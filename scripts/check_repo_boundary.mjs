@@ -30,6 +30,13 @@ const forbiddenDirectories = new Set([
 ]);
 const forbiddenTrackedName =
   /(^|\/)(?:\.env$|[^/]*\.(?:sqlite3?|db(?:-[^/]*)?|wav|mp3|m4a|aac|ogg|pem|key))$/i;
+const privateCredentialName =
+  /(^|\/)(?:demo[_-]?users|[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env)$/i;
+// These two files are intentionally generated local runtime state. They are
+// ignored by Git/Docker and may contain the developer's session secret or
+// Argon2 password hashes, so inspect them through the explicit existence and
+// permission checks rather than treating their values as repository content.
+const ignoredRuntimeFiles = new Set([".env", "backend/config/demo_users.yaml"]);
 const forbiddenReference =
   /(?:Document Validation Agent|agent-core-private|OpenMAIC-main|parallax-main|OpenAvatarChat-main|TalkingHead-main|motion-engine-main|RomanticSimulation)/i;
 const secretPatterns = [
@@ -67,7 +74,10 @@ for (const file of tracked) {
   const normalized = file.replaceAll("\\", "/");
   if (normalized.startsWith("../") || normalized.includes("/../"))
     boundaryFailures.push(`parent path tracked: ${normalized}`);
-  if (forbiddenTrackedName.test(normalized))
+  if (
+    forbiddenTrackedName.test(normalized) ||
+    privateCredentialName.test(normalized)
+  )
     boundaryFailures.push(
       `forbidden runtime/secret file tracked: ${normalized}`,
     );
@@ -87,6 +97,7 @@ function walk(directory) {
       continue;
     }
     if (!entry.isFile()) continue;
+    if (ignoredRuntimeFiles.has(relativePath)) continue;
     let bytes;
     try {
       bytes = readFileSync(absolute);

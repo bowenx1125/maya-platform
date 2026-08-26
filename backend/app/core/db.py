@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0001_wave0_baseline"
+ALEMBIC_HEAD = "0002_wave1_agents_rag"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
@@ -72,6 +72,9 @@ class Database:
             database = self.engine.url.database
             if database and database != ":memory:":
                 Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        # This path is intentionally limited to isolated test databases.  A
+        # deployed process always uses ``upgrade_schema`` so Alembic remains
+        # the source of truth for the Wave 1A head.
         Base.metadata.create_all(self.engine)
 
     def upgrade_schema(self) -> None:

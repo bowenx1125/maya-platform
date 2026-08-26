@@ -1,4 +1,4 @@
-"""FastAPI composition root for Wave 0."""
+"""FastAPI composition root for the Wave 0 and Wave 1A vertical slice."""
 
 from __future__ import annotations
 
@@ -23,7 +23,10 @@ from app.core.errors import (
     request_id_for,
     request_validation_handler,
 )
+from app.modules.agents.router import router as agents_router
 from app.modules.auth.router import router as auth_router
+from app.modules.knowledge.recovery import recover_startup
+from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
 from app.seed import seed_demo_data
 
@@ -57,6 +60,7 @@ def create_app(
             else:
                 runtime_database.upgrade_schema()
             with runtime_database.session() as session:
+                recover_startup(session, runtime_settings.resolved_data_root)
                 seed_demo_data(session)
         yield
         runtime_database.dispose()
@@ -141,6 +145,8 @@ def create_app(
 
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(org_router, prefix="/api/v1")
+    app.include_router(agents_router, prefix="/api/v1")
+    app.include_router(knowledge_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -155,6 +161,31 @@ def create_app(
                 "prepared turn text are never public fields."
             ),
         )
+
+        def freeze_nullable_scalars(value: Any) -> None:
+            """Render Pydantic nullable scalar unions in frozen contract form."""
+
+            if isinstance(value, dict):
+                union = value.get("anyOf")
+                if (
+                    isinstance(union, list)
+                    and len(union) == 2
+                    and {branch.get("type") for branch in union if isinstance(branch, dict)}
+                    == {"string", "null"}
+                    and all(
+                        not isinstance(branch, dict) or "format" not in branch
+                        for branch in union
+                    )
+                ):
+                    value.pop("anyOf", None)
+                    value["type"] = ["string", "null"]
+                for child in value.values():
+                    freeze_nullable_scalars(child)
+            elif isinstance(value, list):
+                for child in value:
+                    freeze_nullable_scalars(child)
+
+        freeze_nullable_scalars(schema)
         # API validation errors are mapped to the frozen 400 envelope (and
         # missing CSRF headers to 403), so do not advertise FastAPI's default
         # uncontracted 422 response.
@@ -164,7 +195,20 @@ def create_app(
             if is_api_path:
                 for operation in path_item.values():
                     if isinstance(operation, dict):
-                        operation.get("responses", {}).pop("422", None)
+                        # FastAPI's generic 422 is not part of the Wave 0
+                        # contract.  Wave 1A explicitly declares six frozen
+                        # business-validation 422 responses and they must
+                        # remain visible to the semantic comparator.
+                        operation_id = operation.get("operationId")
+                        if operation_id not in {
+                            "uploadKnowledgeDocument",
+                            "updateAgentDraft",
+                            "setAgentVersionDocuments",
+                            "uploadAgentMd",
+                            "testAgentDraft",
+                            "publishAgentVersion",
+                        }:
+                            operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]
             else:
                 contract_path = path

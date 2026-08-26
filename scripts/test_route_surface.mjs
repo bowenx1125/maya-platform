@@ -43,6 +43,30 @@ try {
     );
 
   const base = JSON.parse(readFileSync(fixture, "utf8"));
+  const nullableEquivalent = structuredClone(base);
+  const nullableType =
+    nullableEquivalent.components.schemas.KnowledgeDocument.properties
+      .safe_error_code.type;
+  if (!Array.isArray(nullableType))
+    throw new Error("route fixture lost the frozen nullable type array");
+  nullableEquivalent.components.schemas.KnowledgeDocument.properties.safe_error_code.type =
+    [...nullableType].reverse();
+  const nullablePath = resolve(tempDir, "nullable-type-order.json");
+  writeFileSync(
+    nullablePath,
+    `${JSON.stringify(nullableEquivalent, null, 2)}\n`,
+    "utf8",
+  );
+  const nullableResult = run(process.execPath, [
+    comparator,
+    "--server-openapi",
+    nullablePath,
+  ]);
+  if (nullableResult.status !== 0)
+    throw new Error(
+      `nullable type order should be semantically equivalent: ${nullableResult.stderr || nullableResult.stdout}`,
+    );
+
   const cases = [
     [
       "missing inherited SessionCookie security",
@@ -72,6 +96,12 @@ try {
       "missing frozen error response",
       (doc) => {
         delete doc.paths["/api/v1/auth/login"].post.responses["401"];
+      },
+    ],
+    [
+      "required response field drift",
+      (doc) => {
+        doc.components.schemas.AuthSession.required = ["user", "csrf_token"];
       },
     ],
     [

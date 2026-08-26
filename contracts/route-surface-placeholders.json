@@ -1,88 +1,8 @@
 {
   "schema_version": 1,
   "contract_version": "g0-2026-08-26.4",
-  "description": "Explicit Wave 0 allow-list for frozen operations whose backend routes belong to later waves.",
+  "description": "Explicit allow-list for frozen operations whose backend routes belong to later waves.",
   "allowed_missing_operation_ids": {
-    "listKnowledgeDocuments": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "uploadKnowledgeDocument": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "getKnowledgeDocument": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "downloadKnowledgeDocument": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "reindexKnowledgeDocument": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "hideKnowledgeDocument": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "listGroupAgents": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "createAgent": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "getAgent": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "archiveAgent": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "unarchiveAgent": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "listAgentVersions": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "createNextAgentVersion": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "getAgentVersion": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "updateAgentDraft": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "setAgentVersionDocuments": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "getRagPreview": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "uploadAgentMd": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
-    "testAgentDraft": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "publishAgentVersion": {
-      "owner": "M05",
-      "reason": "Agent version routes are a Wave 1A deliverable."
-    },
     "listAvatarTemplates": {
       "owner": "M07",
       "reason": "Avatar routes are a Wave 1B deliverable."
@@ -110,22 +30,6 @@
     "confirmVoiceProfile": {
       "owner": "M08",
       "reason": "Voice routes are a Wave 1B deliverable."
-    },
-    "listPublishedAgentsForTeacher": {
-      "owner": "M09",
-      "reason": "Teacher published-agent views are a Wave 1A deliverable."
-    },
-    "getKnowledgeSnapshot": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "downloadSnapshotRag": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
-    },
-    "downloadSnapshotDocument": {
-      "owner": "M06",
-      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
     },
     "listDebates": {
       "owner": "M10",

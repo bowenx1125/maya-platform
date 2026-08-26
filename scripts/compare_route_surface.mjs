@@ -25,6 +25,30 @@ const implementedOperationIds = new Set([
   "getCourse",
   "listCourseGroups",
   "getGroup",
+  "listGroupAgents",
+  "createAgent",
+  "getAgent",
+  "archiveAgent",
+  "unarchiveAgent",
+  "listAgentVersions",
+  "createNextAgentVersion",
+  "getAgentVersion",
+  "updateAgentDraft",
+  "uploadAgentMd",
+  "publishAgentVersion",
+  "listKnowledgeDocuments",
+  "uploadKnowledgeDocument",
+  "getKnowledgeDocument",
+  "downloadKnowledgeDocument",
+  "reindexKnowledgeDocument",
+  "hideKnowledgeDocument",
+  "setAgentVersionDocuments",
+  "getRagPreview",
+  "testAgentDraft",
+  "getKnowledgeSnapshot",
+  "downloadSnapshotRag",
+  "downloadSnapshotDocument",
+  "listPublishedAgentsForTeacher",
 ]);
 const methods = new Set([
   "get",
@@ -149,6 +173,9 @@ function normaliseSchema(document, schema, seen = new Set()) {
   }
   if (!schema.allOf) {
     const copy = { ...schema };
+    // OpenAPI 3.1's multi-type `type` is a set of allowed types.  Its array
+    // order is not semantic, so canonicalize it before strict comparison.
+    if (Array.isArray(copy.type)) copy.type = [...copy.type].sort();
     for (const keyword of ["oneOf", "anyOf"]) {
       if (Array.isArray(copy[keyword]))
         copy[keyword] = copy[keyword].map((branch) =>
@@ -196,6 +223,7 @@ function normaliseSchema(document, schema, seen = new Set()) {
         merged[key] = fragment[key];
     }
   }
+  if (Array.isArray(merged.type)) merged.type = [...merged.type].sort();
   for (const [name, item] of Object.entries(merged.properties ?? {}))
     merged.properties[name] = normaliseSchema(document, item, seen);
   return merged;
@@ -328,9 +356,18 @@ function compareSchemas(expected, actual, context, errors, options = {}) {
       errors.push(`${context}: server union is wider than the frozen schema`);
     return;
   }
-  if (expected.type !== undefined && actual.type !== expected.type)
+  const expectedType = Array.isArray(expected.type)
+    ? [...expected.type].sort()
+    : expected.type;
+  const actualType = Array.isArray(actual.type)
+    ? [...actual.type].sort()
+    : actual.type;
+  if (
+    expected.type !== undefined &&
+    JSON.stringify(actualType) !== JSON.stringify(expectedType)
+  )
     errors.push(
-      `${context}: type ${actual.type} does not match ${expected.type}`,
+      `${context}: type ${JSON.stringify(actual.type)} does not match ${JSON.stringify(expected.type)}`,
     );
   if (expected.format !== undefined && actual.format !== expected.format)
     errors.push(

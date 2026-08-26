@@ -1,4 +1,4 @@
-name: Maya Wave 0 quality
+name: Maya Wave 1A quality
 
 on:
   push:
@@ -33,13 +33,21 @@ jobs:
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@11.19.0 --activate
 
-      - name: Assert Wave 0 backend inputs
+      - name: Assert foundation backend inputs
         run: |
           test -f backend/app/main.py
           test -f backend/pyproject.toml
           test -f backend/uv.lock
           test -d backend/migrations
           test -d backend/tests
+
+      - name: Assert Wave 1A backend inputs
+        run: |
+          test -f backend/migrations/versions/0002_wave1_agents_rag.py
+          test -f backend/tests/test_wave1_agents_knowledge.py
+          test -f scripts/test_wave1_migration.py
+          test -d backend/app/modules/agents
+          test -d backend/app/modules/knowledge
 
       - name: Frozen JavaScript install
         run: pnpm install --frozen-lockfile
@@ -91,20 +99,28 @@ jobs:
       - name: Local Demo initializer safety probe
         run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 
-      - name: Backend quality and migration smoke
+      - name: Wave 1A backend tests and migration smoke
         working-directory: backend
         run: |
           uv run ruff check app
           uv run ruff check tests
           uv run mypy app
+          uv run pytest tests/test_wave1_agents_knowledge.py
           uv run pytest
-          mkdir -p data
-          uv run alembic upgrade head
 
-      - name: Export FastAPI OpenAPI for route comparison
+      - name: Empty database migration smoke
+        run: |
+          empty_root="$(mktemp -d)"
+          DATABASE_URL="sqlite:///$empty_root/maya.sqlite3" uv run --directory backend alembic upgrade head
+          DATABASE_URL="sqlite:///$empty_root/maya.sqlite3" uv run --directory backend alembic upgrade head
+
+      - name: Populated Wave 1A migration preservation evidence
+        run: uv run --directory backend python ../scripts/test_wave1_migration.py
+
+      - name: Export Wave 1A FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
-      - name: Compare FastAPI route surface to frozen contract
+      - name: Strict Wave 1A FastAPI route and schema comparison
         run: node scripts/compare_route_surface.mjs --server-openapi "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
       - name: Compose configuration

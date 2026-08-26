@@ -1,0 +1,1429 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+
+import {
+  isAmbiguousMutationFailure,
+  isConflict,
+  type AgentDetail,
+  type AgentVersion,
+  type KnowledgeDocument,
+  type KnowledgeSnapshot,
+  type RagPreview,
+  type TestChatResponse,
+} from "../lib/api";
+import { useIdempotencyStore } from "../lib/idempotency";
+import { blockerLabel, statusLabel, t, tm } from "../lib/i18n";
+import { useSession } from "./session-provider";
+import {
+  EmptyCard,
+  ErrorNotice,
+  LoadingCard,
+  PageIntro,
+  SectionCard,
+  StatusBadge,
+} from "./ui";
+
+const agentOutline = `# Identity
+Who are you and what cultural or social perspective do you represent?
+
+# Background
+What background should shape your interpretation of the topic?
+
+# Position
+What is your current position on the debate topic? What trade-offs do you recognize?
+
+# Speaking Style
+How should you speak: formal, analytical, concise, rhetorical, cautious, etc.?
+
+# Debate Strategy
+How should you respond to opponents, use evidence, concede valid points, and distinguish fact from opinion?
+
+# Boundaries
+What should you avoid claiming or doing?`;
+
+export function AgentOverview({ agentId }: { agentId: string }) {
+  const { api } = useSession();
+  const router = useRouter();
+  const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [versions, setVersions] = useState<AgentVersion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const mutationStore = useIdempotencyStore();
+  const [retryAction, setRetryAction] = useState<
+    "archive" | "nextVersion" | null
+  >(null);
+  const archiveIntent = `agent-archive:${agentId}`;
+  const unarchiveIntent = `agent-unarchive:${agentId}`;
+  const nextVersionIntent = `agent-next-version:${agentId}`;
+  // Recovery callbacks can render while an action error is present, before
+  // the normal loaded-view narrowing below.
+  const currentAgent = agent as AgentDetail;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [nextAgent, nextVersions] = await Promise.all([
+        api.agent(agentId),
+        api.versions(agentId),
+      ]);
+      setAgent(nextAgent);
+      setVersions(nextVersions);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoading(false);
+    }
+  }, [agentId, api]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  if (loading) return <LoadingCard />;
+  if (error || !agent)
+    return (
+      <ErrorNotice
+        error={error ?? new Error(t("agentNotFound"))}
+        onRetry={
+          retryAction === "archive"
+            ? () => void archive(true)
+            : retryAction === "nextVersion"
+              ? () => void createNextVersion()
+              : () => void load()
+        }
+      />
+    );
+
+  const draft =
+    versions.find((version) => version.state === "draft") ??
+    versions.find((version) => version.id === agent.current_draft_version_id);
+  const current =
+    versions.find(
+      (version) => version.id === agent.current_published_version_id,
+    ) ?? versions.find((version) => version.state === "published");
+
+  function abandonArchiveIntents() {
+    mutationStore.abandon(archiveIntent);
+    mutationStore.abandon(unarchiveIntent);
+  }
+
+  async function archive(retry = false) {
+    const message =
+      currentAgent.status === "archived"
+        ? t("unarchiveConfirm")
+        : t("archiveConfirm");
+    if (!retry && !window.confirm(message)) return;
+    const intent =
+      currentAgent.status === "archived" ? unarchiveIntent : archiveIntent;
+    if (!retry) {
+      mutationStore.abandon(
+        currentAgent.status === "archived" ? archiveIntent : unarchiveIntent,
+      );
+      mutationStore.abandon(nextVersionIntent);
+    }
+    setBusy(true);
+    setError(null);
+    setRetryAction(null);
+    const handle = mutationStore.handleFor(intent);
+    try {
+      const next =
+        currentAgent.status === "archived"
+          ? await api.unarchiveAgent(currentAgent.id, { idempotency: handle })
+          : await api.archiveAgent(currentAgent.id, { idempotency: handle });
+      mutationStore.finish(intent, handle);
+      setAgent({ ...currentAgent, ...next });
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setRetryAction("archive");
+      } else {
+        mutationStore.abandon(intent, handle);
+      }
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createNextVersion() {
+    abandonArchiveIntents();
+    const handle = mutationStore.handleFor(nextVersionIntent);
+    setBusy(true);
+    setError(null);
+    setRetryAction(null);
+    try {
+      const next = await api.nextVersion(currentAgent.id, {
+        idempotency: handle,
+      });
+      mutationStore.finish(nextVersionIntent, handle);
+      router.push(`/student/agent-versions/${next.id}/edit`);
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setRetryAction("nextVersion");
+      } else {
+        mutationStore.abandon(nextVersionIntent, handle);
+      }
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <PageIntro
+        eyebrow={t("agentWorkspace")}
+        title={agent.name}
+        description={agent.description || t("studentAgentLede")}
+        action={
+          <div className="button-row">
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={busy}
+              onClick={() => void archive()}
+            >
+              {agent.status === "archived" ? t("unarchive") : t("archive")}
+            </button>
+            {draft ? (
+              <Link
+                className="primary-action"
+                href={`/student/agent-versions/${draft.id}/edit`}
+              >
+                {t("continueDraft")}
+              </Link>
+            ) : current ? (
+              <button
+                className="primary-action"
+                type="button"
+                disabled={busy || agent.status === "archived"}
+                onClick={() => void createNextVersion()}
+              >
+                {t("createNextVersion")}
+              </button>
+            ) : null}
+          </div>
+        }
+      />
+      {error ? (
+        <ErrorNotice
+          error={error}
+          onRetry={
+            retryAction === "archive"
+              ? () => void archive(true)
+              : retryAction === "nextVersion"
+                ? () => void createNextVersion()
+                : () => void load()
+          }
+        />
+      ) : null}
+      <div className="workspace-grid">
+        <SectionCard
+          title={t("currentRelease")}
+          description={t("currentReleaseLede")}
+        >
+          {current ? (
+            <VersionSummary version={current} current />
+          ) : (
+            <EmptyCard
+              title={t("noPublishedYet")}
+              action={
+                draft ? (
+                  <Link
+                    className="secondary-action"
+                    href={`/student/agent-versions/${draft.id}/edit`}
+                  >
+                    {t("openV10")}
+                  </Link>
+                ) : null
+              }
+            />
+          )}
+        </SectionCard>
+        <SectionCard
+          title={t("draftStatus")}
+          description={t("draftStatusLede")}
+        >
+          {draft ? (
+            <VersionSummary
+              version={draft}
+              action={
+                <Link
+                  className="text-link"
+                  href={`/student/agent-versions/${draft.id}/edit`}
+                >
+                  {t("openWorkbench")}
+                </Link>
+              }
+            />
+          ) : (
+            <p className="muted-copy">{t("noEditableDraft")}</p>
+          )}
+        </SectionCard>
+      </div>
+      <SectionCard
+        title={t("versionHistory")}
+        description={t("versionHistoryLede")}
+      >
+        {versions.length === 0 ? (
+          <p className="muted-copy">{t("noVersions")}</p>
+        ) : (
+          <div className="version-list">
+            {versions
+              .slice()
+              .sort((a, b) =>
+                b.version_label.localeCompare(a.version_label, undefined, {
+                  numeric: true,
+                }),
+              )
+              .map((version) => (
+                <VersionSummary
+                  key={version.id}
+                  version={version}
+                  current={version.id === current?.id}
+                />
+              ))}
+          </div>
+        )}
+      </SectionCard>
+    </>
+  );
+}
+
+function VersionSummary({
+  version,
+  current = false,
+  action,
+}: {
+  version: AgentVersion;
+  current?: boolean;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="version-summary">
+      <div>
+        <div className="chip-row">
+          <strong>{version.version_label}</strong>
+          <StatusBadge status={version.state} />
+          {current ? (
+            <span className="current-label">{t("current")}</span>
+          ) : null}
+        </div>
+        <p>
+          {version.enabled_documents?.length ?? 0} {t("enabledFiles")} ·{" "}
+          {t("revision")} {version.revision}
+        </p>
+      </div>
+      {action ??
+        (version.state !== "draft" ? (
+          <Link
+            className="text-link"
+            href={`/student/agent-versions/${version.id}`}
+          >
+            {t("inspectRelease")}
+          </Link>
+        ) : null)}
+    </div>
+  );
+}
+
+export function AgentWorkbench({ versionId }: { versionId: string }) {
+  const { api } = useSession();
+  const [version, setVersion] = useState<AgentVersion | null>(null);
+  const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+  const [preview, setPreview] = useState<RagPreview | null>(null);
+  const [agentMd, setAgentMd] = useState("");
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [conflict, setConflict] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatResult, setChatResult] = useState<TestChatResponse | null>(null);
+  const mutationStore = useIdempotencyStore();
+  const [retryAction, setRetryAction] = useState<
+    "uploadKnowledge" | "publish" | null
+  >(null);
+  const [pendingKnowledgeUpload, setPendingKnowledgeUpload] = useState<{
+    file: File;
+    signature: string;
+  } | null>(null);
+  const uploadIntent = `upload-knowledge:${versionId}`;
+  const publishIntent = `publish-agent-version:${versionId}`;
+
+  function abandonUploadIntent() {
+    mutationStore.abandon(uploadIntent);
+    setPendingKnowledgeUpload(null);
+    setRetryAction((current) =>
+      current === "uploadKnowledge" ? null : current,
+    );
+  }
+
+  function abandonPublishIntent() {
+    mutationStore.abandon(publishIntent);
+    setRetryAction((current) => (current === "publish" ? null : current));
+  }
+
+  const load = useCallback(
+    async (keepLocal = false) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const nextVersion = await api.version(versionId);
+        const nextAgent = await api.agent(nextVersion.agent_id);
+        const [nextDocuments, nextPreview] = await Promise.all([
+          api.knowledge(nextAgent.group_id),
+          api.ragPreview(versionId),
+        ]);
+        setVersion(nextVersion);
+        setAgent(nextAgent);
+        setDocuments(nextDocuments);
+        setPreview(nextPreview);
+        if (!keepLocal) {
+          setAgentMd(nextVersion.agent_md ?? "");
+          setSelectedDocumentIds(
+            (nextVersion.enabled_documents ?? []).map(
+              (document) => document.id,
+            ),
+          );
+          setConflict(false);
+        }
+      } catch (cause) {
+        setError(cause);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, versionId],
+  );
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  const enabledCount = selectedDocumentIds.length;
+  const localDirty = Boolean(version && agentMd !== (version.agent_md ?? ""));
+  const blockers = version?.publish_blockers ?? [];
+  const blockerCopy: Record<string, Parameters<typeof t>[0]> = {
+    agent_md_missing: "blockAgentMdMissing",
+    agent_md_too_large: "blockAgentMdLarge",
+    rag_missing: "blockRagMissing",
+    rag_over_limit: "blockRagOverLimit",
+    rag_index_pending: "blockRagPending",
+    rag_index_failed: "blockRagFailed",
+    avatar_missing: "blockAvatarMissing",
+  };
+
+  // The recovery action can be rendered while the previous request is still
+  // represented by `error`; keep these bindings initialized for its callback.
+  const currentVersion = version as AgentVersion;
+  const currentAgent = agent as AgentDetail;
+
+  if (loading) return <LoadingCard />;
+  if (error || !version || !agent)
+    return (
+      <ErrorNotice
+        error={error ?? new Error(t("draftNotFound"))}
+        onRetry={
+          retryAction === "uploadKnowledge" && pendingKnowledgeUpload
+            ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
+            : retryAction === "publish"
+              ? () => void publish(true)
+              : () => void load(Boolean(version && agent))
+        }
+      />
+    );
+  if (version.state !== "draft")
+    return <ReadOnlyVersion version={version} agent={agent} />;
+
+  async function saveDraft() {
+    abandonUploadIntent();
+    abandonPublishIntent();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setConflict(false);
+    try {
+      const next = await api.updateDraft(currentVersion.id, {
+        expected_revision: currentVersion.revision,
+        agent_md: agentMd,
+      });
+      setVersion(next);
+      setAgentMd(next.agent_md ?? "");
+      setNotice(t("draftSavedNotice"));
+    } catch (cause) {
+      if (isConflict(cause)) setConflict(true);
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadAgentMd(file: File) {
+    abandonUploadIntent();
+    abandonPublishIntent();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setConflict(false);
+    try {
+      const next = await api.uploadAgentMd(
+        currentVersion.id,
+        file,
+        currentVersion.revision,
+      );
+      setVersion(next);
+      setAgentMd(next.agent_md ?? "");
+      setNotice(t("agentMdUploadedNotice"));
+    } catch (cause) {
+      if (isConflict(cause)) setConflict(true);
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleDocument(documentId: string, enabled: boolean) {
+    abandonUploadIntent();
+    abandonPublishIntent();
+    const nextIds = enabled
+      ? [...selectedDocumentIds, documentId]
+      : selectedDocumentIds.filter((id) => id !== documentId);
+    setSelectedDocumentIds(nextIds);
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setConflict(false);
+    try {
+      const next = await api.setDocuments(
+        currentVersion.id,
+        currentVersion.revision,
+        nextIds,
+      );
+      setVersion(next);
+      setSelectedDocumentIds(
+        (next.enabled_documents ?? []).map((document) => document.id),
+      );
+      setNotice(t("evidenceUpdatedNotice"));
+      const nextPreview = await api.ragPreview(currentVersion.id);
+      setPreview(nextPreview);
+    } catch (cause) {
+      if (isConflict(cause)) {
+        setConflict(true);
+        setSelectedDocumentIds(selectedDocumentIds);
+      }
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadKnowledge(file: File) {
+    const signature = `${file.name}:${file.size}:${file.lastModified}`;
+    if (pendingKnowledgeUpload?.signature !== signature) {
+      mutationStore.abandon(uploadIntent);
+    }
+    abandonPublishIntent();
+    setPendingKnowledgeUpload({ file, signature });
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setConflict(false);
+    let mutationCompleted = false;
+    const handle = mutationStore.handleFor(uploadIntent);
+    try {
+      const mutation = await api.uploadKnowledge(
+        currentAgent.group_id,
+        currentVersion.id,
+        file,
+        currentVersion.revision,
+        { idempotency: handle },
+      );
+      mutationStore.finish(uploadIntent, handle);
+      mutationCompleted = true;
+      setPendingKnowledgeUpload((current) =>
+        current?.signature === signature ? null : current,
+      );
+      setRetryAction(null);
+      setVersion(mutation.agent_version);
+      setDocuments((current) => [...current, mutation.document]);
+      setSelectedDocumentIds((current) =>
+        current.includes(mutation.document.id)
+          ? current
+          : [...current, mutation.document.id],
+      );
+      setNotice(t("markdownUploadedNotice"));
+      setPreview(await api.ragPreview(currentVersion.id));
+    } catch (cause) {
+      if (!mutationCompleted && isConflict(cause)) {
+        mutationStore.abandon(uploadIntent, handle);
+        setPendingKnowledgeUpload((current) =>
+          current?.signature === signature ? null : current,
+        );
+        setRetryAction(null);
+      } else if (!mutationCompleted && isAmbiguousMutationFailure(cause)) {
+        setRetryAction("uploadKnowledge");
+      } else if (!mutationCompleted) {
+        mutationStore.abandon(uploadIntent, handle);
+        setPendingKnowledgeUpload((current) =>
+          current?.signature === signature ? null : current,
+        );
+        setRetryAction(null);
+      }
+      if (isConflict(cause)) setConflict(true);
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function askAgent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!chatMessage.trim()) return;
+    setChatBusy(true);
+    setError(null);
+    try {
+      setChatResult(await api.testChat(currentVersion.id, chatMessage.trim()));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  async function publish(retry = false) {
+    if (blockers.length > 0) return;
+    if (!retry) abandonUploadIntent();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    const handle = mutationStore.handleFor(publishIntent);
+    try {
+      const next = await api.publish(
+        currentVersion.id,
+        currentVersion.revision,
+        { idempotency: handle },
+      );
+      mutationStore.finish(publishIntent, handle);
+      setRetryAction(null);
+      setVersion(next);
+      setNotice(t("publishedNotice"));
+    } catch (cause) {
+      if (isConflict(cause)) setConflict(true);
+      if (isAmbiguousMutationFailure(cause)) {
+        setRetryAction("publish");
+      } else {
+        mutationStore.abandon(publishIntent, handle);
+        setRetryAction(null);
+      }
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <PageIntro
+        eyebrow={t("agentWorkbench")}
+        title={`${agent.name} · ${version.version_label}`}
+        description={t("workbenchLede")}
+        action={
+          <div className="button-row">
+            <Link
+              className="secondary-action"
+              href={`/student/agents/${agent.id}`}
+            >
+              {t("backToAgent")}
+            </Link>
+            <button
+              className="primary-action"
+              type="button"
+              disabled={saving || blockers.length > 0}
+              onClick={() => void publish()}
+            >
+              {saving ? t("working") : t("publish")}
+            </button>
+          </div>
+        }
+      />
+      <div className="workbench-meta">
+        <StatusBadge status="draft" />
+        <span>
+          {t("revision")} {version.revision}
+        </span>
+        <span>
+          {enabledCount} {t("enabledFileCount")}
+        </span>
+        {localDirty ? (
+          <span className="dirty-label">{t("unsavedChanges")}</span>
+        ) : null}
+      </div>
+      {conflict ? (
+        <DraftConflictNotice onRefresh={() => void load(true)} />
+      ) : null}
+      {error ? (
+        <>
+          <ErrorNotice
+            error={error}
+            onRetry={
+              retryAction === "uploadKnowledge" && pendingKnowledgeUpload
+                ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
+                : retryAction === "publish"
+                  ? () => {
+                      void publish(true);
+                    }
+                  : () => void load(true)
+            }
+          />
+        </>
+      ) : null}
+      {notice ? (
+        <div className="notice notice-success" role="status">
+          <strong>{t("done")}</strong>
+          <span>{notice}</span>
+        </div>
+      ) : null}
+      <div className="workbench-grid">
+        <div className="workbench-main">
+          <SectionCard
+            title={t("agentMd")}
+            description={t("agentMdLede")}
+            action={
+              <div className="button-row">
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() => {
+                    abandonUploadIntent();
+                    abandonPublishIntent();
+                    setAgentMd(agentOutline);
+                  }}
+                >
+                  {t("insertOutline")}
+                </button>
+                <label className="secondary-action file-button">
+                  {t("uploadMd")}
+                  <input
+                    type="file"
+                    accept=".md,text/markdown"
+                    disabled={saving}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadAgentMd(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            }
+          >
+            <textarea
+              className="markdown-editor"
+              aria-label={`${t("agentMd")} ${t("editor")}`}
+              maxLength={12000}
+              value={agentMd}
+              onChange={(event) => {
+                abandonUploadIntent();
+                abandonPublishIntent();
+                setAgentMd(event.target.value);
+              }}
+              placeholder={t("writePrompt")}
+            />
+            <div className="editor-footer">
+              <span>
+                {agentMd.length.toLocaleString()} / 12,000 {t("characters")}
+              </span>
+              <button
+                className="primary-action compact-action"
+                type="button"
+                disabled={saving || !localDirty}
+                onClick={() => void saveDraft()}
+              >
+                {saving ? t("saving") : t("save")}
+              </button>
+            </div>
+          </SectionCard>
+          <SectionCard
+            title={t("evidenceSet")}
+            description={t("evidenceSetLede")}
+            action={
+              <label className="secondary-action file-button">
+                {t("uploadMarkdown")}
+                <input
+                  type="file"
+                  accept=".md,text/markdown"
+                  disabled={saving}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadKnowledge(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            }
+          >
+            {documents.length === 0 ? (
+              <p className="muted-copy">{t("noGroupMarkdown")}</p>
+            ) : (
+              <div className="document-list">
+                {documents.map((document) => (
+                  <label
+                    className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
+                    key={document.id}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedDocumentIds.includes(document.id)}
+                      disabled={saving || document.workspace_state === "hidden"}
+                      onChange={(event) =>
+                        void toggleDocument(document.id, event.target.checked)
+                      }
+                    />
+                    <span className="document-main">
+                      <strong>{document.source_filename}</strong>
+                      <small>
+                        {document.char_count.toLocaleString()} {t("characters")}{" "}
+                        ·{" "}
+                        {document.workspace_state === "hidden"
+                          ? t("hiddenWorkspace")
+                          : t("groupMarkdown")}
+                      </small>
+                    </span>
+                    <StatusBadge
+                      status={document.index_status}
+                      tone={
+                        document.index_status === "ready"
+                          ? "good"
+                          : document.index_status === "failed"
+                            ? "bad"
+                            : "warn"
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+          <SectionCard
+            title={t("testChat")}
+            description={t("testChatLede")}
+            className="chat-card"
+          >
+            <form className="chat-form" onSubmit={askAgent}>
+              <textarea
+                aria-label={t("testChatMessage")}
+                value={chatMessage}
+                onChange={(event) => setChatMessage(event.target.value)}
+                placeholder={t("askEvidence")}
+                rows={3}
+              />
+              <button
+                className="primary-action"
+                type="submit"
+                disabled={chatBusy || !chatMessage.trim()}
+              >
+                {chatBusy ? t("retrieving") : t("testDraft")}
+              </button>
+            </form>
+            {chatResult ? (
+              <ChatResult result={chatResult} />
+            ) : (
+              <p className="muted-copy">{t("tryChat")}</p>
+            )}
+          </SectionCard>
+        </div>
+        <aside className="workbench-side">
+          <SectionCard
+            title={t("publishChecklist")}
+            description={t("checklistLede")}
+          >
+            <div className="checklist">
+              {blockers.length === 0 ? (
+                <div className="check-item check-good">
+                  <span aria-hidden="true">✓</span>
+                  <div>
+                    <strong>{t("readyPublish")}</strong>
+                    <small>{t("allBlockersClear")}</small>
+                  </div>
+                </div>
+              ) : (
+                blockers.map((blocker) => (
+                  <div className="check-item check-bad" key={blocker}>
+                    <span aria-hidden="true">!</span>
+                    <div>
+                      <strong>{blockerLabel(blocker)}</strong>
+                      <small>
+                        {blockerCopy[blocker]
+                          ? t(blockerCopy[blocker])
+                          : t("resolveBlocker")}
+                      </small>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </SectionCard>
+          <SectionCard
+            title={t("ragPreview")}
+            description={t("ragPreviewLede")}
+          >
+            {preview ? (
+              <>
+                <div className="rag-metrics">
+                  <div>
+                    <strong>{preview.document_count}</strong>
+                    <span>{t("files")}</span>
+                  </div>
+                  <div>
+                    <strong>{preview.total_char_count.toLocaleString()}</strong>
+                    <span>{t("characters")}</span>
+                  </div>
+                  <StatusBadge status={preview.index_status} />
+                </div>
+                <pre className="rag-preview">
+                  {preview.combined_markdown || t("previewAfterIndex")}
+                </pre>
+              </>
+            ) : (
+              <LoadingCard label={t("preparingPreview")} />
+            )}
+          </SectionCard>
+          <SectionCard title={t("whatTeaches")}>
+            <p className="teaching-copy">
+              <strong>{t("promptWord")}</strong> {t("whatTeachesPrompt")}{" "}
+              <strong>{t("ragWord")}</strong> {t("whatTeachesRag")}{" "}
+              <strong>{t("publishWord")}</strong> {t("whatTeachesPublish")}
+            </p>
+          </SectionCard>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+export function preserveDraftOnRetry(error: unknown): boolean {
+  return isConflict(error);
+}
+
+export function DraftConflictNotice({ onRefresh }: { onRefresh: () => void }) {
+  return (
+    <div className="notice notice-warning" role="alert">
+      <strong>{t("revisionConflict")}</strong>
+      <span>{t("conflictDetail")}</span>
+      <button className="inline-button" type="button" onClick={onRefresh}>
+        {t("refreshServer")}
+      </button>
+    </div>
+  );
+}
+
+function groundingLabel(mode: TestChatResponse["grounding_mode"]): string {
+  if (mode === "rag_grounded") return t("groundingRag");
+  if (mode === "general_reasoning") return t("groundingGeneral");
+  return t("groundingMixed");
+}
+
+function ChatResult({ result }: { result: TestChatResponse }) {
+  const matched = result.retrieval_status === "matched";
+  return (
+    <div
+      className={`chat-result ${matched ? "chat-matched" : "chat-no-match"}`}
+    >
+      <div className="chip-row">
+        <StatusBadge
+          status={result.retrieval_status}
+          tone={matched ? "good" : "warn"}
+        />
+        <span>{groundingLabel(result.grounding_mode)}</span>
+      </div>
+      <p>{result.answer}</p>
+      <div className="source-row">
+        {matched ? (
+          result.sources.map((source) => (
+            <span
+              className="source-chip"
+              key={`${source.source_filename}-${source.chunk_id ?? "source"}`}
+            >
+              {source.source_filename}
+            </span>
+          ))
+        ) : (
+          <span className="muted-copy">{t("noSources")}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReadOnlyVersion({
+  version,
+  agent,
+}: {
+  version: AgentVersion;
+  agent: AgentDetail;
+}) {
+  return (
+    <>
+      <PageIntro
+        eyebrow={t("publishedSnapshot")}
+        title={`${agent.name} · ${version.version_label}`}
+        description={t("publishedSnapshotLede")}
+        action={
+          <Link
+            className="secondary-action"
+            href={`/student/agents/${agent.id}`}
+          >
+            {t("backToAgent")}
+          </Link>
+        }
+      />
+      <div className="workbench-grid">
+        <div className="workbench-main">
+          <SectionCard title={t("agentMd")} description={t("readOnlyRelease")}>
+            <pre className="read-only-markdown">
+              {version.agent_md || t("noPrompt")}
+            </pre>
+          </SectionCard>
+          <SectionCard title={t("enabledEvidence")}>
+            <div className="document-list">
+              {(version.enabled_documents ?? []).map((document) => (
+                <div className="document-row" key={document.id}>
+                  <span className="document-main">
+                    <strong>{document.source_filename}</strong>
+                    <small>
+                      {document.char_count.toLocaleString()} {t("characters")}
+                    </small>
+                  </span>
+                  <StatusBadge status={document.index_status} />
+                </div>
+              ))}
+              {(version.enabled_documents ?? []).length === 0 ? (
+                <p className="muted-copy">{t("noEvidence")}</p>
+              ) : null}
+            </div>
+          </SectionCard>
+        </div>
+        <aside className="workbench-side">
+          <SectionCard title={t("releaseState")}>
+            <div className="check-item check-good">
+              <span aria-hidden="true">✓</span>
+              <div>
+                <strong>{statusLabel(version.state)}</strong>
+                <small>
+                  {t("revision")} {version.revision} {t("revisionImmutable")}
+                </small>
+              </div>
+            </div>
+          </SectionCard>
+          {version.knowledge_snapshot_id ? (
+            <StudentSnapshot
+              snapshotId={version.knowledge_snapshot_id}
+              agentName={agent.name}
+            />
+          ) : null}
+        </aside>
+      </div>
+    </>
+  );
+}
+
+export function StudentPublishedVersion({ versionId }: { versionId: string }) {
+  const { api } = useSession();
+  const [version, setVersion] = useState<AgentVersion | null>(null);
+  const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nextVersion = await api.version(versionId);
+      const nextAgent = await api.agent(nextVersion.agent_id);
+      setVersion(nextVersion);
+      setAgent(nextAgent);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, versionId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  if (loading) return <LoadingCard />;
+  if (error || !version || !agent)
+    return (
+      <ErrorNotice
+        error={error ?? new Error(t("publishedVersionNotFound"))}
+        onRetry={() => void load()}
+      />
+    );
+  return <ReadOnlyVersion version={version} agent={agent} />;
+}
+
+function StudentSnapshot({
+  snapshotId,
+  agentName,
+}: {
+  snapshotId: string;
+  agentName: string;
+}) {
+  const { api } = useSession();
+  const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
+  const [snapshotText, setSnapshotText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setSnapshot(null);
+      setSnapshotText(null);
+      void api
+        .snapshot(snapshotId)
+        .then((next) => {
+          if (!cancelled) {
+            setSnapshot(next);
+            setSnapshotText(null);
+            setError(null);
+          }
+        })
+        .catch((cause) => {
+          if (!cancelled) setError(cause);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [api, snapshotId]);
+
+  async function downloadSnapshot() {
+    setBusy(true);
+    setError(null);
+    try {
+      const text = await api.downloadSnapshot(snapshotId);
+      setSnapshotText(text);
+      downloadText(text, `${agentName}-${snapshotId.slice(0, 8)}-RAG.md`);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadDocument(
+    snapshotDocumentId: string,
+    filename: string,
+  ) {
+    setBusy(true);
+    setError(null);
+    try {
+      const text = await api.downloadSnapshotDocument(
+        snapshotId,
+        snapshotDocumentId,
+      );
+      downloadText(text, filename);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error)
+    return (
+      <SectionCard title={t("knowledgeSnapshot")}>
+        <ErrorNotice error={error} />
+      </SectionCard>
+    );
+  return (
+    <SectionCard title={t("knowledgeSnapshot")} description={t("snapshotLede")}>
+      {snapshot ? (
+        <>
+          <div className="snapshot-summary">
+            <div>
+              <span className="section-label">{t("snapshot")}</span>
+              <strong>{snapshot.id.slice(0, 8)}…</strong>
+            </div>
+            <div>
+              <span className="section-label">{t("content")}</span>
+              <strong>
+                {snapshot.total_char_count.toLocaleString()} {t("characters")}
+              </strong>
+            </div>
+            <div>
+              <span className="section-label">{t("files")}</span>
+              <strong>{snapshot.documents.length}</strong>
+            </div>
+          </div>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={busy}
+            onClick={() => void downloadSnapshot()}
+          >
+            {t("downloadRag")}
+          </button>
+          <div className="snapshot-files">
+            {snapshot.documents.map((document) => (
+              <div className="snapshot-file" key={document.id}>
+                <span>
+                  <strong>{document.source_filename}</strong>
+                  <small>
+                    {t("order")} {document.order_index + 1} ·{" "}
+                    {document.char_count.toLocaleString()} {t("characters")}
+                  </small>
+                </span>
+                <button
+                  className="inline-button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void downloadDocument(document.id, document.source_filename)
+                  }
+                >
+                  {t("download")}
+                </button>
+              </div>
+            ))}
+          </div>
+          {snapshotText ? (
+            <pre className="snapshot-preview">{snapshotText}</pre>
+          ) : null}
+        </>
+      ) : (
+        <LoadingCard label={t("loadingSnapshot")} />
+      )}
+    </SectionCard>
+  );
+}
+
+export function KnowledgeLibrary({ groupId }: { groupId: string }) {
+  const { api } = useSession();
+  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const mutationStore = useIdempotencyStore();
+  const [retryAction, setRetryAction] = useState<{
+    kind: "reindex" | "hide";
+    documentId: string;
+  } | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setDocuments(await api.knowledge(groupId));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, groupId]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  if (loading) return <LoadingCard />;
+  if (error)
+    return (
+      <ErrorNotice
+        error={error}
+        onRetry={
+          retryAction?.kind === "reindex"
+            ? () => {
+                const document = documents.find(
+                  (item) => item.id === retryAction.documentId,
+                );
+                if (document) void reindex(document);
+              }
+            : retryAction?.kind === "hide"
+              ? () => {
+                  const document = documents.find(
+                    (item) => item.id === retryAction.documentId,
+                  );
+                  if (document) void hide(document, true);
+                }
+              : () => void load()
+        }
+      />
+    );
+
+  async function download(document: KnowledgeDocument) {
+    setBusyId(document.id);
+    try {
+      const content = await api.downloadKnowledge(document.id);
+      downloadText(content, document.source_filename);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusyId(null);
+    }
+  }
+  async function reindex(document: KnowledgeDocument) {
+    const intent = `knowledge-reindex:${document.id}`;
+    mutationStore.abandon(`knowledge-hide:${document.id}`);
+    setBusyId(document.id);
+    setError(null);
+    setRetryAction(null);
+    const handle = mutationStore.handleFor(intent);
+    let mutationCompleted = false;
+    try {
+      await api.reindex(document.id, { idempotency: handle });
+      mutationStore.finish(intent, handle);
+      mutationCompleted = true;
+      await load();
+    } catch (cause) {
+      if (mutationCompleted) {
+        // A refresh failure after the mutation succeeds is read-only state;
+        // never replay the completed reindex request from that error.
+        setRetryAction(null);
+      } else if (isAmbiguousMutationFailure(cause)) {
+        setRetryAction({ kind: "reindex", documentId: document.id });
+      } else {
+        mutationStore.abandon(intent, handle);
+      }
+      setError(cause);
+    } finally {
+      setBusyId(null);
+    }
+  }
+  async function hide(document: KnowledgeDocument, retry = false) {
+    if (
+      !retry &&
+      !window.confirm(tm("hideConfirm", { filename: document.source_filename }))
+    )
+      return;
+    const intent = `knowledge-hide:${document.id}`;
+    if (!retry) mutationStore.abandon(`knowledge-reindex:${document.id}`);
+    setBusyId(document.id);
+    setError(null);
+    setRetryAction(null);
+    const handle = mutationStore.handleFor(intent);
+    try {
+      const next = await api.hideKnowledge(document.id, {
+        idempotency: handle,
+      });
+      mutationStore.finish(intent, handle);
+      setDocuments((current) =>
+        current.map((item) => (item.id === next.id ? next : item)),
+      );
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setRetryAction({ kind: "hide", documentId: document.id });
+      } else {
+        mutationStore.abandon(intent, handle);
+      }
+      setError(cause);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <>
+      <PageIntro
+        eyebrow={t("knowledgePage")}
+        title={t("knowledgePageTitle")}
+        description={t("knowledgePageLede")}
+      />
+      <SectionCard
+        title={`${documents.length} ${t("fileCount")}`}
+        description={t("draftEnableLede")}
+      >
+        {documents.length === 0 ? (
+          <EmptyCard title={t("noUpload")} />
+        ) : (
+          <div className="document-list">
+            {documents.map((document) => (
+              <div className="document-row library-row" key={document.id}>
+                <span className="document-main">
+                  <strong>{document.source_filename}</strong>
+                  <small>
+                    {document.char_count.toLocaleString()} {t("characters")} ·{" "}
+                    {document.workspace_state === "hidden"
+                      ? t("hidden")
+                      : t("active")}
+                  </small>
+                </span>
+                <StatusBadge
+                  status={document.index_status}
+                  tone={
+                    document.index_status === "ready"
+                      ? "good"
+                      : document.index_status === "failed"
+                        ? "bad"
+                        : "warn"
+                  }
+                />
+                <div className="row-actions">
+                  <button
+                    className="inline-button"
+                    type="button"
+                    disabled={busyId === document.id}
+                    onClick={() => void download(document)}
+                  >
+                    {t("download")}
+                  </button>
+                  {document.index_status === "failed" ? (
+                    <button
+                      className="inline-button"
+                      type="button"
+                      disabled={busyId === document.id}
+                      onClick={() => void reindex(document)}
+                    >
+                      {t("reindex")}
+                    </button>
+                  ) : null}
+                  {document.workspace_state === "active" ? (
+                    <button
+                      className="inline-button danger-button"
+                      type="button"
+                      disabled={busyId === document.id}
+                      onClick={() => void hide(document)}
+                    >
+                      {t("hide")}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </>
+  );
+}
+
+function downloadText(content: string, filename: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

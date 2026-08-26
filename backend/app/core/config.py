@@ -146,7 +146,16 @@ class Settings(BaseSettings):
         return Path(__file__).resolve().parents[2] / path
 
     def ensure_data_root(self) -> None:
-        self.resolved_data_root.mkdir(parents=True, exist_ok=True)
+        root = self.resolved_data_root
+        root.mkdir(parents=True, exist_ok=True)
+        # The Demo data root is private application state.  Apply the mode on
+        # every startup so a copied directory cannot silently retain broad
+        # permissions from a previous run.
+        root.chmod(0o700)
+        for relative in ("groups", "snapshots", "tmp", "tmp/publish", "private"):
+            child = root / relative
+            child.mkdir(parents=True, exist_ok=True)
+            child.chmod(0o700)
 
     def cookie_secure(self, request_scheme: str | None = None) -> bool:
         """Use Secure cookies only when the active origin is HTTPS.

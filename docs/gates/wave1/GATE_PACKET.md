@@ -1,8 +1,10 @@
 # Wave 1A Gate Packet
 
-Status: `G0-S PASS — AUTHORIZED FOR G1`
+Status: `G3 PASS — WAVE 1A FUNCTIONAL SLICE COMPLETE`
 Authorized: `2026-08-26 Asia/Shanghai`
 G0-S audit: `/root/wave0_foundation_audit`, `gpt-5.6-sol high`, final verdict `PASS` on `2026-08-27 00:02 Asia/Shanghai` after two bounded correction rounds
+G2 audits: frontend `/root/wave0_backend_audit`, backend `/root/wave0_foundation_audit`, and contract/quality `/root/wave0_backend_audit`, all `gpt-5.6-sol high`; final verdicts `PASS` on `2026-08-27`
+G3 sign-off: main agent, `2026-08-27 02:33 Asia/Shanghai`
 Modules: `M05 Agent/version + M06 Markdown RAG + M09 teacher published inspection`
 Dependencies: `Wave 0 G3 PASS`, frozen `g0-2026-08-26.4` product/OpenAPI contract
 Non-goals: M02 full i18n shell, M07 rendered 3D assets, M08 real voice/TTS, M10-M15 debate/interaction/Maya report, real Bailian/DeepL calls
@@ -309,3 +311,17 @@ Stop and return to the main agent if implementation would require:
 `G0-S Sol design challenge -> G1 Luna implementation -> G1.5 deterministic checks -> G2 Sol code/risk audit -> G3 main sign-off -> cross-module Docker slice`
 
 G0-S and G2 output: `PASS | CHANGES_REQUIRED`, no more than five blocking findings, each tied to this packet or the frozen parent contract. Workers cannot approve their own Gate.
+
+## 15. Live Gate evidence
+
+- G0-S required two correction rounds before PASS. It fixed the operation count, explicit 422 preservation, document-set 100,000-character CAS, durable idempotency/file saga detail and byte-deterministic Mock retrieval.
+- Frontend G2 required three bounded correction rounds before PASS. Closed issues included stale Session state after Demo switching, data-losing stale-revision recovery, student/teacher snapshot projection, real UI idempotency reuse for every keyed command, post-mutation refresh separation, and V2/i18n drift. Final frontend evidence is 6 Vitest files / 22 tests plus lint, TypeScript and production build.
+- Backend G2 required two broad and one narrow correction round before PASS. Closed issues included teacher draft leakage, non-durable upload/publish journals, incomplete claim-token/lease idempotency, non-atomic reindex, snapshot relational integrity, and unreachable 422 business-validation behavior. Final backend evidence is Ruff, mypy and 28 pytest tests.
+- Contract/quality G2 required one correction round before PASS. It added force-tracked credential rejection, populated `0001 -> 0002` preservation evidence, exact 33-implemented/34-placeholder comparison and narrow nullable-array normalization tests.
+- Main G1.5 rerun passed frozen install/format, frontend quality, backend quality, empty/repeated and populated migrations, frozen OpenAPI/hash/generated client, Redocly, response/WebSocket checks, 12 route negatives, repository/secret boundary and Compose structure. The live FastAPI export matches 33 implemented operations with 34 explicit later-wave placeholders.
+- Main cold-built both frozen frontend/backend images. The three-service stack is healthy on `http://localhost:8080`; container FFmpeg is 5.1.9 and Alembic is `0002_wave1_agents_rag`.
+- Main used an isolated mode-0700 Docker data root for the complete 8080 flow: student login -> Agent/V1.0 -> AGENT.md -> Markdown/index -> matched and no_match chat -> immutable publish -> teacher published-only list/detail/snapshot/RAG download -> other-group 404. Restart preserved the same version/snapshot/files. All owned database/Markdown/snapshot files were mode 0600; application SQLite connections reported foreign keys on, WAL, busy timeout 5000 and an empty foreign-key check.
+- The isolated G3 dataset was moved to the user's Trash after verification. The stack was recreated against the normal local Demo database, which migrated to `0002_wave1_agents_rag`, remained healthy, and contains no G3 smoke Agent.
+- In-app browser inspection passed at the default desktop size and 360x800: no horizontal overflow, 44px login button, accessible labels and no console warning/error. Authenticated business behavior is covered through the 8080 API/runtime slice and component tests; the browser password form was not filled during visual inspection.
+
+Wave 1A G3 does not claim M02 final bilingual shell, M07 3D rendering, M08 real voice/TTS, M10-M15 debate/interaction/Maya report, real Bailian quality or final TikTok evidence quality.

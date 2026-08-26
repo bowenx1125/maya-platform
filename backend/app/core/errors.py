@@ -101,5 +101,67 @@ def invalid_request(message: str, details: dict[str, Any] | None = None) -> Plat
     return PlatformError("malformed_request", message, 400, details or {})
 
 
+def conflict(code: str, message: str, details: dict[str, Any] | None = None) -> PlatformError:
+    return PlatformError(code, message, 409, details or {})
+
+
+def unprocessable(code: str, message: str, details: dict[str, Any] | None = None) -> PlatformError:
+    """Return a stable business-validation error with HTTP 422 semantics."""
+
+    return PlatformError(code, message, 422, details or {})
+
+
+def stale_revision(current_revision: int | None = None) -> PlatformError:
+    details = {"current_revision": current_revision} if current_revision is not None else {}
+    return conflict("stale_revision", "The draft revision is stale.", details)
+
+
+def version_immutable() -> PlatformError:
+    return conflict("version_immutable", "Published and superseded versions are immutable.")
+
+
+def invalid_state(message: str = "The requested state transition is not valid.") -> PlatformError:
+    return conflict("invalid_state", message)
+
+
+def idempotency_conflict() -> PlatformError:
+    return conflict("idempotency_conflict", "The idempotency key was used for a different request.")
+
+
+def rag_over_limit() -> PlatformError:
+    return unprocessable(
+        "rag_over_limit",
+        "The enabled Markdown knowledge exceeds the 100000 character limit.",
+    )
+
+
+def publish_blockers(blockers: list[str]) -> PlatformError:
+    """Expose the first frozen publish blocker as the primary 422 code."""
+
+    if not blockers:
+        raise ValueError("publish_blockers requires at least one blocker")
+    return unprocessable(
+        blockers[0],
+        "The draft cannot be published.",
+        {"publish_blockers": blockers},
+    )
+
+
+def validation_failure(
+    message: str,
+    details: dict[str, Any] | None = None,
+    *,
+    code: str = "file_operation_failed",
+) -> PlatformError:
+    """Return a business-validation failure using a frozen domain code.
+
+    ``malformed_request`` is reserved for malformed wire input (HTTP 400).
+    Route-level validation must identify the stable domain reason instead of
+    reusing that transport error at HTTP 422.
+    """
+
+    return PlatformError(code, message, 422, details or {})
+
+
 def uuid_string(value: UUID | str) -> str:
     return str(value)
