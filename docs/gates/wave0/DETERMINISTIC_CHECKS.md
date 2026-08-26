@@ -7,7 +7,7 @@ parent checkout is available at `../docs/pre-code-contracts/openapi-v0.1.yaml`,
 the checker also performs a byte-for-byte comparison; an isolated product
 checkout does not require that parent path.
 
-## Current run — 2026-08-26
+## Current run — 2026-08-26 22:38 Asia/Shanghai
 
 | Check                            | Command                                                                                                                                                                                               | Result                                                                                                                                                 |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -23,6 +23,10 @@ checkout does not require that parent path.
 | Product boundary and secret scan | `node scripts/check_repo_boundary.mjs` and `node scripts/test_repo_boundary.mjs`                                                                                                                      | PASS — Git root is `maya-platform`; generated API subtree is scanned; simulated key/supplier URL probe is detected                                     |
 | Local Demo initializer probe     | `uv run --directory backend python ../scripts/test_bootstrap_local_demo.py`                                                                                                                           | PASS — seven Argon2 hashes, random secret, mode 0600, blank supplier keys and overwrite refusal                                                        |
 | Compose structure                | `docker compose config --quiet`                                                                                                                                                                       | PASS                                                                                                                                                   |
+| Final application images         | `docker compose build --no-cache frontend backend`                                                                                                                                                    | PASS — unchanged retry after one transient Debian mirror 502; frontend production image and backend FFmpeg/uv locked image built                       |
+| Three-service startup            | `docker compose up -d --wait`                                                                                                                                                                         | PASS — gateway started; frontend and backend healthy                                                                                                   |
+| Port 8080 runtime/auth smoke     | frontend root/health plus `/api/v1/auth/*` login, me, identity list, switch, logout                                                                                                                   | PASS — 200/401 boundaries, seven identities, CSRF recovery, session rotation to student and logout invalidation verified                               |
+| Container runtime/data smoke     | backend FFmpeg/ffprobe, Alembic current, live/ready health and SQLite seed/pragma checks                                                                                                              | PASS — FFmpeg 5.1.9, migration head, exact 7/1/7/2/6 seed counts, WAL and no foreign-key violations                                                    |
 | Frozen JavaScript install        | `CI=1 pnpm install --frozen-lockfile`                                                                                                                                                                 | PASS                                                                                                                                                   |
 | Frontend lint                    | `CI=1 pnpm --filter @maya/frontend lint`                                                                                                                                                              | PASS                                                                                                                                                   |
 | Frontend typecheck               | `CI=1 pnpm --filter @maya/frontend typecheck`                                                                                                                                                         | PASS                                                                                                                                                   |
@@ -128,16 +132,14 @@ supplier credentials or make supplier calls. Docker image digest changes remain
 reviewed dependency changes; a network-blocked image pull must be reported as
 an environment limitation rather than weakened by changing a digest.
 
-## Known non-pass items
+## Runtime sign-off and intentional exclusions
 
 - Final G2 backend and foundation Sol re-audits both returned `PASS`; main signed
-  M03/M04/M16/M17/M18 G3. Root package integration now uses the product OpenAPI
+  M01/M03/M04/M16/M17/M18 G3. Root package integration uses the product OpenAPI
   copy and `contracts/redocly.yaml`, and `pnpm format:check` passes.
-- Docker Compose config and both application image builds passed before the
-  final Dockerfile hardening. Docker Desktop then became stuck in `starting`;
-  even a minimal no-volume Caddy container could not start. The final hardened
-  backend rebuild and three-service `http://localhost:8080` health/login smoke
-  remain the only M01 G3 blocker. Do not label Wave 0 complete until that
-  external Desktop condition is cleared and the stack passes.
+- Docker Desktop recovered to `running`. The final hardened images, three-service
+  startup, port 8080 frontend/backend path, authentication/CSRF/session rotation,
+  container FFmpeg, migration and exact seed checks all pass. The earlier Desktop
+  condition is closed and Wave 0 has no remaining Gate blocker.
 - Real suppliers, keys, real TTS/voice, formal TikTok RAG data, 3D assets and
   full Wave 1-3 routes are intentionally outside this Wave 0 quality check.
