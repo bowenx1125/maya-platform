@@ -1,0 +1,26 @@
+{
+  "name": "maya-platform-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.14.0 <25",
+    "pnpm": "11.19.0"
+  },
+  "scripts": {
+    "bootstrap:local": "uv run --directory backend python ../scripts/bootstrap_local_demo.py",
+    "contracts:generate": "openapi-typescript contracts/openapi-v0.1.yaml -o frontend/lib/api/generated/schema.d.ts",
+    "contracts:lint": "redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml",
+    "format:check": "prettier --check .",
+    "frontend:dev": "pnpm --filter @maya/frontend dev",
+    "frontend:lint": "pnpm --filter @maya/frontend lint",
+    "frontend:typecheck": "pnpm --filter @maya/frontend typecheck",
+    "frontend:test": "pnpm --filter @maya/frontend test"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.48.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.6"
+  }
+}

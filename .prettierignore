@@ -1,0 +1,6 @@
+AGENTS.md
+pnpm-lock.yaml
+contracts/openapi-v0.1.yaml
+contracts/ws-events.v1.schema.json
+contracts/fixtures/*.json
+frontend/lib/api/generated/schema.d.ts

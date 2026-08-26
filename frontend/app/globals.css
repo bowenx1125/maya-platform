@@ -1,0 +1,374 @@
+:root {
+  --ink: #27233d;
+  --muted: #706b82;
+  --paper: #fcfaf6;
+  --panel: rgba(255, 255, 255, 0.82);
+  --line: #e8e1d8;
+  --indigo: #5449a6;
+  --indigo-dark: #3e367d;
+  --gold: #d3a74a;
+  --gold-soft: #f6ecd3;
+  --green: #2d8a68;
+  --red: #b74f5a;
+  --shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--paper);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(
+      circle at 8% 2%,
+      rgba(211, 167, 74, 0.15),
+      transparent 31rem
+    ),
+    radial-gradient(
+      circle at 100% 25%,
+      rgba(84, 73, 166, 0.11),
+      transparent 34rem
+    ),
+    var(--paper);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+.shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 72px 0 80px;
+}
+
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  max-width: 840px;
+  padding: clamp(32px, 7vw, 76px);
+  border: 1px solid rgba(232, 225, 216, 0.9);
+  border-radius: 32px;
+  background: linear-gradient(
+    130deg,
+    rgba(255, 255, 255, 0.92),
+    rgba(248, 244, 238, 0.72)
+  );
+  box-shadow: var(--shadow);
+}
+
+.hero-card::after {
+  position: absolute;
+  right: -12%;
+  bottom: -56%;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: rgba(84, 73, 166, 0.08);
+  content: "";
+}
+
+.eyebrow,
+.feature-index {
+  color: var(--indigo);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  position: relative;
+  z-index: 1;
+}
+
+h1 {
+  max-width: 700px;
+  margin: 18px 0 20px;
+  font-size: clamp(2.65rem, 7vw, 5.35rem);
+  font-weight: 760;
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+}
+
+h2 {
+  margin: 12px 0 10px;
+  font-size: 1.2rem;
+  letter-spacing: -0.025em;
+}
+
+.lede {
+  max-width: 650px;
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.7vw, 1.2rem);
+  line-height: 1.65;
+}
+
+.hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 36px;
+}
+
+.primary-action,
+.secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.primary-action {
+  padding: 0 22px;
+  color: white;
+  background: var(--indigo);
+  box-shadow: 0 12px 22px rgba(84, 73, 166, 0.23);
+}
+
+.primary-action:hover,
+.secondary-action:hover {
+  transform: translateY(-1px);
+}
+
+.primary-action:hover {
+  background: var(--indigo-dark);
+}
+
+.secondary-action {
+  padding: 0 16px;
+  color: var(--indigo-dark);
+  border-color: #d8d1e9;
+  background: #fff;
+  cursor: pointer;
+}
+
+.quiet-label {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.feature-grid,
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.feature-card,
+.status-card,
+.environment-card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: 0 14px 38px rgba(72, 61, 105, 0.06);
+}
+
+.feature-card {
+  min-height: 190px;
+  padding: 26px;
+}
+
+.feature-card p,
+.status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.91rem;
+  line-height: 1.6;
+}
+
+.accent-card {
+  border-color: #e9d6a8;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 253, 246, 0.95),
+    rgba(246, 236, 211, 0.72)
+  );
+}
+
+.health-shell {
+  padding-top: 48px;
+}
+
+.page-header,
+.card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.page-header h1 {
+  margin-bottom: 14px;
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+}
+
+.text-link {
+  color: var(--indigo);
+  font-size: 0.88rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+.status-grid {
+  margin-top: 42px;
+}
+
+.status-card {
+  min-height: 170px;
+  padding: 24px;
+}
+
+.status-card-topline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-ready .status-dot {
+  color: var(--green);
+  box-shadow: 0 0 0 5px rgba(45, 138, 104, 0.11);
+}
+
+.status-checking .status-dot {
+  color: var(--gold);
+  box-shadow: 0 0 0 5px rgba(211, 167, 74, 0.15);
+}
+
+.status-unavailable .status-dot {
+  color: var(--red);
+  box-shadow: 0 0 0 5px rgba(183, 79, 90, 0.11);
+}
+
+.status-card strong {
+  display: block;
+  margin: 22px 0 7px;
+  font-size: 1.16rem;
+}
+
+.environment-card {
+  margin-top: 20px;
+  padding: 28px;
+}
+
+.card-heading h2 {
+  margin-top: 10px;
+  font-size: 1.5rem;
+}
+
+.environment-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 28px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--line);
+}
+
+.environment-list > div {
+  padding: 17px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+dd {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .shell {
+    width: min(100% - 28px, 560px);
+    padding: 32px 0 52px;
+  }
+
+  .hero-card {
+    padding: 32px 24px;
+    border-radius: 24px;
+  }
+
+  h1 {
+    font-size: clamp(2.65rem, 15vw, 4.2rem);
+  }
+
+  .hero-actions,
+  .page-header,
+  .card-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-actions {
+    gap: 12px;
+  }
+
+  .primary-action {
+    width: fit-content;
+  }
+
+  .feature-grid,
+  .status-grid,
+  .environment-list {
+    grid-template-columns: 1fr;
+  }
+
+  .status-grid {
+    margin-top: 28px;
+  }
+}

@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "contract_version": "g0-2026-08-26.4",
+  "description": "Explicit Wave 0 allow-list for frozen operations whose backend routes belong to later waves.",
+  "allowed_missing_operation_ids": {
+    "listKnowledgeDocuments": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "uploadKnowledgeDocument": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "getKnowledgeDocument": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "downloadKnowledgeDocument": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "reindexKnowledgeDocument": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "hideKnowledgeDocument": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "listGroupAgents": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "createAgent": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "getAgent": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "archiveAgent": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "unarchiveAgent": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "listAgentVersions": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "createNextAgentVersion": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "getAgentVersion": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "updateAgentDraft": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "setAgentVersionDocuments": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "getRagPreview": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "uploadAgentMd": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "testAgentDraft": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "publishAgentVersion": {
+      "owner": "M05",
+      "reason": "Agent version routes are a Wave 1A deliverable."
+    },
+    "listAvatarTemplates": {
+      "owner": "M07",
+      "reason": "Avatar routes are a Wave 1B deliverable."
+    },
+    "listVoiceProfiles": {
+      "owner": "M08",
+      "reason": "Voice routes are a Wave 1B deliverable."
+    },
+    "enrollVoice": {
+      "owner": "M08",
+      "reason": "Voice routes are a Wave 1B deliverable."
+    },
+    "getVoiceProfile": {
+      "owner": "M08",
+      "reason": "Voice routes are a Wave 1B deliverable."
+    },
+    "deleteVoiceProfile": {
+      "owner": "M08",
+      "reason": "Voice routes are a Wave 1B deliverable."
+    },
+    "createVoicePreview": {
+      "owner": "M08",
+      "reason": "Voice routes are a Wave 1B deliverable."
+    },
+    "confirmVoiceProfile": {
+      "owner": "M08",
+      "reason": "Voice routes are a Wave 1B deliverable."
+    },
+    "listPublishedAgentsForTeacher": {
+      "owner": "M09",
+      "reason": "Teacher published-agent views are a Wave 1A deliverable."
+    },
+    "getKnowledgeSnapshot": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "downloadSnapshotRag": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "downloadSnapshotDocument": {
+      "owner": "M06",
+      "reason": "Knowledge/RAG routes are a Wave 1A deliverable."
+    },
+    "listDebates": {
+      "owner": "M10",
+      "reason": "Debate routes are a Wave 2 deliverable."
+    },
+    "createDebate": {
+      "owner": "M10",
+      "reason": "Debate routes are a Wave 2 deliverable."
+    },
+    "getDebate": {
+      "owner": "M10",
+      "reason": "Debate routes are a Wave 2 deliverable."
+    },
+    "updateDebateDraft": {
+      "owner": "M10",
+      "reason": "Debate routes are a Wave 2 deliverable."
+    },
+    "startDebate": {
+      "owner": "M10",
+      "reason": "Debate routes are a Wave 2 deliverable."
+    },
+    "pauseDebate": {
+      "owner": "M12",
+      "reason": "Playback routes are a Wave 2 deliverable."
+    },
+    "resumeDebate": {
+      "owner": "M12",
+      "reason": "Playback routes are a Wave 2 deliverable."
+    },
+    "skipTurnPlayback": {
+      "owner": "M12",
+      "reason": "Playback routes are a Wave 2 deliverable."
+    },
+    "stopDebate": {
+      "owner": "M12",
+      "reason": "Playback routes are a Wave 2 deliverable."
+    },
+    "replayDebate": {
+      "owner": "M15",
+      "reason": "History/replay routes are a Wave 3 deliverable."
+    },
+    "replayDebateTurn": {
+      "owner": "M15",
+      "reason": "History/replay routes are a Wave 3 deliverable."
+    },
+    "connectDebateEvents": {
+      "owner": "M12",
+      "reason": "WebSocket playback routes are a Wave 2 deliverable."
+    },
+    "getDebateTranscript": {
+      "owner": "M15",
+      "reason": "History/replay routes are a Wave 3 deliverable."
+    },
+    "getTeacherInteraction": {
+      "owner": "M13",
+      "reason": "Classroom interaction routes are a Wave 3 deliverable."
+    },
+    "openInteraction": {
+      "owner": "M13",
+      "reason": "Classroom interaction routes are a Wave 3 deliverable."
+    },
+    "closeInteraction": {
+      "owner": "M13",
+      "reason": "Classroom interaction routes are a Wave 3 deliverable."
+    },
+    "getClassroomInteractionForm": {
+      "owner": "M13",
+      "reason": "Classroom interaction routes are a Wave 3 deliverable."
+    },
+    "submitVote": {
+      "owner": "M13",
+      "reason": "Classroom interaction routes are a Wave 3 deliverable."
+    },
+    "submitBarrage": {
+      "owner": "M13",
+      "reason": "Classroom interaction routes are a Wave 3 deliverable."
+    },
+    "getCurrentReport": {
+      "owner": "M14",
+      "reason": "Maya report routes are a Wave 3 deliverable."
+    },
+    "regenerateReport": {
+      "owner": "M14",
+      "reason": "Maya report routes are a Wave 3 deliverable."
+    },
+    "listReportRevisions": {
+      "owner": "M14",
+      "reason": "Maya report routes are a Wave 3 deliverable."
+    },
+    "getReportRevision": {
+      "owner": "M14",
+      "reason": "Maya report routes are a Wave 3 deliverable."
+    },
+    "downloadCurrentReport": {
+      "owner": "M14",
+      "reason": "Maya report routes are a Wave 3 deliverable."
+    },
+    "listTranslationBatches": {
+      "owner": "M15",
+      "reason": "Translation routes are a Wave 3 deliverable."
+    },
+    "translateCurrentPublishedContent": {
+      "owner": "M15",
+      "reason": "Translation routes are a Wave 3 deliverable."
+    },
+    "streamRetainedTurnAudio": {
+      "owner": "M15",
+      "reason": "Retained audio routes are a Wave 3 deliverable."
+    }
+  },
+  "allowed_extra_operation_ids": {
+    "health_live_health_live_get": {
+      "owner": "M01",
+      "reason": "Liveness probe is infrastructure-only and outside the frozen /api/v1 surface."
+    },
+    "health_ready_health_ready_get": {
+      "owner": "M01",
+      "reason": "Readiness probe is infrastructure-only and outside the frozen /api/v1 surface."
+    }
+  }
+}

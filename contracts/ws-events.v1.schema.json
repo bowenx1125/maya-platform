@@ -1,0 +1,3263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maya.local/contracts/ws-events.v1.schema.json",
+  "title": "Maya v1 WebSocket events",
+  "description": "Closed, versioned platform event union. Prepared turn text is intentionally absent from turn.ready.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "snapshot"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_snapshot"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "debate.started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_debate_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "round.started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_round_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "turn.preparing"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_turn_preparing"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "turn.ready"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_turn_ready"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "playback.started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_playback_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "playback.paused"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_playback_paused"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "playback.resumed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_playback_resumed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "playback.skipped"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_playback_skipped"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "playback.completed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_playback_completed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "replay.started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_replay_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "replay.completed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_replay_completed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "translation.batch_started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_translation_batch_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "translation.batch_completed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_translation_batch_completed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "translation.batch_failed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_translation_batch_failed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "interaction.opened"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_interaction_opened"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "interaction.vote_created"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_interaction_vote_created"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "interaction.barrage_created"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_interaction_barrage_created"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "interaction.closed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_interaction_closed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "barrage_insight.started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_barrage_insight_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "barrage_insight.completed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_barrage_insight_completed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "barrage_insight.failed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_barrage_insight_failed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "report.started"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_report_started"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "report.completed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_report_completed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "report.failed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_report_failed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "debate.completed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_debate_completed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "debate.failed"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_debate_failed"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "debate.stopped"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_debate_stopped"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "error"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_error"
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "iso_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload_snapshot": {
+      "type": "object",
+      "required": [
+        "debate_status",
+        "playback_status",
+        "interaction_status",
+        "insight_status",
+        "report_status",
+        "public_turns",
+        "playback",
+        "interaction",
+        "report"
+      ],
+      "properties": {
+        "debate_status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "running",
+            "debate_finished",
+            "completed",
+            "failed",
+            "stopped"
+          ]
+        },
+        "playback_status": {
+          "type": "string",
+          "enum": [
+            "preparing",
+            "ready",
+            "playing",
+            "paused",
+            "completed",
+            "stopped"
+          ]
+        },
+        "interaction_status": {
+          "type": "string",
+          "enum": [
+            "closed",
+            "open",
+            "finalized"
+          ]
+        },
+        "insight_status": {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "generating",
+            "ready",
+            "failed"
+          ]
+        },
+        "report_status": {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "generating",
+            "ready",
+            "failed"
+          ]
+        },
+        "public_turns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "participant_id",
+              "round_no",
+              "turn_index",
+              "speech",
+              "retrieval_status",
+              "grounding_mode",
+              "sources"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "participant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "round_no": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
+              },
+              "turn_index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "speech": {
+                "type": "string",
+                "minLength": 1
+              },
+              "retrieval_status": {
+                "type": "string",
+                "enum": [
+                  "matched",
+                  "no_match"
+                ]
+              },
+              "grounding_mode": {
+                "type": "string",
+                "enum": [
+                  "rag_grounded",
+                  "mixed",
+                  "general_reasoning"
+                ]
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "source_filename"
+                  ],
+                  "properties": {
+                    "source_filename": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "chunk_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "minItems": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "playback": {
+          "type": "object",
+          "required": [
+            "status",
+            "mode",
+            "current_turn_id",
+            "cursor_ms",
+            "playback_rate",
+            "control_version"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "preparing",
+                "ready",
+                "playing",
+                "paused",
+                "completed",
+                "stopped"
+              ]
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "live",
+                "replay"
+              ]
+            },
+            "current_turn_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "playback_rate": {
+              "type": "number",
+              "minimum": 0.95,
+              "maximum": 1.25
+            },
+            "control_version": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "interaction": {
+          "type": "object",
+          "required": [
+            "status",
+            "votes",
+            "barrage_count"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "closed",
+                "open",
+                "finalized"
+              ]
+            },
+            "votes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "participant_id",
+                  "count",
+                  "percentage"
+                ],
+                "properties": {
+                  "participant_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "percentage": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                },
+                "additionalProperties": false
+              },
+              "minItems": 0
+            },
+            "barrage_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_votes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "public_url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "report": {
+          "type": "object",
+          "required": [
+            "generation_status",
+            "latest_attempt_status",
+            "insight"
+          ],
+          "properties": {
+            "generation_status": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "latest_attempt_status": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "insight": {
+              "type": "object",
+              "required": [
+                "status",
+                "included_count",
+                "filtered_count",
+                "items"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "not_started",
+                    "generating",
+                    "ready",
+                    "failed"
+                  ]
+                },
+                "included_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "filtered_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "category",
+                      "summary",
+                      "count"
+                    ],
+                    "properties": {
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "support",
+                          "challenge",
+                          "question"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "minItems": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "active_revision_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "current_success_revision": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "revision_no",
+                    "status",
+                    "created_at"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "revision_no": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "generating",
+                        "ready",
+                        "failed"
+                      ]
+                    },
+                    "english_markdown": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "word_count": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 600,
+                          "maximum": 900
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "translated_markdown": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "safe_error_code": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "latest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_debate_started": {
+      "type": "object",
+      "required": [
+        "rule_set_id"
+      ],
+      "properties": {
+        "rule_set_id": {
+          "type": "string",
+          "const": "ordered_multi_agent_rounds_demo_v1"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "participant_id",
+              "slot"
+            ],
+            "properties": {
+              "participant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C",
+                  "D",
+                  "E"
+                ]
+              },
+              "order_index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 2
+        },
+        "participant_slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "participant_id",
+              "slot"
+            ],
+            "properties": {
+              "participant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C",
+                  "D",
+                  "E"
+                ]
+              },
+              "order_index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "participants"
+          ],
+          "properties": {
+            "participants": {}
+          }
+        },
+        {
+          "required": [
+            "participant_slots"
+          ],
+          "properties": {
+            "participant_slots": {}
+          }
+        }
+      ]
+    },
+    "payload_round_started": {
+      "type": "object",
+      "required": [
+        "round_no"
+      ],
+      "properties": {
+        "round_no": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "turn_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_turn_preparing": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "slot",
+        "round_no"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "slot": {
+          "type": "string",
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E"
+          ]
+        },
+        "round_no": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "rag",
+            "llm",
+            "tts"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_turn_ready": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "slot",
+        "audio_ready",
+        "retrieval_status"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "slot": {
+          "type": "string",
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E"
+          ]
+        },
+        "round_no": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "audio_ready": {
+          "type": "boolean",
+          "const": true
+        },
+        "retrieval_status": {
+          "type": "string",
+          "enum": [
+            "matched",
+            "no_match"
+          ]
+        },
+        "grounding_mode": {
+          "type": "string",
+          "enum": [
+            "rag_grounded",
+            "mixed",
+            "general_reasoning"
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source_filename"
+            ],
+            "properties": {
+              "source_filename": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chunk_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "audio_duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_playback_started": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "speech",
+        "sources",
+        "playback_url",
+        "avatar_states",
+        "cursor_ms"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "slot": {
+          "type": "string",
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E"
+          ]
+        },
+        "round_no": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "speech": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source_filename"
+            ],
+            "properties": {
+              "source_filename": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chunk_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "playback_url": {
+          "type": "string",
+          "format": "uri-reference"
+        },
+        "avatar_states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "participant_id",
+              "slot",
+              "motion_state",
+              "expression"
+            ],
+            "properties": {
+              "participant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C",
+                  "D",
+                  "E"
+                ]
+              },
+              "motion_state": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "listening",
+                  "speaking",
+                  "thinking",
+                  "nod_yes"
+                ]
+              },
+              "expression": {
+                "type": "string",
+                "enum": [
+                  "neutral",
+                  "attentive",
+                  "happy",
+                  "serious_angry",
+                  "sad"
+                ]
+              },
+              "expression_strength": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "cursor_ms": {
+          "type": "integer",
+          "const": 0
+        },
+        "playback_rate": {
+          "type": "number",
+          "minimum": 0.95,
+          "maximum": 1.25
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_playback_paused": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "cursor_ms",
+        "control_version"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cursor_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playback_rate": {
+          "type": "number",
+          "minimum": 0.95,
+          "maximum": 1.25
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_playback_resumed": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "cursor_ms",
+        "control_version"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cursor_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playback_rate": {
+          "type": "number",
+          "minimum": 0.95,
+          "maximum": 1.25
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_playback_skipped": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "cursor_ms",
+        "control_version"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cursor_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playback_rate": {
+          "type": "number",
+          "minimum": 0.95,
+          "maximum": 1.25
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_playback_completed": {
+      "type": "object",
+      "required": [
+        "turn_id",
+        "cursor_ms",
+        "control_version"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cursor_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playback_rate": {
+          "type": "number",
+          "minimum": 0.95,
+          "maximum": 1.25
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_replay_started": {
+      "type": "object",
+      "required": [
+        "scope",
+        "turn_id"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "turn",
+            "all"
+          ]
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_replay_completed": {
+      "type": "object",
+      "required": [
+        "scope",
+        "turn_id"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "turn",
+            "all"
+          ]
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_translation_batch_started": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "total_items",
+        "succeeded_items",
+        "failed_items"
+      ],
+      "properties": {
+        "batch_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "partial",
+            "failed"
+          ]
+        },
+        "total_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_translation_batch_completed": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "total_items",
+        "succeeded_items",
+        "failed_items"
+      ],
+      "properties": {
+        "batch_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "partial",
+            "failed"
+          ]
+        },
+        "total_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_translation_batch_failed": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "total_items",
+        "succeeded_items",
+        "failed_items"
+      ],
+      "properties": {
+        "batch_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "partial",
+            "failed"
+          ]
+        },
+        "total_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_interaction_opened": {
+      "type": "object",
+      "required": [
+        "public_url",
+        "qr_payload",
+        "aggregate_zeros"
+      ],
+      "properties": {
+        "public_url": {
+          "type": "string",
+          "format": "uri-reference"
+        },
+        "qr_payload": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aggregate_zeros": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "participant_id",
+              "count",
+              "percentage"
+            ],
+            "properties": {
+              "participant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "percentage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "open"
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_interaction_vote_created": {
+      "type": "object",
+      "required": [
+        "participant_id",
+        "new_count",
+        "percentage",
+        "total_votes"
+      ],
+      "properties": {
+        "participant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "slot": {
+          "type": "string",
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E"
+          ]
+        },
+        "new_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "total_votes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_interaction_barrage_created": {
+      "type": "object",
+      "required": [
+        "message_id",
+        "nickname",
+        "raw_text",
+        "sequence"
+      ],
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "nickname": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_interaction_closed": {
+      "type": "object",
+      "required": [
+        "totals",
+        "message_count",
+        "input_hash"
+      ],
+      "properties": {
+        "totals": {
+          "type": "object",
+          "required": [
+            "total_votes",
+            "total_barrages"
+          ],
+          "properties": {
+            "total_votes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_barrages": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "message_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_hash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_barrage_insight_started": {
+      "type": "object",
+      "required": [
+        "revision"
+      ],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "const": "generating"
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_barrage_insight_completed": {
+      "type": "object",
+      "required": [
+        "revision",
+        "included_count",
+        "filtered_count",
+        "themes"
+      ],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "const": "ready"
+        },
+        "included_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "filtered_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "category",
+              "summary",
+              "count"
+            ],
+            "properties": {
+              "category": {
+                "type": "string",
+                "enum": [
+                  "support",
+                  "challenge",
+                  "question"
+                ]
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_barrage_insight_failed": {
+      "type": "object",
+      "required": [
+        "revision",
+        "status",
+        "safe_error_code"
+      ],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "const": "failed"
+        },
+        "included_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "filtered_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "safe_error_code": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_report_started": {
+      "type": "object",
+      "required": [
+        "revision_id",
+        "status"
+      ],
+      "properties": {
+        "revision_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "const": "generating"
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_report_completed": {
+      "type": "object",
+      "required": [
+        "revision_id",
+        "status",
+        "report"
+      ],
+      "properties": {
+        "revision_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "const": "ready"
+        },
+        "report": {
+          "type": "object",
+          "required": [
+            "generation_status",
+            "latest_attempt_status",
+            "insight"
+          ],
+          "properties": {
+            "generation_status": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "latest_attempt_status": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "insight": {
+              "type": "object",
+              "required": [
+                "status",
+                "included_count",
+                "filtered_count",
+                "items"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "not_started",
+                    "generating",
+                    "ready",
+                    "failed"
+                  ]
+                },
+                "included_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "filtered_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "category",
+                      "summary",
+                      "count"
+                    ],
+                    "properties": {
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "support",
+                          "challenge",
+                          "question"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "minItems": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "active_revision_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "current_success_revision": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "revision_no",
+                    "status",
+                    "created_at"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "revision_no": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "generating",
+                        "ready",
+                        "failed"
+                      ]
+                    },
+                    "english_markdown": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "word_count": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 600,
+                          "maximum": 900
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "translated_markdown": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "safe_error_code": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_report_failed": {
+      "type": "object",
+      "required": [
+        "revision_id",
+        "status",
+        "safe_error_code"
+      ],
+      "properties": {
+        "revision_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "const": "failed"
+        },
+        "safe_error_code": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_debate_completed": {
+      "type": "object",
+      "required": [
+        "final_states",
+        "downstream_outcome"
+      ],
+      "properties": {
+        "final_states": {
+          "type": "object",
+          "required": [
+            "debate"
+          ],
+          "properties": {
+            "debate": {
+              "type": "string",
+              "enum": [
+                "debate_finished",
+                "completed",
+                "failed",
+                "stopped"
+              ]
+            },
+            "playback": {
+              "type": "object",
+              "required": [
+                "status",
+                "mode",
+                "current_turn_id",
+                "cursor_ms",
+                "playback_rate",
+                "control_version"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "preparing",
+                    "ready",
+                    "playing",
+                    "paused",
+                    "completed",
+                    "stopped"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "replay"
+                  ]
+                },
+                "current_turn_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cursor_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "playback_rate": {
+                  "type": "number",
+                  "minimum": 0.95,
+                  "maximum": 1.25
+                },
+                "control_version": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "interaction": {
+              "type": "string",
+              "enum": [
+                "closed",
+                "open",
+                "finalized"
+              ]
+            },
+            "insight": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "report": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "downstream_outcome": {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "ready",
+            "failed",
+            "completed"
+          ]
+        },
+        "safe_error_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_debate_failed": {
+      "type": "object",
+      "required": [
+        "final_states",
+        "downstream_outcome",
+        "safe_error_code"
+      ],
+      "properties": {
+        "final_states": {
+          "type": "object",
+          "required": [
+            "debate"
+          ],
+          "properties": {
+            "debate": {
+              "type": "string",
+              "enum": [
+                "debate_finished",
+                "completed",
+                "failed",
+                "stopped"
+              ]
+            },
+            "playback": {
+              "type": "object",
+              "required": [
+                "status",
+                "mode",
+                "current_turn_id",
+                "cursor_ms",
+                "playback_rate",
+                "control_version"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "preparing",
+                    "ready",
+                    "playing",
+                    "paused",
+                    "completed",
+                    "stopped"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "replay"
+                  ]
+                },
+                "current_turn_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cursor_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "playback_rate": {
+                  "type": "number",
+                  "minimum": 0.95,
+                  "maximum": 1.25
+                },
+                "control_version": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "interaction": {
+              "type": "string",
+              "enum": [
+                "closed",
+                "open",
+                "finalized"
+              ]
+            },
+            "insight": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "report": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "downstream_outcome": {
+          "type": "string",
+          "enum": [
+            "failed",
+            "stopped"
+          ]
+        },
+        "safe_error_code": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_debate_stopped": {
+      "type": "object",
+      "required": [
+        "final_states",
+        "downstream_outcome"
+      ],
+      "properties": {
+        "final_states": {
+          "type": "object",
+          "required": [
+            "debate"
+          ],
+          "properties": {
+            "debate": {
+              "type": "string",
+              "enum": [
+                "debate_finished",
+                "completed",
+                "failed",
+                "stopped"
+              ]
+            },
+            "playback": {
+              "type": "object",
+              "required": [
+                "status",
+                "mode",
+                "current_turn_id",
+                "cursor_ms",
+                "playback_rate",
+                "control_version"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "preparing",
+                    "ready",
+                    "playing",
+                    "paused",
+                    "completed",
+                    "stopped"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "replay"
+                  ]
+                },
+                "current_turn_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cursor_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "playback_rate": {
+                  "type": "number",
+                  "minimum": 0.95,
+                  "maximum": 1.25
+                },
+                "control_version": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "interaction": {
+              "type": "string",
+              "enum": [
+                "closed",
+                "open",
+                "finalized"
+              ]
+            },
+            "insight": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            },
+            "report": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "generating",
+                "ready",
+                "failed"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "downstream_outcome": {
+          "type": "string",
+          "const": "stopped"
+        },
+        "safe_error_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "request_id",
+        "recoverable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "current_revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "current_control_version": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "recoverable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

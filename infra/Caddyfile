@@ -1,0 +1,17 @@
+:8080 {
+    encode gzip
+
+    @platform_api path /api/*
+    handle @platform_api {
+        reverse_proxy backend:8000
+    }
+
+    @platform_websocket path /ws/*
+    handle @platform_websocket {
+        reverse_proxy backend:8000
+    }
+
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

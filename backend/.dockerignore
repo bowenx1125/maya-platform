@@ -1,0 +1,13 @@
+.venv
+venv
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+data
+config/demo_users.yaml
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log

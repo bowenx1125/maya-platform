@@ -1,0 +1,57 @@
+{
+  "contract_version": "g0-2026-08-26.4",
+  "description": "Explicit exceptions for generic Redocly response-completeness recommendations; frozen statuses remain mandatory.",
+  "allow_response_schema_supersets": {},
+  "allow_missing_4xx": {
+    "logout": {
+      "reason": "Logout is a same-origin session revocation command whose frozen contract intentionally declares only 204."
+    },
+    "listCourses": {
+      "reason": "The authenticated collection endpoint intentionally relies on the shared error envelope without repeating a 4xx response."
+    },
+    "listAvatarTemplates": {
+      "reason": "The static platform-template collection intentionally declares only its successful response."
+    },
+    "listTranslationBatches": {
+      "reason": "The teacher translation-history collection intentionally declares only its successful response."
+    }
+  },
+  "allow_missing_2xx": {
+    "connectDebateEvents": {
+      "required_status": "101",
+      "reason": "The frozen WebSocket upgrade is represented by 101 Switching Protocols."
+    }
+  },
+  "allow_extra_statuses": {
+    "login": {
+      "422": {
+        "reason": "FastAPI request-validation response; not a replacement for frozen 401."
+      }
+    },
+    "switchDemoIdentity": {
+      "422": {
+        "reason": "FastAPI request-validation response; not a replacement for frozen 403/404."
+      }
+    },
+    "logout": {
+      "422": {
+        "reason": "FastAPI request-validation response; not a replacement for frozen 204."
+      }
+    },
+    "getCourse": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for frozen 404."
+      }
+    },
+    "listCourseGroups": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for frozen 404."
+      }
+    },
+    "getGroup": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for frozen 404."
+      }
+    }
+  }
+}

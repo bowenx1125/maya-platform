@@ -1,0 +1,2116 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Maya Teaching Platform API",
+    "version": "0.1.0-g0.4",
+    "description": "Demo v0.1 platform contract. Provider names, model names, external voice IDs, API keys, absolute file paths, and prepared turn text are never public fields."
+  },
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session created and CSRF token returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/switch": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "switchDemoIdentity",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "description": "Available only when DEMO_MODE=true; rotates the server session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "$ref": "#/components/schemas/Uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/demo-identities": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "listDemoIdentities",
+        "description": "Requires an existing session and DEMO_MODE=true; never returns passwords.",
+        "responses": {
+          "200": {
+            "description": "Safe identity options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "user_id",
+                      "display_name",
+                      "role"
+                    ],
+                    "properties": {
+                      "user_id": {
+                        "$ref": "#/components/schemas/Uuid"
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "teacher",
+                          "student"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "description": "Current user, memberships, refreshed CSRF token and session expiry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "logout",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session revoked."
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courses": {
+      "get": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "listCourses",
+        "responses": {
+          "200": {
+            "description": "Courses visible to current user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Course"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courses/{course_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "getCourse",
+        "responses": {
+          "200": {
+            "description": "Course detail and read-only members.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courses/{course_id}/groups": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "listCourseGroups",
+        "responses": {
+          "200": {
+            "description": "Seeded groups visible in this course.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Group"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/GroupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "getGroup",
+        "responses": {
+          "200": {
+            "description": "Group and read-only members.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "health_live_health_live_get",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "health_ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Ready"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "maya_session"
+      }
+    },
+    "parameters": {
+      "CourseId": {
+        "name": "course_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "GroupId": {
+        "name": "group_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "AgentId": {
+        "name": "agent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "VersionId": {
+        "name": "version_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "SnapshotId": {
+        "name": "snapshot_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "SnapshotDocumentId": {
+        "name": "snapshot_document_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "DocumentId": {
+        "name": "document_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "VoiceProfileId": {
+        "name": "voice_profile_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "DebateId": {
+        "name": "debate_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "TurnId": {
+        "name": "turn_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "RevisionId": {
+        "name": "revision_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "AccessToken": {
+        "name": "access_token",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 32
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 16
+        }
+      },
+      "CsrfToken": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "required": true,
+        "description": "Raw per-session CSRF token returned by AuthSession; required on authenticated mutations.",
+        "schema": {
+          "type": "string",
+          "minLength": 32
+        }
+      }
+    },
+    "requestBodies": {
+      "ControlCommand": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "expected_control_version"
+              ],
+              "properties": {
+                "expected_control_version": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Stable platform error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PlaybackState": {
+        "description": "Authoritative playback state.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PlaybackState"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Uuid": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "IsoTime": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "AuthSession": {
+        "type": "object",
+        "required": [
+          "user",
+          "csrf_token",
+          "expires_at"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/CurrentUser"
+          },
+          "csrf_token": {
+            "type": "string",
+            "minLength": 32
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "CurrentUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "courses",
+          "groups"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "courses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourseMembership"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupMembership"
+            }
+          }
+        }
+      },
+      "CourseMembership": {
+        "type": "object",
+        "required": [
+          "course_id",
+          "role"
+        ],
+        "properties": {
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "teacher",
+              "student"
+            ]
+          }
+        }
+      },
+      "GroupMembership": {
+        "type": "object",
+        "required": [
+          "group_id",
+          "role"
+        ],
+        "properties": {
+          "group_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "leader",
+              "admin",
+              "member"
+            ]
+          }
+        }
+      },
+      "Course": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "current_audio_debate_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CourseDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Course"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "members": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Group": {
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "GroupDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Group"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "members": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Member": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "role"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "KnowledgeDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "group_id",
+          "source_filename",
+          "char_count",
+          "index_status",
+          "workspace_state",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "group_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "source_filename": {
+            "type": "string"
+          },
+          "char_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "index_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "indexing",
+              "ready",
+              "failed"
+            ]
+          },
+          "workspace_state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "hidden"
+            ]
+          },
+          "safe_error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "SnapshotDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "source_filename",
+          "char_count",
+          "order_index"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "source_filename": {
+            "type": "string"
+          },
+          "char_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "order_index": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "KnowledgeSnapshot": {
+        "type": "object",
+        "required": [
+          "id",
+          "agent_version_id",
+          "content_hash",
+          "total_char_count",
+          "documents",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "agent_version_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "total_char_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotDocument"
+            }
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "KnowledgeDocumentMutation": {
+        "type": "object",
+        "required": [
+          "document",
+          "agent_version"
+        ],
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/KnowledgeDocument"
+          },
+          "agent_version": {
+            "$ref": "#/components/schemas/AgentVersion"
+          }
+        }
+      },
+      "AgentSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "group_id",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "group_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "current_published_version_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_draft_version_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AgentDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AgentSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "versions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AgentVersion"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AgentVersion": {
+        "type": "object",
+        "required": [
+          "id",
+          "agent_id",
+          "version_label",
+          "state",
+          "revision",
+          "avatar_config",
+          "voice_fallback_active"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "agent_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "version_label": {
+            "type": "string",
+            "pattern": "^V[0-9]+\\.[0-9]+$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "superseded"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "agent_md": {
+            "type": "string",
+            "maxLength": 12000
+          },
+          "avatar_config": {
+            "$ref": "#/components/schemas/AvatarConfig"
+          },
+          "voice_profile_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effective_voice_profile_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "voice_fallback_active": {
+            "type": "boolean"
+          },
+          "knowledge_snapshot_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled_documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeDocument"
+            }
+          },
+          "publish_blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpdateAgentDraftRequest": {
+        "type": "object",
+        "required": [
+          "expected_revision"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "agent_md": {
+            "type": "string",
+            "maxLength": 12000
+          },
+          "avatar_config": {
+            "$ref": "#/components/schemas/AvatarConfig"
+          },
+          "voice_profile_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AvatarConfig": {
+        "type": "object",
+        "required": [
+          "template_id",
+          "material_theme",
+          "default_expression",
+          "expression_strength",
+          "motion_style"
+        ],
+        "properties": {
+          "template_id": {
+            "type": "string"
+          },
+          "material_theme": {
+            "type": "string"
+          },
+          "eye_color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default_expression": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "attentive",
+              "happy",
+              "serious_angry",
+              "sad"
+            ]
+          },
+          "expression_strength": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "motion_style": {
+            "type": "string",
+            "enum": [
+              "calm",
+              "active"
+            ]
+          }
+        }
+      },
+      "AvatarTemplate": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "available",
+          "supported_parameters"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "supported_parameters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RagPreview": {
+        "type": "object",
+        "required": [
+          "version_id",
+          "total_char_count",
+          "limit",
+          "document_count",
+          "index_status"
+        ],
+        "properties": {
+          "version_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "total_char_count": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer",
+            "const": 100000
+          },
+          "document_count": {
+            "type": "integer"
+          },
+          "index_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed"
+            ]
+          },
+          "combined_markdown": {
+            "type": "string"
+          }
+        }
+      },
+      "RetrievalSource": {
+        "type": "object",
+        "required": [
+          "source_filename"
+        ],
+        "properties": {
+          "source_filename": {
+            "type": "string"
+          },
+          "chunk_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "TestChatResponse": {
+        "type": "object",
+        "required": [
+          "answer",
+          "retrieval_status",
+          "grounding_mode",
+          "sources"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "retrieval_status": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "no_match"
+            ]
+          },
+          "grounding_mode": {
+            "type": "string",
+            "enum": [
+              "rag_grounded",
+              "mixed",
+              "general_reasoning"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetrievalSource"
+            }
+          }
+        }
+      },
+      "VoiceProfile": {
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "system",
+              "group"
+            ]
+          },
+          "group_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "validating",
+              "enrolling",
+              "preview_ready",
+              "ready",
+              "deleting",
+              "outcome_unknown",
+              "failed",
+              "deleted"
+            ]
+          },
+          "source_filename": {
+            "type": "string"
+          },
+          "safe_error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "PlaybackResource": {
+        "type": "object",
+        "required": [
+          "playback_url",
+          "expires_at"
+        ],
+        "properties": {
+          "playback_url": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "PublishedAgentSummary": {
+        "type": "object",
+        "required": [
+          "agent",
+          "current_version"
+        ],
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentSummary"
+          },
+          "current_version": {
+            "$ref": "#/components/schemas/AgentVersion"
+          }
+        }
+      },
+      "DebateParticipantInput": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "stance_mode"
+        ],
+        "properties": {
+          "agent_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "stance_mode": {
+            "type": "string",
+            "enum": [
+              "assigned",
+              "open"
+            ]
+          },
+          "assigned_stance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "support",
+              "oppose",
+              "neutral",
+              null
+            ]
+          },
+          "teacher_note": {
+            "type": "string",
+            "default": ""
+          }
+        }
+      },
+      "DebateDraftRequest": {
+        "type": "object",
+        "required": [
+          "topic",
+          "participants",
+          "round_count"
+        ],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1
+          },
+          "participants": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/DebateParticipantInput"
+            }
+          },
+          "round_count": {
+            "type": "integer",
+            "const": 2
+          },
+          "total_duration_seconds": {
+            "type": "null"
+          },
+          "turn_duration_seconds": {
+            "type": "null"
+          }
+        }
+      },
+      "DebateParticipant": {
+        "type": "object",
+        "required": [
+          "id",
+          "slot",
+          "order_index",
+          "agent_version_id",
+          "knowledge_snapshot_id",
+          "stance_mode"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "slot": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E"
+            ]
+          },
+          "order_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "agent_version_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "knowledge_snapshot_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "stance_mode": {
+            "type": "string",
+            "enum": [
+              "assigned",
+              "open"
+            ]
+          },
+          "initial_stance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "support",
+              "oppose",
+              "neutral",
+              null
+            ]
+          },
+          "current_stance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "support",
+              "oppose",
+              "neutral",
+              null
+            ]
+          },
+          "current_position_summary": {
+            "type": "string"
+          }
+        }
+      },
+      "DebateSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "topic",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "running",
+              "debate_finished",
+              "completed",
+              "failed",
+              "stopped"
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "DebateDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DebateSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "revision",
+              "last_sequence",
+              "rule_set_id",
+              "participants",
+              "public_turns",
+              "playback",
+              "interaction_status",
+              "insight_status",
+              "report_status"
+            ],
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rule_set_id": {
+                "type": "string",
+                "const": "ordered_multi_agent_rounds_demo_v1"
+              },
+              "participants": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DebateParticipant"
+                }
+              },
+              "public_turns": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DebateTurn"
+                }
+              },
+              "playback": {
+                "$ref": "#/components/schemas/PlaybackState"
+              },
+              "interaction_status": {
+                "type": "string",
+                "enum": [
+                  "closed",
+                  "open",
+                  "finalized"
+                ]
+              },
+              "insight_status": {
+                "type": "string",
+                "enum": [
+                  "not_started",
+                  "generating",
+                  "ready",
+                  "failed"
+                ]
+              },
+              "report_status": {
+                "type": "string",
+                "enum": [
+                  "not_started",
+                  "generating",
+                  "ready",
+                  "failed"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "PlaybackState": {
+        "type": "object",
+        "required": [
+          "status",
+          "mode",
+          "cursor_ms",
+          "playback_rate",
+          "control_version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "preparing",
+              "ready",
+              "playing",
+              "paused",
+              "completed",
+              "stopped"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "replay"
+            ]
+          },
+          "current_turn_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cursor_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "playback_rate": {
+            "type": "number",
+            "minimum": 0.95,
+            "maximum": 1.25
+          },
+          "control_version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "DebateTurn": {
+        "type": "object",
+        "required": [
+          "id",
+          "participant_id",
+          "round_no",
+          "turn_index",
+          "speech",
+          "retrieval_status",
+          "grounding_mode",
+          "sources"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "participant_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "round_no": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "turn_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "speech": {
+            "type": "string"
+          },
+          "retrieval_status": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "no_match"
+            ]
+          },
+          "grounding_mode": {
+            "type": "string",
+            "enum": [
+              "rag_grounded",
+              "mixed",
+              "general_reasoning"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetrievalSource"
+            }
+          },
+          "translated_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "playback_resource": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PlaybackResource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Transcript": {
+        "type": "object",
+        "required": [
+          "debate_id",
+          "turns",
+          "audio_retained"
+        ],
+        "properties": {
+          "debate_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DebateTurn"
+            }
+          },
+          "audio_retained": {
+            "type": "boolean"
+          }
+        }
+      },
+      "VoteAggregate": {
+        "type": "object",
+        "required": [
+          "participant_id",
+          "count",
+          "percentage"
+        ],
+        "properties": {
+          "participant_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "BarrageMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "nickname",
+          "raw_text",
+          "sequence",
+          "submitted_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "raw_text": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "submitted_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "TeacherInteraction": {
+        "type": "object",
+        "required": [
+          "status",
+          "votes",
+          "barrages"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "closed",
+              "open",
+              "finalized"
+            ]
+          },
+          "public_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri-reference"
+          },
+          "votes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoteAggregate"
+            }
+          },
+          "barrages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BarrageMessage"
+            }
+          }
+        }
+      },
+      "PublicInteractionForm": {
+        "type": "object",
+        "required": [
+          "topic",
+          "participants"
+        ],
+        "properties": {
+          "topic": {
+            "type": "string"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "participant_id",
+                "slot",
+                "name"
+              ],
+              "properties": {
+                "participant_id": {
+                  "$ref": "#/components/schemas/Uuid"
+                },
+                "slot": {
+                  "type": "string",
+                  "enum": [
+                    "A",
+                    "B",
+                    "C",
+                    "D",
+                    "E"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BarrageInsightItem": {
+        "type": "object",
+        "required": [
+          "category",
+          "summary",
+          "count"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "support",
+              "challenge",
+              "question"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "BarrageInsight": {
+        "type": "object",
+        "required": [
+          "status",
+          "included_count",
+          "filtered_count",
+          "items"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "generating",
+              "ready",
+              "failed"
+            ]
+          },
+          "included_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "filtered_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BarrageInsightItem"
+            }
+          }
+        }
+      },
+      "ReportRevision": {
+        "type": "object",
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "generating",
+              "ready",
+              "failed"
+            ]
+          },
+          "english_markdown": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "word_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 600,
+            "maximum": 900
+          },
+          "translated_markdown": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "safe_error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "Report": {
+        "type": "object",
+        "required": [
+          "debate_id",
+          "generation_status",
+          "latest_attempt_status",
+          "insight"
+        ],
+        "properties": {
+          "debate_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "generation_status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "generating",
+              "ready",
+              "failed"
+            ]
+          },
+          "latest_attempt_status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "generating",
+              "ready",
+              "failed"
+            ]
+          },
+          "insight": {
+            "$ref": "#/components/schemas/BarrageInsight"
+          },
+          "active_revision_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_success_revision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReportRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TranslationBatch": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "target_language",
+          "total_items",
+          "succeeded_items",
+          "failed_items"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "partial",
+              "failed"
+            ]
+          },
+          "target_language": {
+            "type": "string",
+            "const": "zh-Hans"
+          },
+          "total_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeeded_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed_items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "JobStatus": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "interrupted"
+            ]
+          },
+          "safe_error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

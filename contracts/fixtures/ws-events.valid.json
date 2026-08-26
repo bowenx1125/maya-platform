@@ -1,0 +1,519 @@
+[
+  {
+    "event_id": "99999999-9999-4999-8999-000000000001",
+    "event_type": "snapshot",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 1,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "debate_status": "running",
+      "playback_status": "preparing",
+      "interaction_status": "closed",
+      "insight_status": "not_started",
+      "report_status": "not_started",
+      "public_turns": [],
+      "playback": {
+        "status": "preparing",
+        "mode": "live",
+        "current_turn_id": null,
+        "cursor_ms": 0,
+        "playback_rate": 1,
+        "control_version": 0
+      },
+      "interaction": {
+        "status": "closed",
+        "votes": [],
+        "barrage_count": 0
+      },
+      "report": {
+        "generation_status": "not_started",
+        "latest_attempt_status": "not_started",
+        "insight": {
+          "status": "not_started",
+          "included_count": 0,
+          "filtered_count": 0,
+          "items": []
+        }
+      }
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000002",
+    "event_type": "debate.started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 2,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "rule_set_id": "ordered_multi_agent_rounds_demo_v1",
+      "participants": [
+        {
+          "participant_id": "22222222-2222-4222-8222-222222222222",
+          "slot": "A",
+          "order_index": 0,
+          "name": "Bowen"
+        },
+        {
+          "participant_id": "33333333-3333-4333-8333-333333333333",
+          "slot": "B",
+          "order_index": 1,
+          "name": "KaiKai"
+        }
+      ]
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000003",
+    "event_type": "round.started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 3,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "round_no": 1,
+      "turn_count": 2
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000004",
+    "event_type": "turn.preparing",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 4,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "slot": "A",
+      "round_no": 1,
+      "stage": "rag"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000005",
+    "event_type": "turn.ready",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 5,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "slot": "A",
+      "round_no": 1,
+      "audio_ready": true,
+      "retrieval_status": "matched",
+      "grounding_mode": "rag_grounded",
+      "sources": [
+        {
+          "source_filename": "fixture.md"
+        }
+      ]
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000006",
+    "event_type": "playback.started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 6,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "slot": "A",
+      "round_no": 1,
+      "speech": "Evidence-aware speech is disclosed only when playback begins.",
+      "sources": [
+        {
+          "source_filename": "fixture.md"
+        }
+      ],
+      "playback_url": "/api/v1/debates/11111111-1111-4111-8111-111111111111/audio/44444444-4444-4444-8444-444444444444",
+      "avatar_states": [
+        {
+          "participant_id": "22222222-2222-4222-8222-222222222222",
+          "slot": "A",
+          "motion_state": "speaking",
+          "expression": "neutral"
+        },
+        {
+          "participant_id": "33333333-3333-4333-8333-333333333333",
+          "slot": "B",
+          "motion_state": "listening",
+          "expression": "attentive"
+        }
+      ],
+      "cursor_ms": 0,
+      "playback_rate": 1
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000007",
+    "event_type": "playback.paused",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 7,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "cursor_ms": 123,
+      "control_version": 1
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000008",
+    "event_type": "playback.resumed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 8,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "cursor_ms": 123,
+      "control_version": 2
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000009",
+    "event_type": "playback.skipped",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 9,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "cursor_ms": 800,
+      "control_version": 3
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000010",
+    "event_type": "playback.completed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 10,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "turn_id": "44444444-4444-4444-8444-444444444444",
+      "cursor_ms": 1200,
+      "control_version": 4
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000011",
+    "event_type": "replay.started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 11,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "scope": "turn",
+      "turn_id": "44444444-4444-4444-8444-444444444444"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000012",
+    "event_type": "replay.completed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 12,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "scope": "turn",
+      "turn_id": "44444444-4444-4444-8444-444444444444"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000013",
+    "event_type": "translation.batch_started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 13,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "batch_id": "55555555-5555-4555-8555-555555555555",
+      "total_items": 5,
+      "succeeded_items": 0,
+      "failed_items": 0
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000014",
+    "event_type": "translation.batch_completed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 14,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "batch_id": "55555555-5555-4555-8555-555555555555",
+      "status": "completed",
+      "total_items": 5,
+      "succeeded_items": 5,
+      "failed_items": 0
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000015",
+    "event_type": "translation.batch_failed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 15,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "batch_id": "55555555-5555-4555-8555-555555555555",
+      "status": "failed",
+      "total_items": 5,
+      "succeeded_items": 4,
+      "failed_items": 1
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000016",
+    "event_type": "interaction.opened",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 16,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "public_url": "/classroom/fixture-access-token",
+      "qr_payload": "/classroom/fixture-access-token",
+      "aggregate_zeros": [
+        {
+          "participant_id": "22222222-2222-4222-8222-222222222222",
+          "count": 0,
+          "percentage": 0
+        },
+        {
+          "participant_id": "33333333-3333-4333-8333-333333333333",
+          "count": 0,
+          "percentage": 0
+        }
+      ]
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000017",
+    "event_type": "interaction.vote_created",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 17,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "participant_id": "22222222-2222-4222-8222-222222222222",
+      "new_count": 1,
+      "percentage": 100,
+      "total_votes": 1
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000018",
+    "event_type": "interaction.barrage_created",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 18,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "message_id": "66666666-6666-4666-8666-666666666666",
+      "nickname": "Learner",
+      "raw_text": "What evidence should we compare?",
+      "sequence": 1
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000019",
+    "event_type": "interaction.closed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 19,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "totals": {
+        "total_votes": 1,
+        "total_barrages": 1
+      },
+      "message_count": 1,
+      "input_hash": "fixture-input-hash"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000020",
+    "event_type": "barrage_insight.started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 20,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "revision": 1
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000021",
+    "event_type": "barrage_insight.completed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 21,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "revision": 1,
+      "status": "ready",
+      "included_count": 1,
+      "filtered_count": 0,
+      "themes": [
+        {
+          "category": "question",
+          "summary": "Learners ask for comparable evidence.",
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000022",
+    "event_type": "barrage_insight.failed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 22,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "revision": 2,
+      "status": "failed",
+      "safe_error_code": "barrage_insight_failed"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000023",
+    "event_type": "report.started",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 23,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "revision_id": "77777777-7777-4777-8777-777777777777",
+      "status": "generating"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000024",
+    "event_type": "report.completed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 24,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "revision_id": "77777777-7777-4777-8777-777777777777",
+      "status": "ready",
+      "report": {
+        "generation_status": "not_started",
+        "latest_attempt_status": "not_started",
+        "insight": {
+          "status": "not_started",
+          "included_count": 0,
+          "filtered_count": 0,
+          "items": []
+        }
+      }
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000025",
+    "event_type": "report.failed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 25,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "revision_id": "77777777-7777-4777-8777-777777777777",
+      "status": "failed",
+      "safe_error_code": "report_failed"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000026",
+    "event_type": "debate.completed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 26,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "final_states": {
+        "debate": "debate_finished",
+        "playback": {
+          "status": "preparing",
+          "mode": "live",
+          "current_turn_id": null,
+          "cursor_ms": 0,
+          "playback_rate": 1,
+          "control_version": 0
+        },
+        "interaction": "closed",
+        "insight": "not_started",
+        "report": "not_started"
+      },
+      "downstream_outcome": "failed"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000027",
+    "event_type": "debate.failed",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 27,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "final_states": {
+        "debate": "failed",
+        "playback": {
+          "status": "preparing",
+          "mode": "live",
+          "current_turn_id": null,
+          "cursor_ms": 0,
+          "playback_rate": 1,
+          "control_version": 0
+        },
+        "interaction": "closed",
+        "insight": "not_started",
+        "report": "not_started"
+      },
+      "downstream_outcome": "failed",
+      "safe_error_code": "turn_generation_failed"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000028",
+    "event_type": "debate.stopped",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 28,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "final_states": {
+        "debate": "stopped",
+        "playback": {
+          "status": "preparing",
+          "mode": "live",
+          "current_turn_id": null,
+          "cursor_ms": 0,
+          "playback_rate": 1,
+          "control_version": 0
+        },
+        "interaction": "closed",
+        "insight": "not_started",
+        "report": "not_started"
+      },
+      "downstream_outcome": "stopped"
+    }
+  },
+  {
+    "event_id": "99999999-9999-4999-8999-000000000029",
+    "event_type": "error",
+    "event_version": 1,
+    "debate_id": "11111111-1111-4111-8111-111111111111",
+    "sequence": 29,
+    "occurred_at": "2026-08-26T12:00:00.000Z",
+    "payload": {
+      "code": "invalid_state",
+      "message": "The command is not valid in this state.",
+      "request_id": "88888888-8888-4888-8888-888888888888",
+      "recoverable": true
+    }
+  }
+]

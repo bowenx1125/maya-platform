@@ -1,0 +1,111 @@
+name: Maya Wave 0 quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+  MAYA_ENV: test
+  LLM_PROVIDER: mock
+  EMBEDDING_PROVIDER: mock
+  TTS_PROVIDER: mock
+  VOICE_PROVIDER: mock
+  TRANSLATION_PROVIDER: mock
+  DEMO_MODE: "false"
+
+jobs:
+  deterministic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.19.0 --activate
+
+      - name: Assert Wave 0 backend inputs
+        run: |
+          test -f backend/app/main.py
+          test -f backend/pyproject.toml
+          test -f backend/uv.lock
+          test -d backend/migrations
+          test -d backend/tests
+
+      - name: Frozen JavaScript install
+        run: pnpm install --frozen-lockfile
+
+      - name: Frozen parent OpenAPI and generated client checks
+        run: |
+          node scripts/check_frozen_openapi.mjs
+          node scripts/test_frozen_openapi.mjs
+          node scripts/check_generated_contracts.mjs
+
+      - name: Redocly contract lint
+        run: pnpm exec redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml
+
+      - name: Explicit frozen response-contract check
+        run: |
+          node scripts/check_openapi_responses.mjs
+          node scripts/test_openapi_responses.mjs
+
+      - name: WebSocket schema generation and Ajv contract tests
+        run: node scripts/test_ws_events.mjs
+
+      - name: WebSocket generator clean-diff check
+        run: node scripts/check_generated_ws.mjs
+
+      - name: Route semantic comparator fixtures
+        run: node scripts/test_route_surface.mjs
+
+      - name: Product repository boundary and secret scan
+        run: node scripts/check_repo_boundary.mjs
+
+      - name: Generated-source secret scan probe
+        run: node scripts/test_repo_boundary.mjs
+
+      - name: Frontend lint, types, tests, and build
+        run: |
+          pnpm --filter @maya/frontend lint
+          pnpm --filter @maya/frontend typecheck
+          pnpm --filter @maya/frontend test
+          pnpm --filter @maya/frontend build
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
+        with:
+          version: 0.12.0
+
+      - name: Backend dependency sync
+        run: uv sync --directory backend --frozen
+
+      - name: Local Demo initializer safety probe
+        run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
+
+      - name: Backend quality and migration smoke
+        working-directory: backend
+        run: |
+          uv run ruff check app
+          uv run ruff check tests
+          uv run mypy app
+          uv run pytest
+          mkdir -p data
+          uv run alembic upgrade head
+
+      - name: Export FastAPI OpenAPI for route comparison
+        run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
+
+      - name: Compare FastAPI route surface to frozen contract
+        run: node scripts/compare_route_surface.mjs --server-openapi "$RUNNER_TEMP/maya-fastapi-openapi.json"
+
+      - name: Compose configuration
+        run: docker compose config --quiet

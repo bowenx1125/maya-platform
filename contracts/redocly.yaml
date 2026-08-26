@@ -1,0 +1,20 @@
+extends:
+  - recommended
+
+# The parent OpenAPI document is frozen byte-for-byte. Presentation-only rules
+# cannot be satisfied by changing the frozen contract without creating API
+# drift. Generic response-completeness rules are checked by the explicit,
+# operation-by-operation allow-list in scripts/check_openapi_responses.mjs.
+rules:
+  operation-summary: off
+  info-license: off
+  tag-description: off
+  # Enforced by the explicit response-contract checker, which documents every
+  # frozen omission and permits 101 only for the WebSocket upgrade.
+  operation-4xx-response: off
+  operation-2xx-response: off
+
+# Keep the structural and security checks from Redocly's recommended preset:
+# schema validity, operationId uniqueness, path parameters, security and
+# internal $ref resolution remain enabled. A change to this allow-list needs
+# a contract review; do not use it to silence structural or security findings.
