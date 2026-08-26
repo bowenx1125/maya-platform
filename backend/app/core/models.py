@@ -1,8 +1,8 @@
-"""SQLAlchemy models for the identity, organization and Wave 1A domains.
+"""SQLAlchemy models for the identity, organization and Wave 1A/1B domains.
 
-The Wave 1A tables intentionally stop at agents, Markdown knowledge and
-immutable snapshots.  Debate, interaction, voice and report tables belong to
-later waves and are not represented here.
+Voice resources deliberately keep supplier identifiers and provider metadata
+inside the server-side database model.  The API projections in
+``app.modules.voices`` never expose those columns.
 """
 
 from __future__ import annotations
@@ -187,9 +187,7 @@ class Agent(Base):
     # This pointer is deliberately validated by the service against the same
     # agent and a published state.  A direct FK would create a migration cycle
     # with agent_versions on SQLite.
-    current_published_version_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    current_published_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -373,12 +371,8 @@ class KnowledgeSnapshot(Base):
     )
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     total_char_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    embedding_key: Mapped[str] = mapped_column(
-        "embedding_model_key", String(80), nullable=False
-    )
-    chunking_json: Mapped[str] = mapped_column(
-        "chunking_config_json", Text, nullable=False
-    )
+    embedding_key: Mapped[str] = mapped_column("embedding_model_key", String(80), nullable=False)
+    chunking_json: Mapped[str] = mapped_column("chunking_config_json", Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     agent_version: Mapped[AgentVersion] = relationship()
@@ -669,6 +663,218 @@ class IdempotencyRecord(Base):
             name="ck_idempotency_state",
         ),
         Index("ix_idempotency_lease", "lease_expires_at"),
+    )
+
+
+class VoiceProfile(Base):
+    """A platform voice mapping, scoped either to a group or the system.
+
+    ``external_id_encrypted`` is an AEAD envelope, never a supplier voice ID
+    in plaintext.  ``recovery_name`` is a deterministic, non-secret name used
+    only by the server when reconciling an ambiguous provider operation.
+    """
+
+    __tablename__ = "voice_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("groups.id", ondelete="RESTRICT", name="fk_voice_profiles_group"),
+        nullable=True,
+    )
+    display_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="validating")
+    provider_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_model_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    recovery_name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    provenance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consent_copy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    consent_actor_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "users.id", ondelete="SET NULL", name="fk_voice_profiles_consent_actor"
+        ),
+        nullable=True,
+    )
+    consent_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    group: Mapped[Group | None] = relationship()
+
+    @property
+    def external_id_envelope(self) -> bytes | None:
+        """Compatibility name for code that calls the AEAD value an envelope."""
+
+        return self.external_id_encrypted
+
+    @external_id_envelope.setter
+    def external_id_envelope(self, value: bytes | None) -> None:
+        self.external_id_encrypted = value
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('system', 'group')", name="ck_voice_profiles_scope"),
+        CheckConstraint(
+            "status IN ('validating', 'enrolling', 'preview_ready', 'ready', 'deleting', "
+            "'outcome_unknown', 'failed', 'deleted')",
+            name="ck_voice_profiles_status",
+        ),
+        CheckConstraint(
+            "(scope = 'system' AND group_id IS NULL) OR (scope = 'group' AND group_id IS NOT NULL)",
+            name="ck_voice_profiles_scope_group",
+        ),
+        Index("ix_voice_profiles_group_status", "group_id", "status"),
+        Index(
+            "uq_voice_profiles_one_system",
+            "scope",
+            unique=True,
+            sqlite_where=(scope == "system"),
+        ),
+    )
+
+
+class VoiceProviderOperation(Base):
+    """Durable ledger for a potentially charged voice provider operation."""
+
+    __tablename__ = "voice_provider_operations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    profile_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "voice_profiles.id",
+            ondelete="RESTRICT",
+            name="fk_voice_provider_operations_profile",
+        ),
+        nullable=False,
+    )
+    operation_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    profile_scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="prepared")
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    claim_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    charged_request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    safe_request_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    idempotency_record_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "idempotency_records.id",
+            ondelete="SET NULL",
+            name="fk_voice_provider_operations_idempotency",
+        ),
+        nullable=True,
+    )
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    profile: Mapped[VoiceProfile] = relationship()
+
+    @property
+    def operation_kind(self) -> str:
+        return self.operation_type
+
+    @operation_kind.setter
+    def operation_kind(self, value: str) -> None:
+        self.operation_type = value
+
+    __table_args__ = (
+        CheckConstraint(
+            "operation_type IN ('enroll', 'delete', 'exists', 'tts_preview')",
+            name="ck_voice_provider_operations_type",
+        ),
+        CheckConstraint(
+            "profile_scope IN ('system', 'group')",
+            name="ck_voice_provider_operations_scope",
+        ),
+        CheckConstraint(
+            "state IN ('prepared', 'dispatched', 'reconciling', 'succeeded', 'failed', "
+            "'outcome_unknown')",
+            name="ck_voice_provider_operations_state",
+        ),
+        CheckConstraint("attempt >= 1", name="ck_voice_provider_operations_attempt"),
+        CheckConstraint(
+            "request_count >= 0 AND charged_request_count >= 0 AND input_bytes >= 0 "
+            "AND output_bytes >= 0",
+            name="ck_voice_provider_operations_counters",
+        ),
+        Index("ix_voice_provider_operations_profile", "profile_id", "operation_type"),
+        Index("ix_voice_provider_operations_state_deadline", "state", "provider_deadline"),
+        Index(
+            "uq_voice_provider_operations_system_enroll_active",
+            "profile_scope",
+            "operation_type",
+            unique=True,
+            sqlite_where=(
+                (profile_scope == "system")
+                & (operation_type == "enroll")
+                & state.in_(("prepared", "dispatched", "reconciling", "outcome_unknown"))
+            ),
+        ),
+        Index(
+            "uq_voice_provider_operations_profile_delete",
+            "profile_id",
+            unique=True,
+            sqlite_where=(operation_type == "delete"),
+        ),
+    )
+
+
+class VoicePreview(Base):
+    """Short-lived, platform-owned preview resource."""
+
+    __tablename__ = "voice_previews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    profile_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "voice_profiles.id", ondelete="CASCADE", name="fk_voice_previews_profile"
+        ),
+        nullable=False,
+    )
+    group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("groups.id", ondelete="CASCADE", name="fk_voice_previews_group"),
+        nullable=True,
+    )
+    stored_file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "stored_files.id", ondelete="SET NULL", name="fk_voice_previews_stored_file"
+        ),
+        nullable=True,
+    )
+    relative_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    profile: Mapped[VoiceProfile] = relationship()
+    stored_file: Mapped[StoredFile | None] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('active', 'expired', 'confirmed', 'replaced')",
+            name="ck_voice_previews_state",
+        ),
+        Index("ix_voice_previews_profile_state", "profile_id", "state"),
+        Index("ix_voice_previews_expiry", "expires_at"),
     )
 
 

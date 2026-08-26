@@ -1,10 +1,12 @@
 # Wave 1B Gate Packet — M07 Avatar + M08 Voice/TTS
 
-Status: `G0-S PASS — G1 AUTHORIZED`
+Status: `G3 PASS (MOCK RUNTIME) — REAL FALLBACK TTS ACCEPTANCE PENDING`
 Authorized scope: `2026-08-27 Asia/Shanghai`
 Modules: `M07 3D avatar templates` and `M08 voice cloning / fallback / TTS`
 Dependencies: `Wave 0 G3 PASS`, `Wave 1A G3 PASS`, frozen `g0-2026-08-26.4`
 G0-S audits: domain `/root/wave1b_design_domain` and security `/root/wave1b_design_security`, both `gpt-5.6-sol high`, final `PASS` at `2026-08-27 03:23 Asia/Shanghai` after one bounded correction round
+G1 implementers: M07 `/root/wave1b_m07_luna`; M08 `/root/wave1b_m08_luna` with bounded completion `/root/wave1b_m08_finish`; all `gpt-5.6-luna max`
+G1.5 main sign-off refreshed: `2026-08-27 05:39 Asia/Shanghai`
 Initial product commit: `d4e5c0830344fed6f019f6a77f62f513fd01f2d0`
 Initial Project SHA-256: `8bc10962be81f603c92db7406cde470e234b0da7a3cb8f558edbc0e17a7849c9`
 Initial Git state: clean
@@ -292,3 +294,31 @@ Stop the affected Gate if implementation requires:
 - first domain review returned five bounded blockers: generic lease fencing, frozen Port/retry drift, legacy avatar compatibility, absent/null/UUID voice patch semantics and preview-media authorization/counting;
 - first security review returned five bounded blockers: charged dispatch journal, supplier URL/preview logging, streaming upload and FFmpeg teardown, concrete AEAD envelope and provider activation/technical thresholds;
 - main amended only the technical contract, preserving the public OpenAPI and latest user decisions. Both reviewers independently returned `PASS`; no code or real supplier call occurred during G0-S.
+
+## 13. G1/G1.5 live evidence
+
+- M07 provides three stable parameter presets over one honestly reported compatible morph-target GLB, a server catalog/validator, local Three.js/Draco renderer and original state-animation adapter. Backend M07 tests: 10;
+- M08 provides migration `0003`, encrypted internal mappings, durable provider-operation ledger, streaming/FFmpeg/file cleanup, group voice API/UI and split enrollment/preview/deletion modules. The former 1,160-line service is split; the largest file is now `service.py` at 905 lines, while deletion, preview, upload, fallback and DashScope adapter state machines remain separate tested boundaries;
+- the system fallback operator flow is explicitly two-stage: Voice enrollment stops at `preview_ready`; a separate TTS-only technical verification can mark `ready`, with at most one retry. Ambiguous enrollment only reconciles and never issues a second fallback create;
+- the authorized M4A passed an isolated Mock two-stage run: final ready, request temp empty, source hash/mode unchanged. This did not call a supplier or create a real voice;
+- backend Ruff/mypy and full pytest pass: 70 tests, comprising the prior 28, M07 10 and M08 32. Existing warnings are one Starlette/httpx deprecation and Python 3.12 SQLite datetime-adapter warnings in migration evidence;
+- frontend Prettier/ESLint/TypeScript/Vitest/production build pass: 10 files/40 tests. jsdom reports expected non-failing canvas `getContext` notices;
+- fresh/repeated and populated migration reaches `0003_wave1b_avatar_voice`; prior Wave 0/1A fingerprint and rows remain unchanged. The general migration script's 13-table/43-constraint count remains Wave 1A evidence; the dedicated M08 test separately reflects all three `voice_*` tables and their named checks, unique/partial indexes and foreign keys;
+- the current Docker build serves a real Three.js r185 canvas at desktop and 360px. The student workbench exposes all three presets, applying Civic Observer's olive/gray/serious/active defaults; `speaking` changes the authoritative canvas state. Login, workbench and teacher pages have zero horizontal overflow and no browser warning/error, while all native enabled controls remain keyboard-focusable;
+- frozen OpenAPI/hash/generated client/Redocly/response/WS checks, route positive+12 negatives, repository/secret probes and Compose config pass. Live FastAPI matches 40 implemented operations with 27 later-wave placeholders;
+- all provider selectors remained Mock and real external call count is zero at G1.5. The real fallback enrollment/TTS acceptance remains a separate G3 operation after all G2 reviewers pass.
+
+## 14. G2 live evidence
+
+- focused M08 security/provider audit, final frontend audit and cross-contract/migration audit independently returned `PASS` after bounded corrections;
+- the accepted corrections cover profile-CAS plus one-delete-ledger concurrency, complete provider pagination, IP-pinned supplier download with DNS/connect/read total deadlines, TTS timeout retry accounting, file-lock temp leases, frozen negative HTTP statuses, loaded-workbench error preservation and locale/preset/publish behavior;
+- main reran the full deterministic suite and current Docker/browser matrix after the final corrections. No real supplier call occurred during G2.
+
+## 15. G3 main sign-off
+
+- `WAVE_1B_G3_PASS` applies to the complete Mock/local product contract. In an isolated Docker data root, the 8080 chain passed Agent creation, Mock voice enrollment, decodable preview, confirmation, Avatar/voice binding, Markdown snapshot publication, teacher safe projection, preview expiry, voice deletion, automatic fallback semantics, other-group 404 and backend-restart persistence. The delete ledger issued exactly one provider command, retained zero preview WAVs and left zero enrollment request directories;
+- the isolated G3 data root and private HTTP cookie/audio scratch directory were moved to the user's Trash after verification. The normal Demo database was restored at migration head `0003`; all three containers are healthy;
+- the three selectable Avatar parameter presets use one honestly reported compatible GLB. A real Three.js r185 canvas rendered in the browser at desktop and 360px, with preset defaults and state controls verified;
+- the real system voice enrollment stage made exactly one charged create and succeeded. The source hash/mode remained unchanged and request temp count returned to zero. The supplier-side cloned voice remains present by design;
+- the separate real TTS technical preview made two authorized attempts and both failed. The platform profile remains `preview_ready` with a safe `provider_unavailable` status; `FALLBACK_VOICE_PROFILE_ID` was intentionally not activated. No additional real retry, invented silence or browser speech was used;
+- real external counts: Voice enrollment `1`, TTS preview `2`, LLM `0`, Embedding `0`, translation `0`. Estimated supplier cost remains below CNY 0.03 before any account free quota. This unresolved real TTS acceptance is explicit and does not invalidate the user-authorized Mock Wave 2 path.

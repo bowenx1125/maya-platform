@@ -10,13 +10,22 @@ import {
   isConflict,
   type AgentDetail,
   type AgentVersion,
+  type AvatarTemplate,
   type KnowledgeDocument,
   type KnowledgeSnapshot,
   type RagPreview,
   type TestChatResponse,
+  type VoiceProfile,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
-import { blockerLabel, statusLabel, t, tm } from "../lib/i18n";
+import {
+  AGENT_OUTLINE,
+  blockerLabel,
+  statusLabel,
+  type MessageKey,
+} from "../lib/i18n";
+import { useLocale, useT } from "./locale";
+import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -27,25 +36,8 @@ import {
   StatusBadge,
 } from "./ui";
 
-const agentOutline = `# Identity
-Who are you and what cultural or social perspective do you represent?
-
-# Background
-What background should shape your interpretation of the topic?
-
-# Position
-What is your current position on the debate topic? What trade-offs do you recognize?
-
-# Speaking Style
-How should you speak: formal, analytical, concise, rhetorical, cautious, etc.?
-
-# Debate Strategy
-How should you respond to opponents, use evidence, concede valid points, and distinguish fact from opinion?
-
-# Boundaries
-What should you avoid claiming or doing?`;
-
 export function AgentOverview({ agentId }: { agentId: string }) {
+  const t = useT();
   const { api } = useSession();
   const router = useRouter();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
@@ -306,6 +298,7 @@ function VersionSummary({
   current?: boolean;
   action?: ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="version-summary">
       <div>
@@ -335,18 +328,24 @@ function VersionSummary({
 }
 
 export function AgentWorkbench({ versionId }: { versionId: string }) {
+  const t = useT();
+  const { locale } = useLocale();
   const { api } = useSession();
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [preview, setPreview] = useState<RagPreview | null>(null);
+  const [avatarTemplates, setAvatarTemplates] = useState<AvatarTemplate[]>([]);
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
+  const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [agentMd, setAgentMd] = useState("");
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [conflict, setConflict] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<MessageKey | null>(null);
   const [chatMessage, setChatMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [chatResult, setChatResult] = useState<TestChatResponse | null>(null);
@@ -381,16 +380,27 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       try {
         const nextVersion = await api.version(versionId);
         const nextAgent = await api.agent(nextVersion.agent_id);
-        const [nextDocuments, nextPreview] = await Promise.all([
+        const [
+          nextDocuments,
+          nextPreview,
+          nextAvatarTemplates,
+          nextVoiceProfiles,
+        ] = await Promise.all([
           api.knowledge(nextAgent.group_id),
           api.ragPreview(versionId),
+          api.avatarTemplates(),
+          api.voiceProfiles(nextAgent.group_id),
         ]);
         setVersion(nextVersion);
         setAgent(nextAgent);
         setDocuments(nextDocuments);
         setPreview(nextPreview);
+        setAvatarTemplates(nextAvatarTemplates);
+        setVoiceProfiles(nextVoiceProfiles);
         if (!keepLocal) {
           setAgentMd(nextVersion.agent_md ?? "");
+          setAvatarConfig(nextVersion.avatar_config);
+          setVoiceProfileId(nextVersion.voice_profile_id ?? null);
           setSelectedDocumentIds(
             (nextVersion.enabled_documents ?? []).map(
               (document) => document.id,
@@ -414,7 +424,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   }, [load]);
 
   const enabledCount = selectedDocumentIds.length;
-  const localDirty = Boolean(version && agentMd !== (version.agent_md ?? ""));
+  const localDirty = Boolean(
+    version &&
+    (agentMd !== (version.agent_md ?? "") ||
+      JSON.stringify(avatarConfig) !== JSON.stringify(version.avatar_config) ||
+      voiceProfileId !== (version.voice_profile_id ?? null)),
+  );
   const blockers = version?.publish_blockers ?? [];
   const blockerCopy: Record<string, Parameters<typeof t>[0]> = {
     agent_md_missing: "blockAgentMdMissing",
@@ -432,7 +447,11 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   const currentAgent = agent as AgentDetail;
 
   if (loading) return <LoadingCard />;
-  if (error || !version || !agent)
+  // Keep the loaded workbench mounted for mutation errors so local AGENT.md,
+  // avatar/voice edits, selected documents, and retry handles remain visible
+  // and usable. A load error without the required records still uses the
+  // standalone recovery view below.
+  if (!version || !agent)
     return (
       <ErrorNotice
         error={error ?? new Error(t("draftNotFound"))}
@@ -459,10 +478,14 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       const next = await api.updateDraft(currentVersion.id, {
         expected_revision: currentVersion.revision,
         agent_md: agentMd,
+        ...(avatarConfig ? { avatar_config: avatarConfig } : {}),
+        voice_profile_id: voiceProfileId,
       });
       setVersion(next);
       setAgentMd(next.agent_md ?? "");
-      setNotice(t("draftSavedNotice"));
+      setAvatarConfig(next.avatar_config);
+      setVoiceProfileId(next.voice_profile_id ?? null);
+      setNotice("draftSavedNotice");
     } catch (cause) {
       if (isConflict(cause)) setConflict(true);
       setError(cause);
@@ -486,7 +509,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       );
       setVersion(next);
       setAgentMd(next.agent_md ?? "");
-      setNotice(t("agentMdUploadedNotice"));
+      setNotice("agentMdUploadedNotice");
     } catch (cause) {
       if (isConflict(cause)) setConflict(true);
       setError(cause);
@@ -516,7 +539,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       setSelectedDocumentIds(
         (next.enabled_documents ?? []).map((document) => document.id),
       );
-      setNotice(t("evidenceUpdatedNotice"));
+      setNotice("evidenceUpdatedNotice");
       const nextPreview = await api.ragPreview(currentVersion.id);
       setPreview(nextPreview);
     } catch (cause) {
@@ -564,7 +587,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           ? current
           : [...current, mutation.document.id],
       );
-      setNotice(t("markdownUploadedNotice"));
+      setNotice("markdownUploadedNotice");
       setPreview(await api.ragPreview(currentVersion.id));
     } catch (cause) {
       if (!mutationCompleted && isConflict(cause)) {
@@ -604,6 +627,9 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   }
 
   async function publish(retry = false) {
+    // The server only knows the last saved revision.  Never publish it while
+    // the browser still holds newer AGENT/avatar/voice values.
+    if (localDirty) return;
     if (blockers.length > 0) return;
     if (!retry) abandonUploadIntent();
     setSaving(true);
@@ -619,7 +645,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       mutationStore.finish(publishIntent, handle);
       setRetryAction(null);
       setVersion(next);
-      setNotice(t("publishedNotice"));
+      setNotice("publishedNotice");
     } catch (cause) {
       if (isConflict(cause)) setConflict(true);
       if (isAmbiguousMutationFailure(cause)) {
@@ -651,7 +677,8 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             <button
               className="primary-action"
               type="button"
-              disabled={saving || blockers.length > 0}
+              disabled={saving || blockers.length > 0 || localDirty}
+              title={localDirty ? t("saveBeforePublish") : undefined}
               onClick={() => void publish()}
             >
               {saving ? t("working") : t("publish")}
@@ -668,13 +695,21 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           {enabledCount} {t("enabledFileCount")}
         </span>
         {localDirty ? (
-          <span className="dirty-label">{t("unsavedChanges")}</span>
+          <span className="dirty-label" role="status">
+            {t("unsavedChanges")}
+          </span>
         ) : null}
       </div>
+      {localDirty ? (
+        <div className="notice notice-warning" role="status" aria-live="polite">
+          <strong>{t("unsavedChanges")}</strong>
+          <span>{t("saveBeforePublish")}</span>
+        </div>
+      ) : null}
       {conflict ? (
         <DraftConflictNotice onRefresh={() => void load(true)} />
       ) : null}
-      {error ? (
+      {error && !conflict ? (
         <>
           <ErrorNotice
             error={error}
@@ -693,7 +728,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       {notice ? (
         <div className="notice notice-success" role="status">
           <strong>{t("done")}</strong>
-          <span>{notice}</span>
+          <span>{t(notice)}</span>
         </div>
       ) : null}
       <div className="workbench-grid">
@@ -709,7 +744,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   onClick={() => {
                     abandonUploadIntent();
                     abandonPublishIntent();
-                    setAgentMd(agentOutline);
+                    setAgentMd(AGENT_OUTLINE);
                   }}
                 >
                   {t("insertOutline")}
@@ -755,6 +790,59 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 {saving ? t("saving") : t("save")}
               </button>
             </div>
+          </SectionCard>
+          {avatarConfig ? (
+            <SectionCard
+              title={t("avatarDesign")}
+              description={t("avatarDesignLede")}
+            >
+              <AvatarEditor
+                templates={avatarTemplates}
+                value={avatarConfig}
+                onChange={setAvatarConfig}
+                fallbackLabel={agent.name}
+                disabled={saving}
+              />
+            </SectionCard>
+          ) : null}
+          <SectionCard
+            title={t("voiceBinding")}
+            description={t("voiceBindingLede")}
+            action={
+              <Link
+                className="text-link"
+                href={`/student/groups/${agent.group_id}/voices`}
+              >
+                {t("manageVoices")}
+              </Link>
+            }
+          >
+            <div className="stack-form">
+              <label>
+                <span>{t("voiceBinding")}</span>
+                <select
+                  value={voiceProfileId ?? ""}
+                  disabled={saving}
+                  onChange={(event) =>
+                    setVoiceProfileId(event.target.value || null)
+                  }
+                >
+                  <option value="">{t("useFallbackVoice")}</option>
+                  {voiceProfiles
+                    .filter((profile) => profile.status === "ready")
+                    .map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.source_filename || t("customVoiceReady")}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <p className="muted-copy">
+              {voiceProfileId
+                ? t("customVoiceReady")
+                : t("platformVoiceFallback")}
+            </p>
           </SectionCard>
           <SectionCard
             title={t("evidenceSet")}
@@ -864,7 +952,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   <div className="check-item check-bad" key={blocker}>
                     <span aria-hidden="true">!</span>
                     <div>
-                      <strong>{blockerLabel(blocker)}</strong>
+                      <strong>{blockerLabel(blocker, locale)}</strong>
                       <small>
                         {blockerCopy[blocker]
                           ? t(blockerCopy[blocker])
@@ -919,6 +1007,7 @@ export function preserveDraftOnRetry(error: unknown): boolean {
 }
 
 export function DraftConflictNotice({ onRefresh }: { onRefresh: () => void }) {
+  const t = useT();
   return (
     <div className="notice notice-warning" role="alert">
       <strong>{t("revisionConflict")}</strong>
@@ -930,13 +1019,17 @@ export function DraftConflictNotice({ onRefresh }: { onRefresh: () => void }) {
   );
 }
 
-function groundingLabel(mode: TestChatResponse["grounding_mode"]): string {
+function groundingLabel(
+  mode: TestChatResponse["grounding_mode"],
+  t: ReturnType<typeof useT>,
+): string {
   if (mode === "rag_grounded") return t("groundingRag");
   if (mode === "general_reasoning") return t("groundingGeneral");
   return t("groundingMixed");
 }
 
 function ChatResult({ result }: { result: TestChatResponse }) {
+  const t = useT();
   const matched = result.retrieval_status === "matched";
   return (
     <div
@@ -947,7 +1040,7 @@ function ChatResult({ result }: { result: TestChatResponse }) {
           status={result.retrieval_status}
           tone={matched ? "good" : "warn"}
         />
-        <span>{groundingLabel(result.grounding_mode)}</span>
+        <span>{groundingLabel(result.grounding_mode, t)}</span>
       </div>
       <p>{result.answer}</p>
       <div className="source-row">
@@ -975,6 +1068,8 @@ function ReadOnlyVersion({
   version: AgentVersion;
   agent: AgentDetail;
 }) {
+  const t = useT();
+  const { locale } = useLocale();
   return (
     <>
       <PageIntro
@@ -1021,7 +1116,7 @@ function ReadOnlyVersion({
             <div className="check-item check-good">
               <span aria-hidden="true">✓</span>
               <div>
-                <strong>{statusLabel(version.state)}</strong>
+                <strong>{statusLabel(version.state, locale)}</strong>
                 <small>
                   {t("revision")} {version.revision} {t("revisionImmutable")}
                 </small>
@@ -1041,6 +1136,7 @@ function ReadOnlyVersion({
 }
 
 export function StudentPublishedVersion({ versionId }: { versionId: string }) {
+  const t = useT();
   const { api } = useSession();
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
@@ -1087,6 +1183,7 @@ function StudentSnapshot({
   snapshotId: string;
   agentName: string;
 }) {
+  const t = useT();
   const { api } = useSession();
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
   const [snapshotText, setSnapshotText] = useState<string | null>(null);
@@ -1219,6 +1316,7 @@ function StudentSnapshot({
 }
 
 export function KnowledgeLibrary({ groupId }: { groupId: string }) {
+  const t = useT();
   const { api } = useSession();
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1314,7 +1412,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
   async function hide(document: KnowledgeDocument, retry = false) {
     if (
       !retry &&
-      !window.confirm(tm("hideConfirm", { filename: document.source_filename }))
+      !window.confirm(t("hideConfirm", { filename: document.source_filename }))
     )
       return;
     const intent = `knowledge-hide:${document.id}`;

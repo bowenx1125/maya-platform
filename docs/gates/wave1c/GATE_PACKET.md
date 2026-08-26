@@ -1,10 +1,12 @@
 # Wave 1C Gate Packet — M02 Bilingual Interface Shell
 
-Status: `G0-S PASS — G1 AUTHORIZED`
+Status: `G3 PASS`
 Authorized scope: `2026-08-27 Asia/Shanghai`
 Module: `M02 full zh-CN / en-US static interface`
 Dependencies: frozen C01/C03 visual/copy boundaries and current Wave 1A functional pages
 G0-S audit: `/root/wave1c_design_audit`, `gpt-5.6-sol high`, final `PASS` at `2026-08-27 03:23 Asia/Shanghai` after one bounded correction round
+G1 implementer: `/root/wave1c_m02_luna`, `gpt-5.6-luna max`
+G1.5 main sign-off refreshed: `2026-08-27 05:39 Asia/Shanghai`
 Initial product commit: `d4e5c0830344fed6f019f6a77f62f513fd01f2d0`
 
 ## 1. Goal and non-goals
@@ -109,3 +111,22 @@ M02 is low risk while presentation-only. Any session/data/permission side effect
 
 - first review required a server-visible locale cookie, stable Session/API provider topology, key-at-render error/notice state, executable dictionary equality and real-browser first-frame/responsive checks;
 - main added those boundaries without backend/API/content translation scope. The same reviewer returned `PASS`; no implementation file changed during G0-S.
+
+## 9. G1/G1.5 live evidence
+
+- one server-visible presentation cookie restores `en-US/zh-CN` on the first frame; provider topology remains unkeyed and locale-neutral;
+- existing pages plus new Avatar/Voice static interface copy use typed English/Chinese keys; language change preserves business content and does not add Wave 2/3 links;
+- frontend Prettier, ESLint, TypeScript, 10 Vitest files/40 tests and production build pass; dictionary keys/placeholders/allowed identical terms are covered. A real SessionProvider + Agent workbench integration proves locale toggles preserve the PlatformApi instance, Session/CSRF, request counts, retry/idempotency handles, controlled AGENT.md, selected documents, pending File, revision-conflict state and all business bytes;
+- the rebuilt Docker application completes the G1.5 browser matrix for login, student Agent workbench and teacher pages at 1280px and 360px: `en-US/zh-CN` server first frame and reload are stable, no hydration/console warning appears, `scrollWidth === clientWidth`, native enabled controls remain at `tabIndex=0`, V2 Inter/background/title-size sentinels remain intact, and navigation contains only implemented Wave 1 routes. Switching to Chinese preserves unsaved English AGENT.md, the selected Avatar preset and `speaking` preview state;
+- direct same-origin SSR evidence with the presentation cookie returns `<html lang="zh-CN">` and Chinese login copy without the English title; jsdom canvas notices are not used as visual evidence.
+
+## 10. G2 live evidence
+
+- the final frontend and cross-contract Sol High audits independently returned `PASS` after the publish-dirty, English-outline, Avatar state/preset, Civic Observer label, mutation-error and duplicate-conflict corrections;
+- the real workbench integration and rebuilt Docker browser matrix prove presentation-only locale behavior without Session/API/data mutation or hidden local state loss;
+- no translation provider, real model, voice supplier or Wave 2/3 route was invoked or added by M02.
+
+## 11. G3 main sign-off
+
+- `WAVE_1C_G3_PASS`: rebuilt Docker login, student workbench and teacher pages pass desktop/360px SSR locale, refresh, hydration/console, overflow, native keyboard-focusability, V2 style-sentinel and route-link checks;
+- switching locale preserves unsaved English AGENT.md, Avatar preset/state and the integration-tested Session/API/CSRF/retry identities. No business text, RAG, supplier call or persistence mutation is translated by M02.

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -44,6 +43,11 @@ from app.modules.agents.schemas import (
 )
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
+from app.modules.avatars import (
+    DEFAULT_AVATAR_CONFIG,
+    AvatarConfigValidationError,
+    validate_avatar_config,
+)
 from app.modules.knowledge.markdown import MAX_RAG_CHARS, MarkdownInputError, normalize_markdown
 from app.modules.knowledge.multipart import integer_field, parse_upload
 from app.modules.knowledge.services import (
@@ -68,15 +72,6 @@ from app.modules.knowledge.services import (
 )
 
 router = APIRouter(tags=["Agents"])
-
-_DEFAULT_AVATAR = {
-    "template_id": "wave1-default-head",
-    "material_theme": "demo",
-    "eye_color": None,
-    "default_expression": "neutral",
-    "expression_strength": "medium",
-    "motion_style": "calm",
-}
 
 _AGENT_MD_UPLOAD_BODY = {
     "required": True,
@@ -187,7 +182,7 @@ def create_agent(
         state="draft",
         revision=0,
         agent_md="",
-        avatar_config_json=json.dumps(_DEFAULT_AVATAR, separators=(",", ":")),
+        avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -389,7 +384,7 @@ def create_next_agent_version(
         revision=0,
         agent_md=current.agent_md,
         avatar_config_json=current.avatar_config_json,
-        voice_profile_id=None,
+        voice_profile_id=current.voice_profile_id,
         knowledge_snapshot_id=None,
         created_at=timestamp,
         updated_at=timestamp,
@@ -453,6 +448,7 @@ def update_agent_draft(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> AgentVersionDTO:
     scoped = visible_student_version(db, context, str(version_id))
     if scoped.version.state != "draft":
@@ -466,19 +462,21 @@ def update_agent_draft(
     if "agent_md" in payload.model_fields_set:
         values["agent_md"] = payload.agent_md.replace("\r\n", "\n").replace("\r", "\n")
     if payload.avatar_config is not None:
-        if payload.avatar_config.template_id != "wave1-default-head":
-            raise validation_failure(
-                "Only the Wave 1 Demo avatar template is available.",
-                code="avatar_missing",
-            )
-        values["avatar_config_json"] = payload.avatar_config.model_dump_json()
-    if payload.voice_profile_id is not None:
-        # Voice is explicitly unconfigured in Wave 1A; do not persist a
-        # provider/external voice identifier from a future wave.
-        raise validation_failure(
-            "Voice profiles are not configured in Wave 1A.",
-            code="voice_unavailable_fallback_used",
-        )
+        try:
+            avatar = validate_avatar_config(payload.avatar_config)
+        except AvatarConfigValidationError as exc:
+            raise validation_failure(exc.message, exc.details, code=exc.code) from exc
+        values["avatar_config_json"] = avatar.model_dump_json()
+    if "voice_profile_id" in payload.model_fields_set:
+        # Preserve the frozen absent/null/UUID tri-state: absent leaves the
+        # binding untouched, explicit null clears it, UUID binds a ready voice
+        # in the same group.  Import lazily to avoid coupling the core Agent
+        # router to provider construction during module initialization.
+        from app.modules.voices.service import validate_voice_binding
+
+        requested_voice = str(payload.voice_profile_id) if payload.voice_profile_id else None
+        validate_voice_binding(db, context, scoped.version, requested_voice, settings)
+        values["voice_profile_id"] = requested_voice
     changed = db.execute(
         update(AgentVersion)
         .where(

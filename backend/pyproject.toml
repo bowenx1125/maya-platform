@@ -16,6 +16,7 @@ dependencies = [
   "PyYAML==6.0.3",
   "SQLAlchemy==2.0.52",
   "uvicorn[standard]==0.52.4",
+  "cryptography==42.0.5",
 ]
 
 [project.scripts]

@@ -39,11 +39,12 @@ const privateCredentialName =
 const ignoredRuntimeFiles = new Set([".env", "backend/config/demo_users.yaml"]);
 const forbiddenReference =
   /(?:Document Validation Agent|agent-core-private|OpenMAIC-main|parallax-main|OpenAvatarChat-main|TalkingHead-main|motion-engine-main|RomanticSimulation)/i;
+const supplierUrlPattern =
+  /https?:\/\/[^\s"']*(?:aliyuncs\.com|dashscope|api-free\.deepl\.com|openai\.com|deepgram\.com)[^\s"']*/i;
 const secretPatterns = [
   /\b(?:sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})\b/,
   /\bBearer\s+[A-Za-z0-9._-]{20,}\b/i,
   /-----BEGIN [^-]*PRIVATE KEY-----/,
-  /https?:\/\/[^\s"']*(?:aliyuncs\.com|dashscope|api-free\.deepl\.com|openai\.com|deepgram\.com)[^\s"']*/i,
 ];
 const assignmentPattern =
   /^[ \t]*(?:DASHSCOPE_API_KEY|DEEPL_API_KEY|OPENAI_API_KEY|SESSION_SECRET|SECRET_KEY|API_KEY)[ \t]*[=:][ \t]*([^\r\n]*)$/gm;
@@ -158,6 +159,13 @@ function walk(directory) {
         break;
       }
     }
+    const supplierUrlAllowed =
+      relativePath === "backend/app/providers/dashscope.py" ||
+      relativePath === "backend/tests/test_wave1b_voices.py";
+    if (!supplierUrlAllowed && supplierUrlPattern.test(text))
+      boundaryFailures.push(
+        `possible secret assignment/token in ${relativePath}`,
+      );
   }
 }
 walk(root);

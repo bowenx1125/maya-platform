@@ -22,6 +22,9 @@ export type TestChatResponse = components["schemas"]["TestChatResponse"];
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
+export type AvatarTemplate = components["schemas"]["AvatarTemplate"];
+export type VoiceProfile = components["schemas"]["VoiceProfile"];
+export type PlaybackResource = components["schemas"]["PlaybackResource"];
 export type ErrorPayload = components["schemas"]["Error"];
 export type DemoIdentity =
   operations["listDemoIdentities"]["responses"][200]["content"]["application/json"][number];
@@ -558,6 +561,98 @@ export class PlatformApi {
       );
       return unwrap(result);
     });
+  }
+
+  async avatarTemplates(): Promise<AvatarTemplate[]> {
+    return unwrap(await this.client.GET("/avatar-templates"));
+  }
+
+  async voiceProfiles(groupId: string): Promise<VoiceProfile[]> {
+    return unwrap(
+      await this.client.GET("/groups/{group_id}/voice-profiles", {
+        params: { path: { group_id: groupId } },
+      }),
+    );
+  }
+
+  async enrollVoice(
+    groupId: string,
+    file: File,
+    consentCopyVersion?: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<VoiceProfile> {
+    return commitMutation(options.idempotency, async (key) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("consent_accepted", "true");
+      if (consentCopyVersion)
+        form.append("consent_copy_version", consentCopyVersion);
+      const result = await this.client.POST(
+        "/groups/{group_id}/voice-profiles",
+        {
+          params: {
+            path: { group_id: groupId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body: form as unknown as never,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async voiceProfile(profileId: string): Promise<VoiceProfile> {
+    return unwrap(
+      await this.client.GET("/voice-profiles/{voice_profile_id}", {
+        params: { path: { voice_profile_id: profileId } },
+      }),
+    );
+  }
+
+  async deleteVoiceProfile(
+    profileId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<VoiceProfile> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE(
+        "/voice-profiles/{voice_profile_id}",
+        {
+          params: {
+            path: { voice_profile_id: profileId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async createVoicePreview(profileId: string): Promise<PlaybackResource> {
+    return unwrap(
+      await this.client.POST("/voice-profiles/{voice_profile_id}/preview", {
+        params: {
+          path: { voice_profile_id: profileId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+      }),
+    );
+  }
+
+  async confirmVoiceProfile(profileId: string): Promise<VoiceProfile> {
+    return unwrap(
+      await this.client.POST("/voice-profiles/{voice_profile_id}/confirm", {
+        params: {
+          path: { voice_profile_id: profileId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+      }),
+    );
   }
 
   async publishedAgents(courseId: string): Promise<PublishedAgentSummary[]> {

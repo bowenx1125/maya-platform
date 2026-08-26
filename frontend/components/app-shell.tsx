@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
+import { LanguageSwitcher, useT } from "./locale";
 import { useSession } from "./session-provider";
-import { t } from "../lib/i18n";
 
 export function AppShell({
   children,
@@ -14,6 +14,7 @@ export function AppShell({
   children: ReactNode;
   role: "student" | "teacher";
 }) {
+  const t = useT();
   const { user, logout } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -42,6 +43,10 @@ export function AppShell({
               {
                 href: `/student/groups/${groupId}/knowledge`,
                 label: t("knowledge"),
+              },
+              {
+                href: `/student/groups/${groupId}/voices`,
+                label: t("voices"),
               },
             ]
           : []),
@@ -79,6 +84,7 @@ export function AppShell({
           <span className="role-pill">
             {role === "teacher" ? t("teacher") : t("student")}
           </span>
+          <LanguageSwitcher />
           <button
             className="nav-logout"
             type="button"

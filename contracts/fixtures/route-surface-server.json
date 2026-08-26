@@ -1181,6 +1181,254 @@
         }
       }
     },
+    "/api/v1/avatar-templates": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "listAvatarTemplates",
+        "responses": {
+          "200": {
+            "description": "Platform templates and supported parameter capabilities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvatarTemplate"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/voice-profiles": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/GroupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "listVoiceProfiles",
+        "responses": {
+          "200": {
+            "description": "Platform voice profiles; no external IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VoiceProfile"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "enrollVoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "consent_accepted"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "consent_accepted": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "consent_copy_version": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Enrollment job accepted; temporary samples will be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/voice-profiles/{voice_profile_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceProfileId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "getVoiceProfile",
+        "responses": {
+          "200": {
+            "description": "Platform voice status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "deleteVoiceProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "External resource deleted and platform record marked deleted; references use fallback.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/voice-profiles/{voice_profile_id}/preview": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceProfileId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "createVoicePreview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Short-lived platform preview URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackResource"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/voice-profiles/{voice_profile_id}/confirm": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceProfileId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "confirmVoiceProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview accepted; status ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/courses/{course_id}/published-agents": {
       "parameters": [
         {

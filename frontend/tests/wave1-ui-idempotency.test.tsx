@@ -150,6 +150,8 @@ describe("Wave 1A UI idempotency wiring", () => {
       version: vi.fn().mockResolvedValue(version),
       agent: vi.fn().mockResolvedValue(createdAgent()),
       knowledge: vi.fn().mockResolvedValue([]),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
       ragPreview: vi.fn().mockResolvedValue({
         document_count: 0,
         total_char_count: 0,
@@ -310,6 +312,8 @@ describe("Wave 1A UI idempotency wiring", () => {
       version: vi.fn().mockResolvedValue(version),
       agent: vi.fn().mockResolvedValue(agent),
       knowledge: vi.fn().mockResolvedValue([]),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
       ragPreview: vi.fn().mockResolvedValue({
         document_count: 0,
         total_char_count: 0,

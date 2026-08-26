@@ -1,8 +1,11 @@
+"use client";
+
 import Link from "next/link";
 
-import { t } from "../lib/i18n";
+import { useT } from "../components/locale";
 
 export default function HomePage() {
+  const t = useT();
   return (
     <main className="shell">
       <section className="hero-card" aria-labelledby="home-title">

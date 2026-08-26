@@ -13,6 +13,7 @@ import secrets
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -99,6 +100,31 @@ class Settings(BaseSettings):
     def empty_provider_is_mock(cls, value: object) -> object:
         return "mock" if isinstance(value, str) and not value.strip() else value
 
+    @field_validator("llm_provider", "embedding_provider", "tts_provider", "voice_provider")
+    @classmethod
+    def provider_selector_is_supported(cls, value: str) -> str:
+        if value not in {"mock", "dashscope"}:
+            raise ValueError("provider selector must be mock or dashscope")
+        return value
+
+    @field_validator("embedding_provider")
+    @classmethod
+    def embedding_stays_mock(cls, value: str) -> str:
+        if value != "mock":
+            raise ValueError("EMBEDDING_PROVIDER must remain mock")
+        return value
+
+    @field_validator("fallback_voice_profile_id")
+    @classmethod
+    def fallback_id_is_uuid(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        try:
+            UUID(value)
+        except ValueError as exc:
+            raise ValueError("FALLBACK_VOICE_PROFILE_ID must be a UUID") from exc
+        return value
+
     @property
     def is_test(self) -> bool:
         """Whether ephemeral test-only defaults may be used."""
@@ -116,6 +142,36 @@ class Settings(BaseSettings):
         if self.session_secret is None or len(self.session_secret.encode("utf-8")) < 32:
             if not self.is_test:
                 raise RuntimeError("SESSION_SECRET must contain at least 32 bytes")
+        self.validate_provider_configuration()
+
+    def validate_provider_configuration(self) -> None:
+        """Fail closed for unknown, mixed or incompletely configured providers."""
+
+        selectors = (
+            self.llm_provider,
+            self.embedding_provider,
+            self.tts_provider,
+            self.voice_provider,
+        )
+        if any(value not in {"mock", "dashscope"} for value in selectors):
+            raise RuntimeError("provider selector is not supported")
+        if self.embedding_provider != "mock":
+            raise RuntimeError("EMBEDDING_PROVIDER must remain mock")
+        selected_real = [
+            value
+            for value in (self.llm_provider, self.tts_provider, self.voice_provider)
+            if value != "mock"
+        ]
+        if len(selected_real) > 1:
+            raise RuntimeError("at most one real provider may be enabled")
+        if selected_real and (
+            not self.dashscope_api_key
+            or not self.dashscope_workspace_id
+            or self.dashscope_region != "cn-beijing"
+        ):
+            raise RuntimeError("DashScope provider credentials are incomplete")
+        if self.translation_provider not in {None, "", "mock", "deepl"}:
+            raise RuntimeError("translation provider is not supported")
 
     @property
     def secret_bytes(self) -> bytes:

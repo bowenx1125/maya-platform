@@ -2,14 +2,16 @@
 
 import type { ReactNode } from "react";
 
-import { apiErrorMessage, isConflict } from "../lib/api";
-import { statusLabel, t } from "../lib/i18n";
+import { isConflict } from "../lib/api";
+import { localizeError, statusLabel } from "../lib/i18n";
+import { useLocale, useT } from "./locale";
 
-export function LoadingCard({ label = t("loading") }: { label?: string }) {
+export function LoadingCard({ label }: { label?: string }) {
+  const t = useT();
   return (
     <div className="loading-card" role="status">
       <span className="spinner" aria-hidden="true" />
-      {label}
+      {label ?? t("loading")}
     </div>
   );
 }
@@ -21,6 +23,8 @@ export function ErrorNotice({
   error: unknown;
   onRetry?: () => void;
 }) {
+  const t = useT();
+  const { locale } = useLocale();
   const conflict = isConflict(error);
   return (
     <div
@@ -28,7 +32,9 @@ export function ErrorNotice({
       role="alert"
     >
       <strong>{conflict ? t("revisionConflict") : t("requestFailed")}</strong>
-      <span>{conflict ? t("retryConflict") : apiErrorMessage(error)}</span>
+      <span>
+        {conflict ? t("retryConflict") : localizeError(error, locale)}
+      </span>
       {onRetry ? (
         <button className="inline-button" type="button" onClick={onRetry}>
           {t("retry")}
@@ -66,6 +72,7 @@ export function StatusBadge({
   status: string;
   tone?: "good" | "warn" | "bad" | "neutral";
 }) {
+  const { locale } = useLocale();
   const derived =
     tone ??
     (status === "ready" || status === "published" || status === "active"
@@ -76,7 +83,7 @@ export function StatusBadge({
   return (
     <span className={`status-badge status-${derived}`}>
       <span aria-hidden="true" />
-      {statusLabel(status)}
+      {statusLabel(status, locale)}
     </span>
   );
 }

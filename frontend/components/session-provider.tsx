@@ -14,13 +14,13 @@ import {
 } from "react";
 
 import {
-  apiErrorMessage,
   PlatformApi,
   type AuthSession,
   type CurrentUser,
   type DemoIdentity,
 } from "../lib/api";
-import { roleLabel, t } from "../lib/i18n";
+import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
+import { LanguageSwitcher, useLocale, useT } from "./locale";
 
 type SessionStatus = "loading" | "authenticated" | "anonymous";
 
@@ -29,7 +29,7 @@ type SessionContextValue = {
   status: SessionStatus;
   session: AuthSession | null;
   user: CurrentUser | null;
-  error: string | null;
+  error: unknown;
   refresh: () => Promise<AuthSession | null>;
   login: (username: string, password: string) => Promise<AuthSession>;
   logout: () => Promise<void>;
@@ -48,7 +48,7 @@ export function SessionProvider({
   const api = useMemo(() => providedApi ?? new PlatformApi(), [providedApi]);
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const refresh = useCallback(async (): Promise<AuthSession | null> => {
     try {
@@ -60,9 +60,11 @@ export function SessionProvider({
     } catch (cause) {
       setSession(null);
       setStatus("anonymous");
-      if (cause instanceof Error && "status" in cause && cause.status !== 401) {
-        setError(apiErrorMessage(cause));
-      }
+      setError(
+        cause instanceof Error && "status" in cause && cause.status === 401
+          ? null
+          : cause,
+      );
       return null;
     }
   }, [api]);
@@ -135,6 +137,7 @@ export function RouteGuard({
   children: ReactNode;
   role?: "teacher" | "student";
 }) {
+  const t = useT();
   const { status, user } = useSession();
   const pathname = usePathname();
 
@@ -194,12 +197,15 @@ export function RouteGuard({
 }
 
 export function LoginForm() {
+  const t = useT();
+  const { locale } = useLocale();
   const router = useRouter();
   const { status, login, api, switchIdentity } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
 
   useEffect(() => {
@@ -220,6 +226,7 @@ export function LoginForm() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setErrorFallback("loginFailed");
     try {
       const session = await login(username.trim(), password);
       router.replace(
@@ -229,7 +236,7 @@ export function LoginForm() {
             : "/student"),
       );
     } catch (cause) {
-      setError(apiErrorMessage(cause, t("loginFailed")));
+      setError(cause);
     } finally {
       setBusy(false);
     }
@@ -238,6 +245,7 @@ export function LoginForm() {
   async function quickSwitch(userId: string) {
     setBusy(true);
     setError(null);
+    setErrorFallback("demoSwitchUnavailable");
     try {
       const session = await switchIdentity(userId);
       router.replace(
@@ -246,7 +254,7 @@ export function LoginForm() {
           : "/student",
       );
     } catch (cause) {
-      setError(apiErrorMessage(cause, t("demoSwitchUnavailable")));
+      setError(cause);
     } finally {
       setBusy(false);
     }
@@ -254,6 +262,9 @@ export function LoginForm() {
 
   return (
     <section className="auth-card" aria-labelledby="login-title">
+      <div className="auth-language">
+        <LanguageSwitcher />
+      </div>
       <div className="eyebrow">{t("heroEyebrow")}</div>
       <h1 id="login-title">{t("signIn")}</h1>
       <p className="lede">{t("loginLede")}</p>
@@ -279,7 +290,7 @@ export function LoginForm() {
         </label>
         {error ? (
           <p className="form-error" role="alert">
-            {error}
+            {localizeError(error, locale, errorFallback)}
           </p>
         ) : null}
         <button className="primary-action" type="submit" disabled={busy}>
@@ -298,7 +309,7 @@ export function LoginForm() {
                 disabled={busy}
                 onClick={() => void quickSwitch(identity.user_id)}
               >
-                {identity.display_name} · {roleLabel(identity.role)}
+                {identity.display_name} · {roleLabel(identity.role, locale)}
               </button>
             ))}
           </div>

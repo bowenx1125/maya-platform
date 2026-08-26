@@ -3,34 +3,6 @@
   "contract_version": "g0-2026-08-26.4",
   "description": "Explicit allow-list for frozen operations whose backend routes belong to later waves.",
   "allowed_missing_operation_ids": {
-    "listAvatarTemplates": {
-      "owner": "M07",
-      "reason": "Avatar routes are a Wave 1B deliverable."
-    },
-    "listVoiceProfiles": {
-      "owner": "M08",
-      "reason": "Voice routes are a Wave 1B deliverable."
-    },
-    "enrollVoice": {
-      "owner": "M08",
-      "reason": "Voice routes are a Wave 1B deliverable."
-    },
-    "getVoiceProfile": {
-      "owner": "M08",
-      "reason": "Voice routes are a Wave 1B deliverable."
-    },
-    "deleteVoiceProfile": {
-      "owner": "M08",
-      "reason": "Voice routes are a Wave 1B deliverable."
-    },
-    "createVoicePreview": {
-      "owner": "M08",
-      "reason": "Voice routes are a Wave 1B deliverable."
-    },
-    "confirmVoiceProfile": {
-      "owner": "M08",
-      "reason": "Voice routes are a Wave 1B deliverable."
-    },
     "listDebates": {
       "owner": "M10",
       "reason": "Debate routes are a Wave 2 deliverable."

@@ -1,0 +1,202 @@
+.editor {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.previewPanel {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(35, 57, 72, 0.12);
+  border-radius: 1.25rem;
+  background: linear-gradient(145deg, #f7f3ed 0%, #eef4f1 100%);
+}
+
+.canvasFrame {
+  position: relative;
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  overflow: hidden;
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.fallback {
+  display: grid;
+  place-items: center;
+  width: min(58%, 12rem);
+  aspect-ratio: 1;
+  border: 1px solid rgba(35, 57, 72, 0.14);
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #f3c9a5, #a9715c 72%);
+  color: #fffaf3;
+  font-size: clamp(2rem, 8vw, 4rem);
+  font-weight: 720;
+  letter-spacing: 0.03em;
+  box-shadow: 0 1rem 2rem rgba(74, 71, 65, 0.16);
+}
+
+.fallback[hidden],
+.canvas[hidden] {
+  display: none;
+}
+
+.previewLabel {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  max-width: calc(100% - 1.6rem);
+  overflow: hidden;
+  color: #334855;
+  font-size: 0.77rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #526771;
+  font-size: 0.86rem;
+}
+
+.controlGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.control {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.controlFull {
+  grid-column: 1 / -1;
+}
+
+.label {
+  color: #38505d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.select,
+.button {
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid rgba(35, 57, 72, 0.18);
+  border-radius: 0.7rem;
+  background: #fffdfa;
+  color: #213a47;
+  font: inherit;
+}
+
+.select {
+  width: 100%;
+  padding: 0 0.7rem;
+}
+
+.button {
+  cursor: pointer;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.button:hover,
+.button:focus-visible,
+.selected {
+  border-color: #2f7c78;
+  background: #eaf5f1;
+  outline: none;
+}
+
+.button:disabled,
+.select:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.templateButton {
+  min-height: 4.1rem;
+  overflow-wrap: anywhere;
+}
+
+.templateName {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.templateMeta {
+  display: block;
+  margin-top: 0.2rem;
+  color: #6b7d84;
+  font-size: 0.68rem;
+}
+
+.stateButton {
+  flex: 1 1 6.5rem;
+  text-align: center;
+}
+
+.message {
+  margin: 0;
+  color: #5f7078;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.error {
+  color: #a54948;
+}
+
+@media (max-width: 620px) {
+  .controlGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .controlFull {
+    grid-column: auto;
+  }
+
+  .templateGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .canvasFrame {
+    min-height: 230px;
+  }
+}

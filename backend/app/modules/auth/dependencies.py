@@ -32,9 +32,17 @@ def get_database(request: Request) -> Database:
     return database
 
 
-def get_db(database: Database = Depends(get_database)) -> Generator[Session, None, None]:
+def get_db(
+    database: Database = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> Generator[Session, None, None]:
     # FastAPI's generator dependency closes the session after each request.
     session = database.session_factory()
+    # Provider-neutral projections such as an Agent's effective platform voice
+    # need the exact Settings instance injected into this app/test process.
+    # Keeping it in SQLAlchemy's request-local ``Session.info`` avoids adding
+    # Settings arguments to every repository projection call.
+    session.info["maya_settings"] = settings
     try:
         yield session
         session.commit()

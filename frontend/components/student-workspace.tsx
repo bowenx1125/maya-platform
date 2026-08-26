@@ -14,7 +14,8 @@ import {
   type PlatformApi,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
-import { roleLabel, t } from "../lib/i18n";
+import { roleLabel } from "../lib/i18n";
+import { useLocale, useT } from "./locale";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -48,6 +49,7 @@ async function loadGroups(
 }
 
 export function StudentDashboard() {
+  const t = useT();
   const { api, user } = useSession();
   const [course, setCourse] = useState<Course | null>(null);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
@@ -142,6 +144,7 @@ export function StudentDashboard() {
 }
 
 function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
+  const t = useT();
   const { group, agents, documents } = overview;
   return (
     <SectionCard
@@ -204,6 +207,8 @@ function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
 }
 
 export function GroupWorkspace({ groupId }: { groupId: string }) {
+  const t = useT();
+  const { locale } = useLocale();
   const { api } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -349,7 +354,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
                   <span>
                     <strong>{document.source_filename}</strong>
                     <small>
-                      {document.char_count.toLocaleString()} characters
+                      {document.char_count.toLocaleString()} {t("characters")}
                     </small>
                   </span>
                   <StatusBadge status={document.index_status} />
@@ -367,7 +372,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
                 {member.display_name.slice(0, 1).toUpperCase()}
               </span>
               <span>{member.display_name}</span>
-              <small>{roleLabel(member.role)}</small>
+              <small>{roleLabel(member.role, locale)}</small>
             </div>
           ))}
         </div>
@@ -377,6 +382,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
 }
 
 export function CreateAgentForm({ groupId }: { groupId: string }) {
+  const t = useT();
   const { api } = useSession();
   const router = useRouter();
   const mutationStore = useIdempotencyStore();

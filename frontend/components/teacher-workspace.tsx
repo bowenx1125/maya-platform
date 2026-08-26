@@ -4,14 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  apiErrorMessage,
   type AgentDetail,
   type AgentVersion,
   type Course,
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
-import { t } from "../lib/i18n";
+import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -23,6 +22,7 @@ import {
 } from "./ui";
 
 export function TeacherDashboard() {
+  const t = useT();
   const { api, user } = useSession();
   const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
@@ -112,6 +112,7 @@ export function TeacherDashboard() {
 }
 
 function PublishedAgentCard({ item }: { item: PublishedAgentSummary }) {
+  const t = useT();
   const version = item.current_version;
   return (
     <Link className="published-card" href={`/teacher/agents/${item.agent.id}`}>
@@ -153,6 +154,7 @@ export function TeacherAgentDetail({
   agentId: string;
   snapshotId?: string;
 }) {
+  const t = useT();
   const { api } = useSession();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
@@ -382,6 +384,7 @@ export function canShowSnapshotText(
 }
 
 function TeacherVersion({ version }: { version: AgentVersion }) {
+  const t = useT();
   return (
     <div className="teacher-version">
       <div className="version-summary">

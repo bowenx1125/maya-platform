@@ -1,0 +1,91 @@
+.voicePanel {
+  display: grid;
+  gap: 1rem;
+}
+
+.uploadCard {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--line, #ded7c8);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface, #fffdf8) 90%, #efe6d5);
+}
+
+.fileInput {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px dashed var(--line, #ded7c8);
+  border-radius: 0.65rem;
+  background: var(--surface, #fffdf8);
+}
+
+.consent {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.consent input {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  margin-top: 0.12rem;
+}
+
+.profileList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  border: 1px solid var(--line, #ded7c8);
+  border-radius: 0.85rem;
+  background: var(--surface, #fffdf8);
+}
+
+.profileHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.profileName {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.audio {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted, #6e6a64);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .profileHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

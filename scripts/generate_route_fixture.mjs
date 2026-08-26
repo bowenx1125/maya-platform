@@ -48,6 +48,13 @@ const implemented = new Set([
   "downloadSnapshotRag",
   "downloadSnapshotDocument",
   "listPublishedAgentsForTeacher",
+  "listAvatarTemplates",
+  "listVoiceProfiles",
+  "enrollVoice",
+  "getVoiceProfile",
+  "deleteVoiceProfile",
+  "createVoicePreview",
+  "confirmVoiceProfile",
 ]);
 const methods = new Set([
   "get",

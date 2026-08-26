@@ -1,4 +1,4 @@
-name: Maya Wave 1A quality
+name: Maya Wave 1 quality
 
 on:
   push:
@@ -49,8 +49,36 @@ jobs:
           test -d backend/app/modules/agents
           test -d backend/app/modules/knowledge
 
+      - name: Assert Wave 1B and 1C inputs
+        run: |
+          test -f backend/migrations/versions/0003_wave1b_avatar_voice.py
+          test -f backend/tests/test_wave1b_avatars.py
+          test -f backend/tests/test_wave1b_voices.py
+          test -f scripts/enroll_system_fallback.py
+          test -d backend/app/modules/avatars
+          test -d backend/app/modules/voices
+          test -d backend/app/providers
+          test -d frontend/components/avatar
+          test -d frontend/components/locale
+          test -d frontend/components/voice
+          test -f frontend/tests/avatar.test.tsx
+          test -f frontend/tests/voice.test.tsx
+          test -f frontend/tests/wave1c-m02.test.tsx
+          test -f frontend/tests/wave1c-workbench-locale.integration.test.tsx
+          test -f frontend/public/avatars/female_1.glb
+          test -f frontend/public/avatars/NOTICE.md
+          test -f frontend/public/avatars/LICENSE-draco.txt
+          test -f frontend/public/avatars/LICENSE-motion-engine.txt
+          test -f frontend/public/avatars/LICENSE-threejs.txt
+          test -f frontend/public/avatars/draco/draco_decoder.js
+          test -f frontend/public/avatars/draco/draco_decoder.wasm
+          test -f frontend/public/avatars/draco/draco_wasm_wrapper.js
+
       - name: Frozen JavaScript install
         run: pnpm install --frozen-lockfile
+
+      - name: Repository formatting
+        run: pnpm exec prettier --check .
 
       - name: Frozen parent OpenAPI and generated client checks
         run: |
@@ -99,13 +127,15 @@ jobs:
       - name: Local Demo initializer safety probe
         run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 
-      - name: Wave 1A backend tests and migration smoke
+      - name: Wave 1 backend tests and migration smoke
         working-directory: backend
         run: |
           uv run ruff check app
           uv run ruff check tests
+          uv run ruff check migrations
           uv run mypy app
           uv run pytest tests/test_wave1_agents_knowledge.py
+          uv run pytest tests/test_wave1b_avatars.py tests/test_wave1b_voices.py
           uv run pytest
 
       - name: Empty database migration smoke
@@ -117,10 +147,10 @@ jobs:
       - name: Populated Wave 1A migration preservation evidence
         run: uv run --directory backend python ../scripts/test_wave1_migration.py
 
-      - name: Export Wave 1A FastAPI OpenAPI for route comparison
+      - name: Export Wave 1 FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
-      - name: Strict Wave 1A FastAPI route and schema comparison
+      - name: Strict Wave 1 FastAPI route and schema comparison
         run: node scripts/compare_route_surface.mjs --server-openapi "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
       - name: Compose configuration

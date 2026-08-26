@@ -18,6 +18,7 @@ from sqlalchemy import and_, delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.core.errors import (
     PlatformError,
     conflict,
@@ -732,7 +733,9 @@ def recover_operation_now(db: Session, data_root: Path, operation_id: str) -> No
 def _avatar(value: str) -> AvatarConfig:
     try:
         parsed = json.loads(value)
-        return AvatarConfig.model_validate(parsed)
+        from app.modules.avatars import validate_avatar_config
+
+        return validate_avatar_config(parsed)
     except Exception:
         return AvatarConfig(
             template_id="wave1-default-head",
@@ -789,16 +792,29 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
     if "failed" in statuses:
         result.append("rag_index_failed")
     try:
-        avatar = AvatarConfig.model_validate(json.loads(version.avatar_config_json))
-        if avatar.template_id != "wave1-default-head":
-            result.append("avatar_missing")
+        from app.modules.avatars import validate_avatar_config
+
+        validate_avatar_config(json.loads(version.avatar_config_json))
     except Exception:
         result.append("avatar_missing")
     return result
 
 
-def version_dto(db: Session, version: AgentVersion, agent: Agent) -> AgentVersionDTO:
+def version_dto(
+    db: Session,
+    version: AgentVersion,
+    agent: Agent,
+    settings: Settings | None = None,
+) -> AgentVersionDTO:
     docs = _enabled_documents(db, version.id)
+    from app.modules.voices.preview import resolve_effective_voice_profile
+
+    effective_voice = resolve_effective_voice_profile(
+        db,
+        version.voice_profile_id,
+        agent.group_id,
+        settings or db.info.get("maya_settings") or get_settings(),
+    )
     return AgentVersionDTO(
         id=UUID(version.id),
         agent_id=UUID(version.agent_id),
@@ -808,8 +824,10 @@ def version_dto(db: Session, version: AgentVersion, agent: Agent) -> AgentVersio
         agent_md=version.agent_md,
         avatar_config=_avatar(version.avatar_config_json),
         voice_profile_id=UUID(version.voice_profile_id) if version.voice_profile_id else None,
-        effective_voice_profile_id=None,
-        voice_fallback_active=True,
+        effective_voice_profile_id=(
+            UUID(effective_voice.profile_id) if effective_voice.profile_id else None
+        ),
+        voice_fallback_active=effective_voice.fallback_active,
         knowledge_snapshot_id=(
             UUID(version.knowledge_snapshot_id) if version.knowledge_snapshot_id else None
         ),

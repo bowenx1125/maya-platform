@@ -25,9 +25,12 @@ from app.core.errors import (
 )
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.router import router as auth_router
+from app.modules.avatars.router import router as avatars_router
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
+from app.modules.voices.router import router as voices_router
+from app.modules.voices.service import startup_voice_cleanup
 from app.seed import seed_demo_data
 
 logger = logging.getLogger("maya.backend")
@@ -61,6 +64,7 @@ def create_app(
                 runtime_database.upgrade_schema()
             with runtime_database.session() as session:
                 recover_startup(session, runtime_settings.resolved_data_root)
+                startup_voice_cleanup(runtime_settings.resolved_data_root)
                 seed_demo_data(session)
         yield
         runtime_database.dispose()
@@ -147,6 +151,8 @@ def create_app(
     app.include_router(org_router, prefix="/api/v1")
     app.include_router(agents_router, prefix="/api/v1")
     app.include_router(knowledge_router, prefix="/api/v1")
+    app.include_router(avatars_router, prefix="/api/v1")
+    app.include_router(voices_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -207,6 +213,7 @@ def create_app(
                             "uploadAgentMd",
                             "testAgentDraft",
                             "publishAgentVersion",
+                            "enrollVoice",
                         }:
                             operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]
