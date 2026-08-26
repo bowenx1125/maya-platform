@@ -19,6 +19,11 @@ const nullableUuid = { anyOf: [uuid, { type: "null" }] };
 const isoTime = { type: "string", format: "date-time" };
 const slot = { type: "string", enum: ["A", "B", "C", "D", "E"] };
 const nonEmpty = { type: "string", minLength: 1 };
+const publicMediaPath = {
+  type: "string",
+  pattern:
+    "^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+};
 const integer = (minimum = 0, maximum) => ({
   type: "integer",
   minimum,
@@ -246,6 +251,7 @@ const payloads = {
       "playback",
       "interaction",
       "report",
+      "latest_sequence",
     ],
   ),
   "debate.started": (() => {
@@ -292,7 +298,6 @@ const payloads = {
         type: "string",
         enum: ["rag_grounded", "mixed", "general_reasoning"],
       },
-      sources: arrayOf(retrievalSource),
       audio_duration_ms: integer(0),
     },
     ["turn_id", "slot", "audio_ready", "retrieval_status"],
@@ -304,7 +309,7 @@ const payloads = {
       round_no: integer(1, 2),
       speech: nonEmpty,
       sources: arrayOf(retrievalSource),
-      playback_url: { type: "string", format: "uri-reference" },
+      playback_url: publicMediaPath,
       avatar_states: arrayOf(avatarState, 1),
       cursor_ms: { type: "integer", const: 0 },
       playback_rate: number(0.95, 1.25),
@@ -566,7 +571,7 @@ const eventBranch = (eventType) => ({
     event_type: { type: "string", const: eventType },
     event_version: { type: "integer", const: 1 },
     debate_id: uuid,
-    sequence: integer(1),
+    sequence: integer(eventType === "snapshot" ? 0 : 1),
     occurred_at: isoTime,
     payload: { $ref: `#/$defs/payload_${slug(eventType)}` },
   },

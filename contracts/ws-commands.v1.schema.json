@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maya.local/contracts/ws-commands.v1.schema.json",
+  "title": "Maya v1 private WebSocket playback commands",
+  "description": "Closed inbound teacher-controller commands. They never choose turns or expose prepared content.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "command_id": { "type": "string", "format": "uuid" },
+        "command_type": {
+          "type": "string",
+          "const": "playback.controller.acquire"
+        },
+        "command_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "expected_control_version": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "command_id",
+        "command_type",
+        "command_version",
+        "debate_id",
+        "expected_control_version"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "command_id": { "type": "string", "format": "uuid" },
+        "command_type": { "type": "string", "const": "playback.media.prepare" },
+        "command_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "expected_control_version": { "type": "integer", "minimum": 0 },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "turn_id": { "type": "string", "format": "uuid" },
+        "playback_action": {
+          "type": "string",
+          "enum": ["start", "resume", "replay"]
+        }
+      },
+      "required": [
+        "command_id",
+        "command_type",
+        "command_version",
+        "debate_id",
+        "expected_control_version",
+        "controller_epoch",
+        "turn_id",
+        "playback_action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "command_id": { "type": "string", "format": "uuid" },
+        "command_type": { "type": "string", "const": "playback.started_ack" },
+        "command_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "expected_control_version": { "type": "integer", "minimum": 0 },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "turn_id": { "type": "string", "format": "uuid" },
+        "playback_action": {
+          "type": "string",
+          "enum": ["start", "resume", "replay"]
+        }
+      },
+      "required": [
+        "command_id",
+        "command_type",
+        "command_version",
+        "debate_id",
+        "expected_control_version",
+        "controller_epoch",
+        "turn_id",
+        "playback_action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "command_id": { "type": "string", "format": "uuid" },
+        "command_type": { "type": "string", "const": "playback.ended_ack" },
+        "command_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "expected_control_version": { "type": "integer", "minimum": 0 },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "turn_id": { "type": "string", "format": "uuid" }
+      },
+      "required": [
+        "command_id",
+        "command_type",
+        "command_version",
+        "debate_id",
+        "expected_control_version",
+        "controller_epoch",
+        "turn_id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "command_id": { "type": "string", "format": "uuid" },
+        "command_type": { "type": "string", "const": "playback.play_failed" },
+        "command_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "expected_control_version": { "type": "integer", "minimum": 0 },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "turn_id": { "type": "string", "format": "uuid" },
+        "playback_action": {
+          "type": "string",
+          "enum": ["start", "resume", "replay"]
+        },
+        "failure_phase": { "type": "string", "enum": ["pre_ack", "post_ack"] },
+        "cursor_ms": { "type": "integer", "minimum": 0 },
+        "safe_client_code": {
+          "type": "string",
+          "enum": [
+            "autoplay_blocked",
+            "not_supported",
+            "decode_error",
+            "network_error",
+            "aborted",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "command_id",
+        "command_type",
+        "command_version",
+        "debate_id",
+        "expected_control_version",
+        "controller_epoch",
+        "turn_id",
+        "playback_action",
+        "failure_phase",
+        "cursor_ms",
+        "safe_client_code"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

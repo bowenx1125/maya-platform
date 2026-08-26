@@ -1187,8 +1187,12 @@ export interface components {
             safe_error_code?: string | null;
             created_at: components["schemas"]["IsoTime"];
         };
-        PlaybackResource: {
+        VoicePreviewPlaybackResource: {
             /** Format: uri-reference */
+            playback_url: string;
+            expires_at: components["schemas"]["IsoTime"];
+        };
+        DebatePlaybackResource: {
             playback_url: string;
             expires_at: components["schemas"]["IsoTime"];
         };
@@ -1213,13 +1217,22 @@ export interface components {
             total_duration_seconds?: null;
             turn_duration_seconds?: null;
         };
+        DebateDraftUpdateRequest: components["schemas"]["DebateDraftRequest"] & {
+            expected_revision: number;
+        };
         DebateParticipant: {
             id: components["schemas"]["Uuid"];
             /** @enum {string} */
             slot: "A" | "B" | "C" | "D" | "E";
             order_index: number;
+            agent_id: components["schemas"]["Uuid"];
+            agent_name: string;
             agent_version_id: components["schemas"]["Uuid"];
+            version_label: string;
             knowledge_snapshot_id: components["schemas"]["Uuid"];
+            avatar_config: components["schemas"]["AvatarConfig"];
+            effective_voice_profile_id: components["schemas"]["Uuid"] | null;
+            voice_fallback_active: boolean;
             /** @enum {string} */
             stance_mode: "assigned" | "open";
             /** @enum {string|null} */
@@ -1273,7 +1286,7 @@ export interface components {
             grounding_mode: "rag_grounded" | "mixed" | "general_reasoning";
             sources: components["schemas"]["RetrievalSource"][];
             translated_text?: string | null;
-            playback_resource?: components["schemas"]["PlaybackResource"] | null;
+            playback_resource?: components["schemas"]["DebatePlaybackResource"] | null;
         };
         Transcript: {
             debate_id: components["schemas"]["Uuid"];
@@ -1397,6 +1410,12 @@ export interface components {
         IdempotencyKey: string;
         /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
         CsrfToken: string;
+        /** @description A single RFC 9110 byte range used by the classroom audio element. */
+        Range: string;
+        /** @description Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio. */
+        IfRange: string;
+        /** @description Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token. */
+        MediaTicket: string;
     };
     requestBodies: {
         ControlCommand: {
@@ -1407,7 +1426,18 @@ export interface components {
             };
         };
     };
-    headers: never;
+    headers: {
+        /** @description The platform supports a single byte range. */
+        AcceptRangesBytes: "bytes";
+        /** @description Stable strong validator derived from immutable retained audio bytes. */
+        AudioEtag: string;
+        /** @description Number of bytes in this response body. */
+        ContentLength: number;
+        /** @description Inclusive byte range and complete representation size. */
+        ContentRange: string;
+        /** @description Complete representation size for an unsatisfied range. */
+        UnsatisfiedContentRange: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -2347,7 +2377,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PlaybackResource"];
+                    "application/json": components["schemas"]["VoicePreviewPlaybackResource"];
                 };
             };
             404: components["responses"]["Error"];
@@ -2494,6 +2524,7 @@ export interface operations {
                     "application/json": components["schemas"]["DebateSummary"][];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -2525,7 +2556,9 @@ export interface operations {
                     "application/json": components["schemas"]["DebateDetail"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             422: components["responses"]["Error"];
         };
     };
@@ -2549,6 +2582,7 @@ export interface operations {
                     "application/json": components["schemas"]["DebateDetail"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -2566,7 +2600,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DebateDraftRequest"];
+                "application/json": components["schemas"]["DebateDraftUpdateRequest"];
             };
         };
         responses: {
@@ -2579,6 +2613,7 @@ export interface operations {
                     "application/json": components["schemas"]["DebateDetail"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
@@ -2601,7 +2636,7 @@ export interface operations {
             content: {
                 "application/json": {
                     expected_revision: number;
-                    expected_current_audio_debate_id?: components["schemas"]["Uuid"] | null;
+                    expected_current_audio_debate_id: components["schemas"]["Uuid"] | null;
                     confirm_previous_audio_cleanup: boolean;
                 };
             };
@@ -2616,6 +2651,8 @@ export interface operations {
                     "application/json": components["schemas"]["DebateDetail"];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
         };
@@ -2635,6 +2672,8 @@ export interface operations {
         requestBody: components["requestBodies"]["ControlCommand"];
         responses: {
             200: components["responses"]["PlaybackState"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -2653,6 +2692,8 @@ export interface operations {
         requestBody: components["requestBodies"]["ControlCommand"];
         responses: {
             200: components["responses"]["PlaybackState"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -2671,6 +2712,8 @@ export interface operations {
         requestBody: components["requestBodies"]["ControlCommand"];
         responses: {
             200: components["responses"]["PlaybackState"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -2697,6 +2740,8 @@ export interface operations {
                     "application/json": components["schemas"]["DebateDetail"];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -2715,6 +2760,7 @@ export interface operations {
         requestBody: components["requestBodies"]["ControlCommand"];
         responses: {
             200: components["responses"]["PlaybackState"];
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
@@ -2735,6 +2781,7 @@ export interface operations {
         requestBody: components["requestBodies"]["ControlCommand"];
         responses: {
             200: components["responses"]["PlaybackState"];
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
@@ -2761,6 +2808,7 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     getDebateTranscript: {
@@ -2783,6 +2831,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transcript"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -3131,8 +3180,16 @@ export interface operations {
     };
     streamRetainedTurnAudio: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token. */
+                media_ticket?: components["parameters"]["MediaTicket"];
+            };
+            header?: {
+                /** @description A single RFC 9110 byte range used by the classroom audio element. */
+                Range?: components["parameters"]["Range"];
+                /** @description Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio. */
+                "If-Range"?: components["parameters"]["IfRange"];
+            };
             path: {
                 debate_id: components["parameters"]["DebateId"];
                 turn_id: components["parameters"]["TurnId"];
@@ -3141,17 +3198,44 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Teacher-authorized retained audio; Range requests may be supported. */
+            /** @description Teacher-authorized complete retained audio. */
             200: {
                 headers: {
+                    "Accept-Ranges": components["headers"]["AcceptRangesBytes"];
+                    ETag: components["headers"]["AudioEtag"];
+                    "Content-Length": components["headers"]["ContentLength"];
                     [name: string]: unknown;
                 };
                 content: {
                     "audio/wav": string;
                 };
             };
+            /** @description Teacher-authorized single byte range of retained audio. */
+            206: {
+                headers: {
+                    "Accept-Ranges": components["headers"]["AcceptRangesBytes"];
+                    ETag: components["headers"]["AudioEtag"];
+                    "Content-Length": components["headers"]["ContentLength"];
+                    "Content-Range": components["headers"]["ContentRange"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                };
+            };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             410: components["responses"]["Error"];
+            /** @description Requested byte range cannot be satisfied for this retained audio. */
+            416: {
+                headers: {
+                    "Content-Range": components["headers"]["UnsatisfiedContentRange"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

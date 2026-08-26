@@ -1,5 +1,5 @@
 {
-  "contract_version": "g0-2026-08-26.4",
+  "contract_version": "g0-2026-08-27.5",
   "description": "Explicit exceptions for generic Redocly response-completeness recommendations; frozen statuses remain mandatory.",
   "allow_response_schema_supersets": {},
   "allow_missing_4xx": {

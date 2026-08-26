@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Maya Teaching Platform API
-  version: 0.1.0-g0.4
+  version: 0.1.0-g0.5
   description: >-
     Demo v0.1 platform contract. Provider names, model names, external voice IDs,
     API keys, absolute file paths, and prepared turn text are never public fields.
@@ -625,7 +625,7 @@ paths:
           description: Short-lived platform preview URL.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/PlaybackResource'}
+              schema: {$ref: '#/components/schemas/VoicePreviewPlaybackResource'}
         '404': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /voice-profiles/{voice_profile_id}/confirm:
@@ -715,6 +715,7 @@ paths:
               schema:
                 type: array
                 items: {$ref: '#/components/schemas/DebateSummary'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
     post:
       tags: [Debates]
@@ -733,7 +734,9 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DebateDetail'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}:
     parameters:
@@ -747,6 +750,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DebateDetail'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
     patch:
       tags: [Debates]
@@ -757,13 +761,14 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/DebateDraftRequest'}
+            schema: {$ref: '#/components/schemas/DebateDraftUpdateRequest'}
       responses:
         '200':
           description: Draft updated and selected current versions/snapshots re-fixed.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DebateDetail'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
@@ -781,7 +786,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [expected_revision, confirm_previous_audio_cleanup]
+              required: [expected_revision, expected_current_audio_debate_id, confirm_previous_audio_cleanup]
               properties:
                 expected_revision: {type: integer, minimum: 0}
                 expected_current_audio_debate_id:
@@ -793,6 +798,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DebateDetail'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/pause:
@@ -805,6 +812,8 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ControlCommand'}
       responses:
         '200': {$ref: '#/components/responses/PlaybackState'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/resume:
     post:
@@ -816,6 +825,8 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ControlCommand'}
       responses:
         '200': {$ref: '#/components/responses/PlaybackState'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/skip:
     post:
@@ -827,6 +838,8 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ControlCommand'}
       responses:
         '200': {$ref: '#/components/responses/PlaybackState'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/stop:
     post:
@@ -842,6 +855,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DebateDetail'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/replay:
     post:
@@ -853,6 +868,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ControlCommand'}
       responses:
         '200': {$ref: '#/components/responses/PlaybackState'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/turns/{turn_id}/replay:
@@ -866,6 +882,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ControlCommand'}
       responses:
         '200': {$ref: '#/components/responses/PlaybackState'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/events:
@@ -883,6 +900,7 @@ paths:
         '101': {description: Switching Protocols.}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/transcript:
     get:
       tags: [Debates]
@@ -895,6 +913,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Transcript'}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
 
   /debates/{debate_id}/interaction:
@@ -1126,14 +1145,39 @@ paths:
       parameters:
         - $ref: '#/components/parameters/DebateId'
         - $ref: '#/components/parameters/TurnId'
+        - $ref: '#/components/parameters/Range'
+        - $ref: '#/components/parameters/IfRange'
+        - $ref: '#/components/parameters/MediaTicket'
       responses:
         '200':
-          description: Teacher-authorized retained audio; Range requests may be supported.
+          description: Teacher-authorized complete retained audio.
+          headers:
+            Accept-Ranges: {$ref: '#/components/headers/AcceptRangesBytes'}
+            ETag: {$ref: '#/components/headers/AudioEtag'}
+            Content-Length: {$ref: '#/components/headers/ContentLength'}
           content:
             audio/wav:
               schema: {type: string, format: binary}
+        '206':
+          description: Teacher-authorized single byte range of retained audio.
+          headers:
+            Accept-Ranges: {$ref: '#/components/headers/AcceptRangesBytes'}
+            ETag: {$ref: '#/components/headers/AudioEtag'}
+            Content-Length: {$ref: '#/components/headers/ContentLength'}
+            Content-Range: {$ref: '#/components/headers/ContentRange'}
+          content:
+            audio/wav:
+              schema: {type: string, format: binary}
+        '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '410': {$ref: '#/components/responses/Error'}
+        '416':
+          description: Requested byte range cannot be satisfied for this retained audio.
+          headers:
+            Content-Range: {$ref: '#/components/headers/UnsatisfiedContentRange'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
 components:
   securitySchemes:
@@ -1161,6 +1205,43 @@ components:
       required: true
       description: Raw per-session CSRF token returned by AuthSession; required on authenticated mutations.
       schema: {type: string, minLength: 32}
+    Range:
+      name: Range
+      in: header
+      required: false
+      description: A single RFC 9110 byte range used by the classroom audio element.
+      schema: {type: string, pattern: '^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$'}
+    IfRange:
+      name: If-Range
+      in: header
+      required: false
+      description: Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio.
+      schema:
+        oneOf:
+          - {type: string, pattern: '^"[0-9a-f]{64}"$'}
+          - {type: string, pattern: '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$'}
+    MediaTicket:
+      name: media_ticket
+      in: query
+      required: false
+      description: Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token.
+      schema: {type: string, minLength: 43, maxLength: 43, pattern: '^[A-Za-z0-9_-]{43}$'}
+  headers:
+    AcceptRangesBytes:
+      description: The platform supports a single byte range.
+      schema: {type: string, const: bytes}
+    AudioEtag:
+      description: Stable strong validator derived from immutable retained audio bytes.
+      schema: {type: string, pattern: '^"[0-9a-f]{64}"$'}
+    ContentLength:
+      description: Number of bytes in this response body.
+      schema: {type: integer, minimum: 0}
+    ContentRange:
+      description: Inclusive byte range and complete representation size.
+      schema: {type: string, pattern: '^bytes [0-9]+-[0-9]+/[0-9]+$'}
+    UnsatisfiedContentRange:
+      description: Complete representation size for an unsatisfied range.
+      schema: {type: string, pattern: '^bytes \*/[0-9]+$'}
   requestBodies:
     ControlCommand:
       required: true
@@ -1412,11 +1493,21 @@ components:
         source_filename: {type: string}
         safe_error_code: {type: [string, 'null']}
         created_at: {$ref: '#/components/schemas/IsoTime'}
-    PlaybackResource:
+    VoicePreviewPlaybackResource:
       type: object
       required: [playback_url, expires_at]
       properties:
-        playback_url: {type: string, format: uri-reference}
+        playback_url:
+          type: string
+          format: uri-reference
+        expires_at: {$ref: '#/components/schemas/IsoTime'}
+    DebatePlaybackResource:
+      type: object
+      required: [playback_url, expires_at]
+      properties:
+        playback_url:
+          type: string
+          pattern: '^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
         expires_at: {$ref: '#/components/schemas/IsoTime'}
     PublishedAgentSummary:
       type: object
@@ -1445,15 +1536,28 @@ components:
         round_count: {type: integer, const: 2}
         total_duration_seconds: {type: 'null'}
         turn_duration_seconds: {type: 'null'}
+    DebateDraftUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/DebateDraftRequest'
+        - type: object
+          required: [expected_revision]
+          properties:
+            expected_revision: {type: integer, minimum: 0}
     DebateParticipant:
       type: object
-      required: [id, slot, order_index, agent_version_id, knowledge_snapshot_id, stance_mode]
+      required: [id, slot, order_index, agent_id, agent_name, agent_version_id, version_label, knowledge_snapshot_id, avatar_config, effective_voice_profile_id, voice_fallback_active, stance_mode]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         slot: {type: string, enum: [A, B, C, D, E]}
         order_index: {type: integer, minimum: 0, maximum: 4}
+        agent_id: {$ref: '#/components/schemas/Uuid'}
+        agent_name: {type: string}
         agent_version_id: {$ref: '#/components/schemas/Uuid'}
+        version_label: {type: string, pattern: '^V[0-9]+\.[0-9]+$'}
         knowledge_snapshot_id: {$ref: '#/components/schemas/Uuid'}
+        avatar_config: {$ref: '#/components/schemas/AvatarConfig'}
+        effective_voice_profile_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        voice_fallback_active: {type: boolean}
         stance_mode: {type: string, enum: [assigned, open]}
         initial_stance: {type: [string, 'null'], enum: [support, oppose, neutral, null]}
         current_stance: {type: [string, 'null'], enum: [support, oppose, neutral, null]}
@@ -1511,7 +1615,7 @@ components:
           type: array
           items: {$ref: '#/components/schemas/RetrievalSource'}
         translated_text: {type: [string, 'null']}
-        playback_resource: {oneOf: [{$ref: '#/components/schemas/PlaybackResource'}, {type: 'null'}]}
+        playback_resource: {oneOf: [{$ref: '#/components/schemas/DebatePlaybackResource'}, {type: 'null'}]}
     Transcript:
       type: object
       required: [debate_id, turns, audio_retained]

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "g0-2026-08-26.4",
+  "contract_version": "g0-2026-08-27.5",
   "description": "Explicit allow-list for frozen operations whose backend routes belong to later waves.",
   "allowed_missing_operation_ids": {
     "listDebates": {
@@ -40,20 +40,20 @@
       "reason": "Playback routes are a Wave 2 deliverable."
     },
     "replayDebate": {
-      "owner": "M15",
-      "reason": "History/replay routes are a Wave 3 deliverable."
+      "owner": "M12",
+      "reason": "Playback replay routes are a Wave 2 deliverable."
     },
     "replayDebateTurn": {
-      "owner": "M15",
-      "reason": "History/replay routes are a Wave 3 deliverable."
+      "owner": "M12",
+      "reason": "Playback replay routes are a Wave 2 deliverable."
     },
     "connectDebateEvents": {
       "owner": "M12",
       "reason": "WebSocket playback routes are a Wave 2 deliverable."
     },
     "getDebateTranscript": {
-      "owner": "M15",
-      "reason": "History/replay routes are a Wave 3 deliverable."
+      "owner": "M12",
+      "reason": "The live Wave 2 control page consumes the published transcript."
     },
     "getTeacherInteraction": {
       "owner": "M13",
@@ -108,8 +108,8 @@
       "reason": "Translation routes are a Wave 3 deliverable."
     },
     "streamRetainedTurnAudio": {
-      "owner": "M15",
-      "reason": "Retained audio routes are a Wave 3 deliverable."
+      "owner": "M12",
+      "reason": "Live/replay classroom playback is a Wave 2 deliverable."
     }
   },
   "allowed_extra_operation_ids": {

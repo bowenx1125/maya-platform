@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maya.local/contracts/ws-command-results.v1.schema.json",
+  "title": "Maya v1 private WebSocket playback command results",
+  "description": "Closed nonpersistent messages sent only to the relevant teacher controller socket; they carry no Debate sequence.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "message_id": { "type": "string", "format": "uuid" },
+        "message_type": { "type": "string", "const": "controller.acquired" },
+        "result_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "command_id": { "type": "string", "format": "uuid" },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "control_version": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "message_id",
+        "message_type",
+        "result_version",
+        "debate_id",
+        "occurred_at",
+        "command_id",
+        "controller_epoch",
+        "control_version"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "message_id": { "type": "string", "format": "uuid" },
+        "message_type": { "type": "string", "const": "media.prepared" },
+        "result_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "command_id": { "type": "string", "format": "uuid" },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "turn_id": { "type": "string", "format": "uuid" },
+        "media_url": {
+          "type": "string",
+          "pattern": "^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\?media_ticket=[A-Za-z0-9_-]{43}$"
+        },
+        "expires_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "message_id",
+        "message_type",
+        "result_version",
+        "debate_id",
+        "occurred_at",
+        "command_id",
+        "controller_epoch",
+        "turn_id",
+        "media_url",
+        "expires_at"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "message_id": { "type": "string", "format": "uuid" },
+        "message_type": { "type": "string", "const": "command.rejected" },
+        "result_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "command_id": { "type": "string", "format": "uuid" },
+        "code": { "type": "string", "minLength": 1 },
+        "current_control_version": { "type": "integer", "minimum": 0 },
+        "recoverable": { "type": "boolean" }
+      },
+      "required": [
+        "message_id",
+        "message_type",
+        "result_version",
+        "debate_id",
+        "occurred_at",
+        "command_id",
+        "code",
+        "current_control_version",
+        "recoverable"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "message_id": { "type": "string", "format": "uuid" },
+        "message_type": { "type": "string", "const": "command.duplicate" },
+        "result_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "command_id": { "type": "string", "format": "uuid" },
+        "code": { "type": "string", "const": "duplicate_command" },
+        "current_control_version": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "message_id",
+        "message_type",
+        "result_version",
+        "debate_id",
+        "occurred_at",
+        "command_id",
+        "code",
+        "current_control_version"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "message_id": { "type": "string", "format": "uuid" },
+        "message_type": { "type": "string", "const": "controller.revoked" },
+        "result_version": { "type": "integer", "const": 1 },
+        "debate_id": { "type": "string", "format": "uuid" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "controller_epoch": { "type": "string", "format": "uuid" },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "superseded",
+            "disconnected",
+            "session_revoked",
+            "start_next",
+            "debate_terminal"
+          ]
+        }
+      },
+      "required": [
+        "message_id",
+        "message_type",
+        "result_version",
+        "debate_id",
+        "occurred_at",
+        "controller_epoch",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

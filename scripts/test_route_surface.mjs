@@ -153,6 +153,13 @@ try {
         };
       },
     ],
+    [
+      "response schema pattern drift",
+      (doc) => {
+        doc.components.schemas.AgentVersion.properties.version_label.pattern =
+          ".*";
+      },
+    ],
   ];
   for (const [name, mutate] of cases) {
     const candidate = structuredClone(base);

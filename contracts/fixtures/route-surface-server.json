@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Maya Teaching Platform API",
-    "version": "0.1.0-g0.4",
+    "version": "0.1.0-g0.5",
     "description": "Demo v0.1 platform contract. Provider names, model names, external voice IDs, API keys, absolute file paths, and prepared turn text are never public fields."
   },
   "security": [
@@ -1379,7 +1379,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlaybackResource"
+                  "$ref": "#/components/schemas/VoicePreviewPlaybackResource"
                 }
               }
             }
@@ -1691,6 +1691,83 @@
         "schema": {
           "type": "string",
           "minLength": 32
+        }
+      },
+      "Range": {
+        "name": "Range",
+        "in": "header",
+        "required": false,
+        "description": "A single RFC 9110 byte range used by the classroom audio element.",
+        "schema": {
+          "type": "string",
+          "pattern": "^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$"
+        }
+      },
+      "IfRange": {
+        "name": "If-Range",
+        "in": "header",
+        "required": false,
+        "description": "Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio.",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^\"[0-9a-f]{64}\"$"
+            },
+            {
+              "type": "string",
+              "pattern": "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$"
+            }
+          ]
+        }
+      },
+      "MediaTicket": {
+        "name": "media_ticket",
+        "in": "query",
+        "required": false,
+        "description": "Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token.",
+        "schema": {
+          "type": "string",
+          "minLength": 43,
+          "maxLength": 43,
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      }
+    },
+    "headers": {
+      "AcceptRangesBytes": {
+        "description": "The platform supports a single byte range.",
+        "schema": {
+          "type": "string",
+          "const": "bytes"
+        }
+      },
+      "AudioEtag": {
+        "description": "Stable strong validator derived from immutable retained audio bytes.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"[0-9a-f]{64}\"$"
+        }
+      },
+      "ContentLength": {
+        "description": "Number of bytes in this response body.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "ContentRange": {
+        "description": "Inclusive byte range and complete representation size.",
+        "schema": {
+          "type": "string",
+          "pattern": "^bytes [0-9]+-[0-9]+/[0-9]+$"
+        }
+      },
+      "UnsatisfiedContentRange": {
+        "description": "Complete representation size for an unsatisfied range.",
+        "schema": {
+          "type": "string",
+          "pattern": "^bytes \\*/[0-9]+$"
         }
       }
     },
@@ -2509,7 +2586,7 @@
           }
         }
       },
-      "PlaybackResource": {
+      "VoicePreviewPlaybackResource": {
         "type": "object",
         "required": [
           "playback_url",
@@ -2519,6 +2596,22 @@
           "playback_url": {
             "type": "string",
             "format": "uri-reference"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "DebatePlaybackResource": {
+        "type": "object",
+        "required": [
+          "playback_url",
+          "expires_at"
+        ],
+        "properties": {
+          "playback_url": {
+            "type": "string",
+            "pattern": "^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
           },
           "expires_at": {
             "$ref": "#/components/schemas/IsoTime"
@@ -2607,14 +2700,39 @@
           }
         }
       },
+      "DebateDraftUpdateRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DebateDraftRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "expected_revision"
+            ],
+            "properties": {
+              "expected_revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      },
       "DebateParticipant": {
         "type": "object",
         "required": [
           "id",
           "slot",
           "order_index",
+          "agent_id",
+          "agent_name",
           "agent_version_id",
+          "version_label",
           "knowledge_snapshot_id",
+          "avatar_config",
+          "effective_voice_profile_id",
+          "voice_fallback_active",
           "stance_mode"
         ],
         "properties": {
@@ -2636,11 +2754,37 @@
             "minimum": 0,
             "maximum": 4
           },
+          "agent_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "agent_name": {
+            "type": "string"
+          },
           "agent_version_id": {
             "$ref": "#/components/schemas/Uuid"
           },
+          "version_label": {
+            "type": "string",
+            "pattern": "^V[0-9]+\\.[0-9]+$"
+          },
           "knowledge_snapshot_id": {
             "$ref": "#/components/schemas/Uuid"
+          },
+          "avatar_config": {
+            "$ref": "#/components/schemas/AvatarConfig"
+          },
+          "effective_voice_profile_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "voice_fallback_active": {
+            "type": "boolean"
           },
           "stance_mode": {
             "type": "string",
@@ -2903,7 +3047,7 @@
           "playback_resource": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/PlaybackResource"
+                "$ref": "#/components/schemas/DebatePlaybackResource"
               },
               {
                 "type": "null"

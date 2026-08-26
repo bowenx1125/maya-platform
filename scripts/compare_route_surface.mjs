@@ -224,6 +224,7 @@ function normaliseSchema(document, schema, seen = new Set()) {
       "maximum",
       "minLength",
       "maxLength",
+      "pattern",
       "additionalProperties",
     ]) {
       if (merged[key] === undefined && fragment[key] !== undefined)
@@ -387,7 +388,13 @@ function compareSchemas(expected, actual, context, errors, options = {}) {
     JSON.stringify(expected.enum) !== JSON.stringify(actual.enum)
   )
     errors.push(`${context}: enum differs`);
-  for (const keyword of ["minimum", "maximum", "minLength", "maxLength"]) {
+  for (const keyword of [
+    "minimum",
+    "maximum",
+    "minLength",
+    "maxLength",
+    "pattern",
+  ]) {
     if (
       expected[keyword] !== undefined &&
       actual[keyword] !== expected[keyword]
@@ -620,6 +627,41 @@ function compareImplementedOperation(
           ),
         );
       }
+    }
+    const frozenHeaders = new Map(
+      Object.entries(frozenResponse.headers ?? {}).map(([name, header]) => [
+        name.toLowerCase(),
+        resolveRef(frozenDocument, header),
+      ]),
+    );
+    const serverHeaders = new Map(
+      Object.entries(serverResponse.headers ?? {}).map(([name, header]) => [
+        name.toLowerCase(),
+        resolveRef(serverDocument, header),
+      ]),
+    );
+    for (const [name, frozenHeader] of frozenHeaders) {
+      const serverHeader = serverHeaders.get(name);
+      if (!serverHeader) {
+        failures.push(
+          `${operationId}: response ${status} header ${name} is missing`,
+        );
+        continue;
+      }
+      if (frozenHeader.schema && serverHeader.schema)
+        failures.push(
+          ...schemaErrors(
+            frozenDocument,
+            serverDocument,
+            frozenHeader.schema,
+            serverHeader.schema,
+            `${operationId}.response.${status}.header.${name}`,
+          ),
+        );
+      else if (Boolean(frozenHeader.schema) !== Boolean(serverHeader.schema))
+        failures.push(
+          `${operationId}: response ${status} header ${name} schema presence differs`,
+        );
     }
   }
   const allowedExtraStatuses =

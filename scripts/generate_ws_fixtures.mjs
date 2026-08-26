@@ -69,7 +69,7 @@ const finalStates = {
 };
 
 const valid = [
-  envelope("snapshot", 1, {
+  envelope("snapshot", 0, {
     debate_status: "running",
     playback_status: "preparing",
     interaction_status: "closed",
@@ -79,6 +79,7 @@ const valid = [
     playback,
     interaction: { status: "closed", votes: [], barrage_count: 0 },
     report,
+    latest_sequence: 0,
   }),
   envelope("debate.started", 2, {
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",
@@ -98,7 +99,6 @@ const valid = [
     audio_ready: true,
     retrieval_status: "matched",
     grounding_mode: "rag_grounded",
-    sources: [source],
   }),
   envelope("playback.started", 6, {
     turn_id: turnId,
@@ -248,6 +248,31 @@ const invalid = [
     }),
   },
   {
+    name: "turn.ready exposes sources",
+    event: envelope("turn.ready", 1, {
+      turn_id: turnId,
+      slot: "A",
+      audio_ready: true,
+      retrieval_status: "matched",
+      sources: [source],
+    }),
+  },
+  {
+    name: "snapshot watermark mismatch",
+    event: envelope("snapshot", 0, {
+      debate_status: "draft",
+      playback_status: "preparing",
+      interaction_status: "closed",
+      insight_status: "not_started",
+      report_status: "not_started",
+      public_turns: [],
+      playback,
+      interaction: { status: "closed", votes: [], barrage_count: 0 },
+      report,
+      latest_sequence: 1,
+    }),
+  },
+  {
     name: "provider field is not public",
     event: envelope("playback.started", 1, {
       turn_id: turnId,
@@ -257,6 +282,17 @@ const invalid = [
       avatar_states: [avatar(participantA, "A", "speaking", "neutral")],
       cursor_ms: 0,
       provider: "supplier",
+    }),
+  },
+  {
+    name: "supplier absolute playback url is not public",
+    event: envelope("playback.started", 1, {
+      turn_id: turnId,
+      speech: "x",
+      sources: [],
+      playback_url: "https://supplier.example/audio?key=secret",
+      avatar_states: [avatar(participantA, "A", "speaking", "neutral")],
+      cursor_ms: 0,
     }),
   },
   {

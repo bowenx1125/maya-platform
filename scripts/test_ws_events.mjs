@@ -38,10 +38,22 @@ for (const [index, event] of validFixtures.entries()) {
       `positive fixture ${index + 1} (${event.event_type}) rejected: ${ajv.errorsText(validate.errors)}`,
     );
   }
+  if (
+    event.event_type === "snapshot" &&
+    event.payload.latest_sequence !== event.sequence
+  ) {
+    throw new Error(
+      `positive snapshot fixture ${index + 1} has mismatched watermark`,
+    );
+  }
 }
 
 for (const fixture of invalidFixtures) {
-  if (validate(fixture.event)) {
+  const schemaAccepted = validate(fixture.event);
+  const semanticSnapshotMismatch =
+    fixture.event.event_type === "snapshot" &&
+    fixture.event.payload?.latest_sequence !== fixture.event.sequence;
+  if (schemaAccepted && !semanticSnapshotMismatch) {
     throw new Error(`negative fixture unexpectedly accepted: ${fixture.name}`);
   }
 }

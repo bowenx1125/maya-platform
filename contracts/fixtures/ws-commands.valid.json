@@ -1,0 +1,7 @@
+[
+  {"command_id":"10000000-0000-4000-8000-000000000001","command_type":"playback.controller.acquire","command_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","expected_control_version":0},
+  {"command_id":"10000000-0000-4000-8000-000000000002","command_type":"playback.media.prepare","command_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","expected_control_version":1,"controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001","playback_action":"start"},
+  {"command_id":"10000000-0000-4000-8000-000000000003","command_type":"playback.started_ack","command_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","expected_control_version":1,"controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001","playback_action":"start"},
+  {"command_id":"10000000-0000-4000-8000-000000000004","command_type":"playback.ended_ack","command_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","expected_control_version":2,"controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001"},
+  {"command_id":"10000000-0000-4000-8000-000000000005","command_type":"playback.play_failed","command_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","expected_control_version":1,"controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001","playback_action":"resume","failure_phase":"post_ack","cursor_ms":512,"safe_client_code":"decode_error"}
+]
