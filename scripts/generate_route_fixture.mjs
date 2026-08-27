@@ -63,6 +63,7 @@ const implemented = new Set([
   "pauseDebate",
   "resumeDebate",
   "skipTurnPlayback",
+  "advanceDebatePlayback",
   "stopDebate",
   "replayDebate",
   "replayDebateTurn",

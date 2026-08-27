@@ -100,13 +100,22 @@ const playbackState = closed(
   {
     status: {
       type: "string",
-      enum: ["preparing", "ready", "playing", "paused", "completed", "stopped"],
+      enum: [
+        "preparing",
+        "ready",
+        "playing",
+        "paused",
+        "waiting_next",
+        "completed",
+        "stopped",
+      ],
     },
     mode: { type: "string", enum: ["live", "replay"] },
     current_turn_id: nullableUuid,
     cursor_ms: integer(0),
     playback_rate: number(0.95, 1.25),
     control_version: integer(0),
+    next_turn_ready: { type: "boolean" },
   },
   [
     "status",
@@ -115,6 +124,7 @@ const playbackState = closed(
     "cursor_ms",
     "playback_rate",
     "control_version",
+    "next_turn_ready",
   ],
 );
 const voteAggregate = closed(
@@ -214,7 +224,15 @@ const statuses = {
   },
   playback: {
     type: "string",
-    enum: ["preparing", "ready", "playing", "paused", "completed", "stopped"],
+    enum: [
+      "preparing",
+      "ready",
+      "playing",
+      "paused",
+      "waiting_next",
+      "completed",
+      "stopped",
+    ],
   },
   interaction: { type: "string", enum: ["closed", "open", "finalized"] },
   insight: {
@@ -349,6 +367,14 @@ const payloads = {
       playback_rate: number(0.95, 1.25),
     },
     ["turn_id", "cursor_ms", "control_version"],
+  ),
+  "playback.waiting_next": closed(
+    {
+      completed_turn_id: uuid,
+      control_version: integer(0),
+      next_turn_ready: { type: "boolean" },
+    },
+    ["completed_turn_id", "control_version", "next_turn_ready"],
   ),
   "playback.completed": closed(
     {
@@ -532,6 +558,7 @@ const eventTypes = [
   "playback.paused",
   "playback.resumed",
   "playback.skipped",
+  "playback.waiting_next",
   "playback.completed",
   "replay.started",
   "replay.completed",

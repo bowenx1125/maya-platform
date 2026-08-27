@@ -37,7 +37,7 @@
         "turn_id": { "type": "string", "format": "uuid" },
         "playback_action": {
           "type": "string",
-          "enum": ["start", "resume", "replay"]
+          "enum": ["start", "resume", "next", "replay"]
         }
       },
       "required": [
@@ -64,7 +64,7 @@
         "turn_id": { "type": "string", "format": "uuid" },
         "playback_action": {
           "type": "string",
-          "enum": ["start", "resume", "replay"]
+          "enum": ["start", "resume", "next", "replay"]
         }
       },
       "required": [
@@ -113,7 +113,7 @@
         "turn_id": { "type": "string", "format": "uuid" },
         "playback_action": {
           "type": "string",
-          "enum": ["start", "resume", "replay"]
+          "enum": ["start", "resume", "next", "replay"]
         },
         "failure_phase": { "type": "string", "enum": ["pre_ack", "post_ack"] },
         "cursor_ms": { "type": "integer", "minimum": 0 },

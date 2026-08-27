@@ -718,6 +718,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["advanceDebatePlayback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/stop": {
         parameters: {
             query?: never;
@@ -1220,6 +1236,10 @@ export interface components {
         DebateDraftUpdateRequest: components["schemas"]["DebateDraftRequest"] & {
             expected_revision: number;
         };
+        AdvancePlaybackRequest: {
+            expected_control_version: number;
+            expected_current_turn_id: components["schemas"]["Uuid"];
+        };
         DebateParticipant: {
             id: components["schemas"]["Uuid"];
             /** @enum {string} */
@@ -1266,13 +1286,15 @@ export interface components {
         };
         PlaybackState: {
             /** @enum {string} */
-            status: "preparing" | "ready" | "playing" | "paused" | "completed" | "stopped";
+            status: "preparing" | "ready" | "playing" | "paused" | "waiting_next" | "completed" | "stopped";
             /** @enum {string} */
             mode: "live" | "replay";
             current_turn_id?: components["schemas"]["Uuid"] | null;
             cursor_ms: number;
             playback_rate: number;
             control_version: number;
+            /** @description Derived readiness of the deterministic adjacent live successor; always false outside live waiting_next. */
+            next_turn_ready: boolean;
         };
         DebateTurn: {
             id: components["schemas"]["Uuid"];
@@ -2712,6 +2734,31 @@ export interface operations {
         requestBody: components["requestBodies"]["ControlCommand"];
         responses: {
             200: components["responses"]["PlaybackState"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    advanceDebatePlayback: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdvancePlaybackRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PlaybackState"];
+            401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];

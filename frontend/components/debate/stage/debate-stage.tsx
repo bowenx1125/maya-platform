@@ -49,7 +49,14 @@ import type {
 type ConnectionState =
   "connecting" | "connected" | "reconnecting" | "disconnected";
 type ControlAction =
-  "start" | "pause" | "resume" | "skip" | "stop" | "replay" | "replay-turn";
+  | "start"
+  | "pause"
+  | "resume"
+  | "skip"
+  | "next"
+  | "stop"
+  | "replay"
+  | "replay-turn";
 
 const TERMINAL_PLAYBACK: readonly DebatePlaybackState["status"][] = [
   "completed",
@@ -132,6 +139,7 @@ function isPlaybackStatus(
     value === "ready" ||
     value === "playing" ||
     value === "paused" ||
+    value === "waiting_next" ||
     value === "completed" ||
     value === "stopped"
   );
@@ -156,6 +164,27 @@ function isCurrentItemEvent(
   if (!CURRENT_ITEM_EVENT_TYPES.has(event.event_type)) return true;
   const eventTurnId = event.payload.turn_id;
   return isNonEmptyString(eventTurnId) && eventTurnId === currentTurnId;
+}
+
+function hasStaleControlVersion(
+  event: PlaybackEvent,
+  currentControlVersion: number,
+): boolean {
+  if (
+    event.event_type !== "playback.paused" &&
+    event.event_type !== "playback.resumed" &&
+    event.event_type !== "playback.skipped" &&
+    event.event_type !== "playback.completed" &&
+    event.event_type !== "playback.waiting_next"
+  ) {
+    return false;
+  }
+  const eventVersion = event.payload.control_version;
+  return (
+    typeof eventVersion === "number" &&
+    Number.isInteger(eventVersion) &&
+    eventVersion < currentControlVersion
+  );
 }
 
 function normaliseSources(value: unknown): VisiblePlaybackTurn["sources"] {
@@ -241,14 +270,16 @@ function playbackFromWire(
   current: DebatePlaybackState,
 ): DebatePlaybackState {
   if (!isRecord(value)) return current;
+  const status = isPlaybackStatus(value.status) ? value.status : current.status;
+  const mode = isPlaybackMode(value.mode) ? value.mode : current.mode;
   const currentTurnId = isNonEmptyString(value.current_turn_id)
     ? value.current_turn_id
     : value.current_turn_id === null
       ? null
       : (current.current_turn_id ?? null);
   return {
-    status: isPlaybackStatus(value.status) ? value.status : current.status,
-    mode: isPlaybackMode(value.mode) ? value.mode : current.mode,
+    status,
+    mode,
     current_turn_id: currentTurnId,
     cursor_ms: Math.max(0, integer(value.cursor_ms, current.cursor_ms)),
     playback_rate: numberValue(value.playback_rate, current.playback_rate),
@@ -256,7 +287,48 @@ function playbackFromWire(
       0,
       integer(value.control_version, current.control_version),
     ),
+    next_turn_ready:
+      mode === "live" &&
+      status === "waiting_next" &&
+      value.next_turn_ready === true,
   };
+}
+
+function hasCompletePublicPrefix(
+  publicTurns: readonly VisiblePlaybackTurn[],
+): boolean {
+  if (publicTurns.length === 0) return false;
+  const ordered = [...publicTurns].sort(
+    (left, right) => left.turn_index - right.turn_index,
+  );
+  return ordered.every((turn, index) => turn.turn_index === index);
+}
+
+/**
+ * Recover the browser media action from the authoritative snapshot rather
+ * than from the HTTP request that may have been lost.  A waiting state does
+ * not itself authorize media; it stays on the completed item until Next.
+ */
+function derivePendingPlaybackAction(
+  playback: DebatePlaybackState,
+  publicTurns: readonly VisiblePlaybackTurn[],
+): PlaybackAction {
+  if (playback.mode === "replay") return "replay";
+  if (playback.status === "waiting_next") return "start";
+  if (
+    playback.current_turn_id &&
+    publicTurns.some((turn) => turn.id === playback.current_turn_id)
+  ) {
+    return "resume";
+  }
+  if (
+    playback.status === "ready" &&
+    playback.current_turn_id &&
+    hasCompletePublicPrefix(publicTurns)
+  ) {
+    return "next";
+  }
+  return "start";
 }
 
 function errorText(cause: unknown, fallback: string): string {
@@ -315,6 +387,7 @@ function statusCopy(
   if (playbackStatus === "ready") return labels.statusReady;
   if (playbackStatus === "playing") return labels.statusPlaying;
   if (playbackStatus === "paused") return labels.statusPaused;
+  if (playbackStatus === "waiting_next") return labels.waitingNext;
   return labels.debateComplete;
 }
 
@@ -388,6 +461,21 @@ export function DebateStage({
   const reconnectTimerRef = useRef<number | null>(null);
   const socketGenerationRef = useRef(0);
   const connectAttemptRef = useRef(0);
+  const recoveryFenceRef = useRef<{
+    active: boolean;
+    candidate: VisiblePlaybackTurn | null;
+    generation: number;
+    observedSequence: number;
+    refreshInFlight: boolean;
+    targetTurnId: string | null;
+  }>({
+    active: false,
+    candidate: null,
+    generation: 0,
+    observedSequence: 0,
+    refreshInFlight: false,
+    targetTurnId: null,
+  });
   const controlRequestRef = useRef<number | null>(null);
   const nextControlRequestRef = useRef(0);
   const connectRef = useRef<((refresh: boolean) => Promise<void>) | undefined>(
@@ -418,32 +506,24 @@ export function DebateStage({
 
   const commitDetail = useCallback(
     (next: DebateDetail, notify = true) => {
-      const previous = playbackRef.current;
-      markPlaybackItem(next.playback);
-      if (next.playback.mode === "replay") {
-        pendingActionRef.current = "replay";
-      } else if (
-        previous.current_turn_id !== next.playback.current_turn_id ||
-        previous.mode !== next.playback.mode
-      ) {
-        pendingActionRef.current = "start";
-      } else if (
-        next.playback.status === "ready" &&
-        next.playback.current_turn_id &&
-        normalisePublicTurns(next.public_turns).some(
-          (turn) => turn.id === next.playback.current_turn_id,
-        )
-      ) {
-        pendingActionRef.current = "resume";
-      } else if (next.playback.status === "ready") {
-        pendingActionRef.current = "start";
-      }
-      detailRef.current = next;
-      playbackRef.current = next.playback;
-      controlVersionRef.current = next.playback.control_version;
-      setDetailState(next);
-      setPlayback(next.playback);
-      if (notify) onDetailChange?.(next);
+      const turns = normalisePublicTurns(next.public_turns);
+      const committed = {
+        ...next,
+        public_turns: turns as DebateTurn[],
+      };
+      publicTurnsRef.current = turns;
+      setPublicTurns(turns);
+      markPlaybackItem(committed.playback);
+      pendingActionRef.current = derivePendingPlaybackAction(
+        committed.playback,
+        turns,
+      );
+      detailRef.current = committed;
+      playbackRef.current = committed.playback;
+      controlVersionRef.current = committed.playback.control_version;
+      setDetailState(committed);
+      setPlayback(committed.playback);
+      if (notify) onDetailChange?.(committed);
     },
     [markPlaybackItem, onDetailChange],
   );
@@ -578,24 +658,17 @@ export function DebateStage({
           patch.current_turn_id === undefined
             ? (previous.current_turn_id ?? null)
             : patch.current_turn_id,
+        next_turn_ready: patch.next_turn_ready ?? previous.next_turn_ready,
       };
+      next.next_turn_ready =
+        next.mode === "live" &&
+        next.status === "waiting_next" &&
+        next.next_turn_ready === true;
       markPlaybackItem(next);
-      if (next.mode === "replay") {
-        pendingActionRef.current = "replay";
-      } else if (
-        previous.current_turn_id !== next.current_turn_id ||
-        previous.mode !== next.mode
-      ) {
-        pendingActionRef.current = "start";
-      } else if (
-        next.status === "ready" &&
-        next.current_turn_id &&
-        publicTurnById(publicTurnsRef.current, next.current_turn_id)
-      ) {
-        pendingActionRef.current = "resume";
-      } else if (next.status === "ready") {
-        pendingActionRef.current = "start";
-      }
+      pendingActionRef.current = derivePendingPlaybackAction(
+        next,
+        publicTurnsRef.current,
+      );
       playbackRef.current = next;
       controlVersionRef.current = next.control_version;
       setPlayback(next);
@@ -901,22 +974,10 @@ export function DebateStage({
         playbackRef.current,
       );
       markPlaybackItem(nextPlayback);
-      if (nextPlayback.mode === "replay") {
-        pendingActionRef.current = "replay";
-      } else if (
-        playbackRef.current.current_turn_id !== nextPlayback.current_turn_id ||
-        playbackRef.current.mode !== nextPlayback.mode
-      ) {
-        pendingActionRef.current = "start";
-      } else if (
-        nextPlayback.status === "ready" &&
-        nextPlayback.current_turn_id &&
-        publicTurnById(turns, nextPlayback.current_turn_id)
-      ) {
-        pendingActionRef.current = "resume";
-      } else if (nextPlayback.status === "ready") {
-        pendingActionRef.current = "start";
-      }
+      pendingActionRef.current = derivePendingPlaybackAction(
+        nextPlayback,
+        turns,
+      );
       playbackRef.current = nextPlayback;
       controlVersionRef.current = nextPlayback.control_version;
       setPlayback(nextPlayback);
@@ -934,19 +995,27 @@ export function DebateStage({
       setDetailState(nextDetail);
       onDetailChange?.(nextDetail);
       const snapshotStates = normaliseAvatarStates(payload.avatar_states);
-      if (snapshotStates.length > 0) setAvatars(snapshotStates);
+      if (nextPlayback.status === "waiting_next") {
+        // The completed turn remains visible, but waiting is never a speaking
+        // avatar state even if a reconnect races with a stale snapshot.
+        setAvatars([]);
+      } else if (snapshotStates.length > 0) {
+        setAvatars(snapshotStates);
+      }
       const snapshotTurn = publicTurnById(turns, nextPlayback.current_turn_id);
       if (snapshotTurn) {
         setActiveParticipant(snapshotTurn.participant_id);
         if (
           nextPlayback.status === "playing" ||
-          nextPlayback.status === "paused"
+          nextPlayback.status === "paused" ||
+          nextPlayback.status === "waiting_next"
         ) {
           setVisible(snapshotTurn);
         }
       } else if (
         nextPlayback.status === "playing" ||
-        nextPlayback.status === "paused"
+        nextPlayback.status === "paused" ||
+        nextPlayback.status === "waiting_next"
       ) {
         // Never retain a stale speech card if a playing/paused snapshot does
         // not contain the public current turn it claims to expose.
@@ -979,8 +1048,289 @@ export function DebateStage({
     ],
   );
 
+  const syncRefreshedSnapshot = useCallback(
+    (next: DebateDetail, minimumSequence = 0) => {
+      if (!mountedRef.current || closingRef.current) return;
+      if (
+        !Number.isInteger(next.last_sequence) ||
+        next.last_sequence < minimumSequence
+      ) {
+        return false;
+      }
+      commitDetail(next, false);
+      const committedSequence = next.last_sequence;
+      sequenceRef.current = committedSequence;
+      setLastSequence(committedSequence);
+      const synced = {
+        ...detailRef.current,
+        last_sequence: committedSequence,
+      };
+      detailRef.current = synced;
+      setDetailState(synced);
+      onDetailChange?.(synced);
+      const turns = publicTurnsRef.current;
+      const snapshotTurn = publicTurnById(turns, next.playback.current_turn_id);
+      if (
+        snapshotTurn &&
+        (next.playback.status === "playing" ||
+          next.playback.status === "paused" ||
+          next.playback.status === "waiting_next")
+      ) {
+        setActiveParticipant(snapshotTurn.participant_id);
+        setVisible(snapshotTurn);
+      } else if (
+        next.playback.status === "playing" ||
+        next.playback.status === "paused" ||
+        next.playback.status === "waiting_next"
+      ) {
+        setActiveParticipant(null);
+        setVisible(null);
+      }
+      if (TERMINAL_PLAYBACK.includes(next.playback.status)) {
+        pauseAudio(true);
+        setVisible(null);
+        setAvatars([]);
+        setActiveParticipant(null);
+      } else if (next.playback.status === "paused") {
+        pauseAudio(false);
+      }
+      setFailure(null);
+      return true;
+    },
+    [
+      commitDetail,
+      onDetailChange,
+      pauseAudio,
+      setActiveParticipant,
+      setAvatars,
+      setVisible,
+    ],
+  );
+
+  const refreshRecoverySnapshot = useCallback(() => {
+    const fence = recoveryFenceRef.current;
+    if (
+      !fence.active ||
+      !refreshSnapshot ||
+      fence.refreshInFlight ||
+      !mountedRef.current ||
+      closingRef.current
+    ) {
+      return;
+    }
+    fence.refreshInFlight = true;
+    const generation = fence.generation;
+    const load = async () => {
+      while (true) {
+        const currentFence = recoveryFenceRef.current;
+        if (
+          !mountedRef.current ||
+          closingRef.current ||
+          !currentFence.active ||
+          currentFence.generation !== generation
+        ) {
+          return;
+        }
+        let next: DebateDetail;
+        try {
+          next = await refreshSnapshot();
+        } catch {
+          const failedFence = recoveryFenceRef.current;
+          if (
+            failedFence.active &&
+            failedFence.generation === generation &&
+            mountedRef.current &&
+            !closingRef.current
+          ) {
+            failedFence.active = false;
+            failedFence.refreshInFlight = false;
+            requestReconnect();
+          }
+          return;
+        }
+
+        const latestFence = recoveryFenceRef.current;
+        if (
+          !mountedRef.current ||
+          closingRef.current ||
+          !latestFence.active ||
+          latestFence.generation !== generation
+        ) {
+          return;
+        }
+        if (
+          !Number.isInteger(next.last_sequence) ||
+          next.last_sequence < latestFence.observedSequence
+        ) {
+          // A response captured before a subsequent persistent event is not
+          // authoritative for this recovery. Keep the fence up and fetch
+          // again; never use Math.max to disguise a stale snapshot.
+          continue;
+        }
+
+        const refreshedTurns = normalisePublicTurns(next.public_turns);
+        const reflectsStartedTurn =
+          latestFence.targetTurnId === null ||
+          next.playback.current_turn_id === latestFence.targetTurnId ||
+          refreshedTurns.some((turn) => turn.id === latestFence.targetTurnId);
+        if (!reflectsStartedTurn) {
+          latestFence.active = false;
+          latestFence.refreshInFlight = false;
+          requestReconnect();
+          return;
+        }
+        const merged =
+          latestFence.candidate &&
+          !refreshedTurns.some((turn) => turn.id === latestFence.candidate?.id)
+            ? [...refreshedTurns, latestFence.candidate]
+            : refreshedTurns;
+        latestFence.active = false;
+        latestFence.refreshInFlight = false;
+        const synced = syncRefreshedSnapshot(
+          {
+            ...next,
+            public_turns: merged as DebateTurn[],
+          },
+          latestFence.observedSequence,
+        );
+        if (!synced) {
+          // The mounted/sequence guard is intentionally exact. If it ever
+          // rejects after the coverage check, reopen the fence and retry.
+          latestFence.active = true;
+          latestFence.refreshInFlight = true;
+          continue;
+        }
+        return;
+      }
+    };
+    void load();
+  }, [refreshSnapshot, requestReconnect, syncRefreshedSnapshot]);
+
+  const recoverFromStartedTurnMismatch = useCallback(
+    (event: PlaybackEvent): boolean => {
+      if (event.event_type !== "playback.started") return false;
+      const startedTurnId = event.payload.turn_id;
+      const current = playbackRef.current;
+      if (
+        !isNonEmptyString(startedTurnId) ||
+        current.mode !== "live" ||
+        !current.current_turn_id ||
+        current.current_turn_id === startedTurnId ||
+        TERMINAL_PLAYBACK.includes(current.status)
+      ) {
+        return false;
+      }
+
+      const candidate = visibleTurnFromPlaybackStarted(
+        detailRef.current.participants,
+        publicTurnsRef.current,
+        event.payload,
+      );
+      const expectedIndex = publicTurnsRef.current.length;
+      const expectedParticipant =
+        detailRef.current.participants.length > 0
+          ? detailRef.current.participants[
+              expectedIndex % detailRef.current.participants.length
+            ]
+          : undefined;
+      const safeSuccessor = Boolean(
+        candidate &&
+        hasCompletePublicPrefix(publicTurnsRef.current) &&
+        candidate.turn_index === expectedIndex &&
+        candidate.participant_id === expectedParticipant?.id,
+      );
+
+      if (refreshSnapshot) {
+        const previousFence = recoveryFenceRef.current;
+        recoveryFenceRef.current = {
+          active: true,
+          candidate: safeSuccessor ? candidate : null,
+          generation: previousFence.generation + 1,
+          observedSequence: event.sequence,
+          refreshInFlight: false,
+          targetTurnId: startedTurnId,
+        };
+        refreshRecoverySnapshot();
+        return true;
+      }
+
+      if (!safeSuccessor || !candidate) {
+        requestReconnect();
+        return true;
+      }
+
+      // Test/observation integrations may not provide an HTTP reader.  The
+      // started event itself is then the only authoritative public payload;
+      // adopt it only after the deterministic adjacent-prefix check above.
+      pauseAudio(true);
+      setVisible(null);
+      setAvatars([]);
+      setActiveParticipant(null);
+      updatePublicTurns([...publicTurnsRef.current, candidate]);
+      setActiveParticipant(candidate.participant_id);
+      setVisible(candidate);
+      setAvatars(normaliseAvatarStates(event.payload.avatar_states));
+      applyPlayback(
+        {
+          status: "playing",
+          mode: "live",
+          current_turn_id: startedTurnId,
+          cursor_ms: Math.max(0, integer(event.payload.cursor_ms, 0)),
+          playback_rate: numberValue(
+            event.payload.playback_rate,
+            current.playback_rate,
+          ),
+        },
+        "running",
+      );
+      const adopted = {
+        ...detailRef.current,
+        last_sequence: Math.max(
+          detailRef.current.last_sequence,
+          event.sequence,
+        ),
+      };
+      detailRef.current = adopted;
+      setDetailState(adopted);
+      setLastSequence(adopted.last_sequence);
+      onDetailChange?.(adopted);
+      return true;
+    },
+    [
+      applyPlayback,
+      onDetailChange,
+      pauseAudio,
+      requestReconnect,
+      refreshSnapshot,
+      refreshRecoverySnapshot,
+      setActiveParticipant,
+      setAvatars,
+      setVisible,
+      updatePublicTurns,
+    ],
+  );
+
   const handleEvent = useCallback(
     (event: PlaybackEvent) => {
+      const recoveryFence = recoveryFenceRef.current;
+      if (recoveryFence.active) {
+        const observedSequence =
+          event.event_type === "snapshot"
+            ? integer(event.payload.latest_sequence, -1)
+            : event.sequence;
+        if (observedSequence >= 0) {
+          recoveryFence.observedSequence = Math.max(
+            recoveryFence.observedSequence,
+            observedSequence,
+          );
+        }
+        // Persistent events and websocket snapshots observed during a
+        // successor recovery are deliberately not consumed against the old
+        // current turn. The in-flight HTTP snapshot must cover this updated
+        // watermark before the fence can be released.
+        refreshRecoverySnapshot();
+        return;
+      }
       const decision = consumeEventSequence(sequenceRef.current, event);
       if (event.event_type === "snapshot") {
         handleSnapshot(event);
@@ -994,14 +1344,30 @@ export function DebateStage({
       sequenceRef.current = decision.nextSequence;
       setLastSequence(decision.nextSequence);
       const payload = event.payload;
+      if (recoverFromStartedTurnMismatch(event)) return;
       if (
         !isCurrentItemEvent(event, playbackRef.current.current_turn_id ?? null)
       ) {
         return;
       }
+      if (hasStaleControlVersion(event, playbackRef.current.control_version)) {
+        return;
+      }
       switch (event.event_type) {
         case "turn.preparing":
-          if (isNonEmptyString(payload.turn_id)) {
+          if (
+            isNonEmptyString(payload.turn_id) &&
+            playbackRef.current.mode === "live" &&
+            !TERMINAL_PLAYBACK.includes(playbackRef.current.status) &&
+            !(
+              playbackRef.current.current_turn_id &&
+              playbackRef.current.current_turn_id !== payload.turn_id
+            ) &&
+            !(
+              playbackRef.current.current_turn_id === payload.turn_id &&
+              playbackRef.current.status === "ready"
+            )
+          ) {
             const preparingParticipant = detailRef.current.participants.find(
               (participant) => participant.slot === payload.slot,
             );
@@ -1023,7 +1389,24 @@ export function DebateStage({
           }
           break;
         case "turn.ready":
-          if (isNonEmptyString(payload.turn_id)) {
+          if (
+            isNonEmptyString(payload.turn_id) &&
+            playbackRef.current.mode === "live" &&
+            !(
+              playbackRef.current.mode === "live" &&
+              playbackRef.current.status === "waiting_next"
+            ) &&
+            !(
+              playbackRef.current.current_turn_id &&
+              playbackRef.current.current_turn_id !== payload.turn_id
+            ) &&
+            !(
+              playbackRef.current.current_turn_id === payload.turn_id &&
+              (playbackRef.current.status === "ready" ||
+                playbackRef.current.status === "playing" ||
+                playbackRef.current.status === "paused")
+            )
+          ) {
             pendingActionRef.current = "start";
             const readyParticipant = detailRef.current.participants.find(
               (participant) => participant.slot === payload.slot,
@@ -1042,8 +1425,65 @@ export function DebateStage({
             scheduleMediaPrepare();
           }
           break;
+        case "playback.waiting_next": {
+          if (playbackRef.current.mode !== "live") break;
+          const completedTurnId = payload.completed_turn_id;
+          if (!isNonEmptyString(completedTurnId)) break;
+          const eventControlVersion = integer(
+            payload.control_version,
+            playbackRef.current.control_version,
+          );
+          if (eventControlVersion < playbackRef.current.control_version) break;
+          if (
+            playbackRef.current.current_turn_id &&
+            playbackRef.current.current_turn_id !== completedTurnId
+          ) {
+            break;
+          }
+          if (
+            playbackRef.current.next_turn_ready &&
+            eventControlVersion === playbackRef.current.control_version &&
+            payload.next_turn_ready !== true
+          ) {
+            break;
+          }
+          const completedTurn = publicTurnById(
+            publicTurnsRef.current,
+            completedTurnId,
+          );
+          if (completedTurn) {
+            setActiveParticipant(completedTurn.participant_id);
+            setVisible(completedTurn);
+          }
+          pauseAudio(true);
+          setAvatars([]);
+          applyPlayback(
+            {
+              status: "waiting_next",
+              mode: "live",
+              current_turn_id: completedTurnId,
+              cursor_ms: 0,
+              control_version: Math.max(
+                playbackRef.current.control_version,
+                eventControlVersion,
+              ),
+              next_turn_ready: payload.next_turn_ready === true,
+            },
+            "running",
+          );
+          break;
+        }
         case "playback.started": {
           if (!isNonEmptyString(payload.turn_id)) break;
+          if (
+            playbackRef.current.status === "waiting_next" ||
+            (playbackRef.current.mode === "live" &&
+              TERMINAL_PLAYBACK.includes(playbackRef.current.status)) ||
+            (playbackRef.current.current_turn_id !== null &&
+              playbackRef.current.current_turn_id !== payload.turn_id)
+          ) {
+            break;
+          }
           const nextVisible = visibleTurnFromPlaybackStarted(
             detailRef.current.participants,
             publicTurnsRef.current,
@@ -1087,6 +1527,7 @@ export function DebateStage({
         }
         case "replay.started": {
           if (!isNonEmptyString(payload.turn_id)) break;
+          if (playbackRef.current.mode !== "replay") break;
           pendingActionRef.current = "replay";
           const replayTurn = visibleTurnFromPublic(payload.turn_id);
           setActiveParticipant(replayTurn?.participant_id ?? null);
@@ -1104,6 +1545,11 @@ export function DebateStage({
           break;
         }
         case "playback.paused":
+          if (
+            playbackRef.current.mode === "live" &&
+            playbackRef.current.status === "waiting_next"
+          )
+            break;
           applyPlayback({
             status: "paused",
             current_turn_id: isNonEmptyString(payload.turn_id)
@@ -1129,6 +1575,11 @@ export function DebateStage({
           setAvatars([]);
           break;
         case "playback.resumed":
+          if (
+            playbackRef.current.mode === "live" &&
+            playbackRef.current.status === "waiting_next"
+          )
+            break;
           pendingActionRef.current = "resume";
           applyPlayback({
             status: "playing",
@@ -1146,10 +1597,29 @@ export function DebateStage({
           });
           break;
         case "playback.skipped":
-          pendingActionRef.current = "start";
+          if (
+            playbackRef.current.mode === "live" &&
+            playbackRef.current.status === "waiting_next"
+          )
+            break;
           pauseAudio(true);
+          {
+            const completedTurnId = isNonEmptyString(payload.turn_id)
+              ? payload.turn_id
+              : playbackRef.current.current_turn_id;
+            const completedTurn = publicTurnById(
+              publicTurnsRef.current,
+              completedTurnId,
+            );
+            if (completedTurn) {
+              setActiveParticipant(completedTurn.participant_id);
+              setVisible(completedTurn);
+            }
+          }
+          setAvatars([]);
           applyPlayback({
-            status: "preparing",
+            status: "waiting_next",
+            mode: "live",
             cursor_ms: 0,
             control_version: Math.max(
               playbackRef.current.control_version,
@@ -1158,12 +1628,15 @@ export function DebateStage({
                 playbackRef.current.control_version,
               ),
             ),
+            next_turn_ready: false,
           });
-          setVisible(null);
-          setAvatars([]);
-          setActiveParticipant(null);
           break;
         case "playback.completed":
+          if (
+            playbackRef.current.mode === "live" &&
+            playbackRef.current.status === "waiting_next"
+          )
+            break;
           pauseAudio(true);
           if (playbackRef.current.mode === "replay") {
             setVisible(null);
@@ -1209,9 +1682,21 @@ export function DebateStage({
               "debate_finished",
             );
           } else {
-            pendingActionRef.current = "start";
+            const completedTurnId = isNonEmptyString(payload.turn_id)
+              ? payload.turn_id
+              : playbackRef.current.current_turn_id;
+            const completedTurn = publicTurnById(
+              publicTurnsRef.current,
+              completedTurnId,
+            );
+            if (completedTurn) {
+              setActiveParticipant(completedTurn.participant_id);
+              setVisible(completedTurn);
+            }
             applyPlayback({
-              status: "preparing",
+              status: "waiting_next",
+              mode: "live",
+              current_turn_id: completedTurnId,
               cursor_ms: 0,
               control_version: Math.max(
                 playbackRef.current.control_version,
@@ -1220,6 +1705,7 @@ export function DebateStage({
                   playbackRef.current.control_version,
                 ),
               ),
+              next_turn_ready: false,
             });
           }
           setAvatars([]);
@@ -1325,9 +1811,11 @@ export function DebateStage({
       markControllerReady,
       onDetailChange,
       pauseAudio,
+      recoverFromStartedTurnMismatch,
       refreshSnapshot,
       setActiveParticipant,
       requestReconnect,
+      refreshRecoverySnapshot,
       setAvatars,
       setVisible,
       updatePublicTurns,
@@ -1501,24 +1989,10 @@ export function DebateStage({
         return;
       const previous = playbackRef.current;
       markPlaybackItem(detail.playback);
-      if (detail.playback.mode === "replay") {
-        pendingActionRef.current = "replay";
-      } else if (
-        previous.current_turn_id !== detail.playback.current_turn_id ||
-        previous.mode !== detail.playback.mode
-      ) {
-        pendingActionRef.current = "start";
-      } else if (
-        detail.playback.status === "ready" &&
-        detail.playback.current_turn_id &&
-        normalisePublicTurns(detail.public_turns).some(
-          (turn) => turn.id === detail.playback.current_turn_id,
-        )
-      ) {
-        pendingActionRef.current = "resume";
-      } else if (detail.playback.status === "ready") {
-        pendingActionRef.current = "start";
-      }
+      pendingActionRef.current = derivePendingPlaybackAction(
+        detail.playback,
+        normalisePublicTurns(detail.public_turns),
+      );
       detailRef.current = detail;
       playbackRef.current = detail.playback;
       controlVersionRef.current = detail.playback.control_version;
@@ -1600,6 +2074,17 @@ export function DebateStage({
       if (
         (action === "replay" || action === "replay-turn") &&
         (!controllerReadyRef.current || acquirePendingRef.current)
+      ) {
+        return;
+      }
+      if (
+        action === "next" &&
+        (!controllerReadyRef.current ||
+          acquirePendingRef.current ||
+          playbackRef.current.mode !== "live" ||
+          playbackRef.current.status !== "waiting_next" ||
+          !playbackRef.current.next_turn_ready ||
+          !playbackRef.current.current_turn_id)
       ) {
         return;
       }
@@ -1692,6 +2177,24 @@ export function DebateStage({
           pendingActionRef.current = "start";
           pauseAudio(true);
           applyPlayback(next);
+          return;
+        }
+        if (action === "next") {
+          const expectedCurrentTurnId = current.current_turn_id;
+          if (!expectedCurrentTurnId) return;
+          const next = await api.advanceDebatePlayback(debateId, {
+            expected_control_version: current.control_version,
+            expected_current_turn_id: expectedCurrentTurnId,
+          });
+          if (!isCurrentRequest()) return;
+          // Next only authorizes the adjacent server-selected turn.  Its
+          // speech/source/media remain private until playback.started arrives.
+          setVisible(null);
+          setAvatars([]);
+          setActiveParticipant(null);
+          applyPlayback(next);
+          pendingActionRef.current = "next";
+          scheduleMediaPrepare();
           return;
         }
         if (action === "stop") {
@@ -1806,6 +2309,12 @@ export function DebateStage({
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&
     playback.status !== "playing";
+  const canAdvance =
+    playback.mode === "live" &&
+    playback.status === "waiting_next" &&
+    playback.next_turn_ready &&
+    controllerReady &&
+    busyAction === null;
   const activeVisibleTurn =
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
@@ -1943,9 +2452,12 @@ export function DebateStage({
                   : detailState.status === "stopped"
                     ? labels.debateStopped
                     : labels.debateComplete
-                : playback.status === "ready" || playback.status === "preparing"
-                  ? labels.waitingForAudio
-                  : labels.noPublishedSpeech}
+                : playback.status === "waiting_next"
+                  ? labels.waitingNext
+                  : playback.status === "ready" ||
+                      playback.status === "preparing"
+                    ? labels.waitingForAudio
+                    : labels.noPublishedSpeech}
             </section>
           )}
 
@@ -2066,6 +2578,14 @@ export function DebateStage({
               onClick={() => void runControl("skip")}
             >
               {labels.skip}
+            </button>
+            <button
+              className="primary-action"
+              type="button"
+              disabled={!canAdvance}
+              onClick={() => void runControl("next")}
+            >
+              {labels.next}
             </button>
             <button
               className={styles.dangerAction}

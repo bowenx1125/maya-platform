@@ -1,7 +1,7 @@
 """Teacher playback REST and WebSocket routes.
 
 The composition root injects ``app.state.playback_service``.  A safe SQL
-adapter fallback is provided for local startup after migration 0004, while
+adapter fallback is provided for local startup after migration 0005, while
 all route authorization still comes from the live Session and course teacher
 membership on every request/command.
 """
@@ -25,13 +25,14 @@ from app.core.errors import Error, PlatformError, forbidden, not_found
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext, get_auth_context, session_hash
 from app.modules.debates.schemas import (
+    AdvancePlaybackRequest,
     DebateDetail,
     DebateStartRequest,
     PlaybackCommandRequest,
     PlaybackState,
     Transcript,
 )
-from app.providers.tts import MockTTSProvider
+from app.providers.factory import tts_provider
 
 from .audio import AudioStore
 from .events import DebateEventHub, private_result_to_wire
@@ -60,12 +61,14 @@ def get_playback_service(request: Request) -> PlaybackService:
         raise RuntimeError("playback service is not configured")
     repository = SqlPlaybackRepository(session_factory=database.session_factory)
     event_hub = DebateEventHub(SqlEventStore(database.session_factory))
+    selected_tts = tts_provider(settings)
     service = PlaybackService(
         repository,
-        audio_store=AudioStore(settings.resolved_data_root, tts_provider=MockTTSProvider()),
+        audio_store=AudioStore(settings.resolved_data_root, tts_provider=selected_tts),
         event_hub=event_hub,
         session_factory=database.session_factory,
         settings=settings,
+        tts_provider=selected_tts,
     )
     request.app.state.playback_service = service
     return service
@@ -212,6 +215,35 @@ async def skip_debate_route(
         db,
         str(debate_id),
         expected_control_version=payload.expected_control_version,
+        context=context,
+    )
+
+
+@router.post(
+    "/debates/{debate_id}/next",
+    operation_id="advanceDebatePlayback",
+    response_model=PlaybackState,
+    responses={
+        200: {"description": "Authoritative playback state after advancing one live turn."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def advance_debate_playback_route(
+    debate_id: UUID,
+    payload: AdvancePlaybackRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    return await service.next(
+        db,
+        str(debate_id),
+        expected_control_version=payload.expected_control_version,
+        expected_current_turn_id=str(payload.expected_current_turn_id),
         context=context,
     )
 

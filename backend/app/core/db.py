@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0004_wave2_debate_playback"
+ALEMBIC_HEAD = "0005_wave2_manual_advance"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

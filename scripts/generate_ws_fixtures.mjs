@@ -49,6 +49,7 @@ const playback = {
   cursor_ms: 0,
   playback_rate: 1,
   control_version: 0,
+  next_turn_ready: false,
 };
 const report = {
   generation_status: "not_started",
@@ -130,34 +131,39 @@ const valid = [
     cursor_ms: 800,
     control_version: 3,
   }),
-  envelope("playback.completed", 10, {
+  envelope("playback.waiting_next", 10, {
+    completed_turn_id: turnId,
+    control_version: 4,
+    next_turn_ready: true,
+  }),
+  envelope("playback.completed", 11, {
     turn_id: turnId,
     cursor_ms: 1200,
-    control_version: 4,
+    control_version: 5,
   }),
-  envelope("replay.started", 11, { scope: "turn", turn_id: turnId }),
-  envelope("replay.completed", 12, { scope: "turn", turn_id: turnId }),
-  envelope("translation.batch_started", 13, {
+  envelope("replay.started", 12, { scope: "turn", turn_id: turnId }),
+  envelope("replay.completed", 13, { scope: "turn", turn_id: turnId }),
+  envelope("translation.batch_started", 14, {
     batch_id: batchId,
     total_items: 5,
     succeeded_items: 0,
     failed_items: 0,
   }),
-  envelope("translation.batch_completed", 14, {
+  envelope("translation.batch_completed", 15, {
     batch_id: batchId,
     status: "completed",
     total_items: 5,
     succeeded_items: 5,
     failed_items: 0,
   }),
-  envelope("translation.batch_failed", 15, {
+  envelope("translation.batch_failed", 16, {
     batch_id: batchId,
     status: "failed",
     total_items: 5,
     succeeded_items: 4,
     failed_items: 1,
   }),
-  envelope("interaction.opened", 16, {
+  envelope("interaction.opened", 17, {
     public_url: "/classroom/fixture-access-token",
     qr_payload: "/classroom/fixture-access-token",
     aggregate_zeros: [
@@ -165,25 +171,25 @@ const valid = [
       { participant_id: participantB, count: 0, percentage: 0 },
     ],
   }),
-  envelope("interaction.vote_created", 17, {
+  envelope("interaction.vote_created", 18, {
     participant_id: participantA,
     new_count: 1,
     percentage: 100,
     total_votes: 1,
   }),
-  envelope("interaction.barrage_created", 18, {
+  envelope("interaction.barrage_created", 19, {
     message_id: messageId,
     nickname: "Learner",
     raw_text: "What evidence should we compare?",
     sequence: 1,
   }),
-  envelope("interaction.closed", 19, {
+  envelope("interaction.closed", 20, {
     totals: { total_votes: 1, total_barrages: 1 },
     message_count: 1,
     input_hash: "fixture-input-hash",
   }),
-  envelope("barrage_insight.started", 20, { revision: 1 }),
-  envelope("barrage_insight.completed", 21, {
+  envelope("barrage_insight.started", 21, { revision: 1 }),
+  envelope("barrage_insight.completed", 22, {
     revision: 1,
     status: "ready",
     included_count: 1,
@@ -196,39 +202,39 @@ const valid = [
       },
     ],
   }),
-  envelope("barrage_insight.failed", 22, {
+  envelope("barrage_insight.failed", 23, {
     revision: 2,
     status: "failed",
     safe_error_code: "barrage_insight_failed",
   }),
-  envelope("report.started", 23, {
+  envelope("report.started", 24, {
     revision_id: revisionId,
     status: "generating",
   }),
-  envelope("report.completed", 24, {
+  envelope("report.completed", 25, {
     revision_id: revisionId,
     status: "ready",
     report,
   }),
-  envelope("report.failed", 25, {
+  envelope("report.failed", 26, {
     revision_id: revisionId,
     status: "failed",
     safe_error_code: "report_failed",
   }),
-  envelope("debate.completed", 26, {
+  envelope("debate.completed", 27, {
     final_states: finalStates,
     downstream_outcome: "failed",
   }),
-  envelope("debate.failed", 27, {
+  envelope("debate.failed", 28, {
     final_states: { ...finalStates, debate: "failed" },
     downstream_outcome: "failed",
     safe_error_code: "turn_generation_failed",
   }),
-  envelope("debate.stopped", 28, {
+  envelope("debate.stopped", 29, {
     final_states: { ...finalStates, debate: "stopped" },
     downstream_outcome: "stopped",
   }),
-  envelope("error", 29, {
+  envelope("error", 30, {
     code: "invalid_state",
     message: "The command is not valid in this state.",
     request_id: requestId,
@@ -270,6 +276,40 @@ const invalid = [
       interaction: { status: "closed", votes: [], barrage_count: 0 },
       report,
       latest_sequence: 1,
+    }),
+  },
+  {
+    name: "snapshot playback state missing derived readiness",
+    event: (() => {
+      const { next_turn_ready: _derived, ...legacyPlayback } = playback;
+      return envelope("snapshot", 0, {
+        debate_status: "draft",
+        playback_status: "preparing",
+        interaction_status: "closed",
+        insight_status: "not_started",
+        report_status: "not_started",
+        public_turns: [],
+        playback: legacyPlayback,
+        interaction: { status: "closed", votes: [], barrage_count: 0 },
+        report,
+        latest_sequence: 0,
+      });
+    })(),
+  },
+  {
+    name: "waiting event missing derived readiness",
+    event: envelope("playback.waiting_next", 1, {
+      completed_turn_id: turnId,
+      control_version: 4,
+    }),
+  },
+  {
+    name: "waiting event exposes successor identity",
+    event: envelope("playback.waiting_next", 1, {
+      completed_turn_id: turnId,
+      control_version: 4,
+      next_turn_ready: true,
+      next_turn_id: "55555555-5555-4555-8555-555555555555",
     }),
   },
   {

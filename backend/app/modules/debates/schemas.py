@@ -73,6 +73,11 @@ class PlaybackCommandRequest(_ClosedModel):
     expected_control_version: int = Field(ge=0)
 
 
+class AdvancePlaybackRequest(_ClosedModel):
+    expected_control_version: int = Field(ge=0)
+    expected_current_turn_id: UUID
+
+
 class DebatePlaybackResource(_ClosedModel):
     playback_url: str = Field(
         pattern=(
@@ -126,12 +131,15 @@ class DebateSummary(_ClosedModel):
 
 
 class PlaybackState(_ClosedModel):
-    status: Literal["preparing", "ready", "playing", "paused", "completed", "stopped"]
+    status: Literal[
+        "preparing", "ready", "playing", "paused", "waiting_next", "completed", "stopped"
+    ]
     mode: Literal["live", "replay"]
     current_turn_id: UUID | None = None
     cursor_ms: int = Field(ge=0)
     playback_rate: float = Field(ge=0.95, le=1.25)
     control_version: int = Field(ge=0)
+    next_turn_ready: bool
 
 
 class DebateTurn(_ClosedModel):
@@ -194,6 +202,7 @@ class DebateRuleSnapshot(_ClosedModel):
 
 
 __all__ = [
+    "AdvancePlaybackRequest",
     "DebateDetail",
     "DebateDraftRequest",
     "DebateDraftUpdateRequest",

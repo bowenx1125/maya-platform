@@ -63,7 +63,7 @@ const commandBase = (commandType, extraProperties, extraRequired = []) =>
 
 const playbackAction = {
   type: "string",
-  enum: ["start", "resume", "replay"],
+  enum: ["start", "resume", "next", "replay"],
 };
 
 const commandBranches = [

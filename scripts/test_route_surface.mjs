@@ -6,6 +6,10 @@ import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = resolve(root, "contracts/fixtures/route-surface-server.json");
+const placeholdersPath = resolve(
+  root,
+  "contracts/route-surface-placeholders.json",
+);
 const tempDir = mkdtempSync(resolve(tmpdir(), "maya-route-surface-test-"));
 const generator = resolve(root, "scripts/generate_route_fixture.mjs");
 const comparator = resolve(root, "scripts/compare_route_surface.mjs");
@@ -43,6 +47,50 @@ try {
     );
 
   const base = JSON.parse(readFileSync(fixture, "utf8"));
+  const platformOperationCount = Object.entries(base.paths)
+    .filter(([path]) => path.startsWith("/api/v1/"))
+    .reduce(
+      (count, [, pathItem]) =>
+        count +
+        Object.keys(pathItem).filter((method) =>
+          [
+            "get",
+            "put",
+            "post",
+            "patch",
+            "delete",
+            "options",
+            "head",
+            "trace",
+          ].includes(method),
+        ).length,
+      0,
+    );
+  const placeholderContract = JSON.parse(
+    readFileSync(placeholdersPath, "utf8"),
+  );
+  const placeholderCount = Object.keys(
+    placeholderContract.allowed_missing_operation_ids ?? {},
+  ).length;
+  if (platformOperationCount !== 55 || placeholderCount !== 13) {
+    throw new Error(
+      `manual-advance route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
+    );
+  }
+  const nextOperation = base.paths["/api/v1/debates/{debate_id}/next"]?.post;
+  if (!nextOperation || nextOperation.operationId !== "advanceDebatePlayback") {
+    throw new Error(
+      "manual-advance route fixture is missing advanceDebatePlayback",
+    );
+  }
+  if (
+    JSON.stringify(Object.keys(nextOperation.responses).sort()) !==
+    JSON.stringify(["200", "401", "403", "404", "409"])
+  ) {
+    throw new Error(
+      "manual-advance route fixture has the wrong response statuses",
+    );
+  }
   const nullableEquivalent = structuredClone(base);
   const nullableType =
     nullableEquivalent.components.schemas.KnowledgeDocument.properties

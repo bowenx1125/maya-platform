@@ -400,6 +400,48 @@
         },
         "event_type": {
           "type": "string",
+          "const": "playback.waiting_next"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_playback_waiting_next"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
           "const": "playback.completed"
         },
         "event_version": {
@@ -1265,6 +1307,7 @@
             "ready",
             "playing",
             "paused",
+            "waiting_next",
             "completed",
             "stopped"
           ]
@@ -1380,7 +1423,8 @@
             "current_turn_id",
             "cursor_ms",
             "playback_rate",
-            "control_version"
+            "control_version",
+            "next_turn_ready"
           ],
           "properties": {
             "status": {
@@ -1390,6 +1434,7 @@
                 "ready",
                 "playing",
                 "paused",
+                "waiting_next",
                 "completed",
                 "stopped"
               ]
@@ -1424,6 +1469,9 @@
             "control_version": {
               "type": "integer",
               "minimum": 0
+            },
+            "next_turn_ready": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -2106,6 +2154,28 @@
           "type": "number",
           "minimum": 0.95,
           "maximum": 1.25
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_playback_waiting_next": {
+      "type": "object",
+      "required": [
+        "completed_turn_id",
+        "control_version",
+        "next_turn_ready"
+      ],
+      "properties": {
+        "completed_turn_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "control_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "next_turn_ready": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -2849,7 +2919,8 @@
                 "current_turn_id",
                 "cursor_ms",
                 "playback_rate",
-                "control_version"
+                "control_version",
+                "next_turn_ready"
               ],
               "properties": {
                 "status": {
@@ -2859,6 +2930,7 @@
                     "ready",
                     "playing",
                     "paused",
+                    "waiting_next",
                     "completed",
                     "stopped"
                   ]
@@ -2893,6 +2965,9 @@
                 "control_version": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "next_turn_ready": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false
@@ -2979,7 +3054,8 @@
                 "current_turn_id",
                 "cursor_ms",
                 "playback_rate",
-                "control_version"
+                "control_version",
+                "next_turn_ready"
               ],
               "properties": {
                 "status": {
@@ -2989,6 +3065,7 @@
                     "ready",
                     "playing",
                     "paused",
+                    "waiting_next",
                     "completed",
                     "stopped"
                   ]
@@ -3023,6 +3100,9 @@
                 "control_version": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "next_turn_ready": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false
@@ -3100,7 +3180,8 @@
                 "current_turn_id",
                 "cursor_ms",
                 "playback_rate",
-                "control_version"
+                "control_version",
+                "next_turn_ready"
               ],
               "properties": {
                 "status": {
@@ -3110,6 +3191,7 @@
                     "ready",
                     "playing",
                     "paused",
+                    "waiting_next",
                     "completed",
                     "stopped"
                   ]
@@ -3144,6 +3226,9 @@
                 "control_version": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "next_turn_ready": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false

@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event, Thread
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -18,10 +19,12 @@ from app.core.db import Database
 from app.core.errors import PlatformError
 from app.core.models import (
     IdempotencyRecord,
+    StoredFile,
     VoicePreview,
     VoiceProfile,
     VoiceProviderOperation,
 )
+from app.modules.knowledge.files import write_atomic
 from app.modules.voices import service as voice_service
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
@@ -41,7 +44,17 @@ from app.providers.audio import (
     AudioValidationError,
     run_ffmpeg_normalize,
 )
-from app.providers.tts import TTSProviderError, TTSProviderTimeout, TTSResult
+from app.providers.tts import (
+    TTSAudioInvalidError,
+    TTSHTTPRejectedError,
+    TTSProviderError,
+    TTSProviderTimeout,
+    TTSResponseInvalidError,
+    TTSResult,
+    TTSResultDNSFailedError,
+    TTSResultDownloadError,
+    TTSResultURLRejectedError,
+)
 from app.providers.voice import (
     MockVoiceCloneProvider,
     VoiceProviderError,
@@ -890,25 +903,112 @@ def test_preview_expiry_revokes_media_and_reclaims_bytes(
     assert not (settings.resolved_data_root / relative_path).exists()
 
 
+def test_system_preview_media_is_teacher_only(
+    voice_client: tuple[TestClient, Database, Settings],
+) -> None:
+    client, database, settings = voice_client
+    profile_id = str(uuid4())
+    preview_id = str(uuid4())
+    stored_id = str(uuid4())
+    relative_path = f"system/voices/previews/{preview_id}.wav"
+    timestamp = datetime.now(UTC)
+    raw = _wav(1)
+    digest, size = write_atomic(settings.resolved_data_root, relative_path, raw)
+    with database.session() as session:
+        session.add(
+            VoiceProfile(
+                id=profile_id,
+                scope="system",
+                group_id=None,
+                display_name="System English Fallback",
+                status="ready",
+                provider_key="mock",
+                target_model_key="mock-voice-v1",
+                external_id_encrypted=None,
+                recovery_name=f"maya{profile_id.replace('-', '')[:12]}",
+                provenance_json="{}",
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        session.add(
+            StoredFile(
+                id=stored_id,
+                kind="voice_preview",
+                relative_path=relative_path,
+                sha256=digest,
+                size_bytes=size,
+                state="active",
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        session.add(
+            VoicePreview(
+                id=preview_id,
+                profile_id=profile_id,
+                group_id=None,
+                stored_file_id=stored_id,
+                relative_path=relative_path,
+                state="active",
+                expires_at=timestamp + timedelta(minutes=10),
+                created_at=timestamp,
+            )
+        )
+
+    media_url = f"/api/v1/voice-previews/{preview_id}/media"
+    assert client.get(media_url).status_code == 401
+    login(client, "student-bowen-1")
+    assert client.get(media_url).status_code == 404
+    login(client, "student-kaikai-1")
+    assert client.get(media_url).status_code == 404
+    login(client, "teacher-demo")
+    media = client.get(media_url)
+    assert media.status_code == 200
+    assert media.content == raw
+    assert media.headers["content-type"].startswith("audio/wav")
+
+
 def test_supplier_url_rejects_private_hosts_userinfo_redirect_and_queries() -> None:
-    with pytest.raises(TTSProviderError):
+    with pytest.raises(TTSResultURLRejectedError):
         dashscope.validate_supplier_url("http://dashscope.aliyuncs.com/result.wav")
-    with pytest.raises(TTSProviderError):
+    with pytest.raises(TTSResultURLRejectedError):
         dashscope.validate_supplier_url("https://127.0.0.1/result.wav")
-    with pytest.raises(TTSProviderError):
+    with pytest.raises(TTSResultURLRejectedError):
         dashscope.validate_supplier_url("https://user:pass@dashscope.aliyuncs.com/result.wav")
     # Supplier audio URLs are short-lived signed OSS URLs, so query parameters
     # are required and remain server-only. Fragments/userinfo are rejected.
     assert dashscope.validate_supplier_url(
         "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/result.wav?Expires=1"
     ).endswith("?Expires=1")
-    with pytest.raises(TTSProviderError):
+    with pytest.raises(TTSResultURLRejectedError):
         dashscope.validate_supplier_url("https://dashscope.aliyuncs.com/result.wav#fragment")
-    with pytest.raises(TTSProviderError):
+    with pytest.raises(TTSResultURLRejectedError):
         dashscope.validate_supplier_url("https://dashscope.aliyuncs.com.evil.test/result.wav")
+    with pytest.raises(TTSResultURLRejectedError):
+        dashscope.validate_supplier_url("https://dashscope.aliyuncs.com./result.wav")
+    with pytest.raises(TTSResultURLRejectedError):
+        dashscope.validate_supplier_url("https://dashscope.aliyuncs.com:443/result.wav")
     assert dashscope.validate_supplier_url("https://dashscope.aliyuncs.com/result.wav").startswith(
         "https://"
     )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com./result.wav",
+        "http://user:pass@dashscope-result-bj.oss-cn-beijing.aliyuncs.com/result.wav",
+        "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com:443/result.wav",
+        "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com:80/result.wav",
+        "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/result.wav#fragment",
+        "HTTP://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/result.wav",
+        "http://DASHSCOPE-RESULT-BJ.OSS-CN-BEIJING.ALIYUNCS.COM/result.wav",
+    ],
+)
+def test_supplier_http_upgrade_rejects_unsafe_authority(value: str) -> None:
+    with pytest.raises(TTSResultURLRejectedError):
+        dashscope._upgrade_official_result_url(value)
 
 
 class _CaptureDashScopeClient:
@@ -1033,7 +1133,7 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     assert result.request_id == "tts-request"
     assert downloader.url and downloader.url.endswith("?Expires=1")
     assert tts_capture.calls[0][0] == (
-        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     )
     assert tts_capture.calls[0][1]["json"] == {
         "model": "qwen3-tts-vc-2026-01-22",
@@ -1042,6 +1142,101 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
             "voice": "maya123456789012-generated",
         },
     }
+
+
+@pytest.mark.parametrize(
+    ("workspace_id", "region"),
+    [
+        ("workspace with spaces", "cn-beijing"),
+        ("workspace/with/slash", "cn-beijing"),
+        ("workspace123", "cn-shanghai"),
+    ],
+)
+def test_dashscope_tts_rejects_invalid_workspace_or_region_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+    workspace_id: str,
+    region: str,
+) -> None:
+    def unexpected_client() -> _CaptureDashScopeClient:
+        raise AssertionError("invalid TTS configuration must not construct a client")
+
+    monkeypatch.setattr(dashscope, "_client", unexpected_client)
+    config = dashscope.DashScopeConfig(
+        api_key="fixture",
+        workspace_id=workspace_id,
+        region=region,
+    )
+    with pytest.raises(VoiceProviderError):
+        dashscope.DashScopeTTSProvider(config).synthesize("A sentence.", "opaque-voice")
+
+
+def test_dashscope_tts_uses_frozen_safe_failure_classifications(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
+
+    rejected = _CaptureDashScopeClient([_provider_response({"error": "rejected"})])
+    rejected.responses[0] = httpx.Response(
+        403,
+        json={"message": "provider details stay private"},
+        request=httpx.Request("POST", "https://provider.invalid"),
+    )
+    monkeypatch.setattr(dashscope, "_client", lambda: rejected)
+    with pytest.raises(TTSHTTPRejectedError) as rejected_error:
+        dashscope.DashScopeTTSProvider(config).synthesize("A sentence.", "opaque-voice")
+    assert rejected_error.value.safe_code == "tts_http_rejected"
+
+    malformed = _CaptureDashScopeClient([_provider_response({"output": {}})])
+    monkeypatch.setattr(dashscope, "_client", lambda: malformed)
+    with pytest.raises(TTSResponseInvalidError) as malformed_error:
+        dashscope.DashScopeTTSProvider(config).synthesize("A sentence.", "opaque-voice")
+    assert malformed_error.value.safe_code == "tts_response_invalid"
+
+    invalid_audio = _CaptureDownloader()
+    invalid_audio.download = lambda _value: b"not-a-wav"  # type: ignore[method-assign]
+    audio_capture = _CaptureDashScopeClient(
+        [
+            _provider_response(
+                {
+                    "output": {
+                        "audio": {
+                            "url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"
+                        }
+                    }
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(dashscope, "_client", lambda: audio_capture)
+    with pytest.raises(TTSAudioInvalidError) as audio_error:
+        dashscope.DashScopeTTSProvider(config, downloader=invalid_audio).synthesize(
+            "A sentence.", "opaque-voice"
+        )
+    assert audio_error.value.safe_code == "tts_audio_invalid"
+
+    failed_download = _CaptureDownloader()
+    failed_download.download = lambda _value: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        TTSResultDownloadError("download details stay private")
+    )
+    download_capture = _CaptureDashScopeClient(
+        [
+            _provider_response(
+                {
+                    "output": {
+                        "audio": {
+                            "url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"
+                        }
+                    }
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(dashscope, "_client", lambda: download_capture)
+    with pytest.raises(TTSResultDownloadError) as download_error:
+        dashscope.DashScopeTTSProvider(config, downloader=failed_download).synthesize(
+            "A sentence.", "opaque-voice"
+        )
+    assert download_error.value.safe_code == "tts_result_download_failed"
 
 
 def test_dashscope_exists_requires_a_complete_paginated_scan(
@@ -1095,10 +1290,10 @@ def test_supplier_downloader_rejects_dns_private_address_before_http(
     monkeypatch.setattr(
         dashscope,
         "_resolved_public_addresses",
-        lambda _hostname: (_ for _ in ()).throw(TTSProviderError("private")),
+        lambda _hostname: (_ for _ in ()).throw(TTSResultDNSFailedError("private")),
     )
     downloader = dashscope.SupplierAudioDownloader(max_bytes=100)
-    with pytest.raises(TTSProviderError):
+    with pytest.raises(TTSResultDNSFailedError):
         downloader.download("https://dashscope.aliyuncs.com/result.wav")
 
 
@@ -1150,6 +1345,58 @@ def test_supplier_downloader_uses_only_the_approved_numeric_address(
             100,
         )
     ]
+
+
+def test_supplier_downloader_upgrades_documented_http_beijing_result_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Qwen's signed WAV example is HTTP; fetch it over pinned HTTPS."""
+
+    monkeypatch.setattr(
+        dashscope,
+        "_resolved_public_addresses",
+        lambda _hostname: ("1.2.3.4",),
+    )
+    calls: list[tuple[str, str, str, int]] = []
+
+    def pinned(
+        url: str,
+        hostname: str,
+        address: str,
+        *,
+        max_bytes: int,
+        deadline: float,
+    ) -> bytes:
+        del deadline
+        calls.append((url, hostname, address, max_bytes))
+        return b"audio"
+
+    monkeypatch.setattr(dashscope, "_download_from_pinned_address", pinned)
+    result = dashscope.SupplierAudioDownloader(max_bytes=100).download(
+        "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/result.wav?Expires=1"
+    )
+    assert result == b"audio"
+    assert calls == [
+        (
+            "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/result.wav?Expires=1",
+            "dashscope-result-bj.oss-cn-beijing.aliyuncs.com",
+            "1.2.3.4",
+            100,
+        )
+    ]
+
+
+def test_supplier_downloader_rejects_non_provider_http_before_dns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_resolution(_hostname: str) -> tuple[str, ...]:
+        raise AssertionError("unapproved HTTP result host must not reach DNS")
+
+    monkeypatch.setattr(dashscope, "_resolved_public_addresses", unexpected_resolution)
+    with pytest.raises(TTSProviderError):
+        dashscope.SupplierAudioDownloader(max_bytes=100).download(
+            "http://example.com/result.wav?Expires=1"
+        )
 
 
 def test_pinned_connection_rejects_peer_change_before_any_http_request(

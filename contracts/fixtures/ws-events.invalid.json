@@ -61,7 +61,8 @@
           "current_turn_id": null,
           "cursor_ms": 0,
           "playback_rate": 1,
-          "control_version": 0
+          "control_version": 0,
+          "next_turn_ready": false
         },
         "interaction": {
           "status": "closed",
@@ -79,6 +80,81 @@
           }
         },
         "latest_sequence": 1
+      }
+    }
+  },
+  {
+    "name": "snapshot playback state missing derived readiness",
+    "event": {
+      "event_id": "99999999-9999-4999-8999-000000000000",
+      "event_type": "snapshot",
+      "event_version": 1,
+      "debate_id": "11111111-1111-4111-8111-111111111111",
+      "sequence": 0,
+      "occurred_at": "2026-08-26T12:00:00.000Z",
+      "payload": {
+        "debate_status": "draft",
+        "playback_status": "preparing",
+        "interaction_status": "closed",
+        "insight_status": "not_started",
+        "report_status": "not_started",
+        "public_turns": [],
+        "playback": {
+          "status": "preparing",
+          "mode": "live",
+          "current_turn_id": null,
+          "cursor_ms": 0,
+          "playback_rate": 1,
+          "control_version": 0
+        },
+        "interaction": {
+          "status": "closed",
+          "votes": [],
+          "barrage_count": 0
+        },
+        "report": {
+          "generation_status": "not_started",
+          "latest_attempt_status": "not_started",
+          "insight": {
+            "status": "not_started",
+            "included_count": 0,
+            "filtered_count": 0,
+            "items": []
+          }
+        },
+        "latest_sequence": 0
+      }
+    }
+  },
+  {
+    "name": "waiting event missing derived readiness",
+    "event": {
+      "event_id": "99999999-9999-4999-8999-000000000001",
+      "event_type": "playback.waiting_next",
+      "event_version": 1,
+      "debate_id": "11111111-1111-4111-8111-111111111111",
+      "sequence": 1,
+      "occurred_at": "2026-08-26T12:00:00.000Z",
+      "payload": {
+        "completed_turn_id": "44444444-4444-4444-8444-444444444444",
+        "control_version": 4
+      }
+    }
+  },
+  {
+    "name": "waiting event exposes successor identity",
+    "event": {
+      "event_id": "99999999-9999-4999-8999-000000000001",
+      "event_type": "playback.waiting_next",
+      "event_version": 1,
+      "debate_id": "11111111-1111-4111-8111-111111111111",
+      "sequence": 1,
+      "occurred_at": "2026-08-26T12:00:00.000Z",
+      "payload": {
+        "completed_turn_id": "44444444-4444-4444-8444-444444444444",
+        "control_version": 4,
+        "next_turn_ready": true,
+        "next_turn_id": "55555555-5555-4555-8555-555555555555"
       }
     }
   },

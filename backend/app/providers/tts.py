@@ -12,11 +12,57 @@ from typing import Protocol
 
 
 class TTSProviderError(RuntimeError):
-    """A TTS adapter failure safe to map to a platform error code."""
+    """A TTS adapter failure carrying a bounded internal classification."""
+
+    safe_code = "tts_response_invalid"
+
+    def __init__(
+        self, message: str = "TTS provider error", *, safe_code: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.safe_code = safe_code or type(self).safe_code
 
 
 class TTSProviderTimeout(TTSProviderError):
     """A TTS request exceeded its bounded deadline."""
+
+    safe_code = "tts_timeout"
+
+
+class TTSHTTPRejectedError(TTSProviderError):
+    """The TTS HTTP request was rejected or could not be completed."""
+
+    safe_code = "tts_http_rejected"
+
+
+class TTSResponseInvalidError(TTSProviderError):
+    """The TTS response did not match the expected provider schema."""
+
+    safe_code = "tts_response_invalid"
+
+
+class TTSResultURLRejectedError(TTSProviderError):
+    """The provider result URL failed the bounded allowlist checks."""
+
+    safe_code = "tts_result_url_rejected"
+
+
+class TTSResultDNSFailedError(TTSProviderError):
+    """The provider result host could not be resolved safely."""
+
+    safe_code = "tts_result_dns_failed"
+
+
+class TTSResultDownloadError(TTSProviderError):
+    """The provider result object could not be downloaded safely."""
+
+    safe_code = "tts_result_download_failed"
+
+
+class TTSAudioInvalidError(TTSProviderError):
+    """The downloaded provider bytes failed technical audio validation."""
+
+    safe_code = "tts_audio_invalid"
 
 
 @dataclass(frozen=True)

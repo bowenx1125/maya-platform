@@ -64,6 +64,7 @@ const implementedOperationIds = new Set([
   "pauseDebate",
   "resumeDebate",
   "skipTurnPlayback",
+  "advanceDebatePlayback",
   "stopDebate",
   "replayDebate",
   "replayDebateTurn",

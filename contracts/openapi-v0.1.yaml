@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Maya Teaching Platform API
-  version: 0.1.0-g0.5
+  version: 0.1.0-g0.6
   description: >-
     Demo v0.1 platform contract. Provider names, model names, external voice IDs,
     API keys, absolute file paths, and prepared turn text are never public fields.
@@ -841,6 +841,24 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /debates/{debate_id}/next:
+    post:
+      tags: [Debates]
+      operationId: advanceDebatePlayback
+      parameters:
+        - $ref: '#/components/parameters/DebateId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvancePlaybackRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/PlaybackState'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /debates/{debate_id}/stop:
     post:
       tags: [Debates]
@@ -1543,6 +1561,13 @@ components:
           required: [expected_revision]
           properties:
             expected_revision: {type: integer, minimum: 0}
+    AdvancePlaybackRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_control_version, expected_current_turn_id]
+      properties:
+        expected_control_version: {type: integer, minimum: 0}
+        expected_current_turn_id: {$ref: '#/components/schemas/Uuid'}
     DebateParticipant:
       type: object
       required: [id, slot, order_index, agent_id, agent_name, agent_version_id, version_label, knowledge_snapshot_id, avatar_config, effective_voice_profile_id, voice_fallback_active, stance_mode]
@@ -1592,14 +1617,17 @@ components:
             report_status: {type: string, enum: [not_started, generating, ready, failed]}
     PlaybackState:
       type: object
-      required: [status, mode, cursor_ms, playback_rate, control_version]
+      required: [status, mode, cursor_ms, playback_rate, control_version, next_turn_ready]
       properties:
-        status: {type: string, enum: [preparing, ready, playing, paused, completed, stopped]}
+        status: {type: string, enum: [preparing, ready, playing, paused, waiting_next, completed, stopped]}
         mode: {type: string, enum: [live, replay]}
         current_turn_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
         cursor_ms: {type: integer, minimum: 0}
         playback_rate: {type: number, minimum: 0.95, maximum: 1.25}
         control_version: {type: integer, minimum: 0}
+        next_turn_ready:
+          type: boolean
+          description: Derived readiness of the deterministic adjacent live successor; always false outside live waiting_next.
     DebateTurn:
       type: object
       required: [id, participant_id, round_no, turn_index, speech, retrieval_status, grounding_mode, sources]

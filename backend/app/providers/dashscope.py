@@ -15,12 +15,22 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_technical_audio
-from app.providers.tts import TTSProviderError, TTSProviderTimeout, TTSResult
+from app.providers.tts import (
+    TTSAudioInvalidError,
+    TTSHTTPRejectedError,
+    TTSProviderError,
+    TTSProviderTimeout,
+    TTSResponseInvalidError,
+    TTSResult,
+    TTSResultDNSFailedError,
+    TTSResultDownloadError,
+    TTSResultURLRejectedError,
+)
 from app.providers.voice import (
     VoiceEnrollmentResult,
     VoiceExistenceResult,
@@ -34,10 +44,17 @@ APPROVED_RESULT_HOST_SUFFIXES = (
     "dashscope.aliyuncs.com",
     "dashscope-result-bj.oss-cn-beijing.aliyuncs.com",
 )
+# The Qwen non-streaming HTTP API currently documents its signed Beijing OSS
+# result URL with an ``http`` scheme even though the object store supports
+# HTTPS.  This is deliberately an exact host allowlist: an arbitrary HTTP
+# URL must never become eligible merely because it can be rewritten to HTTPS.
+OFFICIAL_HTTP_RESULT_HOSTS = frozenset({"dashscope-result-bj.oss-cn-beijing.aliyuncs.com"})
 VOICE_CUSTOMIZATION_PATH = "/api/v1/services/audio/tts/customization"
-QWEN_TTS_URL = (
-    "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-)
+TTS_GENERATION_PATH = "/api/v1/services/aigc/multimodal-generation/generation"
+# Kept as a documented shared-endpoint reference for callers that need to
+# compare the provider's public API shape.  Actual TTS requests use the
+# workspace endpoint derived from ``_base_url`` below.
+QWEN_TTS_URL = f"https://dashscope.aliyuncs.com{TTS_GENERATION_PATH}"
 
 
 @dataclass(frozen=True)
@@ -78,6 +95,20 @@ def _json(response: httpx.Response) -> dict[str, Any]:
         raise VoiceProviderError("provider response invalid") from exc
     if not isinstance(value, dict):
         raise VoiceProviderError("provider response invalid")
+    return value
+
+
+def _tts_json(response: httpx.Response) -> dict[str, Any]:
+    """Parse a TTS response with a TTS-specific safe classification."""
+
+    if response.status_code < 200 or response.status_code >= 300:
+        raise TTSHTTPRejectedError("provider request failed")
+    try:
+        value = response.json()
+    except (TypeError, ValueError) as exc:
+        raise TTSResponseInvalidError("provider response invalid") from exc
+    if not isinstance(value, dict):
+        raise TTSResponseInvalidError("provider response invalid")
     return value
 
 
@@ -228,7 +259,10 @@ class DashScopeVoiceCloneProvider:
 
 
 def _is_approved_host(hostname: str, suffixes: tuple[str, ...]) -> bool:
-    lowered = hostname.rstrip(".").lower()
+    # DNS absolute-name notation (a trailing dot) is deliberately not
+    # accepted.  The caller later pins the resolved address, so the URL
+    # authority must remain the exact allowlisted spelling.
+    lowered = hostname.lower()
     return any(lowered == suffix or lowered.endswith("." + suffix) for suffix in suffixes)
 
 
@@ -247,7 +281,7 @@ def _resolved_public_addresses(hostname: str, *, timeout_seconds: float = 10.0) 
     if worker.is_alive():
         raise TTSProviderTimeout("supplier host resolution timed out")
     if not result or isinstance(result[0], OSError):
-        raise TTSProviderError("supplier host unavailable")
+        raise TTSResultDNSFailedError("supplier host unavailable")
     infos = result[0]
     addresses: list[str] = []
     for info in infos:
@@ -255,13 +289,13 @@ def _resolved_public_addresses(hostname: str, *, timeout_seconds: float = 10.0) 
         try:
             parsed = ipaddress.ip_address(address)
         except ValueError as exc:
-            raise TTSProviderError("supplier host unavailable") from exc
+            raise TTSResultDNSFailedError("supplier host unavailable") from exc
         if not parsed.is_global:
-            raise TTSProviderError("supplier host unavailable")
+            raise TTSResultDNSFailedError("supplier host unavailable")
         if address not in addresses:
             addresses.append(address)
     if not addresses:
-        raise TTSProviderError("supplier host unavailable")
+        raise TTSResultDNSFailedError("supplier host unavailable")
     return tuple(addresses)
 
 
@@ -277,24 +311,64 @@ def validate_supplier_url(
         host = parsed.hostname
         port = parsed.port
     except ValueError as exc:
-        raise TTSProviderError("supplier URL rejected") from exc
+        raise TTSResultURLRejectedError("supplier URL rejected") from exc
     if (
         parsed.scheme.lower() != "https"
         or not host
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.fragment
-        or (port is not None and port != 443)
+        or "@" in parsed.netloc
+        or "#" in value
+        or port is not None
+        or ":" in parsed.netloc.rsplit("@", 1)[-1]
         or not _is_approved_host(host, allowed_suffixes)
     ):
-        raise TTSProviderError("supplier URL rejected")
+        raise TTSResultURLRejectedError("supplier URL rejected")
     try:
         ipaddress.ip_address(host)
     except ValueError:
         pass
     else:
-        raise TTSProviderError("supplier URL rejected")
+        raise TTSResultURLRejectedError("supplier URL rejected")
     return value
+
+
+def _upgrade_official_result_url(value: str) -> str:
+    """Upgrade the documented Beijing OSS result URL to HTTPS in memory.
+
+    Qwen's non-streaming response examples use an ``http`` URL for the
+    signed WAV object.  The downloader is intentionally HTTPS-only because a
+    signed URL contains bearer-like query material, so only the exact
+    provider-owned Beijing result host is eligible for this compatibility
+    rewrite.  URL validation still runs after the rewrite and rejects
+    userinfo, fragments, non-443 ports, IP literals and private DNS results.
+    """
+
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise TTSResultURLRejectedError("supplier URL rejected") from exc
+    if parsed.scheme.lower() != "http":
+        return value
+    # Only the documented lowercase Beijing result authority may be upgraded.
+    # Do not normalize case, remove a trailing dot, preserve userinfo, or
+    # carry an explicit port into the HTTPS URL.
+    if (
+        not value.startswith("http://")
+        or hostname is None
+        or parsed.netloc not in OFFICIAL_HTTP_RESULT_HOSTS
+        or hostname not in OFFICIAL_HTTP_RESULT_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+        or "@" in parsed.netloc
+        or "#" in value
+        or port is not None
+        or ":" in parsed.netloc.rsplit("@", 1)[-1]
+    ):
+        raise TTSResultURLRejectedError("supplier URL rejected")
+    return urlunsplit(("https", parsed.netloc, parsed.path, parsed.query, parsed.fragment))
 
 
 def _remaining_timeout(deadline: float, cap: float) -> float:
@@ -334,7 +408,7 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
             peer = str(wrapped.getpeername()[0])
             if ipaddress.ip_address(peer) != parsed:
                 wrapped.close()
-                raise TTSProviderError("supplier host changed")
+                raise TTSResultDownloadError("supplier host changed")
             wrapped.settimeout(_remaining_timeout(self._deadline, 30.0))
             self.sock = wrapped
         except BaseException:
@@ -369,14 +443,14 @@ def _download_from_pinned_address(
             connection.sock.settimeout(_remaining_timeout(deadline, 30.0))
         response = connection.getresponse()
         if response.status != 200:
-            raise TTSProviderError("supplier audio unavailable")
+            raise TTSResultDownloadError("supplier audio unavailable")
         content_length = response.getheader("content-length")
         if content_length is not None:
             try:
                 if int(content_length) > max_bytes:
-                    raise TTSProviderError("supplier audio too large")
+                    raise TTSResultDownloadError("supplier audio too large")
             except ValueError as exc:
-                raise TTSProviderError("supplier audio invalid") from exc
+                raise TTSResultDownloadError("supplier audio invalid") from exc
         chunks: list[bytes] = []
         total = 0
         while True:
@@ -387,7 +461,7 @@ def _download_from_pinned_address(
                 break
             total += len(chunk)
             if total > max_bytes:
-                raise TTSProviderError("supplier audio too large")
+                raise TTSResultDownloadError("supplier audio too large")
             chunks.append(chunk)
         return b"".join(chunks)
     except TimeoutError as exc:
@@ -395,7 +469,7 @@ def _download_from_pinned_address(
     except TTSProviderError:
         raise
     except (http.client.HTTPException, ssl.SSLError, OSError) as exc:
-        raise TTSProviderError("supplier audio unavailable") from exc
+        raise TTSResultDownloadError("supplier audio unavailable") from exc
     finally:
         connection.close()
 
@@ -407,10 +481,12 @@ class SupplierAudioDownloader:
         self.max_bytes = max_bytes
 
     def download(self, value: str) -> bytes:
-        url = validate_supplier_url(value)
+        # The supplier's documented Qwen result URL is HTTP; upgrade only
+        # the exact Beijing result host before the common HTTPS/SSRF checks.
+        url = validate_supplier_url(_upgrade_official_result_url(value))
         parsed = urlsplit(url)
         if parsed.hostname is None:  # pragma: no cover - validated above
-            raise TTSProviderError("supplier URL rejected")
+            raise TTSResultURLRejectedError("supplier URL rejected")
         deadline = time.monotonic() + 60.0
         approved_addresses = _resolved_public_addresses(parsed.hostname)
         _remaining_timeout(deadline, 60.0)
@@ -431,9 +507,9 @@ class SupplierAudioDownloader:
                 last_error = exc
                 continue
             if not result:
-                raise TTSProviderError("supplier audio invalid")
+                raise TTSResultDownloadError("supplier audio invalid")
             return result
-        raise last_error or TTSProviderError("supplier audio unavailable")
+        raise last_error or TTSResultDownloadError("supplier audio unavailable")
 
 
 class DashScopeTTSProvider:
@@ -460,26 +536,30 @@ class DashScopeTTSProvider:
             "input": {"text": text, "voice": external_voice_id},
         }
         del language
+        # Validate region/workspace before constructing a client or crossing
+        # the provider boundary.  The reviewed contract selects the Beijing
+        # workspace endpoint rather than relying on a shared host/header.
+        endpoint = f"{_base_url(self.config)}{TTS_GENERATION_PATH}"
         try:
             with _client() as client:
                 response = client.post(
-                    QWEN_TTS_URL,
+                    endpoint,
                     headers={"Authorization": f"Bearer {self.config.api_key}"},
                     json=payload,
                 )
-            document = _json(response)
+            document = _tts_json(response)
         except httpx.TimeoutException as exc:
             raise TTSProviderTimeout("provider request timed out") from exc
         except (httpx.HTTPError, OSError) as exc:
-            raise TTSProviderError("provider request failed") from exc
+            raise TTSHTTPRejectedError("provider request failed") from exc
         output = document.get("output")
         audio = output.get("audio") if isinstance(output, dict) else None
         audio_url = audio.get("url") if isinstance(audio, dict) else None
         if not isinstance(audio_url, str) or not audio_url:
-            raise TTSProviderError("provider response invalid")
+            raise TTSResponseInvalidError("provider response invalid")
         raw = self.downloader.download(audio_url)
         try:
             validate_technical_audio(raw)
         except AudioValidationError as exc:
-            raise TTSProviderError("provider audio invalid") from exc
+            raise TTSAudioInvalidError("provider audio invalid") from exc
         return TTSResult(raw, "audio/wav", _request_id(response, document))

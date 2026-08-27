@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Maya Teaching Platform API",
-    "version": "0.1.0-g0.5",
+    "version": "0.1.0-g0.6",
     "description": "Demo v0.1 platform contract. Provider names, model names, external voice IDs, API keys, absolute file paths, and prepared turn text are never public fields."
   },
   "security": [
@@ -1881,6 +1881,49 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/next": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "advanceDebatePlayback",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvancePlaybackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PlaybackState"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/stop": {
       "post": {
         "tags": [
@@ -3329,6 +3372,23 @@
           }
         ]
       },
+      "AdvancePlaybackRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_control_version",
+          "expected_current_turn_id"
+        ],
+        "properties": {
+          "expected_control_version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expected_current_turn_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
       "DebateParticipant": {
         "type": "object",
         "required": [
@@ -3550,7 +3610,8 @@
           "mode",
           "cursor_ms",
           "playback_rate",
-          "control_version"
+          "control_version",
+          "next_turn_ready"
         ],
         "properties": {
           "status": {
@@ -3560,6 +3621,7 @@
               "ready",
               "playing",
               "paused",
+              "waiting_next",
               "completed",
               "stopped"
             ]
@@ -3593,6 +3655,10 @@
           "control_version": {
             "type": "integer",
             "minimum": 0
+          },
+          "next_turn_ready": {
+            "type": "boolean",
+            "description": "Derived readiness of the deterministic adjacent live successor; always false outside live waiting_next."
           }
         }
       },

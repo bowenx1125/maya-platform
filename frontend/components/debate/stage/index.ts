@@ -16,6 +16,7 @@ export {
 } from "./protocol";
 export type {
   AvatarVisualState,
+  AdvancePlaybackRequest,
   DebatePlaybackApi,
   DebateStageProps,
   DebateStartRequest,

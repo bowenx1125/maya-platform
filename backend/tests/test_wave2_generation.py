@@ -595,12 +595,24 @@ def test_llm_selector_is_callable_but_fail_closed_for_real_or_unknown() -> None:
         ("translation_provider", "deepl"),
     ),
 )
-def test_wave2_startup_rejects_every_non_mock_provider_selector(
+def test_wave2_startup_allows_only_real_tts_with_mock_companions(
     field: str,
     selector: str,
 ) -> None:
-    settings = Settings(maya_env="test", **{field: selector})  # type: ignore[arg-type]
-    with pytest.raises(RuntimeError, match="only Mock selectors"):
+    values: dict[str, object] = {field: selector}
+    if field == "tts_provider":
+        values.update(
+            {
+                "dashscope_api_key": "fixture-key",
+                "dashscope_workspace_id": "workspace123",
+                "dashscope_region": "cn-beijing",
+            }
+        )
+        settings = Settings(maya_env="test", **values)  # type: ignore[arg-type]
+        settings.validate_runtime()
+        return
+    settings = Settings(maya_env="test", **values)  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError, match="Mock companions"):
         settings.validate_runtime()
 
 

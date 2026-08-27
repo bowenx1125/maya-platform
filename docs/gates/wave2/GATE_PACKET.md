@@ -1,9 +1,9 @@
 # Wave 2 Gate Packet — M10 Debate Setup + M11 Turn Generation + M12 Playback
 
-Status: `G0-S PASS — G1 LUNA IMPLEMENTATION AUTHORIZED`
+Status: historical `.5` baseline `G0-S/G3 PASS`; active `.6` manual-acceptance delta `G0-S/G1/G1.5/G2 PASS / MANUAL G3 NOT PASS`
 Authorized scope: `2026-08-27 Asia/Shanghai`
 Modules: `M10 debate creation/rules`, `M11 RAG/LLM turn generation`, `M12 teacher stage/playback/recovery`
-Dependencies: `Wave 0 G3 PASS`, `Wave 1A G3 PASS`, `Wave 1B Mock G3 PASS`, `Wave 1C G3 PASS`, reviewed Wave 2 contract delta `g0-2026-08-27.5`
+Dependencies: `Wave 0 G3 PASS`, `Wave 1A G3 PASS`, `Wave 1B Mock G3 PASS`, `Wave 1C G3 PASS`, historical Wave 2 baseline `g0-2026-08-27.5`; active manual-acceptance delta `g0-2026-08-28.6-manual-acceptance-delta` has completed concentrated Sol High G2 review
 Initial product commit: `e86f8799c5f274c5830c8a529b139d0b698543ac`
 Initial Project SHA-256: `728dcf13557f3f4f9c55d3b55d30915fd730365d1cd063b25a8173647f270889`
 Initial Git state: clean
@@ -24,7 +24,7 @@ Wave 2 must produce a two-person/two-round classroom-debate candidate without en
 - no M13/M14/M15 implementation: no QR, anonymous audience, vote, barrage, insight, Maya report, history product page or translation;
 - no Wave 3/4 routes, tables, buttons or placeholder interactions;
 - no real Embedding migration or rebuild of existing 256-dimensional Mock snapshots;
-- no real TTS call. The real system voice enrollment succeeded, but two authorized technical TTS attempts failed; Wave 2 uses Mock TTS only and never activates `FALLBACK_VOICE_PROFILE_ID`;
+- historical `.5` baseline only: no real TTS call. The active `.6` delta in section 17 superseded this with exactly one reviewed attempt=3 call; that call failed and still did not activate `FALLBACK_VOICE_PROFILE_ID`;
 - no real LLM call until the LLM adapter has separately passed design/security audit. The default Wave 2 G1/G1.5 path is deterministic Mock;
 - no 5-person real-provider run, pressure test, DeepL, public deployment, cloud deployment or Git push;
 - no edit to published AgentVersion/KnowledgeSnapshot and no copying reference-repository source.
@@ -367,3 +367,81 @@ Final main-agent sign-off: `2026-08-28 01:08 Asia/Shanghai`.
 - final 1280×720 and 360×800 browser checks have no horizontal overflow, all six controls remain 44px high, Avatar speaking/listening/idle states render, and browser warning/error logs are empty. Backend/frontend/gateway and FFmpeg 5.1.9 are healthy;
 - all Wave 2 selectors and runtime calls remained Mock. No Voice enrollment, TTS, LLM, Embedding or Translation call was added. `RAG_PIPELINE_PASS / FORMAL_TIKTOK_RAG_CONTENT_ACCEPTANCE_PENDING` remains the exact content status;
 - this record signs only `WAVE_2_G3_PASS` and the Mock two-person/two-round classroom candidate. `M13–M15`, voting, barrage, Maya report, translation/history product work, real LLM/Embedding/TTS and Wave 3/4 remain unimplemented and locked.
+
+## 17. User manual-acceptance repair delta (2026-08-28)
+
+Status: `G0-S/G1/G1.5/G2 PASS / MANUAL G3 NOT PASS`.
+
+The historical G3 record above remains evidence for the old Mock/auto-advance contract. It does not sign this delta. User manual acceptance exposed a ready-but-transparent Avatar, Mock tone instead of human speech, and an unwanted auto-continuous live timeline. Only the following M07/M08/M12 increment is authorized; Wave 3/4 remains locked.
+
+### 17.1 Visible Avatar
+
+- preserve material cardinality: a single-material mesh remains one `Material`; a multi-material mesh remains `Material[]`;
+- GLB/Draco HTTP 200 and `onReady` are insufficient. Acceptance requires visible, non-transparent checked-in GLB pixels at student preview and teacher 2–5 card sizes;
+- tests must fail on the old single-material-to-array bug and real-browser G3 must show visible idle/listening/speaking geometry. Static fallback remains failure for the normal path.
+
+### 17.2 One-call real TTS diagnostic Gate
+
+- enrollment/list/exists/delete calls: `0`; new TTS calls: at most `1`; automatic retry: `0`; LLM/Embedding/Translation calls: `0`;
+- use only the existing unique `scope=system/status=preview_ready` VoiceProfile and its server-only decrypted mapping. Never print or expose Key, Authorization, external voice ID, supplier URL/response, Base64, absolute/private path or source filename;
+- introduce a new operator-only durable `tts_preview` diagnostic attempt instead of resetting/deleting the two failed historical ledger rows. Before the external request, persist a Gate-specific request hash, `prepared→dispatched`, and counters. The operation ID is deterministic from the fixed Gate identity plus internal profile/request hash, so the existing primary-key uniqueness is the database-level claim across processes; creation is a single atomic insert/commit and only the winning committed row may dispatch. A filesystem lock is only an optimization, never the correctness boundary. A loser must replay the committed result or return outcome_unknown while making zero provider calls;
+- classify failures only as stable safe codes: `tts_http_rejected`, `tts_response_invalid`, `tts_result_url_rejected`, `tts_result_dns_failed`, `tts_result_download_failed`, `tts_audio_invalid`, `tts_timeout`, or `tts_outcome_unknown`;
+- success requires nonempty bytes, complete decode, non-silence, reasonable duration, no obvious full-duration clipping, technical validation, temporary-file cleanup, and a same-origin authenticated platform preview. Only then may the profile transition `preview_ready→ready`;
+- timeout/ambiguous billing becomes durable `outcome_unknown` and forbids another call. Failure leaves the profile `preview_ready` and does not activate fallback;
+- the diagnostic itself must not edit `.env`. After profile-ready plus platform-preview acceptance, a separate local configuration step may set the internal UUID as `FALLBACK_VOICE_PROFILE_ID` and restart;
+- startup may allow only `TTS_PROVIDER=dashscope` while LLM/Embedding/Voice/Translation remain Mock. PlaybackService and AudioStore must receive the reviewed factory result instead of hard-coded `MockTTSProvider`. Public contracts remain provider-neutral;
+- one technical preview PASS is not four-turn real classroom TTS PASS. Real classroom pacing remains a later bounded acceptance after this diagnostic.
+- the host `/opt/homebrew` parent is currently world-writable without sticky/ACL, so the charged attempt must not execute through host Homebrew Python/uv/FFmpeg. Run only inside the rebuilt, locked backend Docker image with container Python while invoking Docker through the root-owned `/usr/local/bin/docker` symlink. If that isolated path cannot complete the Gate, stop and require host permission remediation; do not fall back to host tools.
+
+### 17.3 Teacher-gated live advancement
+
+Add OpenAPI operation 68:
+
+`POST /debates/{debate_id}/next`, operation ID `advanceDebatePlayback`, request `AdvancePlaybackRequest`, response `PlaybackState`, exact `401/403/404/409` errors. The closed request contains required `expected_control_version` and `expected_current_turn_id`. A single transaction CAS provides at-most-once advancement; no separate idempotency ledger is added. Strict surface becomes `59 paths / 68 operations`, `55 implemented / 13 later-wave placeholders`.
+
+`PlaybackState.status` adds `waiting_next`; every response adds required derived boolean `next_turn_ready`. It may be true only for `mode=live/status=waiting_next`. It never carries successor text, sources, audio/media URL or supplier data.
+
+Live transitions are frozen as:
+
+1. Start arms only the first turn: `preparing→ready→media.prepare→audio.play→started_ack→playing`;
+2. intermediate native `ended_ack` or Skip completes the public current turn, revokes media, increments control version and enters `waiting_next`; `current_turn_id` remains the just-completed public turn and no successor content is published;
+3. hidden preparation may continue within the existing current-plus-one cap. If the successor was not ready when the first `playback.waiting_next` event committed, that event carries `next_turn_ready=false`. When the successor later commits final/TTS/audio ready under the same fence, the server persists a new sequenced `playback.waiting_next` readiness-change event for the same completed turn/control version with `next_turn_ready=true`; it still carries no successor ID, speech, sources or media. `turn.ready` does not carry `next_turn_ready` and is not relied on to unlock the button;
+4. Next succeeds only when the caller is still course teacher, Debate is running, playback is live waiting-next, both expected values match, the current turn is public with a complete public prefix, the deterministic adjacent successor exists and is final/TTS/audio ready, and no cancellation fence invalidated it;
+5. successful Next atomically moves `current_turn_id` to the adjacent successor, enters `ready`, increments control version, then uses `playback_action=next` in the existing media/started/play-failed handshake. The successor becomes public only at committed `playback.started`;
+6. early/stale/duplicate/wrong-turn Next returns a stable 409 with zero side effects. It cannot arm future autoplay;
+7. final ended/Skip enters completed/debate_finished with no Next;
+8. pause/resume affect only the current playing/paused item; stop also accepts waiting-next. Refresh/WS reconnect/backend restart preserve waiting-next and never auto-advance. If Next already committed to ready before refresh, that authorization remains committed;
+9. full replay keeps automatic continuous playback of already-public items; single replay is unchanged. `waiting_next` is live-only.
+
+Add closed persistent WS event `playback.waiting_next` with only `completed_turn_id`, `control_version`, and `next_turn_ready`. Do not add a WS inbound Next command. Add `next` to media prepare/started/play-failed `playback_action`. `media.prepare` rejects waiting-next and every unadvanced successor.
+
+Frontend adds one 44px bilingual Next button, enabled only for live `waiting_next && next_turn_ready && controllerReady && !busy`. Native ended sends only ended-ack and never prepares the successor locally. The committed waiting state retains the completed turn, makes all Avatars non-speaking, shows neutral waiting copy and exposes no successor.
+
+### 17.4 Migration and deterministic checks
+
+- add immutable migration `0005_wave2_manual_advance`; SQLite rebuilds only `playback_states` to add `waiting_next` to the status check and a live-only waiting constraint. `next_turn_ready` remains a query-derived field, not a column;
+- fresh/repeat/populated `0004→0005`, downgrade/re-upgrade, named constraint/index reflection, full Wave/Voice fingerprints and empty FK check are mandatory; VoiceProfile and historical TTS ledger receive zero migration updates/deletes;
+- parent/product OpenAPI remain byte-identical; update SHA, generated client, route/response fixtures, WS event/command schemas and positive/negative clean-diff generators;
+- tests cover ended/skip waiting, early/stale/duplicate/multitab Next, hidden prepared successor, Next→exactly one media prepare, final completion, stop/refresh/gap/restart, delayed callbacks, replay unchanged, Avatar pixels and TTS one-call/no-retry/redaction/cleanup;
+- full backend/frontend regression, Docker rebuild and real-browser G3 are mandatory.
+
+### 17.5 Stop conditions and current gate state
+
+Stop for a second enrollment, more than one new diagnostic TTS call, ambiguous supplier outcome, missing existing mapping, supplier/prepared-content leakage, migration data loss, 3D still transparent, automatic live successor publication/playback, or any Wave 3/4 expansion.
+
+The earlier lower-effort review was problem-finding only and has no Gate-signing authority. Independent `gpt-5.6-sol high` reviewed the final stable design and returned `PASS / G1 AUTHORIZED` with zero P0/P1. After Luna implementation and deterministic checks, a concentrated independent Sol High G2 audit returned `PASS` with zero P0/P1/P2 and authorized exactly one locked-Docker attempt=3 call. That real call failed safely, so G2 remains code PASS but manual G3 remains unsigned.
+
+## 18. `.6` implementation, audit, Docker and real-TTS record
+
+Main-agent status at `2026-08-28 03:56 Asia/Shanghai`: `G1/G1.5/G2 PASS / MANUAL G3 NOT PASS`.
+
+- visible Avatar: the renderer preserves `Material` versus `Material[]`, tests fail on the old transparent-canvas regression, and the prior Docker browser check showed visible Bowen/KaiKai local GLB faces. The final combined Next-flow state/action and projection-distance check still requires an authenticated teacher browser session;
+- teacher advancement: backend-authoritative `waiting_next`, derived `next_turn_ready`, adjacent-successor CAS, public-prefix/audio/fence revalidation, sequenced readiness change and action=`next` are implemented. The frontend native-ended path only acknowledges completion; it never prepares or starts the successor. Multitab, delayed HTTP/WS, stale snapshot, stop/final, restart and replay regressions pass;
+- concurrency and migration: the cross-process SQLite claim starts with `BEGIN IMMEDIATE` in a fresh Session and revalidates every Next invariant in the same writer transaction. `0005_wave2_manual_advance` passes fresh/repeat/populated, 0004→0005, downgrade/re-upgrade, named schema/index, full Wave/Voice/TTS-ledger fingerprints and empty foreign-key checks;
+- TTS safety: canonical Beijing result URL handling, DNS/TLS pinning, complete-WAV validation, deterministic UUID5 durable claim, one-call/no-retry counters, operator-only preview, teacher-only same-origin media and provider composition all passed the focused and concentrated Sol High audits;
+- full deterministic checks pass: backend `204/204`; frontend `13 files / 71 tests`; Ruff check/format; mypy `78` sources; ESLint; TypeScript; Prettier; Next production build; OpenAPI `59 paths / 68 operations`, exact `55 implemented / 13 placeholders`; 68-response contract; route positive + 13 negatives; WS events `30/17`, commands `6/7`, private results `5/6`; clean generation; repository/secret boundary; Compose;
+- rebuilt backend/frontend/gateway containers are healthy, FFmpeg remains in the locked backend image, and container Alembic is `0005_wave2_manual_advance (head)`;
+- exactly one attempt=3 TTS call ran inside the locked backend Docker. It returned durable `failed` with safe code `tts_audio_invalid`, `request_count=1`, `charged_count=1`, no preview ID/bytes, and left the system profile `preview_ready`. Active preview/file counts are zero. There was no retry, enrollment, list/exists/delete, `.env` edit or fallback activation;
+- cumulative real calls are Voice enrollment `1` successful, TTS `3` failed, LLM `0`, Embedding `0`, Translation `0`. The supplier-side cloned voice still exists;
+- `RAG_PIPELINE_PASS / FORMAL_TIKTOK_RAG_CONTENT_ACCEPTANCE_PENDING` remains exact;
+- manual G3 is not signed. Blocking evidence is the failed real-English TTS Gate plus the not-yet-completed authenticated combined Next/3D browser pass. No Wave 3/4 implementation was entered.

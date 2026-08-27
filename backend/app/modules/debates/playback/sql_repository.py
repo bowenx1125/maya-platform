@@ -17,6 +17,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from .events import EventRecord
 from .protocols import (
@@ -453,6 +454,199 @@ class SqlPlaybackRepository(PlaybackRepository):
 
     def save_playback(self, db: Any, state: SqlRow) -> None:
         self._update_row(db, "playback_states", state, key="debate_id")
+
+    def advance_playback_cas(
+        self,
+        db: Any,
+        debate: SqlRow,
+        *,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        successor_turn_id: str,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        """Atomically claim the live waiting successor transition.
+
+        The application request session may already hold a read snapshot after
+        resolving the playback DTO.  SQLite WAL cannot promote that snapshot
+        after another writer commits, so a Next claim must never write through
+        it.  When a session factory is available, use the short-lived claim
+        transaction below instead.  The legacy branch is retained for small
+        repository doubles that do not expose a factory.
+        """
+
+        if self.session_factory is not None:
+            return self.claim_next_playback(
+                debate_id=str(debate.id),
+                expected_control_version=expected_control_version,
+                expected_current_turn_id=expected_current_turn_id,
+                successor_turn_id=successor_turn_id,
+                teacher_user_id=teacher_user_id,
+            )
+
+        changed = db.execute(
+            text(
+                "UPDATE playback_states SET status='ready', mode='live', "
+                "current_turn_id=:successor_turn_id, cursor_ms=0, "
+                "control_version=:next_control_version, server_started_at=NULL, "
+                "updated_at=:updated_at WHERE debate_id=:debate_id "
+                "AND status='waiting_next' AND mode='live' "
+                "AND current_turn_id=:expected_current_turn_id "
+                "AND control_version=:expected_control_version "
+                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=:debate_id "
+                "AND debates.status='running')"
+            ),
+            {
+                "successor_turn_id": successor_turn_id,
+                "next_control_version": expected_control_version + 1,
+                "updated_at": _now(),
+                "debate_id": str(debate.id),
+                "expected_current_turn_id": expected_current_turn_id,
+                "expected_control_version": expected_control_version,
+            },
+        )
+        return int(getattr(changed, "rowcount", 0)) == 1
+
+    def claim_next_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        successor_turn_id: str,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        """Run the cross-process Next claim in a fresh, serialized transaction.
+
+        ``BEGIN IMMEDIATE`` is deliberately the first SQL sent on the new
+        connection.  It takes SQLite's writer lock before any validation read,
+        so another process either waits for this claim to commit or validates
+        against its committed result.  A failed validation/claim is therefore
+        a deterministic stale result rather than a WAL snapshot promotion
+        error.  The final UPDATE repeats the identity CAS; the write lock also
+        prevents a concurrent writer from changing any gate between the
+        validation SELECT and this UPDATE.
+        """
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        params = {
+            "debate_id": debate_id,
+            "expected_control_version": expected_control_version,
+            "expected_current_turn_id": expected_current_turn_id,
+            "successor_turn_id": successor_turn_id,
+            "teacher_user_id": teacher_user_id,
+        }
+        try:
+            # Do not issue a SELECT (or any other statement) before this
+            # explicit write transaction.  This is the WAL snapshot fix.
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            candidate = claim_session.execute(
+                text(
+                    "SELECT ps.rowid AS claim_rowid "
+                    "FROM playback_states AS ps "
+                    "JOIN debates AS d ON d.id=ps.debate_id "
+                    "JOIN debate_turns AS current_turn "
+                    "ON current_turn.id=ps.current_turn_id "
+                    "AND current_turn.debate_id=ps.debate_id "
+                    "JOIN debate_turns AS successor "
+                    "ON successor.id=:successor_turn_id "
+                    "AND successor.debate_id=ps.debate_id "
+                    "AND successor.turn_index=current_turn.turn_index + 1 "
+                    "WHERE ps.debate_id=:debate_id "
+                    "AND ps.status='waiting_next' AND ps.mode='live' "
+                    "AND ps.current_turn_id=:expected_current_turn_id "
+                    "AND ps.control_version=:expected_control_version "
+                    "AND ps.replay_scope IS NULL AND ps.replay_index IS NULL "
+                    "AND d.status='running' "
+                    "AND :teacher_user_id IS NOT NULL "
+                    "AND EXISTS (SELECT 1 FROM course_members AS cm "
+                    "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
+                    "AND cm.role='teacher') "
+                    "AND current_turn.publication_status='public' "
+                    "AND NOT EXISTS (SELECT 1 FROM debate_turns AS prefix "
+                    "WHERE prefix.debate_id=ps.debate_id "
+                    "AND prefix.turn_index < current_turn.turn_index "
+                    "AND prefix.publication_status <> 'public') "
+                    "AND (SELECT COUNT(*) FROM debate_turns AS prefix_count "
+                    "WHERE prefix_count.debate_id=ps.debate_id "
+                    "AND prefix_count.turn_index < current_turn.turn_index) "
+                    "= current_turn.turn_index "
+                    "AND NOT EXISTS (SELECT 1 FROM debate_turns AS duplicate "
+                    "WHERE duplicate.debate_id=ps.debate_id "
+                    "AND duplicate.turn_index=current_turn.turn_index + 1 "
+                    "AND duplicate.id <> successor.id) "
+                    "AND successor.publication_status='unpublished' "
+                    "AND successor.generation_status='final_ready' "
+                    "AND successor.preparation_stage='ready' "
+                    "AND trim(COALESCE(successor.speech, '')) <> '' "
+                    "AND successor.audio_file_id IS NOT NULL "
+                    "AND successor.audio_duration_ms IS NOT NULL "
+                    "AND successor.audio_duration_ms > 0 "
+                    "AND EXISTS (SELECT 1 FROM stored_files AS sf "
+                    "WHERE sf.id=successor.audio_file_id AND sf.state='active') "
+                    "AND successor.transcript_hash IS NOT NULL "
+                    "AND trim(successor.transcript_hash) <> '' "
+                    "AND successor.cutoff_turn_index=successor.turn_index - 1 "
+                    "AND json_valid(successor.predecessor_turn_ids_json) "
+                    "AND successor.predecessor_turn_ids_json = ("
+                    "SELECT json_group_array(prefix_ids.id) FROM ("
+                    "SELECT id FROM debate_turns "
+                    "WHERE debate_id=ps.debate_id "
+                    "AND turn_index < successor.turn_index "
+                    "ORDER BY turn_index, id"
+                    ") AS prefix_ids) "
+                    "AND (successor.actual_tts_voice_kind IN "
+                    "('platform_profile', 'mock_sentinel')) "
+                    "AND ((successor.actual_tts_voice_kind='mock_sentinel' "
+                    "AND successor.actual_tts_voice_profile_id IS NULL) OR "
+                    "(successor.actual_tts_voice_kind='platform_profile' "
+                    "AND successor.actual_tts_voice_profile_id IS NOT NULL)) "
+                    "AND EXISTS (SELECT 1 FROM jobs AS successor_job "
+                    "WHERE successor_job.debate_id=ps.debate_id "
+                    "AND successor_job.turn_id=successor.id "
+                    "AND successor_job.state='completed' "
+                    "AND successor_job.cancellation_generation=d.cancellation_generation)"
+                ),
+                params,
+            ).first()
+            if candidate is None:
+                claim_session.rollback()
+                return False
+
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET status='ready', mode='live', "
+                    "current_turn_id=:successor_turn_id, cursor_ms=0, "
+                    "control_version=:next_control_version, server_started_at=NULL, "
+                    "updated_at=:updated_at WHERE rowid=:claim_rowid "
+                    "AND debate_id=:debate_id "
+                    "AND status='waiting_next' AND mode='live' "
+                    "AND current_turn_id=:expected_current_turn_id "
+                    "AND control_version=:expected_control_version "
+                    "AND replay_scope IS NULL AND replay_index IS NULL"
+                ),
+                {
+                    **params,
+                    "claim_rowid": candidate[0],
+                    "next_control_version": expected_control_version + 1,
+                    "updated_at": _now(),
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            # Includes a bounded SQLite busy timeout.  The caller exposes the
+            # same stale 409 as a losing CAS; it must never retry a provider or
+            # leak a transient 503 for this teacher command.
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
 
     def mark_turn_ready(
         self,

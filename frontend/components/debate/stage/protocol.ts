@@ -25,6 +25,7 @@ const PLAYBACK_EVENT_TYPES: readonly PlaybackEventType[] = [
   "playback.resumed",
   "playback.skipped",
   "playback.completed",
+  "playback.waiting_next",
   "replay.started",
   "replay.completed",
   "translation.batch_started",
@@ -174,6 +175,14 @@ export function consumeEventSequence(
 ): EventSequenceDecision {
   if (event.event_type === "snapshot") {
     const latest = event.payload.latest_sequence;
+    if (isFiniteNonNegativeInteger(latest) && latest <= lastSequence) {
+      return {
+        accepted: false,
+        duplicate: true,
+        gap: false,
+        nextSequence: lastSequence,
+      };
+    }
     return isFiniteNonNegativeInteger(latest)
       ? { accepted: true, duplicate: false, gap: false, nextSequence: latest }
       : {
@@ -283,6 +292,9 @@ export function deriveAvatarStates(
   const known = new Map(
     participants.map((participant) => [participant.id, participant]),
   );
+  if (playback.mode === "live" && playback.status === "waiting_next") {
+    return participants.map(idleState);
+  }
   if (eventStates.length > 0) {
     return participants.map((participant) => {
       const eventState = eventStates.find(

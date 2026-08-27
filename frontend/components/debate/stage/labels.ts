@@ -29,6 +29,8 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   statusReady: "Ready",
   statusPlaying: "Playing",
   statusPaused: "Paused",
+  waitingNext: "Waiting for the teacher to continue…",
+  next: "Next / 下一步",
   waitingForAudio: "Waiting for the server to prepare audio…",
   audioPaused: "Audio is paused until the server confirms resume.",
   connectionReady: "Connected",

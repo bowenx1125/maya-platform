@@ -118,6 +118,64 @@ function disposeObject(root: THREE.Object3D): void {
   });
 }
 
+function styledMaterialForMesh(
+  source: THREE.Material,
+  meshName: string,
+  skinColor: THREE.Color,
+  eyeColor: THREE.Color,
+): THREE.Material {
+  const candidate = source as RenderableMaterial;
+  const material = candidate.userData.mayaAvatarMaterial
+    ? candidate
+    : (source.clone() as RenderableMaterial);
+  material.userData.mayaAvatarMaterial = true;
+  if (meshName.includes("eye")) {
+    material.color?.copy(eyeColor);
+    if (material.roughness !== undefined) material.roughness = 0.25;
+  } else if (meshName.includes("head") || meshName.includes("neck")) {
+    material.color?.copy(skinColor);
+    if (material.roughness !== undefined) material.roughness = 0.62;
+  }
+  return material;
+}
+
+/**
+ * Apply a platform AvatarConfig without changing Three.js material shape.
+ *
+ * A GLB mesh with one primitive and no geometry groups must keep one material:
+ * Three.js only dispatches material arrays through geometry groups, so turning
+ * that material into a one-item array makes the otherwise-ready mesh render
+ * zero triangles. Meshes that already carry a material array retain that
+ * array, preserving the grouped multi-material contract.
+ */
+export function applyAvatarConfigMaterials(
+  root: THREE.Object3D,
+  config: AvatarConfig,
+): void {
+  const skinColor = new THREE.Color(
+    SKIN_COLORS[config.material_theme] ?? SKIN_COLORS.demo,
+  );
+  const eyeColor = new THREE.Color(
+    EYE_COLORS[config.eye_color ?? "default"] ?? EYE_COLORS.default,
+  );
+  root.traverse((object) => {
+    if (!isMesh(object)) return;
+    const meshName = object.name.toLowerCase();
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((source) =>
+        styledMaterialForMesh(source, meshName, skinColor, eyeColor),
+      );
+      return;
+    }
+    object.material = styledMaterialForMesh(
+      object.material,
+      meshName,
+      skinColor,
+      eyeColor,
+    );
+  });
+}
+
 /**
  * A small presentation adapter: the platform owns state/config, while this
  * class owns only Three.js resources and the animation loop.
@@ -261,34 +319,7 @@ export class AvatarRenderer {
   }
 
   private applyConfig(root: THREE.Object3D, config: AvatarConfig): void {
-    const skinColor = new THREE.Color(
-      SKIN_COLORS[config.material_theme] ?? SKIN_COLORS.demo,
-    );
-    const eyeColor = new THREE.Color(
-      EYE_COLORS[config.eye_color ?? "default"] ?? EYE_COLORS.default,
-    );
-    root.traverse((object) => {
-      if (!isMesh(object)) return;
-      const meshName = object.name.toLowerCase();
-      const materials = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
-      object.material = materials.map((source) => {
-        const candidate = source as RenderableMaterial;
-        const material = candidate.userData.mayaAvatarMaterial
-          ? candidate
-          : (source.clone() as RenderableMaterial);
-        material.userData.mayaAvatarMaterial = true;
-        if (meshName.includes("eye")) {
-          material.color?.copy(eyeColor);
-          if (material.roughness !== undefined) material.roughness = 0.25;
-        } else if (meshName.includes("head") || meshName.includes("neck")) {
-          material.color?.copy(skinColor);
-          if (material.roughness !== undefined) material.roughness = 0.62;
-        }
-        return material;
-      });
-    });
+    applyAvatarConfigMaterials(root, config);
   }
 
   private expressionForState(): AvatarExpression {

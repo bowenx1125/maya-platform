@@ -28,6 +28,8 @@ export type DebateDraftRequest =
   operations["createDebate"]["requestBody"]["content"]["application/json"];
 export type DebateDraftUpdateRequest =
   operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
+export type AdvancePlaybackRequest =
+  operations["advanceDebatePlayback"]["requestBody"]["content"]["application/json"];
 export type DebateParticipant = components["schemas"]["DebateParticipant"];
 export type DebateTurn = components["schemas"]["DebateTurn"];
 export type DebatePlaybackState = components["schemas"]["PlaybackState"];
@@ -807,6 +809,21 @@ export class PlatformApi {
       "/debates/{debate_id}/skip",
       debateId,
       expectedControlVersion,
+    );
+  }
+
+  async advanceDebatePlayback(
+    debateId: string,
+    body: AdvancePlaybackRequest,
+  ): Promise<DebatePlaybackState> {
+    return unwrap(
+      await this.client.POST("/debates/{debate_id}/next", {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body,
+      }),
     );
   }
 

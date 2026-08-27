@@ -146,6 +146,16 @@ class PlaybackRepository(Protocol):
 
     def save_playback(self, db: Any, state: Any) -> None: ...
 
+    def advance_playback_cas(
+        self,
+        db: Any,
+        debate: Any,
+        *,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        successor_turn_id: str,
+    ) -> bool: ...
+
     def mark_turn_ready(
         self,
         db: Any,
@@ -246,6 +256,24 @@ class MemoryPlaybackRepository:
 
     def save_playback(self, db: Any, state: Any) -> None:
         del db, state
+
+    def advance_playback_cas(
+        self,
+        db: Any,
+        debate: MemoryDebate,
+        *,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        successor_turn_id: str,
+    ) -> bool:
+        del db, successor_turn_id
+        state = self.playback_state(None, debate)
+        return bool(
+            state.control_version == expected_control_version
+            and state.current_turn_id == expected_current_turn_id
+            and state.status == "waiting_next"
+            and state.mode == "live"
+        )
 
     def mark_turn_ready(
         self,

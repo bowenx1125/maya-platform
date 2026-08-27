@@ -19,9 +19,11 @@ class ClosedModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-PlaybackStatus = Literal["preparing", "ready", "playing", "paused", "completed", "stopped"]
+PlaybackStatus = Literal[
+    "preparing", "ready", "playing", "paused", "waiting_next", "completed", "stopped"
+]
 PlaybackMode = Literal["live", "replay"]
-PlaybackAction = Literal["start", "resume", "replay"]
+PlaybackAction = Literal["start", "resume", "next", "replay"]
 AvatarMotion = Literal["idle", "listening", "speaking", "thinking", "nod_yes"]
 AvatarExpression = Literal["neutral", "attentive", "happy", "serious_angry", "sad"]
 AvatarStrength = Literal["low", "medium", "high"]
@@ -34,6 +36,7 @@ class PlaybackStateDTO(ClosedModel):
     cursor_ms: int = Field(ge=0)
     playback_rate: float = Field(ge=0.95, le=1.25)
     control_version: int = Field(ge=0)
+    next_turn_ready: bool
 
 
 class RetrievalSourceDTO(ClosedModel):
@@ -96,6 +99,18 @@ class PlaybackCursorPayload(ClosedModel):
     cursor_ms: int = Field(ge=0)
     control_version: int = Field(ge=0)
     playback_rate: float | None = Field(default=None, ge=0.95, le=1.25)
+
+
+class PlaybackWaitingNextPayload(ClosedModel):
+    """Readiness-only signal for the teacher's next-turn gate.
+
+    The successor identity and all prepared content remain server-side until
+    the teacher commits the REST Next CAS and the browser acknowledges media.
+    """
+
+    completed_turn_id: UUID
+    control_version: int = Field(ge=0)
+    next_turn_ready: bool
 
 
 class ReplayPayload(ClosedModel):

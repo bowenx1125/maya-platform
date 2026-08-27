@@ -8,7 +8,7 @@ import type { AvatarConfig, AvatarExpression, AvatarState } from "../../avatar";
 
 export type PlaybackStatus = DebatePlaybackState["status"];
 export type PlaybackMode = DebatePlaybackState["mode"];
-export type PlaybackAction = "start" | "resume" | "replay";
+export type PlaybackAction = "start" | "resume" | "next" | "replay";
 
 /**
  * Keep the classroom component on the platform API boundary.  In particular,
@@ -21,12 +21,16 @@ export type DebatePlaybackApi = Pick<
   | "pauseDebate"
   | "resumeDebate"
   | "skipDebateTurn"
+  | "advanceDebatePlayback"
   | "stopDebate"
   | "replayDebate"
   | "replayDebateTurn"
 >;
 
 export type DebateStartRequest = Parameters<PlatformApi["startDebate"]>[1];
+export type AdvancePlaybackRequest = Parameters<
+  PlatformApi["advanceDebatePlayback"]
+>[1];
 
 export type PlaybackStageLabels = {
   stageTitle?: string;
@@ -52,6 +56,8 @@ export type PlaybackStageLabels = {
   statusReady?: string;
   statusPlaying?: string;
   statusPaused?: string;
+  waitingNext?: string;
+  next?: string;
   waitingForAudio?: string;
   audioPaused?: string;
   connectionReady?: string;
@@ -91,6 +97,7 @@ export type PlaybackEventType =
   | "playback.resumed"
   | "playback.skipped"
   | "playback.completed"
+  | "playback.waiting_next"
   | "replay.started"
   | "replay.completed"
   | "translation.batch_started"

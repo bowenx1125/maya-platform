@@ -37,6 +37,7 @@ from app.core.models import (
     IdempotencyRecord,
     Job,
     KnowledgeSnapshot,
+    StoredFile,
     VoiceProfile,
 )
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
@@ -73,6 +74,57 @@ def _utc_datetime(value: datetime) -> datetime:
 
 def _as_uuid(value: str | UUID) -> UUID:
     return value if isinstance(value, UUID) else UUID(str(value))
+
+
+def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
+    """Derive the closed public readiness bit without persisting a column."""
+
+    if playback.status != "waiting_next" or playback.mode != "live" or not playback.current_turn_id:
+        return False
+    if db.scalar(select(Debate.status).where(Debate.id == debate_id)) != "running":
+        return False
+    turns = list(
+        db.scalars(
+            select(DebateTurn)
+            .where(DebateTurn.debate_id == debate_id)
+            .order_by(DebateTurn.turn_index, DebateTurn.id)
+        ).all()
+    )
+    current = next((row for row in turns if row.id == playback.current_turn_id), None)
+    if current is None:
+        return False
+    successors = [row for row in turns if row.turn_index == current.turn_index + 1]
+    if len(successors) != 1:
+        return False
+    successor = successors[0]
+    if successor.publication_status != "unpublished":
+        return False
+    if successor.generation_status not in {"final_ready", "ready", "completed"}:
+        return False
+    if not successor.audio_file_id:
+        return False
+    if successor.transcript_hash is None or successor.cutoff_turn_index != successor.turn_index - 1:
+        return False
+    try:
+        predecessor_ids = json.loads(successor.predecessor_turn_ids_json)
+    except (TypeError, ValueError):
+        return False
+    expected_ids = [row.id for row in turns if row.turn_index < successor.turn_index]
+    if predecessor_ids != expected_ids:
+        return False
+    if any(
+        row.publication_status != "public" for row in turns if row.turn_index < successor.turn_index
+    ):
+        return False
+    return (
+        db.scalar(
+            select(StoredFile.id).where(
+                StoredFile.id == successor.audio_file_id,
+                StoredFile.state == "active",
+            )
+        )
+        is not None
+    )
 
 
 def _canonical_hash(value: Any) -> str:
@@ -591,6 +643,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             cursor_ms=0,
             playback_rate=1.0,
             control_version=0,
+            next_turn_ready=False,
         )
     else:
         playback_dto = PlaybackStateDTO.model_validate(
@@ -603,6 +656,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 "cursor_ms": playback.cursor_ms,
                 "playback_rate": playback.playback_rate,
                 "control_version": playback.control_version,
+                "next_turn_ready": _next_turn_ready(db, debate.id, playback),
             }
         )
     participant_dtos = [

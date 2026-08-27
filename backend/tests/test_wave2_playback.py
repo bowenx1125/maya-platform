@@ -13,6 +13,7 @@ from contextlib import ExitStack
 from datetime import UTC, datetime
 from email.utils import format_datetime
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -366,6 +367,227 @@ def test_sql_start_prepares_only_current_and_successor_without_public_leak(
         )
         assert replay.status_code == 200
         assert replay.json()["id"] == debate_id
+
+
+def test_sql_next_cross_session_claim_has_one_winner_and_stable_stale_loser(
+    app_factory: Any,
+) -> None:
+    """Two independent request sessions cannot promote the same successor twice.
+
+    The barrier is deliberately placed after each service has read the same
+    waiting state and immediately before its repository claim.  This reproduces
+    the SQLite WAL race that used to turn the second request into
+    ``SQLITE_BUSY_SNAPSHOT``/503; the fresh ``BEGIN IMMEDIATE`` claim must make
+    one request win and the other return the normal stale-control 409.
+    """
+
+    app, database, settings = app_factory()
+    with TestClient(app) as client:
+        bowen_id = _insert_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="Cross Session Bowen",
+            evidence="TikTok transparency privacy safeguards and accountable review.",
+        )
+        kaikai_id = _insert_published_agent(
+            database,
+            group_id=GROUP_KAIKAI_ID,
+            name="Cross Session KaiKai",
+            evidence="Competition expression proportional policy and user choice.",
+        )
+        _session, csrf = login(client)
+        created = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=_headers(csrf, **{"Idempotency-Key": "cross-session-next-create-001"}),
+            json={
+                "topic": TOPIC,
+                "participants": [
+                    {
+                        "agent_id": bowen_id,
+                        "stance_mode": "assigned",
+                        "assigned_stance": "support",
+                    },
+                    {
+                        "agent_id": kaikai_id,
+                        "stance_mode": "assigned",
+                        "assigned_stance": "oppose",
+                    },
+                ],
+                "round_count": 2,
+            },
+        )
+        assert created.status_code == 201, created.text
+        debate_id = created.json()["id"]
+        started = client.post(
+            f"/api/v1/debates/{debate_id}/start",
+            headers=_headers(csrf, **{"Idempotency-Key": "cross-session-next-start-001"}),
+            json={
+                "expected_revision": 0,
+                "expected_current_audio_debate_id": None,
+                "confirm_previous_audio_cleanup": False,
+            },
+        )
+        assert started.status_code == 200, started.text
+        ready = _wait_for_ready(client, debate_id)
+        current_turn_id = str(ready["playback"]["current_turn_id"])
+
+        # Wait until the on-demand successor has a durable final/audio/job
+        # result.  The app's normal generation worker remains Mock-only here.
+        deadline = time.monotonic() + 5
+        successor_turn_id: str | None = None
+        while time.monotonic() < deadline:
+            with database.session() as db:
+                rows = list(
+                    db.scalars(
+                        select(DebateTurn)
+                        .where(DebateTurn.debate_id == debate_id)
+                        .order_by(DebateTurn.turn_index)
+                    ).all()
+                )
+                if len(rows) >= 2:
+                    successor = rows[1]
+                    job_state = db.execute(
+                        text("SELECT state FROM jobs WHERE turn_id=:turn_id"),
+                        {"turn_id": successor.id},
+                    ).scalar_one_or_none()
+                    if (
+                        successor.generation_status == "final_ready"
+                        and successor.preparation_stage == "ready"
+                        and successor.audio_file_id is not None
+                        and job_state == "completed"
+                    ):
+                        successor_turn_id = successor.id
+                        break
+            time.sleep(0.02)
+        assert successor_turn_id is not None
+
+        # Establish the exact waiting boundary without involving a websocket;
+        # this leaves both service sessions with the same expected control and
+        # current turn while retaining the generated audio and job fence.
+        with database.session() as db:
+            db.execute(
+                text(
+                    "UPDATE debate_turns SET publication_status='public', "
+                    "public_at=:public_at, updated_at=:updated_at "
+                    "WHERE id=:turn_id AND debate_id=:debate_id"
+                ),
+                {
+                    "turn_id": current_turn_id,
+                    "debate_id": debate_id,
+                    "public_at": datetime.now(UTC),
+                    "updated_at": datetime.now(UTC),
+                },
+            )
+            playback = db.execute(
+                text("SELECT control_version FROM playback_states WHERE debate_id=:debate_id"),
+                {"debate_id": debate_id},
+            ).scalar_one()
+            expected_control_version = int(playback) + 1
+            db.execute(
+                text(
+                    "UPDATE playback_states SET status='waiting_next', mode='live', "
+                    "current_turn_id=:turn_id, cursor_ms=0, "
+                    "control_version=:control_version, replay_scope=NULL, "
+                    "replay_index=NULL, updated_at=:updated_at "
+                    "WHERE debate_id=:debate_id"
+                ),
+                {
+                    "turn_id": current_turn_id,
+                    "control_version": expected_control_version,
+                    "updated_at": datetime.now(UTC),
+                    "debate_id": debate_id,
+                },
+            )
+
+        repository_a = SqlPlaybackRepository(session_factory=database.session_factory)
+        repository_b = SqlPlaybackRepository(session_factory=database.session_factory)
+        service_a = PlaybackService(
+            repository_a,
+            audio_store=AudioStore(settings.resolved_data_root),
+            event_hub=DebateEventHub(),
+            task_manager=TaskManager(),
+            session_factory=database.session_factory,
+            settings=settings,
+        )
+        service_b = PlaybackService(
+            repository_b,
+            audio_store=AudioStore(settings.resolved_data_root),
+            event_hub=DebateEventHub(),
+            task_manager=TaskManager(),
+            session_factory=database.session_factory,
+            settings=settings,
+        )
+        claim_barrier = Barrier(2)
+
+        def synchronized_claim(repository: SqlPlaybackRepository) -> Any:
+            original = repository.claim_next_playback
+
+            def claim(**kwargs: Any) -> bool:
+                claim_barrier.wait(timeout=5)
+                return original(**kwargs)
+
+            return claim
+
+        repository_a.claim_next_playback = synchronized_claim(repository_a)  # type: ignore[method-assign]
+        repository_b.claim_next_playback = synchronized_claim(repository_b)  # type: ignore[method-assign]
+
+        teacher_context = SimpleNamespace(
+            user=SimpleNamespace(id="98644172-6bbb-5383-8198-3b78dcd5b9ab")
+        )
+
+        def invoke(service: PlaybackService) -> Any:
+            db = database.session_factory()
+            try:
+                return asyncio.run(
+                    service.next(
+                        db,
+                        debate_id,
+                        expected_control_version=expected_control_version,
+                        expected_current_turn_id=current_turn_id,
+                        context=teacher_context,
+                    )
+                )
+            except Exception as exc:  # assert the exact exception below
+                return exc
+            finally:
+                db.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = tuple(pool.map(invoke, (service_a, service_b)))
+
+        successes = [item for item in outcomes if not isinstance(item, Exception)]
+        stale = [
+            item
+            for item in outcomes
+            if isinstance(item, PlatformError) and item.code == "stale_control_version"
+        ]
+        unexpected = [
+            item
+            for item in outcomes
+            if isinstance(item, Exception)
+            and not (isinstance(item, PlatformError) and item.code == "stale_control_version")
+        ]
+        assert len(successes) == 1, outcomes
+        assert len(stale) == 1, outcomes
+        assert not unexpected, unexpected
+        advanced = cast(Any, successes[0])
+        assert advanced.status == "ready"
+        assert str(advanced.current_turn_id) == successor_turn_id
+        assert advanced.control_version == expected_control_version + 1
+
+        with database.session() as db:
+            status, current, control = db.execute(
+                text(
+                    "SELECT status,current_turn_id,control_version FROM playback_states "
+                    "WHERE debate_id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            ).one()
+            assert (status, current, control) == (
+                "ready",
+                successor_turn_id,
+                expected_control_version + 1,
+            )
 
 
 def test_main_composes_playback_service(app_factory: Any) -> None:
@@ -969,6 +1191,7 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                     assert unchanged.json()["playback"]["control_version"] == control_version
                     assert unchanged.json()["playback"]["status"] == "ready"
                 prepare_id = str(uuid4())
+                playback_action = "start" if turn_number == 0 else "next"
                 socket.send_json(
                     {
                         "command_id": prepare_id,
@@ -978,7 +1201,7 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                         "expected_control_version": control_version,
                         "controller_epoch": epoch,
                         "turn_id": turn_id,
-                        "playback_action": "start",
+                        "playback_action": playback_action,
                     }
                 )
                 media = _receive_until(socket, "message_type", "media.prepared")
@@ -1001,7 +1224,7 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                         "expected_control_version": control_version,
                         "controller_epoch": epoch,
                         "turn_id": turn_id,
-                        "playback_action": "start",
+                        "playback_action": playback_action,
                     }
                 )
                 public = _receive_until(socket, "event_type", "playback.started")
@@ -1018,9 +1241,29 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                     assert skipped.status_code == 200, skipped.text
                     skip_event = _receive_until(socket, "event_type", "playback.skipped")
                     assert skip_event["payload"]["turn_id"] == turn_id
-                    control_version = skip_event["payload"]["control_version"]
+                    waiting = _receive_until(socket, "event_type", "playback.waiting_next")
+                    assert set(waiting["payload"]) == {
+                        "completed_turn_id",
+                        "control_version",
+                        "next_turn_ready",
+                    }
+                    assert waiting["payload"]["completed_turn_id"] == turn_id
+                    control_version = waiting["payload"]["control_version"]
                     next_after_skip = skipped.json()["current_turn_id"]
-                    assert next_after_skip != turn_id
+                    assert next_after_skip == turn_id
+                    assert skipped.json()["status"] == "waiting_next"
+                    advanced = client.post(
+                        f"/api/v1/debates/{debate_id}/next",
+                        headers=_headers(csrf),
+                        json={
+                            "expected_control_version": control_version,
+                            "expected_current_turn_id": turn_id,
+                        },
+                    )
+                    assert advanced.status_code == 200, advanced.text
+                    assert advanced.json()["status"] == "ready"
+                    assert advanced.json()["current_turn_id"] != turn_id
+                    control_version = advanced.json()["control_version"]
                 else:
                     socket.send_json(
                         {
@@ -1036,6 +1279,22 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                     completed = _receive_until(socket, "event_type", "playback.completed")
                     assert completed["payload"]["turn_id"] == turn_id
                     control_version = completed["payload"]["control_version"]
+                    if turn_number < 3:
+                        waiting = _receive_until(socket, "event_type", "playback.waiting_next")
+                        assert waiting["payload"]["completed_turn_id"] == turn_id
+                        control_version = waiting["payload"]["control_version"]
+                        advanced = client.post(
+                            f"/api/v1/debates/{debate_id}/next",
+                            headers=_headers(csrf),
+                            json={
+                                "expected_control_version": control_version,
+                                "expected_current_turn_id": turn_id,
+                            },
+                        )
+                        assert advanced.status_code == 200, advanced.text
+                        assert advanced.json()["status"] == "ready"
+                        assert advanced.json()["current_turn_id"] != turn_id
+                        control_version = advanced.json()["control_version"]
                 if turn_number < 3:
                     _wait_for_ready(client, debate_id)
 
@@ -1374,8 +1633,374 @@ async def test_controller_ticket_pause_resume_and_current_only_audio(tmp_path: P
         turn_id=first_turn_id,
     )
     assert advanced.current_turn_id is not None
-    assert str(advanced.current_turn_id) != first_turn_id
+    assert str(advanced.current_turn_id) == first_turn_id
+    assert advanced.status == "waiting_next"
+    assert advanced.next_turn_ready is True
+    next_state = await service.next(
+        None,
+        debate.id,
+        expected_control_version=advanced.control_version,
+        expected_current_turn_id=first_turn_id,
+    )
+    assert str(next_state.current_turn_id) == debate.turns[1].id
+    assert next_state.status == "ready"
+    assert next_state.next_turn_ready is False
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_manual_next_cas_preserves_waiting_boundary_and_ack_publishes_only_then(
+    tmp_path: Path,
+) -> None:
+    service, debate, tasks = await _memory_ready_service(tmp_path)
+    first_turn = debate.turns[0]
+    successor = debate.turns[1]
+    controller = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=0,
+        session_hash="next-session",
+        connection_id="next-tab",
+    )
+    epoch = str(controller.controller_epoch)
+    await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="next-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    playing = await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="next-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    waiting = await service.ended_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=playing.control_version,
+        epoch=epoch,
+        session_hash="next-session",
+        turn_id=first_turn.id,
+    )
+    assert waiting.status == "waiting_next"
+    assert str(waiting.current_turn_id) == first_turn.id
+    assert waiting.next_turn_ready is True
+    assert successor.publication_status == "unpublished"
+    waiting_events = [
+        event
+        for event in service.event_hub.store.events_after(debate.id, 0)
+        if event.event_type == "playback.waiting_next"
+    ]
+    assert len(waiting_events) == 1
+    assert set(waiting_events[0].payload) == {
+        "completed_turn_id",
+        "control_version",
+        "next_turn_ready",
+    }
+    assert successor.id not in str(waiting_events[0].payload)
+
+    with pytest.raises(PlatformError) as hidden_media:
+        await service.media_prepare(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=waiting.control_version,
+            epoch=epoch,
+            session_hash="next-session",
+            turn_id=successor.id,
+            action="next",
+        )
+    assert hidden_media.value.code == "not_found"
+
+    outcomes = await asyncio.gather(
+        *(
+            service.next(
+                None,
+                debate.id,
+                expected_control_version=waiting.control_version,
+                expected_current_turn_id=first_turn.id,
+            )
+            for _index in range(2)
+        ),
+        return_exceptions=True,
+    )
+    successes = [item for item in outcomes if not isinstance(item, Exception)]
+    failures = [item for item in outcomes if isinstance(item, PlatformError)]
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert failures[0].code == "stale_control_version"
+    advanced = cast(Any, successes[0])
     assert advanced.status == "ready"
+    assert str(advanced.current_turn_id) == successor.id
+    assert advanced.control_version == waiting.control_version + 1
+    assert advanced.next_turn_ready is False
+    assert successor.publication_status == "unpublished"
+
+    prepared, _private = await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=advanced.control_version,
+        epoch=epoch,
+        session_hash="next-session",
+        turn_id=successor.id,
+        action="next",
+    )
+    assert prepared.binding.action == "next"
+    assert successor.publication_status == "unpublished"
+    await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=advanced.control_version,
+        epoch=epoch,
+        session_hash="next-session",
+        turn_id=successor.id,
+        action="next",
+    )
+    assert successor.publication_status == "public"
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_slow_successor_emits_false_then_true_readiness_change_without_leak(
+    tmp_path: Path,
+) -> None:
+    repository = MemoryPlaybackRepository()
+    debate = _memory_debate(repository, course_id=str(uuid4()))
+    release = asyncio.Event()
+    successor_started = asyncio.Event()
+
+    async def preparer(_db: Any, _debate: Any, turn: Any, **_kwargs: Any) -> Any:
+        if int(turn.turn_index) == 1:
+            successor_started.set()
+            await release.wait()
+        return {"speech": _valid_speech()}
+
+    tasks = TaskManager()
+    service = PlaybackService(
+        repository,
+        audio_store=AudioStore(tmp_path),
+        task_manager=tasks,
+        turn_preparer=preparer,
+    )
+    await service.start(
+        None,
+        debate.id,
+        expected_revision=0,
+        expected_current_audio_debate_id=None,
+        confirm_previous_audio_cleanup=False,
+    )
+    await asyncio.wait_for(successor_started.wait(), timeout=1)
+    first_turn = debate.turns[0]
+    controller = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=0,
+        session_hash="slow-session",
+        connection_id="slow-tab",
+    )
+    epoch = str(controller.controller_epoch)
+    await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="slow-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    playing = await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="slow-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    waiting = await service.ended_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=playing.control_version,
+        epoch=epoch,
+        session_hash="slow-session",
+        turn_id=first_turn.id,
+    )
+    assert waiting.status == "waiting_next"
+    assert waiting.next_turn_ready is False
+    events = [
+        event
+        for event in service.event_hub.store.events_after(debate.id, 0)
+        if event.event_type == "playback.waiting_next"
+    ]
+    assert [event.payload["next_turn_ready"] for event in events] == [False]
+    assert events[0].payload["completed_turn_id"] == first_turn.id
+
+    release.set()
+    await tasks.wait_debate(debate.id)
+    events = [
+        event
+        for event in service.event_hub.store.events_after(debate.id, 0)
+        if event.event_type == "playback.waiting_next"
+    ]
+    assert [event.payload["next_turn_ready"] for event in events] == [False, True]
+    assert all(
+        event.payload["completed_turn_id"] == first_turn.id
+        and event.payload["control_version"] == waiting.control_version
+        and set(event.payload) == {"completed_turn_id", "control_version", "next_turn_ready"}
+        for event in events
+    )
+    assert service._state(None, debate).status == "waiting_next"
+    assert service._state_dto(service._state(None, debate), None, debate).next_turn_ready is True
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_next_rejects_not_ready_and_never_changes_state(tmp_path: Path) -> None:
+    service, debate, tasks = await _memory_ready_service(tmp_path)
+    await tasks.close()
+    first_turn = debate.turns[0]
+    successor = debate.turns[1]
+    successor.generation_status = "pending"
+    successor.audio_relative_path = None
+    controller = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=0,
+        session_hash="not-ready-session",
+        connection_id="not-ready-tab",
+    )
+    epoch = str(controller.controller_epoch)
+    await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="not-ready-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    playing = await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="not-ready-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    waiting = await service.ended_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=playing.control_version,
+        epoch=epoch,
+        session_hash="not-ready-session",
+        turn_id=first_turn.id,
+    )
+    before = (waiting.status, str(waiting.current_turn_id), waiting.control_version)
+    events_before = list(service.event_hub.store.events_after(debate.id, 0))
+    with pytest.raises(PlatformError) as rejected:
+        await service.next(
+            None,
+            debate.id,
+            expected_control_version=waiting.control_version,
+            expected_current_turn_id=first_turn.id,
+        )
+    assert rejected.value.code == "next_not_ready"
+    after = service._state(None, debate)
+    assert (after.status, str(after.current_turn_id), after.control_version) == before
+    assert list(service.event_hub.store.events_after(debate.id, 0)) == events_before
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_final_live_end_is_completed_and_not_waiting_next(tmp_path: Path) -> None:
+    service, debate, tasks = await _memory_ready_service(tmp_path)
+    await tasks.close()
+    debate.turns = debate.turns[:1]
+    first_turn = debate.turns[0]
+    controller = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=0,
+        session_hash="final-session",
+        connection_id="final-tab",
+    )
+    epoch = str(controller.controller_epoch)
+    await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="final-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    playing = await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="final-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    completed = await service.ended_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=playing.control_version,
+        epoch=epoch,
+        session_hash="final-session",
+        turn_id=first_turn.id,
+    )
+    assert completed.status == "completed"
+    assert completed.next_turn_ready is False
+    assert str(completed.current_turn_id) == first_turn.id
+    assert debate.status == "debate_finished"
+    assert not any(
+        event.event_type == "playback.waiting_next"
+        for event in service.event_hub.store.events_after(debate.id, 0)
+    )
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_next_fence_readiness_rejects_malformed_persisted_prefix(tmp_path: Path) -> None:
+    service, debate, tasks = await _memory_ready_service(tmp_path)
+    await tasks.close()
+    first_turn, successor = debate.turns[:2]
+    successor.predecessor_turn_ids_json = json.dumps([str(uuid4())])
+    successor.transcript_hash = "committed-fence"
+    successor.cutoff_turn_index = 0
+    state = service._state(None, debate)
+    state.status = "waiting_next"
+    state.mode = "live"
+    state.current_turn_id = first_turn.id
+    assert service._state_dto(state, None, debate).next_turn_ready is False
     await tasks.close()
 
 
@@ -1451,12 +2076,13 @@ async def test_skip_next_turn_uses_start_and_unpublished_predecessor_cannot_publ
         debate.id,
         expected_control_version=started.control_version,
     )
-    assert str(skipped.current_turn_id) == next_turn.id
-    assert skipped.status == "ready"
+    assert str(skipped.current_turn_id) == first_turn.id
+    assert skipped.status == "waiting_next"
+    assert skipped.next_turn_ready is True
     assert first_turn.publication_status == "public"
     assert next_turn.publication_status == "unpublished"
 
-    with pytest.raises(PlatformError) as next_resume:
+    with pytest.raises(PlatformError) as waiting_media:
         await service.media_prepare(
             None,
             debate.id,
@@ -1464,31 +2090,39 @@ async def test_skip_next_turn_uses_start_and_unpublished_predecessor_cannot_publ
             expected_control_version=skipped.control_version,
             epoch=epoch,
             session_hash="skip-session",
-            turn_id=next_turn.id,
+            turn_id=first_turn.id,
             action="resume",
         )
-    assert next_resume.value.code == "invalid_state"
+    assert waiting_media.value.code == "not_found"
+    advanced = await service.next(
+        None,
+        debate.id,
+        expected_control_version=skipped.control_version,
+        expected_current_turn_id=first_turn.id,
+    )
+    assert str(advanced.current_turn_id) == next_turn.id
+    assert advanced.status == "ready"
     prepared_next, _private = await service.media_prepare(
         None,
         debate.id,
         command_id=str(uuid4()),
-        expected_control_version=skipped.control_version,
+        expected_control_version=advanced.control_version,
         epoch=epoch,
         session_hash="skip-session",
         turn_id=next_turn.id,
-        action="start",
+        action="next",
     )
     await service.started_ack(
         None,
         debate.id,
         command_id=str(uuid4()),
-        expected_control_version=skipped.control_version,
+        expected_control_version=advanced.control_version,
         epoch=epoch,
         session_hash="skip-session",
         turn_id=next_turn.id,
-        action="start",
+        action="next",
     )
-    assert prepared_next.binding.action == "start"
+    assert prepared_next.binding.action == "next"
     assert next_turn.publication_status == "public"
 
     # A successor that is made current while an earlier turn is unpublished
@@ -2128,6 +2762,7 @@ async def test_snapshot_stream_race_delivers_one_committed_event_after_watermark
             "cursor_ms": 0,
             "playback_rate": 1.0,
             "control_version": 0,
+            "next_turn_ready": False,
         },
         "interaction": {
             "status": "closed",

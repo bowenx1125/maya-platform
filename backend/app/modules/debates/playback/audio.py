@@ -468,7 +468,7 @@ class MediaTicketBinding:
     controller_epoch: str
     debate_id: str
     turn_id: str
-    action: Literal["start", "resume", "replay"]
+    action: Literal["start", "resume", "next", "replay"]
     issued_at: datetime
     expires_at: datetime
     started: bool = False
@@ -493,7 +493,7 @@ class MediaTicketStore:
         controller_epoch: str,
         debate_id: str,
         turn_id: str,
-        action: Literal["start", "resume", "replay"],
+        action: Literal["start", "resume", "next", "replay"],
         now: datetime | None = None,
     ) -> tuple[str, MediaTicketBinding]:
         issued = _utc(now or datetime.now(UTC))

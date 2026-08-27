@@ -39,7 +39,7 @@ from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
-from app.providers.tts import MockTTSProvider
+from app.providers.factory import tts_provider
 from app.seed import seed_demo_data
 
 logger = logging.getLogger("maya.backend")
@@ -63,16 +63,17 @@ def create_app(
     )
     playback_tasks = TaskManager()
     playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
+    selected_tts = tts_provider(runtime_settings)
     playback_service = PlaybackService(
         playback_repository,
         audio_store=AudioStore(
             runtime_settings.resolved_data_root,
-            tts_provider=MockTTSProvider(),
+            tts_provider=selected_tts,
         ),
         event_hub=DebateEventHub(SqlEventStore(runtime_database.session_factory)),
         task_manager=playback_tasks,
         turn_preparer=SqlTurnPreparer(settings=runtime_settings),
-        tts_provider=MockTTSProvider(),
+        tts_provider=selected_tts,
         session_factory=runtime_database.session_factory,
         settings=runtime_settings,
     )

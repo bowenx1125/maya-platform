@@ -503,8 +503,15 @@ class PlaybackState(Base):
         ),
         UniqueConstraint("debate_id", name="uq_playback_states_debate"),
         CheckConstraint(
-            "status IN ('preparing', 'ready', 'playing', 'paused', 'completed', 'stopped')",
+            "status IN ('preparing', 'ready', 'playing', 'paused', 'waiting_next', "
+            "'completed', 'stopped')",
             name="ck_playback_states_status",
+        ),
+        CheckConstraint(
+            "status != 'waiting_next' OR "
+            "(mode = 'live' AND current_turn_id IS NOT NULL "
+            "AND replay_scope IS NULL AND replay_index IS NULL)",
+            name="ck_playback_states_waiting_next_live",
         ),
         CheckConstraint("mode IN ('live', 'replay')", name="ck_playback_states_mode"),
         CheckConstraint("cursor_ms >= 0", name="ck_playback_states_cursor"),

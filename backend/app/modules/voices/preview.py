@@ -14,8 +14,8 @@ import wave
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, exists, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, invalid_state, not_found
@@ -44,6 +44,7 @@ from app.providers.audio import (
 )
 from app.providers.factory import tts_provider
 from app.providers.tts import TTSProvider, TTSProviderError
+from app.seed import COURSE_ID
 
 
 def _configured_fallback(db: Session, settings: Settings) -> VoiceProfile | None:
@@ -260,21 +261,47 @@ def media_path_for_preview(
     preview_id: str,
     settings: Settings,
 ) -> tuple[Path, str]:
-    """Authorize and resolve one active, unexpired same-group preview."""
+    """Authorize and resolve one active, unexpired preview.
 
+    System fallback previews have no group scope.  They are readable only by
+    a teacher in the frozen Demo course; student and cross-course sessions
+    receive the same not-found response as other out-of-scope voice media.
+    Group previews retain the existing same-group student query.
+    """
+
+    scoped_group_member = aliased(GroupMember)
+    scoped_course_member = aliased(CourseMember)
+    teacher_course_member = aliased(CourseMember)
+    teacher_exists = exists(
+        select(teacher_course_member.user_id).where(
+            teacher_course_member.course_id == COURSE_ID,
+            teacher_course_member.user_id == context.user.id,
+            teacher_course_member.role == "teacher",
+        )
+    )
     row = db.execute(
         select(VoicePreview, VoiceProfile)
         .join(VoiceProfile, VoiceProfile.id == VoicePreview.profile_id)
-        .join(Group, Group.id == VoiceProfile.group_id)
-        .join(GroupMember, GroupMember.group_id == Group.id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
+        .outerjoin(Group, Group.id == VoiceProfile.group_id)
+        .outerjoin(scoped_group_member, scoped_group_member.group_id == Group.id)
+        .outerjoin(scoped_course_member, scoped_course_member.course_id == Group.course_id)
         .where(
             VoicePreview.id == preview_id,
-            VoiceProfile.scope == "group",
-            Group.id == VoicePreview.group_id,
-            GroupMember.user_id == context.user.id,
-            CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
+            or_(
+                and_(
+                    VoiceProfile.scope == "system",
+                    VoiceProfile.group_id.is_(None),
+                    VoicePreview.group_id.is_(None),
+                    teacher_exists,
+                ),
+                and_(
+                    VoiceProfile.scope == "group",
+                    Group.id == VoicePreview.group_id,
+                    scoped_group_member.user_id == context.user.id,
+                    scoped_course_member.user_id == context.user.id,
+                    scoped_course_member.role == "student",
+                ),
+            ),
         )
     ).first()
     if row is None:

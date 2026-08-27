@@ -313,6 +313,48 @@ def read_pcm16_wav(path: Path, *, max_bytes: int = MAX_PREVIEW_BYTES) -> bytes:
         raise AudioValidationError("audio_invalid") from exc
 
 
+def _validate_pcm16_wav_structure(raw_wav: bytes, expected_data_bytes: int) -> None:
+    """Require a complete RIFF/WAVE container with one exact PCM data chunk."""
+
+    if len(raw_wav) < 12 or raw_wav[:4] != b"RIFF" or raw_wav[8:12] != b"WAVE":
+        raise AudioValidationError("audio_invalid")
+    try:
+        riff_size = struct.unpack_from("<I", raw_wav, 4)[0]
+    except struct.error as exc:  # pragma: no cover - length is checked above
+        raise AudioValidationError("audio_invalid") from exc
+    # Bytes outside the RIFF declaration are not part of the WAV and can hide
+    # a truncated or otherwise malformed tail.
+    if riff_size != len(raw_wav) - 8:
+        raise AudioValidationError("audio_invalid")
+
+    offset = 12
+    format_chunks = 0
+    data_chunks = 0
+    while offset < len(raw_wav):
+        if len(raw_wav) - offset < 8:
+            raise AudioValidationError("audio_invalid")
+        chunk_id = raw_wav[offset : offset + 4]
+        chunk_size = struct.unpack_from("<I", raw_wav, offset + 4)[0]
+        offset += 8
+        if chunk_size > len(raw_wav) - offset:
+            raise AudioValidationError("audio_invalid")
+        if chunk_id == b"fmt ":
+            format_chunks += 1
+        elif chunk_id == b"data":
+            data_chunks += 1
+            if data_chunks > 1 or chunk_size != expected_data_bytes:
+                raise AudioValidationError("audio_invalid")
+        offset += chunk_size
+        if chunk_size % 2:
+            # RIFF chunks are word aligned; a missing pad byte is a malformed
+            # tail even when the preceding bytes happen to decode as audio.
+            if offset >= len(raw_wav):
+                raise AudioValidationError("audio_invalid")
+            offset += 1
+    if offset != len(raw_wav) or format_chunks != 1 or data_chunks != 1:
+        raise AudioValidationError("audio_invalid")
+
+
 def audio_quality_metrics(raw_wav: bytes) -> dict[str, float]:
     """Compute bounded technical acceptance metrics for PCM16 WAV bytes."""
 
@@ -326,13 +368,24 @@ def audio_quality_metrics(raw_wav: bytes) -> dict[str, float]:
                 or stream.getframerate() != NORMALIZED_SAMPLE_RATE
             ):
                 raise AudioValidationError("audio_invalid")
-            frames = stream.readframes(stream.getnframes())
+            declared_frames = stream.getnframes()
+            if declared_frames <= 0:
+                raise AudioValidationError("audio_invalid")
+            frames = stream.readframes(declared_frames)
+            expected_data_bytes = declared_frames * NORMALIZED_CHANNELS * NORMALIZED_SAMPLE_WIDTH
+            # ``wave`` can open a container whose data chunk declares more
+            # bytes than are actually available.  Acceptance requires the
+            # read to match the declared frame count exactly, including an
+            # even PCM16 byte count.
+            if len(frames) != expected_data_bytes or len(frames) % NORMALIZED_SAMPLE_WIDTH:
+                raise AudioValidationError("audio_invalid")
+            _validate_pcm16_wav_structure(raw_wav, expected_data_bytes)
     except (OSError, EOFError, wave.Error, struct.error) as exc:
         raise AudioValidationError("audio_invalid") from exc
-    if len(frames) < 2:
+    if len(frames) < NORMALIZED_SAMPLE_WIDTH:
         raise AudioValidationError("audio_invalid")
-    sample_count = len(frames) // 2
-    samples = struct.unpack(f"<{sample_count}h", frames[: sample_count * 2])
+    sample_count = len(frames) // NORMALIZED_SAMPLE_WIDTH
+    samples = struct.unpack(f"<{sample_count}h", frames)
     squared = sum(sample * sample for sample in samples)
     nonzero = sum(sample != 0 for sample in samples)
     clipped = sum(abs(sample) >= 32760 for sample in samples)
