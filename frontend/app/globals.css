@@ -1437,6 +1437,12 @@ textarea {
   text-decoration: underline;
 }
 
+.current-version-indicator {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
 .status-grid {
   margin-top: 42px;
 }

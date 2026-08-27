@@ -411,6 +411,7 @@ const enMessages = {
   whyMattersCopy:
     "The teacher sees exactly what was published: the Agent prompt, selected filenames, and the frozen RAG snapshot. A later student draft cannot silently change this view.",
   inspect: "Inspect →",
+  viewingSnapshot: "Viewing",
   readAgentMd: "Read AGENT.md",
   download: "Download",
   reindex: "Reindex",
@@ -949,6 +950,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   whyMattersCopy:
     "教师看到的就是已发布内容：Agent 提示词、所选文件名和冻结的 RAG 快照。后续学生草稿不会静默改变这个视图。",
   inspect: "查看 →",
+  viewingSnapshot: "正在查看",
   readAgentMd: "阅读 AGENT.md",
   download: "下载",
   reindex: "重新索引",

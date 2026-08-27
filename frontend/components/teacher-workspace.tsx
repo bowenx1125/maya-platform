@@ -209,6 +209,15 @@ export function TeacherAgentDetail({
       />
     );
   const currentAgent = agent;
+  const currentVersion = versions.find(
+    (version) => version.id === currentAgent.current_published_version_id,
+  );
+  const selectedSnapshotId = snapshotId ?? snapshot?.id ?? null;
+  const selectedVersionId = selectedSnapshotId
+    ? (versions.find(
+        (version) => version.knowledge_snapshot_id === selectedSnapshotId,
+      )?.id ?? null)
+    : (currentAgent.current_published_version_id ?? null);
 
   async function downloadSnapshot() {
     if (!snapshot) return;
@@ -271,14 +280,10 @@ export function TeacherAgentDetail({
             title={t("currentRelease")}
             description={t("currentPointerLede")}
           >
-            {versions.find(
-              (version) => version.id === agent.current_published_version_id,
-            ) ? (
+            {currentVersion ? (
               <TeacherVersion
-                version={versions.find(
-                  (version) =>
-                    version.id === agent.current_published_version_id,
-                )!}
+                version={currentVersion}
+                selected={currentVersion.id === selectedVersionId}
               />
             ) : (
               <EmptyCard title={t("noCurrentPublished")} />
@@ -293,7 +298,11 @@ export function TeacherAgentDetail({
             ) : (
               <div className="version-list">
                 {versions.map((version) => (
-                  <TeacherVersion version={version} key={version.id} />
+                  <TeacherVersion
+                    version={version}
+                    selected={version.id === selectedVersionId}
+                    key={version.id}
+                  />
                 ))}
               </div>
             )}
@@ -383,7 +392,13 @@ export function canShowSnapshotText(
   return Boolean(snapshotId && downloadedSnapshotId === snapshotId);
 }
 
-function TeacherVersion({ version }: { version: AgentVersion }) {
+function TeacherVersion({
+  version,
+  selected,
+}: {
+  version: AgentVersion;
+  selected: boolean;
+}) {
   const t = useT();
   return (
     <div className="teacher-version">
@@ -398,12 +413,18 @@ function TeacherVersion({ version }: { version: AgentVersion }) {
             {version.enabled_documents?.length ?? 0} {t("evidenceFiles")}
           </p>
         </div>
-        <Link
-          className="text-link"
-          href={`/teacher/agents/${version.agent_id}?snapshot=${version.knowledge_snapshot_id ?? ""}`}
-        >
-          {t("inspect")}
-        </Link>
+        {selected ? (
+          <span className="current-version-indicator" aria-current="page">
+            {t("viewingSnapshot")}
+          </span>
+        ) : (
+          <Link
+            className="text-link"
+            href={`/teacher/agents/${version.agent_id}?snapshot=${version.knowledge_snapshot_id ?? ""}`}
+          >
+            {t("inspect")}
+          </Link>
+        )}
       </div>
       <details>
         <summary>{t("readAgentMd")}</summary>
