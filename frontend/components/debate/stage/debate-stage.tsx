@@ -141,6 +141,23 @@ function isPlaybackMode(value: unknown): value is DebatePlaybackState["mode"] {
   return value === "live" || value === "replay";
 }
 
+const CURRENT_ITEM_EVENT_TYPES = new Set<PlaybackEvent["event_type"]>([
+  "playback.paused",
+  "playback.resumed",
+  "playback.skipped",
+  "playback.completed",
+  "replay.completed",
+]);
+
+function isCurrentItemEvent(
+  event: PlaybackEvent,
+  currentTurnId: string | null,
+): boolean {
+  if (!CURRENT_ITEM_EVENT_TYPES.has(event.event_type)) return true;
+  const eventTurnId = event.payload.turn_id;
+  return isNonEmptyString(eventTurnId) && eventTurnId === currentTurnId;
+}
+
 function normaliseSources(value: unknown): VisiblePlaybackTurn["sources"] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((source) => {
@@ -357,6 +374,11 @@ export function DebateStage({
   const pendingActionRef = useRef<PlaybackAction>("start");
   const prepareKeyRef = useRef<string | null>(null);
   const preparedMediaKeyRef = useRef<string | null>(null);
+  const playbackGenerationRef = useRef(0);
+  const playbackItemKeyRef = useRef(
+    `${playback.mode}:${playback.current_turn_id ?? ""}`,
+  );
+  const mediaGenerationRef = useRef(0);
   const audioTurnRef = useRef<string | null>(null);
   const audioActionRef = useRef<PlaybackAction>("start");
   const startedAckRef = useRef(false);
@@ -364,6 +386,10 @@ export function DebateStage({
   const mountedRef = useRef(false);
   const closingRef = useRef(false);
   const reconnectTimerRef = useRef<number | null>(null);
+  const socketGenerationRef = useRef(0);
+  const connectAttemptRef = useRef(0);
+  const controlRequestRef = useRef<number | null>(null);
+  const nextControlRequestRef = useRef(0);
   const connectRef = useRef<((refresh: boolean) => Promise<void>) | undefined>(
     undefined,
   );
@@ -380,8 +406,38 @@ export function DebateStage({
     labelsRef.current = labels;
   }, [labels]);
 
+  const markPlaybackItem = useCallback(
+    (next: Pick<DebatePlaybackState, "mode" | "current_turn_id">) => {
+      const key = `${next.mode}:${next.current_turn_id ?? ""}`;
+      if (playbackItemKeyRef.current === key) return;
+      playbackItemKeyRef.current = key;
+      playbackGenerationRef.current += 1;
+    },
+    [],
+  );
+
   const commitDetail = useCallback(
     (next: DebateDetail, notify = true) => {
+      const previous = playbackRef.current;
+      markPlaybackItem(next.playback);
+      if (next.playback.mode === "replay") {
+        pendingActionRef.current = "replay";
+      } else if (
+        previous.current_turn_id !== next.playback.current_turn_id ||
+        previous.mode !== next.playback.mode
+      ) {
+        pendingActionRef.current = "start";
+      } else if (
+        next.playback.status === "ready" &&
+        next.playback.current_turn_id &&
+        normalisePublicTurns(next.public_turns).some(
+          (turn) => turn.id === next.playback.current_turn_id,
+        )
+      ) {
+        pendingActionRef.current = "resume";
+      } else if (next.playback.status === "ready") {
+        pendingActionRef.current = "start";
+      }
       detailRef.current = next;
       playbackRef.current = next.playback;
       controlVersionRef.current = next.playback.control_version;
@@ -389,7 +445,7 @@ export function DebateStage({
       setPlayback(next.playback);
       if (notify) onDetailChange?.(next);
     },
-    [onDetailChange],
+    [markPlaybackItem, onDetailChange],
   );
 
   const updatePublicTurns = useCallback(
@@ -408,6 +464,8 @@ export function DebateStage({
   );
 
   const pauseAudio = useCallback((clearSource = false) => {
+    mediaGenerationRef.current += 1;
+    startedAckRef.current = false;
     const audio = audioRef.current;
     if (!audio) return;
     try {
@@ -425,7 +483,6 @@ export function DebateStage({
       audioTurnRef.current = null;
       preparedMediaKeyRef.current = null;
       prepareKeyRef.current = null;
-      startedAckRef.current = false;
       cursorMsRef.current = 0;
     }
   }, []);
@@ -446,9 +503,12 @@ export function DebateStage({
   );
 
   const sendControllerAcquire = useCallback(() => {
+    const debateStatus = detailRef.current.status;
     if (
       readOnly ||
-      detailRef.current.status === "draft" ||
+      debateStatus === "draft" ||
+      debateStatus === "failed" ||
+      debateStatus === "stopped" ||
       controllerReadyRef.current ||
       acquirePendingRef.current
     )
@@ -464,16 +524,36 @@ export function DebateStage({
     if (!sent) acquirePendingRef.current = false;
   }, [debateId, readOnly, sendCommand]);
 
+  const scheduleControllerAcquire = useCallback(() => {
+    const generation = playbackGenerationRef.current;
+    const socketGeneration = socketGenerationRef.current;
+    const connectAttempt = connectAttemptRef.current;
+    window.setTimeout(() => {
+      if (
+        !mountedRef.current ||
+        generation !== playbackGenerationRef.current ||
+        socketGeneration !== socketGenerationRef.current ||
+        connectAttempt !== connectAttemptRef.current
+      )
+        return;
+      sendControllerAcquire();
+    }, 0);
+  }, [sendControllerAcquire]);
+
   const requestReconnect = useCallback(() => {
     if (!mountedRef.current || closingRef.current) return;
+    connectAttemptRef.current += 1;
     pauseAudio(false);
     setConnection("reconnecting");
     markControllerReady(false);
     acquirePendingRef.current = false;
     controllerEpochRef.current = null;
     setFailure(labelsRef.current.connectionReconnecting);
+    socketGenerationRef.current += 1;
+    const staleSocket = socketRef.current;
+    socketRef.current = null;
     try {
-      socketRef.current?.close(1012, "sequence recovery");
+      staleSocket?.close(1012, "sequence recovery");
     } catch {
       // The close callback will still schedule recovery for normal sockets.
     }
@@ -499,6 +579,23 @@ export function DebateStage({
             ? (previous.current_turn_id ?? null)
             : patch.current_turn_id,
       };
+      markPlaybackItem(next);
+      if (next.mode === "replay") {
+        pendingActionRef.current = "replay";
+      } else if (
+        previous.current_turn_id !== next.current_turn_id ||
+        previous.mode !== next.mode
+      ) {
+        pendingActionRef.current = "start";
+      } else if (
+        next.status === "ready" &&
+        next.current_turn_id &&
+        publicTurnById(publicTurnsRef.current, next.current_turn_id)
+      ) {
+        pendingActionRef.current = "resume";
+      } else if (next.status === "ready") {
+        pendingActionRef.current = "start";
+      }
       playbackRef.current = next;
       controlVersionRef.current = next.control_version;
       setPlayback(next);
@@ -512,7 +609,7 @@ export function DebateStage({
       onDetailChange?.(nextDetail);
       return next;
     },
-    [onDetailChange],
+    [markPlaybackItem, onDetailChange],
   );
 
   const visibleTurnFromPublic = useCallback(
@@ -559,6 +656,15 @@ export function DebateStage({
     if (!sent) prepareKeyRef.current = null;
   }, [debateId, readOnly, sendCommand]);
 
+  const scheduleMediaPrepare = useCallback(() => {
+    const generation = playbackGenerationRef.current;
+    window.setTimeout(() => {
+      if (!mountedRef.current || generation !== playbackGenerationRef.current)
+        return;
+      ensureMediaPrepare();
+    }, 0);
+  }, [ensureMediaPrepare]);
+
   const sendPlayFailure = useCallback(
     (
       code:
@@ -569,7 +675,9 @@ export function DebateStage({
         | "aborted"
         | "unknown",
       cause?: unknown,
+      mediaGeneration = mediaGenerationRef.current,
     ) => {
+      if (mediaGeneration !== mediaGenerationRef.current) return;
       const turnId =
         audioTurnRef.current ?? playbackRef.current.current_turn_id;
       const epoch = controllerEpochRef.current;
@@ -606,6 +714,14 @@ export function DebateStage({
             message.control_version === undefined
           )
             return;
+          if (
+            controllerReadyRef.current &&
+            controllerEpochRef.current &&
+            message.controller_epoch !== controllerEpochRef.current
+          ) {
+            return;
+          }
+          if (message.control_version < controlVersionRef.current) return;
           controllerEpochRef.current = message.controller_epoch;
           controlVersionRef.current = message.control_version;
           acquirePendingRef.current = false;
@@ -613,7 +729,7 @@ export function DebateStage({
           setFailure(null);
           applyPlayback({ control_version: message.control_version });
           if (playbackRef.current.status === "ready") {
-            window.setTimeout(() => ensureMediaPrepare(), 0);
+            scheduleMediaPrepare();
           }
           return;
         case "media.prepared": {
@@ -636,6 +752,7 @@ export function DebateStage({
           }
           const action = pendingActionRef.current;
           const key = `${message.turn_id}:${action}:${current.control_version}`;
+          const mediaGeneration = mediaGenerationRef.current;
           preparedMediaKeyRef.current = key;
           audioTurnRef.current = message.turn_id;
           audioActionRef.current = action;
@@ -667,6 +784,7 @@ export function DebateStage({
             () => {
               if (
                 !mountedRef.current ||
+                mediaGeneration !== mediaGenerationRef.current ||
                 message.controller_epoch !== controllerEpochRef.current ||
                 audioTurnRef.current !== message.turn_id
               ) {
@@ -688,12 +806,19 @@ export function DebateStage({
               sendPlayFailure(
                 isNotAllowedError(cause) ? "autoplay_blocked" : "unknown",
                 cause,
+                mediaGeneration,
               );
             },
           );
           return;
         }
         case "controller.revoked":
+          if (
+            !message.controller_epoch ||
+            message.controller_epoch !== controllerEpochRef.current
+          ) {
+            return;
+          }
           controllerEpochRef.current = null;
           acquirePendingRef.current = false;
           markControllerReady(false);
@@ -748,9 +873,9 @@ export function DebateStage({
     [
       applyPlayback,
       debateId,
-      ensureMediaPrepare,
       markControllerReady,
       pauseAudio,
+      scheduleMediaPrepare,
       sendCommand,
       sendPlayFailure,
       setActiveParticipant,
@@ -775,8 +900,23 @@ export function DebateStage({
         payload.playback,
         playbackRef.current,
       );
-      pendingActionRef.current =
-        nextPlayback.mode === "replay" ? "replay" : "start";
+      markPlaybackItem(nextPlayback);
+      if (nextPlayback.mode === "replay") {
+        pendingActionRef.current = "replay";
+      } else if (
+        playbackRef.current.current_turn_id !== nextPlayback.current_turn_id ||
+        playbackRef.current.mode !== nextPlayback.mode
+      ) {
+        pendingActionRef.current = "start";
+      } else if (
+        nextPlayback.status === "ready" &&
+        nextPlayback.current_turn_id &&
+        publicTurnById(turns, nextPlayback.current_turn_id)
+      ) {
+        pendingActionRef.current = "resume";
+      } else if (nextPlayback.status === "ready") {
+        pendingActionRef.current = "start";
+      }
       playbackRef.current = nextPlayback;
       controlVersionRef.current = nextPlayback.control_version;
       setPlayback(nextPlayback);
@@ -821,7 +961,7 @@ export function DebateStage({
         pauseAudio(false);
       }
       if (!readOnly && nextStatus !== "draft") {
-        window.setTimeout(() => sendControllerAcquire(), 0);
+        scheduleControllerAcquire();
       }
       setFailure(null);
     },
@@ -830,10 +970,11 @@ export function DebateStage({
       pauseAudio,
       requestReconnect,
       readOnly,
-      sendControllerAcquire,
+      scheduleControllerAcquire,
       setActiveParticipant,
       setAvatars,
       setVisible,
+      markPlaybackItem,
       updatePublicTurns,
     ],
   );
@@ -853,6 +994,11 @@ export function DebateStage({
       sequenceRef.current = decision.nextSequence;
       setLastSequence(decision.nextSequence);
       const payload = event.payload;
+      if (
+        !isCurrentItemEvent(event, playbackRef.current.current_turn_id ?? null)
+      ) {
+        return;
+      }
       switch (event.event_type) {
         case "turn.preparing":
           if (isNonEmptyString(payload.turn_id)) {
@@ -878,6 +1024,7 @@ export function DebateStage({
           break;
         case "turn.ready":
           if (isNonEmptyString(payload.turn_id)) {
+            pendingActionRef.current = "start";
             const readyParticipant = detailRef.current.participants.find(
               (participant) => participant.slot === payload.slot,
             );
@@ -892,7 +1039,7 @@ export function DebateStage({
               },
               "running",
             );
-            window.setTimeout(() => ensureMediaPrepare(), 0);
+            scheduleMediaPrepare();
           }
           break;
         case "playback.started": {
@@ -999,6 +1146,7 @@ export function DebateStage({
           });
           break;
         case "playback.skipped":
+          pendingActionRef.current = "start";
           pauseAudio(true);
           applyPlayback({
             status: "preparing",
@@ -1043,6 +1191,7 @@ export function DebateStage({
             publicTurnsRef.current.length >=
               detailRef.current.participants.length * 2
           ) {
+            pendingActionRef.current = "start";
             setActiveParticipant(null);
             applyPlayback(
               {
@@ -1060,6 +1209,7 @@ export function DebateStage({
               "debate_finished",
             );
           } else {
+            pendingActionRef.current = "start";
             applyPlayback({
               status: "preparing",
               cursor_ms: 0,
@@ -1079,22 +1229,43 @@ export function DebateStage({
           setVisible(null);
           setAvatars([]);
           setActiveParticipant(null);
-          applyPlayback({
-            status: "completed",
-            mode: "live",
-            current_turn_id: null,
-            control_version: Math.max(
-              playbackRef.current.control_version,
-              integer(
-                payload.control_version,
+          if (!refreshSnapshot) {
+            // Observation-only/test integrations may not provide a snapshot
+            // reader.  In that compatibility mode there is no safe way to
+            // distinguish an intermediate replay item from the final one,
+            // so retain the historical terminal fallback.  The real control
+            // page always supplies refreshSnapshot below.
+            applyPlayback({
+              status: "completed",
+              mode: "live",
+              current_turn_id: null,
+              control_version: Math.max(
                 playbackRef.current.control_version,
+                integer(
+                  payload.control_version,
+                  playbackRef.current.control_version,
+                ),
               ),
-            ),
-          });
-          void refreshSnapshot?.().then((next) => {
-            if (!mountedRef.current || !next) return;
-            commitDetail(next);
-          });
+            });
+            break;
+          }
+          void refreshSnapshot()
+            .then((next) => {
+              if (!mountedRef.current || !next) return;
+              commitDetail(next);
+              if (
+                next.playback.mode === "replay" &&
+                next.playback.status === "ready" &&
+                next.playback.current_turn_id
+              ) {
+                pendingActionRef.current = "replay";
+                scheduleMediaPrepare();
+              }
+            })
+            .catch((cause: unknown) => {
+              if (!mountedRef.current) return;
+              setFailure(errorText(cause, labelsRef.current.connectionError));
+            });
           break;
         case "debate.completed":
           pauseAudio(true);
@@ -1150,7 +1321,6 @@ export function DebateStage({
     [
       applyPlayback,
       commitDetail,
-      ensureMediaPrepare,
       handleSnapshot,
       markControllerReady,
       onDetailChange,
@@ -1162,6 +1332,7 @@ export function DebateStage({
       setVisible,
       updatePublicTurns,
       visibleTurnFromPublic,
+      scheduleMediaPrepare,
     ],
   );
 
@@ -1183,19 +1354,28 @@ export function DebateStage({
   );
 
   const installSocket = useCallback(
-    (socket: PlaybackSocket) => {
+    (socket: PlaybackSocket, socketGeneration: number) => {
+      const isCurrentSocket = () =>
+        socketRef.current === socket &&
+        socketGenerationRef.current === socketGeneration;
       const onOpen = () => {
+        if (!isCurrentSocket()) return;
         setConnection("connected");
         setFailure(null);
         if (!readOnly) sendControllerAcquire();
       };
-      const onMessage = (event: Event) => handleSocketMessage(event);
+      const onMessage = (event: Event) => {
+        if (!isCurrentSocket()) return;
+        handleSocketMessage(event);
+      };
       const onError = () => {
+        if (!isCurrentSocket()) return;
         setConnection("reconnecting");
         setFailure(labelsRef.current.connectionError);
       };
       const onClose = (event?: Event) => {
-        if (!mountedRef.current || closingRef.current) return;
+        if (!mountedRef.current || closingRef.current || !isCurrentSocket())
+          return;
         const closeCode =
           event && "code" in event ? Number((event as CloseEvent).code) : 0;
         if (closeCode === 4401 || closeCode === 4403) {
@@ -1260,10 +1440,16 @@ export function DebateStage({
   const connect = useCallback(
     async (refresh: boolean) => {
       if (!mountedRef.current || closingRef.current) return;
+      const connectAttempt = ++connectAttemptRef.current;
       if (refresh && refreshSnapshot) {
         try {
           const next = await refreshSnapshot();
-          if (!mountedRef.current || closingRef.current) return;
+          if (
+            !mountedRef.current ||
+            closingRef.current ||
+            connectAttempt !== connectAttemptRef.current
+          )
+            return;
           commitDetail(next, false);
           publicTurnsRef.current = normalisePublicTurns(next.public_turns);
           setPublicTurns(publicTurnsRef.current);
@@ -1274,9 +1460,16 @@ export function DebateStage({
           setFailure(errorText(cause, labelsRef.current.connectionError));
         }
       }
-      if (!mountedRef.current || closingRef.current) return;
+      if (
+        !mountedRef.current ||
+        closingRef.current ||
+        connectAttempt !== connectAttemptRef.current
+      )
+        return;
       socketCleanupRef.current?.();
       socketCleanupRef.current = null;
+      socketRef.current = null;
+      const socketGeneration = ++socketGenerationRef.current;
       try {
         const url = socketUrl ?? debateSocketUrl(debateId);
         const socket = socketFactory
@@ -1284,7 +1477,7 @@ export function DebateStage({
           : (new WebSocket(url) as unknown as PlaybackSocket);
         socketRef.current = socket;
         setConnection("connecting");
-        installSocket(socket);
+        installSocket(socket, socketGeneration);
       } catch (cause) {
         setConnection("disconnected");
         setFailure(errorText(cause, labelsRef.current.connectionError));
@@ -1301,6 +1494,31 @@ export function DebateStage({
   );
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (
+        detail.last_sequence < sequenceRef.current ||
+        detail.playback.control_version < controlVersionRef.current
+      )
+        return;
+      const previous = playbackRef.current;
+      markPlaybackItem(detail.playback);
+      if (detail.playback.mode === "replay") {
+        pendingActionRef.current = "replay";
+      } else if (
+        previous.current_turn_id !== detail.playback.current_turn_id ||
+        previous.mode !== detail.playback.mode
+      ) {
+        pendingActionRef.current = "start";
+      } else if (
+        detail.playback.status === "ready" &&
+        detail.playback.current_turn_id &&
+        normalisePublicTurns(detail.public_turns).some(
+          (turn) => turn.id === detail.playback.current_turn_id,
+        )
+      ) {
+        pendingActionRef.current = "resume";
+      } else if (detail.playback.status === "ready") {
+        pendingActionRef.current = "start";
+      }
       detailRef.current = detail;
       playbackRef.current = detail.playback;
       controlVersionRef.current = detail.playback.control_version;
@@ -1313,7 +1531,7 @@ export function DebateStage({
       setLastSequence(detail.last_sequence);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [detail]);
+  }, [detail, markPlaybackItem]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -1324,6 +1542,8 @@ export function DebateStage({
       window.clearTimeout(timer);
       mountedRef.current = false;
       closingRef.current = true;
+      connectAttemptRef.current += 1;
+      socketGenerationRef.current += 1;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
@@ -1375,7 +1595,24 @@ export function DebateStage({
 
   const runControl = useCallback(
     async (action: ControlAction, turnId?: string) => {
-      if (readOnly || busyAction !== null) return;
+      if (readOnly || busyAction !== null || controlRequestRef.current !== null)
+        return;
+      if (
+        (action === "replay" || action === "replay-turn") &&
+        (!controllerReadyRef.current || acquirePendingRef.current)
+      ) {
+        return;
+      }
+      const requestToken = ++nextControlRequestRef.current;
+      controlRequestRef.current = requestToken;
+      const requestGeneration = playbackGenerationRef.current;
+      const requestTurnId = playbackRef.current.current_turn_id;
+      const requestControlVersion = playbackRef.current.control_version;
+      const isCurrentRequest = () =>
+        controlRequestRef.current === requestToken &&
+        playbackGenerationRef.current === requestGeneration &&
+        playbackRef.current.current_turn_id === requestTurnId &&
+        controlVersionRef.current === requestControlVersion;
       setBusyAction(action);
       setControlError(null);
       setFailure(null);
@@ -1403,6 +1640,21 @@ export function DebateStage({
             },
             { idempotency },
           );
+          if (!isCurrentRequest()) {
+            // The start request races the draft socket becoming live.  The
+            // socket's authoritative turn events may advance the playback
+            // generation before this HTTP response arrives; never apply the
+            // now-stale draft detail, but recover the controller boundary.
+            if (
+              detailRef.current.status === "running" &&
+              !TERMINAL_PLAYBACK.includes(playbackRef.current.status) &&
+              !controllerEpochRef.current &&
+              !closingRef.current
+            ) {
+              scheduleControllerAcquire();
+            }
+            return;
+          }
           // A draft socket is observation-only.  Starting the Debate changes
           // the server authority boundary, so acquire a fresh controller
           // epoch only after the start response is committed.
@@ -1410,23 +1662,25 @@ export function DebateStage({
           acquirePendingRef.current = false;
           markControllerReady(false);
           commitDetail(started);
-          window.setTimeout(() => sendControllerAcquire(), 0);
+          scheduleControllerAcquire();
           return;
         }
         if (action === "pause") {
           const next = await api.pauseDebate(debateId, current.control_version);
+          if (!isCurrentRequest()) return;
           pauseAudio(false);
           applyPlayback(next);
           return;
         }
         if (action === "resume") {
-          pendingActionRef.current = "resume";
           const next = await api.resumeDebate(
             debateId,
             current.control_version,
           );
+          if (!isCurrentRequest()) return;
+          pendingActionRef.current = "resume";
           applyPlayback(next);
-          window.setTimeout(() => ensureMediaPrepare(), 0);
+          scheduleMediaPrepare();
           return;
         }
         if (action === "skip") {
@@ -1434,12 +1688,15 @@ export function DebateStage({
             debateId,
             current.control_version,
           );
+          if (!isCurrentRequest()) return;
+          pendingActionRef.current = "start";
           pauseAudio(true);
           applyPlayback(next);
           return;
         }
         if (action === "stop") {
           const next = await api.stopDebate(debateId, current.control_version);
+          if (!isCurrentRequest()) return;
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -1456,9 +1713,10 @@ export function DebateStage({
             debateId,
             current.control_version,
           );
+          if (!isCurrentRequest()) return;
           setVisible(null);
           applyPlayback(next);
-          window.setTimeout(() => ensureMediaPrepare(), 0);
+          scheduleMediaPrepare();
           return;
         }
         if (!turnId) return;
@@ -1468,13 +1726,19 @@ export function DebateStage({
           turnId,
           current.control_version,
         );
+        if (!isCurrentRequest()) return;
         setVisible(null);
         applyPlayback(next);
-        window.setTimeout(() => ensureMediaPrepare(), 0);
+        scheduleMediaPrepare();
       } catch (cause) {
-        setControlError(errorText(cause, labelsRef.current.connectionError));
+        if (controlRequestRef.current === requestToken) {
+          setControlError(errorText(cause, labelsRef.current.connectionError));
+        }
       } finally {
-        setBusyAction(null);
+        if (controlRequestRef.current === requestToken) {
+          controlRequestRef.current = null;
+          setBusyAction(null);
+        }
       }
     },
     [
@@ -1483,15 +1747,15 @@ export function DebateStage({
       busyAction,
       commitDetail,
       debateId,
-      ensureMediaPrepare,
       expectedCurrentAudioDebateId,
       markControllerReady,
       pauseAudio,
       readOnly,
+      scheduleControllerAcquire,
+      scheduleMediaPrepare,
       setActiveParticipant,
       setAvatars,
       setVisible,
-      sendControllerAcquire,
     ],
   );
 
@@ -1537,6 +1801,7 @@ export function DebateStage({
     TERMINAL_PLAYBACK.includes(playback.status);
   const canReplay =
     !readOnly &&
+    controllerReady &&
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&

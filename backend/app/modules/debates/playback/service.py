@@ -410,6 +410,74 @@ class PlaybackService:
         audio = PlaybackService._get(turn, "audio_relative_path", "audio_file_id", default=None)
         return generation in {"ready", "final_ready", "completed"} and audio is not None
 
+    @classmethod
+    def _has_public_predecessor_prefix(cls, turns: list[Any], turn: Any) -> bool:
+        """Return whether every planned predecessor is already public.
+
+        A final-ready successor may be prepared in the background, but it must
+        never become the public current item (or publish at ``started_ack``)
+        while any earlier planned turn remains unpublished.  Checking the
+        contiguous index sequence as well as the publication flag prevents a
+        malformed/partial plan from being treated as a valid prefix.
+        """
+
+        try:
+            current_index = int(cls._get(turn, "turn_index", default=-1))
+        except (TypeError, ValueError):
+            return False
+        if current_index < 0:
+            return False
+        predecessors: list[Any] = []
+        for candidate in turns:
+            try:
+                candidate_index = int(cls._get(candidate, "turn_index", default=-1))
+            except (TypeError, ValueError):
+                return False
+            if candidate_index < current_index:
+                predecessors.append(candidate)
+        predecessors.sort(key=lambda candidate: int(cls._get(candidate, "turn_index", default=-1)))
+        indices = [int(cls._get(candidate, "turn_index", default=-1)) for candidate in predecessors]
+        if indices != list(range(current_index)):
+            return False
+        return all(cls._turn_public(candidate) for candidate in predecessors)
+
+    @classmethod
+    def _validate_playback_action(
+        cls,
+        state: PlaybackRuntime,
+        turn: Any,
+        turns: list[Any],
+        action: Literal["start", "resume", "replay"],
+    ) -> None:
+        """Fail closed when the browser action does not match the item context.
+
+        ``start`` is reserved for the first publication of an unpublished
+        live turn.  ``resume`` can only continue an already public live turn,
+        and ``replay`` can only address an already public replay item.  This
+        check is deliberately pure and runs before ticket/state mutation in
+        both media preparation and the browser started acknowledgement.
+        """
+
+        public = cls._turn_public(turn)
+        if action == "replay":
+            if state.mode != "replay" or not public:
+                raise conflict(
+                    "invalid_state", "Replay action does not match the current public item."
+                )
+            return
+        if state.mode != "live":
+            raise invalid_state("Live playback action does not match the current playback mode.")
+        if action == "start":
+            if public:
+                raise conflict("invalid_state", "A public live turn can only be resumed.")
+        elif not public:
+            raise conflict("invalid_state", "An unpublished live turn can only be started.")
+        if not cls._has_public_predecessor_prefix(turns, turn):
+            raise conflict(
+                "invalid_state",
+                "The live turn cannot be published before its public predecessor prefix.",
+            )
+
     @staticmethod
     def _word_count(text: str) -> int:
         return len(_WORD_RE.findall(text))
@@ -1747,8 +1815,15 @@ class PlaybackService:
             current = self._current_turn(db, debate, state)
             if not self._turn_ready(current):
                 raise invalid_state("The current turn is not ready for playback.")
-            cursor = self._cursor(state)
             turns = self._turns(db, debate)
+            if not self._turn_public(current) or not self._has_public_predecessor_prefix(
+                turns, current
+            ):
+                raise conflict(
+                    "invalid_state",
+                    "The live turn cannot advance before its public predecessor prefix.",
+                )
+            cursor = self._cursor(state)
             index = next(
                 index for index, item in enumerate(turns) if str(item.id) == state.current_turn_id
             )
@@ -1994,9 +2069,22 @@ class PlaybackService:
         async with self._lock:
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
-            if str(getattr(debate, "status", "")) == "draft":
+            debate_status = str(getattr(debate, "status", ""))
+            if debate_status == "draft":
                 raise invalid_state("A draft debate has no playback controller.")
+            if debate_status in {"failed", "stopped"}:
+                raise invalid_state("A failed or stopped debate has no playback controller.")
+            if debate_status not in {"running", "debate_finished", "completed"}:
+                raise invalid_state("The debate is not in a controllable playback state.")
             state = self._state(db, debate)
+            # Stopped playback is irreversible in every mode.  A finished
+            # debate may acquire the controller while its live playback state
+            # is completed; the teacher still has to issue the explicit REST
+            # replay command before any media action is possible.
+            if state.status == "stopped":
+                raise invalid_state("Stopped playback has no controller.")
+            if state.mode == "replay" and debate_status not in {"debate_finished", "completed"}:
+                raise invalid_state("Replay is available only after the debate finishes.")
             self._check_control(state, expected_control_version)
             previous_epoch = state.controller_epoch
             previous_connection = state.controller_connection_id
@@ -2141,11 +2229,9 @@ class PlaybackService:
             self._check_epoch(state, epoch=epoch, session_hash=session_hash)
             if state.status != "ready" or state.current_turn_id != turn_id:
                 raise not_found()
-            if action == "replay" and state.mode != "replay":
-                raise invalid_state("Replay media is not the current playback item.")
-            if action != "replay" and state.mode != "live":
-                raise invalid_state("Live media is not the current playback item.")
             turn = self._current_turn(db, debate, state)
+            turns = self._turns(db, debate)
+            self._validate_playback_action(state, turn, turns, action)
             if not self._turn_ready(turn):
                 raise not_found()
             if self.audio_store is None or self.audio_store.metadata(debate_id, turn_id) is None:
@@ -2225,6 +2311,9 @@ class PlaybackService:
                 or state.pending_action != action
             ):
                 raise conflict("invalid_state", "The playback acknowledgement is stale.")
+            turn = self._current_turn(db, debate, state)
+            turns = self._turns(db, debate)
+            self._validate_playback_action(state, turn, turns, action)
             ticket = self._find_ticket(
                 session_hash=session_hash,
                 epoch=epoch,
@@ -2239,7 +2328,6 @@ class PlaybackService:
                 binding,
                 audio_duration_ms=state.audio_duration_ms,
             )
-            turn = self._current_turn(db, debate, state)
             if action == "start":
                 if not self.repository.publish_turn(db, turn):
                     raise conflict("invalid_state", "The turn is not ready to publish.")
@@ -2342,6 +2430,18 @@ class PlaybackService:
                 # Duplicate ended events are intentionally no-op/private at
                 # the transport layer; callers can inspect the unchanged DTO.
                 return self._state_dto(state)
+            turns = self._turns(db, debate)
+            current = self._current_turn(db, debate, state)
+            if state.mode == "live":
+                if not self._turn_public(current) or not self._has_public_predecessor_prefix(
+                    turns, current
+                ):
+                    raise conflict(
+                        "invalid_state",
+                        "The live turn cannot advance before its public predecessor prefix.",
+                    )
+            elif not self._turn_public(current):
+                raise conflict("invalid_state", "Replay requires a public playback item.")
             cursor = self._cursor(state)
             state.control_version += 1
             self.ticket_store.revoke_item(debate_id, turn_id)
@@ -2362,7 +2462,6 @@ class PlaybackService:
                     "control_version": state.control_version,
                 }
             else:
-                turns = self._turns(db, debate)
                 index = next(index for index, item in enumerate(turns) if str(item.id) == turn_id)
                 if index + 1 < len(turns):
                     next_turn = turns[index + 1]

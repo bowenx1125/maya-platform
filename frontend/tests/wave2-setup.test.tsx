@@ -134,6 +134,27 @@ describe("Wave 2 teacher debate setup", () => {
     expect(router.replace).toHaveBeenCalledWith("/teacher/debates");
   });
 
+  it("loads candidates once with the stable default platform controller", async () => {
+    const publishedAgents = vi
+      .fn()
+      .mockResolvedValue([
+        candidate("bowen", "Bowen"),
+        candidate("kaikai", "KaiKai"),
+      ]);
+    useSessionMock.mockReturnValue({
+      api: {
+        publishedAgents,
+        createDebate: vi.fn().mockResolvedValue(createdDebate()),
+      },
+      user: teacherSession().user,
+    });
+
+    render(<TeacherDebateCreate />);
+    await screen.findByRole("button", { name: /Bowen/ });
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    expect(publishedAgents).toHaveBeenCalledTimes(1);
+  });
+
   it("reuses one idempotency key after an ambiguous create response", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const keys: string[] = [];

@@ -192,7 +192,10 @@ export function TeacherDebateCreate({
   const router = useRouter();
   const { api, user } = useSession();
   const courseId = teacherCourseId(user);
-  const effectiveController = controller ?? defaultCreateController(api);
+  const effectiveController = useMemo(
+    () => controller ?? defaultCreateController(api),
+    [api, controller],
+  );
   const [candidates, setCandidates] = useState<PublishedAgentSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [participantDrafts, setParticipantDrafts] = useState<

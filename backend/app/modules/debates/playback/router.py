@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from typing import Annotated, Any, cast
 from uuid import UUID, uuid4
 
@@ -345,25 +345,28 @@ def _websocket_origin_allowed(websocket: WebSocket, settings: Settings) -> bool:
     return origin == _origin_tuple(f"{gateway_scheme}://{websocket.url.netloc}")
 
 
-def _reload_ws_context(
-    db: Session,
-    settings: Settings,
-    raw_token: str | None,
-) -> AuthContext | None:
-    """End the prior read transaction and reload the live Session row.
+@contextlib.contextmanager
+def _websocket_session(database: Any, settings: Settings) -> Iterator[Session]:
+    """Provide one short-lived DB session for a WebSocket operation.
 
-    Logout/revoke happens through another request-local SQLAlchemy session.  A
-    long-lived WebSocket session must not trust an identity-map copy from its
-    upgrade handshake; every command gets a fresh membership/session read.
+    A WebSocket can outlive the HTTP request dependency scope by hours.  Do
+    not bind a SQLAlchemy session to that socket: a single auth/snapshot read
+    would otherwise keep a QueuePool connection checked out until disconnect.
+    The event stream remains long-lived in memory, while every database
+    operation gets its own transaction and promptly returns its connection.
     """
 
-    rollback = getattr(db, "rollback", None)
-    if callable(rollback):
-        rollback()
-    expire_all = getattr(db, "expire_all", None)
-    if callable(expire_all):
-        expire_all()
-    return get_auth_context(db, settings, raw_token)
+    db: Session = database.session_factory()
+    db.info["maya_settings"] = settings
+    try:
+        yield db
+        db.commit()
+    except BaseException:
+        with contextlib.suppress(Exception):
+            db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 async def _close_ws(websocket: WebSocket, code: int = 4403) -> None:
@@ -409,12 +412,10 @@ async def debate_events_route(
         await _close_ws(websocket)
         return
     raw_token = websocket.cookies.get("maya_session")
-    db: Session = database.session_factory()
-    db.info["maya_settings"] = settings
     service = get_playback_service(websocket)  # type: ignore[arg-type]
-    context = get_auth_context(db, settings, raw_token)
+    with _websocket_session(database, settings) as handshake_db:
+        context = get_auth_context(handshake_db, settings, raw_token)
     if context is None:
-        db.close()
         await _close_ws(websocket, 4401)
         return
     connection_id = str(uuid4())
@@ -422,10 +423,11 @@ async def debate_events_route(
     seen_command_ids: set[str] = set()
 
     async def snapshot_factory() -> tuple[dict[str, Any], int]:
-        current = get_auth_context(db, settings, raw_token)
-        if current is None:
-            raise forbidden()
-        return await service.snapshot(db, str(debate_id), current)
+        with _websocket_session(database, settings) as snapshot_db:
+            current = get_auth_context(snapshot_db, settings, raw_token)
+            if current is None:
+                raise forbidden()
+            return await service.snapshot(snapshot_db, str(debate_id), current)
 
     stream = cast(
         AsyncGenerator[dict[str, Any], None],
@@ -463,146 +465,160 @@ async def debate_events_route(
                     # Even malformed input must not get a free pass around
                     # the live-session check.  A revoked socket is closed
                     # before returning a private malformed-command result.
-                    fresh = _reload_ws_context(db, settings, raw_token)
+                    close_for_revocation = False
+                    with _websocket_session(database, settings) as command_db:
+                        fresh = get_auth_context(command_db, settings, raw_token)
+                        if fresh is None:
+                            rejected = await service.command_duplicate_or_rejected(
+                                command_db,
+                                str(debate_id),
+                                command_id=str(command_id),
+                                code="session_revoked",
+                                recoverable=False,
+                            )
+                            close_for_revocation = True
+                        else:
+                            rejected = await service.command_duplicate_or_rejected(
+                                command_db,
+                                str(debate_id),
+                                command_id=str(command_id),
+                                code="malformed_command",
+                                recoverable=False,
+                            )
+                    await websocket.send_json(private_result_to_wire(rejected))
+                    if close_for_revocation:
+                        await _close_ws(websocket, 4401)
+                        break
+                    continue
+                close_for_revocation = False
+                result: PrivateResult | None = None
+                with _websocket_session(database, settings) as command_db:
+                    fresh = get_auth_context(command_db, settings, raw_token)
                     if fresh is None:
-                        rejected = await service.command_duplicate_or_rejected(
-                            db,
+                        result = await service.command_duplicate_or_rejected(
+                            command_db,
                             str(debate_id),
-                            command_id=str(command_id),
+                            command_id=str(command.command_id),
                             code="session_revoked",
                             recoverable=False,
                         )
-                        await websocket.send_json(private_result_to_wire(rejected))
-                        await _close_ws(websocket, 4401)
-                        break
-                    rejected = await service.command_duplicate_or_rejected(
-                        db,
-                        str(debate_id),
-                        command_id=str(command_id),
-                        code="malformed_command",
-                        recoverable=False,
-                    )
-                    await websocket.send_json(private_result_to_wire(rejected))
-                    continue
-                fresh = _reload_ws_context(db, settings, raw_token)
-                if fresh is None:
-                    rejected = await service.command_duplicate_or_rejected(
-                        db,
-                        str(debate_id),
-                        command_id=str(command.command_id),
-                        code="session_revoked",
-                        recoverable=False,
-                    )
-                    await websocket.send_json(private_result_to_wire(rejected))
-                    await _close_ws(websocket, 4401)
-                    break
-                command_key = str(command.command_id)
-                if command_key in seen_command_ids:
-                    duplicate = await service.command_duplicate(
-                        db,
-                        str(debate_id),
-                        command_id=command_key,
-                    )
-                    await websocket.send_json(private_result_to_wire(duplicate))
-                    continue
-                seen_command_ids.add(command_key)
-                if str(command.debate_id) != str(debate_id):
-                    rejected = await service.command_duplicate_or_rejected(
-                        db,
-                        str(debate_id),
-                        command_id=str(command.command_id),
-                        code="forbidden",
-                        recoverable=False,
-                    )
-                    await websocket.send_json(private_result_to_wire(rejected))
-                    continue
-                try:
-                    result: PrivateResult | None = None
-                    if isinstance(command, ControllerAcquireCommand):
-                        acquired = await service.controller_acquire(
-                            db,
-                            str(debate_id),
-                            command_id=str(command.command_id),
-                            expected_control_version=command.expected_control_version,
-                            session_hash=_session_hash(fresh),
-                            connection_id=connection_id,
-                            context=fresh,
-                        )
-                        result = acquired
-                        epoch = str(acquired.controller_epoch)
-                        service.register_connection(epoch, websocket.send_json)
-                    elif isinstance(command, MediaPrepareCommand):
-                        _media, result = await service.media_prepare(
-                            db,
-                            str(debate_id),
-                            command_id=str(command.command_id),
-                            expected_control_version=command.expected_control_version,
-                            epoch=str(command.controller_epoch),
-                            session_hash=_session_hash(fresh),
-                            turn_id=str(command.turn_id),
-                            action=command.playback_action,
-                            context=fresh,
-                        )
-                    elif isinstance(command, StartedAckCommand):
-                        await service.started_ack(
-                            db,
-                            str(debate_id),
-                            command_id=str(command.command_id),
-                            expected_control_version=command.expected_control_version,
-                            epoch=str(command.controller_epoch),
-                            session_hash=_session_hash(fresh),
-                            turn_id=str(command.turn_id),
-                            action=command.playback_action,
-                            context=fresh,
-                        )
-                    elif isinstance(command, EndedAckCommand):
-                        before = service._state(db, service._get_debate(db, str(debate_id))).status
-                        await service.ended_ack(
-                            db,
-                            str(debate_id),
-                            command_id=str(command.command_id),
-                            expected_control_version=command.expected_control_version,
-                            epoch=str(command.controller_epoch),
-                            session_hash=_session_hash(fresh),
-                            turn_id=str(command.turn_id),
-                            context=fresh,
-                        )
-                        after = service._state(db, service._get_debate(db, str(debate_id))).status
-                        if before != "playing" or after == before:
-                            result = await service.command_duplicate_or_rejected(
-                                db,
-                                str(debate_id),
-                                command_id=str(command.command_id),
-                                code="duplicate_command",
-                                recoverable=True,
-                            )
-                    elif isinstance(command, PlayFailedCommand):
-                        await service.play_failed(
-                            db,
-                            str(debate_id),
-                            expected_control_version=command.expected_control_version,
-                            epoch=str(command.controller_epoch),
-                            session_hash=_session_hash(fresh),
-                            turn_id=str(command.turn_id),
-                            failure_phase=command.failure_phase,
-                            cursor_ms=command.cursor_ms,
-                            safe_client_code=command.safe_client_code,
-                            context=fresh,
-                        )
+                        close_for_revocation = True
                     else:
-                        raise PlatformError(
-                            "malformed_command", "The command is not supported.", 400
-                        )
-                except PlatformError as exc:
-                    result = await service.command_duplicate_or_rejected(
-                        db,
-                        str(debate_id),
-                        command_id=str(command.command_id),
-                        code=exc.code,
-                        recoverable=exc.status_code in {408, 409, 503},
-                    )
+                        command_key = str(command.command_id)
+                        if command_key in seen_command_ids:
+                            result = await service.command_duplicate(
+                                command_db,
+                                str(debate_id),
+                                command_id=command_key,
+                            )
+                        else:
+                            seen_command_ids.add(command_key)
+                            if str(command.debate_id) != str(debate_id):
+                                result = await service.command_duplicate_or_rejected(
+                                    command_db,
+                                    str(debate_id),
+                                    command_id=str(command.command_id),
+                                    code="forbidden",
+                                    recoverable=False,
+                                )
+                            else:
+                                try:
+                                    if isinstance(command, ControllerAcquireCommand):
+                                        acquired = await service.controller_acquire(
+                                            command_db,
+                                            str(debate_id),
+                                            command_id=str(command.command_id),
+                                            expected_control_version=command.expected_control_version,
+                                            session_hash=_session_hash(fresh),
+                                            connection_id=connection_id,
+                                            context=fresh,
+                                        )
+                                        result = acquired
+                                        epoch = str(acquired.controller_epoch)
+                                        service.register_connection(epoch, websocket.send_json)
+                                    elif isinstance(command, MediaPrepareCommand):
+                                        _media, result = await service.media_prepare(
+                                            command_db,
+                                            str(debate_id),
+                                            command_id=str(command.command_id),
+                                            expected_control_version=command.expected_control_version,
+                                            epoch=str(command.controller_epoch),
+                                            session_hash=_session_hash(fresh),
+                                            turn_id=str(command.turn_id),
+                                            action=command.playback_action,
+                                            context=fresh,
+                                        )
+                                    elif isinstance(command, StartedAckCommand):
+                                        await service.started_ack(
+                                            command_db,
+                                            str(debate_id),
+                                            command_id=str(command.command_id),
+                                            expected_control_version=command.expected_control_version,
+                                            epoch=str(command.controller_epoch),
+                                            session_hash=_session_hash(fresh),
+                                            turn_id=str(command.turn_id),
+                                            action=command.playback_action,
+                                            context=fresh,
+                                        )
+                                    elif isinstance(command, EndedAckCommand):
+                                        before = service._state(
+                                            command_db,
+                                            service._get_debate(command_db, str(debate_id)),
+                                        ).status
+                                        await service.ended_ack(
+                                            command_db,
+                                            str(debate_id),
+                                            command_id=str(command.command_id),
+                                            expected_control_version=command.expected_control_version,
+                                            epoch=str(command.controller_epoch),
+                                            session_hash=_session_hash(fresh),
+                                            turn_id=str(command.turn_id),
+                                            context=fresh,
+                                        )
+                                        after = service._state(
+                                            command_db,
+                                            service._get_debate(command_db, str(debate_id)),
+                                        ).status
+                                        if before != "playing" or after == before:
+                                            result = await service.command_duplicate_or_rejected(
+                                                command_db,
+                                                str(debate_id),
+                                                command_id=str(command.command_id),
+                                                code="duplicate_command",
+                                                recoverable=True,
+                                            )
+                                    elif isinstance(command, PlayFailedCommand):
+                                        await service.play_failed(
+                                            command_db,
+                                            str(debate_id),
+                                            expected_control_version=command.expected_control_version,
+                                            epoch=str(command.controller_epoch),
+                                            session_hash=_session_hash(fresh),
+                                            turn_id=str(command.turn_id),
+                                            failure_phase=command.failure_phase,
+                                            cursor_ms=command.cursor_ms,
+                                            safe_client_code=command.safe_client_code,
+                                            context=fresh,
+                                        )
+                                    else:
+                                        raise PlatformError(
+                                            "malformed_command",
+                                            "The command is not supported.",
+                                            400,
+                                        )
+                                except PlatformError as exc:
+                                    result = await service.command_duplicate_or_rejected(
+                                        command_db,
+                                        str(debate_id),
+                                        command_id=str(command.command_id),
+                                        code=exc.code,
+                                        recoverable=exc.status_code in {408, 409, 503},
+                                    )
                 if result is not None:
                     await websocket.send_json(private_result_to_wire(result))
+                if close_for_revocation:
+                    await _close_ws(websocket, 4401)
+                    break
                 if event_task is None or event_task.done():
                     event_task = asyncio.create_task(stream.__anext__())
     except (WebSocketDisconnect, RuntimeError, PlatformError):
@@ -615,15 +631,15 @@ async def debate_events_route(
         if epoch is not None:
             service.unregister_connection(epoch)
             with contextlib.suppress(Exception):
-                await service.controller_disconnect(
-                    db,
-                    str(debate_id),
-                    epoch=epoch,
-                    session_hash=_session_hash(context),
-                )
+                with _websocket_session(database, settings) as disconnect_db:
+                    await service.controller_disconnect(
+                        disconnect_db,
+                        str(debate_id),
+                        epoch=epoch,
+                        session_hash=session_hash(raw_token or ""),
+                    )
         with contextlib.suppress(Exception):
             await stream.aclose()
-        db.close()
 
 
 @router.get(

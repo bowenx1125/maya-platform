@@ -9,6 +9,7 @@ import json
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from email.utils import format_datetime
 from pathlib import Path
@@ -941,6 +942,32 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                 detail = _wait_for_ready(client, debate_id)
                 turn_id = detail["playback"]["current_turn_id"]
                 assert turn_id is not None
+                if turn_number == 0:
+                    # A live turn is still unpublished until its first
+                    # started acknowledgement.  A stale resume action must
+                    # be rejected without issuing a ticket or changing the
+                    # authoritative SQL playback state.
+                    wrong_resume_id = str(uuid4())
+                    socket.send_json(
+                        {
+                            "command_id": wrong_resume_id,
+                            "command_type": "playback.media.prepare",
+                            "command_version": 1,
+                            "debate_id": debate_id,
+                            "expected_control_version": control_version,
+                            "controller_epoch": epoch,
+                            "turn_id": turn_id,
+                            "playback_action": "resume",
+                        }
+                    )
+                    rejected = _receive_until(socket, "message_type", "command.rejected")
+                    assert rejected["command_id"] == wrong_resume_id
+                    assert rejected["code"] == "invalid_state"
+                    assert rejected["current_control_version"] == control_version
+                    unchanged = client.get(f"/api/v1/debates/{debate_id}")
+                    assert unchanged.status_code == 200
+                    assert unchanged.json()["playback"]["control_version"] == control_version
+                    assert unchanged.json()["playback"]["status"] == "ready"
                 prepare_id = str(uuid4())
                 socket.send_json(
                     {
@@ -982,20 +1009,33 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                 assert public["payload"]["speech"]
                 assert "provider" not in str(public).lower()
                 published_turn_ids.append(turn_id)
-                socket.send_json(
-                    {
-                        "command_id": str(uuid4()),
-                        "command_type": "playback.ended_ack",
-                        "command_version": 1,
-                        "debate_id": debate_id,
-                        "expected_control_version": control_version,
-                        "controller_epoch": epoch,
-                        "turn_id": turn_id,
-                    }
-                )
-                completed = _receive_until(socket, "event_type", "playback.completed")
-                assert completed["payload"]["turn_id"] == turn_id
-                control_version = completed["payload"]["control_version"]
+                if turn_number == 0:
+                    skipped = client.post(
+                        f"/api/v1/debates/{debate_id}/skip",
+                        headers=_headers(csrf),
+                        json={"expected_control_version": control_version},
+                    )
+                    assert skipped.status_code == 200, skipped.text
+                    skip_event = _receive_until(socket, "event_type", "playback.skipped")
+                    assert skip_event["payload"]["turn_id"] == turn_id
+                    control_version = skip_event["payload"]["control_version"]
+                    next_after_skip = skipped.json()["current_turn_id"]
+                    assert next_after_skip != turn_id
+                else:
+                    socket.send_json(
+                        {
+                            "command_id": str(uuid4()),
+                            "command_type": "playback.ended_ack",
+                            "command_version": 1,
+                            "debate_id": debate_id,
+                            "expected_control_version": control_version,
+                            "controller_epoch": epoch,
+                            "turn_id": turn_id,
+                        }
+                    )
+                    completed = _receive_until(socket, "event_type", "playback.completed")
+                    assert completed["payload"]["turn_id"] == turn_id
+                    control_version = completed["payload"]["control_version"]
                 if turn_number < 3:
                     _wait_for_ready(client, debate_id)
 
@@ -1101,6 +1141,121 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
             )
             revoked = _receive_until(socket, "code", "session_revoked")
             assert revoked["recoverable"] is False
+
+
+def test_websocket_sessions_release_small_sqlite_pool_for_http_requests(
+    app_factory: Any,
+) -> None:
+    """Multiple observation tabs must not pin the file-SQLite QueuePool."""
+
+    app, database, _settings = app_factory()
+    pool = cast(Any, database.engine.pool)
+    # Keep the regression deterministic and fast if the route accidentally
+    # holds a connection for the lifetime of a socket.  The production
+    # default remains unchanged; this only constrains this isolated database.
+    pool._pool.maxsize = 2
+    pool._max_overflow = 0
+    pool._overflow = -2
+    pool._timeout = 0.2
+
+    with TestClient(app) as client:
+        bowen_id = _insert_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="Bowen",
+            evidence="TikTok recommendation transparency and user choice.",
+        )
+        kaikai_id = _insert_published_agent(
+            database,
+            group_id=GROUP_KAIKAI_ID,
+            name="KaiKai",
+            evidence="Quartz orchid mineral lattice basalt geometry.",
+        )
+        _session, csrf = login(client)
+        body = {
+            "topic": TOPIC,
+            "participants": [
+                {
+                    "agent_id": bowen_id,
+                    "stance_mode": "assigned",
+                    "assigned_stance": "support",
+                },
+                {
+                    "agent_id": kaikai_id,
+                    "stance_mode": "assigned",
+                    "assigned_stance": "oppose",
+                },
+            ],
+            "round_count": 2,
+        }
+        create_headers = _headers(csrf, **{"Idempotency-Key": "wave2-pool-create-0001"})
+        created = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=create_headers,
+            json=body,
+        )
+        assert created.status_code == 201, created.text
+        debate_id = created.json()["id"]
+        started = client.post(
+            f"/api/v1/debates/{debate_id}/start",
+            headers=_headers(csrf, **{"Idempotency-Key": "wave2-pool-start-0001"}),
+            json={
+                "expected_revision": 0,
+                "expected_current_audio_debate_id": None,
+                "confirm_previous_audio_cleanup": False,
+            },
+        )
+        assert started.status_code == 200, started.text
+        _wait_for_ready(client, debate_id)
+        baseline_checked_out = pool.checkedout()
+
+        with ExitStack() as sockets:
+            opened: list[Any] = []
+            for _index in range(5):
+                socket = sockets.enter_context(
+                    client.websocket_connect(
+                        f"/api/v1/debates/{debate_id}/events",
+                        headers={"origin": "http://testserver"},
+                    )
+                )
+                opened.append(socket)
+                snapshot = _receive_until(socket, "event_type", "snapshot")
+                assert snapshot["payload"]["debate_status"] == "running"
+                assert snapshot["payload"]["playback"]["status"] == "ready"
+
+            # Each handshake and snapshot has completed and returned its
+            # connection, even though all five WebSockets remain open.
+            assert pool.checkedout() == baseline_checked_out
+
+            command_id = str(uuid4())
+            opened[0].send_json(
+                {
+                    "command_id": command_id,
+                    "command_type": "playback.controller.acquire",
+                    "command_version": 1,
+                    "debate_id": debate_id,
+                    "expected_control_version": 0,
+                }
+            )
+            acquired = _receive_until(opened[0], "message_type", "controller.acquired")
+            assert acquired["command_id"] == command_id
+            assert pool.checkedout() == baseline_checked_out
+
+            fetched = client.get(f"/api/v1/debates/{debate_id}")
+            assert fetched.status_code == 200, fetched.text
+
+            replay = client.post(
+                f"/api/v1/courses/{COURSE_ID}/debates",
+                headers=create_headers,
+                json=body,
+            )
+            assert replay.status_code == 201, replay.text
+            assert replay.json() == created.json()
+            assert pool.checkedout() == baseline_checked_out
+
+        # Closing the sockets runs disconnect cleanup (if a tab had acquired
+        # control) and still leaves the QueuePool at its pre-WebSocket level.
+        assert pool.checkedout() == baseline_checked_out
 
 
 @pytest.mark.asyncio
@@ -1221,6 +1376,146 @@ async def test_controller_ticket_pause_resume_and_current_only_audio(tmp_path: P
     assert advanced.current_turn_id is not None
     assert str(advanced.current_turn_id) != first_turn_id
     assert advanced.status == "ready"
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_skip_next_turn_uses_start_and_unpublished_predecessor_cannot_publish(
+    tmp_path: Path,
+) -> None:
+    service, debate, tasks = await _memory_ready_service(tmp_path)
+    first_turn = debate.turns[0]
+    next_turn = debate.turns[1]
+    controller = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=0,
+        session_hash="skip-session",
+        connection_id="skip-tab",
+    )
+    epoch = str(controller.controller_epoch)
+
+    before = service._state(None, debate)
+    with pytest.raises(PlatformError) as wrong_resume:
+        await service.media_prepare(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=controller.control_version,
+            epoch=epoch,
+            session_hash="skip-session",
+            turn_id=first_turn.id,
+            action="resume",
+        )
+    assert wrong_resume.value.code == "invalid_state"
+    assert (before.status, before.current_turn_id, before.control_version) == (
+        "ready",
+        first_turn.id,
+        controller.control_version,
+    )
+    assert before.pending_action is None
+    assert (
+        service.ticket_store.find(
+            session_hash="skip-session",
+            controller_epoch=epoch,
+            debate_id=debate.id,
+            turn_id=first_turn.id,
+            action="resume",
+        )
+        is None
+    )
+
+    await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="skip-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    started = await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=controller.control_version,
+        epoch=epoch,
+        session_hash="skip-session",
+        turn_id=first_turn.id,
+        action="start",
+    )
+    skipped = await service.skip(
+        None,
+        debate.id,
+        expected_control_version=started.control_version,
+    )
+    assert str(skipped.current_turn_id) == next_turn.id
+    assert skipped.status == "ready"
+    assert first_turn.publication_status == "public"
+    assert next_turn.publication_status == "unpublished"
+
+    with pytest.raises(PlatformError) as next_resume:
+        await service.media_prepare(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=skipped.control_version,
+            epoch=epoch,
+            session_hash="skip-session",
+            turn_id=next_turn.id,
+            action="resume",
+        )
+    assert next_resume.value.code == "invalid_state"
+    prepared_next, _private = await service.media_prepare(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=skipped.control_version,
+        epoch=epoch,
+        session_hash="skip-session",
+        turn_id=next_turn.id,
+        action="start",
+    )
+    await service.started_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=skipped.control_version,
+        epoch=epoch,
+        session_hash="skip-session",
+        turn_id=next_turn.id,
+        action="start",
+    )
+    assert prepared_next.binding.action == "start"
+    assert next_turn.publication_status == "public"
+
+    # A successor that is made current while an earlier turn is unpublished
+    # must still fail closed at both media preparation and started ack.
+    next_turn.publication_status = "unpublished"
+    first_turn.publication_status = "unpublished"
+    state = service._state(None, debate)
+    state.status = "ready"
+    state.mode = "live"
+    state.current_turn_id = next_turn.id
+    state.pending_action = "start"
+    state.control_version += 1
+    with pytest.raises(PlatformError) as missing_prefix:
+        await service.started_ack(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=state.control_version,
+            epoch=epoch,
+            session_hash="skip-session",
+            turn_id=next_turn.id,
+            action="start",
+        )
+    assert missing_prefix.value.code == "invalid_state"
+    assert state.status == "ready"
+    assert state.current_turn_id == next_turn.id
+    assert state.control_version > skipped.control_version
     await tasks.close()
 
 
@@ -1436,6 +1731,205 @@ async def test_draft_controller_acquire_is_rejected_until_start(tmp_path: Path) 
         )
     assert rejected.value.code == "invalid_state"
     await tasks.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["failed", "stopped"])
+async def test_terminal_controller_acquire_does_not_mutate_playback(
+    tmp_path: Path,
+    status: str,
+) -> None:
+    repository = MemoryPlaybackRepository()
+    debate = _memory_debate(repository, course_id=str(uuid4()), status=status)
+    state = repository.playback_state(None, debate)
+    state.status = "stopped"
+    state.mode = "live"
+    state.current_turn_id = str(uuid4())
+    state.control_version = 7
+    state.controller_epoch = None
+    state.controller_session_hash = None
+    state.controller_connection_id = None
+    tasks = TaskManager()
+    service = PlaybackService(repository, audio_store=AudioStore(tmp_path), task_manager=tasks)
+    events_before = list(service.event_hub.store.events_after(debate.id, 0))
+
+    with pytest.raises(PlatformError) as rejected:
+        await service.controller_acquire(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=7,
+            session_hash="terminal-session",
+            connection_id="terminal-tab",
+        )
+
+    assert rejected.value.code == "invalid_state"
+    assert state.status == "stopped"
+    assert state.mode == "live"
+    assert state.control_version == 7
+    assert state.controller_epoch is None
+    assert state.controller_session_hash is None
+    assert state.controller_connection_id is None
+    assert debate.id not in service._controller_sessions
+    assert list(service.event_hub.store.events_after(debate.id, 0)) == events_before
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["debate_finished", "completed"])
+async def test_finished_live_controller_acquire_then_explicit_replay(
+    tmp_path: Path,
+    status: str,
+) -> None:
+    repository = MemoryPlaybackRepository()
+    debate = _memory_debate(repository, course_id=str(uuid4()), status=status)
+    turn = MemoryTurn(
+        participant_id=debate.participants[0].id,
+        generation_status="final_ready",
+        publication_status="public",
+        speech=_valid_speech(),
+        audio_relative_path="retained.wav",
+    )
+    debate.turns = [turn]
+    state = repository.playback_state(None, debate)
+    state.status = "completed"
+    state.mode = "live"
+    state.current_turn_id = turn.id
+    state.control_version = 4
+    state.replay_scope = None
+    state.replay_turn_ids = []
+    state.replay_index = 0
+    tasks = TaskManager()
+    service = PlaybackService(repository, audio_store=None, task_manager=tasks)
+    events_before = list(service.event_hub.store.events_after(debate.id, 0))
+
+    acquired = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=4,
+        session_hash="finished-session",
+        connection_id="finished-tab",
+    )
+
+    assert acquired.control_version == 5
+    assert state.status == "completed"
+    assert state.mode == "live"
+    assert state.current_turn_id == turn.id
+    assert state.replay_scope is None
+    assert state.replay_turn_ids == []
+    assert state.replay_index == 0
+    assert state.controller_epoch == str(acquired.controller_epoch)
+    assert state.controller_session_hash == "finished-session"
+    assert state.controller_connection_id == "finished-tab"
+    assert debate.status == status
+    assert list(service.event_hub.store.events_after(debate.id, 0)) == events_before
+
+    replay = await service.replay_all(
+        None,
+        debate.id,
+        expected_control_version=acquired.control_version,
+    )
+    assert replay.status == "ready"
+    assert replay.mode == "replay"
+    assert str(replay.current_turn_id) == turn.id
+    await tasks.close()
+
+
+@pytest.mark.parametrize("status", ["failed", "stopped"])
+def test_websocket_terminal_controller_acquire_is_private_stable_rejection(
+    app_factory: Any,
+    status: str,
+) -> None:
+    app, database, _settings = app_factory()
+    with TestClient(app) as client:
+        bowen_id = _insert_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="Bowen",
+            evidence="TikTok recommendation transparency and user choice.",
+        )
+        kaikai_id = _insert_published_agent(
+            database,
+            group_id=GROUP_KAIKAI_ID,
+            name="KaiKai",
+            evidence="Quartz orchid mineral lattice basalt geometry.",
+        )
+        _session, csrf = login(client)
+        body = {
+            "topic": TOPIC,
+            "participants": [
+                {
+                    "agent_id": bowen_id,
+                    "stance_mode": "assigned",
+                    "assigned_stance": "support",
+                },
+                {
+                    "agent_id": kaikai_id,
+                    "stance_mode": "assigned",
+                    "assigned_stance": "oppose",
+                },
+            ],
+            "round_count": 2,
+        }
+        created = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=_headers(csrf, **{"Idempotency-Key": f"wave2-{status}-create-0001"}),
+            json=body,
+        )
+        assert created.status_code == 201, created.text
+        debate_id = created.json()["id"]
+        with database.session() as db:
+            debate = db.get(Debate, debate_id)
+            playback = db.scalar(
+                select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+            )
+            assert debate is not None and playback is not None
+            debate.status = status
+            playback.status = "stopped"
+            playback.mode = "live"
+            playback.control_version = 7
+            playback.controller_epoch = None
+            playback.controller_owner_connection = None
+
+        event_sequence_before = app.state.playback_service.event_hub.store.last_sequence(debate_id)
+        with client.websocket_connect(
+            f"/api/v1/debates/{debate_id}/events",
+            headers={"origin": "http://testserver"},
+        ) as socket:
+            snapshot = _receive_until(socket, "event_type", "snapshot")
+            assert snapshot["payload"]["debate_status"] == status
+            assert snapshot["payload"]["playback"]["status"] == "stopped"
+            assert snapshot["payload"]["playback"]["control_version"] == 7
+            command_id = str(uuid4())
+            socket.send_json(
+                {
+                    "command_id": command_id,
+                    "command_type": "playback.controller.acquire",
+                    "command_version": 1,
+                    "debate_id": debate_id,
+                    "expected_control_version": 7,
+                }
+            )
+            rejected = _receive_until(socket, "message_type", "command.rejected")
+            assert rejected["command_id"] == command_id
+            assert rejected["code"] == "invalid_state"
+            assert rejected["current_control_version"] == 7
+            assert "controller_epoch" not in rejected
+
+        with database.session() as db:
+            playback = db.scalar(
+                select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+            )
+            assert playback is not None
+            assert playback.status == "stopped"
+            assert playback.mode == "live"
+            assert playback.control_version == 7
+            assert playback.controller_epoch is None
+            assert playback.controller_owner_connection is None
+        assert app.state.playback_service.event_hub.store.last_sequence(debate_id) == (
+            event_sequence_before
+        )
 
 
 @pytest.mark.asyncio
