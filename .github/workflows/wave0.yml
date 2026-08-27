@@ -1,4 +1,4 @@
-name: Maya Wave 1 quality
+name: Maya Wave 2 quality
 
 on:
   push:
@@ -74,6 +74,22 @@ jobs:
           test -f frontend/public/avatars/draco/draco_decoder.wasm
           test -f frontend/public/avatars/draco/draco_wasm_wrapper.js
 
+      - name: Assert Wave 2 inputs
+        run: |
+          test -f backend/migrations/versions/0004_wave2_debate_playback.py
+          test -f backend/tests/test_wave2_setup.py
+          test -f backend/tests/test_wave2_generation.py
+          test -f backend/tests/test_wave2_playback.py
+          test -f scripts/test_wave2_migration.py
+          test -d backend/app/modules/debates/setup
+          test -d backend/app/modules/debates/generation
+          test -d backend/app/modules/debates/playback
+          test -f backend/app/providers/llm.py
+          test -d frontend/components/debate/setup
+          test -d frontend/components/debate/stage
+          test -f frontend/tests/wave2-setup.test.tsx
+          test -f frontend/tests/wave2-playback.test.tsx
+
       - name: Frozen JavaScript install
         run: pnpm install --frozen-lockfile
 
@@ -129,9 +145,10 @@ jobs:
       - name: Local Demo initializer safety probe
         run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 
-      - name: Wave 1 backend tests and migration smoke
+      - name: Wave 2 backend tests and migration smoke
         working-directory: backend
         run: |
+          uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py
           uv run ruff check app
           uv run ruff check tests
           uv run ruff check migrations
@@ -149,10 +166,13 @@ jobs:
       - name: Populated Wave 1A migration preservation evidence
         run: uv run --directory backend python ../scripts/test_wave1_migration.py
 
-      - name: Export Wave 1 FastAPI OpenAPI for route comparison
+      - name: Populated Wave 2 migration preservation evidence
+        run: uv run --directory backend python ../scripts/test_wave2_migration.py
+
+      - name: Export Wave 2 FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
-      - name: Strict Wave 1 FastAPI route and schema comparison
+      - name: Strict Wave 2 FastAPI route and schema comparison
         run: node scripts/compare_route_surface.mjs --server-openapi "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
       - name: Compose configuration

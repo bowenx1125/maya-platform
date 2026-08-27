@@ -6,7 +6,7 @@ import hashlib
 import json
 import secrets
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -360,6 +360,7 @@ def claim_idempotency(
     body_hash: str,
     *,
     data_root: Path | None = None,
+    takeover_recovery: Callable[[Session, IdempotencyRecord], bool] | None = None,
 ) -> tuple[IdempotencyRecord, JSONResponse | None]:
     """Atomically claim a keyed command in its own committed transaction.
 
@@ -418,10 +419,7 @@ def claim_idempotency(
                     raise invalid_state("The idempotency replay could not be loaded.")
                 return claimed, _replay(existing)
             timestamp = now_utc()
-            if (
-                existing.state == "pending"
-                and _utc_datetime(existing.lease_expires_at) > timestamp
-            ):
+            if existing.state == "pending" and _utc_datetime(existing.lease_expires_at) > timestamp:
                 if time.monotonic() < poll_deadline:
                     # Do not hold the transaction while waiting.  A separate
                     # short read lets the owner commit its final replay.
@@ -436,6 +434,10 @@ def claim_idempotency(
                 # Recovery is intentionally explicit.  A stale worker may
                 # have promoted an orphan before its lease expired; cleanup
                 # must complete before a new token is allowed to run.
+                if takeover_recovery is not None and takeover_recovery(session, existing):
+                    session.commit()
+                    continue
+
                 from app.modules.knowledge.recovery import recover_file_operations
 
                 operations = session.scalars(
@@ -1354,9 +1356,7 @@ def create_snapshot(
             )
         )
         for item in captured:
-            frozen_relative = (
-                f"{target_relative}/documents/{item['snapshot_document_id']}.md"
-            )
+            frozen_relative = f"{target_relative}/documents/{item['snapshot_document_id']}.md"
             db.add(
                 StoredFile(
                     id=item["frozen_file_id"],

@@ -65,8 +65,7 @@ async def request_validation_handler(
     errors = exc.errors()
     details = {"fields": [str(item.get("loc", ())) for item in errors]}
     csrf_error = any(
-        tuple(item.get("loc", ()))[:1] == ("header",)
-        and "csrf" in str(item.get("loc", ())).lower()
+        tuple(item.get("loc", ()))[:1] == ("header",) and "csrf" in str(item.get("loc", ())).lower()
         for item in errors
     )
     error = (

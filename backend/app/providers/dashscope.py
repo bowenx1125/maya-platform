@@ -36,8 +36,7 @@ APPROVED_RESULT_HOST_SUFFIXES = (
 )
 VOICE_CUSTOMIZATION_PATH = "/api/v1/services/audio/tts/customization"
 QWEN_TTS_URL = (
-    "https://dashscope.aliyuncs.com/"
-    "api/v1/services/aigc/multimodal-generation/generation"
+    "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 )
 
 
@@ -233,9 +232,7 @@ def _is_approved_host(hostname: str, suffixes: tuple[str, ...]) -> bool:
     return any(lowered == suffix or lowered.endswith("." + suffix) for suffix in suffixes)
 
 
-def _resolved_public_addresses(
-    hostname: str, *, timeout_seconds: float = 10.0
-) -> tuple[str, ...]:
+def _resolved_public_addresses(hostname: str, *, timeout_seconds: float = 10.0) -> tuple[str, ...]:
     result: list[Any] = []
 
     def resolve() -> None:

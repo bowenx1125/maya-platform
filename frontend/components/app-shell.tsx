@@ -54,6 +54,7 @@ export function AppShell({
     : [
         { href: "/teacher", label: t("course") },
         { href: "/teacher", label: t("publishedAgents") },
+        { href: "/teacher/debates", label: t("debates") },
       ];
 
   return (

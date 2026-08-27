@@ -100,18 +100,19 @@ class Settings(BaseSettings):
     def empty_provider_is_mock(cls, value: object) -> object:
         return "mock" if isinstance(value, str) and not value.strip() else value
 
+    @field_validator("translation_provider", mode="before")
+    @classmethod
+    def empty_translation_is_disabled(cls, value: object) -> object:
+        # Compose historically forwards an empty value when translation is
+        # not configured.  Keep that explicit disabled state distinct from a
+        # real provider, while treating the Wave 2 Mock selector uniformly.
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("llm_provider", "embedding_provider", "tts_provider", "voice_provider")
     @classmethod
     def provider_selector_is_supported(cls, value: str) -> str:
         if value not in {"mock", "dashscope"}:
             raise ValueError("provider selector must be mock or dashscope")
-        return value
-
-    @field_validator("embedding_provider")
-    @classmethod
-    def embedding_stays_mock(cls, value: str) -> str:
-        if value != "mock":
-            raise ValueError("EMBEDDING_PROVIDER must remain mock")
         return value
 
     @field_validator("fallback_voice_profile_id")
@@ -145,7 +146,14 @@ class Settings(BaseSettings):
         self.validate_provider_configuration()
 
     def validate_provider_configuration(self) -> None:
-        """Fail closed for unknown, mixed or incompletely configured providers."""
+        """Fail closed for every non-Mock provider during Wave 2 startup.
+
+        Provider adapters remain importable for the later reviewed real
+        service gate, but no runtime setting may activate one in this wave.
+        Keeping the check here (rather than only in individual factories)
+        makes the startup boundary cover LLM, Embedding, TTS, Voice and the
+        optional Translation selector consistently.
+        """
 
         selectors = (
             self.llm_provider,
@@ -155,23 +163,25 @@ class Settings(BaseSettings):
         )
         if any(value not in {"mock", "dashscope"} for value in selectors):
             raise RuntimeError("provider selector is not supported")
-        if self.embedding_provider != "mock":
-            raise RuntimeError("EMBEDDING_PROVIDER must remain mock")
-        selected_real = [
-            value
-            for value in (self.llm_provider, self.tts_provider, self.voice_provider)
-            if value != "mock"
-        ]
-        if len(selected_real) > 1:
-            raise RuntimeError("at most one real provider may be enabled")
-        if selected_real and (
-            not self.dashscope_api_key
-            or not self.dashscope_workspace_id
-            or self.dashscope_region != "cn-beijing"
-        ):
-            raise RuntimeError("DashScope provider credentials are incomplete")
         if self.translation_provider not in {None, "", "mock", "deepl"}:
             raise RuntimeError("translation provider is not supported")
+
+        non_mock = [
+            name
+            for name, value in (
+                ("LLM_PROVIDER", self.llm_provider),
+                ("EMBEDDING_PROVIDER", self.embedding_provider),
+                ("TTS_PROVIDER", self.tts_provider),
+                ("VOICE_PROVIDER", self.voice_provider),
+            )
+            if value != "mock"
+        ]
+        if self.translation_provider not in {None, "", "mock"}:
+            non_mock.append("TRANSLATION_PROVIDER")
+        if non_mock:
+            raise RuntimeError(
+                "Wave 2 runtime provider gate permits only Mock selectors: " + ", ".join(non_mock)
+            )
 
     @property
     def secret_bytes(self) -> bytes:

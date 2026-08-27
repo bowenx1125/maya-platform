@@ -1,0 +1,508 @@
+.stage {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding-bottom: 32px;
+}
+
+.stageHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(250, 247, 239, 0.93)
+  );
+  box-shadow: 0 18px 42px rgba(55, 47, 74, 0.07);
+}
+
+.stageHeader h1 {
+  max-width: 900px;
+  margin: 5px 0 8px;
+  color: var(--ink);
+  font-size: clamp(1.3rem, 2.4vw, 2.1rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.stageHeader p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.87rem;
+  line-height: 1.5;
+}
+
+.eyebrow {
+  color: var(--indigo);
+  font-size: 0.68rem;
+  font-weight: 820;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.statusCluster {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 7px;
+}
+
+.connectionPill,
+.playbackStatus,
+.currentMark,
+.roundMark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.connectionPill {
+  color: #23664d;
+  background: #e4f2e9;
+}
+
+.connectionPill[data-state="connecting"],
+.connectionPill[data-state="reconnecting"] {
+  color: #825e10;
+  background: var(--gold-soft);
+}
+
+.connectionPill[data-state="disconnected"] {
+  color: #864544;
+  background: #f8e9e5;
+}
+
+.playbackStatus {
+  color: var(--muted);
+  background: rgba(241, 237, 248, 0.9);
+  text-transform: capitalize;
+}
+
+.connectionOverlay {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 11px 15px;
+  border: 1px solid #ead8a6;
+  border-radius: 14px;
+  color: #705415;
+  background: #fff8df;
+  font-size: 0.83rem;
+  font-weight: 760;
+}
+
+.connectionOverlay small {
+  flex: 1 1 220px;
+  color: #866f38;
+  font-size: 0.75rem;
+  font-weight: 550;
+}
+
+.overlayDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d39e25;
+  box-shadow: 0 0 0 4px rgba(211, 158, 37, 0.15);
+}
+
+.avatarGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.avatarCard {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 26px rgba(55, 47, 74, 0.045);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.avatarCardCurrent {
+  border-color: #d5ab4c;
+  box-shadow:
+    0 0 0 3px rgba(213, 171, 76, 0.22),
+    0 15px 30px rgba(86, 66, 29, 0.1);
+  transform: translateY(-2px);
+}
+
+.avatarCardTop,
+.avatarIdentity,
+.transcriptItemTop,
+.speechHeader,
+.transcriptHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.slotMark {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--indigo-dark);
+  background: var(--gold-soft);
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.currentMark {
+  min-height: 24px;
+  color: #79540b;
+  background: var(--gold-soft);
+  font-size: 0.65rem;
+}
+
+.avatar {
+  min-width: 0;
+  height: clamp(132px, 17vw, 220px);
+}
+
+.avatarIdentity {
+  display: block;
+  min-width: 0;
+}
+
+.avatarIdentity h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.96rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatarIdentity span {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stageColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.speechColumn,
+.transcriptCard,
+.controlsArea {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.speechCard,
+.waitingCard,
+.failureCard {
+  min-width: 0;
+}
+
+.speechHeader {
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.speechHeader h2,
+.transcriptHeader h2 {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.roundMark {
+  color: var(--indigo-dark);
+  background: #f1edf8;
+}
+
+.speechText {
+  margin: 17px 0 20px;
+  color: var(--ink);
+  font-size: 1.02rem;
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.sourceBlock {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.sourceBlock h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sourceBlock ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceBlock li {
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--indigo-dark);
+  background: #f4f0fb;
+  font-size: 0.75rem;
+}
+
+.sourceBlock p,
+.waitingCard,
+.emptyTranscript {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.waitingCard {
+  display: grid;
+  min-height: 170px;
+  place-items: center;
+  padding: 20px;
+  border: 1px dashed #cfc6dc;
+  border-radius: 15px;
+  background: #faf8fc;
+  text-align: center;
+}
+
+.failureCard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #ecc9bf;
+  border-radius: 13px;
+  color: #874940;
+  background: #fff3ef;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.failureCard span {
+  flex: 1 1 220px;
+}
+
+.transcriptHeader {
+  align-items: flex-start;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.transcriptHeader > span {
+  display: inline-grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--indigo-dark);
+  background: #f1edf8;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.emptyTranscript {
+  padding: 22px 0 5px;
+}
+
+.transcriptList {
+  display: grid;
+  max-height: 440px;
+  gap: 10px;
+  overflow: auto;
+  padding-top: 12px;
+}
+
+.transcriptItem {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #ebe6f0;
+  border-radius: 13px;
+  background: #fcfbfd;
+}
+
+.transcriptItemTop {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 720;
+}
+
+.transcriptItem p {
+  margin: 8px 0 10px;
+  color: var(--ink);
+  font-size: 0.79rem;
+  line-height: 1.52;
+}
+
+.controlsArea {
+  display: grid;
+  gap: 10px;
+}
+
+.controlButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.busyMessage,
+.controllerMessage {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.77rem;
+}
+
+.stage button {
+  min-height: 44px;
+}
+
+.dangerAction {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #d9a39a;
+  border-radius: 999px;
+  color: #7f3e38;
+  background: #fff0ed;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.dangerAction:hover:not(:disabled) {
+  background: #f9dfda;
+}
+
+.dangerAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.stage audio {
+  display: none;
+}
+
+@media (max-width: 1040px) {
+  .avatarGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stageColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .stage {
+    gap: 13px;
+  }
+
+  .stageHeader {
+    display: grid;
+    gap: 14px;
+    padding: 17px;
+  }
+
+  .statusCluster {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .avatarGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .avatarCard {
+    padding: 9px;
+    border-radius: 15px;
+  }
+
+  .avatar {
+    height: 145px;
+  }
+
+  .speechColumn,
+  .transcriptCard,
+  .controlsArea {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .speechText {
+    font-size: 0.94rem;
+    line-height: 1.6;
+  }
+
+  .controlButtons > button {
+    flex: 1 1 calc(50% - 9px);
+  }
+}
+
+@media (max-width: 360px) {
+  .stageHeader h1 {
+    font-size: 1.15rem;
+  }
+
+  .avatarGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .avatar {
+    height: 122px;
+  }
+
+  .avatarIdentity h2 {
+    font-size: 0.86rem;
+  }
+
+  .currentMark {
+    display: none;
+  }
+
+  .controlButtons > button {
+    flex-basis: 100%;
+  }
+}

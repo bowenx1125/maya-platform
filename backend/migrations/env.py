@@ -8,7 +8,10 @@ from logging.config import fileConfig
 from alembic import context
 from app.core.db import _sqlite_pragmas
 from app.core.models import Base
+from app.modules.debates import models as _debate_models
 from sqlalchemy import engine_from_config, event, pool
+
+del _debate_models
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,0 +1,427 @@
+"""Provider-neutral data contracts for M11 turn generation.
+
+The generation package intentionally has no dependency on the Wave 2 ORM.  A
+setup repository can adapt its rows to these small immutable objects and a
+playback worker can persist the resulting :class:`FinalReadyTurn` without
+giving a provider access to database models.  The same boundary is useful in
+tests: every hash and validation decision can be exercised without a running
+FastAPI application or an external key.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from .policy import TurnPlan
+
+
+StanceMode = Literal["assigned", "open"]
+Stance = Literal["support", "oppose", "neutral"]
+PositionUpdate = Literal["unchanged", "refined", "partial_concession", "reframed", "switched"]
+QuestionType = Literal["agent", "audience_reflection", "none"]
+RetrievalStatus = Literal["matched", "no_match"]
+GroundingMode = Literal["rag_grounded", "mixed", "general_reasoning"]
+
+
+class TurnValidationError(ValueError):
+    """A closed structured-result or evidence contract was violated."""
+
+    def __init__(self, message: str, *, code: str = "turn_generation_failed") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class GenerationProviderError(RuntimeError):
+    """Provider-neutral technical failure eligible for one shared retry."""
+
+    code = "provider_unavailable"
+
+
+class GenerationFailed(RuntimeError):
+    """Generation exhausted its shared two-attempt repair budget."""
+
+    code = "turn_generation_failed"
+
+    def __init__(self, message: str, *, attempt: int = 2) -> None:
+        super().__init__(message)
+        self.attempt = attempt
+
+
+class GenerationDiscarded(RuntimeError):
+    """A late provider result failed the current turn/debate fence."""
+
+    code = "generation_result_discarded"
+
+
+class TurnQuestion(BaseModel):
+    """The only question shape a turn provider may return."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: QuestionType = "none"
+    target_participant_id: str | None = None
+    text: str | None = None
+
+
+class StructuredTurnResult(BaseModel):
+    """Closed provider output for one speech turn.
+
+    Retrieval and grounding status are deliberately absent.  The server
+    derives those values from the typed receipts returned by its own retriever
+    and from ``used_evidence_id``.  A provider therefore cannot forge a source
+    filename, select a chunk from another snapshot, or claim ``rag_grounded``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    speech: str = Field(min_length=1)
+    answered_question_id: str | None = None
+    rebuttal_target_turn_id: str | None = None
+    rebuttal_summary: str = ""
+    new_argument_summary: str = ""
+    turn_summary: str = ""
+    position_summary: str = ""
+    position_update: PositionUpdate = "unchanged"
+    new_stance: Stance | None = None
+    position_update_reason: str | None = None
+    used_evidence_id: list[str] = Field(default_factory=list)
+    question: TurnQuestion = Field(default_factory=TurnQuestion)
+
+    @classmethod
+    def from_provider(
+        cls, value: StructuredTurnResult | Mapping[str, object]
+    ) -> StructuredTurnResult:
+        """Parse a provider value while preserving the closed-object rule."""
+
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls.model_validate(value)
+        except Exception as exc:
+            raise TurnValidationError("The LLM returned an invalid closed turn object.") from exc
+
+
+_SAFE_FILENAME_RE = re.compile(r"^[^/\\\x00\x00-\x1f\x7f]+$")
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotRetrievalReceipt:
+    """A server-authored, typed retrieval result.
+
+    ``evidence_id`` is intentionally optional for ergonomic test fixtures.  A
+    missing ID is resolved to a stable digest by :meth:`resolved_evidence_id`;
+    the retriever always materialises it before passing a receipt to an LLM.
+    The remaining fields mirror the frozen G0 receipt contract exactly.
+    """
+
+    snapshot_id: str
+    query_kind: str
+    query_hash: str
+    threshold_key: Literal["strict", "relaxed"]
+    rank: int
+    score: float
+    chunk_id: str
+    source_filename: str
+    text: str
+    evidence_id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.snapshot_id or not self.query_kind or not self.query_hash:
+            raise ValueError("retrieval receipt identity is required")
+        if self.threshold_key not in {"strict", "relaxed"}:
+            raise ValueError("retrieval threshold must be strict or relaxed")
+        if self.rank < 1:
+            raise ValueError("retrieval rank must be positive")
+        if not math.isfinite(self.score):
+            raise ValueError("retrieval score must be finite")
+        if not self.chunk_id or not self.text.strip():
+            raise ValueError("retrieval chunk identity and text are required")
+        if not _SAFE_FILENAME_RE.match(self.source_filename):
+            raise ValueError("retrieval source filename is unsafe")
+        if not self.evidence_id:
+            raw = "\x1f".join(str(item) for item in self.canonical_identity())
+            object.__setattr__(
+                self,
+                "evidence_id",
+                "evidence-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32],
+            )
+
+    def identity_key(self) -> tuple[str, str]:
+        return self.snapshot_id, self.chunk_id
+
+    def canonical_identity(self) -> tuple[str, str, str, str, int, float, str, str, str]:
+        return (
+            self.snapshot_id,
+            self.query_kind,
+            self.query_hash,
+            self.threshold_key,
+            self.rank,
+            self.score,
+            self.chunk_id,
+            self.source_filename,
+            self.text,
+        )
+
+    def resolved_evidence_id(self) -> str:
+        if self.evidence_id:
+            return self.evidence_id
+        raw = "\x1f".join(str(item) for item in self.canonical_identity())
+        return "evidence-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+    @property
+    def id(self) -> str:
+        """Convenience alias used by adapters that call receipts ``id``."""
+
+        return self.resolved_evidence_id()
+
+
+# ``SelectedEvidence`` is a descriptive alias kept separate from the public
+# source DTO.  It prevents callers from accidentally treating an unused
+# retrieval result as a citation.
+SelectedEvidence = SnapshotRetrievalReceipt
+
+
+@dataclass(frozen=True, slots=True)
+class PublicSource:
+    """A provider-neutral source projection for a persisted public turn."""
+
+    source_filename: str
+    chunk_id: str
+    evidence_id: str
+    rank: int
+    score: float
+
+
+@dataclass(frozen=True, slots=True)
+class ParticipantContext:
+    """Frozen participant/persona input consumed by one generation call."""
+
+    participant_id: str
+    agent_id: str
+    agent_name: str
+    slot: str
+    order_index: int
+    snapshot_id: str
+    agent_md: str = ""
+    stance_mode: StanceMode = "open"
+    initial_stance: Stance | None = None
+    current_stance: Stance | None = None
+    initial_position_summary: str = ""
+    current_position_summary: str = ""
+    teacher_note: str = ""
+
+    def __post_init__(self) -> None:
+        if self.stance_mode == "assigned" and self.initial_stance is None:
+            raise ValueError("assigned participants need an initial stance")
+        if self.stance_mode == "open" and self.initial_stance is not None:
+            raise ValueError("open participants cannot carry an assigned stance")
+        if self.stance_mode == "open" and self.current_stance is not None:
+            raise ValueError("open participants cannot synthesize a stance enum")
+
+    @property
+    def effective_position_summary(self) -> str:
+        return self.current_position_summary or self.initial_position_summary
+
+
+@dataclass(frozen=True, slots=True)
+class PendingQuestion:
+    """A question from a final-ready predecessor awaiting this participant."""
+
+    question_id: str
+    source_turn_id: str
+    source_participant_id: str
+    target_participant_id: str
+    text: str
+
+    def __post_init__(self) -> None:
+        if not self.question_id or not self.source_turn_id or not self.text.strip():
+            raise ValueError("pending question fields are required")
+        if self.target_participant_id == self.source_participant_id:
+            raise ValueError("a pending question cannot target its author")
+
+
+@dataclass(frozen=True, slots=True)
+class TurnPromptInput:
+    """Immutable prompt input and final-ready predecessor fence."""
+
+    debate_id: str
+    topic: str
+    rule_set_id: str
+    phase: str
+    turn_plan: TurnPlan
+    participant: ParticipantContext
+    participants: tuple[ParticipantContext, ...]
+    agent_md: str
+    stance_mode: StanceMode
+    assigned_stance: Stance | None
+    teacher_note: str
+    current_position_summary: str
+    predecessors: tuple[FinalReadyTurn, ...]
+    predecessor_turn_ids: tuple[str, ...]
+    cutoff_turn_index: int
+    transcript_hash: str
+    receipts: tuple[SnapshotRetrievalReceipt, ...] = ()
+    pending_question: PendingQuestion | None = None
+
+    def __post_init__(self) -> None:
+        if self.participant.snapshot_id == "":
+            raise ValueError("participant snapshot is required")
+        if self.assigned_stance is not None and self.stance_mode != "assigned":
+            raise ValueError("open prompt cannot carry an assigned stance")
+        if self.stance_mode == "assigned" and self.assigned_stance is None:
+            raise ValueError("assigned prompt requires a stance")
+        if self.predecessor_turn_ids != tuple(item.turn_id for item in self.predecessors):
+            raise ValueError("predecessor_turn_ids must match the final-ready prefix")
+        if self.cutoff_turn_index != self.turn_plan.turn_index - 1:
+            raise ValueError("cutoff_turn_index must be the immediate predecessor index")
+
+
+@dataclass(frozen=True, slots=True)
+class FinalReadyTurn:
+    """Validated immutable text/structure ready for the separate TTS stage."""
+
+    turn_id: str
+    participant_id: str
+    snapshot_id: str
+    round_no: int
+    turn_index: int
+    speech: str
+    structured: StructuredTurnResult
+    retrieval_status: RetrievalStatus
+    grounding_mode: GroundingMode
+    used_receipts: tuple[SnapshotRetrievalReceipt, ...]
+    predecessor_turn_ids: tuple[str, ...]
+    cutoff_turn_index: int
+    transcript_hash: str
+    attempt: Literal[1, 2]
+    publication_status: Literal["final_ready", "public"] = "final_ready"
+
+    def __post_init__(self) -> None:
+        if self.speech != self.structured.speech:
+            raise ValueError("final-ready speech must match its structured result")
+        if tuple(receipt.resolved_evidence_id() for receipt in self.used_receipts) != tuple(
+            self.structured.used_evidence_id
+        ):
+            raise ValueError("final-ready used receipts must match structured evidence IDs")
+        if self.retrieval_status == "no_match" and self.grounding_mode != "general_reasoning":
+            raise ValueError("no-match turns must use general_reasoning")
+        if self.retrieval_status == "matched" and not self.used_receipts:
+            raise ValueError("matched turns need used receipts")
+        if self.grounding_mode == "mixed" and not self.used_receipts:
+            raise ValueError("mixed turns need used receipts")
+        if self.grounding_mode == "general_reasoning" and self.used_receipts:
+            raise ValueError("general reasoning cannot carry source receipts")
+
+    @property
+    def question_id(self) -> str | None:
+        question = self.structured.question
+        return f"{self.turn_id}:question" if question.type != "none" else None
+
+    @property
+    def public_sources(self) -> tuple[PublicSource, ...]:
+        return tuple(
+            PublicSource(
+                source_filename=receipt.source_filename,
+                chunk_id=receipt.chunk_id,
+                evidence_id=receipt.resolved_evidence_id(),
+                rank=receipt.rank,
+                score=receipt.score,
+            )
+            for receipt in self.used_receipts
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ValidatedTurn:
+    """Validator output with server-derived retrieval/grounding fields."""
+
+    result: StructuredTurnResult
+    retrieval_status: RetrievalStatus
+    grounding_mode: GroundingMode
+    used_receipts: tuple[SnapshotRetrievalReceipt, ...]
+    public_sources: tuple[PublicSource, ...]
+    word_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationContext:
+    """All immutable state needed for one turn's RAG/LLM attempt."""
+
+    debate_id: str
+    topic: str
+    turn: TurnPlan
+    participant: ParticipantContext
+    participants: tuple[ParticipantContext, ...]
+    predecessors: tuple[FinalReadyTurn, ...] = ()
+    pending_question: PendingQuestion | None = None
+
+    def __post_init__(self) -> None:
+        ordered = tuple(sorted(self.predecessors, key=lambda item: item.turn_index))
+        if tuple(item.turn_index for item in ordered) != tuple(range(self.turn.turn_index)):
+            raise ValueError("invalid predecessor prefix")
+
+    @property
+    def effective_pending_question(self) -> PendingQuestion | None:
+        """Use an explicit question or derive the latest assigned predecessor.
+
+        Derivation keeps the setup/playback adapter small while preserving an
+        exact question ID.  A caller-provided value remains authoritative and
+        is validated against the current participant by :class:`TurnValidator`.
+        """
+
+        if self.pending_question is not None:
+            return self.pending_question
+        for predecessor in reversed(self.predecessors):
+            question = predecessor.structured.question
+            if (
+                question.type == "agent"
+                and question.target_participant_id == self.participant.participant_id
+                and question.text
+            ):
+                return PendingQuestion(
+                    question_id=predecessor.question_id or f"{predecessor.turn_id}:question",
+                    source_turn_id=predecessor.turn_id,
+                    source_participant_id=predecessor.participant_id,
+                    target_participant_id=self.participant.participant_id,
+                    text=question.text,
+                )
+        return None
+
+
+def mapping_to_dict(value: object) -> Mapping[str, object]:
+    """Narrow helper for adapters that receive an untyped JSON object."""
+
+    if not isinstance(value, Mapping):
+        raise TurnValidationError("The provider response must be a JSON object.")
+    return value
+
+
+__all__ = [
+    "FinalReadyTurn",
+    "GenerationContext",
+    "GenerationDiscarded",
+    "GenerationFailed",
+    "GroundingMode",
+    "ParticipantContext",
+    "PendingQuestion",
+    "PublicSource",
+    "RetrievalStatus",
+    "SelectedEvidence",
+    "SnapshotRetrievalReceipt",
+    "Stance",
+    "StanceMode",
+    "StructuredTurnResult",
+    "TurnPromptInput",
+    "TurnQuestion",
+    "TurnValidationError",
+    "ValidatedTurn",
+    "mapping_to_dict",
+]

@@ -26,11 +26,20 @@ from app.core.errors import (
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.router import router as auth_router
 from app.modules.avatars.router import router as avatars_router
+from app.modules.debates.playback.audio import AudioStore
+from app.modules.debates.playback.events import DebateEventHub
+from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
+from app.modules.debates.playback.router import router as debate_playback_router
+from app.modules.debates.playback.service import PlaybackService
+from app.modules.debates.playback.sql_repository import SqlEventStore, SqlPlaybackRepository
+from app.modules.debates.playback.task_manager import TaskManager
+from app.modules.debates.setup.router import router as debate_setup_router
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
+from app.providers.tts import MockTTSProvider
 from app.seed import seed_demo_data
 
 logger = logging.getLogger("maya.backend")
@@ -52,6 +61,21 @@ def create_app(
         runtime_settings.database_url,
         runtime_settings.resolved_data_root,
     )
+    playback_tasks = TaskManager()
+    playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
+    playback_service = PlaybackService(
+        playback_repository,
+        audio_store=AudioStore(
+            runtime_settings.resolved_data_root,
+            tts_provider=MockTTSProvider(),
+        ),
+        event_hub=DebateEventHub(SqlEventStore(runtime_database.session_factory)),
+        task_manager=playback_tasks,
+        turn_preparer=SqlTurnPreparer(settings=runtime_settings),
+        tts_provider=MockTTSProvider(),
+        session_factory=runtime_database.session_factory,
+        settings=runtime_settings,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -65,17 +89,22 @@ def create_app(
             with runtime_database.session() as session:
                 recover_startup(session, runtime_settings.resolved_data_root)
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
+                await playback_service.recover_startup(session)
                 seed_demo_data(session)
-        yield
-        runtime_database.dispose()
+        try:
+            yield
+        finally:
+            await playback_tasks.close()
+            runtime_database.dispose()
 
     app = FastAPI(
         title="Maya Teaching Platform API",
-        version="0.1.0-g0.4",
+        version="0.1.0-g0.5",
         lifespan=lifespan,
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
+    app.state.playback_service = playback_service
     if settings is not None:
         # Route dependencies use get_settings; keep injected app instances
         # internally consistent without changing global process settings.
@@ -153,6 +182,8 @@ def create_app(
     app.include_router(knowledge_router, prefix="/api/v1")
     app.include_router(avatars_router, prefix="/api/v1")
     app.include_router(voices_router, prefix="/api/v1")
+    app.include_router(debate_setup_router, prefix="/api/v1")
+    app.include_router(debate_playback_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -179,12 +210,23 @@ def create_app(
                     and {branch.get("type") for branch in union if isinstance(branch, dict)}
                     == {"string", "null"}
                     and all(
-                        not isinstance(branch, dict) or "format" not in branch
-                        for branch in union
+                        not isinstance(branch, dict) or "format" not in branch for branch in union
                     )
                 ):
+                    string_branch = next(
+                        (
+                            branch
+                            for branch in union
+                            if isinstance(branch, dict) and branch.get("type") == "string"
+                        ),
+                        None,
+                    )
                     value.pop("anyOf", None)
                     value["type"] = ["string", "null"]
+                    if isinstance(string_branch, dict) and isinstance(
+                        string_branch.get("enum"), list
+                    ):
+                        value["enum"] = [*string_branch["enum"], None]
                 for child in value.values():
                     freeze_nullable_scalars(child)
             elif isinstance(value, list):
@@ -192,6 +234,31 @@ def create_app(
                     freeze_nullable_scalars(child)
 
         freeze_nullable_scalars(schema)
+        component_schemas = schema.get("components", {}).get("schemas", {})
+        participant_schema = component_schemas.get("DebateParticipant", {})
+        participant_properties = participant_schema.get("properties", {})
+        if "effective_voice_profile_id" in participant_properties:
+            participant_properties["effective_voice_profile_id"] = {
+                "oneOf": [
+                    {"type": "string", "format": "uuid"},
+                    {"type": "null"},
+                ]
+            }
+        turn_schema = component_schemas.get("DebateTurn", {})
+        turn_properties = turn_schema.get("properties", {})
+        if "playback_resource" in turn_properties:
+            turn_properties["playback_resource"] = {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/DebatePlaybackResource"},
+                    {"type": "null"},
+                ]
+            }
+        for name, component in component_schemas.items():
+            if not name.endswith("RetrievalSource") or not isinstance(component, dict):
+                continue
+            properties = component.get("properties", {})
+            if "chunk_id" in properties:
+                properties["chunk_id"] = {"type": "string", "format": "uuid"}
         # API validation errors are mapped to the frozen 400 envelope (and
         # missing CSRF headers to 403), so do not advertise FastAPI's default
         # uncontracted 422 response.
@@ -202,10 +269,45 @@ def create_app(
                 for operation in path_item.values():
                     if isinstance(operation, dict):
                         # FastAPI's generic 422 is not part of the Wave 0
-                        # contract.  Wave 1A explicitly declares six frozen
-                        # business-validation 422 responses and they must
-                        # remain visible to the semantic comparator.
+                        # contract.  Only operations with an explicit frozen
+                        # business-validation 422 keep that response in the
+                        # generated server contract.
                         operation_id = operation.get("operationId")
+                        if operation_id == "streamRetainedTurnAudio":
+                            for parameter in operation.get("parameters", []):
+                                if not isinstance(parameter, dict):
+                                    continue
+                                if parameter.get("name") == "Range":
+                                    parameter["schema"] = {
+                                        "type": "string",
+                                        "pattern": r"^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$",
+                                    }
+                                elif parameter.get("name") == "If-Range":
+                                    parameter["schema"] = {
+                                        "oneOf": [
+                                            {
+                                                "type": "string",
+                                                "pattern": r'^"[0-9a-f]{64}"$',
+                                            },
+                                            {
+                                                "type": "string",
+                                                "pattern": (
+                                                    r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), "
+                                                    r"[0-9]{2} "
+                                                    r"(Jan|Feb|Mar|Apr|May|Jun|Jul|"
+                                                    r"Aug|Sep|Oct|Nov|Dec) "
+                                                    r"[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$"
+                                                ),
+                                            },
+                                        ]
+                                    }
+                                elif parameter.get("name") == "media_ticket":
+                                    parameter["schema"] = {
+                                        "type": "string",
+                                        "minLength": 43,
+                                        "maxLength": 43,
+                                        "pattern": r"^[A-Za-z0-9_-]{43}$",
+                                    }
                         if operation_id not in {
                             "uploadKnowledgeDocument",
                             "updateAgentDraft",
@@ -214,6 +316,9 @@ def create_app(
                             "testAgentDraft",
                             "publishAgentVersion",
                             "enrollVoice",
+                            "createDebate",
+                            "updateDebateDraft",
+                            "startDebate",
                         }:
                             operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]

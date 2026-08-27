@@ -652,9 +652,7 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
         json={"expected_revision": 0},
     )
     publish_body = _assert_business_error(publish_error, "agent_md_missing")
-    assert publish_body["details"] == {
-        "publish_blockers": ["agent_md_missing", "rag_missing"]
-    }
+    assert publish_body["details"] == {"publish_blockers": ["agent_md_missing", "rag_missing"]}
 
 
 def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(

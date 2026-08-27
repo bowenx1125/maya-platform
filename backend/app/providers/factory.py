@@ -1,4 +1,4 @@
-"""Server-side provider selection for voice and TTS."""
+"""Server-side provider selection for Wave 1 and Wave 2 capabilities."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from app.providers.dashscope import (
     DashScopeTTSProvider,
     DashScopeVoiceCloneProvider,
 )
+from app.providers.llm import LLMProvider
+from app.providers.llm import llm_provider as select_llm_provider
 from app.providers.tts import MockTTSProvider, TTSProvider
 from app.providers.voice import MockVoiceCloneProvider, VoiceCloneProvider
 
@@ -40,3 +42,13 @@ def tts_provider(settings: Settings) -> TTSProvider:
     if settings.tts_provider == "dashscope":
         return DashScopeTTSProvider(_dashscope_config(settings))
     raise RuntimeError("tts provider is not supported")
+
+
+def llm_provider(settings: Settings) -> LLMProvider:
+    """Return the reviewed Wave 2 text provider.
+
+    Wave 2 intentionally exposes only the deterministic Mock implementation;
+    ``select_llm_provider`` fails closed for a real selector.
+    """
+
+    return select_llm_provider(settings)

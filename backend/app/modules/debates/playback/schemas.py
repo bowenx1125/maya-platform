@@ -1,0 +1,328 @@
+"""Closed provider-neutral playback and WebSocket schemas.
+
+These models intentionally mirror the frozen Wave 2 wire contracts.  Internal
+generation/voice details never cross this file's public DTO boundary.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Annotated, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ClosedModel(BaseModel):
+    """Schema objects are closed so accidental supplier fields fail loudly."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+PlaybackStatus = Literal["preparing", "ready", "playing", "paused", "completed", "stopped"]
+PlaybackMode = Literal["live", "replay"]
+PlaybackAction = Literal["start", "resume", "replay"]
+AvatarMotion = Literal["idle", "listening", "speaking", "thinking", "nod_yes"]
+AvatarExpression = Literal["neutral", "attentive", "happy", "serious_angry", "sad"]
+AvatarStrength = Literal["low", "medium", "high"]
+
+
+class PlaybackStateDTO(ClosedModel):
+    status: PlaybackStatus
+    mode: PlaybackMode
+    current_turn_id: UUID | None = None
+    cursor_ms: int = Field(ge=0)
+    playback_rate: float = Field(ge=0.95, le=1.25)
+    control_version: int = Field(ge=0)
+
+
+class RetrievalSourceDTO(ClosedModel):
+    source_filename: str = Field(min_length=1)
+    chunk_id: UUID | None = None
+
+
+class PublicTurnDTO(ClosedModel):
+    id: UUID
+    participant_id: UUID
+    round_no: int = Field(ge=1, le=2)
+    turn_index: int = Field(ge=0)
+    speech: str = Field(min_length=1)
+    retrieval_status: Literal["matched", "no_match"]
+    grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"]
+    sources: list[RetrievalSourceDTO]
+
+
+class AvatarStateDTO(ClosedModel):
+    participant_id: UUID
+    slot: Literal["A", "B", "C", "D", "E"]
+    motion_state: AvatarMotion
+    expression: AvatarExpression
+    expression_strength: AvatarStrength | None = None
+
+
+class DebatePlaybackResourceDTO(ClosedModel):
+    playback_url: str = Field(
+        pattern=(
+            r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        )
+    )
+    expires_at: datetime
+
+
+class PlaybackStartedPayload(ClosedModel):
+    turn_id: UUID
+    slot: Literal["A", "B", "C", "D", "E"] | None = None
+    round_no: int | None = Field(default=None, ge=1, le=2)
+    speech: str = Field(min_length=1)
+    sources: list[RetrievalSourceDTO]
+    playback_url: str = Field(
+        pattern=(
+            r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        )
+    )
+    avatar_states: list[AvatarStateDTO] = Field(min_length=1)
+    cursor_ms: Literal[0] = 0
+    playback_rate: float | None = Field(default=None, ge=0.95, le=1.25)
+
+
+class PlaybackCursorPayload(ClosedModel):
+    turn_id: UUID
+    cursor_ms: int = Field(ge=0)
+    control_version: int = Field(ge=0)
+    playback_rate: float | None = Field(default=None, ge=0.95, le=1.25)
+
+
+class ReplayPayload(ClosedModel):
+    scope: Literal["turn", "all"]
+    turn_id: UUID | None
+    control_version: int | None = Field(default=None, ge=0)
+
+
+class DebateStartedPayload(ClosedModel):
+    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1"]
+    participants: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
+    participant_slots: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
+
+
+class ParticipantSlotDTO(ClosedModel):
+    participant_id: UUID
+    slot: Literal["A", "B", "C", "D", "E"]
+    order_index: int | None = Field(default=None, ge=0, le=4)
+    name: str | None = Field(default=None, min_length=1)
+
+
+class RoundStartedPayload(ClosedModel):
+    round_no: int = Field(ge=1, le=2)
+    turn_count: int | None = Field(default=None, ge=1)
+
+
+class TurnPreparingPayload(ClosedModel):
+    turn_id: UUID
+    slot: Literal["A", "B", "C", "D", "E"]
+    round_no: int = Field(ge=1, le=2)
+    stage: Literal["rag", "llm", "tts"] | None = None
+
+
+class TurnReadyPayload(ClosedModel):
+    turn_id: UUID
+    slot: Literal["A", "B", "C", "D", "E"]
+    round_no: int | None = Field(default=None, ge=1, le=2)
+    audio_ready: Literal[True] = True
+    retrieval_status: Literal["matched", "no_match"]
+    grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"] | None = None
+    audio_duration_ms: int | None = Field(default=None, ge=0)
+
+
+class ErrorPayload(ClosedModel):
+    code: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    request_id: UUID | None = None
+    recoverable: bool | None = None
+
+
+class SnapshotInteractionDTO(ClosedModel):
+    status: Literal["closed", "open", "finalized"]
+    votes: list[dict[str, object]] = Field(default_factory=list)
+    barrage_count: int = Field(ge=0)
+    total_votes: int | None = Field(default=None, ge=0)
+    public_url: str | None = None
+
+
+class SnapshotReportDTO(ClosedModel):
+    generation_status: Literal["not_started", "generating", "ready", "failed"]
+    latest_attempt_status: Literal["not_started", "generating", "ready", "failed"]
+    insight: dict[str, object]
+    active_revision_id: UUID | None = None
+    current_success_revision: dict[str, object] | None = None
+
+
+class DebateTerminalPayload(ClosedModel):
+    final_states: dict[str, object]
+    downstream_outcome: Literal["failed", "stopped"]
+    safe_error_code: str | None = None
+
+
+class SnapshotPayload(ClosedModel):
+    debate_status: Literal["draft", "running", "debate_finished", "completed", "failed", "stopped"]
+    playback_status: PlaybackStatus
+    interaction_status: Literal["closed", "open", "finalized"]
+    insight_status: Literal["not_started", "generating", "ready", "failed"]
+    report_status: Literal["not_started", "generating", "ready", "failed"]
+    public_turns: list[PublicTurnDTO]
+    playback: PlaybackStateDTO
+    interaction: SnapshotInteractionDTO
+    report: SnapshotReportDTO
+    latest_sequence: int = Field(ge=0)
+
+
+class WSCommandBase(ClosedModel):
+    command_id: UUID
+    command_type: str
+    command_version: Literal[1] = 1
+    debate_id: UUID
+    expected_control_version: int = Field(ge=0)
+
+
+class ControllerAcquireCommand(WSCommandBase):
+    command_type: Literal["playback.controller.acquire"] = "playback.controller.acquire"
+
+
+class MediaPrepareCommand(WSCommandBase):
+    command_type: Literal["playback.media.prepare"] = "playback.media.prepare"
+    controller_epoch: UUID
+    turn_id: UUID
+    playback_action: PlaybackAction
+
+
+class StartedAckCommand(WSCommandBase):
+    command_type: Literal["playback.started_ack"] = "playback.started_ack"
+    controller_epoch: UUID
+    turn_id: UUID
+    playback_action: PlaybackAction
+
+
+class EndedAckCommand(WSCommandBase):
+    command_type: Literal["playback.ended_ack"] = "playback.ended_ack"
+    controller_epoch: UUID
+    turn_id: UUID
+
+
+class PlayFailedCommand(WSCommandBase):
+    command_type: Literal["playback.play_failed"] = "playback.play_failed"
+    controller_epoch: UUID
+    turn_id: UUID
+    playback_action: PlaybackAction
+    failure_phase: Literal["pre_ack", "post_ack"]
+    cursor_ms: int = Field(ge=0)
+    safe_client_code: Literal[
+        "autoplay_blocked",
+        "not_supported",
+        "decode_error",
+        "network_error",
+        "aborted",
+        "unknown",
+    ]
+
+
+WSCommand = Annotated[
+    ControllerAcquireCommand
+    | MediaPrepareCommand
+    | StartedAckCommand
+    | EndedAckCommand
+    | PlayFailedCommand,
+    Field(discriminator="command_type"),
+]
+
+
+class PrivateResultBase(ClosedModel):
+    message_id: UUID
+    message_type: str
+    result_version: Literal[1] = 1
+    debate_id: UUID
+    occurred_at: datetime
+    command_id: UUID | None = None
+
+
+class ControllerAcquiredResult(PrivateResultBase):
+    message_type: Literal["controller.acquired"] = "controller.acquired"
+    command_id: UUID
+    controller_epoch: UUID
+    control_version: int = Field(ge=0)
+
+
+class MediaPreparedResult(PrivateResultBase):
+    message_type: Literal["media.prepared"] = "media.prepared"
+    command_id: UUID
+    controller_epoch: UUID
+    turn_id: UUID
+    media_url: str = Field(
+        pattern=(
+            r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\?media_ticket=[A-Za-z0-9_-]{43}$"
+        )
+    )
+    expires_at: datetime
+
+
+class CommandRejectedResult(PrivateResultBase):
+    message_type: Literal["command.rejected"] = "command.rejected"
+    command_id: UUID
+    code: str = Field(min_length=1)
+    current_control_version: int = Field(ge=0)
+    recoverable: bool
+
+
+class CommandDuplicateResult(PrivateResultBase):
+    message_type: Literal["command.duplicate"] = "command.duplicate"
+    command_id: UUID
+    code: Literal["duplicate_command"] = "duplicate_command"
+    current_control_version: int = Field(ge=0)
+
+
+class ControllerRevokedResult(PrivateResultBase):
+    message_type: Literal["controller.revoked"] = "controller.revoked"
+    command_id: None = Field(default=None, exclude=True)
+    controller_epoch: UUID
+    reason: Literal[
+        "superseded", "disconnected", "session_revoked", "start_next", "debate_terminal"
+    ]
+
+
+PrivateResult = Annotated[
+    ControllerAcquiredResult
+    | MediaPreparedResult
+    | CommandRejectedResult
+    | CommandDuplicateResult
+    | ControllerRevokedResult,
+    Field(discriminator="message_type"),
+]
+
+
+class ControlCommandDTO(ClosedModel):
+    expected_control_version: int = Field(ge=0)
+
+
+class StartDebateDTO(ClosedModel):
+    expected_revision: int = Field(ge=0)
+    expected_current_audio_debate_id: UUID | None
+    confirm_previous_audio_cleanup: bool
+
+
+class AudioResponseHeaders(ClosedModel):
+    """Internal test projection for the exact byte-range response headers."""
+
+    accept_ranges: Literal["bytes"] = "bytes"
+    etag: str
+    content_length: int = Field(ge=0)
+    content_range: str | None = None
+
+
+DebateStartedPayload.model_rebuild()

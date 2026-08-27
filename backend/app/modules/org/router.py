@@ -42,8 +42,7 @@ def _members_for_course(db: Session, course_id: str) -> list[Member]:
         .order_by(User.id)
     ).all()
     return [
-        Member(user_id=UUID(row.id), display_name=row.display_name, role=row.role)
-        for row in rows
+        Member(user_id=UUID(row.id), display_name=row.display_name, role=row.role) for row in rows
     ]
 
 
@@ -55,8 +54,7 @@ def _members_for_group(db: Session, group_id: str) -> list[Member]:
         .order_by(User.id)
     ).all()
     return [
-        Member(user_id=UUID(row.id), display_name=row.display_name, role=row.role)
-        for row in rows
+        Member(user_id=UUID(row.id), display_name=row.display_name, role=row.role) for row in rows
     ]
 
 

@@ -587,6 +587,14 @@ class FileOperation(Base):
     source_relative_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     target_relative_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     expected_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Wave 2 audio replacement journal metadata.  These columns deliberately
+    # remain nullable so the Wave 0/1 upload and snapshot journals keep their
+    # existing shape; ``debate_audio_swap`` rows fill the old pointer,
+    # staging path and new Debate identity before any filesystem rename.
+    old_audio_debate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    staging_relative_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    new_debate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    expected_old_debate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     state: Mapped[str] = mapped_column(String(24), nullable=False, default="prepared")
     safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -617,6 +625,15 @@ class Job(Base):
     document_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=True
     )
+    # Debate work is added in Wave 2 without changing existing knowledge and
+    # voice job callers.  The migration adds the matching foreign keys after
+    # the Debate tables exist; keeping the ORM columns nullable preserves
+    # ``create_all`` for the earlier isolated Wave 1 test databases.
+    debate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    turn_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cancellation_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
     operation: Mapped[str] = mapped_column(String(40), nullable=False)
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -630,6 +647,15 @@ class Job(Base):
             name="ck_jobs_state",
         ),
         Index("ix_jobs_document", "document_id"),
+        Index("ix_jobs_debate", "debate_id"),
+        Index("ix_jobs_turn", "turn_id"),
+        Index(
+            "uq_jobs_operation_idempotency_key",
+            "operation",
+            "idempotency_key",
+            unique=True,
+            sqlite_where=idempotency_key.is_not(None),
+        ),
     )
 
 
@@ -695,9 +721,7 @@ class VoiceProfile(Base):
     consent_copy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     consent_actor_user_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey(
-            "users.id", ondelete="SET NULL", name="fk_voice_profiles_consent_actor"
-        ),
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_voice_profiles_consent_actor"),
         nullable=True,
     )
     consent_accepted_at: Mapped[datetime | None] = mapped_column(
@@ -842,9 +866,7 @@ class VoicePreview(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     profile_id: Mapped[str] = mapped_column(
         String(36),
-        ForeignKey(
-            "voice_profiles.id", ondelete="CASCADE", name="fk_voice_previews_profile"
-        ),
+        ForeignKey("voice_profiles.id", ondelete="CASCADE", name="fk_voice_previews_profile"),
         nullable=False,
     )
     group_id: Mapped[str | None] = mapped_column(
@@ -854,9 +876,7 @@ class VoicePreview(Base):
     )
     stored_file_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey(
-            "stored_files.id", ondelete="SET NULL", name="fk_voice_previews_stored_file"
-        ),
+        ForeignKey("stored_files.id", ondelete="SET NULL", name="fk_voice_previews_stored_file"),
         nullable=True,
     )
     relative_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -63,7 +63,10 @@ def recover_file_operations(
 ) -> None:
     """Recover durable file journals before a lease can be taken over."""
 
-    query = select(FileOperation).where(FileOperation.state.in_(_RECOVERABLE_OPERATION_STATES))
+    query = select(FileOperation).where(
+        FileOperation.state.in_(_RECOVERABLE_OPERATION_STATES),
+        FileOperation.operation_kind != "debate_audio_swap",
+    )
     if idempotency_record_id is not None:
         query = query.where(FileOperation.idempotency_record_id == idempotency_record_id)
     if operation_id is not None:
@@ -97,7 +100,12 @@ def recover_startup(session: Session, data_root: Path) -> None:
         document.index_status = "failed"
         document.safe_error_code = "provider_unavailable"
 
-    for job in session.scalars(select(Job).where(Job.state.in_(("pending", "running")))).all():
+    for job in session.scalars(
+        select(Job).where(
+            Job.state.in_(("pending", "running")),
+            Job.debate_id.is_(None),
+        )
+    ).all():
         job.state = "interrupted"
         job.safe_error_code = "provider_unavailable"
     mark_owned_files_private(data_root)

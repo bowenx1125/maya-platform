@@ -198,9 +198,7 @@ def demo_identities(
     users = db.scalars(select(User).where(User.status == "active").order_by(User.username)).all()
     output: list[DemoIdentity] = []
     for user in users:
-        roles = db.scalars(
-            select(CourseMember.role).where(CourseMember.user_id == user.id)
-        ).all()
+        roles = db.scalars(select(CourseMember.role).where(CourseMember.user_id == user.id)).all()
         role: Literal["teacher", "student"] = "teacher" if "teacher" in roles else "student"
         output.append(
             DemoIdentity(user_id=UUID(user.id), display_name=user.display_name, role=role)

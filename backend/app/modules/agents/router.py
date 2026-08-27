@@ -582,7 +582,7 @@ def publish_agent_version(
         "publishAgentVersion",
         idempotency_key,
         body_hash,
-            data_root=settings.resolved_data_root,
+        data_root=settings.resolved_data_root,
     )
     if replay is not None:
         return replay  # type: ignore[return-value]

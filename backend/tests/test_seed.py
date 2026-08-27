@@ -27,16 +27,11 @@ from sqlalchemy.orm import Session
 def _snapshot(session: Session) -> dict[str, Any]:
     return {
         "users": [
-            (row.id, row.username, row.display_name)
-            for row in session.scalars(select(User)).all()
+            (row.id, row.username, row.display_name) for row in session.scalars(select(User)).all()
         ],
-        "courses": [
-            (row.id, row.code, row.name)
-            for row in session.scalars(select(Course)).all()
-        ],
+        "courses": [(row.id, row.code, row.name) for row in session.scalars(select(Course)).all()],
         "groups": [
-            (row.id, row.course_id, row.name)
-            for row in session.scalars(select(Group)).all()
+            (row.id, row.course_id, row.name) for row in session.scalars(select(Group)).all()
         ],
         "course_members": sorted(
             (row.course_id, row.user_id, row.role)
@@ -48,9 +43,7 @@ def _snapshot(session: Session) -> dict[str, Any]:
         ),
         "fingerprints": {
             **{
-                f"user:{row.id}": row_fingerprint(
-                    row, ("username", "display_name", "status")
-                )
+                f"user:{row.id}": row_fingerprint(row, ("username", "display_name", "status"))
                 for row in session.scalars(select(User)).all()
             },
             **{
@@ -118,7 +111,6 @@ def test_seed_cli_uses_alembic_and_is_repeatable(tmp_path: Path) -> None:
         assert session.scalar(select(User)) is not None
     with db.engine.connect() as connection:
         assert (
-            connection.execute(text("SELECT version_num FROM alembic_version"))
-            .scalar_one()
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             == ALEMBIC_HEAD
         )

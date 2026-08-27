@@ -22,9 +22,22 @@ export type TestChatResponse = components["schemas"]["TestChatResponse"];
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
+export type DebateSummary = components["schemas"]["DebateSummary"];
+export type DebateDetail = components["schemas"]["DebateDetail"];
+export type DebateDraftRequest =
+  operations["createDebate"]["requestBody"]["content"]["application/json"];
+export type DebateDraftUpdateRequest =
+  operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
+export type DebateParticipant = components["schemas"]["DebateParticipant"];
+export type DebateTurn = components["schemas"]["DebateTurn"];
+export type DebatePlaybackState = components["schemas"]["PlaybackState"];
+export type DebateTranscript = components["schemas"]["Transcript"];
 export type AvatarTemplate = components["schemas"]["AvatarTemplate"];
 export type VoiceProfile = components["schemas"]["VoiceProfile"];
-export type PlaybackResource = components["schemas"]["PlaybackResource"];
+export type PlaybackResource =
+  components["schemas"]["VoicePreviewPlaybackResource"];
+export type DebatePlaybackResource =
+  components["schemas"]["DebatePlaybackResource"];
 export type ErrorPayload = components["schemas"]["Error"];
 export type DemoIdentity =
   operations["listDemoIdentities"]["responses"][200]["content"]["application/json"][number];
@@ -659,6 +672,190 @@ export class PlatformApi {
     return unwrap(
       await this.client.GET("/courses/{course_id}/published-agents", {
         params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async debates(courseId: string): Promise<DebateSummary[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/debates", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async createDebate(
+    courseId: string,
+    body: DebateDraftRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const {
+        total_duration_seconds: _totalDuration,
+        turn_duration_seconds: _turnDuration,
+        ...requestBody
+      } = body;
+      const result = await this.client.POST("/courses/{course_id}/debates", {
+        params: {
+          path: { course_id: courseId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body: requestBody,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async debate(debateId: string): Promise<DebateDetail> {
+    return unwrap(
+      await this.client.GET("/debates/{debate_id}", {
+        params: { path: { debate_id: debateId } },
+      }),
+    );
+  }
+
+  async updateDebateDraft(
+    debateId: string,
+    body: DebateDraftUpdateRequest,
+  ): Promise<DebateDetail> {
+    const {
+      total_duration_seconds: _totalDuration,
+      turn_duration_seconds: _turnDuration,
+      ...requestBody
+    } = body;
+    return unwrap(
+      await this.client.PATCH("/debates/{debate_id}", {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: requestBody,
+      }),
+    );
+  }
+
+  async startDebate(
+    debateId: string,
+    body: operations["startDebate"]["requestBody"]["content"]["application/json"],
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST("/debates/{debate_id}/start", {
+        params: {
+          path: { debate_id: debateId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  private async controlDebate(
+    path:
+      | "/debates/{debate_id}/pause"
+      | "/debates/{debate_id}/resume"
+      | "/debates/{debate_id}/skip"
+      | "/debates/{debate_id}/replay",
+    debateId: string,
+    expectedControlVersion: number,
+  ): Promise<DebatePlaybackState> {
+    return unwrap(
+      await this.client.POST(path, {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { expected_control_version: expectedControlVersion },
+      }),
+    );
+  }
+
+  async pauseDebate(
+    debateId: string,
+    expectedControlVersion: number,
+  ): Promise<DebatePlaybackState> {
+    return this.controlDebate(
+      "/debates/{debate_id}/pause",
+      debateId,
+      expectedControlVersion,
+    );
+  }
+
+  async resumeDebate(
+    debateId: string,
+    expectedControlVersion: number,
+  ): Promise<DebatePlaybackState> {
+    return this.controlDebate(
+      "/debates/{debate_id}/resume",
+      debateId,
+      expectedControlVersion,
+    );
+  }
+
+  async skipDebateTurn(
+    debateId: string,
+    expectedControlVersion: number,
+  ): Promise<DebatePlaybackState> {
+    return this.controlDebate(
+      "/debates/{debate_id}/skip",
+      debateId,
+      expectedControlVersion,
+    );
+  }
+
+  async stopDebate(
+    debateId: string,
+    expectedControlVersion: number,
+  ): Promise<DebateDetail> {
+    return unwrap(
+      await this.client.POST("/debates/{debate_id}/stop", {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { expected_control_version: expectedControlVersion },
+      }),
+    );
+  }
+
+  async replayDebate(
+    debateId: string,
+    expectedControlVersion: number,
+  ): Promise<DebatePlaybackState> {
+    return this.controlDebate(
+      "/debates/{debate_id}/replay",
+      debateId,
+      expectedControlVersion,
+    );
+  }
+
+  async replayDebateTurn(
+    debateId: string,
+    turnId: string,
+    expectedControlVersion: number,
+  ): Promise<DebatePlaybackState> {
+    return unwrap(
+      await this.client.POST("/debates/{debate_id}/turns/{turn_id}/replay", {
+        params: {
+          path: { debate_id: debateId, turn_id: turnId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { expected_control_version: expectedControlVersion },
+      }),
+    );
+  }
+
+  async debateTranscript(debateId: string): Promise<DebateTranscript> {
+    return unwrap(
+      await this.client.GET("/debates/{debate_id}/transcript", {
+        params: { path: { debate_id: debateId } },
       }),
     );
   }

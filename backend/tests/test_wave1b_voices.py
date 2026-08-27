@@ -90,13 +90,17 @@ def _headers(csrf: str, key: str) -> dict[str, str]:
 def _multipart(file_name: str, content: bytes, *, chunk_size: int = 257) -> tuple[bytes, str]:
     boundary = "maya-test-boundary"
     body = (
-        f"--{boundary}\r\n"
-        'Content-Disposition: form-data; name="consent_accepted"\r\n\r\n'
-        "true\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'
-        "Content-Type: audio/wav\r\n\r\n"
-    ).encode() + content + f"\r\n--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="consent_accepted"\r\n\r\n'
+            "true\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'
+            "Content-Type: audio/wav\r\n\r\n"
+        ).encode()
+        + content
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
     return body, boundary
 
 
@@ -739,9 +743,13 @@ def test_effective_voice_resolver_prefers_ready_custom_and_fails_closed_to_syste
             updated_at=timestamp,
         )
         fallback.external_id_encrypted = encrypt_external_voice_id(
-            "system-external", settings.secret_bytes, profile_id=fallback.id,
-            scope=fallback.scope, group_id=fallback.group_id,
-            provider_key=fallback.provider_key, target_model_key=fallback.target_model_key,
+            "system-external",
+            settings.secret_bytes,
+            profile_id=fallback.id,
+            scope=fallback.scope,
+            group_id=fallback.group_id,
+            provider_key=fallback.provider_key,
+            target_model_key=fallback.target_model_key,
         )
         custom = VoiceProfile(
             id=custom_id,
@@ -760,9 +768,13 @@ def test_effective_voice_resolver_prefers_ready_custom_and_fails_closed_to_syste
             **common,
         )
         custom.external_id_encrypted = encrypt_external_voice_id(
-            "custom-external", settings.secret_bytes, profile_id=custom.id,
-            scope=custom.scope, group_id=custom.group_id,
-            provider_key=custom.provider_key, target_model_key=custom.target_model_key,
+            "custom-external",
+            settings.secret_bytes,
+            profile_id=custom.id,
+            scope=custom.scope,
+            group_id=custom.group_id,
+            provider_key=custom.provider_key,
+            target_model_key=custom.target_model_key,
         )
         session.add_all([fallback, custom])
     settings.fallback_voice_profile_id = fallback_id
@@ -774,7 +786,6 @@ def test_effective_voice_resolver_prefers_ready_custom_and_fails_closed_to_syste
         assert effective.profile_id == custom_id and not effective.fallback_active
     finally:
         resolver_session.close()
-
 
     corrupt_session = database.session_factory()
     try:
@@ -822,15 +833,22 @@ def test_voice_permissions_are_same_group_students_only(
     other = login(client, "student-kaikai-1")[1]
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
-    assert client.delete(
-        f"/api/v1/voice-profiles/{profile_id}", headers=_headers(other, "voice-cross-delete")
-    ).status_code == 404
+    assert (
+        client.delete(
+            f"/api/v1/voice-profiles/{profile_id}", headers=_headers(other, "voice-cross-delete")
+        ).status_code
+        == 404
+    )
     teacher = login(client, "teacher-demo")[1]
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
-    assert client.delete(
-        f"/api/v1/voice-profiles/{profile_id}", headers=_headers(teacher, "voice-teacher-delete")
-    ).status_code == 404
+    assert (
+        client.delete(
+            f"/api/v1/voice-profiles/{profile_id}",
+            headers=_headers(teacher, "voice-teacher-delete"),
+        ).status_code
+        == 404
+    )
     # Return to the original same-group session to demonstrate it remains
     # authorized after the denied probes.
     login(client, "student-bowen-1")
@@ -888,9 +906,9 @@ def test_supplier_url_rejects_private_hosts_userinfo_redirect_and_queries() -> N
         dashscope.validate_supplier_url("https://dashscope.aliyuncs.com/result.wav#fragment")
     with pytest.raises(TTSProviderError):
         dashscope.validate_supplier_url("https://dashscope.aliyuncs.com.evil.test/result.wav")
-    assert dashscope.validate_supplier_url(
-        "https://dashscope.aliyuncs.com/result.wav"
-    ).startswith("https://")
+    assert dashscope.validate_supplier_url("https://dashscope.aliyuncs.com/result.wav").startswith(
+        "https://"
+    )
 
 
 class _CaptureDashScopeClient:
@@ -968,16 +986,11 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     )
     assert enrolled.external_voice_id == "maya123456789012-generated"
     assert enrolled.request_id == "enroll-request"
-    exists = voice.exists(
-        "maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22"
-    )
+    exists = voice.exists("maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22")
     assert exists.matches == ("maya123456789012-generated",)
-    voice.delete(
-        "maya123456789012-generated", target_model_key="qwen3-tts-vc-2026-01-22"
-    )
+    voice.delete("maya123456789012-generated", target_model_key="qwen3-tts-vc-2026-01-22")
     expected_customization = (
-        "https://workspace123.cn-beijing.maas.aliyuncs.com"
-        "/api/v1/services/audio/tts/customization"
+        "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/customization"
     )
     assert [call[0] for call in capture.calls] == [expected_customization] * 3
     create_body = capture.calls[0][1]["json"]
@@ -1020,8 +1033,7 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     assert result.request_id == "tts-request"
     assert downloader.url and downloader.url.endswith("?Expires=1")
     assert tts_capture.calls[0][0] == (
-        "https://dashscope.aliyuncs.com/"
-        "api/v1/services/aigc/multimodal-generation/generation"
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     )
     assert tts_capture.calls[0][1]["json"] == {
         "model": "qwen3-tts-vc-2026-01-22",
@@ -1046,21 +1058,15 @@ def test_dashscope_exists_requires_a_complete_paginated_scan(
     provider = dashscope.DashScopeVoiceCloneProvider(
         dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
     )
-    incomplete = provider.exists(
-        "maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22"
-    )
+    incomplete = provider.exists("maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22")
     assert incomplete.matches == ()
     assert incomplete.visibility_known is False
     assert len(incomplete_capture.calls) == 10
 
     complete_capture = _CaptureDashScopeClient(
         [
-            _provider_response(
-                {"output": {"voice_list": full_page, "total_count": 201}}
-            ),
-            _provider_response(
-                {"output": {"voice_list": full_page, "total_count": 201}}
-            ),
+            _provider_response({"output": {"voice_list": full_page, "total_count": 201}}),
+            _provider_response({"output": {"voice_list": full_page, "total_count": 201}}),
             _provider_response(
                 {
                     "output": {
@@ -1077,9 +1083,7 @@ def test_dashscope_exists_requires_a_complete_paginated_scan(
         ]
     )
     monkeypatch.setattr(dashscope, "_client", lambda: complete_capture)
-    complete = provider.exists(
-        "maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22"
-    )
+    complete = provider.exists("maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22")
     assert complete.matches == ("maya123456789012-generated",)
     assert complete.visibility_known is True
     assert len(complete_capture.calls) == 3
@@ -1110,9 +1114,7 @@ def test_supplier_dns_resolution_has_a_hard_timeout(
     monkeypatch.setattr(dashscope.socket, "getaddrinfo", blocked_resolution)
     try:
         with pytest.raises(TTSProviderTimeout):
-            dashscope._resolved_public_addresses(
-                "dashscope.aliyuncs.com", timeout_seconds=0.01
-            )
+            dashscope._resolved_public_addresses("dashscope.aliyuncs.com", timeout_seconds=0.01)
     finally:
         release.set()
 
@@ -1272,13 +1274,17 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             },
         )
     with database.engine.connect() as connection:
-        before = connection.execute(
-            text(
-                "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
-                "avatar_config_json, voice_profile_id FROM agents "
-                "JOIN agent_versions ON agent_versions.agent_id = agents.id"
+        before = (
+            connection.execute(
+                text(
+                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
+                    "avatar_config_json, voice_profile_id FROM agents "
+                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     command.upgrade(migration_config, "head")
     command.upgrade(migration_config, "head")
     with database.engine.connect() as connection:
@@ -1305,9 +1311,9 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
         assert {item["name"] for item in schema.get_check_constraints("voice_previews")} == {
             "ck_voice_previews_state"
         }
-        assert {
-            item["name"] for item in schema.get_unique_constraints("voice_profiles")
-        } == {"uq_voice_profiles_recovery_name"}
+        assert {item["name"] for item in schema.get_unique_constraints("voice_profiles")} == {
+            "uq_voice_profiles_recovery_name"
+        }
         profile_indexes = {item["name"]: item for item in schema.get_indexes("voice_profiles")}
         assert set(profile_indexes) == {
             "ix_voice_profiles_group_status",
@@ -1324,10 +1330,7 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             "uq_voice_provider_operations_system_enroll_active",
         }
         assert operation_indexes["uq_voice_provider_operations_profile_delete"]["unique"] == 1
-        assert (
-            operation_indexes["uq_voice_provider_operations_system_enroll_active"]["unique"]
-            == 1
-        )
+        assert operation_indexes["uq_voice_provider_operations_system_enroll_active"]["unique"] == 1
         assert {item["name"] for item in schema.get_indexes("voice_previews")} == {
             "ix_voice_previews_expiry",
             "ix_voice_previews_profile_state",
@@ -1336,9 +1339,7 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             "fk_voice_profiles_consent_actor",
             "fk_voice_profiles_group",
         }
-        assert {
-            item["name"] for item in schema.get_foreign_keys("voice_provider_operations")
-        } == {
+        assert {item["name"] for item in schema.get_foreign_keys("voice_provider_operations")} == {
             "fk_voice_provider_operations_idempotency",
             "fk_voice_provider_operations_profile",
         }
@@ -1347,13 +1348,17 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             "fk_voice_previews_profile",
             "fk_voice_previews_stored_file",
         }
-        after = connection.execute(
-            text(
-                "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
-                "avatar_config_json, voice_profile_id FROM agents "
-                "JOIN agent_versions ON agent_versions.agent_id = agents.id"
+        after = (
+            connection.execute(
+                text(
+                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
+                    "avatar_config_json, voice_profile_id FROM agents "
+                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         assert list(before) == list(after)
         assert connection.execute(text("SELECT COUNT(*) FROM voice_profiles")).scalar_one() == 0
     database.dispose()

@@ -3,58 +3,6 @@
   "contract_version": "g0-2026-08-27.5",
   "description": "Explicit allow-list for frozen operations whose backend routes belong to later waves.",
   "allowed_missing_operation_ids": {
-    "listDebates": {
-      "owner": "M10",
-      "reason": "Debate routes are a Wave 2 deliverable."
-    },
-    "createDebate": {
-      "owner": "M10",
-      "reason": "Debate routes are a Wave 2 deliverable."
-    },
-    "getDebate": {
-      "owner": "M10",
-      "reason": "Debate routes are a Wave 2 deliverable."
-    },
-    "updateDebateDraft": {
-      "owner": "M10",
-      "reason": "Debate routes are a Wave 2 deliverable."
-    },
-    "startDebate": {
-      "owner": "M10",
-      "reason": "Debate routes are a Wave 2 deliverable."
-    },
-    "pauseDebate": {
-      "owner": "M12",
-      "reason": "Playback routes are a Wave 2 deliverable."
-    },
-    "resumeDebate": {
-      "owner": "M12",
-      "reason": "Playback routes are a Wave 2 deliverable."
-    },
-    "skipTurnPlayback": {
-      "owner": "M12",
-      "reason": "Playback routes are a Wave 2 deliverable."
-    },
-    "stopDebate": {
-      "owner": "M12",
-      "reason": "Playback routes are a Wave 2 deliverable."
-    },
-    "replayDebate": {
-      "owner": "M12",
-      "reason": "Playback replay routes are a Wave 2 deliverable."
-    },
-    "replayDebateTurn": {
-      "owner": "M12",
-      "reason": "Playback replay routes are a Wave 2 deliverable."
-    },
-    "connectDebateEvents": {
-      "owner": "M12",
-      "reason": "WebSocket playback routes are a Wave 2 deliverable."
-    },
-    "getDebateTranscript": {
-      "owner": "M12",
-      "reason": "The live Wave 2 control page consumes the published transcript."
-    },
     "getTeacherInteraction": {
       "owner": "M13",
       "reason": "Classroom interaction routes are a Wave 3 deliverable."
@@ -106,10 +54,6 @@
     "translateCurrentPublishedContent": {
       "owner": "M15",
       "reason": "Translation routes are a Wave 3 deliverable."
-    },
-    "streamRetainedTurnAudio": {
-      "owner": "M12",
-      "reason": "Live/replay classroom playback is a Wave 2 deliverable."
     }
   },
   "allowed_extra_operation_ids": {

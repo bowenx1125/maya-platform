@@ -33,14 +33,20 @@ def test_health_and_auth_rotation_csrf_logout(client: TestClient, app_factory: A
     second, csrf2 = login(client)
     assert second["csrf_token"] != csrf
     assert client.cookies.get("maya_session") != first_cookie
-    assert client.post(
-        "/api/v1/auth/logout",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
-    ).status_code == 403
-    assert client.post(
-        "/api/v1/auth/logout",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf2},
-    ).status_code == 204
+    assert (
+        client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": csrf2},
+        ).status_code
+        == 204
+    )
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
@@ -58,13 +64,17 @@ def test_cookie_secure_follows_https_origin(app_factory: Any) -> None:
 
 def test_session_expiry_and_csrf_failures(client: TestClient, app_factory: Any) -> None:
     _payload, csrf = login(client)
-    assert client.post(
-        "/api/v1/auth/logout", headers={"Origin": "http://testserver"}
-    ).status_code == 403
-    assert client.post(
-        "/api/v1/auth/logout",
-        headers={"Origin": "http://evil.example", "X-CSRF-Token": csrf},
-    ).status_code == 403
+    assert (
+        client.post("/api/v1/auth/logout", headers={"Origin": "http://testserver"}).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "http://evil.example", "X-CSRF-Token": csrf},
+        ).status_code
+        == 403
+    )
 
     app, database, _settings = app_factory()
     with TestClient(app) as other_client:
@@ -81,11 +91,14 @@ def test_demo_mode_false_hides_switch(client: TestClient, app_factory: Any) -> N
     with TestClient(app) as disabled_client:
         _payload, csrf = login(disabled_client)
         assert disabled_client.get("/api/v1/auth/demo-identities").status_code == 404
-        assert disabled_client.post(
-            "/api/v1/auth/switch",
-            headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
-            json={"user_id": "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7"},
-        ).status_code == 404
+        assert (
+            disabled_client.post(
+                "/api/v1/auth/switch",
+                headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+                json={"user_id": "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7"},
+            ).status_code
+            == 404
+        )
 
 
 def test_org_scope_teacher_and_student(client: TestClient) -> None:

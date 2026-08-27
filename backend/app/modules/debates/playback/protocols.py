@@ -1,0 +1,331 @@
+"""Narrow interfaces between playback and the M10/M11 domain services."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any, Protocol
+from uuid import uuid4
+
+from .schemas import RetrievalSourceDTO
+
+
+@dataclass(frozen=True)
+class PreparedSource:
+    snapshot_id: str
+    query_kind: str
+    query_hash: str
+    threshold_key: str
+    source_filename: str
+    chunk_id: str
+    evidence_id: str
+    rank: int
+    score: float
+    text: str
+
+
+@dataclass(frozen=True)
+class PreparedGenerationFence:
+    """Prompt prefix identity committed before any provider call."""
+
+    predecessor_turn_ids: tuple[str, ...]
+    transcript_hash: str
+    cutoff_turn_index: int
+    attempt: int = 1
+
+
+@dataclass(frozen=True)
+class ResolvedTurnVoice:
+    """Server-only voice mapping revalidated immediately before TTS."""
+
+    kind: str
+    profile_id: str | None
+    voice_token: str
+
+
+@dataclass(frozen=True)
+class PreparedTurn:
+    """Generation output accepted from M11 after its own validator."""
+
+    speech: str
+    sources: tuple[RetrievalSourceDTO, ...] = ()
+    retrieval_status: str = "no_match"
+    grounding_mode: str = "general_reasoning"
+    structured: Mapping[str, Any] = field(default_factory=dict)
+    voice_token: str = "mock"
+    actual_voice_kind: str = "mock_sentinel"
+    actual_voice_profile_id: str | None = None
+    source_receipts: tuple[PreparedSource, ...] = ()
+    predecessor_turn_ids: tuple[str, ...] = ()
+    transcript_hash: str | None = None
+    cutoff_turn_index: int | None = None
+    word_count: int | None = None
+    generation_attempt: int = 1
+
+
+@dataclass
+class MemoryParticipant:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    agent_id: str = field(default_factory=lambda: str(uuid4()))
+    slot: str = "A"
+    order_index: int = 0
+    name: str = "Agent"
+    version_label: str = "V1.0"
+    avatar_config: dict[str, Any] = field(
+        default_factory=lambda: {
+            "template_id": "wave1-default-head",
+            "material_theme": "demo",
+            "eye_color": None,
+            "default_expression": "neutral",
+            "expression_strength": "medium",
+            "motion_style": "calm",
+        }
+    )
+    effective_voice_profile_id: str | None = None
+    voice_fallback_active: bool = True
+    initial_stance: str | None = None
+    current_stance: str | None = None
+    current_position_summary: str = ""
+
+
+@dataclass
+class MemoryTurn:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    participant_id: str = ""
+    round_no: int = 1
+    turn_index: int = 0
+    generation_status: str = "pending"
+    publication_status: str = "unpublished"
+    preparation_stage: str | None = None
+    speech: str | None = None
+    structured: dict[str, Any] = field(default_factory=dict)
+    sources: list[RetrievalSourceDTO] = field(default_factory=list)
+    retrieval_status: str = "no_match"
+    grounding_mode: str = "general_reasoning"
+    audio_duration_ms: int | None = None
+    audio_sha256: str | None = None
+    audio_relative_path: str | None = None
+    predecessor_turn_ids: tuple[str, ...] = ()
+    predecessor_hash: str | None = None
+    attempt: int = 1
+    failed_code: str | None = None
+
+
+@dataclass
+class MemoryDebate:
+    id: str = field(default_factory=lambda: str(uuid4()))
+    course_id: str = field(default_factory=lambda: str(uuid4()))
+    topic: str = ""
+    status: str = "draft"
+    revision: int = 0
+    cancellation_generation: int = 0
+    participants: list[MemoryParticipant] = field(default_factory=list)
+    turns: list[MemoryTurn] = field(default_factory=list)
+    playback: Any = None
+    interaction_status: str = "closed"
+    insight_status: str = "not_started"
+    report_status: str = "not_started"
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+class PlaybackRepository(Protocol):
+    """Methods the service needs from setup/generation persistence."""
+
+    def get_debate(self, db: Any, debate_id: str) -> Any | None: ...
+
+    def save_debate(self, db: Any, debate: Any) -> None: ...
+
+    def participants(self, db: Any, debate: Any) -> list[Any]: ...
+
+    def turns(self, db: Any, debate: Any) -> list[Any]: ...
+
+    def ensure_turn_plan(self, db: Any, debate: Any) -> list[Any]: ...
+
+    def playback_state(self, db: Any, debate: Any) -> Any: ...
+
+    def save_playback(self, db: Any, state: Any) -> None: ...
+
+    def mark_turn_ready(
+        self,
+        db: Any,
+        turn: Any,
+        prepared: PreparedTurn,
+        audio: Any,
+        *,
+        generation: int,
+        attempt: int,
+        claim_token: str | None = None,
+    ) -> bool: ...
+
+    def publish_turn(self, db: Any, turn: Any) -> bool: ...
+
+    def fail_turn_and_debate(self, db: Any, debate: Any, turn: Any, code: str) -> None: ...
+
+    def mark_jobs_interrupted(self, db: Any, debate: Any, code: str) -> None: ...
+
+    def teacher_allowed(self, db: Any, debate: Any, context: Any) -> bool: ...
+
+    def course_running(
+        self, db: Any, course_id: str, except_debate_id: str | None = None
+    ) -> bool: ...
+
+    def current_audio_debate_id(self, db: Any, course_id: str) -> str | None: ...
+
+    def set_current_audio_debate(self, db: Any, course_id: str, debate_id: str | None) -> bool: ...
+
+    def public_turn(self, db: Any, debate: Any, turn_id: str) -> Any | None: ...
+
+
+class TurnPreparer(Protocol):
+    def __call__(
+        self,
+        db: Any,
+        debate: Any,
+        turn: Any,
+        *,
+        attempt: int,
+        cancellation_generation: int,
+    ) -> PreparedTurn | Awaitable[PreparedTurn]: ...
+
+
+class MemoryPlaybackRepository:
+    """A complete repository double for playback tests and local composition."""
+
+    def __init__(self) -> None:
+        self.debates: dict[str, MemoryDebate] = {}
+        self.jobs_interrupted: list[tuple[str, str]] = []
+        self.course_audio: dict[str, str | None] = {}
+
+    def add_debate(self, debate: MemoryDebate) -> MemoryDebate:
+        if debate.playback is None:
+            from .service import PlaybackRuntime
+
+            debate.playback = PlaybackRuntime()
+        self.debates[debate.id] = debate
+        return debate
+
+    def get_debate(self, db: Any, debate_id: str) -> MemoryDebate | None:
+        del db
+        return self.debates.get(debate_id)
+
+    def save_debate(self, db: Any, debate: MemoryDebate) -> None:
+        del db
+        self.debates[debate.id] = debate
+
+    def participants(self, db: Any, debate: MemoryDebate) -> list[MemoryParticipant]:
+        del db
+        return sorted(debate.participants, key=lambda item: item.order_index)
+
+    def turns(self, db: Any, debate: MemoryDebate) -> list[MemoryTurn]:
+        del db
+        return sorted(debate.turns, key=lambda item: item.turn_index)
+
+    def ensure_turn_plan(self, db: Any, debate: MemoryDebate) -> list[MemoryTurn]:
+        del db
+        participants = self.participants(None, debate)
+        if not debate.turns:
+            for round_no in (1, 2):
+                for participant in participants:
+                    debate.turns.append(
+                        MemoryTurn(
+                            participant_id=participant.id,
+                            round_no=round_no,
+                            turn_index=len(debate.turns),
+                        )
+                    )
+        return self.turns(None, debate)
+
+    def playback_state(self, db: Any, debate: MemoryDebate) -> Any:
+        del db
+        if debate.playback is None:
+            from .service import PlaybackRuntime
+
+            debate.playback = PlaybackRuntime()
+        return debate.playback
+
+    def save_playback(self, db: Any, state: Any) -> None:
+        del db, state
+
+    def mark_turn_ready(
+        self,
+        db: Any,
+        turn: MemoryTurn,
+        prepared: PreparedTurn,
+        audio: Any,
+        *,
+        generation: int,
+        attempt: int,
+        claim_token: str | None = None,
+    ) -> bool:
+        del db, generation, claim_token
+        if turn.generation_status not in {"pending", "running", "final_ready"}:
+            return False
+        turn.generation_status = "final_ready"
+        turn.preparation_stage = "ready"
+        turn.speech = prepared.speech
+        turn.structured = dict(prepared.structured)
+        turn.sources = list(prepared.sources)
+        turn.retrieval_status = prepared.retrieval_status
+        turn.grounding_mode = prepared.grounding_mode
+        turn.audio_duration_ms = getattr(audio, "duration_ms", None)
+        turn.audio_sha256 = getattr(audio, "sha256", None)
+        turn.audio_relative_path = getattr(audio, "relative_path", None)
+        turn.attempt = prepared.generation_attempt or attempt
+        turn.predecessor_turn_ids = prepared.predecessor_turn_ids
+        turn.predecessor_hash = prepared.transcript_hash
+        return True
+
+    def publish_turn(self, db: Any, turn: MemoryTurn) -> bool:
+        del db
+        if turn.speech is None or turn.generation_status not in {"ready", "final_ready"}:
+            return False
+        if turn.publication_status == "public":
+            return True
+        turn.publication_status = "public"
+        return True
+
+    def fail_turn_and_debate(
+        self, db: Any, debate: MemoryDebate, turn: MemoryTurn, code: str
+    ) -> None:
+        del db
+        turn.generation_status = "failed"
+        turn.failed_code = code
+        debate.status = "failed"
+
+    def mark_jobs_interrupted(self, db: Any, debate: MemoryDebate, code: str) -> None:
+        del db
+        self.jobs_interrupted.append((debate.id, code))
+
+    def teacher_allowed(self, db: Any, debate: MemoryDebate, context: Any) -> bool:
+        del db, debate, context
+        return True
+
+    def course_running(self, db: Any, course_id: str, except_debate_id: str | None = None) -> bool:
+        del db
+        return any(
+            debate.course_id == course_id
+            and debate.id != except_debate_id
+            and debate.status == "running"
+            for debate in self.debates.values()
+        )
+
+    def current_audio_debate_id(self, db: Any, course_id: str) -> str | None:
+        del db
+        return self.course_audio.get(course_id)
+
+    def set_current_audio_debate(self, db: Any, course_id: str, debate_id: str | None) -> bool:
+        del db
+        self.course_audio[course_id] = debate_id
+        return True
+
+    def public_turn(self, db: Any, debate: MemoryDebate, turn_id: str) -> MemoryTurn | None:
+        del db
+        return next(
+            (
+                turn
+                for turn in debate.turns
+                if turn.id == turn_id and turn.publication_status == "public"
+            ),
+            None,
+        )

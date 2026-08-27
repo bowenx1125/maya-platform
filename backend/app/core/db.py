@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0003_wave1b_avatar_voice"
+ALEMBIC_HEAD = "0004_wave2_debate_playback"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
@@ -68,6 +68,11 @@ class Database:
         does not create any later-wave tables.
         """
 
+        # Register Wave 2's vertical-domain tables before isolated tests call
+        # create_all. Deployment still uses Alembic as the source of truth.
+        from app.modules.debates import models as _debate_models
+
+        del _debate_models
         if self.engine.url.get_backend_name() == "sqlite":
             database = self.engine.url.database
             if database and database != ":memory:":
@@ -112,13 +117,9 @@ class Database:
                     journal_mode = str(
                         connection.execute(text("PRAGMA journal_mode")).scalar_one()
                     ).lower()
-                    busy_timeout = int(
-                        connection.execute(text("PRAGMA busy_timeout")).scalar_one()
-                    )
+                    busy_timeout = int(connection.execute(text("PRAGMA busy_timeout")).scalar_one())
                     pragma_ready = (
-                        foreign_keys == 1
-                        and journal_mode == "wal"
-                        and 0 < busy_timeout <= 60_000
+                        foreign_keys == 1 and journal_mode == "wal" and 0 < busy_timeout <= 60_000
                     )
                     if not pragma_ready:
                         return False

@@ -150,19 +150,14 @@ def delete_voice_profile(
         )
         .order_by(VoiceProviderOperation.created_at)
     )
-    if (
-        profile_operation is not None
-        and profile_operation.idempotency_record_id != record.id
-    ):
+    if profile_operation is not None and profile_operation.idempotency_record_id != record.id:
         if profile_operation.state == "succeeded" or profile.status == "deleted":
             result = voice_profile_dto(profile)
             finish_idempotency(db, record, 200, result.model_dump(mode="json"))
             db.commit()
             return result
         abandon_claim(db, record)
-        raise PlatformError(
-            "provider_unavailable", "The delete outcome needs reconciliation.", 503
-        )
+        raise PlatformError("provider_unavailable", "The delete outcome needs reconciliation.", 503)
     existing_operation = profile_operation
     operation: VoiceProviderOperation
     if existing_operation is not None:
@@ -232,10 +227,7 @@ def delete_voice_profile(
             )
             if current is not None and (
                 current.status == "deleted"
-                or (
-                    concurrent_operation is not None
-                    and concurrent_operation.state == "succeeded"
-                )
+                or (concurrent_operation is not None and concurrent_operation.state == "succeeded")
             ):
                 result = voice_profile_dto(current)
                 finish_idempotency(db, record, 200, result.model_dump(mode="json"))

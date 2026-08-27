@@ -186,9 +186,7 @@ def _ensure_course_member(session: Session, user_id: str, role: str, now: dateti
         if existing.role != role:
             raise SeedConflict(f"fixed course membership conflicts: {user_id}")
         return
-    session.add(
-        CourseMember(course_id=COURSE_ID, user_id=user_id, role=role, created_at=now)
-    )
+    session.add(CourseMember(course_id=COURSE_ID, user_id=user_id, role=role, created_at=now))
 
 
 def _ensure_group_member(

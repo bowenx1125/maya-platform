@@ -1547,6 +1547,616 @@
         }
       }
     },
+    "/api/v1/courses/{course_id}/debates": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "listDebates",
+        "responses": {
+          "200": {
+            "description": "Draft, active, and historical debates for teacher.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DebateSummary"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "createDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Draft created and selected versions/snapshots fixed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DebateId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "getDebate",
+        "responses": {
+          "200": {
+            "description": "Authoritative debate snapshot for teacher.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "updateDebateDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateDraftUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Draft updated and selected current versions/snapshots re-fixed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/start": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DebateId"
+        },
+        {
+          "$ref": "#/components/parameters/IdempotencyKey"
+        },
+        {
+          "$ref": "#/components/parameters/CsrfToken"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "startDebate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "expected_revision",
+                  "expected_current_audio_debate_id",
+                  "confirm_previous_audio_cleanup"
+                ],
+                "properties": {
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "expected_current_audio_debate_id": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/Uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "confirm_previous_audio_cleanup": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Debate started; prior retained audio swap committed if confirmed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/pause": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "pauseDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ControlCommand"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PlaybackState"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/resume": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "resumeDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ControlCommand"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PlaybackState"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/skip": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "skipTurnPlayback",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ControlCommand"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PlaybackState"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/stop": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "stopDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ControlCommand"
+        },
+        "responses": {
+          "200": {
+            "description": "Debate irreversibly stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/replay": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "replayDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ControlCommand"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PlaybackState"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/turns/{turn_id}/replay": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "replayDebateTurn",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/TurnId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ControlCommand"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PlaybackState"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/events": {
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "connectDebateEvents",
+        "description": "WebSocket upgrade. First event is an authoritative snapshot.",
+        "x-websocket": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "name": "since_sequence",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols."
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/transcript": {
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "getDebateTranscript",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published English turns, sources, optional translations, and retained playback resources.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcript"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/audio/{turn_id}": {
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "streamRetainedTurnAudio",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/TurnId"
+          },
+          {
+            "$ref": "#/components/parameters/Range"
+          },
+          {
+            "$ref": "#/components/parameters/IfRange"
+          },
+          {
+            "$ref": "#/components/parameters/MediaTicket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teacher-authorized complete retained audio.",
+            "headers": {
+              "Accept-Ranges": {
+                "$ref": "#/components/headers/AcceptRangesBytes"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/AudioEtag"
+              },
+              "Content-Length": {
+                "$ref": "#/components/headers/ContentLength"
+              }
+            },
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Teacher-authorized single byte range of retained audio.",
+            "headers": {
+              "Accept-Ranges": {
+                "$ref": "#/components/headers/AcceptRangesBytes"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/AudioEtag"
+              },
+              "Content-Length": {
+                "$ref": "#/components/headers/ContentLength"
+              },
+              "Content-Range": {
+                "$ref": "#/components/headers/ContentRange"
+              }
+            },
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error"
+          },
+          "416": {
+            "description": "Requested byte range cannot be satisfied for this retained audio.",
+            "headers": {
+              "Content-Range": {
+                "$ref": "#/components/headers/UnsatisfiedContentRange"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",
