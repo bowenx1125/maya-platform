@@ -1,6 +1,6 @@
 # Wave 2 Gate Packet — M10 Debate Setup + M11 Turn Generation + M12 Playback
 
-Status: historical `.5` baseline `G0-S/G3 PASS`; active `.6` manual-acceptance delta `G0-S/G1/G1.5/G2 PASS / MANUAL G3 NOT PASS`
+Status: historical `.5` baseline `G0-S/G3 PASS`; active `.6` manual-acceptance delta `G0-S/G1/G1.5/G2 PASS / M07+M12 BROWSER PASS / M08 REAL TTS FAILED-DEFERRED / OVERALL MANUAL G3 NOT PASS`
 Authorized scope: `2026-08-27 Asia/Shanghai`
 Modules: `M10 debate creation/rules`, `M11 RAG/LLM turn generation`, `M12 teacher stage/playback/recovery`
 Dependencies: `Wave 0 G3 PASS`, `Wave 1A G3 PASS`, `Wave 1B Mock G3 PASS`, `Wave 1C G3 PASS`, historical Wave 2 baseline `g0-2026-08-27.5`; active manual-acceptance delta `g0-2026-08-28.6-manual-acceptance-delta` has completed concentrated Sol High G2 review
@@ -433,9 +433,9 @@ The earlier lower-effort review was problem-finding only and has no Gate-signing
 
 ## 18. `.6` implementation, audit, Docker and real-TTS record
 
-Main-agent status at `2026-08-28 03:56 Asia/Shanghai`: `G1/G1.5/G2 PASS / MANUAL G3 NOT PASS`.
+Main-agent status at `2026-08-28 09:05 Asia/Shanghai`: `G1/G1.5/G2 PASS / M07+M12 BROWSER PASS / M08 REAL TTS FAILED-DEFERRED / OVERALL MANUAL G3 NOT PASS`.
 
-- visible Avatar: the renderer preserves `Material` versus `Material[]`, tests fail on the old transparent-canvas regression, and the prior Docker browser check showed visible Bowen/KaiKai local GLB faces. The final combined Next-flow state/action and projection-distance check still requires an authenticated teacher browser session;
+- visible Avatar: the renderer preserves `Material` versus `Material[]`, tests fail on the old transparent-canvas regression, and the authenticated 1280×720 Docker browser now shows both local GLB faces as `data-avatar-status=ready` canvases. During live turns the current participant is `speaking` and the other is `listening`; both return to `idle` in `waiting_next`. Classroom projection-distance readability remains a separate user-site check;
 - teacher published-version inspection: the authenticated browser reproduced that a selected V1.0 rendered an `Inspect` link back to the exact current snapshot URL, so clicking looked broken. The selected snapshot is now shown as a non-interactive bilingual `Viewing/正在查看` state with `aria-current=page`; only unselected immutable historical snapshots retain links. Focused and full frontend checks plus an independent Sol High review pass, and the rebuilt 1280×720 browser page shows both duplicated selected rows consistently without a no-op link;
 - teacher advancement: backend-authoritative `waiting_next`, derived `next_turn_ready`, adjacent-successor CAS, public-prefix/audio/fence revalidation, sequenced readiness change and action=`next` are implemented. The frontend native-ended path only acknowledges completion; it never prepares or starts the successor. Multitab, delayed HTTP/WS, stale snapshot, stop/final, restart and replay regressions pass;
 - concurrency and migration: the cross-process SQLite claim starts with `BEGIN IMMEDIATE` in a fresh Session and revalidates every Next invariant in the same writer transaction. `0005_wave2_manual_advance` passes fresh/repeat/populated, 0004→0005, downgrade/re-upgrade, named schema/index, full Wave/Voice/TTS-ledger fingerprints and empty foreign-key checks;
@@ -445,11 +445,14 @@ Main-agent status at `2026-08-28 03:56 Asia/Shanghai`: `G1/G1.5/G2 PASS / MANUAL
 - exactly one attempt=3 TTS call ran inside the locked backend Docker. It returned durable `failed` with safe code `tts_audio_invalid`, `request_count=1`, `charged_count=1`, no preview ID/bytes, and left the system profile `preview_ready`. Active preview/file counts are zero. There was no retry, enrollment, list/exists/delete, `.env` edit or fallback activation;
 - cumulative real calls are Voice enrollment `1` successful, TTS `3` failed, LLM `0`, Embedding `0`, Translation `0`. The supplier-side cloned voice still exists;
 - `RAG_PIPELINE_PASS / FORMAL_TIKTOK_RAG_CONTENT_ACCEPTANCE_PENDING` remains exact;
-- manual G3 is not signed. Blocking evidence is the failed real-English TTS Gate plus the not-yet-completed authenticated combined Next/3D browser pass. No Wave 3/4 implementation was entered.
+- M07/M12 browser acceptance is signed for this delta. The real-English TTS Gate remains failed/deferred, so the combined `.6` manual G3 and any complete-Demo claim remain unsigned. No Wave 3/4 implementation was entered.
 
 ### 18.1 Authenticated browser continuation
 
 - the user explicitly deferred further TTS troubleshooting. No fourth TTS, enrollment, list/exists/delete, `.env` or fallback change is permitted or performed;
 - authenticated 1280×720 Docker browser verification now proves the teacher V1.0 selection feedback and two visibly rendered ready Avatar canvases. Both teacher Agent and classroom pages have zero captured warning/error logs and no horizontal overflow;
-- normal-data Next draft `9c9f1560-0cb5-4ddc-865c-faf51bf3ba31` freezes Bowen=A=support and KaiKai=B=oppose for two rounds. Starting it correctly reaches the required confirmation that the previous current-debate replay audio will be deleted while text remains. Browser acceptance is paused before accepting that destructive confirmation until the user explicitly authorizes it;
+- the user explicitly authorized the start-time cleanup for normal-data draft `9c9f1560-0cb5-4ddc-865c-faf51bf3ba31`. The application removed only the prior current-debate Mock replay-audio directory, retained prior text/source/debate rows, made this debate the course current-audio debate and created four new decodable one-second Mock WAV files;
+- authenticated browser acceptance at 1280×720 completed the exact A1/B1/A2/B2 plan. Start exposed only A1; each of A1, B1 and A2 ended in durable `waiting_next` with the completed speech still visible, an enabled teacher Next button and no successor speech/source leak. A page refresh at A1 preserved the same one-public-turn boundary and Next readiness. Each teacher Next exposed exactly the deterministic adjacent successor;
+- A2 pause/resume preserved the same turn and returned to `waiting_next`; live state evidence showed Bowen `speaking`/Kaikai `listening` for A2 and Bowen `listening`/Kaikai `speaking` for B2. B2 ended naturally with four public turns, debate status `debate_finished`, playback terminal, Next disabled and full replay enabled. Full replay started from stored public media and returned to the same terminal state; viewport width and document scroll width both remained 1280;
+- browser evidence therefore signs the `.6` M07 visible-Avatar and M12 teacher-paced-Next portions. Skip/stop/backend-restart/single-turn replay remain covered by the deterministic and historical authenticated G3 suites rather than being repeated destructively in this one normal-data run. Projection-distance readability remains for the user to inspect in the real classroom;
 - local checkpoint `41343a3 fix: clarify selected agent snapshot` contains the reviewed M09 feedback repair. It is local only; no push, PR or deployment occurred.
