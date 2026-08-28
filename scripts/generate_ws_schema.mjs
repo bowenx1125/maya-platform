@@ -371,10 +371,11 @@ const payloads = {
   "playback.waiting_next": closed(
     {
       completed_turn_id: uuid,
+      mode: { type: "string", enum: ["live", "replay"] },
       control_version: integer(0),
       next_turn_ready: { type: "boolean" },
     },
-    ["completed_turn_id", "control_version", "next_turn_ready"],
+    ["completed_turn_id", "mode", "control_version", "next_turn_ready"],
   ),
   "playback.completed": closed(
     {

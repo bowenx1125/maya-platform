@@ -14,7 +14,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_, delete, exists, or_, select, update
+from sqlalchemy import and_, delete, exists, or_, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -755,6 +755,8 @@ def _document_dto(document: KnowledgeDocument) -> KnowledgeDocumentDTO:
         group_id=UUID(document.group_id),
         source_filename=document.source_filename,
         char_count=document.char_count,
+        content_hash=document.content_hash,
+        index_revision=document.index_revision,
         index_status=cast(Literal["pending", "indexing", "ready", "failed"], document.index_status),
         workspace_state=cast(Literal["active", "hidden"], document.workspace_state),
         safe_error_code=document.safe_error_code,
@@ -854,6 +856,7 @@ def agent_summary(db: Session, agent: Agent, *, include_draft: bool = True) -> A
         group_id=UUID(agent.group_id),
         name=agent.name,
         description=agent.description,
+        metadata_revision=agent.metadata_revision,
         status=cast(Literal["active", "archived"], agent.status),
         current_published_version_id=(
             UUID(agent.current_published_version_id) if agent.current_published_version_id else None
@@ -892,10 +895,10 @@ def normalized_document_content(data_root: Path, document: KnowledgeDocument) ->
     raw = read_contained(data_root, stored.relative_path)
     try:
         return normalize_markdown(document.source_filename, raw).normalized
-    except ValueError as exc:
+    except ValueError:
         raise PlatformError(
             "provider_unavailable", "The service is temporarily unavailable.", 503
-        ) from exc
+        ) from None
 
 
 def combined_markdown(db: Session, version_id: str, data_root: Path) -> str:
@@ -1122,10 +1125,10 @@ def create_snapshot(
             raise invalid_state("A source Markdown document failed integrity verification.")
         try:
             normalized = normalize_markdown(document.source_filename, source_bytes).normalized
-        except ValueError as exc:
+        except ValueError:
             raise PlatformError(
                 "provider_unavailable", "The service is temporarily unavailable.", 503
-            ) from exc
+            ) from None
         chunks = list(
             db.scalars(
                 select(KnowledgeDocumentChunk)
@@ -1243,6 +1246,7 @@ def create_snapshot(
         # Final transaction revalidates the complete captured relation and
         # source/index state before inserting immutable snapshot rows.
         db.rollback()
+        db.execute(text("BEGIN IMMEDIATE"))
         if idempotency_record_id is not None and claim_token is not None:
             record = db.get(IdempotencyRecord, idempotency_record_id)
             if record is None:
@@ -1473,6 +1477,11 @@ def create_snapshot(
                 pass
         raise
     except Exception:
+        # The final publication transaction may already hold SQLite's writer
+        # lock.  Release it before recording the durable cleanup marker so a
+        # fault at DB/CAS boundaries cannot leave a promoted orphan merely
+        # because the independent journal writer was blocked by this session.
+        db.rollback()
         try:
             transition_file_operation(
                 db,

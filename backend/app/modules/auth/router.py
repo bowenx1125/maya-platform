@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
@@ -11,22 +10,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.errors import Error, not_found, unauthenticated
+from app.core.errors import Error, PlatformError, not_found, unauthenticated
 from app.core.models import CourseMember, GroupMember, User
-from app.modules.auth.credentials import verify_password
+from app.modules.auth.credentials import (
+    CredentialFileError,
+    DemoAccountSnapshot,
+    active_catalog_snapshot,
+    verify_password,
+)
 from app.modules.auth.dependencies import (
     get_db,
     require_auth,
     require_authenticated_mutation,
-    require_demo_auth,
     require_demo_authenticated_mutation,
     require_demo_mode,
+    require_demo_quick_login,
 )
 from app.modules.auth.schemas import (
     AuthSession,
     CourseMembership,
     CurrentUser,
     DemoIdentity,
+    DemoQuickLoginRequest,
     DemoSwitchRequest,
     GroupMembership,
     LoginRequest,
@@ -92,6 +97,48 @@ def _auth_response(db: Session, context: AuthContext, csrf: str | None = None) -
         csrf_token=csrf or context.csrf_token,
         expires_at=_utc(context.session.expires_at),
     )
+
+
+def _safe_demo_snapshot(settings: Settings) -> DemoAccountSnapshot:
+    """Read the immutable startup catalog without exposing parser details."""
+
+    try:
+        return active_catalog_snapshot(settings)
+    except CredentialFileError:
+        # The catalog is validated during startup as well. This branch remains
+        # generic by design: no path, account key, username, password, or raw
+        # line leaks.
+        raise PlatformError(
+            "provider_unavailable",
+            "The service is temporarily unavailable.",
+            503,
+        ) from None
+
+
+def _public_demo_identities(db: Session, settings: Settings) -> list[DemoIdentity]:
+    snapshot = _safe_demo_snapshot(settings)
+    users = {
+        row.id: row
+        for row in db.scalars(
+            select(User).where(
+                User.id.in_([snapshot.user_id_for(account) for account in snapshot.accounts]),
+                User.status == "active",
+            )
+        ).all()
+    }
+    output = [
+        DemoIdentity(
+            user_id=UUID(snapshot.user_id_for(account)),
+            # The published process snapshot is the source for public
+            # identity presentation too; the DB lookup only confirms that
+            # the bound User remains active after startup.
+            display_name=account.display_name,
+            role=account.role,
+        )
+        for account in snapshot.accounts
+        if snapshot.user_id_for(account) in users
+    ]
+    return sorted(output, key=lambda item: (item.display_name.casefold(), str(item.user_id)))
 
 
 @router.post(
@@ -167,7 +214,12 @@ def switch_demo_identity(
     settings: Settings = Depends(get_settings),
 ) -> AuthSession:
     require_demo_mode(settings)
-    user = db.get(User, str(payload.user_id))
+    snapshot = _safe_demo_snapshot(settings)
+    account = next(
+        (item for item in snapshot.accounts if snapshot.user_id_for(item) == str(payload.user_id)),
+        None,
+    )
+    user = db.get(User, str(payload.user_id)) if account is not None else None
     if user is None or user.status != "active":
         raise not_found()
     raw_token, session_row, raw_csrf = create_rotated_session(
@@ -184,26 +236,60 @@ def switch_demo_identity(
     "/demo-identities",
     response_model=list[DemoIdentity],
     operation_id="listDemoIdentities",
+    openapi_extra={"security": []},
     responses={
         200: {"model": list[DemoIdentity], "description": "Safe identity options."},
         404: {"model": Error, "description": "Demo mode is disabled."},
     },
 )
 def demo_identities(
-    _context: AuthContext = Depends(require_demo_auth),
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(require_demo_quick_login),
 ) -> list[DemoIdentity]:
-    require_demo_mode(settings)
-    users = db.scalars(select(User).where(User.status == "active").order_by(User.username)).all()
-    output: list[DemoIdentity] = []
-    for user in users:
-        roles = db.scalars(select(CourseMember.role).where(CourseMember.user_id == user.id)).all()
-        role: Literal["teacher", "student"] = "teacher" if "teacher" in roles else "student"
-        output.append(
-            DemoIdentity(user_id=UUID(user.id), display_name=user.display_name, role=role)
-        )
-    return output
+    return _public_demo_identities(db, settings)
+
+
+@router.post(
+    "/quick-login",
+    response_model=AuthSession,
+    operation_id="quickLogin",
+    openapi_extra={"security": []},
+    responses={
+        200: {"model": AuthSession, "description": "Passwordless Demo session created."},
+        404: {"model": Error, "description": "Demo quick login is disabled or unknown."},
+        503: {"model": Error, "description": "The Demo account catalog is unavailable."},
+    },
+)
+def quick_login(
+    payload: DemoQuickLoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(require_demo_quick_login),
+) -> AuthSession:
+    """Rotate a session for one currently active catalog identity.
+
+    This route is intentionally anonymous and has no CSRF requirement: it is
+    an explicit identity selection from the server-provided public catalog.
+    The old cookie, if any, is still revoked before rotation.
+    """
+
+    snapshot = _safe_demo_snapshot(settings)
+    account = next(
+        (item for item in snapshot.accounts if snapshot.user_id_for(item) == str(payload.user_id)),
+        None,
+    )
+    user = db.get(User, str(payload.user_id)) if account is not None else None
+    if user is None or user.status != "active":
+        raise not_found()
+    raw_token, session_row, raw_csrf = create_rotated_session(
+        db,
+        user,
+        settings,
+        old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+    )
+    _set_session_cookie(response, raw_token, settings, request)
+    return _auth_response(db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf)
 
 
 @router.post(

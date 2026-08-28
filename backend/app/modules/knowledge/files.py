@@ -9,12 +9,81 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tempfile
+import unicodedata
 from pathlib import Path
+from urllib.parse import quote
 
 
 class FileBoundaryError(ValueError):
     """Raised when a relative path escapes the configured data root."""
+
+
+_DOWNLOAD_COMPONENT_RE = re.compile(r"[^\w.-]+", re.UNICODE)
+_DOWNLOAD_ASCII_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def sanitize_download_component(value: str, fallback: str) -> str:
+    """Return one safe, human-readable filename component.
+
+    The original metadata is never used as a path.  Unicode letters/digits
+    are retained for ``filename*`` while punctuation, whitespace and path
+    separators become a stable hyphen.  Control/format characters are
+    rejected from the output rather than copied into a response header.
+    """
+
+    normalized = unicodedata.normalize("NFKC", value).strip()
+    kept: list[str] = []
+    for char in normalized:
+        category = unicodedata.category(char)
+        if category in {"Cc", "Cf"}:
+            continue
+        kept.append(char)
+    component = _DOWNLOAD_COMPONENT_RE.sub("-", "".join(kept)).strip(".-")
+    return component or fallback
+
+
+def download_base_name(source_filename: str, fallback: str = "document") -> str:
+    """Sanitize a Markdown source's basename without accepting a path."""
+
+    if not source_filename or "/" in source_filename or "\\" in source_filename:
+        raise FileBoundaryError("invalid download filename")
+    if any(unicodedata.category(char) in {"Cc", "Cf"} for char in source_filename):
+        raise FileBoundaryError("invalid download filename")
+    base = Path(source_filename).stem
+    return sanitize_download_component(base, fallback)
+
+
+def frozen_download_filename(
+    source_filename: str,
+    agent_name: str,
+    version_label: str,
+    *,
+    ordinal: int | None = None,
+) -> str:
+    """Build the stable Agent/version-suffixed Markdown download name."""
+
+    base = download_base_name(source_filename)
+    agent = sanitize_download_component(agent_name, "agent")
+    version = sanitize_download_component(version_label, "version")
+    suffix = f"--{ordinal:02d}" if ordinal is not None else ""
+    return f"{base}--{agent}--{version}{suffix}.md"
+
+
+def content_disposition(filename: str) -> str:
+    """Return safe ASCII fallback plus RFC 5987 UTF-8 filename metadata."""
+
+    if not filename or "/" in filename or "\\" in filename:
+        raise FileBoundaryError("invalid download filename")
+    if any(ord(char) < 32 or ord(char) == 127 for char in filename):
+        raise FileBoundaryError("invalid download filename")
+    ascii_name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode()
+    ascii_name = _DOWNLOAD_ASCII_RE.sub("-", ascii_name).strip(".-") or "download"
+    if not ascii_name.lower().endswith(".md"):
+        ascii_name += ".md"
+    encoded = quote(filename, safe="!#$&+-.^_`|~")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}"
 
 
 def contained_path(root: Path, relative_path: str) -> Path:
@@ -24,8 +93,8 @@ def contained_path(root: Path, relative_path: str) -> Path:
     base = root.resolve()
     try:
         candidate.relative_to(base)
-    except ValueError as exc:
-        raise FileBoundaryError("file path is outside data root") from exc
+    except ValueError:
+        raise FileBoundaryError("file path is outside data root") from None
     return candidate
 
 

@@ -48,26 +48,12 @@ import type {
 
 type ConnectionState =
   "connecting" | "connected" | "reconnecting" | "disconnected";
-type ControlAction =
-  | "start"
-  | "pause"
-  | "resume"
-  | "skip"
-  | "next"
-  | "stop"
-  | "replay"
-  | "replay-turn";
+type ControlAction = "start" | "next" | "replay";
 
 const TERMINAL_PLAYBACK: readonly DebatePlaybackState["status"][] = [
   "completed",
   "stopped",
 ];
-const TERMINAL_DEBATE: readonly DebateDetail["status"][] = [
-  "completed",
-  "failed",
-  "stopped",
-];
-
 function makeId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
     return globalThis.crypto.randomUUID();
@@ -154,7 +140,6 @@ const CURRENT_ITEM_EVENT_TYPES = new Set<PlaybackEvent["event_type"]>([
   "playback.resumed",
   "playback.skipped",
   "playback.completed",
-  "replay.completed",
 ]);
 
 function isCurrentItemEvent(
@@ -288,9 +273,7 @@ function playbackFromWire(
       integer(value.control_version, current.control_version),
     ),
     next_turn_ready:
-      mode === "live" &&
-      status === "waiting_next" &&
-      value.next_turn_ready === true,
+      status === "waiting_next" && value.next_turn_ready === true,
   };
 }
 
@@ -376,6 +359,11 @@ function statusCopy(
   playbackStatus: DebatePlaybackState["status"],
   labels: ReturnType<typeof resolvePlaybackStageLabels>,
 ): string {
+  if (playbackStatus === "waiting_next") return labels.waitingNext;
+  if (playbackStatus === "preparing") return labels.statusPreparing;
+  if (playbackStatus === "ready") return labels.statusReady;
+  if (playbackStatus === "playing") return labels.statusPlaying;
+  if (playbackStatus === "paused") return labels.statusReady;
   if (detailStatus === "debate_finished" || detailStatus === "completed") {
     return labels.debateComplete;
   }
@@ -383,11 +371,6 @@ function statusCopy(
     return labels.debateStopped;
   }
   if (detailStatus === "failed") return labels.debateFailed;
-  if (playbackStatus === "preparing") return labels.statusPreparing;
-  if (playbackStatus === "ready") return labels.statusReady;
-  if (playbackStatus === "playing") return labels.statusPlaying;
-  if (playbackStatus === "paused") return labels.statusPaused;
-  if (playbackStatus === "waiting_next") return labels.waitingNext;
   return labels.debateComplete;
 }
 
@@ -692,9 +675,7 @@ export function DebateStage({
         next_turn_ready: patch.next_turn_ready ?? previous.next_turn_ready,
       };
       next.next_turn_ready =
-        next.mode === "live" &&
-        next.status === "waiting_next" &&
-        next.next_turn_ready === true;
+        next.status === "waiting_next" && next.next_turn_ready === true;
       markPlaybackItem(next);
       pendingActionRef.current = derivePendingPlaybackAction(
         next,
@@ -1457,7 +1438,11 @@ export function DebateStage({
           }
           break;
         case "playback.waiting_next": {
-          if (playbackRef.current.mode !== "live") break;
+          const eventMode =
+            payload.mode === "replay" || payload.mode === "live"
+              ? payload.mode
+              : playbackRef.current.mode;
+          if (eventMode !== playbackRef.current.mode) break;
           const completedTurnId = payload.completed_turn_id;
           if (!isNonEmptyString(completedTurnId)) break;
           const eventControlVersion = integer(
@@ -1491,7 +1476,7 @@ export function DebateStage({
           applyPlayback(
             {
               status: "waiting_next",
-              mode: "live",
+              mode: eventMode,
               current_turn_id: completedTurnId,
               cursor_ms: 0,
               control_version: Math.max(
@@ -1575,93 +1560,6 @@ export function DebateStage({
           );
           break;
         }
-        case "playback.paused":
-          if (
-            playbackRef.current.mode === "live" &&
-            playbackRef.current.status === "waiting_next"
-          )
-            break;
-          applyPlayback({
-            status: "paused",
-            current_turn_id: isNonEmptyString(payload.turn_id)
-              ? payload.turn_id
-              : playbackRef.current.current_turn_id,
-            cursor_ms: Math.max(
-              0,
-              integer(payload.cursor_ms, playbackRef.current.cursor_ms),
-            ),
-            control_version: Math.max(
-              playbackRef.current.control_version,
-              integer(
-                payload.control_version,
-                playbackRef.current.control_version,
-              ),
-            ),
-            playback_rate: numberValue(
-              payload.playback_rate,
-              playbackRef.current.playback_rate,
-            ),
-          });
-          pauseAudio(false);
-          setAvatars([]);
-          break;
-        case "playback.resumed":
-          if (
-            playbackRef.current.mode === "live" &&
-            playbackRef.current.status === "waiting_next"
-          )
-            break;
-          pendingActionRef.current = "resume";
-          applyPlayback({
-            status: "playing",
-            cursor_ms: Math.max(
-              0,
-              integer(payload.cursor_ms, playbackRef.current.cursor_ms),
-            ),
-            control_version: Math.max(
-              playbackRef.current.control_version,
-              integer(
-                payload.control_version,
-                playbackRef.current.control_version,
-              ),
-            ),
-          });
-          break;
-        case "playback.skipped":
-          if (
-            playbackRef.current.mode === "live" &&
-            playbackRef.current.status === "waiting_next"
-          )
-            break;
-          pauseAudio(true);
-          {
-            const completedTurnId = isNonEmptyString(payload.turn_id)
-              ? payload.turn_id
-              : playbackRef.current.current_turn_id;
-            const completedTurn = publicTurnById(
-              publicTurnsRef.current,
-              completedTurnId,
-            );
-            if (completedTurn) {
-              setActiveParticipant(completedTurn.participant_id);
-              setVisible(completedTurn);
-            }
-          }
-          setAvatars([]);
-          applyPlayback({
-            status: "waiting_next",
-            mode: "live",
-            cursor_ms: 0,
-            control_version: Math.max(
-              playbackRef.current.control_version,
-              integer(
-                payload.control_version,
-                playbackRef.current.control_version,
-              ),
-            ),
-            next_turn_ready: false,
-          });
-          break;
         case "playback.completed":
           if (
             playbackRef.current.mode === "live" &&
@@ -1747,11 +1645,8 @@ export function DebateStage({
           setAvatars([]);
           setActiveParticipant(null);
           if (!refreshSnapshot) {
-            // Observation-only/test integrations may not provide a snapshot
-            // reader.  In that compatibility mode there is no safe way to
-            // distinguish an intermediate replay item from the final one,
-            // so retain the historical terminal fallback.  The real control
-            // page always supplies refreshSnapshot below.
+            // Observation-only/test integrations may not provide an HTTP
+            // reader. The final replay event is still terminal locally.
             applyPlayback({
               status: "completed",
               mode: "live",
@@ -1770,14 +1665,6 @@ export function DebateStage({
             .then((next) => {
               if (!mountedRef.current || !next) return;
               commitDetail(next);
-              if (
-                next.playback.mode === "replay" &&
-                next.playback.status === "ready" &&
-                next.playback.current_turn_id
-              ) {
-                pendingActionRef.current = "replay";
-                scheduleMediaPrepare();
-              }
             })
             .catch((cause: unknown) => {
               if (!mountedRef.current) return;
@@ -2099,11 +1986,11 @@ export function DebateStage({
   );
 
   const runControl = useCallback(
-    async (action: ControlAction, turnId?: string) => {
+    async (action: ControlAction) => {
       if (readOnly || busyAction !== null || controlRequestRef.current !== null)
         return;
       if (
-        (action === "replay" || action === "replay-turn") &&
+        action === "replay" &&
         (!controllerReadyRef.current ||
           acquirePendingRef.current ||
           audioPointer !== debateId)
@@ -2114,7 +2001,8 @@ export function DebateStage({
         action === "next" &&
         (!controllerReadyRef.current ||
           acquirePendingRef.current ||
-          playbackRef.current.mode !== "live" ||
+          (playbackRef.current.mode !== "live" &&
+            playbackRef.current.mode !== "replay") ||
           playbackRef.current.status !== "waiting_next" ||
           !playbackRef.current.next_turn_ready ||
           !playbackRef.current.current_turn_id)
@@ -2186,35 +2074,6 @@ export function DebateStage({
           scheduleControllerAcquire();
           return;
         }
-        if (action === "pause") {
-          const next = await api.pauseDebate(debateId, current.control_version);
-          if (!isCurrentRequest()) return;
-          pauseAudio(false);
-          applyPlayback(next);
-          return;
-        }
-        if (action === "resume") {
-          const next = await api.resumeDebate(
-            debateId,
-            current.control_version,
-          );
-          if (!isCurrentRequest()) return;
-          pendingActionRef.current = "resume";
-          applyPlayback(next);
-          scheduleMediaPrepare();
-          return;
-        }
-        if (action === "skip") {
-          const next = await api.skipDebateTurn(
-            debateId,
-            current.control_version,
-          );
-          if (!isCurrentRequest()) return;
-          pendingActionRef.current = "start";
-          pauseAudio(true);
-          applyPlayback(next);
-          return;
-        }
         if (action === "next") {
           const expectedCurrentTurnId = current.current_turn_id;
           if (!expectedCurrentTurnId) return;
@@ -2229,21 +2088,8 @@ export function DebateStage({
           setAvatars([]);
           setActiveParticipant(null);
           applyPlayback(next);
-          pendingActionRef.current = "next";
+          pendingActionRef.current = next.mode === "replay" ? "replay" : "next";
           scheduleMediaPrepare();
-          return;
-        }
-        if (action === "stop") {
-          const next = await api.stopDebate(debateId, current.control_version);
-          if (!isCurrentRequest()) return;
-          pauseAudio(true);
-          setVisible(null);
-          setAvatars([]);
-          setActiveParticipant(null);
-          controllerEpochRef.current = null;
-          acquirePendingRef.current = false;
-          markControllerReady(false);
-          commitDetail(next);
           return;
         }
         if (action === "replay") {
@@ -2254,21 +2100,14 @@ export function DebateStage({
           );
           if (!isCurrentRequest()) return;
           setVisible(null);
+          // Whole replay deliberately rebuilds the visible classroom prefix
+          // from replay.started events. Do not leave the historical full
+          // transcript on screen while the first retained item is loading.
+          updatePublicTurns([]);
           applyPlayback(next);
           scheduleMediaPrepare();
           return;
         }
-        if (!turnId) return;
-        pendingActionRef.current = "replay";
-        const next = await api.replayDebateTurn(
-          debateId,
-          turnId,
-          current.control_version,
-        );
-        if (!isCurrentRequest()) return;
-        setVisible(null);
-        applyPlayback(next);
-        scheduleMediaPrepare();
       } catch (cause) {
         if (controlRequestRef.current === requestToken) {
           setControlError(errorText(cause, labelsRef.current.connectionError));
@@ -2289,13 +2128,13 @@ export function DebateStage({
       debateId,
       markControllerReady,
       markCurrentAudioDebate,
-      pauseAudio,
       readOnly,
       scheduleControllerAcquire,
       scheduleMediaPrepare,
       setActiveParticipant,
       setAvatars,
       setVisible,
+      updatePublicTurns,
     ],
   );
 
@@ -2337,8 +2176,9 @@ export function DebateStage({
     publicTurns,
   ]);
   const isTerminal =
-    TERMINAL_DEBATE.includes(detailState.status) ||
-    TERMINAL_PLAYBACK.includes(playback.status);
+    detailState.status === "failed" ||
+    detailState.status === "stopped" ||
+    (playback.mode !== "replay" && TERMINAL_PLAYBACK.includes(playback.status));
   const canReplay =
     !readOnly &&
     audioPointer === debateId &&
@@ -2346,13 +2186,14 @@ export function DebateStage({
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&
-    playback.status !== "playing";
-  const canAdvance =
     playback.mode === "live" &&
+    playback.status === "completed";
+  const canAdvance =
     playback.status === "waiting_next" &&
     playback.next_turn_ready &&
     controllerReady &&
-    busyAction === null;
+    busyAction === null &&
+    (playback.mode === "live" || playback.mode === "replay");
   const activeVisibleTurn =
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
@@ -2401,7 +2242,7 @@ export function DebateStage({
           {connection === "disconnected"
             ? labels.connectionDisconnected
             : labels.connectionReconnecting}
-          <small>{labels.audioPaused}</small>
+          <small>{labels.connectionWaiting}</small>
         </div>
       ) : null}
 
@@ -2507,20 +2348,6 @@ export function DebateStage({
           {failure ? (
             <div className={styles.failureCard} role="alert">
               <span>{failure}</span>
-              {!readOnly && playback.current_turn_id ? (
-                <button
-                  className="secondary-action"
-                  type="button"
-                  onClick={() => {
-                    prepareKeyRef.current = null;
-                    preparedMediaKeyRef.current = null;
-                    setFailure(null);
-                    ensureMediaPrepare();
-                  }}
-                >
-                  {labels.retryPlayback}
-                </button>
-              ) : null}
             </div>
           ) : null}
 
@@ -2562,16 +2389,6 @@ export function DebateStage({
                       </span>
                     </div>
                     <p>{turn.speech}</p>
-                    {!readOnly && (
-                      <button
-                        className="inline-button"
-                        type="button"
-                        disabled={busyAction !== null || !canReplay}
-                        onClick={() => void runControl("replay-turn", turn.id)}
-                      >
-                        {labels.replayTurn}
-                      </button>
-                    )}
                   </article>
                 );
               })}
@@ -2596,57 +2413,12 @@ export function DebateStage({
               {labels.start}
             </button>
             <button
-              className="secondary-action"
-              type="button"
-              disabled={busyAction !== null || playback.status !== "playing"}
-              onClick={() => void runControl("pause")}
-            >
-              {labels.pause}
-            </button>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={
-                busyAction !== null ||
-                playback.status !== "paused" ||
-                !controllerReady
-              }
-              onClick={() => void runControl("resume")}
-            >
-              {labels.resume}
-            </button>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={
-                busyAction !== null ||
-                playback.status !== "playing" ||
-                playback.mode !== "live"
-              }
-              onClick={() => void runControl("skip")}
-            >
-              {labels.skip}
-            </button>
-            <button
               className="primary-action"
               type="button"
               disabled={!canAdvance}
               onClick={() => void runControl("next")}
             >
               {labels.next}
-            </button>
-            <button
-              className={styles.dangerAction}
-              type="button"
-              disabled={
-                busyAction !== null ||
-                detailState.status === "draft" ||
-                detailState.status === "debate_finished" ||
-                TERMINAL_DEBATE.includes(detailState.status)
-              }
-              onClick={() => void runControl("stop")}
-            >
-              {labels.stop}
             </button>
             <button
               className="secondary-action"

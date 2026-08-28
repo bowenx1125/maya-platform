@@ -25,6 +25,7 @@ class AgentSummary(BaseModel):
     group_id: UUID
     name: str
     description: str = ""
+    metadata_revision: int = Field(ge=0)
     status: Literal["active", "archived"]
     current_published_version_id: UUID | None = None
     current_draft_version_id: UUID | None = None
@@ -48,7 +49,7 @@ class AgentVersion(BaseModel):
 
 class KnowledgeDocumentMutation(BaseModel):
     document: KnowledgeDocument
-    agent_version: AgentVersion
+    agent_version: AgentVersion | None = None
 
 
 class AgentDetail(AgentSummary):
@@ -65,6 +66,18 @@ class UpdateAgentDraftRequest(BaseModel):
 class AgentCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
+
+
+class UpdateAgentMetadataRequest(BaseModel):
+    """CAS payload for the mutable Agent description only.
+
+    ``description`` is intentionally nullable on the wire so clients can
+    clear an older/null value explicitly.  The database stores a non-null
+    empty string and the projection never invents fallback copy.
+    """
+
+    expected_metadata_revision: int = Field(ge=0)
+    description: str | None = ""
 
 
 class SetDocumentsRequest(BaseModel):

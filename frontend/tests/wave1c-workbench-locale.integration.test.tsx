@@ -109,6 +109,7 @@ function makeAgent(): AgentDetail {
     group_id: "group-id",
     name: "Agent",
     description: "A stable Agent description",
+    metadata_revision: 0,
     status: "active",
     current_draft_version_id: "version-id",
     current_published_version_id: null,

@@ -483,11 +483,21 @@ class PlaybackState(Base):
     control_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     controller_epoch: Mapped[str | None] = mapped_column(String(128), nullable=True)
     controller_owner_connection: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    pending_action: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    pending_ticket_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pending_media_command_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    audio_duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     server_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     replay_scope: Mapped[str | None] = mapped_column(String(8), nullable=True)
     replay_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The whole-replay cursor is persisted so a process restart cannot fall
+    # back to an in-memory list and accidentally skip the teacher's Next gate.
+    # Migration 0006 adds this nullable compatibility column to existing
+    # playback rows; an empty value is treated as an empty queue and rebuilt
+    # only from the immutable public prefix by the playback service.
+    replay_turn_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -509,11 +519,21 @@ class PlaybackState(Base):
         ),
         CheckConstraint(
             "status != 'waiting_next' OR "
-            "(mode = 'live' AND current_turn_id IS NOT NULL "
-            "AND replay_scope IS NULL AND replay_index IS NULL)",
-            name="ck_playback_states_waiting_next_live",
+            "(current_turn_id IS NOT NULL AND ((mode = 'live' "
+            "AND replay_scope IS NULL AND replay_index IS NULL) OR "
+            "(mode = 'replay' AND replay_scope = 'all' "
+            "AND replay_index IS NOT NULL AND replay_index >= 0)))",
+            name="ck_playback_states_waiting_next_mode",
         ),
         CheckConstraint("mode IN ('live', 'replay')", name="ck_playback_states_mode"),
+        CheckConstraint(
+            "pending_action IS NULL OR pending_action IN ('start', 'resume', 'next', 'replay')",
+            name="ck_playback_states_pending_action",
+        ),
+        CheckConstraint(
+            "audio_duration_ms >= 0",
+            name="ck_playback_states_audio_duration",
+        ),
         CheckConstraint("cursor_ms >= 0", name="ck_playback_states_cursor"),
         CheckConstraint(
             "playback_rate >= 0.95 AND playback_rate <= 1.25",
@@ -556,6 +576,42 @@ class DebateEvent(Base):
     )
 
 
+class AuditLog(Base):
+    """Generic redacted audit envelope used by operator-only boundaries.
+
+    Audit rows deliberately carry no foreign keys: an audit trail survives
+    cleanup of the debated entity and remains usable by later domains.  The
+    playback reset writer fills only the event/debate/request identity and a
+    small allow-listed ``details_json`` object; provider, path, ticket and
+    controller-epoch material never belongs in this table.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    actor_kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    course_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    debate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    details_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(trim(event_type)) > 0",
+            name="ck_audit_logs_event_type_nonempty",
+        ),
+        CheckConstraint(
+            "length(trim(details_json)) > 0",
+            name="ck_audit_logs_details_nonempty",
+        ),
+        Index("ix_audit_logs_debate_created", "debate_id", "created_at"),
+        Index("ix_audit_logs_event_created", "event_type", "created_at"),
+    )
+
+
 # Names used by the business contract and by downstream Wave 2 modules.  The
 # aliases keep the SQL table names singular in one place while allowing the
 # public domain vocabulary to remain explicit.
@@ -565,6 +621,7 @@ DebatePlaybackState = PlaybackState
 
 __all__ = [
     "Base",
+    "AuditLog",
     "Debate",
     "DebateEvent",
     "DebateParticipant",

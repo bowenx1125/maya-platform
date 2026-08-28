@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, Query, Request
-from sqlalchemy import and_, exists, or_, select, update
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from sqlalchemy import and_, exists, or_, select, text, update
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError
 
 from app.core.config import Settings, get_settings
 from app.core.errors import (
     Error,
     PlatformError,
+    conflict,
+    forbidden,
     invalid_state,
     not_found,
     rag_over_limit,
@@ -25,8 +29,11 @@ from app.core.models import (
     AgentVersion,
     AgentVersionDocument,
     CourseMember,
+    FileOperation,
     Group,
     GroupMember,
+    IdempotencyRecord,
+    KnowledgeSnapshot,
 )
 from app.modules.agents.schemas import (
     AgentCreateRequest,
@@ -37,6 +44,7 @@ from app.modules.agents.schemas import (
     TestChatRequest,
     TestChatResponse,
     UpdateAgentDraftRequest,
+    UpdateAgentMetadataRequest,
 )
 from app.modules.agents.schemas import (
     AgentVersion as AgentVersionDTO,
@@ -48,6 +56,7 @@ from app.modules.avatars import (
     AvatarConfigValidationError,
     validate_avatar_config,
 )
+from app.modules.knowledge.files import content_disposition, frozen_download_filename
 from app.modules.knowledge.markdown import MAX_RAG_CHARS, MarkdownInputError, normalize_markdown
 from app.modules.knowledge.multipart import integer_field, parse_upload
 from app.modules.knowledge.services import (
@@ -94,6 +103,222 @@ def _time() -> datetime:
     return datetime.now(UTC)
 
 
+def _summary_with_metadata(
+    db: Session, agent: Agent, *, include_draft: bool = True
+) -> AgentSummary:
+    """Build the shared projection with its authoritative metadata CAS."""
+
+    return agent_summary(db, agent, include_draft=include_draft)
+
+
+def _detail_with_metadata(db: Session, agent: Agent, role: str) -> AgentDetail:
+    """Return an Agent detail whose mutable metadata is current and explicit."""
+
+    detail = agent_detail(db, agent, role)
+    return detail.model_copy(update={"metadata_revision": agent.metadata_revision})
+
+
+def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
+    """Resolve delete visibility and preserve the teacher/other-group split.
+
+    A student must be a member of the owning group.  A teacher in the owning
+    course is deliberately recognized before the student-only check so the
+    operation returns ``403 forbidden`` rather than accidentally making a
+    same-course teacher look like a missing resource.  Other courses/groups
+    remain indistinguishable from a missing Agent and return 404.
+    """
+
+    row = db.execute(
+        select(Agent, CourseMember.role)
+        .join(Group, Group.id == Agent.group_id)
+        .join(CourseMember, CourseMember.course_id == Group.course_id)
+        .outerjoin(
+            GroupMember,
+            and_(GroupMember.group_id == Group.id, GroupMember.user_id == context.user.id),
+        )
+        .where(
+            Agent.id == agent_id,
+            CourseMember.user_id == context.user.id,
+            or_(
+                CourseMember.role == "teacher",
+                and_(CourseMember.role == "student", GroupMember.user_id.is_not(None)),
+            ),
+        )
+    ).first()
+    if row is None:
+        raise not_found()
+    if row[1] != "student":
+        raise forbidden()
+    return cast(Agent, row[0])
+
+
+def _agent_has_history(db: Session, agent_id: str) -> bool:
+    """Check every retained Agent history source while the writer lock is held."""
+
+    # A publish claim has to exclude a concurrent hard delete even while its
+    # immutable snapshot is being staged on disk.  The guard is a durable,
+    # Agent-scoped FileOperation row and is joined to the still-pending publish
+    # claim so a failed/abandoned request never becomes permanent history.
+    publish_guard = db.scalar(
+        select(FileOperation.id)
+        .join(IdempotencyRecord, IdempotencyRecord.id == FileOperation.idempotency_record_id)
+        .where(
+            FileOperation.entity_id == agent_id,
+            FileOperation.operation_kind == "agent_publish_guard",
+            FileOperation.state.in_(("prepared", "staged", "promoted", "cleanup_required")),
+            IdempotencyRecord.operation == "publishAgentVersion",
+            IdempotencyRecord.state == "pending",
+        )
+    )
+    if publish_guard is not None:
+        return True
+
+    # A non-null current pointer is itself a historical reference.  Keep a
+    # malformed legacy pointer conservative rather than deleting an Agent
+    # whose published lineage may only be partially represented in the DB.
+    if db.scalar(
+        select(Agent.current_published_version_id).where(
+            Agent.id == agent_id,
+            Agent.current_published_version_id.is_not(None),
+        )
+    ):
+        return True
+
+    # A non-draft version or any snapshot binding is historical even if a
+    # malformed/legacy row lost the current pointer.  This is intentionally
+    # broader than only checking ``current_published_version_id``.
+    version_history = db.scalar(
+        select(AgentVersion.id).where(
+            AgentVersion.agent_id == agent_id,
+            or_(
+                AgentVersion.state.in_(("published", "superseded")),
+                AgentVersion.knowledge_snapshot_id.is_not(None),
+            ),
+        )
+    )
+    if version_history is not None:
+        return True
+
+    snapshot_history = db.scalar(
+        select(KnowledgeSnapshot.id)
+        .join(AgentVersion, AgentVersion.id == KnowledgeSnapshot.agent_version_id)
+        .where(AgentVersion.agent_id == agent_id)
+    )
+    if snapshot_history is not None:
+        return True
+
+    # Debate models are a vertical Wave 2 module.  Importing lazily keeps the
+    # earlier isolated Agent/schema tests free of a circular module import,
+    # while production and migration schemas always register this table.
+    from app.modules.debates.models import DebateParticipant
+
+    return (
+        db.scalar(select(DebateParticipant.id).where(DebateParticipant.agent_id == agent_id))
+        is not None
+    )
+
+
+def _begin_immediate(db: Session) -> None:
+    """Start the final serialized Agent writer transaction.
+
+    Scoped authorization reads may have opened a WAL snapshot.  Roll it back
+    before issuing ``BEGIN IMMEDIATE`` so the final eligibility check cannot
+    fail with ``SQLITE_BUSY_SNAPSHOT`` and so publish/debate writers cannot
+    interleave between the check and the delete.
+    """
+
+    db.rollback()
+    db.execute(text("BEGIN IMMEDIATE"))
+
+
+def _acquire_publish_guard(
+    db: Session,
+    context: AuthContext,
+    version_id: str,
+    expected_revision: int,
+    record: IdempotencyRecord,
+) -> tuple[AgentVersion, Agent, str]:
+    """Re-read a publish target under SQLite's writer lock and fence deletion.
+
+    The idempotency claim is committed before this function is called.  The
+    immediate transaction then re-resolves the student-visible version and
+    inserts a durable Agent-scoped guard before releasing the lock.  A delete
+    that wins the lock first sees a missing version and the publish caller gets
+    a stable 404; a publish that wins leaves a guard for the delete's final
+    history check.
+    """
+
+    _begin_immediate(db)
+    try:
+        scoped = visible_student_version(db, context, version_id)
+        if scoped.version.state != "draft":
+            raise version_immutable()
+        if scoped.agent.status != "active":
+            raise invalid_state("Archived Agents cannot be published.")
+        if scoped.version.revision != expected_revision:
+            raise stale_revision(scoped.version.revision)
+        # Keep an explicit CAS fence in the locked transaction as well as the
+        # ORM re-read.  This makes the publish winner observable to SQLite and
+        # prevents a stale worker from installing a guard for another draft.
+        fenced = db.execute(
+            update(AgentVersion)
+            .where(
+                AgentVersion.id == scoped.version.id,
+                AgentVersion.agent_id == scoped.agent.id,
+                AgentVersion.state == "draft",
+                AgentVersion.revision == expected_revision,
+            )
+            .values(revision=AgentVersion.revision)
+        )
+        if getattr(fenced, "rowcount", 0) != 1:
+            current_revision = db.scalar(
+                select(AgentVersion.revision).where(AgentVersion.id == scoped.version.id)
+            )
+            raise stale_revision(current_revision)
+        timestamp = _time()
+        guard_id = str(uuid4())
+        db.add(
+            FileOperation(
+                id=guard_id,
+                idempotency_record_id=record.id,
+                operation_kind="agent_publish_guard",
+                entity_id=scoped.agent.id,
+                request_id=str(uuid4()),
+                source_relative_path=None,
+                target_relative_path=None,
+                expected_sha256=None,
+                state="prepared",
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        db.flush()
+        db.commit()
+        return scoped.version, scoped.agent, guard_id
+    except PlatformError:
+        if db.in_transaction():
+            db.rollback()
+        raise
+
+
+def _recover_publish_guard(db: Session, guard_id: str | None) -> None:
+    """Release a guard after a failed publish without leaving a writer lock."""
+
+    if guard_id is None:
+        return
+    db.rollback()
+    db.execute(text("BEGIN IMMEDIATE"))
+    changed = db.execute(
+        update(FileOperation)
+        .where(FileOperation.id == guard_id, FileOperation.state == "prepared")
+        .values(state="recovered", updated_at=_time())
+    )
+    if getattr(changed, "rowcount", 0) == 1:
+        db.commit()
+    else:
+        db.rollback()
+
+
 @router.get(
     "/groups/{group_id}/agents",
     response_model=list[AgentSummary],
@@ -105,7 +330,7 @@ def _time() -> datetime:
 )
 def list_group_agents(
     group_id: UUID,
-    include_archived: bool = Query(False),
+    include_archived: bool = Query(True),
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[AgentSummary]:
@@ -136,7 +361,7 @@ def list_group_agents(
         )
     ).all()
     agents = [row for row in rows if include_archived or row[0].status == "active"]
-    return [agent_summary(db, row[0], include_draft=role != "teacher") for row in agents]
+    return [_summary_with_metadata(db, row[0], include_draft=role != "teacher") for row in agents]
 
 
 @router.post(
@@ -170,7 +395,10 @@ def create_agent(
         id=str(uuid4()),
         group_id=str(group_id),
         name=payload.name,
-        description=payload.description,
+        description=(
+            payload.description if payload.description and payload.description.strip() else ""
+        ),
+        metadata_revision=0,
         status="active",
         created_at=timestamp,
         updated_at=timestamp,
@@ -188,7 +416,7 @@ def create_agent(
     )
     db.add_all([agent, version])
     db.flush()
-    result = agent_detail(db, agent, "student")
+    result = _detail_with_metadata(db, agent, "student")
     finish_idempotency(db, record, 201, result.model_dump(mode="json"))
     saga_checkpoint("create_agent.before_final_commit")
     db.commit()
@@ -211,85 +439,137 @@ def get_agent(
     db: Session = Depends(get_db),
 ) -> AgentDetail:
     scoped = visible_agent(db, context, str(agent_id))
-    return agent_detail(db, scoped.agent, scoped.role)
+    return _detail_with_metadata(db, scoped.agent, scoped.role)
 
 
-def _archive_agent(
+@router.patch(
+    "/agents/{agent_id}",
+    response_model=AgentDetail,
+    operation_id="updateAgentMetadata",
+    responses={
+        200: {"model": AgentDetail, "description": "Mutable Agent metadata updated."},
+        404: {"model": Error, "description": "Agent not found."},
+        409: {"model": Error, "description": "Metadata revision conflict."},
+    },
+)
+def update_agent_metadata(
     agent_id: UUID,
-    *,
-    status: str,
-    operation: str,
-    idempotency_key: str,
-    context: AuthContext,
-    db: Session,
-) -> AgentSummary:
+    payload: UpdateAgentMetadataRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> AgentDetail:
+    """CAS-update description without touching any versioned Agent data."""
+
     scoped = visible_student_agent(db, context, str(agent_id))
-    body_hash = parse_json_payload_hash(operation, context, [str(agent_id)], {"status": status})
-    record, replay = claim_idempotency(db, context, operation, idempotency_key, body_hash)
+    # Close the authorization read snapshot before taking the final writer
+    # lock.  This also makes concurrent updates resolve to one deterministic
+    # winner instead of a SQLite WAL snapshot error.
+    _begin_immediate(db)
+    try:
+        current = db.scalar(
+            select(Agent).where(
+                Agent.id == str(agent_id),
+                Agent.group_id == scoped.agent.group_id,
+                Agent.metadata_revision == payload.expected_metadata_revision,
+            )
+        )
+        if current is None:
+            latest = db.scalar(select(Agent.metadata_revision).where(Agent.id == str(agent_id)))
+            db.rollback()
+            if latest is None:
+                raise not_found()
+            raise conflict(
+                "stale_metadata_revision",
+                "The Agent description changed elsewhere.",
+                {
+                    "current_metadata_revision": latest,
+                },
+            )
+        description = payload.description
+        current.description = description if description and description.strip() else ""
+        current.metadata_revision += 1
+        current.updated_at = _time()
+        db.flush()
+        result = _detail_with_metadata(db, current, "student")
+        db.commit()
+        return result
+    except PlatformError:
+        # A stale CAS has already rolled back above.  This branch releases the
+        # immediate lock for any other domain error before FastAPI serializes
+        # the stable platform envelope.
+        if db.in_transaction():
+            db.rollback()
+        raise
+
+
+@router.delete(
+    "/agents/{agent_id}",
+    status_code=204,
+    operation_id="deleteAgent",
+    responses={
+        204: {"description": "Eligible Agent and its draft state deleted."},
+        403: {"model": Error, "description": "Teachers cannot delete Agents."},
+        404: {"model": Error, "description": "Agent not found."},
+        409: {"model": Error, "description": "Agent history is retained."},
+    },
+)
+def delete_agent(
+    agent_id: UUID,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Hard-delete only an Agent with no immutable or debate history.
+
+    The final eligibility query and delete run under one ``BEGIN IMMEDIATE``
+    transaction.  SQLite's writer lock therefore serializes this operation
+    with publish and Debate creation, leaving exactly one committed winner.
+    """
+
+    body_hash = parse_json_payload_hash("deleteAgent", context, [str(agent_id)], {})
+    record, replay = claim_idempotency(db, context, "deleteAgent", idempotency_key, body_hash)
     if replay is not None:
-        return replay  # type: ignore[return-value]
+        return Response(status_code=204)
     assert_claim_owned(db, record)
-    scoped.agent.status = status
-    scoped.agent.updated_at = _time()
-    result = agent_summary(db, scoped.agent)
-    finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-    saga_checkpoint(f"{operation}.before_final_commit")
-    db.commit()
-    saga_checkpoint(f"{operation}.after_final_commit")
-    return result
 
+    try:
+        # Resolve authorization after the durable claim so an idempotent
+        # replay can succeed even though the Agent row was already removed.
+        # A denied first request abandons the claim below without revealing
+        # anything about another group.
+        _student_delete_scope(db, context, str(agent_id))
+        _begin_immediate(db)
+        # Re-resolve both the actor scope and the Agent under the writer lock;
+        # no publish/Debate writer can slip between this read and the delete.
+        agent = _student_delete_scope(db, context, str(agent_id))
+        if _agent_has_history(db, agent.id):
+            db.rollback()
+            abandon_claim(db, record)
+            raise conflict(
+                "agent_history_retained",
+                "This Agent has published or classroom history and must be retained.",
+            )
 
-@router.post(
-    "/agents/{agent_id}/archive",
-    response_model=AgentSummary,
-    operation_id="archiveAgent",
-    responses={
-        200: {"model": AgentSummary, "description": "Agent archived; history retained."},
-        404: {"model": Error, "description": "Agent not found."},
-        409: {"model": Error, "description": "Invalid archive transition."},
-    },
-)
-def archive_agent(
-    agent_id: UUID,
-    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> AgentSummary:
-    return _archive_agent(
-        agent_id,
-        status="archived",
-        operation="archiveAgent",
-        idempotency_key=idempotency_key,
-        context=context,
-        db=db,
-    )
-
-
-@router.post(
-    "/agents/{agent_id}/unarchive",
-    response_model=AgentSummary,
-    operation_id="unarchiveAgent",
-    responses={
-        200: {"model": AgentSummary, "description": "Agent returned to active state."},
-        404: {"model": Error, "description": "Agent not found."},
-    },
-)
-def unarchive_agent(
-    agent_id: UUID,
-    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> AgentSummary:
-    return _archive_agent(
-        agent_id,
-        status="active",
-        operation="unarchiveAgent",
-        idempotency_key=idempotency_key,
-        context=context,
-        db=db,
-    )
+        # AgentVersion -> AgentVersionDocument are Agent-owned draft state and
+        # are removed by the ORM cascade.  KnowledgeDocument, VoiceProfile,
+        # AuditLog, StoredFile and other group/Agent rows have no cascade from
+        # this delete and therefore remain intact.
+        db.delete(agent)
+        db.flush()
+        finish_idempotency(db, record, 204, {})
+        saga_checkpoint("delete_agent.before_final_commit")
+        db.commit()
+        saga_checkpoint("delete_agent.after_final_commit")
+        return Response(status_code=204)
+    except PlatformError:
+        if db.in_transaction():
+            db.rollback()
+        # A failed final check must not leave a pending idempotency lease that
+        # blocks a later explicit request.  ``abandon_claim`` is idempotent.
+        abandon_claim(db, record)
+        raise
 
 
 @router.get(
@@ -552,6 +832,40 @@ async def upload_agent_md(
     return version_dto(db, scoped.version, scoped.agent)
 
 
+@router.get(
+    "/agent-versions/{version_id}/agent-md/download",
+    response_class=Response,
+    operation_id="downloadAgentMd",
+    responses={
+        200: {
+            "description": "Published immutable AGENT.md.",
+            "content": {"text/markdown": {"schema": {"type": "string"}}},
+        },
+        404: {"model": Error, "description": "Published Agent version not found."},
+    },
+)
+def download_agent_md(
+    version_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Download AGENT.md only from a published/superseded visible version."""
+
+    scoped = visible_version(db, context, str(version_id))
+    if scoped.version.state not in {"published", "superseded"}:
+        raise not_found()
+    filename = frozen_download_filename(
+        "AGENT.md",
+        scoped.agent.name,
+        f"V1.{scoped.version.version_seq}",
+    )
+    return Response(
+        scoped.version.agent_md.encode("utf-8"),
+        media_type="text/markdown",
+        headers={"Content-Disposition": content_disposition(filename)},
+    )
+
+
 @router.post(
     "/agent-versions/{version_id}/publish",
     response_model=AgentVersionDTO,
@@ -572,7 +886,10 @@ def publish_agent_version(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AgentVersionDTO:
-    scoped = visible_student_version(db, context, str(version_id))
+    # Keep the original scope check for the stable permission/not-found
+    # boundary, but never reuse that ORM object after the durable claim.  The
+    # guarded re-read below is the authority for the publish write.
+    visible_student_version(db, context, str(version_id))
     body_hash = parse_json_payload_hash(
         "publishAgentVersion", context, [str(version_id)], payload.model_dump()
     )
@@ -587,35 +904,56 @@ def publish_agent_version(
     if replay is not None:
         return replay  # type: ignore[return-value]
     assert_claim_owned(db, record)
+    guard_id: str | None = None
     try:
-        if scoped.version.state != "draft":
-            raise version_immutable()
-        if scoped.agent.status != "active":
-            raise invalid_state("Archived Agents cannot be published.")
-        if scoped.version.revision != payload.expected_revision:
-            raise stale_revision(scoped.version.revision)
+        version, agent, guard_id = _acquire_publish_guard(
+            db,
+            context,
+            str(version_id),
+            payload.expected_revision,
+            record,
+        )
         create_snapshot(
             db,
             settings.resolved_data_root,
-            scoped.version,
-            scoped.agent,
+            version,
+            agent,
             expected_revision=payload.expected_revision,
             idempotency_record_id=record.id,
             claim_token=record.claim_token,
         )
-        result = version_dto(db, scoped.version, scoped.agent)
+        # ``create_snapshot`` owns the heavy staging/finalization transaction
+        # and intentionally rolls back before its final re-check.  The guard
+        # survives that boundary, so mark it committed in the same transaction
+        # as the immutable version and idempotency completion.
+        guard = db.get(FileOperation, guard_id)
+        if guard is None or guard.state != "prepared":
+            raise invalid_state("The Agent publish guard is no longer active.")
+        guard.state = "committed"
+        guard.updated_at = _time()
+        result = version_dto(db, version, agent)
         finish_idempotency(db, record, 200, result.model_dump(mode="json"))
         db.flush()
         saga_checkpoint("publish.after_final_db_prepare")
         db.commit()
         saga_checkpoint("publish.after_final_commit")
         return result
+    except ObjectDeletedError as exc:
+        # A legacy caller or a process-local race may still hand us a deleted
+        # ORM instance.  End the guard/claim and expose the same stable 404 as
+        # the guarded re-query instead of leaking a 503 infrastructure error.
+        _recover_publish_guard(db, guard_id)
+        abandon_claim(db, record)
+        raise not_found() from exc
     except PlatformError:
+        _recover_publish_guard(db, guard_id)
         abandon_claim(db, record)
         raise
     except Exception:
         # Keep the operation/claim journal durable for startup recovery when
         # an injected crash or unexpected infrastructure error occurs.
+        _recover_publish_guard(db, guard_id)
+        abandon_claim(db, record)
         raise
 
 
@@ -705,7 +1043,7 @@ def list_published_agents_for_teacher(
             raise not_found()
     return [
         PublishedAgentSummary(
-            agent=agent_summary(db, agent, include_draft=False),
+            agent=_summary_with_metadata(db, agent, include_draft=False),
             current_version=version_dto(db, version, agent),
         )
         for agent, version in rows

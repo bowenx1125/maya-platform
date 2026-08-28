@@ -52,10 +52,17 @@ export function AppShell({
           : []),
       ]
     : [
-        { href: "/teacher", label: t("course") },
-        { href: "/teacher", label: t("publishedAgents") },
+        { href: "/teacher", label: t("home") },
         { href: "/teacher/debates", label: t("debates") },
       ];
+
+  const activeHref = links
+    .filter(
+      (link) =>
+        pathname === link.href ||
+        (!isStudent && pathname.startsWith(`${link.href}/`)),
+    )
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   return (
     <div className="app-frame">
@@ -70,8 +77,9 @@ export function AppShell({
         >
           {links.map((link) => (
             <Link
+              aria-current={activeHref === link.href ? "page" : undefined}
               className={
-                pathname === link.href ? "nav-link active" : "nav-link"
+                activeHref === link.href ? "nav-link active" : "nav-link"
               }
               href={link.href}
               key={link.href}

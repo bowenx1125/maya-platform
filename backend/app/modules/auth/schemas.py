@@ -48,6 +48,12 @@ class DemoSwitchRequest(BaseModel):
     user_id: UUID
 
 
+class DemoQuickLoginRequest(BaseModel):
+    """Public selector for an identity from the safe Demo catalog."""
+
+    user_id: UUID
+
+
 class PublicMember(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

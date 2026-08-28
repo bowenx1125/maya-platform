@@ -156,23 +156,9 @@ class TestSocket implements PlaybackSocket {
   }
 }
 
-function fakeApi(
-  initial: DebateDetail,
-): DebatePlaybackApi & { pauseDebate: ReturnType<typeof vi.fn> } {
-  const paused = {
-    ...initial.playback,
-    status: "paused" as const,
-    control_version: initial.playback.control_version + 1,
-  };
+function fakeApi(initial: DebateDetail): DebatePlaybackApi {
   return {
     startDebate: vi.fn().mockResolvedValue(initial),
-    pauseDebate: vi.fn().mockResolvedValue(paused),
-    resumeDebate: vi
-      .fn()
-      .mockResolvedValue({ ...initial.playback, status: "ready" }),
-    skipDebateTurn: vi
-      .fn()
-      .mockResolvedValue({ ...initial.playback, status: "preparing" }),
     advanceDebatePlayback: vi.fn().mockResolvedValue({
       ...initial.playback,
       status: "ready",
@@ -180,22 +166,12 @@ function fakeApi(
       next_turn_ready: false,
       control_version: initial.playback.control_version + 1,
     }),
-    stopDebate: vi.fn().mockResolvedValue({
-      ...initial,
-      status: "stopped",
-      playback: { ...initial.playback, status: "stopped" },
-    }),
     replayDebate: vi.fn().mockResolvedValue({
       ...initial.playback,
       mode: "replay",
       status: "ready",
     }),
-    replayDebateTurn: vi.fn().mockResolvedValue({
-      ...initial.playback,
-      mode: "replay",
-      status: "ready",
-    }),
-  } as DebatePlaybackApi & { pauseDebate: ReturnType<typeof vi.fn> };
+  };
 }
 
 function envelope(
@@ -441,7 +417,7 @@ describe("Wave 2 M12 playback stage", () => {
     },
   );
 
-  it("waits for teacher Next after skip and uses the next media action", async () => {
+  it("waits for live teacher Next and prepares exactly the adjacent turn", async () => {
     const initial = detail({
       public_turns: [
         {
@@ -456,21 +432,16 @@ describe("Wave 2 M12 playback stage", () => {
         },
       ],
     });
-    const socket = new TestSocket();
-    const api = fakeApi(initial);
-    api.resumeDebate = vi.fn().mockResolvedValue({
-      ...initial.playback,
-      status: "ready",
-      current_turn_id: turnId,
-      control_version: 2,
-    });
-    api.skipDebateTurn = vi.fn().mockResolvedValue({
+    initial.playback = {
       ...initial.playback,
       status: "waiting_next",
+      mode: "live",
       current_turn_id: turnId,
       control_version: 3,
       next_turn_ready: false,
-    });
+    };
+    const socket = new TestSocket();
+    const api = fakeApi(initial);
     api.advanceDebatePlayback = vi.fn().mockResolvedValue({
       ...initial.playback,
       status: "ready",
@@ -489,89 +460,20 @@ describe("Wave 2 M12 playback stage", () => {
 
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
     socket.emit("open");
-    socket.emit(
-      "message",
-      envelope("playback.paused", 1, {
-        turn_id: turnId,
-        cursor_ms: 200,
-        control_version: 1,
-        playback_rate: 1,
-      }),
-    );
     socket.emit("message", {
-      message_id: "91000000-0000-4000-8000-000000000030",
+      message_id: "91000000-0000-0000-8000-000000000030",
       message_type: "controller.acquired",
       result_version: 1,
       debate_id: debateId,
       occurred_at: "2026-08-27T00:00:00Z",
-      command_id: "92000000-0000-4000-8000-000000000030",
+      command_id: "92000000-0000-0000-8000-000000000030",
       controller_epoch: epoch,
-      control_version: 1,
+      control_version: 3,
     });
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Resume" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
-    await waitFor(() =>
-      expect(
-        socket
-          .commands()
-          .some(
-            (command) =>
-              command.command_type === "playback.media.prepare" &&
-              command.turn_id === turnId &&
-              command.playback_action === "resume",
-          ),
-      ).toBe(true),
-    );
     socket.emit(
       "message",
-      envelope("playback.resumed", 2, {
-        turn_id: turnId,
-        cursor_ms: 200,
-        control_version: 2,
-        playback_rate: 1,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.started", 3, {
-        turn_id: turnId,
-        slot: "A",
-        round_no: 1,
-        speech: "The first public speech.",
-        sources: [{ source_filename: "first.md" }],
-        playback_url: `/api/v1/debates/${debateId}/audio/${turnId}`,
-        cursor_ms: 0,
-        playback_rate: 1,
-        avatar_states: [],
-      }),
-    );
-
-    await waitFor(() =>
-      expect(
-        screen
-          .getByRole("button", { name: "Skip current turn" })
-          .hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Skip current turn" }));
-    await waitFor(() => expect(api.skipDebateTurn).toHaveBeenCalled());
-    socket.emit(
-      "message",
-      envelope("playback.skipped", 4, {
-        turn_id: turnId,
-        cursor_ms: 0,
-        control_version: 3,
-        playback_rate: 1,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.waiting_next", 5, {
+      envelope("playback.waiting_next", 1, {
+        mode: "live",
         completed_turn_id: turnId,
         control_version: 3,
         next_turn_ready: false,
@@ -582,33 +484,10 @@ describe("Wave 2 M12 playback stage", () => {
       screen.getByRole("button", { name: "Next / 下一步" }),
     ).toHaveProperty("disabled", true);
 
-    // A hidden successor may be ready, but turn.ready never unlocks or
-    // prepares it. Only the readiness-change waiting event does.
     socket.emit(
       "message",
-      envelope("turn.ready", 6, {
-        turn_id: nextTurnId,
-        slot: "B",
-        round_no: 1,
-        audio_ready: true,
-        retrieval_status: "no_match",
-        grounding_mode: "general_reasoning",
-        audio_duration_ms: 1000,
-      }),
-    );
-
-    expect(
-      socket
-        .commands()
-        .filter(
-          (command) =>
-            command.command_type === "playback.media.prepare" &&
-            command.turn_id === nextTurnId,
-        ),
-    ).toHaveLength(0);
-    socket.emit(
-      "message",
-      envelope("playback.waiting_next", 7, {
+      envelope("playback.waiting_next", 2, {
+        mode: "live",
         completed_turn_id: turnId,
         control_version: 3,
         next_turn_ready: true,
@@ -639,159 +518,6 @@ describe("Wave 2 M12 playback stage", () => {
       expect(nextPrepare).toHaveLength(1);
       expect(nextPrepare[0]?.playback_action).toBe("next");
     });
-  });
-
-  it("ignores a delayed pause response after the live item advances to the next turn", async () => {
-    const initial = detail({
-      last_sequence: 4,
-      public_turns: [
-        {
-          id: turnId,
-          participant_id: participantAId,
-          round_no: 1,
-          turn_index: 0,
-          speech: "A public speech before the control race.",
-          retrieval_status: "matched",
-          grounding_mode: "mixed",
-          sources: [],
-        },
-      ],
-    });
-    initial.playback = {
-      ...initial.playback,
-      status: "playing",
-      control_version: 5,
-    };
-    const socket = new TestSocket();
-    const api = fakeApi(initial);
-    let resolvePause!: (state: DebatePlaybackState) => void;
-    api.pauseDebate = vi.fn().mockReturnValue(
-      new Promise<DebatePlaybackState>((resolve) => {
-        resolvePause = resolve;
-      }),
-    );
-    render(
-      <DebateStage
-        api={api}
-        debateId={debateId}
-        detail={initial}
-        socketFactory={() => socket}
-      />,
-    );
-
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    socket.emit("open");
-    socket.emit("message", {
-      message_id: "91000000-0000-4000-8000-000000000050",
-      message_type: "controller.acquired",
-      result_version: 1,
-      debate_id: debateId,
-      occurred_at: "2026-08-27T00:00:00Z",
-      command_id: "92000000-0000-4000-8000-000000000050",
-      controller_epoch: epoch,
-      control_version: 5,
-    });
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Pause" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    expect(api.pauseDebate).toHaveBeenCalledWith(debateId, 5);
-
-    socket.emit(
-      "message",
-      envelope("playback.paused", 5, {
-        turn_id: turnId,
-        cursor_ms: 300,
-        control_version: 6,
-        playback_rate: 1,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.resumed", 6, {
-        turn_id: turnId,
-        cursor_ms: 300,
-        control_version: 7,
-        playback_rate: 1,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.skipped", 7, {
-        turn_id: turnId,
-        cursor_ms: 300,
-        control_version: 8,
-        playback_rate: 1,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.waiting_next", 8, {
-        completed_turn_id: turnId,
-        control_version: 8,
-        next_turn_ready: false,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("turn.ready", 9, {
-        turn_id: nextTurnId,
-        slot: "B",
-        round_no: 1,
-        audio_ready: true,
-        retrieval_status: "no_match",
-        grounding_mode: "general_reasoning",
-        audio_duration_ms: 1000,
-      }),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.waiting_next", 10, {
-        completed_turn_id: turnId,
-        control_version: 8,
-        next_turn_ready: true,
-      }),
-    );
-    // A late A event cannot roll the committed waiting state back while the
-    // in-flight pause response remains unresolved.
-    socket.emit(
-      "message",
-      envelope("playback.paused", 11, {
-        turn_id: turnId,
-        cursor_ms: 400,
-        control_version: 10,
-        playback_rate: 1,
-      }),
-    );
-    socket.emit("message", {
-      message_id: "91000000-0000-4000-8000-000000000051",
-      message_type: "controller.revoked",
-      result_version: 1,
-      debate_id: debateId,
-      occurred_at: "2026-08-27T00:00:00Z",
-      controller_epoch: "50000000-0000-4000-8000-000000000002",
-      reason: "superseded",
-    });
-    await waitFor(() =>
-      expect(
-        document.querySelector('[data-playback-status="waiting_next"]'),
-      ).toBeTruthy(),
-    );
-
-    resolvePause({
-      ...initial.playback,
-      status: "paused",
-      current_turn_id: turnId,
-      control_version: 8,
-      next_turn_ready: false,
-    });
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    expect(
-      document.querySelector('[data-playback-status="waiting_next"]'),
-    ).toBeTruthy();
-    expect(api.pauseDebate).toHaveBeenCalledTimes(1);
   });
 
   it("clears local audio and avatar state when the controller is revoked", async () => {
@@ -842,121 +568,102 @@ describe("Wave 2 M12 playback stage", () => {
     ).toBe(true);
   });
 
-  it.each(["replay-all", "replay-turn"] as const)(
-    "waits for controller acquisition before dispatching %s",
-    async (replayKind) => {
-      const initial = detail({
-        status: "completed",
-        public_turns: [
-          {
-            id: turnId,
-            participant_id: participantAId,
-            round_no: 1,
-            turn_index: 0,
-            speech: "A published speech available for replay.",
-            retrieval_status: "matched",
-            grounding_mode: "mixed",
-            sources: [],
-          },
-        ],
-      });
-      initial.playback = {
-        ...initial.playback,
-        status: "completed",
-        mode: "live",
-        current_turn_id: null,
-        control_version: 0,
-      };
-      const replayState = {
-        ...initial.playback,
-        status: "ready" as const,
-        mode: "replay" as const,
-        current_turn_id: turnId,
-        control_version: 1,
-      };
-      const socket = new TestSocket();
-      const api = fakeApi(initial);
-      api.replayDebate = vi.fn().mockResolvedValue(replayState);
-      api.replayDebateTurn = vi.fn().mockResolvedValue(replayState);
-      render(
-        <DebateStage
-          api={api}
-          debateId={debateId}
-          detail={initial}
-          currentAudioDebateId={debateId}
-          socketFactory={() => socket}
-        />,
-      );
+  it("waits for controller acquisition before dispatching whole replay", async () => {
+    const initial = detail({
+      status: "completed",
+      public_turns: [
+        {
+          id: turnId,
+          participant_id: participantAId,
+          round_no: 1,
+          turn_index: 0,
+          speech: "A published speech available for replay.",
+          retrieval_status: "matched",
+          grounding_mode: "mixed",
+          sources: [],
+        },
+      ],
+    });
+    initial.playback = {
+      ...initial.playback,
+      status: "completed",
+      mode: "live",
+      current_turn_id: null,
+      control_version: 0,
+    };
+    const replayState = {
+      ...initial.playback,
+      status: "ready" as const,
+      mode: "replay" as const,
+      current_turn_id: turnId,
+      control_version: 1,
+      next_turn_ready: false,
+    };
+    const socket = new TestSocket();
+    const api = fakeApi(initial);
+    api.replayDebate = vi.fn().mockResolvedValue(replayState);
+    render(
+      <DebateStage
+        api={api}
+        debateId={debateId}
+        detail={initial}
+        currentAudioDebateId={debateId}
+        socketFactory={() => socket}
+      />,
+    );
 
-      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-      socket.emit("open");
-      const replayButton =
-        replayKind === "replay-all"
-          ? screen.getByRole("button", { name: "Replay all" })
-          : screen.getAllByRole("button", { name: "Replay turn" })[0];
-      expect(replayButton).toBeDefined();
-      expect((replayButton as HTMLButtonElement).disabled).toBe(true);
-      fireEvent.click(replayButton as HTMLElement);
-      expect(api.replayDebate).not.toHaveBeenCalled();
-      expect(api.replayDebateTurn).not.toHaveBeenCalled();
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    const replayButton = screen.getByRole("button", {
+      name: "Replay whole debate",
+    });
+    expect((replayButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(replayButton);
+    expect(api.replayDebate).not.toHaveBeenCalled();
 
-      socket.emit("message", {
-        message_id: "91000000-0000-4000-8000-000000000061",
-        message_type: "controller.acquired",
-        result_version: 1,
-        debate_id: debateId,
-        occurred_at: "2026-08-27T00:00:00Z",
-        command_id: "92000000-0000-4000-8000-000000000061",
-        controller_epoch: epoch,
-        control_version: 0,
-      });
-      await waitFor(() =>
-        expect((replayButton as HTMLButtonElement).disabled).toBe(false),
-      );
-      fireEvent.click(replayButton as HTMLElement);
-
-      if (replayKind === "replay-all") {
-        await waitFor(() =>
-          expect(api.replayDebate).toHaveBeenCalledWith(debateId, 0),
+    socket.emit("message", {
+      message_id: "91000000-0000-0000-8000-000000000061",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      command_id: "92000000-0000-0000-8000-000000000061",
+      controller_epoch: epoch,
+      control_version: 0,
+    });
+    await waitFor(() =>
+      expect((replayButton as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(replayButton);
+    await waitFor(() =>
+      expect(api.replayDebate).toHaveBeenCalledWith(debateId, 0),
+    );
+    await waitFor(() => {
+      const prepareCommands = socket
+        .commands()
+        .filter(
+          (command) =>
+            command.command_type === "playback.media.prepare" &&
+            command.turn_id === turnId,
         );
-      } else {
-        await waitFor(() =>
-          expect(api.replayDebateTurn).toHaveBeenCalledWith(
-            debateId,
-            turnId,
-            0,
-          ),
-        );
-      }
-      await waitFor(() => {
-        const prepareCommands = socket
-          .commands()
-          .filter(
-            (command) =>
-              command.command_type === "playback.media.prepare" &&
-              command.turn_id === turnId,
-          );
-        expect(prepareCommands).toHaveLength(1);
-        expect(prepareCommands[0]?.controller_epoch).toBe(epoch);
-        expect(prepareCommands[0]?.playback_action).toBe("replay");
-      });
-      expect(
-        socket
-          .commands()
-          .filter(
-            (command) => command.command_type === "playback.controller.acquire",
-          ),
-      ).toHaveLength(1);
-    },
-  );
+      expect(prepareCommands).toHaveLength(1);
+      expect(prepareCommands[0]?.controller_epoch).toBe(epoch);
+      expect(prepareCommands[0]?.playback_action).toBe("replay");
+    });
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(1);
+  });
 
   it.each([
     ["current", debateId, false],
     ["old", "10000000-0000-4000-8000-000000000099", true],
-    ["unknown", undefined, true],
-    ["null", null, true],
   ] as const)(
-    "gates retained replay when the course audio pointer is %s",
+    "gates whole replay when the course audio pointer is %s",
     async (_pointerState, pointer, shouldDisable) => {
       const initial = detail({
         status: "debate_finished",
@@ -994,31 +701,35 @@ describe("Wave 2 M12 playback stage", () => {
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       socket.emit("open");
       socket.emit("message", {
-        message_id: "91000000-0000-4000-8000-000000000062",
+        message_id: "91000000-0000-0000-8000-000000000062",
         message_type: "controller.acquired",
         result_version: 1,
         debate_id: debateId,
         occurred_at: "2026-08-27T00:00:00Z",
-        command_id: "92000000-0000-4000-8000-000000000062",
+        command_id: "92000000-0000-0000-8000-000000000062",
         controller_epoch: epoch,
         control_version: 0,
       });
 
-      const replayAll = screen.getByRole("button", { name: "Replay all" });
-      const replayTurn = screen.getByRole("button", { name: "Replay turn" });
-      await waitFor(() => {
-        expect((replayAll as HTMLButtonElement).disabled).toBe(shouldDisable);
-        expect((replayTurn as HTMLButtonElement).disabled).toBe(shouldDisable);
+      const replayButton = screen.getByRole("button", {
+        name: "Replay whole debate",
       });
-
+      await waitFor(() =>
+        expect((replayButton as HTMLButtonElement).disabled).toBe(
+          shouldDisable,
+        ),
+      );
       if (shouldDisable) {
         expect(
           screen.getAllByText("This audio is no longer retained.").length,
         ).toBeGreaterThan(0);
-        fireEvent.click(replayAll);
-        fireEvent.click(replayTurn);
+        fireEvent.click(replayButton);
         expect(api.replayDebate).not.toHaveBeenCalled();
-        expect(api.replayDebateTurn).not.toHaveBeenCalled();
+      } else {
+        fireEvent.click(replayButton);
+        await waitFor(() =>
+          expect(api.replayDebate).toHaveBeenCalledWith(debateId, 0),
+        );
       }
     },
   );
@@ -1114,66 +825,116 @@ describe("Wave 2 M12 playback stage", () => {
       expect(
         (
           screen.getByRole("button", {
-            name: "Replay all",
+            name: "Replay whole debate",
           }) as HTMLButtonElement
         ).disabled,
       ).toBe(false),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Replay all" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replay whole debate" }),
+    );
     await waitFor(() => expect(api.replayDebate).toHaveBeenCalled());
   });
 
-  it("does not loop a completed full replay back into media preparation", async () => {
-    const initial = detail({
-      status: "debate_finished",
-      public_turns: [
-        {
-          id: turnId,
-          participant_id: participantAId,
-          round_no: 1,
-          turn_index: 0,
-          speech: "A published speech",
-          retrieval_status: "matched",
-          grounding_mode: "mixed",
-          sources: [],
+  it.each(["replay-first", "debate-first"] as const)(
+    "treats normal debate terminal events as terminal in either replay order",
+    async (order) => {
+      const firstSpeech = "A published speech";
+      const secondSpeech = "The restored historical speech.";
+      const initial = detail({
+        status: "debate_finished",
+        public_turns: [
+          {
+            id: turnId,
+            participant_id: participantAId,
+            round_no: 1,
+            turn_index: 0,
+            speech: firstSpeech,
+            retrieval_status: "matched",
+            grounding_mode: "mixed",
+            sources: [],
+          },
+        ],
+      });
+      initial.playback = {
+        ...initial.playback,
+        mode: "replay",
+        status: "playing",
+        current_turn_id: turnId,
+      };
+      const final = {
+        ...initial,
+        status: "completed" as const,
+        public_turns: [
+          ...initial.public_turns,
+          {
+            id: nextTurnId,
+            participant_id: participantBId,
+            round_no: 1,
+            turn_index: 1,
+            speech: secondSpeech,
+            retrieval_status: "matched" as const,
+            grounding_mode: "mixed" as const,
+            sources: [],
+          },
+        ],
+        last_sequence: 2,
+        playback: {
+          ...initial.playback,
+          mode: "live" as const,
+          status: "completed" as const,
+          current_turn_id: null,
+          control_version: 3,
         },
-      ],
-    });
-    initial.playback.mode = "replay";
-    initial.playback.status = "playing";
-    const socket = new TestSocket();
-    const api = fakeApi(initial);
-    render(
-      <DebateStage
-        api={api}
-        debateId={debateId}
-        detail={initial}
-        socketFactory={() => socket}
-      />,
-    );
-
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    socket.emit("open");
-    socket.emit(
-      "message",
-      envelope("replay.completed", 1, {
+      };
+      const refreshSnapshot = vi.fn().mockResolvedValue(final);
+      const socket = new TestSocket();
+      render(
+        <DebateStage
+          api={fakeApi(initial)}
+          debateId={debateId}
+          detail={initial}
+          refreshSnapshot={refreshSnapshot}
+          socketFactory={() => socket}
+        />,
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      socket.emit("open");
+      const replayCompleted = envelope("replay.completed", 1, {
         scope: "all",
         turn_id: turnId,
         control_version: 2,
-      }),
-    );
-    await waitFor(() =>
-      expect(screen.getByText("Debate complete")).toBeTruthy(),
-    );
-    expect(
-      socket
-        .commands()
-        .filter((command) => command.command_type === "playback.media.prepare"),
-    ).toHaveLength(0);
-  });
+      });
+      const debateCompleted = envelope("debate.completed", 2, {
+        final_states: {},
+        downstream_outcome: "completed",
+      });
+      if (order === "replay-first") {
+        socket.emit("message", replayCompleted);
+        socket.emit("message", debateCompleted);
+      } else {
+        socket.emit("message", debateCompleted);
+        socket.emit("message", replayCompleted);
+      }
+      await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.getAllByText(secondSpeech).length).toBeGreaterThan(0),
+      );
+      expect(
+        document.querySelector('[data-connection="reconnecting"]'),
+      ).toBeNull();
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.media.prepare",
+          ),
+      ).toHaveLength(0);
+    },
+  );
 
-  it("uses the authoritative snapshot to continue an intermediate full replay", async () => {
+  it("uses the authoritative snapshot to hold an intermediate full replay at the waiting gate after reconnect", async () => {
     const firstPublicTurn = {
       id: turnId,
       participant_id: participantAId,
@@ -1207,40 +968,44 @@ describe("Wave 2 M12 playback stage", () => {
       last_sequence: 1,
       playback: {
         ...initial.playback,
-        status: "ready" as const,
+        status: "waiting_next" as const,
         mode: "replay" as const,
-        current_turn_id: nextTurnId,
+        current_turn_id: turnId,
         control_version: 2,
+        next_turn_ready: true,
       },
     };
-    const final = {
-      ...intermediate,
-      last_sequence: 2,
+    const advanced = {
       playback: {
         ...intermediate.playback,
-        status: "completed" as const,
+        status: "ready" as const,
         current_turn_id: nextTurnId,
         control_version: 3,
+        next_turn_ready: false,
       },
     };
-    const refreshSnapshot = vi
+    const refreshSnapshot = vi.fn().mockResolvedValue(intermediate);
+    const firstSocket = new TestSocket();
+    const secondSocket = new TestSocket();
+    const socketFactory = vi
       .fn()
-      .mockResolvedValueOnce(intermediate)
-      .mockResolvedValueOnce(final);
-    const socket = new TestSocket();
+      .mockReturnValueOnce(firstSocket)
+      .mockReturnValueOnce(secondSocket);
+    const api = fakeApi(initial);
+    api.advanceDebatePlayback = vi.fn().mockResolvedValue(advanced.playback);
     render(
       <DebateStage
-        api={fakeApi(initial)}
+        api={api}
         debateId={debateId}
         detail={initial}
         refreshSnapshot={refreshSnapshot}
-        socketFactory={() => socket}
+        socketFactory={socketFactory}
       />,
     );
 
-    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    socket.emit("open");
-    socket.emit("message", {
+    await waitFor(() => expect(firstSocket.hasListeners("open")).toBe(true));
+    firstSocket.emit("open");
+    firstSocket.emit("message", {
       message_id: "91000000-0000-4000-8000-000000000040",
       message_type: "controller.acquired",
       result_version: 1,
@@ -1250,41 +1015,44 @@ describe("Wave 2 M12 playback stage", () => {
       controller_epoch: epoch,
       control_version: 1,
     });
-
-    socket.emit(
-      "message",
-      envelope("replay.completed", 1, {
-        scope: "all",
-        turn_id: turnId,
-        control_version: 2,
+    firstSocket.emit("close");
+    await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(secondSocket.hasListeners("open")).toBe(true));
+    secondSocket.emit("open");
+    secondSocket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000041",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      command_id: "92000000-0000-4000-8000-000000000041",
+      controller_epoch: "50000000-0000-4000-8000-000000000002",
+      control_version: 2,
+    });
+    expect(
+      secondSocket
+        .commands()
+        .filter((command) => command.command_type === "playback.media.prepare"),
+    ).toHaveLength(0);
+    const nextButton = screen.getByRole("button", { name: "Next / 下一步" });
+    await waitFor(() => expect(nextButton).toHaveProperty("disabled", false));
+    fireEvent.click(nextButton);
+    await waitFor(() =>
+      expect(api.advanceDebatePlayback).toHaveBeenCalledWith(debateId, {
+        expected_control_version: 2,
+        expected_current_turn_id: turnId,
       }),
     );
-    await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
     await waitFor(() => {
-      const prepareCommands = socket
+      const prepareCommands = secondSocket
         .commands()
         .filter((command) => command.command_type === "playback.media.prepare");
       expect(prepareCommands).toHaveLength(1);
       expect(prepareCommands[0]?.turn_id).toBe(nextTurnId);
       expect(prepareCommands[0]?.playback_action).toBe("replay");
     });
-
-    socket.emit(
-      "message",
-      envelope("replay.completed", 2, {
-        scope: "all",
-        turn_id: nextTurnId,
-        control_version: 3,
-      }),
-    );
-    await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(
-        document.querySelector('[data-playback-status="completed"]'),
-      ).toBeTruthy(),
-    );
     expect(
-      socket
+      secondSocket
         .commands()
         .filter((command) => command.command_type === "playback.media.prepare"),
     ).toHaveLength(1);
@@ -1479,64 +1247,7 @@ describe("Wave 2 M12 playback stage", () => {
     ).toBeTruthy();
   });
 
-  it("keeps Stop disabled after the debate finishes, including replay", () => {
-    const finished = detail({
-      status: "debate_finished",
-      public_turns: [
-        {
-          id: turnId,
-          participant_id: participantAId,
-          round_no: 1,
-          turn_index: 0,
-          speech: "A completed public speech",
-          retrieval_status: "matched",
-          grounding_mode: "mixed",
-          sources: [],
-        },
-      ],
-    });
-    finished.playback = {
-      ...finished.playback,
-      status: "completed",
-      current_turn_id: null,
-    };
-    const { rerender } = render(
-      <DebateStage
-        api={fakeApi(finished)}
-        debateId={debateId}
-        detail={finished}
-        socketFactory={() => new TestSocket()}
-      />,
-    );
-    expect(
-      (screen.getByRole("button", { name: "Stop debate" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-
-    const replaying = {
-      ...finished,
-      playback: {
-        ...finished.playback,
-        status: "playing" as const,
-        mode: "replay" as const,
-        current_turn_id: turnId,
-      },
-    };
-    rerender(
-      <DebateStage
-        api={fakeApi(replaying)}
-        debateId={debateId}
-        detail={replaying}
-        socketFactory={() => new TestSocket()}
-      />,
-    );
-    expect(
-      (screen.getByRole("button", { name: "Stop debate" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-  });
-
-  it("pauses locally without selecting a new turn and recovers a sequence gap", async () => {
+  it("recovers a sequence gap without changing the three-button surface", async () => {
     const initial = detail({
       status: "running",
       last_sequence: 0,
@@ -1553,12 +1264,15 @@ describe("Wave 2 M12 playback stage", () => {
         },
       ],
     });
-    initial.playback.status = "playing";
+    initial.playback = {
+      ...initial.playback,
+      status: "playing",
+      current_turn_id: turnId,
+    };
     const socket = new TestSocket();
-    const api = fakeApi(initial);
     render(
       <DebateStage
-        api={api}
+        api={fakeApi(initial)}
         debateId={debateId}
         detail={initial}
         socketFactory={() => socket}
@@ -1566,17 +1280,9 @@ describe("Wave 2 M12 playback stage", () => {
     );
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
     socket.emit("open");
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    await waitFor(() =>
-      expect(api.pauseDebate).toHaveBeenCalledWith(debateId, 0),
-    );
-    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
-    expect(initial.public_turns[0]?.id).toBe(turnId);
-
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Start debate", "Next / 下一步", "Replay whole debate"]);
     socket.emit(
       "message",
       envelope("playback.started", 2, {
@@ -1679,6 +1385,7 @@ describe("Wave 2 M12 playback stage", () => {
     socket.emit(
       "message",
       envelope("playback.waiting_next", 3, {
+        mode: "live",
         completed_turn_id: turnId,
         control_version: 1,
         next_turn_ready: false,
@@ -1746,6 +1453,7 @@ describe("Wave 2 M12 playback stage", () => {
     socket.emit(
       "message",
       envelope("playback.waiting_next", 1, {
+        mode: "live",
         completed_turn_id: turnId,
         control_version: 0,
         next_turn_ready: true,
@@ -2242,6 +1950,7 @@ describe("Wave 2 playback protocol helpers", () => {
     ).toMatchObject({ accepted: true, nextSequence: 4 });
     const waiting = parsePlaybackEvent(
       envelope("playback.waiting_next", 1, {
+        mode: "replay",
         completed_turn_id: turnId,
         control_version: 8,
         next_turn_ready: true,

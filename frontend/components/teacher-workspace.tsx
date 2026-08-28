@@ -7,11 +7,13 @@ import {
   type AgentDetail,
   type AgentVersion,
   type Course,
+  type GroupDetail,
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
+import { AvatarPreview } from "./avatar";
 import {
   EmptyCard,
   ErrorNotice,
@@ -86,24 +88,34 @@ export function TeacherDashboard() {
         </div>
       )}
       <SectionCard
-        title={t("teacherBoundary")}
-        description={t("teacherBoundaryLede")}
+        title={t("teacherCapabilities")}
+        description={t("teacherCapabilitiesLede")}
       >
         <div className="teaching-note-grid">
           <div>
             <span className="feature-index">01</span>
-            <h3>{t("currentRelease")}</h3>
-            <p>{t("currentReleaseTeacher")}</p>
+            <h3>{t("inspectPublished")}</h3>
+            <p>{t("inspectPublishedLede")}</p>
           </div>
           <div>
             <span className="feature-index">02</span>
-            <h3>{t("history")}</h3>
-            <p>{t("historyTeacher")}</p>
+            <h3>{t("createDebate")}</h3>
+            <p>{t("createDebateLede")}</p>
           </div>
           <div>
             <span className="feature-index">03</span>
-            <h3>{t("snapshot")}</h3>
-            <p>{t("snapshotTeacher")}</p>
+            <h3>{t("controlClassroom")}</h3>
+            <p>{t("controlClassroomLede")}</p>
+          </div>
+          <div>
+            <span className="feature-index">04</span>
+            <h3>{t("reviewHistory")}</h3>
+            <p>{t("reviewHistoryLede")}</p>
+          </div>
+          <div>
+            <span className="feature-index">05</span>
+            <h3>{t("studentDraftBoundary")}</h3>
+            <p>{t("studentDraftBoundaryLede")}</p>
           </div>
         </div>
       </SectionCard>
@@ -126,7 +138,7 @@ function PublishedAgentCard({ item }: { item: PublishedAgentSummary }) {
             <StatusBadge status={version.state} />
           </div>
           <h2>{item.agent.name}</h2>
-          <p>{item.agent.description || t("noDescriptionProvided")}</p>
+          <p>{item.agent.description}</p>
         </div>
         <span className="row-arrow" aria-hidden="true">
           →
@@ -157,6 +169,7 @@ export function TeacherAgentDetail({
   const t = useT();
   const { api } = useSession();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [group, setGroup] = useState<GroupDetail | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
   const [snapshotText, setSnapshotText] = useState<string | null>(null);
@@ -175,8 +188,14 @@ export function TeacherAgentDetail({
     setDownloadedSnapshotId(null);
     try {
       const nextAgent = await api.agent(agentId);
-      const nextVersions = await api.versions(agentId);
+      const [nextVersions, nextGroup] = await Promise.all([
+        api.versions(agentId),
+        typeof api.group === "function"
+          ? api.group(nextAgent.group_id)
+          : Promise.resolve(null),
+      ]);
       setAgent(nextAgent);
+      setGroup(nextGroup);
       setVersions(nextVersions.filter((version) => version.state !== "draft"));
       const selectedSnapshotId =
         snapshotId ||
@@ -223,31 +242,25 @@ export function TeacherAgentDetail({
     if (!snapshot) return;
     setBusy(true);
     try {
-      const text = await api.downloadSnapshot(snapshot.id);
-      setSnapshotText(text);
+      const downloaded = await api.downloadSnapshot(snapshot.id);
+      setSnapshotText(downloaded.content);
       setDownloadedSnapshotId(snapshot.id);
-      downloadText(
-        text,
-        `${currentAgent.name}-${snapshot.id.slice(0, 8)}-RAG.md`,
-      );
+      downloadText(downloaded.content, downloaded.filename);
     } catch (cause) {
       setError(cause);
     } finally {
       setBusy(false);
     }
   }
-  async function downloadDocument(
-    snapshotDocumentId: string,
-    filename: string,
-  ) {
+  async function downloadDocument(snapshotDocumentId: string) {
     if (!snapshot) return;
     setBusy(true);
     try {
-      const text = await api.downloadSnapshotDocument(
+      const downloaded = await api.downloadSnapshotDocument(
         snapshot.id,
         snapshotDocumentId,
       );
-      downloadText(text, filename);
+      downloadText(downloaded.content, downloaded.filename);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -267,6 +280,69 @@ export function TeacherAgentDetail({
           </Link>
         }
       />
+      <div className="teacher-agent-context-grid">
+        <SectionCard
+          title={t("producingGroup")}
+          description={t("producingGroupLede")}
+        >
+          <p className="teacher-context-value">
+            {group?.name ?? currentAgent.group_id}
+          </p>
+        </SectionCard>
+        <SectionCard
+          title={t("avatarPreview")}
+          description={t("teacherAvatarLede")}
+        >
+          {currentVersion ? (
+            <AvatarPreview
+              config={currentVersion.avatar_config}
+              fallbackLabel={currentAgent.name}
+            />
+          ) : (
+            <p className="muted-copy">{t("noCurrentPublished")}</p>
+          )}
+        </SectionCard>
+        <SectionCard
+          title={t("voiceBinding")}
+          description={t("voiceBindingLede")}
+        >
+          {currentVersion ? (
+            <div
+              className="teacher-voice-state"
+              data-effective-voice={
+                currentVersion.voice_fallback_active
+                  ? "platform-fallback"
+                  : "custom-profile"
+              }
+            >
+              <span
+                className={`status-badge status-${currentVersion.voice_fallback_active ? "warn" : "good"}`}
+              >
+                <span aria-hidden="true" />
+                {currentVersion.voice_fallback_active
+                  ? t("platformVoiceFallback")
+                  : t("customVoiceReady")}
+              </span>
+              <p>
+                {currentVersion.voice_fallback_active
+                  ? t("voiceFallbackHint")
+                  : t("teacherEffectiveVoice")}
+              </p>
+            </div>
+          ) : (
+            <p className="muted-copy">{t("noCurrentPublished")}</p>
+          )}
+        </SectionCard>
+      </div>
+      <SectionCard title={t("description")}>
+        <div
+          className="current-agent-metadata"
+          aria-label={t("currentMetadata")}
+        >
+          <span className="section-label">{t("current")}</span>
+          <p>{agent.description}</p>
+        </div>
+      </SectionCard>
       {agent.status === "archived" ? (
         <div className="notice notice-warning">
           <strong>{t("archivedAgent")}</strong>
@@ -355,12 +431,7 @@ export function TeacherAgentDetail({
                         className="inline-button"
                         type="button"
                         disabled={busy}
-                        onClick={() =>
-                          void downloadDocument(
-                            document.id,
-                            document.source_filename,
-                          )
-                        }
+                        onClick={() => void downloadDocument(document.id)}
                       >
                         {t("download")}
                       </button>
@@ -400,6 +471,23 @@ function TeacherVersion({
   selected: boolean;
 }) {
   const t = useT();
+  const { api } = useSession();
+  const [agentMdBusy, setAgentMdBusy] = useState(false);
+  const [agentMdError, setAgentMdError] = useState<unknown>(null);
+
+  async function downloadAgentMd() {
+    setAgentMdBusy(true);
+    setAgentMdError(null);
+    try {
+      const downloaded = await api.downloadAgentMd(version.id, "AGENT.md");
+      downloadText(downloaded.content, downloaded.filename);
+    } catch (cause) {
+      setAgentMdError(cause);
+    } finally {
+      setAgentMdBusy(false);
+    }
+  }
+
   return (
     <div className="teacher-version">
       <div className="version-summary">
@@ -431,6 +519,15 @@ function TeacherVersion({
         <pre className="read-only-markdown compact-readonly">
           {version.agent_md || t("noPrompt")}
         </pre>
+        <button
+          className="inline-button"
+          type="button"
+          disabled={agentMdBusy}
+          onClick={() => void downloadAgentMd()}
+        >
+          {t("download")} AGENT.md
+        </button>
+        {agentMdError ? <ErrorNotice error={agentMdError} /> : null}
       </details>
     </div>
   );

@@ -151,7 +151,7 @@ jobs:
       - name: Wave 2 backend tests and migration smoke
         working-directory: backend
         run: |
-          uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py
+          uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py migrations/versions/0006_pre_wave3_polish.py
           uv run ruff check app
           uv run ruff check tests
           uv run ruff check migrations

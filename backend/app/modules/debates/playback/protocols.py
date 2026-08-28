@@ -213,6 +213,7 @@ class MemoryPlaybackRepository:
         self.jobs_interrupted: list[tuple[str, str]] = []
         self.course_audio: dict[str, str | None] = {}
         self.audio_file_states: dict[str, str] = {}
+        self.audit_logs: list[dict[str, Any]] = []
 
     def add_debate(self, debate: MemoryDebate) -> MemoryDebate:
         if debate.playback is None:
@@ -335,6 +336,36 @@ class MemoryPlaybackRepository:
     def mark_jobs_interrupted(self, db: Any, debate: MemoryDebate, code: str) -> None:
         del db
         self.jobs_interrupted.append((debate.id, code))
+
+    def write_playback_reset_audit(
+        self,
+        db: Any,
+        *,
+        debate_id: str,
+        actor_user_id: str | None,
+        previous_mode: str,
+        resulting_status: str,
+        control_version: int,
+        request_id: str | None,
+    ) -> None:
+        del db
+        self.audit_logs.append(
+            {
+                "id": str(uuid4()),
+                "event_type": "playback.operator_reset",
+                "actor_kind": "operator",
+                "actor_id": actor_user_id,
+                "course_id": None,
+                "debate_id": debate_id,
+                "request_id": request_id,
+                "details": {
+                    "mode": previous_mode,
+                    "status": resulting_status,
+                    "control_version": control_version,
+                },
+                "created_at": datetime.now(UTC),
+            }
+        )
 
     def teacher_allowed(self, db: Any, debate: MemoryDebate, context: Any) -> bool:
         del db, debate, context

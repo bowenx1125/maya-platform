@@ -44,10 +44,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Requires an existing session and DEMO_MODE=true; never returns passwords. */
+        /** @description Anonymous safe catalog available only when DEMO_MODE and DEMO_QUICK_LOGIN are enabled; never returns passwords. */
         get: operations["listDemoIdentities"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/quick-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Passwordless Demo identity selection; rotates any existing Session and CSRF token. */
+        post: operations["quickLogin"];
         delete?: never;
         options?: never;
         head?: never;
@@ -193,6 +210,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/knowledge-documents/{document_id}/replace": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                document_id: components["parameters"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates an immutable copy-on-write replacement and atomically updates every current draft reference. */
+        post: operations["replaceKnowledgeDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/knowledge-documents/{document_id}/download": {
         parameters: {
             query?: never;
@@ -282,50 +320,10 @@ export interface paths {
         get: operations["getAgent"];
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["deleteAgent"];
         options?: never;
         head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agents/{agent_id}/archive": {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path: {
-                agent_id: components["parameters"]["AgentId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["archiveAgent"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agents/{agent_id}/unarchive": {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path: {
-                agent_id: components["parameters"]["AgentId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["unarchiveAgent"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        patch: operations["updateAgentMetadata"];
         trace?: never;
     };
     "/agents/{agent_id}/versions": {
@@ -362,6 +360,25 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateAgentDraft"];
+        trace?: never;
+    };
+    "/agent-versions/{version_id}/agent-md/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        /** @description Downloads immutable AGENT.md from a published or superseded visible version. */
+        get: operations["downloadAgentMd"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/agent-versions/{version_id}/knowledge-documents": {
@@ -670,54 +687,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debates/{debate_id}/pause": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["pauseDebate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debates/{debate_id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resumeDebate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debates/{debate_id}/skip": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["skipTurnPlayback"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debates/{debate_id}/next": {
         parameters: {
             query?: never;
@@ -734,22 +703,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debates/{debate_id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["stopDebate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debates/{debate_id}/replay": {
         parameters: {
             query?: never;
@@ -760,22 +713,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["replayDebate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debates/{debate_id}/turns/{turn_id}/replay": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["replayDebateTurn"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1044,6 +981,9 @@ export interface components {
             /** Format: password */
             password: string;
         };
+        DemoQuickLoginRequest: {
+            user_id: components["schemas"]["Uuid"];
+        };
         AuthSession: {
             user: components["schemas"]["CurrentUser"];
             csrf_token: string;
@@ -1093,6 +1033,8 @@ export interface components {
             group_id: components["schemas"]["Uuid"];
             source_filename: string;
             char_count: number;
+            content_hash: string;
+            index_revision: number;
             /** @enum {string} */
             index_status: "pending" | "indexing" | "ready" | "failed";
             /** @enum {string} */
@@ -1116,13 +1058,14 @@ export interface components {
         };
         KnowledgeDocumentMutation: {
             document: components["schemas"]["KnowledgeDocument"];
-            agent_version: components["schemas"]["AgentVersion"];
+            agent_version?: components["schemas"]["AgentVersion"] | null;
         };
         AgentSummary: {
             id: components["schemas"]["Uuid"];
             group_id: components["schemas"]["Uuid"];
             name: string;
             description?: string;
+            metadata_revision: number;
             /** @enum {string} */
             status: "active" | "archived";
             current_published_version_id?: components["schemas"]["Uuid"] | null;
@@ -1152,6 +1095,11 @@ export interface components {
             agent_md?: string;
             avatar_config?: components["schemas"]["AvatarConfig"];
             voice_profile_id?: components["schemas"]["Uuid"] | null;
+        };
+        UpdateAgentMetadataRequest: {
+            expected_metadata_revision: number;
+            /** @default  */
+            description: string | null;
         };
         AvatarConfig: {
             template_id: string;
@@ -1547,6 +1495,32 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    quickLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoQuickLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Passwordless Demo session created. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
     getCurrentUser: {
         parameters: {
             query?: never;
@@ -1719,13 +1693,13 @@ export interface operations {
                 "multipart/form-data": {
                     /** Format: binary */
                     file: string;
-                    target_agent_version_id: components["schemas"]["Uuid"];
+                    target_agent_version_id?: components["schemas"]["Uuid"];
                     expected_revision?: number;
                 };
             };
         };
         responses: {
-            /** @description Document stored and indexing job created; enabled only on target draft. */
+            /** @description Document stored and indexed; a target draft is updated only when explicitly supplied. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1760,6 +1734,43 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    replaceKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                document_id: components["parameters"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    expected_content_hash: string;
+                    expected_index_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Immutable replacement created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     downloadKnowledgeDocument: {
@@ -1924,7 +1935,7 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
-    archiveAgent: {
+    deleteAgent: {
         parameters: {
             query?: never;
             header: {
@@ -1939,24 +1950,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Agent archived; history retained. */
-            200: {
+            /** @description Eligible Agent and its draft state deleted. */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["AgentSummary"];
-                };
+                content?: never;
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
-    unarchiveAgent: {
+    updateAgentMetadata: {
         parameters: {
             query?: never;
             header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
                 "X-CSRF-Token": components["parameters"]["CsrfToken"];
             };
@@ -1965,18 +1974,23 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAgentMetadataRequest"];
+            };
+        };
         responses: {
-            /** @description Agent returned to active state. */
+            /** @description Mutable Agent metadata updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentSummary"];
+                    "application/json": components["schemas"]["AgentDetail"];
                 };
             };
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     listAgentVersions: {
@@ -2083,6 +2097,29 @@ export interface operations {
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+        };
+    };
+    downloadAgentMd: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Published immutable AGENT.md. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     setAgentVersionDocuments: {
@@ -2680,66 +2717,6 @@ export interface operations {
             422: components["responses"]["Error"];
         };
     };
-    pauseDebate: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["ControlCommand"];
-        responses: {
-            200: components["responses"]["PlaybackState"];
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
-    resumeDebate: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["ControlCommand"];
-        responses: {
-            200: components["responses"]["PlaybackState"];
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
-    skipTurnPlayback: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["ControlCommand"];
-        responses: {
-            200: components["responses"]["PlaybackState"];
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
     advanceDebatePlayback: {
         parameters: {
             query?: never;
@@ -2765,34 +2742,6 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
-    stopDebate: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["ControlCommand"];
-        responses: {
-            /** @description Debate irreversibly stopped. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DebateDetail"];
-                };
-            };
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
     replayDebate: {
         parameters: {
             query?: never;
@@ -2802,27 +2751,6 @@ export interface operations {
             };
             path: {
                 debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["ControlCommand"];
-        responses: {
-            200: components["responses"]["PlaybackState"];
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
-    replayDebateTurn: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-                turn_id: components["parameters"]["TurnId"];
             };
             cookie?: never;
         };

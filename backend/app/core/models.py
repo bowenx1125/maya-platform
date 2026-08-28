@@ -183,6 +183,12 @@ class Agent(Base):
     )
     name: Mapped[str] = mapped_column(String(240), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Description is mutable Agent metadata, deliberately separate from
+    # AgentVersion.revision.  It is used only by the metadata PATCH CAS and
+    # never copied into a frozen version/snapshot.
+    metadata_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     # This pointer is deliberately validated by the service against the same
     # agent and a published state.  A direct FK would create a migration cycle
@@ -198,6 +204,7 @@ class Agent(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('active', 'archived')", name="ck_agents_status"),
+        CheckConstraint("metadata_revision >= 0", name="ck_agents_metadata_revision_nonnegative"),
         Index("ix_agents_group_id", "group_id"),
         Index("ix_agents_group_status", "group_id", "status"),
     )

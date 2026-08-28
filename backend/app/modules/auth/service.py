@@ -1,18 +1,33 @@
-"""Session and CSRF primitives."""
+"""Session, CSRF and private Demo-account synchronization primitives."""
 
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
+import json
 import secrets
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.models import SessionRecord, User
+from app.core.db import Database
+from app.core.models import Course, CourseMember, Group, GroupMember, SessionRecord, User
+from app.modules.auth.credentials import (
+    CredentialFileError,
+    DemoAccount,
+    DesiredAccountGraph,
+    account_id,
+    catalog_graph_for_sync,
+    discard_pending_catalog,
+    publish_catalog_snapshot,
+)
+from app.modules.auth.models import DemoAccountBinding
 
 SESSION_COOKIE_NAME = "maya_session"
 SESSION_TTL = timedelta(hours=12)
@@ -57,6 +72,491 @@ class AuthContext:
     session: SessionRecord
     user: User
     csrf_token: str
+
+
+class AccountSyncError(RuntimeError):
+    """Raised when a complete private account graph cannot be applied."""
+
+
+@dataclass(frozen=True)
+class AccountSyncResult:
+    """Non-sensitive startup synchronization counters."""
+
+    active_count: int
+    created_count: int
+    changed_count: int
+    disabled_count: int
+
+
+# Existing Wave 0 seed group IDs are stable and are used only to resolve the
+# human-readable private-file group key. No group key is emitted to the API.
+_GROUP_KEY_ALIASES = {
+    "group-bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+    "group-a": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+    "group_a": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+    "group_bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+    "bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+    "bowen-group": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+    "group-kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
+    "group-b": "699112be-780b-5ffd-9a87-3762f596c558",
+    "group_b": "699112be-780b-5ffd-9a87-3762f596c558",
+    "group_kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
+    "kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
+    "kaikai-group": "699112be-780b-5ffd-9a87-3762f596c558",
+}
+
+# These are the historical fixed identities from the Wave 0 seed. They are
+# eligible for first binding by their canonical account key (or by a new key
+# that explicitly names the same unbound seeded username), but an arbitrary
+# existing user is never silently claimed by a catalog row.
+_SEED_ACCOUNT_KEYS = (
+    "teacher-demo",
+    "student-bowen-1",
+    "student-bowen-2",
+    "student-bowen-3",
+    "student-kaikai-1",
+    "student-kaikai-2",
+    "student-kaikai-3",
+)
+_SEED_USER_IDS = frozenset(account_id(key) for key in _SEED_ACCOUNT_KEYS)
+
+
+@dataclass(frozen=True)
+class _SyncOutcome:
+    result: AccountSyncResult
+    resolved_user_ids: dict[str, str]
+
+
+def _account_fingerprint(account: DemoAccount, settings: Settings) -> str:
+    """Hash credential/authorization material without display metadata.
+
+    The keyed digest is stable across process restarts that share the session
+    secret, while preventing a database reader from directly comparing a
+    stored fingerprint to common Demo passwords. ``account_key`` is the
+    durable binding key, not mutable material; ``display_name`` is expressly
+    excluded so a presentation-only rename does not revoke sessions.
+    """
+
+    password_material = account.password_hash or account.password
+    canonical = json.dumps(
+        (account.username, account.role, account.group_key or "", password_material),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hmac.new(settings.secret_bytes, canonical, hashlib.sha256).hexdigest()
+
+
+def _normalise_group_label(value: str) -> str:
+    return value.strip().casefold().replace(" ", "-")
+
+
+def _resolve_group(
+    account: DemoAccount,
+    groups: dict[str, Group],
+    groups_by_name: dict[str, Group],
+    course_id: str,
+) -> str:
+    if account.role == "teacher":
+        if account.group_key is not None:
+            raise AccountSyncError("demo account catalog contains an invalid group")
+        return ""
+    if not account.group_key:
+        raise AccountSyncError("demo account catalog contains an invalid group")
+    label = _normalise_group_label(account.group_key)
+    candidate_id = _GROUP_KEY_ALIASES.get(label, account.group_key)
+    candidate = groups.get(candidate_id)
+    if candidate is None:
+        candidate = groups_by_name.get(label)
+    if candidate is None or candidate.course_id != course_id:
+        raise AccountSyncError("demo account catalog contains an invalid group")
+    return candidate.id
+
+
+def _revoke_user_sessions(session: Session, user_id: str, timestamp: datetime) -> None:
+    rows = session.scalars(select(SessionRecord).where(SessionRecord.user_id == user_id)).all()
+    for row in rows:
+        if row.revoked_at is None:
+            row.revoked_at = timestamp
+
+
+def _resolve_catalog_users(
+    graph: DesiredAccountGraph,
+    users: Sequence[User],
+    bindings: Sequence[DemoAccountBinding],
+) -> dict[str, User | None]:
+    """Resolve every row before mutating anything in the writer transaction."""
+
+    users_by_id = {row.id: row for row in users}
+    users_by_username: dict[str, list[User]] = {}
+    for row in users:
+        users_by_username.setdefault(row.username.casefold(), []).append(row)
+
+    bindings_by_key: dict[str, DemoAccountBinding] = {}
+    bindings_by_user: dict[str, DemoAccountBinding] = {}
+    for existing_binding in bindings:
+        if (
+            existing_binding.account_key in bindings_by_key
+            or existing_binding.user_id in bindings_by_user
+        ):
+            raise AccountSyncError("demo account catalog bindings are inconsistent")
+        bindings_by_key[existing_binding.account_key] = existing_binding
+        bindings_by_user[existing_binding.user_id] = existing_binding
+
+    seen_keys: set[str] = set()
+    seen_names: set[str] = set()
+    seen_users: set[str] = set()
+    resolved: dict[str, User | None] = {}
+    for account in graph.accounts:
+        name_key = account.username.casefold()
+        if account.account_key in seen_keys or name_key in seen_names:
+            raise AccountSyncError("demo account catalog contains duplicate identities")
+        seen_keys.add(account.account_key)
+        seen_names.add(name_key)
+
+        account_binding = bindings_by_key.get(account.account_key)
+        resolved_user: User | None
+        if account_binding is not None:
+            resolved_user = users_by_id.get(account_binding.user_id)
+            if resolved_user is None:
+                raise AccountSyncError("demo account catalog binding is inconsistent")
+        else:
+            deterministic = users_by_id.get(account.user_id)
+            candidates = users_by_username.get(name_key, [])
+            if len(candidates) > 1:
+                raise AccountSyncError("demo account catalog conflicts with an existing user")
+            named = candidates[0] if candidates else None
+            if named is not None:
+                owner = bindings_by_user.get(named.id)
+                if owner is not None and owner.account_key != account.account_key:
+                    raise AccountSyncError("demo account catalog conflicts with an existing user")
+                if named.id not in _SEED_USER_IDS and named.id != account.user_id:
+                    raise AccountSyncError("demo account catalog conflicts with an existing user")
+                if deterministic is not None and deterministic.id != named.id:
+                    raise AccountSyncError("demo account catalog conflicts with an existing user")
+                resolved_user = named
+            elif deterministic is not None:
+                owner = bindings_by_user.get(deterministic.id)
+                if owner is not None:
+                    raise AccountSyncError("demo account catalog conflicts with an existing user")
+                # A deterministic row that has drifted away from its username
+                # is not safe to claim. It may be a non-Demo application user.
+                if deterministic.username.casefold() != name_key:
+                    raise AccountSyncError("demo account catalog conflicts with an existing user")
+                resolved_user = deterministic
+            else:
+                resolved_user = None
+
+        if resolved_user is not None:
+            conflicting = users_by_username.get(name_key, [])
+            if any(other.id != resolved_user.id for other in conflicting):
+                raise AccountSyncError("demo account catalog conflicts with an existing user")
+            if resolved_user.id in seen_users:
+                raise AccountSyncError("demo account catalog contains duplicate identities")
+            seen_users.add(resolved_user.id)
+        elif account.user_id in seen_users:
+            raise AccountSyncError("demo account catalog contains duplicate identities")
+        else:
+            seen_users.add(account.user_id)
+        resolved[account.account_key] = resolved_user
+    return resolved
+
+
+def _sync_graph_in_session(
+    session: Session,
+    settings: Settings,
+    graph: DesiredAccountGraph,
+    *,
+    transaction_started: bool = False,
+) -> _SyncOutcome:
+    """Apply the complete desired graph in one SQLite writer transaction.
+
+    The returned mapping is only published by the Database wrapper after its
+    commit succeeds. A failed commit therefore cannot advance auth reads.
+    """
+
+    if transaction_started:
+        if not session.in_transaction():
+            raise AccountSyncError("account sync requires an active transaction")
+    elif session.in_transaction():
+        raise AccountSyncError("account sync requires a fresh transaction")
+
+    try:
+        if not transaction_started:
+            # ``BEGIN IMMEDIATE`` obtains SQLite's single writer lock before
+            # any catalog-owned row is read or changed.
+            session.execute(text("BEGIN IMMEDIATE"))
+
+        course = session.scalar(select(Course).where(Course.code == "demo-course-001"))
+        if course is None:
+            course = session.scalar(select(Course).order_by(Course.id))
+        if course is None:
+            raise AccountSyncError("demo account catalog requires a seeded course")
+
+        group_rows = session.scalars(select(Group).where(Group.course_id == course.id)).all()
+        groups = {row.id: row for row in group_rows}
+        groups_by_name = {_normalise_group_label(row.name): row for row in group_rows}
+        desired_groups = {
+            account.account_key: _resolve_group(account, groups, groups_by_name, course.id)
+            for account in graph.accounts
+        }
+
+        users = session.scalars(select(User).order_by(User.id)).all()
+        bindings = session.scalars(
+            select(DemoAccountBinding).order_by(DemoAccountBinding.account_key)
+        ).all()
+        resolved_users = _resolve_catalog_users(graph, users, bindings)
+        users_by_id = {row.id: row for row in users}
+
+        course_members = session.scalars(select(CourseMember)).all()
+        group_members = session.scalars(select(GroupMember)).all()
+        course_members_by_user: dict[str, list[CourseMember]] = {}
+        group_members_by_user: dict[str, list[GroupMember]] = {}
+        for course_row in course_members:
+            course_members_by_user.setdefault(course_row.user_id, []).append(course_row)
+        for group_row in group_members:
+            group_members_by_user.setdefault(group_row.user_id, []).append(group_row)
+
+        bindings_by_key = {row.account_key: row for row in bindings}
+        timestamp = utc_now()
+        created_count = 0
+        changed_count = 0
+        resolved_user_ids: dict[str, str] = {}
+        desired_keys = {account.account_key for account in graph.accounts}
+
+        for account in graph.accounts:
+            user = resolved_users[account.account_key]
+            binding = bindings_by_key.get(account.account_key)
+            is_new = user is None
+            if user is None:
+                user = User(
+                    id=account.user_id,
+                    username=account.username,
+                    display_name=account.display_name,
+                    status="active",
+                    created_at=timestamp,
+                )
+                session.add(user)
+                users_by_id[user.id] = user
+                created_count += 1
+
+            resolved_user_ids[account.account_key] = user.id
+            fingerprint = _account_fingerprint(account, settings)
+            material_changed = (
+                is_new
+                or binding is None
+                or not binding.active
+                or binding.material_fingerprint != fingerprint
+                or user.status != "active"
+            )
+
+            # Username/display name are current projections of the catalog;
+            # only username participates in the material fingerprint.
+            user.username = account.username
+            user.display_name = account.display_name
+            user.status = "active"
+
+            desired_group_id = desired_groups[account.account_key]
+            existing_courses = course_members_by_user.get(user.id, [])
+            existing_groups = group_members_by_user.get(user.id, [])
+            kept_course = next(
+                (
+                    row
+                    for row in existing_courses
+                    if row.course_id == course.id and row.role == account.role
+                ),
+                None,
+            )
+            prior_group = next(
+                (row for row in existing_groups if row.group_id == desired_group_id),
+                None,
+            )
+            if len(existing_courses) != 1 or kept_course is None:
+                material_changed = True
+            if account.role == "teacher":
+                if existing_groups:
+                    material_changed = True
+            elif len(existing_groups) != 1 or prior_group is None:
+                material_changed = True
+
+            # Enforce the complete desired course/group graph. Existing seed
+            # leader membership is preserved when the desired group remains.
+            for course_row in existing_courses:
+                if course_row is not kept_course:
+                    session.delete(course_row)
+            if kept_course is None:
+                session.add(
+                    CourseMember(
+                        course_id=course.id,
+                        user_id=user.id,
+                        role=account.role,
+                        created_at=timestamp,
+                    )
+                )
+
+            for group_row in existing_groups:
+                if not desired_group_id or group_row is not prior_group:
+                    session.delete(group_row)
+            if desired_group_id and prior_group is None:
+                session.add(
+                    GroupMember(
+                        group_id=desired_group_id,
+                        user_id=user.id,
+                        role="member",
+                        created_at=timestamp,
+                    )
+                )
+
+            if binding is None:
+                session.add(
+                    DemoAccountBinding(
+                        account_key=account.account_key,
+                        user_id=user.id,
+                        material_fingerprint=fingerprint,
+                        active=True,
+                        created_at=timestamp,
+                        updated_at=timestamp,
+                    )
+                )
+            elif (
+                binding.user_id != user.id
+                or binding.material_fingerprint != fingerprint
+                or not binding.active
+            ):
+                binding.user_id = user.id
+                binding.material_fingerprint = fingerprint
+                binding.active = True
+                binding.updated_at = timestamp
+
+            if material_changed and not is_new:
+                _revoke_user_sessions(session, user.id, timestamp)
+                changed_count += 1
+
+        # Only users owned by a durable catalog binding can be disabled. A
+        # seeded/non-Demo application user is intentionally left untouched.
+        disabled_count = 0
+        for binding in bindings:
+            if binding.account_key in desired_keys:
+                continue
+            user = users_by_id.get(binding.user_id)
+            if user is None:
+                raise AccountSyncError("demo account catalog binding is inconsistent")
+            had_live_state = binding.active or user.status != "inactive"
+            if had_live_state:
+                disabled_count += 1
+            binding.active = False
+            binding.updated_at = timestamp
+            user.status = "inactive"
+            _revoke_user_sessions(session, user.id, timestamp)
+            for course_row in course_members_by_user.get(user.id, []):
+                session.delete(course_row)
+            for group_row in group_members_by_user.get(user.id, []):
+                session.delete(group_row)
+
+        session.flush()
+        return _SyncOutcome(
+            result=AccountSyncResult(
+                active_count=len(graph.accounts),
+                created_count=created_count,
+                changed_count=changed_count,
+                disabled_count=disabled_count,
+            ),
+            resolved_user_ids=resolved_user_ids,
+        )
+    except AccountSyncError:
+        session.rollback()
+        raise
+    except (IntegrityError, SQLAlchemyError):
+        session.rollback()
+        raise AccountSyncError("demo account catalog could not be synchronized") from None
+    except Exception:
+        session.rollback()
+        raise AccountSyncError("demo account catalog could not be synchronized") from None
+
+
+def _catalog_for_sync(settings: Settings, graph: DesiredAccountGraph | None) -> DesiredAccountGraph:
+    if graph is not None:
+        return graph
+    try:
+        return catalog_graph_for_sync(settings)
+    except CredentialFileError:
+        raise AccountSyncError("demo account catalog could not be parsed") from None
+
+
+def sync_demo_accounts(
+    target: Session | Database,
+    settings: Settings,
+    graph: DesiredAccountGraph | None = None,
+) -> AccountSyncResult:
+    """Synchronize one prepared graph and publish it only after commit."""
+
+    desired = _catalog_for_sync(settings, graph)
+    if isinstance(target, Database):
+        try:
+            with target.session() as session:
+                outcome = _sync_graph_in_session(session, settings, desired)
+        except Exception:
+            # Keep an already-published snapshot untouched. A first-startup
+            # pending graph is discarded so a failed process cannot expose it.
+            discard_pending_catalog(settings)
+            raise AccountSyncError("demo account catalog could not be synchronized") from None
+        publish_catalog_snapshot(settings, desired, outcome.resolved_user_ids)
+        return outcome.result
+    outcome = _sync_graph_in_session(target, settings, desired)
+    # The caller owns this Session's commit. Do not publish before that commit
+    # succeeds; startup should use ``bootstrap_demo_accounts`` for a complete
+    # seed+sync boundary.
+    return outcome.result
+
+
+def bootstrap_demo_accounts(
+    target: Database,
+    settings: Settings,
+    seed_callback: Callable[[Session], None],
+    graph: DesiredAccountGraph | None = None,
+) -> AccountSyncResult:
+    """Seed and synchronize in one BEGIN IMMEDIATE transaction.
+
+    The callback is injected so the auth module does not own the Wave 0 seed
+    implementation. A caller can wire this helper from the composition root
+    without changing public contracts.
+    """
+
+    desired = _catalog_for_sync(settings, graph)
+    try:
+        with target.session() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            seed_callback(session)
+            outcome = _sync_graph_in_session(
+                session,
+                settings,
+                desired,
+                transaction_started=True,
+            )
+    except AccountSyncError:
+        discard_pending_catalog(settings)
+        raise
+    except Exception:
+        discard_pending_catalog(settings)
+        raise AccountSyncError("demo account bootstrap failed") from None
+    publish_catalog_snapshot(settings, desired, outcome.resolved_user_ids)
+    return outcome.result
+
+
+# Explicit aliases make the startup seam discoverable without exposing any
+# private catalog field through a route or DTO.
+synchronize_demo_accounts = sync_demo_accounts
+sync_demo_account_catalog = sync_demo_accounts
+
+
+def synchronize_seed_and_demo_accounts(
+    target: Database,
+    settings: Settings,
+    seed_callback: Callable[[Session], None],
+    graph: DesiredAccountGraph | None = None,
+) -> AccountSyncResult:
+    """Compatibility name for the composition-root startup seam."""
+
+    return bootstrap_demo_accounts(target, settings, seed_callback, graph)
 
 
 def revoke_cookie_session(db: Session, raw_token: str | None, now: datetime | None = None) -> None:

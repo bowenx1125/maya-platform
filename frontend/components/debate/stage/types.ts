@@ -17,14 +17,7 @@ export type PlaybackAction = "start" | "resume" | "next" | "replay";
  */
 export type DebatePlaybackApi = Pick<
   PlatformApi,
-  | "startDebate"
-  | "pauseDebate"
-  | "resumeDebate"
-  | "skipDebateTurn"
-  | "advanceDebatePlayback"
-  | "stopDebate"
-  | "replayDebate"
-  | "replayDebateTurn"
+  "startDebate" | "advanceDebatePlayback" | "replayDebate"
 >;
 
 export type DebateStartRequest = Parameters<PlatformApi["startDebate"]>[1];
@@ -36,13 +29,7 @@ export type PlaybackStageLabels = {
   stageTitle?: string;
   stageDescription?: string;
   start?: string;
-  pause?: string;
-  resume?: string;
-  skip?: string;
-  stop?: string;
   replayAll?: string;
-  replayTurn?: string;
-  retryPlayback?: string;
   transcript?: string;
   sources?: string;
   noSources?: string;
@@ -55,11 +42,10 @@ export type PlaybackStageLabels = {
   statusPreparing?: string;
   statusReady?: string;
   statusPlaying?: string;
-  statusPaused?: string;
   waitingNext?: string;
   next?: string;
   waitingForAudio?: string;
-  audioPaused?: string;
+  connectionWaiting?: string;
   connectionReady?: string;
   connectionReconnecting?: string;
   connectionDisconnected?: string;

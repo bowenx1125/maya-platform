@@ -292,7 +292,7 @@ export function deriveAvatarStates(
   const known = new Map(
     participants.map((participant) => [participant.id, participant]),
   );
-  if (playback.mode === "live" && playback.status === "waiting_next") {
+  if (playback.status === "waiting_next") {
     return participants.map(idleState);
   }
   if (eventStates.length > 0) {

@@ -154,72 +154,6 @@ def _control_dependencies() -> dict[str, Any]:
 
 
 @router.post(
-    "/debates/{debate_id}/pause",
-    operation_id="pauseDebate",
-    response_model=PlaybackState,
-    responses=_control_dependencies()["responses"],
-)
-async def pause_debate_route(
-    debate_id: UUID,
-    payload: PlaybackCommandRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    service: PlaybackService = Depends(get_playback_service),
-) -> Any:
-    return await service.pause(
-        db,
-        str(debate_id),
-        expected_control_version=payload.expected_control_version,
-        context=context,
-    )
-
-
-@router.post(
-    "/debates/{debate_id}/resume",
-    operation_id="resumeDebate",
-    response_model=PlaybackState,
-    responses=_control_dependencies()["responses"],
-)
-async def resume_debate_route(
-    debate_id: UUID,
-    payload: PlaybackCommandRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    service: PlaybackService = Depends(get_playback_service),
-) -> Any:
-    return await service.resume(
-        db,
-        str(debate_id),
-        expected_control_version=payload.expected_control_version,
-        context=context,
-    )
-
-
-@router.post(
-    "/debates/{debate_id}/skip",
-    operation_id="skipTurnPlayback",
-    response_model=PlaybackState,
-    responses=_control_dependencies()["responses"],
-)
-async def skip_debate_route(
-    debate_id: UUID,
-    payload: PlaybackCommandRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    service: PlaybackService = Depends(get_playback_service),
-) -> Any:
-    return await service.skip(
-        db,
-        str(debate_id),
-        expected_control_version=payload.expected_control_version,
-        context=context,
-    )
-
-
-@router.post(
     "/debates/{debate_id}/next",
     operation_id="advanceDebatePlayback",
     response_model=PlaybackState,
@@ -249,29 +183,6 @@ async def advance_debate_playback_route(
 
 
 @router.post(
-    "/debates/{debate_id}/stop",
-    operation_id="stopDebate",
-    response_model=DebateDetail,
-    responses=_control_dependencies()["responses"],
-)
-async def stop_debate_route(
-    debate_id: UUID,
-    payload: PlaybackCommandRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    service: PlaybackService = Depends(get_playback_service),
-) -> Any:
-    state = await service.stop(
-        db,
-        str(debate_id),
-        expected_control_version=payload.expected_control_version,
-        context=context,
-    )
-    return _state_or_detail(service, db, str(debate_id), state, context)
-
-
-@router.post(
     "/debates/{debate_id}/replay",
     operation_id="replayDebate",
     response_model=PlaybackState,
@@ -288,30 +199,6 @@ async def replay_debate_route(
     return await service.replay_all(
         db,
         str(debate_id),
-        expected_control_version=payload.expected_control_version,
-        context=context,
-    )
-
-
-@router.post(
-    "/debates/{debate_id}/turns/{turn_id}/replay",
-    operation_id="replayDebateTurn",
-    response_model=PlaybackState,
-    responses=_control_dependencies()["responses"],
-)
-async def replay_debate_turn_route(
-    debate_id: UUID,
-    turn_id: UUID,
-    payload: PlaybackCommandRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    service: PlaybackService = Depends(get_playback_service),
-) -> Any:
-    return await service.replay_turn(
-        db,
-        str(debate_id),
-        str(turn_id),
         expected_control_version=payload.expected_control_version,
         context=context,
     )

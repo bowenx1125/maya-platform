@@ -14,6 +14,12 @@ class KnowledgeDocument(BaseModel):
     group_id: UUID
     source_filename: str
     char_count: int = Field(ge=1)
+    content_hash: str = Field(
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    index_revision: int = Field(ge=0)
     index_status: Literal["pending", "indexing", "ready", "failed"]
     workspace_state: Literal["active", "hidden"]
     safe_error_code: str | None = None

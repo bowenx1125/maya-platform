@@ -49,8 +49,8 @@ def normalize_markdown(filename: str, data: bytes) -> MarkdownDocument:
         raise MarkdownInputError("invalid_filename")
     try:
         text = data.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as exc:
-        raise MarkdownInputError("invalid_utf8") from exc
+    except UnicodeDecodeError:
+        raise MarkdownInputError("invalid_utf8") from None
     if text.startswith("\ufeff"):
         text = text[1:]
     text = text.replace("\r\n", "\n").replace("\r", "\n")

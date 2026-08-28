@@ -29,6 +29,7 @@ function agent(): AgentDetail {
     group_id: "group-id",
     name: "Published Agent",
     description: "A released view",
+    metadata_revision: 0,
     status: "active",
     current_published_version_id: "version-one",
     current_draft_version_id: null,
@@ -117,7 +118,12 @@ describe("student and teacher snapshot selection", () => {
           id,
         }),
       ),
-      downloadSnapshot: vi.fn((id: string) => Promise.resolve(`# ${id}`)),
+      downloadSnapshot: vi.fn((id: string) =>
+        Promise.resolve({
+          content: `# ${id}`,
+          filename: `RAG--Agent--V1.0.md`,
+        }),
+      ),
       downloadSnapshotDocument: vi.fn(),
     };
     mockedUseSession.mockReturnValue({ api } as never);
@@ -235,7 +241,10 @@ describe("student and teacher snapshot selection", () => {
         ...snapshot("snapshot-one"),
         id: "11111111-1111-4111-8111-111111111111",
       }),
-      downloadSnapshot: vi.fn().mockResolvedValue("# frozen evidence"),
+      downloadSnapshot: vi.fn().mockResolvedValue({
+        content: "# frozen evidence",
+        filename: "RAG--Agent--V1.0.md",
+      }),
       downloadSnapshotDocument: vi.fn(),
     };
     mockedUseSession.mockReturnValue({ api } as never);

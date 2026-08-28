@@ -256,6 +256,28 @@ class SqlPlaybackRepository(PlaybackRepository):
                 ),
                 {"updated_at": _now()},
             )
+        state_columns = (
+            self._columns(db, "playback_states")
+            if self._has_table(db, "playback_states")
+            else set()
+        )
+        pending_clear = ""
+        if {
+            "pending_action",
+            "pending_ticket_hash",
+            "pending_media_command_id",
+            "audio_duration_ms",
+        }.issubset(state_columns):
+            pending_clear = (
+                ", pending_action=NULL, pending_ticket_hash=NULL, "
+                "pending_media_command_id=NULL, audio_duration_ms=0"
+            )
+        pending_where = (
+            "pending_action IS NOT NULL OR pending_ticket_hash IS NOT NULL "
+            "OR pending_media_command_id IS NOT NULL OR audio_duration_ms <> 0"
+            if pending_clear
+            else "0"
+        )
         for debate_id in affected:
             db.execute(
                 text(
@@ -270,7 +292,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "UPDATE playback_states SET status='stopped', cursor_ms=0, "
                         "control_version=control_version+1, controller_epoch=NULL, "
                         "controller_owner_connection=NULL, server_started_at=NULL, "
-                        "updated_at=:updated_at WHERE debate_id=:debate_id"
+                        "updated_at=:updated_at" + pending_clear + " WHERE debate_id=:debate_id"
                     ),
                     {"debate_id": debate_id, "updated_at": _now()},
                 )
@@ -280,7 +302,9 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "UPDATE playback_states SET status='ready', cursor_ms=0, "
                     "control_version=control_version+1, controller_epoch=NULL, "
                     "controller_owner_connection=NULL, server_started_at=NULL, "
-                    "updated_at=:updated_at WHERE status IN ('playing','paused') "
+                    "updated_at=:updated_at"
+                    + pending_clear
+                    + " WHERE status IN ('playing','paused') "
                     "AND debate_id NOT IN (SELECT id FROM debates WHERE status='failed')"
                 ),
                 {"updated_at": _now()},
@@ -289,7 +313,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                 text(
                     "UPDATE playback_states SET controller_epoch=NULL, "
                     "controller_owner_connection=NULL, server_started_at=NULL, "
-                    "updated_at=:updated_at WHERE controller_epoch IS NOT NULL"
+                    "updated_at=:updated_at"
+                    + pending_clear
+                    + " WHERE controller_epoch IS NOT NULL OR "
+                    + pending_where
                 ),
                 {"updated_at": _now()},
             )
@@ -440,6 +467,10 @@ class SqlPlaybackRepository(PlaybackRepository):
             "controller_epoch": None,
             "controller_session_hash": None,
             "controller_connection_id": None,
+            "pending_action": None,
+            "pending_ticket_hash": None,
+            "pending_media_command_id": None,
+            "audio_duration_ms": 0,
             "replay_scope": None,
             "replay_index": 0,
             "replay_turn_ids_json": "[]",
@@ -559,6 +590,9 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND ps.current_turn_id=:expected_current_turn_id "
                     "AND ps.control_version=:expected_control_version "
                     "AND ps.replay_scope IS NULL AND ps.replay_index IS NULL "
+                    "AND ps.pending_action IS NULL "
+                    "AND ps.pending_ticket_hash IS NULL "
+                    "AND ps.pending_media_command_id IS NULL "
                     "AND d.status='running' "
                     "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
@@ -620,12 +654,16 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "UPDATE playback_states SET status='ready', mode='live', "
                     "current_turn_id=:successor_turn_id, cursor_ms=0, "
                     "control_version=:next_control_version, server_started_at=NULL, "
+                    "pending_action=NULL, pending_ticket_hash=NULL, "
+                    "pending_media_command_id=NULL, audio_duration_ms=0, "
                     "updated_at=:updated_at WHERE rowid=:claim_rowid "
                     "AND debate_id=:debate_id "
                     "AND status='waiting_next' AND mode='live' "
                     "AND current_turn_id=:expected_current_turn_id "
                     "AND control_version=:expected_control_version "
-                    "AND replay_scope IS NULL AND replay_index IS NULL"
+                    "AND replay_scope IS NULL AND replay_index IS NULL "
+                    "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
+                    "AND pending_media_command_id IS NULL"
                 ),
                 {
                     **params,
@@ -647,6 +685,581 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         finally:
             claim_session.close()
+
+    def claim_replay_next_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        successor_turn_id: str,
+        expected_replay_index: int,
+        expected_audio_relative_path: str | None = None,
+        expected_audio_sha256: str | None = None,
+        expected_audio_size_bytes: int | None = None,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        """Atomically move one retained replay item past the Next gate.
+
+        Replay has no generation job to claim.  This writer transaction only
+        advances the persisted replay cursor after rechecking teacher scope,
+        public adjacency and the durable StoredFile identity.  Byte-level WAV
+        validation is performed immediately before this call and again by the
+        media.prepare command, so a changed/corrupt file cannot be played.
+        """
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        params = {
+            "debate_id": debate_id,
+            "expected_control_version": expected_control_version,
+            "expected_current_turn_id": expected_current_turn_id,
+            "successor_turn_id": successor_turn_id,
+            "expected_replay_index": expected_replay_index,
+            "expected_audio_relative_path": expected_audio_relative_path,
+            "expected_audio_sha256": expected_audio_sha256,
+            "expected_audio_size_bytes": expected_audio_size_bytes,
+            "teacher_user_id": teacher_user_id,
+        }
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            candidate = claim_session.execute(
+                text(
+                    "SELECT ps.rowid AS claim_rowid FROM playback_states AS ps "
+                    "JOIN debates AS d ON d.id=ps.debate_id "
+                    "JOIN courses AS c ON c.id=d.course_id "
+                    "JOIN debate_turns AS current_turn ON current_turn.id=ps.current_turn_id "
+                    "AND current_turn.debate_id=ps.debate_id "
+                    "JOIN debate_turns AS successor ON successor.id=:successor_turn_id "
+                    "AND successor.debate_id=ps.debate_id "
+                    "AND successor.turn_index=current_turn.turn_index + 1 "
+                    "WHERE ps.debate_id=:debate_id AND ps.status='waiting_next' "
+                    "AND ps.mode='replay' AND ps.replay_scope='all' "
+                    "AND ps.replay_index=:expected_replay_index "
+                    "AND ps.current_turn_id=:expected_current_turn_id "
+                    "AND ps.control_version=:expected_control_version "
+                    "AND ps.pending_action IS NULL "
+                    "AND ps.pending_ticket_hash IS NULL "
+                    "AND ps.pending_media_command_id IS NULL "
+                    "AND d.status IN ('debate_finished','completed') "
+                    "AND c.current_audio_debate_id=d.id "
+                    "AND :teacher_user_id IS NOT NULL "
+                    "AND EXISTS (SELECT 1 FROM course_members AS cm "
+                    "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
+                    "AND cm.role='teacher') "
+                    "AND current_turn.publication_status='public' "
+                    "AND successor.publication_status='public' "
+                    "AND successor.generation_status='final_ready' "
+                    "AND successor.preparation_stage='ready' "
+                    "AND trim(COALESCE(successor.speech,'')) <> '' "
+                    "AND successor.audio_file_id IS NOT NULL "
+                    "AND successor.audio_duration_ms IS NOT NULL "
+                    "AND successor.audio_duration_ms > 0 "
+                    "AND EXISTS (SELECT 1 FROM stored_files AS sf "
+                    "WHERE sf.id=successor.audio_file_id AND sf.kind='debate_audio' "
+                    "AND sf.state='active' "
+                    "AND sf.relative_path=:expected_audio_relative_path "
+                    "AND sf.sha256=:expected_audio_sha256 "
+                    "AND sf.size=:expected_audio_size_bytes) "
+                    "AND NOT EXISTS (SELECT 1 FROM debate_turns AS duplicate "
+                    "WHERE duplicate.debate_id=ps.debate_id "
+                    "AND duplicate.turn_index=current_turn.turn_index + 1 "
+                    "AND duplicate.id <> successor.id)"
+                ),
+                params,
+            ).first()
+            if candidate is None:
+                claim_session.rollback()
+                return False
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET status='ready', mode='replay', "
+                    "current_turn_id=:successor_turn_id, cursor_ms=0, "
+                    "replay_index=:next_replay_index, server_started_at=NULL, "
+                    "pending_action=NULL, pending_ticket_hash=NULL, "
+                    "pending_media_command_id=NULL, audio_duration_ms=0, "
+                    "control_version=:next_control_version, updated_at=:updated_at "
+                    "WHERE rowid=:claim_rowid AND debate_id=:debate_id "
+                    "AND status='waiting_next' AND mode='replay' "
+                    "AND replay_scope='all' AND replay_index=:expected_replay_index "
+                    "AND current_turn_id=:expected_current_turn_id "
+                    "AND control_version=:expected_control_version "
+                    "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
+                    "AND pending_media_command_id IS NULL"
+                ),
+                {
+                    **params,
+                    "next_replay_index": expected_replay_index + 1,
+                    "next_control_version": expected_control_version + 1,
+                    "updated_at": _now(),
+                    "claim_rowid": candidate[0],
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
+
+    def rollback_replay_next_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        expected_replay_index: int,
+        previous_turn_id: str,
+        previous_replay_index: int,
+    ) -> bool:
+        """Return a claimed replay successor to its waiting gate by CAS.
+
+        The service performs a second byte/pointer validation after the fresh
+        Next claim.  If the file changed in that interval, this writer
+        transaction prevents a corrupted successor from remaining ``ready``;
+        a concurrent winner causes a stable false result rather than an
+        unguarded overwrite.
+        """
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            columns = self._columns(claim_session, "playback_states")
+            pending_clear = ""
+            if {
+                "pending_action",
+                "pending_ticket_hash",
+                "pending_media_command_id",
+                "audio_duration_ms",
+            }.issubset(columns):
+                pending_clear = (
+                    ", pending_action=NULL, pending_ticket_hash=NULL, "
+                    "pending_media_command_id=NULL, audio_duration_ms=0"
+                )
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET status='waiting_next', mode='replay', "
+                    "current_turn_id=:previous_turn_id, replay_index=:previous_replay_index, "
+                    "cursor_ms=0, control_version=:next_control_version, "
+                    "server_started_at=NULL, updated_at=:updated_at"
+                    + pending_clear
+                    + " WHERE debate_id=:debate_id AND status='ready' "
+                    "AND mode='replay' AND replay_scope='all' "
+                    "AND current_turn_id=:expected_current_turn_id "
+                    "AND replay_index=:expected_replay_index "
+                    "AND control_version=:expected_control_version"
+                ),
+                {
+                    "previous_turn_id": previous_turn_id,
+                    "previous_replay_index": previous_replay_index,
+                    "next_control_version": expected_control_version + 1,
+                    "updated_at": _now(),
+                    "debate_id": debate_id,
+                    "expected_current_turn_id": expected_current_turn_id,
+                    "expected_replay_index": expected_replay_index,
+                    "expected_control_version": expected_control_version,
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
+
+    def claim_operator_reset(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        actor_kind: str = "operator",
+        actor_id: str | None = None,
+        request_id: str | None = None,
+        teacher_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Atomically reset one Debate from a fresh SQLite writer transaction.
+
+        Reset is an operator boundary rather than an HTTP request mutation.
+        ``BEGIN IMMEDIATE`` therefore precedes every read, and the control
+        version, cancellation fence, playback authority, jobs and redacted
+        AuditLog row commit (or roll back) together.  A missing/invalid audit
+        table is an error: silently resetting without an audit record would
+        violate the operator contract.
+        """
+
+        if self.session_factory is None:
+            raise RuntimeError("operator reset requires a SQL session factory")
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            row = (
+                claim_session.execute(
+                    text(
+                        "SELECT d.status AS debate_status, d.course_id, "
+                        "ps.status AS playback_status, ps.mode, ps.current_turn_id, "
+                        "ps.control_version, ps.controller_epoch "
+                        "FROM debates AS d JOIN playback_states AS ps ON ps.debate_id=d.id "
+                        "WHERE d.id=:debate_id"
+                    ),
+                    {"debate_id": debate_id},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                claim_session.rollback()
+                return {"claimed": False, "reason": "not_found"}
+
+            current_control_version = int(row["control_version"] or 0)
+            if current_control_version != expected_control_version:
+                claim_session.rollback()
+                return {
+                    "claimed": False,
+                    "reason": "stale_control_version",
+                    "control_version": current_control_version,
+                }
+            previous_mode = str(row["mode"] or "live")
+            playback_status = str(row["playback_status"] or "preparing")
+            if (previous_mode == "live" and playback_status in {"completed", "stopped"}) or (
+                previous_mode == "replay" and playback_status == "completed"
+            ):
+                claim_session.rollback()
+                return {"claimed": False, "reason": "invalid_state"}
+            if teacher_user_id:
+                allowed = claim_session.execute(
+                    text(
+                        "SELECT 1 FROM course_members AS cm "
+                        "WHERE cm.course_id=:course_id AND cm.user_id=:teacher_user_id "
+                        "AND cm.role='teacher'"
+                    ),
+                    {
+                        "course_id": str(row["course_id"]),
+                        "teacher_user_id": teacher_user_id,
+                    },
+                ).first()
+                if allowed is None:
+                    claim_session.rollback()
+                    return {"claimed": False, "reason": "forbidden"}
+
+            resulting_status = "completed" if previous_mode == "replay" else "stopped"
+            resulting_debate_status = (
+                str(row["debate_status"]) if previous_mode == "replay" else "stopped"
+            )
+            next_control_version = current_control_version + 1
+            timestamp = _now()
+            claim_session.execute(
+                text(
+                    "UPDATE debates SET status=:status, "
+                    "cancellation_generation=COALESCE(cancellation_generation, 0)+1, "
+                    "updated_at=:updated_at WHERE id=:debate_id"
+                ),
+                {
+                    "status": resulting_debate_status,
+                    "updated_at": timestamp,
+                    "debate_id": debate_id,
+                },
+            )
+            if self._has_table_in_session(claim_session, "jobs"):
+                claim_session.execute(
+                    text(
+                        "UPDATE jobs SET state='interrupted', "
+                        "safe_error_code='operator_reset', updated_at=:updated_at "
+                        "WHERE debate_id=:debate_id AND state IN ('pending','running')"
+                    ),
+                    {"updated_at": timestamp, "debate_id": debate_id},
+                )
+
+            state_columns = self._columns(claim_session, "playback_states")
+            queue_clause = (
+                ", replay_turn_ids_json='[]'" if "replay_turn_ids_json" in state_columns else ""
+            )
+            pending_clause = ""
+            if {
+                "pending_action",
+                "pending_ticket_hash",
+                "pending_media_command_id",
+                "audio_duration_ms",
+            }.issubset(state_columns):
+                pending_clause = (
+                    ", pending_action=NULL, pending_ticket_hash=NULL, "
+                    "pending_media_command_id=NULL, audio_duration_ms=0"
+                )
+            claim_session.execute(
+                text(
+                    "UPDATE playback_states SET status=:status, mode='live', "
+                    "current_turn_id=NULL, cursor_ms=0, "
+                    "control_version=:control_version, controller_epoch=NULL, "
+                    "controller_owner_connection=NULL, server_started_at=NULL, "
+                    "replay_scope=NULL, replay_index=NULL" + queue_clause + pending_clause + ", "
+                    "updated_at=:updated_at WHERE debate_id=:debate_id "
+                    "AND status=:expected_status AND mode=:expected_mode "
+                    "AND control_version=:expected_control_version"
+                ),
+                {
+                    "status": resulting_status,
+                    "control_version": next_control_version,
+                    "updated_at": timestamp,
+                    "debate_id": debate_id,
+                    "expected_status": playback_status,
+                    "expected_mode": previous_mode,
+                    "expected_control_version": expected_control_version,
+                },
+            )
+
+            # Importing the ORM here keeps the repository's text boundary
+            # narrow while still making this a real AuditLog row.  ``flush``
+            # deliberately occurs before commit so any missing table,
+            # constraint or malformed payload rolls the entire reset back.
+            from app.modules.debates.models import AuditLog
+
+            details_json = json.dumps(
+                {
+                    "mode": previous_mode,
+                    "status": resulting_status,
+                    "control_version": next_control_version,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            claim_session.add(
+                AuditLog(
+                    id=str(uuid4()),
+                    event_type="playback.operator_reset",
+                    actor_kind=actor_kind,
+                    actor_id=actor_id,
+                    course_id=str(row["course_id"]),
+                    debate_id=debate_id,
+                    request_id=request_id,
+                    details_json=details_json,
+                    created_at=timestamp,
+                )
+            )
+            claim_session.flush()
+            claim_session.commit()
+            return {
+                "claimed": True,
+                "previous_mode": previous_mode,
+                "previous_status": playback_status,
+                "resulting_status": resulting_status,
+                "debate_status": resulting_debate_status,
+                "current_turn_id": row["current_turn_id"],
+                "controller_epoch": row["controller_epoch"],
+                "control_version": next_control_version,
+            }
+        except Exception:
+            claim_session.rollback()
+            raise
+        finally:
+            claim_session.close()
+
+    def claim_media_prepare(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        controller_epoch: str,
+        turn_id: str,
+        ticket_hash: str,
+        command_id: str,
+        action: str,
+        audio_duration_ms: int,
+        expected_audio_relative_path: str | None = None,
+        expected_audio_sha256: str | None = None,
+        expected_audio_size_bytes: int | None = None,
+    ) -> bool:
+        """Claim the single durable media ticket slot with a fresh writer.
+
+        Ticket bytes are issued by the service before this CAS so a losing
+        request can revoke its just-issued token.  This transaction binds the
+        winning hash, command/action, duration and controller epoch to the
+        authoritative PlaybackState; no request-local cache decides whether a
+        second service may prepare another ticket.
+        """
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            columns = self._columns(claim_session, "playback_states")
+            required = {
+                "pending_action",
+                "pending_ticket_hash",
+                "pending_media_command_id",
+                "audio_duration_ms",
+            }
+            if not required.issubset(columns):
+                claim_session.rollback()
+                return False
+            candidate = claim_session.execute(
+                text(
+                    "SELECT ps.rowid AS claim_rowid FROM playback_states AS ps "
+                    "JOIN debates AS d ON d.id=ps.debate_id "
+                    "JOIN debate_turns AS t ON t.id=ps.current_turn_id "
+                    "AND t.debate_id=ps.debate_id "
+                    "JOIN courses AS c ON c.id=d.course_id "
+                    "JOIN stored_files AS sf ON sf.id=t.audio_file_id "
+                    "WHERE ps.debate_id=:debate_id AND ps.status='ready' "
+                    "AND ((:action='replay' AND ps.mode='replay') OR "
+                    "(:action<>'replay' AND ps.mode='live')) "
+                    "AND ps.current_turn_id=:turn_id "
+                    "AND ps.control_version=:expected_control_version "
+                    "AND ps.controller_epoch=:controller_epoch "
+                    "AND ps.pending_action IS NULL "
+                    "AND ps.pending_ticket_hash IS NULL "
+                    "AND ps.pending_media_command_id IS NULL "
+                    "AND ((:action='replay' AND d.status IN ('debate_finished','completed')) OR "
+                    "(:action<>'replay' AND d.status='running')) "
+                    "AND t.generation_status='final_ready' "
+                    "AND t.audio_file_id IS NOT NULL "
+                    "AND t.audio_duration_ms IS NOT NULL "
+                    "AND t.audio_duration_ms > 0 "
+                    "AND t.audio_duration_ms=:audio_duration_ms "
+                    "AND c.current_audio_debate_id=d.id "
+                    "AND sf.kind='debate_audio' AND sf.state='active' "
+                    "AND sf.relative_path=:expected_audio_relative_path "
+                    "AND sf.sha256=:expected_audio_sha256 "
+                    "AND sf.size=:expected_audio_size_bytes"
+                ),
+                {
+                    "debate_id": debate_id,
+                    "turn_id": turn_id,
+                    "expected_control_version": expected_control_version,
+                    "controller_epoch": controller_epoch,
+                    "action": action,
+                    "audio_duration_ms": audio_duration_ms,
+                    "expected_audio_relative_path": expected_audio_relative_path,
+                    "expected_audio_sha256": expected_audio_sha256,
+                    "expected_audio_size_bytes": expected_audio_size_bytes,
+                },
+            ).first()
+            if candidate is None:
+                claim_session.rollback()
+                return False
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET pending_action=:action, "
+                    "pending_ticket_hash=:ticket_hash, "
+                    "pending_media_command_id=:command_id, "
+                    "audio_duration_ms=:audio_duration_ms, updated_at=:updated_at "
+                    "WHERE rowid=:claim_rowid AND debate_id=:debate_id "
+                    "AND status='ready' AND current_turn_id=:turn_id "
+                    "AND ((:action='replay' AND mode='replay') OR "
+                    "(:action<>'replay' AND mode='live')) "
+                    "AND control_version=:expected_control_version "
+                    "AND controller_epoch=:controller_epoch "
+                    "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
+                    "AND pending_media_command_id IS NULL"
+                ),
+                {
+                    "action": action,
+                    "ticket_hash": ticket_hash,
+                    "command_id": command_id,
+                    "audio_duration_ms": audio_duration_ms,
+                    "updated_at": _now(),
+                    "claim_rowid": candidate[0],
+                    "debate_id": debate_id,
+                    "turn_id": turn_id,
+                    "expected_control_version": expected_control_version,
+                    "controller_epoch": controller_epoch,
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
+
+    def release_media_prepare(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        controller_epoch: str,
+        turn_id: str,
+        ticket_hash: str,
+        command_id: str,
+    ) -> bool:
+        """Release one media claim after a post-claim byte validation fails.
+
+        The release is a fresh writer CAS.  A request Session must not clear
+        a claim through a stale WAL snapshot while a browser acknowledgement
+        may already be racing; matching the complete pending identity keeps
+        the losing cleanup from touching a newer claim.
+        """
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            columns = self._columns(claim_session, "playback_states")
+            required = {
+                "pending_action",
+                "pending_ticket_hash",
+                "pending_media_command_id",
+                "audio_duration_ms",
+            }
+            if not required.issubset(columns):
+                claim_session.rollback()
+                return False
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET pending_action=NULL, "
+                    "pending_ticket_hash=NULL, pending_media_command_id=NULL, "
+                    "audio_duration_ms=0, updated_at=:updated_at "
+                    "WHERE debate_id=:debate_id AND status='ready' "
+                    "AND current_turn_id=:turn_id "
+                    "AND control_version=:expected_control_version "
+                    "AND controller_epoch=:controller_epoch "
+                    "AND pending_ticket_hash=:ticket_hash "
+                    "AND pending_media_command_id=:command_id"
+                ),
+                {
+                    "updated_at": _now(),
+                    "debate_id": debate_id,
+                    "turn_id": turn_id,
+                    "expected_control_version": expected_control_version,
+                    "controller_epoch": controller_epoch,
+                    "ticket_hash": ticket_hash,
+                    "command_id": command_id,
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
+
+    @staticmethod
+    def _has_table_in_session(session: Any, table_name: str) -> bool:
+        return bool(
+            session.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:table_name"),
+                {"table_name": table_name},
+            ).first()
+        )
 
     def mark_turn_ready(
         self,
@@ -1364,6 +1977,9 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "UPDATE playback_states SET status='completed', mode='live', cursor_ms=0, "
                 "control_version=:control_version, controller_epoch=NULL, "
                 "controller_owner_connection=NULL, server_started_at=NULL, "
+                "replay_scope=NULL, replay_index=NULL, "
+                "pending_action=NULL, pending_ticket_hash=NULL, "
+                "pending_media_command_id=NULL, audio_duration_ms=0, "
                 "updated_at=:updated_at WHERE debate_id=:debate_id"
             ),
             {
@@ -1372,6 +1988,14 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "debate_id": debate_id,
             },
         )
+        if "replay_turn_ids_json" in self._columns(db, "playback_states"):
+            db.execute(
+                text(
+                    "UPDATE playback_states SET replay_turn_ids_json='[]' "
+                    "WHERE debate_id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            )
         return {
             "turn_id": row["current_turn_id"],
             "control_version": new_version,

@@ -76,7 +76,7 @@ def recover_file_operations(
         # final target and a staging source; publish uses exact UUID trees.
         _remove_owned_path(data_root, operation.source_relative_path)
         _remove_owned_path(data_root, operation.target_relative_path)
-        if operation.operation_kind == "document_upload":
+        if operation.operation_kind in {"document_upload", "document_replace"}:
             _remove_empty_entity_parent(
                 data_root,
                 operation.target_relative_path,

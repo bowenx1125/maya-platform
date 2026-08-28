@@ -44,8 +44,8 @@ def integer_field(fields: dict[str, str], name: str, *, required: bool = False) 
         return None
     try:
         parsed = int(value)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be an integer") from exc
+    except ValueError:
+        raise ValueError(f"{name} must be an integer") from None
     if parsed < 0:
         raise ValueError(f"{name} must be non-negative")
     return parsed

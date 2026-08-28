@@ -622,6 +622,7 @@ class MediaTicketBinding:
     debate_id: str
     turn_id: str
     action: Literal["start", "resume", "next", "replay"]
+    control_version: int
     issued_at: datetime
     expires_at: datetime
     started: bool = False
@@ -647,6 +648,7 @@ class MediaTicketStore:
         debate_id: str,
         turn_id: str,
         action: Literal["start", "resume", "next", "replay"],
+        control_version: int = 0,
         now: datetime | None = None,
     ) -> tuple[str, MediaTicketBinding]:
         issued = _utc(now or datetime.now(UTC))
@@ -663,6 +665,7 @@ class MediaTicketStore:
             debate_id=debate_id,
             turn_id=turn_id,
             action=action,
+            control_version=control_version,
             issued_at=issued,
             expires_at=issued + self.ttl,
         )
@@ -743,6 +746,7 @@ class MediaTicketStore:
             debate_id=binding.debate_id,
             turn_id=binding.turn_id,
             action=binding.action,
+            control_version=binding.control_version,
             issued_at=binding.issued_at,
             expires_at=expires,
             started=True,

@@ -15,8 +15,10 @@ export type AgentSummary = components["schemas"]["AgentSummary"];
 export type AgentDetail = components["schemas"]["AgentDetail"];
 export type AgentVersion = components["schemas"]["AgentVersion"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocument"];
-export type KnowledgeDocumentMutation =
-  components["schemas"]["KnowledgeDocumentMutation"];
+export type KnowledgeDocumentMutation = {
+  document: KnowledgeDocument;
+  agent_version: AgentVersion | null;
+};
 export type RagPreview = components["schemas"]["RagPreview"];
 export type TestChatResponse = components["schemas"]["TestChatResponse"];
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
@@ -43,6 +45,11 @@ export type DebatePlaybackResource =
 export type ErrorPayload = components["schemas"]["Error"];
 export type DemoIdentity =
   operations["listDemoIdentities"]["responses"][200]["content"]["application/json"][number];
+
+export type MarkdownDownload = {
+  content: string;
+  filename: string;
+};
 
 export type PlatformApiOptions = {
   baseUrl?: string;
@@ -129,6 +136,44 @@ function newIdempotencyKey(): string {
   return `maya-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function safeDownloadFilename(value: string, fallback: string): string {
+  if (
+    !value ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\") ||
+    [...value].some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
+  ) {
+    return fallback;
+  }
+  return value;
+}
+
+export function responseDownloadFilename(
+  response: Response,
+  fallback: string,
+): string {
+  const header = response.headers.get("Content-Disposition");
+  if (!header) return fallback;
+  const encoded = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header)?.[1];
+  if (encoded) {
+    try {
+      return safeDownloadFilename(decodeURIComponent(encoded), fallback);
+    } catch {
+      return fallback;
+    }
+  }
+  const plain = /filename\s*=\s*(?:"([^"]+)"|([^;]+))/i.exec(header);
+  return safeDownloadFilename(
+    (plain?.[1] ?? plain?.[2] ?? "").trim(),
+    fallback,
+  );
+}
+
 export function isConflict(error: unknown): error is PlatformApiError {
   return (
     error instanceof PlatformApiError &&
@@ -181,12 +226,14 @@ export function apiErrorMessage(
  */
 export class PlatformApi {
   private readonly client: PlatformClientHandle;
+  private readonly baseUrl: string;
   private csrfToken?: string;
 
   constructor(options: PlatformApiOptions = {}) {
     this.csrfToken = options.csrfToken;
+    this.baseUrl = options.baseUrl ?? "/api/v1";
     this.client = createPlatformClient({
-      baseUrl: options.baseUrl ?? "/api/v1",
+      baseUrl: this.baseUrl,
       csrfToken: this.csrfToken,
     });
   }
@@ -198,6 +245,48 @@ export class PlatformApi {
 
   getCsrfToken(): string | undefined {
     return this.csrfToken;
+  }
+
+  private async multipart<T>(
+    path: string,
+    file: File,
+    fields: Record<string, string>,
+    idempotencyKey: string,
+  ): Promise<T> {
+    const form = new FormData();
+    form.append("file", file);
+    for (const [name, value] of Object.entries(fields)) {
+      form.append(name, value);
+    }
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+        body: form,
+      },
+    );
+    const raw = await response.text();
+    let payload: unknown;
+    try {
+      payload = raw ? JSON.parse(raw) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    if (!response.ok) {
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    return payload as T;
   }
 
   async login(username: string, password: string): Promise<AuthSession> {
@@ -229,6 +318,16 @@ export class PlatformApi {
   > {
     const result = await this.client.GET("/auth/demo-identities");
     return unwrap(result);
+  }
+
+  /** Select an identity from the anonymous Demo catalog. */
+  async quickLogin(userId: string): Promise<AuthSession> {
+    const result = await this.client.POST("/auth/quick-login", {
+      body: { user_id: userId },
+    });
+    const session = await unwrap<AuthSession>(result);
+    this.setCsrfToken(session.csrf_token);
+    return session;
   }
 
   async switchDemoIdentity(userId: string): Promise<AuthSession> {
@@ -312,30 +411,27 @@ export class PlatformApi {
     );
   }
 
-  async archiveAgent(
+  async updateAgentMetadata(
     agentId: string,
-    options: IdempotentMutationOptions = {},
-  ): Promise<AgentSummary> {
-    return commitMutation(options.idempotency, async (key) => {
-      const result = await this.client.POST("/agents/{agent_id}/archive", {
+    body: components["schemas"]["UpdateAgentMetadataRequest"],
+  ): Promise<AgentDetail> {
+    return unwrap(
+      await this.client.PATCH("/agents/{agent_id}", {
         params: {
           path: { agent_id: agentId },
-          header: {
-            "Idempotency-Key": key,
-            "X-CSRF-Token": this.csrfToken ?? "",
-          },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
         },
-      });
-      return unwrap(result);
-    });
+        body,
+      }),
+    );
   }
 
-  async unarchiveAgent(
+  async deleteAgent(
     agentId: string,
     options: IdempotentMutationOptions = {},
-  ): Promise<AgentSummary> {
+  ): Promise<void> {
     return commitMutation(options.idempotency, async (key) => {
-      const result = await this.client.POST("/agents/{agent_id}/unarchive", {
+      const result = await this.client.DELETE("/agents/{agent_id}", {
         params: {
           path: { agent_id: agentId },
           header: {
@@ -344,7 +440,7 @@ export class PlatformApi {
           },
         },
       });
-      return unwrap(result);
+      return unwrap<void>(result);
     });
   }
 
@@ -380,6 +476,24 @@ export class PlatformApi {
         params: { path: { version_id: versionId } },
       }),
     );
+  }
+
+  /** Download immutable published AGENT.md with the server-chosen filename. */
+  async downloadAgentMd(
+    versionId: string,
+    fallbackFilename = "AGENT.md",
+  ): Promise<MarkdownDownload> {
+    const result = await this.client.GET(
+      "/agent-versions/{version_id}/agent-md/download",
+      {
+        parseAs: "text",
+        params: { path: { version_id: versionId } },
+      },
+    );
+    return {
+      content: await unwrap(result),
+      filename: responseDownloadFilename(result.response, fallbackFilename),
+    };
   }
 
   async updateDraft(
@@ -513,11 +627,70 @@ export class PlatformApi {
               "X-CSRF-Token": this.csrfToken ?? "",
             },
           },
+          // openapi-fetch intentionally does not expose FormData as the
+          // generated object-body type.  Passing the real FormData preserves
+          // the browser multipart boundary and keeps this one cast inside the
+          // platform adapter rather than leaking it to product components.
           body: form as unknown as never,
         },
       );
-      return unwrap(result);
+      const mutation = await unwrap(result);
+      return {
+        document: mutation.document,
+        agent_version: mutation.agent_version ?? null,
+      };
     });
+  }
+
+  async createLibraryKnowledge(
+    groupId: string,
+    file: File,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocumentMutation> {
+    return commitMutation(options.idempotency, (key) =>
+      this.multipart<KnowledgeDocumentMutation>(
+        `/groups/${groupId}/knowledge-documents`,
+        file,
+        {},
+        key,
+      ),
+    );
+  }
+
+  async replaceKnowledgeDocument(
+    documentId: string,
+    file: File,
+    expectedContentHash: string,
+    expectedIndexRevision: number,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocument> {
+    return commitMutation(options.idempotency, (key) => {
+      return this.multipart<KnowledgeDocument>(
+        `/knowledge-documents/${documentId}/replace`,
+        file,
+        {
+          expected_content_hash: expectedContentHash,
+          expected_index_revision: String(expectedIndexRevision),
+        },
+        key,
+      );
+    });
+  }
+
+  async replaceKnowledge(
+    documentId: string,
+    file: File,
+    expectedContentHash: string,
+    expectedIndexRevision: number,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocument> {
+    return this.replaceKnowledgeDocument(
+      documentId,
+      file,
+      expectedContentHash,
+      expectedIndexRevision,
+      options,
+    );
   }
 
   async document(documentId: string): Promise<KnowledgeDocument> {
@@ -528,12 +701,21 @@ export class PlatformApi {
     );
   }
 
-  async downloadKnowledge(documentId: string): Promise<string> {
-    return unwrap(
-      await this.client.GET("/knowledge-documents/{document_id}/download", {
+  async downloadKnowledge(
+    documentId: string,
+    fallbackFilename = "download.md",
+  ): Promise<MarkdownDownload> {
+    const result = await this.client.GET(
+      "/knowledge-documents/{document_id}/download",
+      {
+        parseAs: "text",
         params: { path: { document_id: documentId } },
-      }),
+      },
     );
+    return {
+      content: await unwrap(result),
+      filename: responseDownloadFilename(result.response, fallbackFilename),
+    };
   }
 
   async reindex(
@@ -574,7 +756,7 @@ export class PlatformApi {
           },
         },
       );
-      return unwrap(result);
+      return (await unwrap(result)) as unknown as KnowledgeDocument;
     });
   }
 
@@ -759,59 +941,6 @@ export class PlatformApi {
     });
   }
 
-  private async controlDebate(
-    path:
-      | "/debates/{debate_id}/pause"
-      | "/debates/{debate_id}/resume"
-      | "/debates/{debate_id}/skip"
-      | "/debates/{debate_id}/replay",
-    debateId: string,
-    expectedControlVersion: number,
-  ): Promise<DebatePlaybackState> {
-    return unwrap(
-      await this.client.POST(path, {
-        params: {
-          path: { debate_id: debateId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-        body: { expected_control_version: expectedControlVersion },
-      }),
-    );
-  }
-
-  async pauseDebate(
-    debateId: string,
-    expectedControlVersion: number,
-  ): Promise<DebatePlaybackState> {
-    return this.controlDebate(
-      "/debates/{debate_id}/pause",
-      debateId,
-      expectedControlVersion,
-    );
-  }
-
-  async resumeDebate(
-    debateId: string,
-    expectedControlVersion: number,
-  ): Promise<DebatePlaybackState> {
-    return this.controlDebate(
-      "/debates/{debate_id}/resume",
-      debateId,
-      expectedControlVersion,
-    );
-  }
-
-  async skipDebateTurn(
-    debateId: string,
-    expectedControlVersion: number,
-  ): Promise<DebatePlaybackState> {
-    return this.controlDebate(
-      "/debates/{debate_id}/skip",
-      debateId,
-      expectedControlVersion,
-    );
-  }
-
   async advanceDebatePlayback(
     debateId: string,
     body: AdvancePlaybackRequest,
@@ -827,41 +956,14 @@ export class PlatformApi {
     );
   }
 
-  async stopDebate(
-    debateId: string,
-    expectedControlVersion: number,
-  ): Promise<DebateDetail> {
-    return unwrap(
-      await this.client.POST("/debates/{debate_id}/stop", {
-        params: {
-          path: { debate_id: debateId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-        body: { expected_control_version: expectedControlVersion },
-      }),
-    );
-  }
-
   async replayDebate(
     debateId: string,
     expectedControlVersion: number,
   ): Promise<DebatePlaybackState> {
-    return this.controlDebate(
-      "/debates/{debate_id}/replay",
-      debateId,
-      expectedControlVersion,
-    );
-  }
-
-  async replayDebateTurn(
-    debateId: string,
-    turnId: string,
-    expectedControlVersion: number,
-  ): Promise<DebatePlaybackState> {
     return unwrap(
-      await this.client.POST("/debates/{debate_id}/turns/{turn_id}/replay", {
+      await this.client.POST("/debates/{debate_id}/replay", {
         params: {
-          path: { debate_id: debateId, turn_id: turnId },
+          path: { debate_id: debateId },
           header: { "X-CSRF-Token": this.csrfToken ?? "" },
         },
         body: { expected_control_version: expectedControlVersion },
@@ -885,30 +987,43 @@ export class PlatformApi {
     );
   }
 
-  async downloadSnapshot(snapshotId: string): Promise<string> {
-    return unwrap(
-      await this.client.GET("/knowledge-snapshots/{snapshot_id}/download", {
+  async downloadSnapshot(
+    snapshotId: string,
+    fallbackFilename = "RAG.md",
+  ): Promise<MarkdownDownload> {
+    const result = await this.client.GET(
+      "/knowledge-snapshots/{snapshot_id}/download",
+      {
+        parseAs: "text",
         params: { path: { snapshot_id: snapshotId } },
-      }),
+      },
     );
+    return {
+      content: await unwrap(result),
+      filename: responseDownloadFilename(result.response, fallbackFilename),
+    };
   }
 
   async downloadSnapshotDocument(
     snapshotId: string,
     snapshotDocumentId: string,
-  ): Promise<string> {
-    return unwrap(
-      await this.client.GET(
-        "/knowledge-snapshots/{snapshot_id}/documents/{snapshot_document_id}/download",
-        {
-          params: {
-            path: {
-              snapshot_id: snapshotId,
-              snapshot_document_id: snapshotDocumentId,
-            },
+    fallbackFilename = "source.md",
+  ): Promise<MarkdownDownload> {
+    const result = await this.client.GET(
+      "/knowledge-snapshots/{snapshot_id}/documents/{snapshot_document_id}/download",
+      {
+        parseAs: "text",
+        params: {
+          path: {
+            snapshot_id: snapshotId,
+            snapshot_document_id: snapshotDocumentId,
           },
         },
-      ),
+      },
     );
+    return {
+      content: await unwrap(result),
+      filename: responseDownloadFilename(result.response, fallbackFilename),
+    };
   }
 }

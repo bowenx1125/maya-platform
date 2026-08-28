@@ -33,7 +33,6 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.core.db import Database
 from app.core.models import (
-    Agent,
     AgentVersion,
     KnowledgeChunk,
     KnowledgeDocument,
@@ -51,6 +50,7 @@ WAVE_1_REVISION = "0002_wave1_agents_rag"
 WAVE_1B_REVISION = "0003_wave1b_avatar_voice"
 WAVE_2_REVISION = "0004_wave2_debate_playback"
 WAVE_2_MANUAL_ADVANCE_REVISION = "0005_wave2_manual_advance"
+PRE_WAVE_3_POLISH_REVISION = "0006_pre_wave3_polish"
 TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
@@ -72,9 +72,7 @@ def run_alembic(path: Path, target: str) -> None:
         check=False,
     )
     if result.returncode:
-        raise RuntimeError(
-            f"Alembic upgrade to {target} failed: {result.stderr[-1000:]}"
-        )
+        raise RuntimeError(f"Alembic upgrade to {target} failed: {result.stderr[-1000:]}")
 
 
 def downgrade_alembic(path: Path, target: str) -> None:
@@ -89,9 +87,7 @@ def downgrade_alembic(path: Path, target: str) -> None:
         check=False,
     )
     if result.returncode:
-        raise RuntimeError(
-            f"Alembic downgrade to {target} failed: {result.stderr[-1000:]}"
-        )
+        raise RuntimeError(f"Alembic downgrade to {target} failed: {result.stderr[-1000:]}")
 
 
 def revision(path: Path) -> str | None:
@@ -137,9 +133,7 @@ def table_fingerprints(
         with database.engine.connect() as connection:
             for table in sorted(inspector.get_table_names()):
                 configured_columns = (
-                    columns_by_table.get(table)
-                    if columns_by_table is not None
-                    else None
+                    columns_by_table.get(table) if columns_by_table is not None else None
                 )
                 columns = (
                     configured_columns
@@ -155,15 +149,10 @@ def table_fingerprints(
                 selected = ", ".join(columns)
                 rows = connection.execute(text(f"SELECT {selected} FROM {table}"))
                 values = [
-                    {
-                        column: canonical(value)
-                        for column, value in zip(columns, row, strict=True)
-                    }
+                    {column: canonical(value) for column, value in zip(columns, row, strict=True)}
                     for row in rows
                 ]
-                encoded = json.dumps(
-                    values, sort_keys=True, separators=(",", ":"), default=str
-                )
+                encoded = json.dumps(values, sort_keys=True, separators=(",", ":"), default=str)
                 result[table] = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         return result
     finally:
@@ -175,9 +164,7 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
     agent_id, version_id = str(uuid4()), str(uuid4())
     source_file_id, document_id = str(uuid4()), str(uuid4())
     snapshot_id, snapshot_document_id, chunk_id = (str(uuid4()) for _ in range(3))
-    system_voice_id, preview_file_id, preview_id, operation_id = (
-        str(uuid4()) for _ in range(4)
-    )
+    system_voice_id, preview_file_id, preview_id, operation_id = (str(uuid4()) for _ in range(4))
     idempotency_id, job_id, file_operation_id = (str(uuid4()) for _ in range(3))
     with database.session() as session:
         session.add(
@@ -192,17 +179,28 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
                 updated_at=now,
             )
         )
-        session.add(
-            Agent(
-                id=agent_id,
-                group_id=GROUP_ID,
-                name="Migration Agent",
-                description="Wave 1 preservation row",
-                status="active",
-                current_published_version_id=version_id,
-                created_at=now,
-                updated_at=now,
-            )
+        # The probe intentionally inserts at the historical 0003 schema.
+        # Use a column-explicit Core insert so later ORM-only columns (for
+        # example 0006 ``metadata_revision``) do not leak backward into the
+        # frozen Wave 1 fixture.
+        session.execute(
+            text(
+                "INSERT INTO agents "
+                "(id, group_id, name, description, status, "
+                "current_published_version_id, created_at, updated_at) "
+                "VALUES (:id, :group_id, :name, :description, :status, "
+                ":current_published_version_id, :created_at, :updated_at)"
+            ),
+            {
+                "id": agent_id,
+                "group_id": GROUP_ID,
+                "name": "Migration Agent",
+                "description": "Wave 1 preservation row",
+                "status": "active",
+                "current_published_version_id": version_id,
+                "created_at": now,
+                "updated_at": now,
+            },
         )
         session.add(
             KnowledgeDocument(
@@ -447,9 +445,7 @@ def insert_legacy_playback_fixture(path: Path) -> dict[str, str]:
             ).first()
             if parent is None:
                 raise AssertionError("populated migration fixture Agent is missing")
-            agent_id, group_id, version_id, snapshot_id = (
-                str(value) for value in parent
-            )
+            agent_id, group_id, version_id, snapshot_id = (str(value) for value in parent)
             connection.execute(
                 text(
                     "INSERT INTO debates "
@@ -567,13 +563,8 @@ def row_fingerprint(path: Path, table: str, row_id: str, columns: list[str]) -> 
             ).first()
             if row is None:
                 raise AssertionError(f"{table} row {row_id} disappeared")
-            values = {
-                column: canonical(value)
-                for column, value in zip(columns, row, strict=True)
-            }
-            encoded = json.dumps(
-                values, sort_keys=True, separators=(",", ":"), default=str
-            )
+            values = {column: canonical(value) for column, value in zip(columns, row, strict=True)}
+            encoded = json.dumps(values, sort_keys=True, separators=(",", ":"), default=str)
             return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
     finally:
         database.dispose()
@@ -588,10 +579,7 @@ def assert_legacy_playback_row_preserved(
 
     database = Database(database_url(path))
     try:
-        columns = [
-            item["name"]
-            for item in inspect(database.engine).get_columns("playback_states")
-        ]
+        columns = [item["name"] for item in inspect(database.engine).get_columns("playback_states")]
         after_fingerprint = row_fingerprint(
             path,
             "playback_states",
@@ -609,9 +597,7 @@ def assert_legacy_playback_row_preserved(
                 {"id": fixture["playback_id"]},
             ).first()
             if row is None:
-                raise AssertionError(
-                    "legacy playback_states row disappeared after 0005"
-                )
+                raise AssertionError("legacy playback_states row disappeared after 0005")
             (
                 debate_id,
                 playback_status,
@@ -626,13 +612,9 @@ def assert_legacy_playback_row_preserved(
                 "live",
                 fixture["turn_id"],
             ):
-                raise AssertionError(
-                    "0005 changed legacy playback state or current turn"
-                )
+                raise AssertionError("0005 changed legacy playback state or current turn")
             if replay_scope is not None or replay_index is not None:
-                raise AssertionError(
-                    "legacy live playback unexpectedly gained replay scope"
-                )
+                raise AssertionError("legacy live playback unexpectedly gained replay scope")
             related = connection.execute(
                 text(
                     "SELECT d.id, dt.id, dt.participant_id, dp.id "
@@ -652,13 +634,9 @@ def assert_legacy_playback_row_preserved(
                 fixture["participant_id"],
                 fixture["participant_id"],
             ):
-                raise AssertionError(
-                    "legacy playback foreign-key relationships changed"
-                )
+                raise AssertionError("legacy playback foreign-key relationships changed")
             if connection.execute(text("PRAGMA foreign_key_check")).fetchall():
-                raise AssertionError(
-                    "foreign_key_check is not empty after preserving playback row"
-                )
+                raise AssertionError("foreign_key_check is not empty after preserving playback row")
     finally:
         database.dispose()
 
@@ -722,9 +700,7 @@ def assert_schema(path: Path, *, manual_advance: bool = False) -> None:
             actual = {item["name"] for item in inspector.get_indexes(table)}
             missing = names.difference(actual)
             if missing:
-                raise AssertionError(
-                    f"Wave 2 indexes missing from {table}: {sorted(missing)}"
-                )
+                raise AssertionError(f"Wave 2 indexes missing from {table}: {sorted(missing)}")
         expected_unique_constraints = {
             "playback_states": {"uq_playback_states_debate"},
         }
@@ -759,9 +735,7 @@ def assert_schema(path: Path, *, manual_advance: bool = False) -> None:
             actual = {item["name"] for item in inspector.get_check_constraints(table)}
             missing = names.difference(actual)
             if missing:
-                raise AssertionError(
-                    f"Wave 2 checks missing from {table}: {sorted(missing)}"
-                )
+                raise AssertionError(f"Wave 2 checks missing from {table}: {sorted(missing)}")
         fks = {
             item["name"]: (
                 item["constrained_columns"],
@@ -775,9 +749,7 @@ def assert_schema(path: Path, *, manual_advance: bool = False) -> None:
             "debate_turns",
             ["id", "participant_id"],
         ):
-            raise AssertionError(
-                "position history must bind the exact participant turn"
-            )
+            raise AssertionError("position history must bind the exact participant turn")
         playback_fks = {
             item["name"]: item for item in inspector.get_foreign_keys("playback_states")
         }
@@ -930,9 +902,7 @@ def assert_manual_advance_constraints(path: Path) -> None:
                     f"invalid waiting_next playback shape was accepted: {row['id']}"
                 )
             connection.execute(
-                text(
-                    "DELETE FROM playback_states WHERE id IN (:one, :two, :three, :four, :five)"
-                ),
+                text("DELETE FROM playback_states WHERE id IN (:one, :two, :three, :four, :five)"),
                 {
                     "one": row_ids[0],
                     "two": row_ids[1],
@@ -974,9 +944,7 @@ def assert_legacy_status_rejects_waiting_next(path: Path) -> None:
             isolation_level="AUTOCOMMIT"
         ) as connection:
             connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
-            connection.execute(
-                text("DELETE FROM playback_states WHERE id=:id"), {"id": row_id}
-            )
+            connection.execute(text("DELETE FROM playback_states WHERE id=:id"), {"id": row_id})
         database.dispose()
 
 
@@ -1000,9 +968,7 @@ def _row_values(path: Path, table: str, row_id: str) -> dict[str, Any]:
         database.dispose()
 
 
-def assert_waiting_next_downgrade_preserves_row(
-    path: Path, fixture: dict[str, str]
-) -> None:
+def assert_waiting_next_downgrade_preserves_row(path: Path, fixture: dict[str, str]) -> None:
     """Map a real 0005 waiting row to conservative 0004 ``paused``.
 
     The row remains attached to its Debate/Turn and all durable identity,
@@ -1040,9 +1006,7 @@ def assert_waiting_next_downgrade_preserves_row(
     assert_schema(path)
     after_downgrade = _row_values(path, "playback_states", fixture["playback_id"])
     if after_downgrade.get("status") != "paused":
-        raise AssertionError(
-            "0005 waiting_next row was not conservatively mapped to paused"
-        )
+        raise AssertionError("0005 waiting_next row was not conservatively mapped to paused")
     for column, value in before.items():
         if column != "status" and after_downgrade.get(column) != value:
             raise AssertionError(f"downgrade changed playback_states.{column}")
@@ -1063,17 +1027,13 @@ def assert_waiting_next_downgrade_preserves_row(
     assert_schema(path, manual_advance=True)
     after_upgrade = _row_values(path, "playback_states", fixture["playback_id"])
     if after_upgrade.get("status") != "paused":
-        raise AssertionError(
-            "0005 re-upgrade unexpectedly restored waiting_next semantics"
-        )
+        raise AssertionError("0005 re-upgrade unexpectedly restored waiting_next semantics")
     for column, value in before.items():
         if column != "status" and after_upgrade.get(column) != value:
             raise AssertionError(f"re-upgrade changed playback_states.{column}")
     with database.engine.connect() as connection:
         if connection.execute(text("PRAGMA foreign_key_check")).fetchall():
-            raise AssertionError(
-                "foreign_key_check failed after waiting-row re-upgrade"
-            )
+            raise AssertionError("foreign_key_check failed after waiting-row re-upgrade")
 
 
 def assert_voice_untouched(path: Path) -> None:
@@ -1084,9 +1044,7 @@ def assert_voice_untouched(path: Path) -> None:
                 text("SELECT table_name FROM voice_mutation_sentinel")
             ).fetchall()
             if touched:
-                raise AssertionError(
-                    f"0005 touched immutable voice ledger rows: {touched}"
-                )
+                raise AssertionError(f"0005 touched immutable voice ledger rows: {touched}")
             if connection.execute(text("PRAGMA foreign_key_check")).fetchall():
                 raise AssertionError("foreign_key_check is not empty after 0005")
     finally:
@@ -1115,9 +1073,7 @@ def assert_final_ready_shape_rejects(path: Path) -> None:
             ).first()
             if parent is None:
                 raise AssertionError("populated migration fixture Agent is missing")
-            agent_id, group_id, version_id, snapshot_id = (
-                str(value) for value in parent
-            )
+            agent_id, group_id, version_id, snapshot_id = (str(value) for value in parent)
         now = datetime.now(UTC)
         with database.engine.begin() as connection:
             connection.execute(
@@ -1207,16 +1163,214 @@ def assert_final_ready_shape_rejects(path: Path) -> None:
             )
     finally:
         with database.engine.begin() as connection:
-            connection.execute(
-                text("DELETE FROM debate_turns WHERE id=:id"), {"id": turn_id}
-            )
+            connection.execute(text("DELETE FROM debate_turns WHERE id=:id"), {"id": turn_id})
             connection.execute(
                 text("DELETE FROM debate_participants WHERE id=:id"),
                 {"id": participant_id},
             )
-            connection.execute(
-                text("DELETE FROM debates WHERE id=:id"), {"id": debate_id}
+            connection.execute(text("DELETE FROM debates WHERE id=:id"), {"id": debate_id})
+        database.dispose()
+
+
+def assert_pre_wave3_polish_migration(
+    path: Path,
+    fixture: dict[str, str],
+) -> None:
+    """Prove 0006 is reversible without deleting frozen Agent history."""
+
+    historical_tables = (
+        "agent_versions",
+        "knowledge_snapshots",
+        "snapshot_documents",
+        "knowledge_chunks",
+        "debates",
+        "debate_participants",
+        "debate_turns",
+    )
+    columns_0005 = table_columns(path)
+    before = table_fingerprints(path, columns_by_table=columns_0005)
+
+    run_alembic(path, PRE_WAVE_3_POLISH_REVISION)
+    run_alembic(path, PRE_WAVE_3_POLISH_REVISION)
+    if revision(path) != PRE_WAVE_3_POLISH_REVISION:
+        raise AssertionError("populated database did not reach 0006")
+
+    after_upgrade = table_fingerprints(path, columns_by_table=columns_0005)
+    for table, fingerprint in before.items():
+        if table in {"alembic_version", "voice_mutation_sentinel"}:
+            continue
+        if after_upgrade.get(table) != fingerprint:
+            raise AssertionError(f"pre-existing table changed during 0006: {table}")
+
+    database = Database(database_url(path))
+    try:
+        inspector = inspect(database.engine)
+        agent_columns = {item["name"] for item in inspector.get_columns("agents")}
+        playback_columns = {item["name"] for item in inspector.get_columns("playback_states")}
+        if "metadata_revision" not in agent_columns:
+            raise AssertionError("0006 metadata_revision column is missing")
+        expected_playback_columns = {
+            "replay_turn_ids_json",
+            "pending_action",
+            "pending_ticket_hash",
+            "pending_media_command_id",
+            "audio_duration_ms",
+        }
+        if not expected_playback_columns.issubset(playback_columns):
+            raise AssertionError(
+                "0006 playback columns are missing: "
+                f"{sorted(expected_playback_columns - playback_columns)}"
             )
+        playback_checks = {
+            item["name"] for item in inspector.get_check_constraints("playback_states")
+        }
+        if not {
+            "ck_playback_states_waiting_next_mode",
+            "ck_playback_states_pending_action",
+            "ck_playback_states_audio_duration",
+        }.issubset(playback_checks):
+            raise AssertionError("0006 playback safety checks are missing")
+        if not {"demo_account_bindings", "audit_logs"}.issubset(set(inspector.get_table_names())):
+            raise AssertionError("0006 server-only auth/audit tables are missing")
+        with database.engine.connect() as connection:
+            trigger_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM sqlite_master WHERE type='trigger' "
+                    "AND name LIKE 'ck_agents_metadata_revision_nonnegative_%'"
+                )
+            ).scalar_one()
+        if trigger_count != 2:
+            raise AssertionError("0006 metadata revision guards are missing")
+
+        with database.engine.begin() as connection:
+            agent_id = connection.execute(
+                text("SELECT id FROM agents WHERE name='Migration Agent'")
+            ).scalar_one()
+            rejected = False
+            try:
+                connection.execute(
+                    text("UPDATE agents SET metadata_revision=-1 WHERE id=:id"),
+                    {"id": agent_id},
+                )
+            except IntegrityError:
+                rejected = True
+            if not rejected:
+                raise AssertionError("0006 accepted a negative metadata revision")
+        for statement, message in (
+            (
+                "UPDATE playback_states SET audio_duration_ms=-1 WHERE id=:id",
+                "0006 accepted a negative audio duration",
+            ),
+            (
+                "UPDATE playback_states SET pending_action='invalid' WHERE id=:id",
+                "0006 accepted an invalid pending action",
+            ),
+        ):
+            with database.engine.begin() as connection:
+                rejected = False
+                try:
+                    connection.execute(text(statement), {"id": fixture["playback_id"]})
+                except IntegrityError:
+                    rejected = True
+                if not rejected:
+                    raise AssertionError(message)
+    finally:
+        database.dispose()
+
+    database = Database(database_url(path))
+    try:
+        with database.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE playback_states SET status='waiting_next', "
+                    "mode='replay', current_turn_id=:turn_id, replay_scope='all', "
+                    "replay_index=0, replay_turn_ids_json=:queue, "
+                    "controller_epoch='migration-epoch', "
+                    "controller_owner_connection='migration-owner', cursor_ms=123 "
+                    "WHERE id=:playback_id"
+                ),
+                {
+                    "turn_id": fixture["turn_id"],
+                    "queue": json.dumps([fixture["turn_id"]]),
+                    "playback_id": fixture["playback_id"],
+                },
+            )
+    finally:
+        database.dispose()
+
+    pre_downgrade = table_fingerprints(path)
+    downgrade_alembic(path, WAVE_2_MANUAL_ADVANCE_REVISION)
+    if revision(path) != WAVE_2_MANUAL_ADVANCE_REVISION:
+        raise AssertionError("0006 downgrade did not return to 0005")
+
+    database = Database(database_url(path))
+    try:
+        inspector = inspect(database.engine)
+        if "metadata_revision" in {item["name"] for item in inspector.get_columns("agents")}:
+            raise AssertionError("0006 downgrade retained metadata_revision")
+        downgraded_playback_columns = {
+            item["name"] for item in inspector.get_columns("playback_states")
+        }
+        if expected_playback_columns & downgraded_playback_columns:
+            raise AssertionError("0006 downgrade retained new playback columns")
+        if {"demo_account_bindings", "audit_logs"} & set(inspector.get_table_names()):
+            raise AssertionError("0006 downgrade retained server-only tables")
+        with database.engine.connect() as connection:
+            trigger_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM sqlite_master WHERE type='trigger' "
+                    "AND name LIKE 'ck_agents_metadata_revision_nonnegative_%'"
+                )
+            ).scalar_one()
+            if trigger_count:
+                raise AssertionError("0006 downgrade retained metadata guards")
+            playback = (
+                connection.execute(
+                    text(
+                        "SELECT status, mode, current_turn_id, cursor_ms, "
+                        "controller_epoch, controller_owner_connection, replay_scope, "
+                        "replay_index FROM playback_states WHERE id=:id"
+                    ),
+                    {"id": fixture["playback_id"]},
+                )
+                .mappings()
+                .one()
+            )
+            expected = {
+                "status": "completed",
+                "mode": "live",
+                "current_turn_id": None,
+                "cursor_ms": 0,
+                "controller_epoch": None,
+                "controller_owner_connection": None,
+                "replay_scope": None,
+                "replay_index": None,
+            }
+            if dict(playback) != expected:
+                raise AssertionError(f"0006 downgrade replay mapping drifted: {playback}")
+            if connection.execute(text("PRAGMA foreign_key_check")).all():
+                raise AssertionError("0006 downgrade left foreign-key violations")
+    finally:
+        database.dispose()
+
+    after_downgrade = table_fingerprints(path)
+    for table in historical_tables:
+        if after_downgrade.get(table) != pre_downgrade.get(table):
+            raise AssertionError(f"0006 downgrade changed or deleted frozen history: {table}")
+
+    run_alembic(path, PRE_WAVE_3_POLISH_REVISION)
+    if revision(path) != PRE_WAVE_3_POLISH_REVISION:
+        raise AssertionError("0006 re-upgrade did not restore head")
+    after_reupgrade = table_fingerprints(path)
+    for table in historical_tables:
+        if after_reupgrade.get(table) != pre_downgrade.get(table):
+            raise AssertionError(f"0006 re-upgrade changed or deleted frozen history: {table}")
+    database = Database(database_url(path))
+    try:
+        with database.engine.connect() as connection:
+            if connection.execute(text("PRAGMA foreign_key_check")).all():
+                raise AssertionError("0006 re-upgrade left foreign-key violations")
+    finally:
         database.dispose()
 
 
@@ -1226,9 +1380,7 @@ def main() -> None:
         fresh = root / "fresh.sqlite3"
         run_alembic(fresh, WAVE_2_REVISION)
         if revision(fresh) != WAVE_2_REVISION:
-            raise AssertionError(
-                "fresh database did not reach 0004 before manual-advance delta"
-            )
+            raise AssertionError("fresh database did not reach 0004 before manual-advance delta")
         run_alembic(fresh, WAVE_2_REVISION)
         assert_schema(fresh)
         run_alembic(fresh, WAVE_2_MANUAL_ADVANCE_REVISION)
@@ -1261,9 +1413,7 @@ def main() -> None:
         )
         for table in ("jobs", "file_operations"):
             if not pre_migration_columns.get(table):
-                raise AssertionError(
-                    f"Populated fixture is missing {table} before 0004"
-                )
+                raise AssertionError(f"Populated fixture is missing {table} before 0004")
             if before.get(table) is None:
                 raise AssertionError(f"Populated fixture did not fingerprint {table}")
         install_voice_mutation_sentinels(populated)
@@ -1314,9 +1464,11 @@ def main() -> None:
         assert_waiting_next_downgrade_preserves_row(populated, legacy_fixture)
         assert_final_ready_shape_rejects(populated)
         assert_voice_untouched(populated)
+        assert_pre_wave3_polish_migration(populated, legacy_fixture)
     print(
-        "Wave 2 migration passed: fresh/repeat/populated 0001→0004→0005, "
-        "0005 downgrade/re-upgrade, Wave 0/1/voice fingerprints preserved, "
+        "Wave 2/pre-Wave3 migration passed: fresh/repeat/populated "
+        "0001→0004→0005→0006, 0005/0006 downgrade/re-upgrade, "
+        "Wave 0/1/voice/frozen-debate fingerprints preserved, "
         "named schema/check constraints passed, derived next_turn_ready stayed "
         "out of SQLite, voice ledger untouched, and foreign_key_check empty."
     )

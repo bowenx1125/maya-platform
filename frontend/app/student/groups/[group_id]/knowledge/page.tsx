@@ -1,5 +1,5 @@
 import { AppShell } from "../../../../../components/app-shell";
-import { KnowledgeLibrary } from "../../../../../components/agent-workspace";
+import { KnowledgeLibrary } from "../../../../../components/knowledge";
 import { RouteGuard } from "../../../../../components/session-provider";
 
 export default async function KnowledgePage({

@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import Settings, get_settings
@@ -23,8 +24,10 @@ from app.core.errors import (
     request_id_for,
     request_validation_handler,
 )
+from app.core.models import Course
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.events import DebateEventHub
@@ -40,7 +43,7 @@ from app.modules.org.router import router as org_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.providers.factory import tts_provider
-from app.seed import seed_demo_data
+from app.seed import COURSE_ID, seed_demo_data
 
 logger = logging.getLogger("maya.backend")
 
@@ -87,11 +90,29 @@ def create_app(
                 runtime_database.initialize_schema()
             else:
                 runtime_database.upgrade_schema()
+            if runtime_settings.demo_mode:
+                # Parse first, then seed a fresh organization and apply the
+                # complete private-account desired graph in one BEGIN
+                # IMMEDIATE transaction.  Once a catalog has renamed or
+                # disabled identities, skip the historical strict seed and
+                # let the durable account binding remain authoritative.
+                def seed_if_empty(session: Any) -> None:
+                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
+                        seed_demo_data(session)
+
+                bootstrap_demo_accounts(
+                    runtime_database,
+                    runtime_settings,
+                    seed_if_empty,
+                )
+            else:
+                with runtime_database.session() as session:
+                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
+                        seed_demo_data(session)
             with runtime_database.session() as session:
                 recover_startup(session, runtime_settings.resolved_data_root)
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
                 await playback_service.recover_startup(session)
-                seed_demo_data(session)
         try:
             yield
         finally:
@@ -100,7 +121,7 @@ def create_app(
 
     app = FastAPI(
         title="Maya Teaching Platform API",
-        version="0.1.0-g0.5",
+        version="0.1.0-g0.7",
         lifespan=lifespan,
     )
     app.state.settings = runtime_settings

@@ -2162,6 +2162,7 @@
       "type": "object",
       "required": [
         "completed_turn_id",
+        "mode",
         "control_version",
         "next_turn_ready"
       ],
@@ -2169,6 +2170,13 @@
         "completed_turn_id": {
           "type": "string",
           "format": "uuid"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "live",
+            "replay"
+          ]
         },
         "control_version": {
           "type": "integer",

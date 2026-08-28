@@ -19,11 +19,8 @@ vi.mock("../components/session-provider", () => ({
   useSession: useSessionMock,
 }));
 
-import {
-  AgentOverview,
-  AgentWorkbench,
-  KnowledgeLibrary,
-} from "../components/agent-workspace";
+import { AgentOverview, AgentWorkbench } from "../components/agent-workspace";
+import { KnowledgeLibrary } from "../components/knowledge";
 import { CreateAgentForm } from "../components/student-workspace";
 
 afterEach(() => {
@@ -39,6 +36,7 @@ function createdAgent(): AgentDetail {
     group_id: "group-id",
     name: "First Agent",
     description: "",
+    metadata_revision: 0,
     status: "active",
     current_draft_version_id: "version-id",
     current_published_version_id: null,
@@ -186,72 +184,54 @@ describe("Wave 1A UI idempotency wiring", () => {
     expect(keys[1]).toBe(keys[0]);
   });
 
-  it("replays archive through the action-specific retry path", async () => {
+  it("replays safe delete through the action-specific retry path", async () => {
     const keys: string[] = [];
     const agent = createdAgent();
-    const archiveAgent = vi.fn(async (...args: unknown[]) => {
+    const deleteAgent = vi.fn(async (...args: unknown[]) => {
       const options = args[1] as { idempotency?: { key: string } } | undefined;
       keys.push(options?.idempotency?.key ?? "missing");
       if (keys.length === 1) throw new TypeError("connection reset");
-      return { ...agent, status: "archived" };
+      return undefined;
     });
     const api = {
       agent: vi.fn().mockResolvedValue(agent),
       versions: vi.fn().mockResolvedValue([]),
-      archiveAgent,
-      unarchiveAgent: vi.fn(),
+      deleteAgent,
     };
     useSessionMock.mockReturnValue({ api });
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<AgentOverview agentId="agent-id" />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Archive" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Delete Agent" })).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Agent" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "connection reset",
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(archiveAgent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(deleteAgent).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
     expect(window.confirm).toHaveBeenCalledTimes(1);
   });
 
-  it("replays unarchive through the action-specific retry path", async () => {
-    const keys: string[] = [];
+  it("keeps legacy archived Agents discoverable for delete without archive actions", async () => {
     const agent = archivedAgent();
-    const unarchiveAgent = vi.fn(async (...args: unknown[]) => {
-      const options = args[1] as { idempotency?: { key: string } } | undefined;
-      keys.push(options?.idempotency?.key ?? "missing");
-      if (keys.length === 1) throw new TypeError("connection reset");
-      return { ...agent, status: "active" };
-    });
     const api = {
       agent: vi.fn().mockResolvedValue(agent),
       versions: vi.fn().mockResolvedValue([]),
-      archiveAgent: vi.fn(),
-      unarchiveAgent,
+      deleteAgent: vi.fn().mockResolvedValue(undefined),
     };
     useSessionMock.mockReturnValue({ api });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<AgentOverview agentId="agent-id" />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Unarchive" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Delete Agent" })).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(unarchiveAgent).toHaveBeenCalledTimes(2));
-    expect(keys[1]).toBe(keys[0]);
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unarchive" })).toBeNull();
   });
 
   it("replays next-version creation through its action-specific retry", async () => {

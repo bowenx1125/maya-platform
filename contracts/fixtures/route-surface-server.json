@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Maya Teaching Platform API",
-    "version": "0.1.0-g0.6",
+    "version": "0.1.0-g0.7",
     "description": "Demo v0.1 platform contract. Provider names, model names, external voice IDs, API keys, absolute file paths, and prepared turn text are never public fields."
   },
   "security": [
@@ -120,8 +120,9 @@
         "tags": [
           "Auth"
         ],
+        "security": [],
         "operationId": "listDemoIdentities",
-        "description": "Requires an existing session and DEMO_MODE=true; never returns passwords.",
+        "description": "Anonymous safe catalog available only when DEMO_MODE and DEMO_QUICK_LOGIN are enabled; never returns passwords.",
         "responses": {
           "200": {
             "description": "Safe identity options.",
@@ -157,6 +158,44 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/quick-login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "operationId": "quickLogin",
+        "description": "Passwordless Demo identity selection; rotates any existing Session and CSRF token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemoQuickLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Passwordless Demo session created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -404,8 +443,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file",
-                  "target_agent_version_id"
+                  "file"
                 ],
                 "properties": {
                   "file": {
@@ -426,7 +464,7 @@
         },
         "responses": {
           "201": {
-            "description": "Document stored and indexing job created; enabled only on target draft.",
+            "description": "Document stored and indexed; a target draft is updated only when explicitly supplied.",
             "content": {
               "application/json": {
                 "schema": {
@@ -470,6 +508,74 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-documents/{document_id}/replace": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DocumentId"
+        },
+        {
+          "$ref": "#/components/parameters/IdempotencyKey"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Knowledge"
+        ],
+        "operationId": "replaceKnowledgeDocument",
+        "description": "Creates an immutable copy-on-write replacement and atomically updates every current draft reference.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "expected_content_hash",
+                  "expected_index_revision"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "expected_content_hash": {
+                    "type": "string"
+                  },
+                  "expected_index_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Immutable replacement created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -701,34 +807,34 @@
             "$ref": "#/components/responses/Error"
           }
         }
-      }
-    },
-    "/api/v1/agents/{agent_id}/archive": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/AgentId"
-        },
-        {
-          "$ref": "#/components/parameters/IdempotencyKey"
-        }
-      ],
-      "post": {
+      },
+      "patch": {
         "tags": [
           "Agents"
         ],
-        "operationId": "archiveAgent",
+        "operationId": "updateAgentMetadata",
         "parameters": [
           {
             "$ref": "#/components/parameters/CsrfToken"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentMetadataRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Agent archived; history retained.",
+            "description": "Mutable Agent metadata updated.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AgentSummary"
+                  "$ref": "#/components/schemas/AgentDetail"
                 }
               }
             }
@@ -740,39 +846,31 @@
             "$ref": "#/components/responses/Error"
           }
         }
-      }
-    },
-    "/api/v1/agents/{agent_id}/unarchive": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/AgentId"
-        },
-        {
-          "$ref": "#/components/parameters/IdempotencyKey"
-        }
-      ],
-      "post": {
+      },
+      "delete": {
         "tags": [
           "Agents"
         ],
-        "operationId": "unarchiveAgent",
+        "operationId": "deleteAgent",
         "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
           {
             "$ref": "#/components/parameters/CsrfToken"
           }
         ],
         "responses": {
-          "200": {
-            "description": "Agent returned to active state.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentSummary"
-                }
-              }
-            }
+          "204": {
+            "description": "Eligible Agent and its draft state deleted."
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -906,6 +1004,35 @@
             "$ref": "#/components/responses/Error"
           },
           "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/agent-versions/{version_id}/agent-md/download": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VersionId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "downloadAgentMd",
+        "description": "Downloads immutable AGENT.md from a published or superseded visible version.",
+        "responses": {
+          "200": {
+            "description": "Published immutable AGENT.md.",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -1782,105 +1909,6 @@
         }
       }
     },
-    "/api/v1/debates/{debate_id}/pause": {
-      "post": {
-        "tags": [
-          "Debates"
-        ],
-        "operationId": "pauseDebate",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/CsrfToken"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ControlCommand"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PlaybackState"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/resume": {
-      "post": {
-        "tags": [
-          "Debates"
-        ],
-        "operationId": "resumeDebate",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/CsrfToken"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ControlCommand"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PlaybackState"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/skip": {
-      "post": {
-        "tags": [
-          "Debates"
-        ],
-        "operationId": "skipTurnPlayback",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/CsrfToken"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ControlCommand"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PlaybackState"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
     "/api/v1/debates/{debate_id}/next": {
       "post": {
         "tags": [
@@ -1924,46 +1952,6 @@
         }
       }
     },
-    "/api/v1/debates/{debate_id}/stop": {
-      "post": {
-        "tags": [
-          "Debates"
-        ],
-        "operationId": "stopDebate",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/CsrfToken"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ControlCommand"
-        },
-        "responses": {
-          "200": {
-            "description": "Debate irreversibly stopped.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DebateDetail"
-                }
-              }
-            }
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
     "/api/v1/debates/{debate_id}/replay": {
       "post": {
         "tags": [
@@ -1973,42 +1961,6 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/CsrfToken"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ControlCommand"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PlaybackState"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/turns/{turn_id}/replay": {
-      "post": {
-        "tags": [
-          "Debates"
-        ],
-        "operationId": "replayDebateTurn",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/TurnId"
           },
           {
             "$ref": "#/components/parameters/CsrfToken"
@@ -2515,6 +2467,17 @@
           }
         }
       },
+      "DemoQuickLoginRequest": {
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
       "AuthSession": {
         "type": "object",
         "required": [
@@ -2717,6 +2680,8 @@
           "group_id",
           "source_filename",
           "char_count",
+          "content_hash",
+          "index_revision",
           "index_status",
           "workspace_state",
           "created_at"
@@ -2734,6 +2699,16 @@
           "char_count": {
             "type": "integer",
             "minimum": 1
+          },
+          "content_hash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "index_revision": {
+            "type": "integer",
+            "minimum": 0
           },
           "index_status": {
             "type": "string",
@@ -2826,15 +2801,21 @@
       "KnowledgeDocumentMutation": {
         "type": "object",
         "required": [
-          "document",
-          "agent_version"
+          "document"
         ],
         "properties": {
           "document": {
             "$ref": "#/components/schemas/KnowledgeDocument"
           },
           "agent_version": {
-            "$ref": "#/components/schemas/AgentVersion"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AgentVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -2844,6 +2825,7 @@
           "id",
           "group_id",
           "name",
+          "metadata_revision",
           "status"
         ],
         "properties": {
@@ -2858,6 +2840,10 @@
           },
           "description": {
             "type": "string"
+          },
+          "metadata_revision": {
+            "type": "integer",
+            "minimum": 0
           },
           "status": {
             "type": "string",
@@ -3020,6 +3006,25 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "UpdateAgentMetadataRequest": {
+        "type": "object",
+        "required": [
+          "expected_metadata_revision"
+        ],
+        "properties": {
+          "expected_metadata_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": ""
           }
         }
       },

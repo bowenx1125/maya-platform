@@ -37,8 +37,14 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
         "/auth/demo-identities": (
             "get",
             "listDemoIdentities",
-            [{"sessionCookie": []}],
+            [],
             {"200", "404"},
+        ),
+        "/auth/quick-login": (
+            "post",
+            "quickLogin",
+            [],
+            {"200", "404", "503"},
         ),
         "/auth/logout": ("post", "logout", [{"sessionCookie": []}], {"204"}),
         "/courses": ("get", "listCourses", [{"sessionCookie": []}], {"200"}),

@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 
 import {
+  PlatformApiError,
   isAmbiguousMutationFailure,
   isConflict,
+  type IdempotencyHandle,
+  type PlatformApi,
   type AgentDetail,
   type AgentVersion,
   type AvatarTemplate,
@@ -36,6 +39,32 @@ import {
   StatusBadge,
 } from "./ui";
 
+type AgentDetailWithMetadata = AgentDetail & {
+  metadata_revision?: number;
+};
+
+type AgentMetadataApi = PlatformApi & {
+  updateAgentMetadata: (
+    agentId: string,
+    body: {
+      expected_metadata_revision: number;
+      description: string | null;
+    },
+  ) => Promise<AgentDetail>;
+  deleteAgent: (
+    agentId: string,
+    options?: { idempotency?: IdempotencyHandle },
+  ) => Promise<unknown>;
+};
+
+function isMetadataRevisionConflict(error: unknown): boolean {
+  return (
+    error instanceof PlatformApiError &&
+    error.status === 409 &&
+    error.code === "stale_metadata_revision"
+  );
+}
+
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
   const { api } = useSession();
@@ -45,13 +74,17 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionSaving, setDescriptionSaving] = useState(false);
+  const [metadataConflict, setMetadataConflict] = useState(false);
   const mutationStore = useIdempotencyStore();
   const [retryAction, setRetryAction] = useState<
-    "archive" | "nextVersion" | null
+    "delete" | "nextVersion" | null
   >(null);
-  const archiveIntent = `agent-archive:${agentId}`;
-  const unarchiveIntent = `agent-unarchive:${agentId}`;
+  const deleteIntent = `agent-delete:${agentId}`;
   const nextVersionIntent = `agent-next-version:${agentId}`;
+  const metadataApi = api as AgentMetadataApi;
   // Recovery callbacks can render while an action error is present, before
   // the normal loaded-view narrowing below.
   const currentAgent = agent as AgentDetail;
@@ -66,6 +99,9 @@ export function AgentOverview({ agentId }: { agentId: string }) {
       ]);
       setAgent(nextAgent);
       setVersions(nextVersions);
+      setDescriptionDraft(nextAgent.description ?? "");
+      setEditingDescription(false);
+      setMetadataConflict(false);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -85,8 +121,8 @@ export function AgentOverview({ agentId }: { agentId: string }) {
       <ErrorNotice
         error={error ?? new Error(t("agentNotFound"))}
         onRetry={
-          retryAction === "archive"
-            ? () => void archive(true)
+          retryAction === "delete"
+            ? () => void deleteAgent(true)
             : retryAction === "nextVersion"
               ? () => void createNextVersion()
               : () => void load()
@@ -101,42 +137,45 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     versions.find(
       (version) => version.id === agent.current_published_version_id,
     ) ?? versions.find((version) => version.state === "published");
+  const descriptionDirty =
+    descriptionDraft !== (currentAgent.description ?? "");
+  const canHardDelete =
+    !currentAgent.current_published_version_id &&
+    versions.every(
+      (version) =>
+        version.state === "draft" && version.knowledge_snapshot_id == null,
+    );
 
-  function abandonArchiveIntents() {
-    mutationStore.abandon(archiveIntent);
-    mutationStore.abandon(unarchiveIntent);
+  function abandonDeleteIntent() {
+    mutationStore.abandon(deleteIntent);
   }
 
-  async function archive(retry = false) {
-    const message =
-      currentAgent.status === "archived"
-        ? t("unarchiveConfirm")
-        : t("archiveConfirm");
-    if (!retry && !window.confirm(message)) return;
-    const intent =
-      currentAgent.status === "archived" ? unarchiveIntent : archiveIntent;
+  async function deleteAgent(retry = false) {
+    if (
+      !retry &&
+      descriptionDirty &&
+      !window.confirm(t("discardDescriptionConfirm"))
+    )
+      return;
+    if (!retry && !window.confirm(t("deleteAgentConfirm"))) return;
     if (!retry) {
-      mutationStore.abandon(
-        currentAgent.status === "archived" ? archiveIntent : unarchiveIntent,
-      );
+      abandonDeleteIntent();
       mutationStore.abandon(nextVersionIntent);
     }
     setBusy(true);
     setError(null);
     setRetryAction(null);
-    const handle = mutationStore.handleFor(intent);
+    setMetadataConflict(false);
+    const handle = mutationStore.handleFor(deleteIntent);
     try {
-      const next =
-        currentAgent.status === "archived"
-          ? await api.unarchiveAgent(currentAgent.id, { idempotency: handle })
-          : await api.archiveAgent(currentAgent.id, { idempotency: handle });
-      mutationStore.finish(intent, handle);
-      setAgent({ ...currentAgent, ...next });
+      await metadataApi.deleteAgent(currentAgent.id, { idempotency: handle });
+      mutationStore.finish(deleteIntent, handle);
+      router.replace(`/student/groups/${currentAgent.group_id}`);
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) {
-        setRetryAction("archive");
+        setRetryAction("delete");
       } else {
-        mutationStore.abandon(intent, handle);
+        mutationStore.abandon(deleteIntent, handle);
       }
       setError(cause);
     } finally {
@@ -145,7 +184,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   }
 
   async function createNextVersion() {
-    abandonArchiveIntents();
+    abandonDeleteIntent();
     const handle = mutationStore.handleFor(nextVersionIntent);
     setBusy(true);
     setError(null);
@@ -168,22 +207,83 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     }
   }
 
+  async function saveDescription() {
+    if (!descriptionDirty) {
+      setEditingDescription(false);
+      return;
+    }
+    setDescriptionSaving(true);
+    setError(null);
+    setRetryAction(null);
+    setMetadataConflict(false);
+    const localDraft = descriptionDraft;
+    try {
+      const next = await metadataApi.updateAgentMetadata(currentAgent.id, {
+        expected_metadata_revision:
+          (currentAgent as AgentDetailWithMetadata).metadata_revision ?? 0,
+        description: descriptionDraft,
+      });
+      setAgent(next);
+      setDescriptionDraft(next.description ?? "");
+      setEditingDescription(false);
+    } catch (cause) {
+      if (isMetadataRevisionConflict(cause)) {
+        try {
+          const authoritative = await metadataApi.agent(currentAgent.id);
+          setAgent(authoritative);
+          setDescriptionDraft(localDraft);
+          setEditingDescription(true);
+          setMetadataConflict(true);
+          setError(null);
+        } catch (refreshError) {
+          setError(refreshError);
+        }
+      } else {
+        setError(cause);
+      }
+    } finally {
+      setDescriptionSaving(false);
+    }
+  }
+
+  function cancelDescription() {
+    setDescriptionDraft(currentAgent.description ?? "");
+    setEditingDescription(false);
+    setMetadataConflict(false);
+    setError(null);
+  }
+
+  function returnToGroup(event: MouseEvent<HTMLAnchorElement>) {
+    if (descriptionDirty && !window.confirm(t("discardDescriptionConfirm"))) {
+      event.preventDefault();
+    }
+  }
+
   return (
     <>
       <PageIntro
         eyebrow={t("agentWorkspace")}
         title={agent.name}
-        description={agent.description || t("studentAgentLede")}
+        description={agent.description}
         action={
           <div className="button-row">
-            <button
+            <Link
               className="secondary-action"
-              type="button"
-              disabled={busy}
-              onClick={() => void archive()}
+              href={`/student/groups/${agent.group_id}`}
+              onClick={returnToGroup}
             >
-              {agent.status === "archived" ? t("unarchive") : t("archive")}
-            </button>
+              {t("returnWorkspace")}
+            </Link>
+            {canHardDelete ? (
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={busy || descriptionSaving}
+                onClick={() => void deleteAgent()}
+              >
+                {t("deleteAgent")}
+              </button>
+            ) : null}
             {draft ? (
               <Link
                 className="primary-action"
@@ -208,14 +308,65 @@ export function AgentOverview({ agentId }: { agentId: string }) {
         <ErrorNotice
           error={error}
           onRetry={
-            retryAction === "archive"
-              ? () => void archive(true)
-              : retryAction === "nextVersion"
-                ? () => void createNextVersion()
-                : () => void load()
+            isMetadataRevisionConflict(error)
+              ? undefined
+              : retryAction === "delete"
+                ? () => void deleteAgent(true)
+                : retryAction === "nextVersion"
+                  ? () => void createNextVersion()
+                  : () => void load()
           }
         />
       ) : null}
+      {metadataConflict ? (
+        <div className="notice notice-warning" role="alert">
+          {t("metadataConflict")}
+        </div>
+      ) : null}
+      <SectionCard title={t("description")}>
+        {editingDescription ? (
+          <div className="stack-form">
+            <label>
+              <span>{t("shortDescription")}</span>
+              <textarea
+                aria-label={t("description")}
+                value={descriptionDraft}
+                rows={4}
+                disabled={descriptionSaving}
+                onChange={(event) => setDescriptionDraft(event.target.value)}
+              />
+            </label>
+            <div className="button-row">
+              <button
+                className="primary-action"
+                type="button"
+                disabled={descriptionSaving || !descriptionDirty}
+                onClick={() => void saveDescription()}
+              >
+                {descriptionSaving ? t("saving") : t("saveDescription")}
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={descriptionSaving}
+                onClick={cancelDescription}
+              >
+                {t("cancel")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="secondary-action description-edit-trigger"
+            type="button"
+            aria-label={t("editDescription")}
+            onClick={() => setEditingDescription(true)}
+          >
+            <span>{agent.description}</span>
+            <span aria-hidden="true">✎</span>
+          </button>
+        )}
+      </SectionCard>
       <div className="workspace-grid">
         <SectionCard
           title={t("currentRelease")}
@@ -1070,6 +1221,23 @@ function ReadOnlyVersion({
 }) {
   const t = useT();
   const { locale } = useLocale();
+  const { api } = useSession();
+  const [agentMdBusy, setAgentMdBusy] = useState(false);
+  const [agentMdError, setAgentMdError] = useState<unknown>(null);
+
+  async function downloadAgentMd() {
+    setAgentMdBusy(true);
+    setAgentMdError(null);
+    try {
+      const downloaded = await api.downloadAgentMd(version.id);
+      downloadText(downloaded.content, downloaded.filename);
+    } catch (cause) {
+      setAgentMdError(cause);
+    } finally {
+      setAgentMdBusy(false);
+    }
+  }
+
   return (
     <>
       <PageIntro
@@ -1091,6 +1259,15 @@ function ReadOnlyVersion({
             <pre className="read-only-markdown">
               {version.agent_md || t("noPrompt")}
             </pre>
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={agentMdBusy}
+              onClick={() => void downloadAgentMd()}
+            >
+              {t("download")} AGENT.md
+            </button>
+            {agentMdError ? <ErrorNotice error={agentMdError} /> : null}
           </SectionCard>
           <SectionCard title={t("enabledEvidence")}>
             <div className="document-list">
@@ -1124,10 +1301,7 @@ function ReadOnlyVersion({
             </div>
           </SectionCard>
           {version.knowledge_snapshot_id ? (
-            <StudentSnapshot
-              snapshotId={version.knowledge_snapshot_id}
-              agentName={agent.name}
-            />
+            <StudentSnapshot snapshotId={version.knowledge_snapshot_id} />
           ) : null}
         </aside>
       </div>
@@ -1176,13 +1350,7 @@ export function StudentPublishedVersion({ versionId }: { versionId: string }) {
   return <ReadOnlyVersion version={version} agent={agent} />;
 }
 
-function StudentSnapshot({
-  snapshotId,
-  agentName,
-}: {
-  snapshotId: string;
-  agentName: string;
-}) {
+function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
   const t = useT();
   const { api } = useSession();
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
@@ -1218,9 +1386,9 @@ function StudentSnapshot({
     setBusy(true);
     setError(null);
     try {
-      const text = await api.downloadSnapshot(snapshotId);
-      setSnapshotText(text);
-      downloadText(text, `${agentName}-${snapshotId.slice(0, 8)}-RAG.md`);
+      const downloaded = await api.downloadSnapshot(snapshotId);
+      setSnapshotText(downloaded.content);
+      downloadText(downloaded.content, downloaded.filename);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -1228,18 +1396,15 @@ function StudentSnapshot({
     }
   }
 
-  async function downloadDocument(
-    snapshotDocumentId: string,
-    filename: string,
-  ) {
+  async function downloadDocument(snapshotDocumentId: string) {
     setBusy(true);
     setError(null);
     try {
-      const text = await api.downloadSnapshotDocument(
+      const downloaded = await api.downloadSnapshotDocument(
         snapshotId,
         snapshotDocumentId,
       );
-      downloadText(text, filename);
+      downloadText(downloaded.content, downloaded.filename);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -1295,9 +1460,7 @@ function StudentSnapshot({
                   className="inline-button"
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    void downloadDocument(document.id, document.source_filename)
-                  }
+                  onClick={() => void downloadDocument(document.id)}
                 >
                   {t("download")}
                 </button>
@@ -1312,207 +1475,6 @@ function StudentSnapshot({
         <LoadingCard label={t("loadingSnapshot")} />
       )}
     </SectionCard>
-  );
-}
-
-export function KnowledgeLibrary({ groupId }: { groupId: string }) {
-  const t = useT();
-  const { api } = useSession();
-  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<unknown>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const mutationStore = useIdempotencyStore();
-  const [retryAction, setRetryAction] = useState<{
-    kind: "reindex" | "hide";
-    documentId: string;
-  } | null>(null);
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setDocuments(await api.knowledge(groupId));
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, groupId]);
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void load();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
-
-  if (loading) return <LoadingCard />;
-  if (error)
-    return (
-      <ErrorNotice
-        error={error}
-        onRetry={
-          retryAction?.kind === "reindex"
-            ? () => {
-                const document = documents.find(
-                  (item) => item.id === retryAction.documentId,
-                );
-                if (document) void reindex(document);
-              }
-            : retryAction?.kind === "hide"
-              ? () => {
-                  const document = documents.find(
-                    (item) => item.id === retryAction.documentId,
-                  );
-                  if (document) void hide(document, true);
-                }
-              : () => void load()
-        }
-      />
-    );
-
-  async function download(document: KnowledgeDocument) {
-    setBusyId(document.id);
-    try {
-      const content = await api.downloadKnowledge(document.id);
-      downloadText(content, document.source_filename);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusyId(null);
-    }
-  }
-  async function reindex(document: KnowledgeDocument) {
-    const intent = `knowledge-reindex:${document.id}`;
-    mutationStore.abandon(`knowledge-hide:${document.id}`);
-    setBusyId(document.id);
-    setError(null);
-    setRetryAction(null);
-    const handle = mutationStore.handleFor(intent);
-    let mutationCompleted = false;
-    try {
-      await api.reindex(document.id, { idempotency: handle });
-      mutationStore.finish(intent, handle);
-      mutationCompleted = true;
-      await load();
-    } catch (cause) {
-      if (mutationCompleted) {
-        // A refresh failure after the mutation succeeds is read-only state;
-        // never replay the completed reindex request from that error.
-        setRetryAction(null);
-      } else if (isAmbiguousMutationFailure(cause)) {
-        setRetryAction({ kind: "reindex", documentId: document.id });
-      } else {
-        mutationStore.abandon(intent, handle);
-      }
-      setError(cause);
-    } finally {
-      setBusyId(null);
-    }
-  }
-  async function hide(document: KnowledgeDocument, retry = false) {
-    if (
-      !retry &&
-      !window.confirm(t("hideConfirm", { filename: document.source_filename }))
-    )
-      return;
-    const intent = `knowledge-hide:${document.id}`;
-    if (!retry) mutationStore.abandon(`knowledge-reindex:${document.id}`);
-    setBusyId(document.id);
-    setError(null);
-    setRetryAction(null);
-    const handle = mutationStore.handleFor(intent);
-    try {
-      const next = await api.hideKnowledge(document.id, {
-        idempotency: handle,
-      });
-      mutationStore.finish(intent, handle);
-      setDocuments((current) =>
-        current.map((item) => (item.id === next.id ? next : item)),
-      );
-    } catch (cause) {
-      if (isAmbiguousMutationFailure(cause)) {
-        setRetryAction({ kind: "hide", documentId: document.id });
-      } else {
-        mutationStore.abandon(intent, handle);
-      }
-      setError(cause);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <>
-      <PageIntro
-        eyebrow={t("knowledgePage")}
-        title={t("knowledgePageTitle")}
-        description={t("knowledgePageLede")}
-      />
-      <SectionCard
-        title={`${documents.length} ${t("fileCount")}`}
-        description={t("draftEnableLede")}
-      >
-        {documents.length === 0 ? (
-          <EmptyCard title={t("noUpload")} />
-        ) : (
-          <div className="document-list">
-            {documents.map((document) => (
-              <div className="document-row library-row" key={document.id}>
-                <span className="document-main">
-                  <strong>{document.source_filename}</strong>
-                  <small>
-                    {document.char_count.toLocaleString()} {t("characters")} ·{" "}
-                    {document.workspace_state === "hidden"
-                      ? t("hidden")
-                      : t("active")}
-                  </small>
-                </span>
-                <StatusBadge
-                  status={document.index_status}
-                  tone={
-                    document.index_status === "ready"
-                      ? "good"
-                      : document.index_status === "failed"
-                        ? "bad"
-                        : "warn"
-                  }
-                />
-                <div className="row-actions">
-                  <button
-                    className="inline-button"
-                    type="button"
-                    disabled={busyId === document.id}
-                    onClick={() => void download(document)}
-                  >
-                    {t("download")}
-                  </button>
-                  {document.index_status === "failed" ? (
-                    <button
-                      className="inline-button"
-                      type="button"
-                      disabled={busyId === document.id}
-                      onClick={() => void reindex(document)}
-                    >
-                      {t("reindex")}
-                    </button>
-                  ) : null}
-                  {document.workspace_state === "active" ? (
-                    <button
-                      className="inline-button danger-button"
-                      type="button"
-                      disabled={busyId === document.id}
-                      onClick={() => void hide(document)}
-                    >
-                      {t("hide")}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-    </>
   );
 }
 

@@ -108,6 +108,7 @@ class PlaybackWaitingNextPayload(ClosedModel):
     the teacher commits the REST Next CAS and the browser acknowledges media.
     """
 
+    mode: PlaybackMode
     completed_turn_id: UUID
     control_version: int = Field(ge=0)
     next_turn_ready: bool

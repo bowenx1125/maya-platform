@@ -7,6 +7,7 @@ import type { FormEvent } from "react";
 
 import {
   isAmbiguousMutationFailure,
+  type AgentDetail,
   type AgentSummary,
   type Course,
   type GroupDetail,
@@ -32,6 +33,28 @@ type GroupOverview = {
   documents: KnowledgeDocument[];
 };
 
+type AgentWithMetadata = AgentSummary & {
+  metadata_revision?: number;
+};
+
+type AgentMetadataApi = PlatformApi & {
+  updateAgentMetadata: (
+    agentId: string,
+    body: {
+      expected_metadata_revision: number;
+      description: string | null;
+    },
+  ) => Promise<AgentDetail>;
+};
+
+function isMetadataRevisionConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { status?: unknown; code?: unknown };
+  return (
+    candidate.status === 409 && candidate.code === "stale_metadata_revision"
+  );
+}
+
 async function loadGroups(
   api: PlatformApi,
   groupIds: string[],
@@ -40,7 +63,11 @@ async function loadGroups(
     groupIds.map(async (groupId) => {
       const [group, agents, documents] = await Promise.all([
         api.group(groupId),
-        api.agents(groupId),
+        // Keep legacy archived rows discoverable so an old, never-published
+        // Agent still has an explicit hard-delete path after archive UI is
+        // removed.  Historical rows remain visibly inactive and are rejected
+        // by the server's history check.
+        api.agents(groupId, true),
         api.knowledge(groupId),
       ]);
       return { group, agents, documents };
@@ -193,7 +220,7 @@ function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
           >
             <span>
               <strong>{agent.name}</strong>
-              <small>{agent.description || t("noDescription")}</small>
+              <small>{agent.description}</small>
             </span>
             <StatusBadge status={agent.status} />
           </Link>
@@ -213,7 +240,6 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
-  const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 
@@ -223,7 +249,9 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     try {
       const [nextGroup, nextAgents, nextDocuments] = await Promise.all([
         api.group(groupId),
-        api.agents(groupId, showArchived),
+        // Archived rows are legacy data only; they remain discoverable for
+        // explicit safe deletion and are not offered as archive actions.
+        api.agents(groupId, true),
         api.knowledge(groupId),
       ]);
       setGroup(nextGroup);
@@ -234,7 +262,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [api, groupId, showArchived]);
+  }, [api, groupId]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -275,20 +303,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
         }
       />
       <div className="workspace-grid">
-        <SectionCard
-          title={t("agents")}
-          description={t("agentsLede")}
-          action={
-            <label className="toggle-label">
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(event) => setShowArchived(event.target.checked)}
-              />{" "}
-              {t("showArchived")}
-            </label>
-          }
-        >
+        <SectionCard title={t("agents")} description={t("agentsLede")}>
           {agents.length === 0 ? (
             <EmptyCard
               title={t("noAgents")}
@@ -304,31 +319,17 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           ) : (
             <div className="agent-list">
               {agents.map((agent) => (
-                <Link
-                  className="agent-row"
-                  href={`/student/agents/${agent.id}`}
-                  key={agent.id}
-                >
-                  <div className="avatar-orb" aria-hidden="true">
-                    {agent.name.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="agent-row-copy">
-                    <strong>{agent.name}</strong>
-                    <span>{agent.description || t("defineIdentity")}</span>
-                    <div className="chip-row">
-                      <StatusBadge status={agent.status} />
-                      {agent.current_draft_version_id ? (
-                        <StatusBadge status="draft" />
-                      ) : null}
-                      {agent.current_published_version_id ? (
-                        <StatusBadge status="published" />
-                      ) : null}
-                    </div>
-                  </div>
-                  <span className="row-arrow" aria-hidden="true">
-                    →
-                  </span>
-                </Link>
+                <GroupAgentRow
+                  agent={agent}
+                  key={`${agent.id}:${(agent as AgentWithMetadata).metadata_revision ?? 0}:${agent.description ?? ""}`}
+                  onUpdated={(updated) =>
+                    setAgents((current) =>
+                      current.map((item) =>
+                        item.id === updated.id ? updated : item,
+                      ),
+                    )
+                  }
+                />
               ))}
             </div>
           )}
@@ -378,6 +379,200 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
         </div>
       </SectionCard>
     </>
+  );
+}
+
+function GroupAgentRow({
+  agent,
+  onUpdated,
+}: {
+  agent: AgentSummary;
+  onUpdated: (agent: AgentSummary) => void;
+}) {
+  const t = useT();
+  const { api } = useSession();
+  const metadataApi = api as AgentMetadataApi;
+  const [currentAgent, setCurrentAgent] = useState<AgentWithMetadata>(
+    agent as AgentWithMetadata,
+  );
+  const [descriptionDraft, setDescriptionDraft] = useState(
+    agent.description ?? "",
+  );
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const dirty = descriptionDraft !== (currentAgent.description ?? "");
+
+  async function refreshAfterConflict(localDraft: string) {
+    try {
+      const authoritative = await metadataApi.agent(currentAgent.id);
+      setCurrentAgent(authoritative as AgentWithMetadata);
+      setDescriptionDraft(localDraft);
+      setEditing(true);
+      setConflict(true);
+      setError(null);
+    } catch (refreshError) {
+      setError(refreshError);
+    }
+  }
+
+  async function saveDescription() {
+    if (!dirty) {
+      setEditing(false);
+      return;
+    }
+    const localDraft = descriptionDraft;
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await metadataApi.updateAgentMetadata(currentAgent.id, {
+        expected_metadata_revision: currentAgent.metadata_revision ?? 0,
+        description: localDraft,
+      });
+      const nextAgent = next as AgentWithMetadata;
+      setCurrentAgent(nextAgent);
+      setDescriptionDraft(nextAgent.description ?? "");
+      setEditing(false);
+      setConflict(false);
+      onUpdated(nextAgent);
+    } catch (cause) {
+      if (isMetadataRevisionConflict(cause)) {
+        await refreshAfterConflict(localDraft);
+      } else {
+        setError(cause);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelDescription() {
+    setDescriptionDraft(currentAgent.description ?? "");
+    setEditing(false);
+    setConflict(false);
+    setError(null);
+  }
+
+  if (editing) {
+    return (
+      <div
+        className="agent-row"
+        data-agent-row={currentAgent.id}
+        style={{ flexWrap: "wrap" }}
+      >
+        <div className="avatar-orb" aria-hidden="true">
+          {currentAgent.name.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="agent-row-copy">
+          <Link
+            href={`/student/agents/${currentAgent.id}`}
+            className="text-link"
+          >
+            {currentAgent.name}
+          </Link>
+          <label>
+            <span className="section-label">{t("description")}</span>
+            <textarea
+              aria-label={t("description")}
+              rows={2}
+              value={descriptionDraft}
+              disabled={saving}
+              onChange={(event) => setDescriptionDraft(event.target.value)}
+            />
+          </label>
+          {conflict ? (
+            <div className="notice notice-warning" role="alert">
+              <strong>{t("metadataConflict")}</strong>
+              <span aria-label={t("currentMetadata")}>
+                {t("currentMetadata")}: {currentAgent.description}
+              </span>
+            </div>
+          ) : null}
+          {error ? <ErrorNotice error={error} /> : null}
+          <div className="button-row">
+            <button
+              className="primary-action"
+              type="button"
+              disabled={saving || !dirty}
+              onClick={() => void saveDescription()}
+            >
+              {saving ? t("saving") : t("saveDescription")}
+            </button>
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={saving}
+              onClick={cancelDescription}
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="agent-row"
+      data-agent-row={currentAgent.id}
+      style={{ flexWrap: "wrap" }}
+    >
+      <Link
+        href={`/student/agents/${currentAgent.id}`}
+        className="agent-row-link"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          minWidth: 0,
+          flex: "1 1 12rem",
+          textDecoration: "none",
+        }}
+      >
+        <div className="avatar-orb" aria-hidden="true">
+          {currentAgent.name.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="agent-row-copy">
+          <strong>{currentAgent.name}</strong>
+          <div className="chip-row">
+            <StatusBadge status={currentAgent.status} />
+            {currentAgent.current_draft_version_id ? (
+              <StatusBadge status="draft" />
+            ) : null}
+            {currentAgent.current_published_version_id ? (
+              <StatusBadge status="published" />
+            ) : null}
+          </div>
+        </div>
+        <span className="row-arrow" aria-hidden="true">
+          →
+        </span>
+      </Link>
+      <button
+        className="secondary-action description-edit-trigger"
+        type="button"
+        aria-label={t("editDescription")}
+        style={{
+          flex: "1 1 14rem",
+          minWidth: "9rem",
+          justifyContent: "space-between",
+          overflowWrap: "anywhere",
+          textAlign: "left",
+          whiteSpace: "normal",
+        }}
+        onClick={() => {
+          setDescriptionDraft(currentAgent.description ?? "");
+          setEditing(true);
+          setError(null);
+        }}
+      >
+        <span>{currentAgent.description}</span>
+        <span aria-hidden="true">✎</span>
+      </button>
+    </div>
   );
 }
 

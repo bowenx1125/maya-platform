@@ -132,6 +132,7 @@ describe("G2 idempotency key lifecycle", () => {
       name: "Agent",
       status: "active",
       description: "",
+      metadata_revision: 0,
       current_draft_version_id: "version-id",
       current_published_version_id: null,
       versions: [],

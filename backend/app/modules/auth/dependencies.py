@@ -164,6 +164,16 @@ def require_demo_mode(settings: Settings) -> None:
         raise not_found()
 
 
+def require_demo_quick_login(settings: Settings = Depends(get_settings)) -> Settings:
+    """Authorize the anonymous Demo identity catalog and passwordless login."""
+
+    if not (settings.demo_mode and settings.demo_quick_login):
+        # Deliberately return 404 for either disabled flag, including an
+        # anonymous request, so the feature is not discoverable when off.
+        raise not_found()
+    return settings
+
+
 def require_teacher(scope: CourseScope | None) -> CourseScope:
     if scope is None:
         raise not_found()

@@ -32,6 +32,7 @@ type SessionContextValue = {
   error: unknown;
   refresh: () => Promise<AuthSession | null>;
   login: (username: string, password: string) => Promise<AuthSession>;
+  quickLogin: (userId: string) => Promise<AuthSession>;
   logout: () => Promise<void>;
   switchIdentity: (userId: string) => Promise<AuthSession>;
 };
@@ -87,6 +88,17 @@ export function SessionProvider({
     [api],
   );
 
+  const quickLogin = useCallback(
+    async (userId: string) => {
+      const next = await api.quickLogin(userId);
+      setSession(next);
+      setStatus("authenticated");
+      setError(null);
+      return next;
+    },
+    [api],
+  );
+
   const logout = useCallback(async () => {
     await api.logout();
     setSession(null);
@@ -113,10 +125,21 @@ export function SessionProvider({
       error,
       refresh,
       login,
+      quickLogin,
       logout,
       switchIdentity,
     }),
-    [api, error, login, logout, refresh, session, status, switchIdentity],
+    [
+      api,
+      error,
+      login,
+      logout,
+      quickLogin,
+      refresh,
+      session,
+      status,
+      switchIdentity,
+    ],
   );
 
   return (
@@ -200,7 +223,7 @@ export function LoginForm() {
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
-  const { status, login, api, switchIdentity } = useSession();
+  const { status, login, quickLogin, api, switchIdentity } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -209,7 +232,7 @@ export function LoginForm() {
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" || status === "anonymous") {
       void api
         .demoIdentities()
         .then(setIdentities)
@@ -242,12 +265,18 @@ export function LoginForm() {
     }
   }
 
-  async function quickSwitch(userId: string) {
+  async function chooseDemoIdentity(userId: string) {
     setBusy(true);
     setError(null);
     setErrorFallback("demoSwitchUnavailable");
     try {
-      const session = await switchIdentity(userId);
+      // Retain the CSRF-protected switch for an already authenticated user;
+      // anonymous login uses the dedicated passwordless route with no secret
+      // account fields in the browser.
+      const session =
+        status === "authenticated"
+          ? await switchIdentity(userId)
+          : await quickLogin(userId);
       router.replace(
         session.user.courses.some((item) => item.role === "teacher")
           ? "/teacher"
@@ -268,36 +297,7 @@ export function LoginForm() {
       <div className="eyebrow">{t("heroEyebrow")}</div>
       <h1 id="login-title">{t("signIn")}</h1>
       <p className="lede">{t("loginLede")}</p>
-      <form className="stack-form" onSubmit={submit}>
-        <label>
-          <span>{t("username")}</span>
-          <input
-            autoComplete="username"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            required
-          />
-        </label>
-        <label>
-          <span>{t("password")}</span>
-          <input
-            autoComplete="current-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        {error ? (
-          <p className="form-error" role="alert">
-            {localizeError(error, locale, errorFallback)}
-          </p>
-        ) : null}
-        <button className="primary-action" type="submit" disabled={busy}>
-          {busy ? t("signingIn") : t("login")}
-        </button>
-      </form>
-      {status === "authenticated" && identities.length > 0 ? (
+      {identities.length > 0 ? (
         <div className="quick-switch" aria-label={t("demoIdentity")}>
           <span className="section-label">{t("demoIdentity")}</span>
           <div className="chip-row">
@@ -307,7 +307,7 @@ export function LoginForm() {
                 key={identity.user_id}
                 type="button"
                 disabled={busy}
-                onClick={() => void quickSwitch(identity.user_id)}
+                onClick={() => void chooseDemoIdentity(identity.user_id)}
               >
                 {identity.display_name} · {roleLabel(identity.role, locale)}
               </button>
@@ -315,6 +315,42 @@ export function LoginForm() {
           </div>
         </div>
       ) : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {localizeError(error, locale, errorFallback)}
+        </p>
+      ) : null}
+      <details className="password-fallback">
+        <summary>
+          {locale === "zh"
+            ? "改用用户名和密码登录"
+            : "Use username and password instead"}
+        </summary>
+        <form className="stack-form" onSubmit={submit}>
+          <label>
+            <span>{t("username")}</span>
+            <input
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            <span>{t("password")}</span>
+            <input
+              autoComplete="current-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          <button className="primary-action" type="submit" disabled={busy}>
+            {busy ? t("signingIn") : t("login")}
+          </button>
+        </form>
+      </details>
     </section>
   );
 }

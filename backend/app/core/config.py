@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # provider/security contract.
     node_env: str = Field(default="development", validation_alias="NODE_ENV")
     demo_mode: bool = Field(default=False, validation_alias="DEMO_MODE")
+    # Passwordless identity selection is intentionally a separate explicit
+    # Demo-only capability: either flag being off must hide the route.
+    demo_quick_login: bool = Field(default=False, validation_alias="DEMO_QUICK_LOGIN")
     session_secret: str | None = Field(default=None, validation_alias="SESSION_SECRET")
     classroom_public_base_url: str | None = Field(
         default=None,
@@ -72,6 +75,17 @@ class Settings(BaseSettings):
         default=Path("config/demo_users.yaml"),
         validation_alias="DEMO_USERS_FILE",
     )
+    demo_accounts_file: Path = Field(
+        default=Path("config/demo-accounts/accounts.private.md"),
+        validation_alias="DEMO_ACCOUNTS_FILE",
+    )
+    # Explicit one-time compatibility switch for a legacy YAML migration. It
+    # defaults off so an old YAML file cannot silently become a second runtime
+    # credential source after the private Markdown catalog is adopted.
+    allow_legacy_demo_users: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LEGACY_DEMO_USERS",
+    )
     maya_env: str = Field(default="", validation_alias="MAYA_ENV")
 
     @field_validator("session_secret", mode="before")
@@ -87,6 +101,17 @@ class Settings(BaseSettings):
         # docker-compose forwards an empty value when DEMO_MODE is not set.
         # Treat that as the secure disabled default instead of a settings
         # parse failure.
+        return False if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("demo_quick_login", mode="before")
+    @classmethod
+    def empty_demo_quick_login_is_false(cls, value: object) -> object:
+        # Compose forwards an empty value when DEMO_QUICK_LOGIN is unset.
+        return False if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("allow_legacy_demo_users", mode="before")
+    @classmethod
+    def empty_legacy_demo_users_is_false(cls, value: object) -> object:
         return False if isinstance(value, str) and not value.strip() else value
 
     @field_validator(
@@ -122,8 +147,8 @@ class Settings(BaseSettings):
             return None
         try:
             UUID(value)
-        except ValueError as exc:
-            raise ValueError("FALLBACK_VOICE_PROFILE_ID must be a UUID") from exc
+        except ValueError:
+            raise ValueError("FALLBACK_VOICE_PROFILE_ID must be a UUID") from None
         return value
 
     @property
@@ -144,6 +169,13 @@ class Settings(BaseSettings):
             if not self.is_test:
                 raise RuntimeError("SESSION_SECRET must contain at least 32 bytes")
         self.validate_provider_configuration()
+        # Parse the complete private graph before the application lifespan
+        # yields. A malformed catalog therefore prevents readiness rather
+        # than partially applying identities.
+        if self.demo_mode or self.demo_quick_login or self.resolved_demo_accounts_file.exists():
+            from app.modules.auth.credentials import prepare_catalog
+
+            prepare_catalog(self)
 
     def validate_provider_configuration(self) -> None:
         """Allow Mock everywhere, or the explicitly gated real TTS slice.
@@ -213,6 +245,13 @@ class Settings(BaseSettings):
     @property
     def resolved_demo_users_file(self) -> Path:
         path = self.demo_users_file
+        if path.is_absolute():
+            return path
+        return Path(__file__).resolve().parents[2] / path
+
+    @property
+    def resolved_demo_accounts_file(self) -> Path:
+        path = self.demo_accounts_file
         if path.is_absolute():
             return path
         return Path(__file__).resolve().parents[2] / path

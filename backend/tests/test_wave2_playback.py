@@ -1493,26 +1493,25 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                 assert public["payload"]["speech"]
                 assert "provider" not in str(public).lower()
                 published_turn_ids.append(turn_id)
-                if turn_number == 0:
-                    skipped = client.post(
-                        f"/api/v1/debates/{debate_id}/skip",
-                        headers=_headers(csrf),
-                        json={"expected_control_version": control_version},
-                    )
-                    assert skipped.status_code == 200, skipped.text
-                    skip_event = _receive_until(socket, "event_type", "playback.skipped")
-                    assert skip_event["payload"]["turn_id"] == turn_id
-                    waiting = _receive_until(socket, "event_type", "playback.waiting_next")
-                    assert set(waiting["payload"]) == {
-                        "completed_turn_id",
-                        "control_version",
-                        "next_turn_ready",
+                socket.send_json(
+                    {
+                        "command_id": str(uuid4()),
+                        "command_type": "playback.ended_ack",
+                        "command_version": 1,
+                        "debate_id": debate_id,
+                        "expected_control_version": control_version,
+                        "controller_epoch": epoch,
+                        "turn_id": turn_id,
                     }
+                )
+                completed = _receive_until(socket, "event_type", "playback.completed")
+                assert completed["payload"]["turn_id"] == turn_id
+                control_version = completed["payload"]["control_version"]
+                if turn_number < 3:
+                    waiting = _receive_until(socket, "event_type", "playback.waiting_next")
                     assert waiting["payload"]["completed_turn_id"] == turn_id
+                    assert waiting["payload"]["mode"] == "live"
                     control_version = waiting["payload"]["control_version"]
-                    next_after_skip = skipped.json()["current_turn_id"]
-                    assert next_after_skip == turn_id
-                    assert skipped.json()["status"] == "waiting_next"
                     advanced = client.post(
                         f"/api/v1/debates/{debate_id}/next",
                         headers=_headers(csrf),
@@ -1525,37 +1524,6 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                     assert advanced.json()["status"] == "ready"
                     assert advanced.json()["current_turn_id"] != turn_id
                     control_version = advanced.json()["control_version"]
-                else:
-                    socket.send_json(
-                        {
-                            "command_id": str(uuid4()),
-                            "command_type": "playback.ended_ack",
-                            "command_version": 1,
-                            "debate_id": debate_id,
-                            "expected_control_version": control_version,
-                            "controller_epoch": epoch,
-                            "turn_id": turn_id,
-                        }
-                    )
-                    completed = _receive_until(socket, "event_type", "playback.completed")
-                    assert completed["payload"]["turn_id"] == turn_id
-                    control_version = completed["payload"]["control_version"]
-                    if turn_number < 3:
-                        waiting = _receive_until(socket, "event_type", "playback.waiting_next")
-                        assert waiting["payload"]["completed_turn_id"] == turn_id
-                        control_version = waiting["payload"]["control_version"]
-                        advanced = client.post(
-                            f"/api/v1/debates/{debate_id}/next",
-                            headers=_headers(csrf),
-                            json={
-                                "expected_control_version": control_version,
-                                "expected_current_turn_id": turn_id,
-                            },
-                        )
-                        assert advanced.status_code == 200, advanced.text
-                        assert advanced.json()["status"] == "ready"
-                        assert advanced.json()["current_turn_id"] != turn_id
-                        control_version = advanced.json()["control_version"]
                 if turn_number < 3:
                     _wait_for_ready(client, debate_id)
 
@@ -1598,50 +1566,68 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
             assert llm.call_count == 4
             assert tts.synthesize_calls == 4
             replay = client.post(
-                f"/api/v1/debates/{debate_id}/turns/{published_turn_ids[0]}/replay",
+                f"/api/v1/debates/{debate_id}/replay",
                 headers=_headers(csrf),
                 json={"expected_control_version": control_version},
             )
             assert replay.status_code == 200, replay.text
             control_version = replay.json()["control_version"]
-            socket.send_json(
-                {
-                    "command_id": str(uuid4()),
-                    "command_type": "playback.media.prepare",
-                    "command_version": 1,
-                    "debate_id": debate_id,
-                    "expected_control_version": control_version,
-                    "controller_epoch": epoch,
-                    "turn_id": published_turn_ids[0],
-                    "playback_action": "replay",
-                }
-            )
-            _receive_until(socket, "message_type", "media.prepared")
-            socket.send_json(
-                {
-                    "command_id": str(uuid4()),
-                    "command_type": "playback.started_ack",
-                    "command_version": 1,
-                    "debate_id": debate_id,
-                    "expected_control_version": control_version,
-                    "controller_epoch": epoch,
-                    "turn_id": published_turn_ids[0],
-                    "playback_action": "replay",
-                }
-            )
-            _receive_until(socket, "event_type", "replay.started")
-            socket.send_json(
-                {
-                    "command_id": str(uuid4()),
-                    "command_type": "playback.ended_ack",
-                    "command_version": 1,
-                    "debate_id": debate_id,
-                    "expected_control_version": control_version,
-                    "controller_epoch": epoch,
-                    "turn_id": published_turn_ids[0],
-                }
-            )
-            _receive_until(socket, "event_type", "replay.completed")
+            for replay_index, replay_turn_id in enumerate(published_turn_ids):
+                socket.send_json(
+                    {
+                        "command_id": str(uuid4()),
+                        "command_type": "playback.media.prepare",
+                        "command_version": 1,
+                        "debate_id": debate_id,
+                        "expected_control_version": control_version,
+                        "controller_epoch": epoch,
+                        "turn_id": replay_turn_id,
+                        "playback_action": "replay",
+                    }
+                )
+                _receive_until(socket, "message_type", "media.prepared")
+                socket.send_json(
+                    {
+                        "command_id": str(uuid4()),
+                        "command_type": "playback.started_ack",
+                        "command_version": 1,
+                        "debate_id": debate_id,
+                        "expected_control_version": control_version,
+                        "controller_epoch": epoch,
+                        "turn_id": replay_turn_id,
+                        "playback_action": "replay",
+                    }
+                )
+                _receive_until(socket, "event_type", "replay.started")
+                socket.send_json(
+                    {
+                        "command_id": str(uuid4()),
+                        "command_type": "playback.ended_ack",
+                        "command_version": 1,
+                        "debate_id": debate_id,
+                        "expected_control_version": control_version,
+                        "controller_epoch": epoch,
+                        "turn_id": replay_turn_id,
+                    }
+                )
+                if replay_index == len(published_turn_ids) - 1:
+                    completed_replay = _receive_until(socket, "event_type", "replay.completed")
+                    control_version = completed_replay["payload"]["control_version"]
+                else:
+                    waiting_replay = _receive_until(socket, "event_type", "playback.waiting_next")
+                    assert waiting_replay["payload"]["mode"] == "replay"
+                    control_version = waiting_replay["payload"]["control_version"]
+                    advanced_replay = client.post(
+                        f"/api/v1/debates/{debate_id}/next",
+                        headers=_headers(csrf),
+                        json={
+                            "expected_control_version": control_version,
+                            "expected_current_turn_id": replay_turn_id,
+                        },
+                    )
+                    assert advanced_replay.status_code == 200, advanced_replay.text
+                    assert advanced_replay.json()["status"] == "ready"
+                    control_version = advanced_replay.json()["control_version"]
             assert llm.call_count == 4
             assert tts.synthesize_calls == 4
 
@@ -1969,10 +1955,12 @@ async def test_manual_next_cas_preserves_waiting_boundary_and_ack_publishes_only
     ]
     assert len(waiting_events) == 1
     assert set(waiting_events[0].payload) == {
+        "mode",
         "completed_turn_id",
         "control_version",
         "next_turn_ready",
     }
+    assert waiting_events[0].payload["mode"] == "live"
     assert successor.id not in str(waiting_events[0].payload)
 
     with pytest.raises(PlatformError) as hidden_media:
@@ -2128,7 +2116,9 @@ async def test_slow_successor_emits_false_then_true_readiness_change_without_lea
     assert all(
         event.payload["completed_turn_id"] == first_turn.id
         and event.payload["control_version"] == waiting.control_version
-        and set(event.payload) == {"completed_turn_id", "control_version", "next_turn_ready"}
+        and event.payload["mode"] == "live"
+        and set(event.payload)
+        == {"mode", "completed_turn_id", "control_version", "next_turn_ready"}
         for event in events
     )
     assert service._state(None, debate).status == "waiting_next"
@@ -3189,7 +3179,7 @@ async def test_full_replay_uses_retained_audio_without_provider_calls(tmp_path: 
     debate.turns = turns
     tts = MockTTSProvider()
     store = AudioStore(tmp_path, tts_provider=tts)
-    for turn in turns:
+    for _turn_index, turn in enumerate(turns):
         metadata = store.store_bytes(
             course_id=debate.course_id,
             debate_id=debate.id,
@@ -3226,7 +3216,7 @@ async def test_full_replay_uses_retained_audio_without_provider_calls(tmp_path: 
     )
     control_version = controller.control_version
     epoch = str(controller.controller_epoch)
-    for turn in turns:
+    for turn_index, turn in enumerate(turns):
         current = service._state(None, debate)
         assert current.current_turn_id == turn.id
         _prepared, _private = await service.media_prepare(
@@ -3259,6 +3249,16 @@ async def test_full_replay_uses_retained_audio_without_provider_calls(tmp_path: 
             turn_id=turn.id,
         )
         control_version = completed.control_version
+        if turn_index < len(turns) - 1:
+            assert completed.status == "waiting_next"
+            advanced = await service.next(
+                None,
+                debate.id,
+                expected_control_version=completed.control_version,
+                expected_current_turn_id=turn.id,
+            )
+            assert advanced.status == "ready"
+            control_version = advanced.control_version
     assert service._state(None, debate).status == "completed"
     assert provider_calls == 0
     assert tts.synthesize_calls == 0

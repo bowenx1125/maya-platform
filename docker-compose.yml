@@ -48,11 +48,14 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DEMO_MODE: ${DEMO_MODE:-true}
+      DEMO_QUICK_LOGIN: ${DEMO_QUICK_LOGIN:-true}
       SESSION_SECRET: ${SESSION_SECRET:-}
       CLASSROOM_PUBLIC_BASE_URL: ${CLASSROOM_PUBLIC_BASE_URL:-http://localhost:8080}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/maya.sqlite3}
       DATA_ROOT: ${DATA_ROOT:-/app/data}
       DEMO_USERS_FILE: ${DEMO_USERS_FILE:-/app/config/demo_users.yaml}
+      DEMO_ACCOUNTS_FILE: ${DEMO_ACCOUNTS_FILE:-/app/config/demo-accounts/accounts.private.md}
+      ALLOW_LEGACY_DEMO_USERS: ${ALLOW_LEGACY_DEMO_USERS:-false}
       MAYA_ENV: ${MAYA_ENV:-development}
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}

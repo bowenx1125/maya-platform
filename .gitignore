@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 backend/config/demo_users.yaml
+backend/config/demo-accounts/accounts.private.md
 *.pem
 *.key
 

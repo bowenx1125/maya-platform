@@ -191,6 +191,7 @@
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
       "completed_turn_id": "44444444-4444-4444-8444-444444444444",
+      "mode": "live",
       "control_version": 4,
       "next_turn_ready": true
     }

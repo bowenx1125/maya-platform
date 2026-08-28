@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import re
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
@@ -65,6 +66,7 @@ class PlaybackRuntime:
     controller_connection_id: str | None = None
     pending_action: str | None = None
     pending_ticket_hash: str | None = None
+    pending_media_command_id: str | None = None
     started_monotonic: float | None = None
     audio_duration_ms: int = 0
     replay_scope: str | None = None
@@ -133,6 +135,13 @@ class PlaybackService:
         # new connection, so an old browser cannot inherit authority.
         self._controller_sessions: dict[str, str] = {}
         self._runtime_cache: dict[str, PlaybackRuntime] = {}
+        # Raw media URLs remain process-local and short-lived.  The durable
+        # pending hash is the authorization fence; this cache only lets the
+        # same in-process command replay its original private result without
+        # issuing a second ticket.
+        self._media_command_results: dict[
+            tuple[str, str], tuple[PreparedMedia, MediaPreparedResult]
+        ] = {}
         self._lock = asyncio.Lock()
 
     async def recover_startup(self, db: Any) -> tuple[str, ...]:
@@ -172,6 +181,11 @@ class PlaybackService:
                         state.controller_epoch = None
                         state.controller_session_hash = None
                         state.controller_connection_id = None
+                        state.pending_action = None
+                        state.pending_ticket_hash = None
+                        state.pending_media_command_id = None
+                        state.audio_duration_ms = 0
+                        self._clear_media_results(candidate_id)
                         self._save(db, candidate, state)
                     else:
                         state = self._state(db, candidate)
@@ -181,7 +195,36 @@ class PlaybackService:
                             state.controller_epoch = None
                             state.controller_session_hash = None
                             state.controller_connection_id = None
+                            state.pending_action = None
+                            state.pending_ticket_hash = None
+                            state.pending_media_command_id = None
+                            state.audio_duration_ms = 0
+                            self._clear_media_results(candidate_id)
                             self._save(db, candidate, state)
+                        elif (
+                            state.controller_epoch is not None
+                            or state.controller_connection_id is not None
+                            or state.pending_action is not None
+                            or state.pending_ticket_hash is not None
+                            or state.pending_media_command_id is not None
+                            or state.audio_duration_ms != 0
+                        ):
+                            # A waiting replay gate is durable across a
+                            # restart, but its process-local controller and
+                            # media ticket are not.  Clear only those
+                            # authority fields so restart cannot auto-advance
+                            # or let an old socket prepare media; the teacher
+                            # may reconnect and issue the same explicit Next.
+                            state.controller_epoch = None
+                            state.controller_session_hash = None
+                            state.controller_connection_id = None
+                            state.pending_action = None
+                            state.pending_ticket_hash = None
+                            state.pending_media_command_id = None
+                            state.audio_duration_ms = 0
+                            self._clear_media_results(candidate_id)
+                            self._save(db, candidate, state)
+                    self.ticket_store.revoke_debate(candidate_id)
                 affected = tuple(sorted(affected_set))
             journals = getattr(self.repository, "audio_swap_journals", None)
             rows = list(journals(db)) if callable(journals) else []
@@ -230,6 +273,7 @@ class PlaybackService:
             self._commit(db)
             self._controller_sessions.clear()
             self._runtime_cache.clear()
+            self._media_command_results.clear()
             return affected
 
     # ------------------------------------------------------------------
@@ -283,9 +327,27 @@ class PlaybackService:
                     cached.controller_connection_id,
                 ),
             )
+            cached.pending_action = getattr(state, "pending_action", cached.pending_action)
+            cached.pending_ticket_hash = getattr(
+                state, "pending_ticket_hash", cached.pending_ticket_hash
+            )
+            cached.pending_media_command_id = getattr(
+                state, "pending_media_command_id", cached.pending_media_command_id
+            )
+            cached.audio_duration_ms = int(
+                getattr(state, "audio_duration_ms", cached.audio_duration_ms) or 0
+            )
             cached.replay_scope = getattr(state, "replay_scope", cached.replay_scope)
             raw_replay_index = getattr(state, "replay_index", cached.replay_index)
             cached.replay_index = None if raw_replay_index is None else int(raw_replay_index)
+            raw_replay = getattr(state, "replay_turn_ids_json", None)
+            if isinstance(raw_replay, str):
+                try:
+                    parsed_replay = json.loads(raw_replay)
+                    if isinstance(parsed_replay, list):
+                        cached.replay_turn_ids = [str(item) for item in parsed_replay]
+                except (TypeError, ValueError):
+                    cached.replay_turn_ids = []
             return cached
         runtime = PlaybackRuntime(
             status=str(getattr(state, "status", "preparing")),
@@ -301,6 +363,10 @@ class PlaybackService:
                 "controller_connection_id",
                 getattr(state, "controller_owner_connection", None),
             ),
+            pending_action=getattr(state, "pending_action", None),
+            pending_ticket_hash=getattr(state, "pending_ticket_hash", None),
+            pending_media_command_id=getattr(state, "pending_media_command_id", None),
+            audio_duration_ms=int(getattr(state, "audio_duration_ms", 0) or 0),
             replay_scope=getattr(state, "replay_scope", None),
             replay_turn_ids=list(getattr(state, "replay_turn_ids", []) or []),
             replay_index=(
@@ -312,8 +378,6 @@ class PlaybackService:
         raw_replay = getattr(state, "replay_turn_ids_json", None)
         if isinstance(raw_replay, str):
             try:
-                import json
-
                 parsed_replay = json.loads(raw_replay)
                 if isinstance(parsed_replay, list):
                     runtime.replay_turn_ids = [str(item) for item in parsed_replay]
@@ -335,6 +399,10 @@ class PlaybackService:
                 "controller_epoch",
                 "controller_session_hash",
                 "controller_connection_id",
+                "pending_action",
+                "pending_ticket_hash",
+                "pending_media_command_id",
+                "audio_duration_ms",
                 "replay_scope",
                 "replay_index",
                 "replay_turn_ids_json",
@@ -367,6 +435,61 @@ class PlaybackService:
         commit = getattr(db, "commit", None)
         if callable(commit):
             commit()
+
+    def _clear_media_results(self, debate_id: str) -> None:
+        """Drop process-local media result handles after their authority ends."""
+
+        for key in tuple(self._media_command_results):
+            if key[0] == debate_id:
+                self._media_command_results.pop(key, None)
+
+    def _rollback_replay_next(self, db: Any, debate: Any, state: PlaybackRuntime) -> bool:
+        """CAS a replay successor back to waiting when bytes changed after Next."""
+
+        if state.mode != "replay" or state.replay_scope != "all":
+            return False
+        queue, valid = self._replay_queue(db, debate, state)
+        if not valid:
+            return False
+        try:
+            replay_index = int(state.replay_index) if state.replay_index is not None else -1
+        except (TypeError, ValueError):
+            return False
+        if replay_index <= 0 or replay_index >= len(queue):
+            return False
+        current = queue[replay_index]
+        previous = queue[replay_index - 1]
+        if str(current.id) != str(state.current_turn_id):
+            return False
+        rollback = getattr(self.repository, "rollback_replay_next_playback", None)
+        if callable(rollback):
+            changed = bool(
+                rollback(
+                    debate_id=self._debate_id(debate),
+                    expected_control_version=state.control_version,
+                    expected_current_turn_id=str(current.id),
+                    expected_replay_index=replay_index,
+                    previous_turn_id=str(previous.id),
+                    previous_replay_index=replay_index - 1,
+                )
+            )
+            self._rollback(db)
+            if changed:
+                self._clear_media_results(self._debate_id(debate))
+            return changed
+        state.status = "waiting_next"
+        state.current_turn_id = str(previous.id)
+        state.replay_index = replay_index - 1
+        state.cursor_ms = 0
+        state.pending_action = None
+        state.pending_ticket_hash = None
+        state.pending_media_command_id = None
+        state.audio_duration_ms = 0
+        state.control_version += 1
+        self._clear_media_results(self._debate_id(debate))
+        self._save(db, debate, state)
+        self._commit(db)
+        return True
 
     @staticmethod
     def _rollback(db: Any) -> None:
@@ -534,6 +657,15 @@ class PlaybackService:
             return False
         if str(self._get(turn, "generation_status", default="")) != "final_ready":
             return False
+        # Replay is authorized only against the Debate currently retained by
+        # its course.  The pointer can change after replay starts (for
+        # example, when a newer Debate replaces the retained audio), so this
+        # check must be repeated at every waiting/Next readiness gate rather
+        # than relying on the replay-start snapshot alone.
+        if self.repository.current_audio_debate_id(db, self._course_id(debate)) != self._debate_id(
+            debate
+        ):
+            return False
         return self._validated_turn_audio(db, debate, turn) is not None
 
     def audio_retained(self, db: Any, debate_id: str) -> bool:
@@ -671,6 +803,101 @@ class PlaybackService:
         if self._validated_turn_audio(db, debate, successor) is None:
             return False
         return True
+
+    def _replay_queue(
+        self,
+        db: Any,
+        debate: Any,
+        state: PlaybackRuntime,
+    ) -> tuple[list[Any], bool]:
+        """Resolve the immutable whole-replay list and its structural validity.
+
+        ``replay_turn_ids`` is persisted when the migration provides the
+        queue column.  Older rows only have ``replay_scope``/``replay_index``;
+        for those rows the public final-ready turns form the deterministic
+        queue.  This fallback is safe because a finished Debate cannot publish
+        another turn while replay is in progress, and all callers still check
+        adjacency and durable audio below.
+        """
+
+        if state.replay_scope != "all":
+            return [], False
+        turns_by_id = {
+            str(self._get(turn, "id", default="")): turn for turn in self._turns(db, debate)
+        }
+        queue_ids = [str(item) for item in state.replay_turn_ids]
+        if queue_ids:
+            # A persisted queue is a frozen identity list.  Duplicate or
+            # missing identities make the replay fail closed rather than
+            # silently selecting a different public turn.
+            if len(set(queue_ids)) != len(queue_ids):
+                return [], False
+            queue = [turns_by_id.get(item) for item in queue_ids]
+            if any(turn is None for turn in queue):
+                return [], False
+            resolved = cast(list[Any], queue)
+        else:
+            resolved = sorted(
+                [
+                    turn
+                    for turn in turns_by_id.values()
+                    if self._turn_public(turn)
+                    and str(self._get(turn, "generation_status", default="")) == "final_ready"
+                ],
+                key=lambda item: int(self._get(item, "turn_index", default=-1) or -1),
+            )
+            if not resolved:
+                return [], False
+            # Persisting the queue is best effort for compatibility rows.  A
+            # read/snapshot path must not mutate the DB; the state-changing
+            # replay start path writes it explicitly.
+        if any(not self._turn_public(turn) for turn in resolved):
+            return [], False
+        indexes: list[int] = []
+        for turn in resolved:
+            try:
+                indexes.append(int(self._get(turn, "turn_index", default=-1)))
+            except (TypeError, ValueError):
+                return [], False
+        if indexes != list(range(len(resolved))):
+            return [], False
+        return resolved, True
+
+    def _replay_next_turn_ready(self, db: Any, debate: Any, state: PlaybackRuntime) -> bool:
+        """Derive readiness for exactly one adjacent replay successor.
+
+        Replay readiness is deliberately not inferred from an in-memory
+        ``AudioStore`` cache or from ``turn.ready``.  The successor must be
+        the unique next item in the frozen public queue and pass the same
+        current-course pointer, StoredFile, canonical-path, size/hash and WAV
+        validation used by authenticated media reads.
+        """
+
+        if (
+            state.mode != "replay"
+            or state.status != "waiting_next"
+            or state.current_turn_id is None
+            or state.replay_index is None
+        ):
+            return False
+        queue, valid = self._replay_queue(db, debate, state)
+        if not valid:
+            return False
+        index = int(state.replay_index)
+        if index < 0 or index >= len(queue):
+            return False
+        current = queue[index]
+        if str(self._get(current, "id", default="")) != state.current_turn_id:
+            return False
+        if index + 1 >= len(queue):
+            return False
+        successor = queue[index + 1]
+        # Both the frozen queue and the physical turn plan must agree on the
+        # adjacency.  This rejects duplicate/renumbered rows before any CAS.
+        adjacent, unique = self._adjacent_successor(self._turns(db, debate), current)
+        if not unique or adjacent is None or str(adjacent.id) != str(successor.id):
+            return False
+        return self._replay_audio_ready(db, debate, successor)
 
     @classmethod
     def _has_public_predecessor_prefix(cls, turns: list[Any], turn: Any) -> bool:
@@ -864,7 +1091,12 @@ class PlaybackService:
         db: Any | None = None,
         debate: Any | None = None,
     ) -> PlaybackStateDTO:
-        next_turn_ready = self._next_turn_ready(db, debate, state) if debate is not None else False
+        if debate is None:
+            next_turn_ready = False
+        elif state.mode == "replay":
+            next_turn_ready = self._replay_next_turn_ready(db, debate, state)
+        else:
+            next_turn_ready = self._next_turn_ready(db, debate, state)
         return PlaybackStateDTO(
             status=state.status,  # type: ignore[arg-type]
             mode=state.mode,  # type: ignore[arg-type]
@@ -1384,6 +1616,9 @@ class PlaybackService:
                     current_state.cursor_ms = 0
                     current_state.audio_duration_ms = audio.duration_ms
                     current_state.pending_action = None
+                    current_state.pending_ticket_hash = None
+                    current_state.pending_media_command_id = None
+                    self._clear_media_results(debate_id)
                     self._save(db, fresh_debate, current_state)
                     ready_events.append(
                         self._stage_event(
@@ -1421,6 +1656,7 @@ class PlaybackService:
                             debate_id,
                             "playback.waiting_next",
                             {
+                                "mode": "live",
                                 "completed_turn_id": current_state.current_turn_id,
                                 "control_version": current_state.control_version,
                                 "next_turn_ready": True,
@@ -1763,9 +1999,11 @@ class PlaybackService:
             old_state.mode = "live"
             old_state.replay_scope = None
             old_state.replay_turn_ids = []
-            old_state.replay_index = 0
+            old_state.replay_index = None
             old_state.pending_action = None
             old_state.pending_ticket_hash = None
+            old_state.pending_media_command_id = None
+            old_state.audio_duration_ms = 0
             old_state.controller_epoch = None
             old_state.controller_session_hash = None
             old_state.controller_connection_id = None
@@ -1773,6 +2011,7 @@ class PlaybackService:
             old_state.cursor_ms = 0
             old_state.control_version += 1
             self._save(db, old_debate, old_state)
+            self._clear_media_results(old_debate_id)
             info = {
                 "turn_id": old_turn_id,
                 "control_version": old_state.control_version,
@@ -1946,6 +2185,9 @@ class PlaybackService:
             state.replay_index = 0
             state.pending_action = None
             state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             self._save(db, debate, state)
             # Revalidate teacher authority after the independently committed
             # idempotency/journal steps and immediately before the final CAS.
@@ -2090,6 +2332,11 @@ class PlaybackService:
             cursor = self._cursor(state)
             self._set_nonplaying(state, "paused", cursor)
             state.control_version += 1
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             self._save(db, debate, state)
             turn_id = state.current_turn_id
             payload = {
@@ -2125,7 +2372,10 @@ class PlaybackService:
                 raise invalid_state("The current turn is not ready for playback.")
             self._set_nonplaying(state, "ready")
             state.control_version += 1
-            state.pending_action = "resume"
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
             self._save(db, debate, state)
             self._commit(db)
             return self._state_dto(state, db, debate)
@@ -2164,6 +2414,11 @@ class PlaybackService:
             )
             state.control_version += 1
             self.ticket_store.revoke_item(debate_id, state.current_turn_id)
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             if index + 1 >= len(turns):
                 self._set_nonplaying(state, "completed", cursor)
                 debate.status = "debate_finished"
@@ -2199,6 +2454,7 @@ class PlaybackService:
                         debate_id,
                         "playback.waiting_next",
                         {
+                            "mode": "live",
                             "completed_turn_id": str(current.id),
                             "control_version": state.control_version,
                             "next_turn_ready": next_ready,
@@ -2220,7 +2476,13 @@ class PlaybackService:
         expected_current_turn_id: str,
         context: AuthContext | None = None,
     ) -> PlaybackStateDTO:
-        """Authorize exactly one adjacent live successor with a teacher CAS."""
+        """Authorize exactly one adjacent live or replay successor.
+
+        Live and replay use the same teacher/CAS boundary, but they never
+        share a queue or generation path. Replay Next only moves an already
+        public retained turn; the browser performs the media handshake for
+        that newly current item.
+        """
 
         async with self._lock:
             debate = self._get_debate(db, debate_id)
@@ -2233,9 +2495,8 @@ class PlaybackService:
                     "The playback current turn is stale.",
                     {"current_current_turn_id": state.current_turn_id},
                 )
-            if str(self._get(debate, "status", default="")) != "running":
-                raise invalid_state("Only a running debate can advance to the next turn.")
-            if state.mode != "live" or state.status != "waiting_next":
+            debate_status = str(self._get(debate, "status", default=""))
+            if state.status != "waiting_next":
                 raise invalid_state("Playback is not waiting for the teacher's next command.")
 
             turns = sorted(
@@ -2243,36 +2504,103 @@ class PlaybackService:
                 key=lambda item: int(self._get(item, "turn_index", default=0) or 0),
             )
             current = self._current_turn(db, debate, state)
-            if not self._turn_public(current) or not self._has_public_predecessor_prefix(
-                turns, current
-            ):
-                raise conflict(
-                    "invalid_state",
-                    "The live turn cannot advance before its public predecessor prefix.",
-                )
-            successor, unique = self._adjacent_successor(turns, current)
-            if successor is None:
-                if unique:
-                    raise conflict("no_next_turn", "The current turn has no adjacent successor.")
-                raise conflict("invalid_state", "The playback turn plan has multiple successors.")
-            if not self._next_turn_ready(db, debate, state):
-                raise conflict(
-                    "next_not_ready",
-                    "The adjacent next turn is not ready for playback.",
-                )
+            is_replay = state.mode == "replay"
+            queue: list[Any] = []
+            replay_audio_metadata: AudioMetadata | None = None
+            if is_replay:
+                if debate_status not in {"debate_finished", "completed"}:
+                    raise invalid_state("Replay is available only after the debate finishes.")
+                queue, queue_valid = self._replay_queue(db, debate, state)
+                if not queue_valid:
+                    raise conflict("invalid_state", "The replay queue is unavailable.")
+                try:
+                    replay_index = int(state.replay_index) if state.replay_index is not None else -1
+                except (TypeError, ValueError):
+                    replay_index = -1
+                if (
+                    replay_index < 0
+                    or replay_index >= len(queue)
+                    or str(queue[replay_index].id) != str(current.id)
+                ):
+                    raise conflict("invalid_state", "The replay cursor is unavailable.")
+                successor = queue[replay_index + 1] if replay_index + 1 < len(queue) else None
+                if successor is None:
+                    raise conflict("no_next_turn", "The replay has no adjacent successor.")
+                adjacent, unique = self._adjacent_successor(turns, current)
+                if not unique or adjacent is None or str(adjacent.id) != str(successor.id):
+                    raise conflict("invalid_state", "The replay turn plan has multiple successors.")
+                if not self._replay_next_turn_ready(db, debate, state):
+                    raise conflict(
+                        "next_not_ready",
+                        "The adjacent retained replay turn is not ready for playback.",
+                    )
+                replay_audio_metadata = self._validated_turn_audio(db, debate, successor)
+                if replay_audio_metadata is None:
+                    raise conflict(
+                        "next_not_ready",
+                        "The adjacent retained replay turn is not ready for playback.",
+                    )
+            else:
+                if debate_status != "running":
+                    raise invalid_state("Only a running debate can advance to the next turn.")
+                if state.mode != "live":
+                    raise invalid_state("Playback is not in live mode.")
+                if not self._turn_public(current) or not self._has_public_predecessor_prefix(
+                    turns, current
+                ):
+                    raise conflict(
+                        "invalid_state",
+                        "The live turn cannot advance before its public predecessor prefix.",
+                    )
+                successor, unique = self._adjacent_successor(turns, current)
+                if successor is None:
+                    if unique:
+                        raise conflict(
+                            "no_next_turn", "The current turn has no adjacent successor."
+                        )
+                    raise conflict(
+                        "invalid_state", "The playback turn plan has multiple successors."
+                    )
+                if not self._next_turn_ready(db, debate, state):
+                    raise conflict(
+                        "next_not_ready",
+                        "The adjacent next turn is not ready for playback.",
+                    )
 
             advance_cas = getattr(self.repository, "advance_playback_cas", None)
-            fresh_claim = getattr(self.repository, "claim_next_playback", None)
+            fresh_claim = getattr(
+                self.repository,
+                "claim_replay_next_playback" if is_replay else "claim_next_playback",
+                None,
+            )
             if callable(fresh_claim):
                 # SQL repositories never write through the request Session:
                 # it may be holding a WAL read snapshot from the checks above.
                 teacher_user_id = str(context.user.id) if context is not None else ""
+                claim_kwargs: dict[str, Any] = {
+                    "debate_id": str(debate.id),
+                    "expected_control_version": expected_control_version,
+                    "expected_current_turn_id": expected_current_turn_id,
+                    "successor_turn_id": str(successor.id),
+                    "teacher_user_id": teacher_user_id,
+                }
+                if is_replay:
+                    claim_kwargs["expected_replay_index"] = int(state.replay_index or 0)
+                    claim_kwargs["expected_audio_relative_path"] = (
+                        replay_audio_metadata.relative_path
+                        if replay_audio_metadata is not None
+                        else None
+                    )
+                    claim_kwargs["expected_audio_sha256"] = (
+                        replay_audio_metadata.sha256 if replay_audio_metadata is not None else None
+                    )
+                    claim_kwargs["expected_audio_size_bytes"] = (
+                        replay_audio_metadata.size_bytes
+                        if replay_audio_metadata is not None
+                        else None
+                    )
                 claimed = fresh_claim(
-                    debate_id=str(debate.id),
-                    expected_control_version=expected_control_version,
-                    expected_current_turn_id=expected_current_turn_id,
-                    successor_turn_id=str(successor.id),
-                    teacher_user_id=teacher_user_id,
+                    **claim_kwargs,
                 )
                 if not claimed:
                     raise conflict(
@@ -2285,13 +2613,32 @@ class PlaybackService:
                 self._rollback(db)
                 debate = self._get_debate(db, debate_id)
                 state = self._state(db, debate)
+                # The durable media slot stays empty until the browser's
+                # single media.prepare command wins its own CAS.  The stage
+                # derives replay/next action from this ready state, so do not
+                # pre-fill pending_action here and accidentally reject it.
+                state.pending_action = None
+                if is_replay and not self._replay_audio_ready(db, debate, successor):
+                    if not self._rollback_replay_next(db, debate, state):
+                        raise conflict(
+                            "stale_control_version",
+                            "The replay transition was superseded before media validation.",
+                        )
+                    raise conflict(
+                        "next_not_ready",
+                        "The adjacent retained replay turn is not ready for playback.",
+                    )
                 return self._state_dto(state, db, debate)
-            if callable(advance_cas) and not advance_cas(
-                db,
-                debate,
-                expected_control_version=expected_control_version,
-                expected_current_turn_id=expected_current_turn_id,
-                successor_turn_id=str(successor.id),
+            if (
+                not is_replay
+                and callable(advance_cas)
+                and not advance_cas(
+                    db,
+                    debate,
+                    expected_control_version=expected_control_version,
+                    expected_current_turn_id=expected_current_turn_id,
+                    successor_turn_id=str(successor.id),
+                )
             ):
                 raise conflict(
                     "stale_control_version",
@@ -2299,14 +2646,28 @@ class PlaybackService:
                     {"current_control_version": state.control_version},
                 )
 
+            if is_replay:
+                state.replay_turn_ids = [str(item.id) for item in queue]
+                state.replay_index = int(state.replay_index or 0) + 1
             state.current_turn_id = str(successor.id)
             state.cursor_ms = 0
             state.started_monotonic = None
             state.status = "ready"
             state.pending_action = None
             state.pending_ticket_hash = None
+            state.pending_media_command_id = None
             metadata = self._validated_turn_audio(db, debate, successor)
             state.audio_duration_ms = int(metadata.duration_ms) if metadata is not None else 0
+            if is_replay and not self._replay_audio_ready(db, debate, successor):
+                if not self._rollback_replay_next(db, debate, state):
+                    raise conflict(
+                        "stale_control_version",
+                        "The replay transition was superseded before media validation.",
+                    )
+                raise conflict(
+                    "next_not_ready",
+                    "The adjacent retained replay turn is not ready for playback.",
+                )
             state.control_version += 1
             self._save(db, debate, state)
             self._commit(db)
@@ -2343,6 +2704,9 @@ class PlaybackService:
             state.control_version += 1
             state.pending_action = None
             state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             stopped_epoch = state.controller_epoch
             state.controller_epoch = None
             state.controller_session_hash = None
@@ -2370,6 +2734,270 @@ class PlaybackService:
             self._revoke_epoch(stopped_epoch, debate_id, "debate_terminal")
         if stopped_event is not None:
             await self._publish_event(stopped_event)
+        return self._state_dto(state, db, debate)
+
+    def _write_operator_reset_audit(
+        self,
+        db: Any,
+        *,
+        debate_id: str,
+        actor_user_id: str | None,
+        previous_mode: str,
+        resulting_status: str,
+        control_version: int,
+        request_id: str | None,
+    ) -> None:
+        """Write the redacted reset audit row or fail the reset.
+
+        SQL production repositories use ``claim_operator_reset`` so this hook
+        is only the in-memory repository seam.  There is deliberately no
+        best-effort fallback: an operator reset without an AuditLog is an
+        invalid transition.
+        """
+
+        writer = getattr(self.repository, "write_playback_reset_audit", None)
+        if not callable(writer):
+            raise PlatformError(
+                "audit_log_failed",
+                "Operator reset requires an AuditLog writer.",
+                503,
+            )
+        try:
+            writer(
+                db,
+                debate_id=debate_id,
+                actor_user_id=actor_user_id,
+                previous_mode=previous_mode,
+                resulting_status=resulting_status,
+                control_version=control_version,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            raise PlatformError(
+                "audit_log_failed",
+                "Operator reset could not write its AuditLog.",
+                503,
+            ) from exc
+
+    async def operator_reset(
+        self,
+        db: Any,
+        debate_id: str,
+        *,
+        confirm: bool,
+        expected_control_version: int | None = None,
+        actor_user_id: str | None = None,
+        context: AuthContext | None = None,
+        request_id: str | None = None,
+    ) -> PlaybackStateDTO:
+        """Recover one stuck playback through the local operator boundary.
+
+        ``confirm`` is intentionally mandatory and this method is not wired
+        into FastAPI.  Reset versus Next is serialized by the same service
+        lock; the losing stale command observes the incremented control
+        version.  A live abnormal run becomes stopped, while replay returns
+        to the completed historical view without touching turn content.
+        """
+
+        if not confirm:
+            raise conflict(
+                "reset_confirmation_required",
+                "Explicit reset confirmation is required.",
+            )
+        reset_event: EventRecord | None = None
+        reset_epoch: str | None = None
+        # SQL deployments must claim reset through a fresh writer transaction.
+        # The request Session may have read a stale WAL snapshot, and neither
+        # its state mutation nor a process-local audit fallback can serialize
+        # reset against another service instance's Next claim.
+        sql_reset = getattr(self.repository, "claim_operator_reset", None)
+        if callable(sql_reset):
+            debate = self._get_debate(db, debate_id)
+            self._assert_teacher(db, debate, context)
+            state = self._state(db, debate)
+            expected = (
+                state.control_version
+                if expected_control_version is None
+                else expected_control_version
+            )
+            try:
+                result = sql_reset(
+                    debate_id=debate_id,
+                    expected_control_version=expected,
+                    actor_kind="operator",
+                    actor_id=(str(context.user.id) if context is not None else actor_user_id),
+                    request_id=request_id,
+                    teacher_user_id=(str(context.user.id) if context is not None else None),
+                )
+            except PlatformError:
+                self._rollback(db)
+                raise
+            except Exception as exc:
+                self._rollback(db)
+                raise PlatformError(
+                    "audit_log_failed",
+                    "Operator reset could not commit its AuditLog transaction.",
+                    503,
+                ) from exc
+            self._rollback(db)
+            if not bool(result.get("claimed")):
+                reason = str(result.get("reason", "invalid_state"))
+                if reason == "stale_control_version":
+                    raise conflict(
+                        "stale_control_version",
+                        "The playback control version is stale.",
+                        {"current_control_version": result.get("control_version")},
+                    )
+                if reason == "not_found":
+                    raise not_found()
+                if reason == "forbidden":
+                    raise forbidden()
+                raise invalid_state("Playback is not in an operator-reset state.")
+
+            debate = self._get_debate(db, debate_id)
+            state = self._state(db, debate)
+            previous_mode = str(result.get("previous_mode", "live"))
+            previous_turn_id = result.get("current_turn_id")
+            reset_epoch = result.get("controller_epoch")
+            # These fields are intentionally process-local, but clearing them
+            # keeps two service instances from retaining an old pending ticket
+            # after the durable writer has revoked its epoch.
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._controller_sessions.pop(debate_id, None)
+            if previous_mode == "replay":
+                reset_event = self._stage_event(
+                    db,
+                    debate_id,
+                    "replay.completed",
+                    {
+                        "scope": "all",
+                        "turn_id": previous_turn_id,
+                        "control_version": state.control_version,
+                    },
+                )
+            else:
+                reset_event = self._stage_event(
+                    db,
+                    debate_id,
+                    "debate.stopped",
+                    {
+                        "final_states": {
+                            "debate": "stopped",
+                            "playback": self._state_dto(state, db, debate).model_dump(mode="json"),
+                            "interaction": "closed",
+                            "insight": "not_started",
+                            "report": "not_started",
+                        },
+                        "downstream_outcome": "stopped",
+                        "safe_error_code": "operator_reset",
+                    },
+                )
+            self._commit(db)
+            await self.task_manager.cancel_debate(debate_id)
+            self.ticket_store.revoke_debate(debate_id)
+            if reset_epoch is not None:
+                self._revoke_epoch(str(reset_epoch), debate_id, "debate_terminal")
+            await self._publish_event(reset_event)
+            return self._state_dto(state, db, debate)
+        previous_mode = "live"
+        resulting_status = "stopped"
+        async with self._lock:
+            debate = self._get_debate(db, debate_id)
+            self._assert_teacher(db, debate, context)
+            state = self._state(db, debate)
+            if expected_control_version is not None:
+                self._check_control(state, expected_control_version)
+            if state.mode == "live" and state.status in {"completed", "stopped"}:
+                raise invalid_state("Playback is not in an operator-reset state.")
+            if state.mode == "replay" and state.status == "completed":
+                raise invalid_state("Replay is already completed.")
+            previous_mode = state.mode
+            previous_turn_id = state.current_turn_id
+            previous_control_version = state.control_version
+            next_control_version = previous_control_version + 1
+            resulting_status = "completed" if previous_mode == "replay" else "stopped"
+            # Audit is mandatory even for the in-memory test adapter.  Write
+            # it before mutating that adapter so a failing writer leaves the
+            # reset state untouched, matching the SQL transaction below.
+            self._write_operator_reset_audit(
+                db,
+                debate_id=debate_id,
+                actor_user_id=(str(context.user.id) if context is not None else actor_user_id),
+                previous_mode=previous_mode,
+                resulting_status=resulting_status,
+                control_version=next_control_version,
+                request_id=request_id,
+            )
+            state.control_version = next_control_version
+            debate.cancellation_generation = (
+                int(self._get(debate, "cancellation_generation", default=0) or 0) + 1
+            )
+            mark_interrupted = getattr(self.repository, "mark_jobs_interrupted", None)
+            if callable(mark_interrupted):
+                mark_interrupted(db, debate, "operator_reset")
+            if previous_mode == "replay":
+                if str(self._get(debate, "status", default="")) not in {
+                    "debate_finished",
+                    "completed",
+                }:
+                    debate.status = "completed"
+                self._set_nonplaying(state, "completed", state.cursor_ms)
+            else:
+                debate.status = "stopped"
+                self._set_nonplaying(state, "stopped", state.cursor_ms)
+            self.repository.save_debate(db, debate)
+            reset_epoch = state.controller_epoch
+            state.mode = "live"
+            state.current_turn_id = None
+            state.cursor_ms = 0
+            state.replay_scope = None
+            state.replay_turn_ids = []
+            state.replay_index = None
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.controller_epoch = None
+            state.controller_session_hash = None
+            state.controller_connection_id = None
+            self._controller_sessions.pop(debate_id, None)
+            self._save(db, debate, state)
+            if previous_mode == "replay":
+                reset_event = self._stage_event(
+                    db,
+                    debate_id,
+                    "replay.completed",
+                    {
+                        "scope": "all",
+                        "turn_id": previous_turn_id,
+                        "control_version": state.control_version,
+                    },
+                )
+            else:
+                reset_event = self._stage_event(
+                    db,
+                    debate_id,
+                    "debate.stopped",
+                    {
+                        "final_states": {
+                            "debate": "stopped",
+                            "playback": self._state_dto(state, db, debate).model_dump(mode="json"),
+                            "interaction": "closed",
+                            "insight": "not_started",
+                            "report": "not_started",
+                        },
+                        "downstream_outcome": "stopped",
+                        "safe_error_code": "operator_reset",
+                    },
+                )
+            self._commit(db)
+        await self.task_manager.cancel_debate(debate_id)
+        self.ticket_store.revoke_debate(debate_id)
+        if reset_epoch is not None:
+            self._revoke_epoch(reset_epoch, debate_id, "debate_terminal")
+        if reset_event is not None:
+            await self._publish_event(reset_event)
         return self._state_dto(state, db, debate)
 
     async def replay_all(
@@ -2439,13 +3067,20 @@ class PlaybackService:
                 )
             state.mode = "replay"
             state.replay_scope = "turn" if turn_id else "all"
+            # Persist the exact public queue for whole replay.  The queue is
+            # immutable for the lifetime of this replay; replay readiness and
+            # restart recovery must not rediscover a different transcript.
             state.replay_turn_ids = [str(item.id) for item in turns]
             state.replay_index = 0
             state.current_turn_id = state.replay_turn_ids[0]
             state.cursor_ms = 0
             state.status = "ready"
             state.started_monotonic = None
-            state.pending_action = "replay"
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             state.control_version += 1
             self._save(db, debate, state)
             self._commit(db)
@@ -2505,6 +3140,11 @@ class PlaybackService:
                         },
                     )
                     self._commit(db)
+                state.pending_action = None
+                state.pending_ticket_hash = None
+                state.pending_media_command_id = None
+                state.audio_duration_ms = 0
+                self._clear_media_results(debate_id)
                 self._revoke_epoch(previous_epoch, debate_id, "superseded")
             # Even a paused/ready handoff increments the control version, so
             # the old tab cannot issue a stale command after takeover.
@@ -2598,7 +3238,11 @@ class PlaybackService:
             state.controller_session_hash = None
             state.controller_connection_id = None
             state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
             self._controller_sessions.pop(debate_id, None)
+            self._clear_media_results(debate_id)
             self._save(db, debate, state)
             self._commit(db)
             self._revoke_epoch(epoch, debate_id, "disconnected")
@@ -2624,6 +3268,39 @@ class PlaybackService:
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
             self._check_epoch(state, epoch=epoch, session_hash=session_hash)
+
+            command_key = (debate_id, command_id)
+            previous = self._media_command_results.get(command_key)
+            if previous is not None:
+                prepared, result = previous
+                binding = prepared.binding
+                if (
+                    state.status == "ready"
+                    and state.current_turn_id == turn_id
+                    and state.pending_action == action
+                    and state.pending_ticket_hash == binding.token_hash
+                    and state.pending_media_command_id == command_id
+                    and binding.controller_epoch == epoch
+                    and binding.session_hash == session_hash
+                    and binding.control_version == expected_control_version
+                ):
+                    # Same command is idempotent in this process.  Reuse the
+                    # original private URL; no second ticket is issued.
+                    return prepared, result
+                self._media_command_results.pop(command_key, None)
+
+            # A pending hash is an authoritative one-ticket fence.  A second
+            # command must not replace it, even if the browser reconnects or
+            # another service instance owns a separate in-memory ticket map.
+            if (
+                state.pending_ticket_hash is not None
+                or state.pending_action is not None
+                or state.pending_media_command_id is not None
+            ):
+                raise conflict(
+                    "duplicate_command",
+                    "A media ticket is already pending for this playback item.",
+                )
             if state.status != "ready" or state.current_turn_id != turn_id:
                 raise not_found()
             turn = self._current_turn(db, debate, state)
@@ -2632,7 +3309,23 @@ class PlaybackService:
             if not self._turn_ready(turn):
                 raise not_found()
             metadata = self._validated_turn_audio(db, debate, turn)
+            if (
+                action == "replay"
+                and self.repository.current_audio_debate_id(db, self._course_id(debate))
+                != debate_id
+            ):
+                metadata = None
             if metadata is None:
+                if action == "replay" and state.replay_index not in {None, 0}:
+                    if self._rollback_replay_next(db, debate, state):
+                        raise conflict(
+                            "next_not_ready",
+                            "The retained replay bytes changed before media preparation.",
+                        )
+                    raise conflict(
+                        "stale_control_version",
+                        "The replay transition was superseded before media preparation.",
+                    )
                 raise not_found()
             token, binding = self.ticket_store.issue(
                 session_hash=session_hash,
@@ -2640,12 +3333,116 @@ class PlaybackService:
                 debate_id=debate_id,
                 turn_id=turn_id,
                 action=action,
+                control_version=expected_control_version,
             )
-            state.pending_action = action
-            state.pending_ticket_hash = binding.token_hash
-            state.audio_duration_ms = int(metadata.duration_ms)
-            self._save(db, debate, state)
-            self._commit(db)
+            try:
+                claim_media = getattr(self.repository, "claim_media_prepare", None)
+                if callable(claim_media):
+                    claimed = bool(
+                        claim_media(
+                            debate_id=debate_id,
+                            expected_control_version=expected_control_version,
+                            controller_epoch=epoch,
+                            turn_id=turn_id,
+                            ticket_hash=binding.token_hash,
+                            command_id=command_id,
+                            action=action,
+                            audio_duration_ms=int(metadata.duration_ms),
+                            expected_audio_relative_path=metadata.relative_path,
+                            expected_audio_sha256=metadata.sha256,
+                            expected_audio_size_bytes=metadata.size_bytes,
+                        )
+                    )
+                    if not claimed:
+                        self.ticket_store.revoke_token(token)
+                        self._rollback(db)
+                        if action == "replay" and state.replay_index not in {None, 0}:
+                            if self._rollback_replay_next(db, debate, state):
+                                raise conflict(
+                                    "next_not_ready",
+                                    "The retained replay bytes changed before media preparation.",
+                                )
+                        raise conflict(
+                            "stale_control_version",
+                            "The media ticket claim was superseded.",
+                            {"current_control_version": state.control_version},
+                        )
+                    # The fresh claim committed independently of the request
+                    # Session. Re-read the authoritative pending hash before
+                    # constructing the private result.
+                    self._rollback(db)
+                    debate = self._get_debate(db, debate_id)
+                    state = self._state(db, debate)
+                    post_metadata = self._validated_turn_audio(db, debate, turn)
+                    pointer_matches = (
+                        action != "replay"
+                        or self.repository.current_audio_debate_id(db, self._course_id(debate))
+                        == debate_id
+                    )
+                    same_validated_bytes = bool(
+                        post_metadata is not None
+                        and post_metadata.relative_path == metadata.relative_path
+                        and post_metadata.sha256 == metadata.sha256
+                        and post_metadata.size_bytes == metadata.size_bytes
+                    )
+                    if not pointer_matches or not same_validated_bytes:
+                        self.ticket_store.revoke_token(token)
+                        replay_index = state.replay_index
+                        if action == "replay" and replay_index not in {None, 0}:
+                            if self._rollback_replay_next(db, debate, state):
+                                raise conflict(
+                                    "next_not_ready",
+                                    "The retained replay bytes changed before media preparation.",
+                                )
+                        release_claim = getattr(self.repository, "release_media_prepare", None)
+                        released = False
+                        if callable(release_claim):
+                            released = bool(
+                                release_claim(
+                                    debate_id=debate_id,
+                                    expected_control_version=expected_control_version,
+                                    controller_epoch=epoch,
+                                    turn_id=turn_id,
+                                    ticket_hash=binding.token_hash,
+                                    command_id=command_id,
+                                )
+                            )
+                            self._rollback(db)
+                        else:
+                            state.pending_action = None
+                            state.pending_ticket_hash = None
+                            state.pending_media_command_id = None
+                            state.audio_duration_ms = 0
+                            self._save(db, debate, state)
+                            self._commit(db)
+                            released = True
+                        self._clear_media_results(debate_id)
+                        if not released:
+                            raise conflict(
+                                "stale_control_version",
+                                "The media ticket claim was superseded.",
+                                {"current_control_version": state.control_version},
+                            )
+                        if action == "replay":
+                            raise conflict(
+                                "next_not_ready",
+                                "The retained replay bytes changed before media preparation.",
+                            )
+                        raise PlatformError(
+                            "audio_not_retained",
+                            "This audio is no longer retained.",
+                            410,
+                        )
+                else:
+                    state.pending_action = action
+                    state.pending_ticket_hash = binding.token_hash
+                    state.pending_media_command_id = command_id
+                    state.audio_duration_ms = int(metadata.duration_ms)
+                    self._save(db, debate, state)
+                    self._commit(db)
+            except Exception:
+                self.ticket_store.revoke_token(token)
+                raise
             media_url = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
             result = MediaPreparedResult(
                 message_id=uuid4(),
@@ -2657,7 +3454,9 @@ class PlaybackService:
                 media_url=media_url,
                 expires_at=binding.expires_at,
             )
-            return PreparedMedia(media_url, binding.expires_at, token, binding), result
+            prepared = PreparedMedia(media_url, binding.expires_at, token, binding)
+            self._media_command_results[command_key] = (prepared, result)
+            return prepared, result
 
     def _find_ticket(
         self,
@@ -2707,6 +3506,8 @@ class PlaybackService:
                 state.status != "ready"
                 or state.current_turn_id != turn_id
                 or state.pending_action != action
+                or state.pending_ticket_hash is None
+                or state.pending_media_command_id is None
             ):
                 raise conflict("invalid_state", "The playback acknowledgement is stale.")
             turn = self._current_turn(db, debate, state)
@@ -2719,9 +3520,11 @@ class PlaybackService:
                 turn_id=turn_id,
                 action=action,
             )
-            if ticket is None:
+            if ticket is None or ticket[0] != state.pending_ticket_hash:
                 raise conflict("invalid_state", "The playback media ticket is unavailable.")
             token_hash, binding = ticket
+            if binding.control_version != expected_control_version:
+                raise conflict("invalid_state", "The playback media ticket is stale.")
             self.ticket_store.mark_binding_started(
                 binding,
                 audio_duration_ms=state.audio_duration_ms,
@@ -2730,7 +3533,10 @@ class PlaybackService:
                 if not self.repository.publish_turn(db, turn):
                     raise conflict("invalid_state", "The turn is not ready to publish.")
             self._set_playing(state)
-            state.pending_action = None
+            # Keep the action/hash/command bound for the lifetime of the
+            # playing item.  Audio authorization must prove that its bearer
+            # ticket is the exact media.prepare claim; ended_ack/play_failed
+            # clear this fence when the item leaves playback.
             state.pending_ticket_hash = token_hash
             self._save(db, debate, state)
             participants = self._participants(db, debate)
@@ -2818,6 +3624,7 @@ class PlaybackService:
         completed_events: list[EventRecord] = []
         next_turn_to_enqueue: Any | None = None
         mode = "live"
+        completed_epoch: str | None = None
         async with self._lock:
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
@@ -2843,22 +3650,81 @@ class PlaybackService:
             cursor = self._cursor(state)
             state.control_version += 1
             self.ticket_store.revoke_item(debate_id, turn_id)
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             if state.mode == "replay":
-                replay_ids = state.replay_turn_ids
-                state.replay_index = (state.replay_index or 0) + 1
-                if state.replay_scope == "all" and state.replay_index < len(replay_ids):
-                    state.current_turn_id = replay_ids[state.replay_index]
-                    state.cursor_ms = 0
-                    self._set_nonplaying(state, "ready")
-                else:
-                    self._set_nonplaying(state, "completed", cursor)
+                replay_queue, queue_valid = self._replay_queue(db, debate, state)
+                if not queue_valid:
+                    raise conflict("invalid_state", "The replay queue is unavailable.")
+                try:
+                    replay_index = int(state.replay_index) if state.replay_index is not None else -1
+                except (TypeError, ValueError):
+                    replay_index = -1
+                if (
+                    replay_index < 0
+                    or replay_index >= len(replay_queue)
+                    or str(replay_queue[replay_index].id) != turn_id
+                ):
+                    raise conflict("invalid_state", "The replay cursor is unavailable.")
+                mode = "replay"
+                # The completed item remains current while waiting for the
+                # teacher.  Only REST Next can increment this cursor and make
+                # the adjacent public item ready.
+                state.replay_index = replay_index
+                successor = (
+                    replay_queue[replay_index + 1] if replay_index + 1 < len(replay_queue) else None
+                )
+                if successor is not None:
+                    adjacent, unique = self._adjacent_successor(turns, current)
+                    if not unique or adjacent is None or str(adjacent.id) != str(successor.id):
+                        raise conflict(
+                            "invalid_state", "The replay turn plan has multiple successors."
+                        )
+                    self._set_nonplaying(state, "waiting_next", cursor)
                     state.current_turn_id = turn_id
-                self._save(db, debate, state)
-                payload = {
-                    "scope": state.replay_scope or "turn",
-                    "turn_id": turn_id,
-                    "control_version": state.control_version,
-                }
+                    next_ready = self._replay_next_turn_ready(db, debate, state)
+                    self._save(db, debate, state)
+                    payload = {
+                        "mode": "replay",
+                        "completed_turn_id": turn_id,
+                        "control_version": state.control_version,
+                        "next_turn_ready": next_ready,
+                    }
+                    completed_events.append(
+                        self._stage_event(db, debate_id, "playback.waiting_next", payload)
+                    )
+                else:
+                    # Final replay completion returns the ordinary historical
+                    # view: no controller/ticket or replay cursor survives.
+                    self._set_nonplaying(state, "completed", cursor)
+                    state.mode = "live"
+                    state.current_turn_id = None
+                    state.cursor_ms = 0
+                    state.replay_scope = None
+                    state.replay_turn_ids = []
+                    state.replay_index = None
+                    state.pending_action = None
+                    state.pending_ticket_hash = None
+                    state.pending_media_command_id = None
+                    state.audio_duration_ms = 0
+                    self._clear_media_results(debate_id)
+                    completed_epoch = state.controller_epoch
+                    state.controller_epoch = None
+                    state.controller_session_hash = None
+                    state.controller_connection_id = None
+                    self._controller_sessions.pop(debate_id, None)
+                    self._save(db, debate, state)
+                    payload = {
+                        "scope": "all",
+                        "turn_id": turn_id,
+                        "control_version": state.control_version,
+                    }
+                    completed_events.append(
+                        self._stage_event(db, debate_id, "replay.completed", payload)
+                    )
             else:
                 index = next(index for index, item in enumerate(turns) if str(item.id) == turn_id)
                 if index + 1 < len(turns):
@@ -2889,15 +3755,11 @@ class PlaybackService:
                         "playback_rate": state.playback_rate,
                     }
                     next_ready = False
-            mode = state.mode
-            completed_events.append(
-                self._stage_event(
-                    db,
-                    debate_id,
-                    "replay.completed" if mode == "replay" else "playback.completed",
-                    payload,
+            if mode != "replay":
+                mode = state.mode
+                completed_events.append(
+                    self._stage_event(db, debate_id, "playback.completed", payload)
                 )
-            )
             if mode == "live" and state.status == "waiting_next":
                 # Keep the waiting event closed over the completed current
                 # turn.  It intentionally contains no successor identity or
@@ -2909,6 +3771,7 @@ class PlaybackService:
                         debate_id,
                         "playback.waiting_next",
                         {
+                            "mode": "live",
                             "completed_turn_id": turn_id,
                             "control_version": state.control_version,
                             "next_turn_ready": next_ready,
@@ -2923,6 +3786,9 @@ class PlaybackService:
                     next_turn_to_enqueue = next_turn
             self._commit(db)
         await self._publish_events(completed_events)
+        if completed_epoch is not None:
+            self._revoke_epoch(completed_epoch, debate_id, "debate_terminal")
+            self.ticket_store.revoke_debate(debate_id)
         if next_turn_to_enqueue is not None:
             await self._enqueue(debate, next_turn_to_enqueue)
         return self._state_dto(state, db, debate)
@@ -2952,6 +3818,10 @@ class PlaybackService:
                 raise not_found()
             self.ticket_store.revoke_item(debate_id, turn_id)
             state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._clear_media_results(debate_id)
             if failure_phase == "pre_ack":
                 if state.status != "ready":
                     raise invalid_state("A pre-play failure requires ready playback.")
@@ -2982,11 +3852,26 @@ class PlaybackService:
         self._assert_teacher(db, debate, context)
         state = self._state(db, debate)
         turns = self._turns(db, debate)
+        replay_visible_ids: set[str] | None = None
+        if state.mode == "replay" and state.replay_scope == "all":
+            replay_queue, queue_valid = self._replay_queue(db, debate, state)
+            try:
+                replay_index = int(state.replay_index) if state.replay_index is not None else -1
+            except (TypeError, ValueError):
+                replay_index = -1
+            if queue_valid and 0 <= replay_index < len(replay_queue):
+                replay_visible_ids = {str(item.id) for item in replay_queue[: replay_index + 1]}
+            else:
+                # An inconsistent replay state must never expose the complete
+                # history while the replay cursor is unresolved.
+                replay_visible_ids = set()
         public_turns = []
         for turn in sorted(
             turns, key=lambda item: int(self._get(item, "turn_index", default=0) or 0)
         ):
             if not self._turn_public(turn):
+                continue
+            if replay_visible_ids is not None and str(turn.id) not in replay_visible_ids:
                 continue
             speech = self._get(turn, "speech", "original_text", default="")
             if not isinstance(speech, str) or not speech:
@@ -3090,7 +3975,14 @@ class PlaybackService:
         ):
             raise forbidden()
         state = self._state(db, debate)
-        if state.controller_epoch != ticket_binding.controller_epoch:
+        if (
+            state.controller_epoch != ticket_binding.controller_epoch
+            or state.current_turn_id != turn_id
+            or state.pending_action != ticket_binding.action
+            or state.pending_ticket_hash != ticket_binding.token_hash
+            or state.pending_media_command_id is None
+            or ticket_binding.control_version != state.control_version
+        ):
             raise forbidden()
         return AudioAuthorization(metadata, ticket_binding)
 
