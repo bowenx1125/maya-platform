@@ -401,7 +401,9 @@ export function DebateStage({
   socketUrl,
   labels: suppliedLabels,
   readOnly = false,
-  expectedCurrentAudioDebateId = null,
+  currentAudioDebateId,
+  expectedCurrentAudioDebateId,
+  onCurrentAudioDebateIdChange,
   className,
 }: DebateStageProps) {
   const labels = useMemo(
@@ -430,7 +432,10 @@ export function DebateStage({
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
-
+  const audioPointerInput =
+    currentAudioDebateId !== undefined
+      ? currentAudioDebateId
+      : expectedCurrentAudioDebateId;
   const detailRef = useRef(detailState);
   const playbackRef = useRef(playback);
   const publicTurnsRef = useRef(publicTurns);
@@ -484,6 +489,32 @@ export function DebateStage({
   const startIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const labelsRef = useRef(labels);
+
+  const [audioPointerOverride, setAudioPointerOverride] = useState<{
+    source: string | null | undefined;
+    value: string;
+  } | null>(null);
+  const audioPointer =
+    audioPointerOverride !== null &&
+    audioPointerOverride.source === audioPointerInput
+      ? audioPointerOverride.value
+      : audioPointerInput;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAudioPointerOverride(null), 0);
+    return () => window.clearTimeout(timer);
+  }, [audioPointerInput]);
+
+  const markCurrentAudioDebate = useCallback(
+    (nextDebateId: string) => {
+      setAudioPointerOverride({
+        source: audioPointerInput,
+        value: nextDebateId,
+      });
+      onCurrentAudioDebateIdChange?.(nextDebateId);
+    },
+    [audioPointerInput, onCurrentAudioDebateIdChange],
+  );
 
   const markControllerReady = useCallback((value: boolean) => {
     controllerReadyRef.current = value;
@@ -2073,7 +2104,9 @@ export function DebateStage({
         return;
       if (
         (action === "replay" || action === "replay-turn") &&
-        (!controllerReadyRef.current || acquirePendingRef.current)
+        (!controllerReadyRef.current ||
+          acquirePendingRef.current ||
+          audioPointer !== debateId)
       ) {
         return;
       }
@@ -2106,7 +2139,7 @@ export function DebateStage({
         if (action === "start") {
           pendingActionRef.current = "start";
           if (
-            expectedCurrentAudioDebateId &&
+            audioPointer &&
             !window.confirm(labelsRef.current.replaceRetainedAudioConfirm)
           ) {
             return;
@@ -2118,13 +2151,16 @@ export function DebateStage({
             debateId,
             {
               expected_revision: detailRef.current.revision,
-              expected_current_audio_debate_id: expectedCurrentAudioDebateId,
-              confirm_previous_audio_cleanup: Boolean(
-                expectedCurrentAudioDebateId,
-              ),
+              expected_current_audio_debate_id: audioPointer ?? null,
+              confirm_previous_audio_cleanup: Boolean(audioPointer),
             },
             { idempotency },
           );
+          // A successful start changes the course's retained-audio pointer.
+          // Commit this local fact before stale-response handling so a
+          // start response that loses a WS/controller race still enables
+          // replay after the debate reaches a terminal state.
+          markCurrentAudioDebate(debateId);
           if (!isCurrentRequest()) {
             // The start request races the draft socket becoming live.  The
             // socket's authoritative turn events may advance the playback
@@ -2247,11 +2283,12 @@ export function DebateStage({
     [
       api,
       applyPlayback,
+      audioPointer,
       busyAction,
       commitDetail,
       debateId,
-      expectedCurrentAudioDebateId,
       markControllerReady,
+      markCurrentAudioDebate,
       pauseAudio,
       readOnly,
       scheduleControllerAcquire,
@@ -2304,6 +2341,7 @@ export function DebateStage({
     TERMINAL_PLAYBACK.includes(playback.status);
   const canReplay =
     !readOnly &&
+    audioPointer === debateId &&
     controllerReady &&
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
@@ -2319,6 +2357,11 @@ export function DebateStage({
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
       : null;
+  const replayAudioUnavailable =
+    publicTurns.length > 0 &&
+    (detailState.status === "debate_finished" ||
+      detailState.status === "completed") &&
+    audioPointer !== debateId;
   const visibleStatus = statusCopy(detailState.status, playback.status, labels);
 
   return (
@@ -2484,6 +2527,11 @@ export function DebateStage({
           {controlError ? (
             <div className={styles.failureCard} role="alert">
               <span>{controlError}</span>
+            </div>
+          ) : null}
+          {replayAudioUnavailable ? (
+            <div className={styles.failureCard} role="status">
+              <span>{labels.audioNotRetained}</span>
             </div>
           ) : null}
         </div>

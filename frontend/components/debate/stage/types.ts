@@ -68,6 +68,7 @@ export type PlaybackStageLabels = {
   controlBusy?: string;
   retryReason?: string;
   noPublishedSpeech?: string;
+  audioNotRetained?: string;
   selectedTurn?: string;
   replaceRetainedAudioConfirm?: string;
   audioLabel?: string;
@@ -186,7 +187,18 @@ export type DebateStageProps = {
   socketUrl?: string;
   labels?: PlaybackStageLabels;
   readOnly?: boolean;
-  /** Course pointer captured by the page before start; null is a CAS for no retained audio. */
+  /**
+   * Authoritative course audio pointer. `undefined` means the control page
+   * could not establish the pointer; neither unknown nor null authorizes
+   * replay.
+   */
+  currentAudioDebateId?: string | null;
+  /**
+   * Legacy name retained for callers that only provide the start CAS. New
+   * callers should use currentAudioDebateId for both the CAS and replay gate.
+   */
   expectedCurrentAudioDebateId?: string | null;
+  /** Keep the page's local current-audio pointer in sync after a successful start. */
+  onCurrentAudioDebateIdChange?: (debateId: string) => void;
   className?: string;
 };

@@ -41,6 +41,7 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   controlBusy: "Updating classroom playback…",
   retryReason: "Playback did not start. You can retry this turn.",
   noPublishedSpeech: "The server has not published a speech for this turn yet.",
+  audioNotRetained: "This audio is no longer retained.",
   selectedTurn: "Selected turn",
   replaceRetainedAudioConfirm:
     "Starting this debate will replace the previous retained audio. Its text remains available.",

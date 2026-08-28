@@ -148,6 +148,132 @@ class AudioStore:
         # defense against a stale local data directory.
         return contained_path(self.data_root, relative_path)
 
+    def _non_symlink_path(self, relative_path: str) -> Path | None:
+        """Return an exact path only when no component is a symlink.
+
+        ``contained_path`` intentionally resolves links before checking
+        containment.  That is the right boundary for ordinary file access,
+        but replay retention has a stricter contract: a StoredFile must point
+        at the exact canonical WAV and the bytes must not be reached through a
+        link.  Walk the lexical path first, then retain the containment check
+        as a second defence.
+        """
+
+        try:
+            if not relative_path or Path(relative_path).is_absolute():
+                return None
+            base = self.data_root.absolute()
+            if base.is_symlink():
+                return None
+            candidate = base / relative_path
+            candidate.relative_to(base)
+            current = candidate
+            while current != base:
+                if current.is_symlink():
+                    return None
+                current = current.parent
+            resolved = contained_path(self.data_root, relative_path)
+            if resolved != candidate.resolve(strict=False):
+                return None
+            return candidate
+        except (OSError, TypeError, ValueError):
+            return None
+
+    def _validated_file_snapshot(
+        self,
+        *,
+        course_id: str,
+        debate_id: str,
+        turn_id: str,
+        relative_path: str,
+        expected_sha256: str | None,
+        expected_size_bytes: int | None,
+        expected_duration_ms: int | None = None,
+    ) -> tuple[AudioMetadata, bytes] | None:
+        """Return metadata and bytes from one validated file read.
+
+        The in-memory metadata index is deliberately not consulted here.  A
+        caller must provide the database facts (hash/size/path); this method
+        reads the canonical path, rejects symlink components, verifies the
+        digest and size, and decodes the WAV.  Returning the bytes from that
+        same read prevents a path replacement between validation and response
+        construction from serving unvalidated content.
+        """
+
+        try:
+            canonical = self.relative_path(course_id, debate_id, turn_id)
+        except (TypeError, ValueError):
+            return None
+        if relative_path != canonical:
+            return None
+        if expected_sha256 is None or expected_size_bytes is None:
+            return None
+        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+            return None
+        try:
+            expected_size = int(expected_size_bytes)
+        except (TypeError, ValueError):
+            return None
+        if expected_size < 0:
+            return None
+        path = self._non_symlink_path(relative_path)
+        if path is None or path.is_symlink() or not path.is_file():
+            return None
+        try:
+            raw = path.read_bytes()
+            stat = path.stat()
+            if stat.st_size != expected_size or len(raw) != expected_size:
+                return None
+            digest = hashlib.sha256(raw).hexdigest()
+            if digest != expected_sha256:
+                return None
+            duration = wav_duration_ms(raw)
+            if expected_duration_ms is not None and duration != int(expected_duration_ms):
+                return None
+        except (OSError, TypeError, ValueError, TTSProviderError, wave.Error):
+            return None
+        metadata = AudioMetadata(
+            course_id=course_id,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            relative_path=relative_path,
+            sha256=digest,
+            size_bytes=expected_size,
+            duration_ms=duration,
+            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
+        )
+        return metadata, raw
+
+    def validate_file(
+        self,
+        *,
+        course_id: str,
+        debate_id: str,
+        turn_id: str,
+        relative_path: str,
+        expected_sha256: str | None,
+        expected_size_bytes: int | None,
+        expected_duration_ms: int | None = None,
+    ) -> AudioMetadata | None:
+        """Validate durable StoredFile facts and return fresh byte metadata."""
+
+        snapshot = self._validated_file_snapshot(
+            course_id=course_id,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            relative_path=relative_path,
+            expected_sha256=expected_sha256,
+            expected_size_bytes=expected_size_bytes,
+            expected_duration_ms=expected_duration_ms,
+        )
+        return snapshot[0] if snapshot is not None else None
+
+    def rehydrate(self, metadata: AudioMetadata) -> None:
+        """Cache metadata only after a caller has verified durable facts."""
+
+        with self._lock:
+            self._metadata[(metadata.debate_id, metadata.turn_id)] = metadata
+
     def synthesize_and_store(
         self,
         *,
@@ -213,8 +339,8 @@ class AudioStore:
             metadata = self._metadata.get((debate_id, turn_id))
         if metadata is None:
             return None
-        path = self.path_for(metadata.relative_path)
-        if path.is_symlink() or not path.is_file():
+        path = self._non_symlink_path(metadata.relative_path)
+        if path is None or path.is_symlink() or not path.is_file():
             return None
         return metadata
 
@@ -222,7 +348,9 @@ class AudioStore:
         metadata = self.metadata(debate_id, turn_id)
         if metadata is None:
             return None
-        path = self.path_for(metadata.relative_path)
+        path = self._non_symlink_path(metadata.relative_path)
+        if path is None:
+            return None
         try:
             return path.read_bytes()
         except OSError:
@@ -232,21 +360,34 @@ class AudioStore:
         """Remove only this debate's exact files; never infer a parent deletion."""
 
         with self._lock:
-            items = [
-                metadata
-                for (candidate, _), metadata in self._metadata.items()
-                if candidate == debate_id
-            ]
             for key in [key for key in self._metadata if key[0] == debate_id]:
                 self._metadata.pop(key, None)
-        for metadata in items:
-            path = self.path_for(metadata.relative_path)
-            if path.is_symlink() or not path.exists():
+        if not _SAFE_UUID.fullmatch(debate_id):
+            return
+        # The process-local index is only a cache.  On a fresh service it is
+        # empty even when the durable debate directory still has bytes, so
+        # cleanup must resolve the exact UUID directory independently.
+        course_root = self.data_root / "courses"
+        if not course_root.is_dir() or course_root.is_symlink():
+            return
+        for course_dir in course_root.iterdir():
+            if course_dir.is_symlink() or not _SAFE_UUID.fullmatch(course_dir.name):
+                continue
+            debate_root = course_dir / "current-debate-audio" / debate_id
+            if debate_root.is_symlink() or not debate_root.is_dir():
+                continue
+            for path in debate_root.iterdir():
                 if path.is_symlink():
                     path.unlink(missing_ok=True)
-                continue
-            if path.is_file():
-                path.unlink()
+                elif path.is_file():
+                    path.unlink()
+            try:
+                debate_root.rmdir()
+            except OSError:
+                # Never recursively infer a parent deletion from an
+                # unexpected directory.  The journal keeps the boundary
+                # recoverable for a later startup pass.
+                pass
 
     def remove_turn(self, debate_id: str, turn_id: str) -> None:
         """Remove one unpublished/stale turn without touching retained siblings."""
@@ -270,11 +411,11 @@ class AudioStore:
     ) -> bool:
         """Atomically move one retained debate directory to audio-swap staging."""
 
-        source = self.path_for(
+        source = self._non_symlink_path(
             f"courses/{_uuid_part(course_id)}/current-debate-audio/{_uuid_part(debate_id)}"
         )
-        target = self.path_for(staging_relative_path)
-        if source.is_symlink() or target.is_symlink():
+        target = self._non_symlink_path(staging_relative_path)
+        if source is None or target is None:
             raise ValueError("audio swap path cannot be a symlink")
         if not source.exists():
             return False
@@ -309,11 +450,11 @@ class AudioStore:
     ) -> bool:
         """Restore one staged directory after a failed start transaction."""
 
-        source = self.path_for(staging_relative_path)
-        target = self.path_for(
+        source = self._non_symlink_path(staging_relative_path)
+        target = self._non_symlink_path(
             f"courses/{_uuid_part(course_id)}/current-debate-audio/{_uuid_part(debate_id)}"
         )
-        if source.is_symlink() or target.is_symlink():
+        if source is None or target is None:
             raise ValueError("audio swap path cannot be a symlink")
         if not source.exists():
             return False
@@ -341,10 +482,9 @@ class AudioStore:
     def delete_staging(self, staging_relative_path: str) -> None:
         """Delete a journal-approved staging directory after DB commit."""
 
-        target = self.path_for(staging_relative_path)
-        if target.is_symlink():
-            target.unlink()
-            return
+        target = self._non_symlink_path(staging_relative_path)
+        if target is None:
+            raise ValueError("audio staging target cannot be a symlink")
         if not target.exists():
             return
         if not target.is_dir():
@@ -371,9 +511,22 @@ class AudioStore:
         metadata = self.metadata(debate_id, turn_id)
         if metadata is None:
             raise FileNotFoundError("audio_not_retained")
-        body = self.read(debate_id, turn_id)
-        if body is None:
+        # The index is only a cache.  Re-read and validate the canonical bytes
+        # before every response so a file replaced after authorization cannot
+        # be served under stale hash/size metadata.
+        snapshot = self._validated_file_snapshot(
+            course_id=metadata.course_id,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            relative_path=metadata.relative_path,
+            expected_sha256=metadata.sha256,
+            expected_size_bytes=metadata.size_bytes,
+            expected_duration_ms=metadata.duration_ms,
+        )
+        if snapshot is None:
             raise FileNotFoundError("audio_not_retained")
+        metadata, body = snapshot
+        self.rehydrate(metadata)
         etag = f'"{metadata.sha256}"'
         use_range = bool(range_header)
         if use_range and if_range:

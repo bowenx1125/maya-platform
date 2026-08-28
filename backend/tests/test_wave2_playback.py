@@ -55,7 +55,12 @@ from app.modules.debates.playback.router import _websocket_origin_allowed
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlPlaybackRepository, SqlRow
 from app.modules.debates.playback.task_manager import TaskManager
-from app.modules.debates.setup.audio_swap import AudioSwapRequest, prepare_audio_swap_journal
+from app.modules.debates.setup.audio_swap import (
+    AudioSwapRequest,
+    AudioSwapState,
+    prepare_audio_swap_journal,
+    transition_audio_swap,
+)
 from app.modules.knowledge.markdown import EMBEDDING_DIMENSION, EMBEDDING_KEY, mock_embedding
 from app.modules.knowledge.recovery import recover_file_operations
 from app.modules.knowledge.services import claim_idempotency
@@ -242,6 +247,149 @@ def _wav_bytes() -> bytes:
         wav.setframerate(8_000)
         wav.writeframes(b"\x00\x00" * 80)
     return stream.getvalue()
+
+
+def _insert_sql_retained_debate(
+    database: Database,
+    *,
+    agent_id: str,
+    status: str = "debate_finished",
+) -> tuple[str, str, str, str]:
+    """Create one minimal final/public SQL turn with a durable audio row."""
+
+    now = datetime.now(UTC)
+    debate_id, participant_id, turn_id, file_id = (str(uuid4()) for _ in range(4))
+    with database.session() as db:
+        version = db.scalar(select(AgentVersion).where(AgentVersion.agent_id == agent_id))
+        assert version is not None and version.knowledge_snapshot_id is not None
+        agent = db.get(Agent, agent_id)
+        assert agent is not None
+        snapshot_id = str(version.knowledge_snapshot_id)
+        db.add(
+            Debate(
+                id=debate_id,
+                course_id=COURSE_ID,
+                topic=TOPIC,
+                rule_set_id="ordered_multi_agent_rounds_demo_v1",
+                rule_snapshot_json='{"round_count":2}',
+                status=status,
+                revision=0,
+                last_sequence=0,
+                cancellation_generation=0,
+                created_by="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.flush()
+        db.add(
+            DebateParticipant(
+                id=participant_id,
+                debate_id=debate_id,
+                course_id=COURSE_ID,
+                group_id=str(agent.group_id),
+                agent_id=agent_id,
+                agent_version_id=str(version.id),
+                knowledge_snapshot_id=snapshot_id,
+                slot="A",
+                order_index=0,
+                agent_name=str(agent.name),
+                version_label="V1.0",
+                avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+                requested_voice_profile_id=None,
+                effective_voice_kind="mock_sentinel",
+                effective_voice_profile_id=None,
+                voice_fallback_active=True,
+                stance_mode="assigned",
+                initial_stance="support",
+                current_stance="support",
+                teacher_note="",
+                initial_position_summary="A retained position.",
+                current_position_summary="A retained position.",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.flush()
+        store = AudioStore(database.data_root or Path("/tmp"))
+        relative_path = store.relative_path(COURSE_ID, debate_id, turn_id)
+        raw = _wav_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        metadata = store.store_bytes(
+            course_id=COURSE_ID,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            raw=raw,
+        )
+        db.add(
+            StoredFile(
+                id=file_id,
+                kind="debate_audio",
+                relative_path=relative_path,
+                sha256=digest,
+                size_bytes=len(raw),
+                state="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.flush()
+        db.add(
+            DebateTurn(
+                id=turn_id,
+                debate_id=debate_id,
+                participant_id=participant_id,
+                knowledge_snapshot_id=snapshot_id,
+                round_no=1,
+                turn_index=0,
+                generation_status="final_ready",
+                publication_status="public",
+                preparation_stage="ready",
+                speech=_valid_speech(),
+                structured_json='{"position_summary":"A retained position."}',
+                predecessor_turn_ids_json="[]",
+                transcript_hash="a" * 64,
+                cutoff_turn_index=-1,
+                retrieval_status="no_match",
+                grounding_mode="general_reasoning",
+                retrieval_receipts_json="[]",
+                word_count=80,
+                attempt=1,
+                audio_file_id=file_id,
+                audio_duration_ms=metadata.duration_ms,
+                actual_tts_voice_kind="mock_sentinel",
+                actual_tts_voice_profile_id=None,
+                safe_error_code=None,
+                created_at=now,
+                updated_at=now,
+                public_at=now,
+            )
+        )
+        db.flush()
+        db.add(
+            DebatePlaybackState(
+                id=str(uuid4()),
+                debate_id=debate_id,
+                status="completed",
+                mode="live",
+                current_turn_id=None,
+                cursor_ms=0,
+                playback_rate=1.0,
+                control_version=7,
+                controller_epoch=None,
+                controller_owner_connection=None,
+                server_started_at=None,
+                replay_scope=None,
+                replay_index=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.execute(
+            text("UPDATE courses SET current_audio_debate_id=:debate_id WHERE id=:course_id"),
+            {"debate_id": debate_id, "course_id": COURSE_ID},
+        )
+    return debate_id, turn_id, file_id, relative_path
 
 
 def _memory_debate(
@@ -2876,6 +3024,37 @@ async def test_if_range_returns_range_only_for_matching_current_bytes(tmp_path: 
     assert stale_date.status_code == 200
 
 
+def test_audio_response_uses_the_validated_bytes_snapshot_on_same_size_replace(
+    tmp_path: Path,
+) -> None:
+    """A replacement between validation and the old read cannot leak bytes."""
+
+    course_id, debate_id, turn_id = (str(uuid4()) for _ in range(3))
+    store = AudioStore(tmp_path, tts_provider=MockTTSProvider())
+    raw = _wav_bytes()
+    metadata = store.store_bytes(
+        course_id=course_id,
+        debate_id=debate_id,
+        turn_id=turn_id,
+        raw=raw,
+    )
+    path = store.path_for(metadata.relative_path)
+    replacement = raw[:44] + bytes([raw[44] ^ 1]) + raw[45:]
+    original_snapshot = store._validated_file_snapshot
+
+    def validate_then_replace(**kwargs: Any) -> Any:
+        validated = original_snapshot(**kwargs)
+        path.write_bytes(replacement)
+        return validated
+
+    store._validated_file_snapshot = validate_then_replace  # type: ignore[method-assign]
+    response = store.response(debate_id, turn_id)
+    assert response.status_code == 200
+    assert response.body == raw
+    assert response.body != replacement
+    assert response.etag == f'"{metadata.sha256}"'
+
+
 @pytest.mark.asyncio
 async def test_full_replay_uses_retained_audio_without_provider_calls(tmp_path: Path) -> None:
     repository = MemoryPlaybackRepository()
@@ -2967,6 +3146,377 @@ async def test_full_replay_uses_retained_audio_without_provider_calls(tmp_path: 
     assert provider_calls == 0
     assert tts.synthesize_calls == 0
     await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_sql_replay_rehydrates_empty_audio_cache_from_stored_file(
+    app_factory: Any,
+) -> None:
+    """A fresh service must validate and rehydrate persisted current audio."""
+
+    _app, database, settings = app_factory()
+    with TestClient(_app):
+        pass
+    agent_id = _insert_published_agent(
+        database,
+        group_id=GROUP_BOWEN_ID,
+        name="Retained Bowen",
+        evidence="TikTok transparency, privacy, safeguards, and accountable review.",
+    )
+    debate_id, turn_id, _file_id, _relative_path = _insert_sql_retained_debate(
+        database, agent_id=agent_id
+    )
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    tts = MockTTSProvider()
+    store = AudioStore(settings.resolved_data_root, tts_provider=tts)
+    # The constructor may scan the tree, but this test proves the DB facts are
+    # sufficient even when a restarted process begins with an empty cache.
+    store._metadata.clear()
+    tasks = TaskManager()
+    service = PlaybackService(
+        repository,
+        audio_store=store,
+        task_manager=tasks,
+        tts_provider=tts,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+
+    with database.session() as db:
+        replay = await service.replay_all(db, debate_id, expected_control_version=7)
+
+    assert replay.mode == "replay"
+    assert replay.status == "ready"
+    assert str(replay.current_turn_id) == turn_id
+    assert service.audio_store.metadata(debate_id, turn_id) is not None
+    assert tts.synthesize_calls == 0
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+async def test_sql_replay_pointer_change_rejects_all_and_turn_without_mutation(
+    app_factory: Any,
+) -> None:
+    _app, database, settings = app_factory()
+    with TestClient(_app):
+        pass
+    agent_id = _insert_published_agent(
+        database,
+        group_id=GROUP_BOWEN_ID,
+        name="Pointer Bowen",
+        evidence="TikTok transparency, privacy, safeguards, and accountable review.",
+    )
+    debate_id, turn_id, _file_id, _relative_path = _insert_sql_retained_debate(
+        database, agent_id=agent_id
+    )
+    replacement_id, _replacement_turn_id, _replacement_file_id, _replacement_path = (
+        _insert_sql_retained_debate(database, agent_id=agent_id)
+    )
+
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    store = AudioStore(settings.resolved_data_root)
+    store._metadata.clear()
+    tasks = TaskManager()
+    service = PlaybackService(
+        repository,
+        audio_store=store,
+        task_manager=tasks,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    for replay_call in (
+        lambda db: service.replay_all(db, debate_id, expected_control_version=7),
+        lambda db: service.replay_turn(db, debate_id, turn_id, expected_control_version=7),
+    ):
+        with database.session() as db:
+            with pytest.raises(PlatformError) as rejected:
+                await replay_call(db)
+        assert rejected.value.code == "audio_not_retained"
+
+    with database.session() as db:
+        state = db.scalar(
+            select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+        )
+        assert state is not None
+        assert state.control_version == 7
+        assert state.status == "completed"
+        assert state.mode == "live"
+        assert state.current_turn_id is None
+    await tasks.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tamper",
+    ["missing", "bad_wav", "symlink", "path", "hash", "size", "state", "kind"],
+)
+async def test_sql_replay_rejects_invalid_persisted_audio_facts(
+    app_factory: Any,
+    tamper: str,
+) -> None:
+    _app, database, settings = app_factory()
+    with TestClient(_app):
+        pass
+    agent_id = _insert_published_agent(
+        database,
+        group_id=GROUP_BOWEN_ID,
+        name="Integrity Bowen",
+        evidence="TikTok transparency, privacy, safeguards, and accountable review.",
+    )
+    debate_id, _turn_id, file_id, relative_path = _insert_sql_retained_debate(
+        database, agent_id=agent_id
+    )
+    path = settings.resolved_data_root / relative_path
+    if tamper == "missing":
+        path.unlink()
+    elif tamper == "bad_wav":
+        bad = b"x" * path.stat().st_size
+        path.write_bytes(bad)
+        with database.session() as db:
+            stored = db.get(StoredFile, file_id)
+            assert stored is not None
+            stored.sha256 = hashlib.sha256(bad).hexdigest()
+            stored.size_bytes = len(bad)
+    elif tamper == "symlink":
+        target = path.with_name("other.wav")
+        target.write_bytes(_wav_bytes())
+        path.unlink()
+        path.symlink_to(target.name)
+    elif tamper == "path":
+        with database.session() as db:
+            stored = db.get(StoredFile, file_id)
+            assert stored is not None
+            stored.relative_path = f"courses/{COURSE_ID}/wrong/{file_id}.wav"
+    elif tamper == "hash":
+        with database.session() as db:
+            stored = db.get(StoredFile, file_id)
+            assert stored is not None
+            stored.sha256 = "0" * 64
+    elif tamper == "size":
+        with database.session() as db:
+            stored = db.get(StoredFile, file_id)
+            assert stored is not None
+            stored.size_bytes += 1
+    elif tamper == "state":
+        with database.session() as db:
+            stored = db.get(StoredFile, file_id)
+            assert stored is not None
+            stored.state = "deleted"
+    else:
+        with database.session() as db:
+            stored = db.get(StoredFile, file_id)
+            assert stored is not None
+            stored.kind = "markdown"
+
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    store = AudioStore(settings.resolved_data_root)
+    store._metadata.clear()
+    tasks = TaskManager()
+    service = PlaybackService(
+        repository,
+        audio_store=store,
+        task_manager=tasks,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    with database.session() as db:
+        with pytest.raises(PlatformError) as rejected:
+            await service.replay_all(db, debate_id, expected_control_version=7)
+    assert rejected.value.code == "audio_not_retained"
+    with database.session() as db:
+        state = db.scalar(
+            select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+        )
+        assert state is not None and state.control_version == 7 and state.status == "completed"
+    await tasks.close()
+
+
+def _insert_sql_draft_debate(database: Database, *, debate_id: str) -> None:
+    now = datetime.now(UTC)
+    with database.session() as db:
+        db.add(
+            Debate(
+                id=debate_id,
+                course_id=COURSE_ID,
+                topic=TOPIC,
+                rule_set_id="ordered_multi_agent_rounds_demo_v1",
+                rule_snapshot_json='{"round_count":2}',
+                status="draft",
+                revision=0,
+                last_sequence=0,
+                cancellation_generation=0,
+                created_by="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+
+def _prepare_committed_sql_audio_swap(
+    database: Database,
+    settings: Any,
+    *,
+    old_debate_id: str,
+    new_debate_id: str,
+    old_relative_path: str,
+    request_id: str,
+) -> tuple[str, Path]:
+    store = AudioStore(settings.resolved_data_root)
+    staging = f"staging/audio-swap/{COURSE_ID}/{request_id}/{old_debate_id}"
+    source = f"courses/{COURSE_ID}/current-debate-audio/{old_debate_id}"
+    with database.session() as db:
+        journal = prepare_audio_swap_journal(
+            db,
+            AudioSwapRequest(
+                course_id=COURSE_ID,
+                request_id=request_id,
+                old_debate_id=old_debate_id,
+                source_relative_path=source,
+                staging_relative_path=staging,
+                new_debate_id=new_debate_id,
+                expected_old_debate_id=old_debate_id,
+            ),
+        )
+    assert store.stage_debate_directory(
+        course_id=COURSE_ID,
+        debate_id=old_debate_id,
+        staging_relative_path=staging,
+    )
+    with database.session() as db:
+        transition_audio_swap(
+            db,
+            str(journal.id),
+            expected_state=AudioSwapState.PREPARED,
+            target_state=AudioSwapState.STAGED,
+        )
+        transition_audio_swap(
+            db,
+            str(journal.id),
+            expected_state=AudioSwapState.STAGED,
+            target_state=AudioSwapState.COMMITTED,
+        )
+        db.execute(
+            text("UPDATE courses SET current_audio_debate_id=:new WHERE id=:course_id"),
+            {"new": new_debate_id, "course_id": COURSE_ID},
+        )
+    return staging, settings.resolved_data_root / old_relative_path
+
+
+@pytest.mark.asyncio
+async def test_sql_audio_swap_cleanup_marks_old_files_deleted_and_keeps_turn_audit(
+    app_factory: Any,
+) -> None:
+    _app, database, settings = app_factory()
+    with TestClient(_app):
+        pass
+    agent_id = _insert_published_agent(
+        database,
+        group_id=GROUP_BOWEN_ID,
+        name="Cleanup Bowen",
+        evidence="TikTok transparency, privacy, safeguards, and accountable review.",
+    )
+    old_id, _turn_id, file_id, relative_path = _insert_sql_retained_debate(
+        database, agent_id=agent_id
+    )
+    new_id = str(uuid4())
+    _insert_sql_draft_debate(database, debate_id=new_id)
+    request_id = str(uuid4())
+    _staging, old_path = _prepare_committed_sql_audio_swap(
+        database,
+        settings,
+        old_debate_id=old_id,
+        new_debate_id=new_id,
+        old_relative_path=relative_path,
+        request_id=request_id,
+    )
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    service = PlaybackService(
+        repository,
+        audio_store=AudioStore(settings.resolved_data_root),
+        task_manager=TaskManager(),
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    with database.session() as db:
+        journal = db.scalar(
+            select(FileOperation).where(
+                FileOperation.operation_kind == "debate_audio_swap",
+                FileOperation.new_debate_id == new_id,
+            )
+        )
+        assert journal is not None
+        swap = (journal, str(journal.staging_relative_path))
+        service._commit_audio_swap(
+            db,
+            swap,
+            course_id=COURSE_ID,
+            old_debate_id=old_id,
+        )
+    assert not old_path.exists()
+    with database.session() as db:
+        stored = db.get(StoredFile, file_id)
+        turn = db.scalar(select(DebateTurn).where(DebateTurn.debate_id == old_id))
+        journal = db.scalar(
+            select(FileOperation).where(
+                FileOperation.operation_kind == "debate_audio_swap",
+                FileOperation.new_debate_id == new_id,
+            )
+        )
+        assert stored is not None and stored.state == "deleted"
+        assert turn is not None and turn.audio_file_id == file_id and turn.speech == _valid_speech()
+        assert journal is not None and journal.state == "recovered"
+    await service.task_manager.close()
+
+
+@pytest.mark.asyncio
+async def test_sql_audio_swap_recovery_marks_old_files_deleted(
+    app_factory: Any,
+) -> None:
+    _app, database, settings = app_factory()
+    with TestClient(_app):
+        pass
+    agent_id = _insert_published_agent(
+        database,
+        group_id=GROUP_BOWEN_ID,
+        name="Recovery Bowen",
+        evidence="TikTok transparency, privacy, safeguards, and accountable review.",
+    )
+    old_id, _turn_id, file_id, relative_path = _insert_sql_retained_debate(
+        database, agent_id=agent_id
+    )
+    new_id = str(uuid4())
+    _insert_sql_draft_debate(database, debate_id=new_id)
+    request_id = str(uuid4())
+    staging, old_path = _prepare_committed_sql_audio_swap(
+        database,
+        settings,
+        old_debate_id=old_id,
+        new_debate_id=new_id,
+        old_relative_path=relative_path,
+        request_id=request_id,
+    )
+    assert not old_path.exists()
+    service = PlaybackService(
+        SqlPlaybackRepository(session_factory=database.session_factory),
+        audio_store=AudioStore(settings.resolved_data_root),
+        task_manager=TaskManager(),
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    with database.session() as db:
+        await service.recover_startup(db)
+    assert not (settings.resolved_data_root / staging).exists()
+    with database.session() as db:
+        stored = db.get(StoredFile, file_id)
+        journal = db.scalar(
+            select(FileOperation).where(
+                FileOperation.operation_kind == "debate_audio_swap",
+                FileOperation.new_debate_id == new_id,
+            )
+        )
+        assert stored is not None and stored.state == "deleted"
+        assert journal is not None and journal.state == "recovered"
+    await service.task_manager.close()
 
 
 @pytest.mark.asyncio

@@ -338,9 +338,7 @@ async def transcript_route(
         {
             "debate_id": str(debate_id),
             "turns": snapshot["public_turns"],
-            "audio_retained": service.audio_store.retained(str(debate_id))
-            if service.audio_store
-            else False,
+            "audio_retained": service.audio_retained(db, str(debate_id)),
         }
     )
 

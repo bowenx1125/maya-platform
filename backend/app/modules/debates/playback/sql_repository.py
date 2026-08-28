@@ -1224,6 +1224,57 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         return int(getattr(result, "rowcount", 0)) == 1
 
+    def retained_audio_file(self, db: Any, debate: SqlRow, turn: SqlRow) -> SqlRow | None:
+        """Read the StoredFile facts bound to one DebateTurn.
+
+        Replay must not trust the process-local AudioStore index.  This query
+        deliberately joins through the exact DebateTurn/debate identity so a
+        file UUID copied from another debate cannot authorize playback.
+        """
+
+        if not self._has_table(db, "stored_files") or not self._has_table(db, "debate_turns"):
+            return None
+        file_id = getattr(turn, "audio_file_id", None)
+        if not file_id:
+            return None
+        return _row(
+            db.execute(
+                text(
+                    "SELECT sf.* FROM stored_files AS sf "
+                    "JOIN debate_turns AS dt ON dt.audio_file_id=sf.id "
+                    "WHERE dt.id=:turn_id AND dt.debate_id=:debate_id "
+                    "AND dt.audio_file_id=:file_id"
+                ),
+                {
+                    "turn_id": str(turn.id),
+                    "debate_id": str(debate.id),
+                    "file_id": str(file_id),
+                },
+            ),
+            db,
+        )
+
+    def mark_debate_audio_deleted(self, db: Any, debate_id: str) -> int:
+        """Mark only this debate's retained audio rows deleted after cleanup.
+
+        Text/source/turn rows remain untouched.  The update is intentionally
+        keyed by both ``kind`` and the turn's debate so an audio swap cannot
+        alter Markdown, voice previews, or another debate's files.
+        """
+
+        if not self._has_table(db, "stored_files") or not self._has_table(db, "debate_turns"):
+            return 0
+        changed = db.execute(
+            text(
+                "UPDATE stored_files SET state='deleted', updated_at=:updated_at "
+                "WHERE kind='debate_audio' AND state <> 'deleted' "
+                "AND id IN (SELECT audio_file_id FROM debate_turns "
+                "WHERE debate_id=:debate_id AND audio_file_id IS NOT NULL)"
+            ),
+            {"debate_id": debate_id, "updated_at": _now()},
+        )
+        return int(getattr(changed, "rowcount", 0))
+
     def commit_start_state(
         self,
         db: Any,

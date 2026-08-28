@@ -61,6 +61,7 @@ export default function TeacherDebateControlPage() {
       controlBusy: t("debateControlBusy"),
       retryReason: t("debateRetryReason"),
       noPublishedSpeech: t("debateNoPublishedSpeech"),
+      audioNotRetained: t("errorAudioNotRetained"),
       selectedTurn: t("debateSelectedTurn"),
       replaceRetainedAudioConfirm: t("debateReplaceAudioConfirm"),
       audioLabel: t("debateAudioLabel"),
@@ -69,8 +70,8 @@ export default function TeacherDebateControlPage() {
   );
   const [detail, setDetail] = useState<DebateDetail | null>(null);
   const [currentAudioDebateId, setCurrentAudioDebateId] = useState<
-    string | null
-  >(null);
+    string | null | undefined
+  >(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
@@ -90,7 +91,7 @@ export default function TeacherDebateControlPage() {
         setCurrentAudioDebateId(course.current_audio_debate_id ?? null);
       } catch {
         // The debate snapshot remains usable if the optional course pointer cannot be read.
-        setCurrentAudioDebateId(null);
+        setCurrentAudioDebateId(undefined);
       }
       return next;
     } catch (cause) {
@@ -105,6 +106,13 @@ export default function TeacherDebateControlPage() {
     if (!debateId) throw new Error("Debate id is missing.");
     const next = await api.debate(debateId);
     setDetail(next);
+    try {
+      const course = await api.course(next.course_id);
+      setCurrentAudioDebateId(course.current_audio_debate_id ?? null);
+    } catch {
+      // Unknown retention state must fail closed for replay.
+      setCurrentAudioDebateId(undefined);
+    }
     setError(null);
     return next;
   }, [api, debateId]);
@@ -143,9 +151,10 @@ export default function TeacherDebateControlPage() {
               api={api}
               debateId={debateId}
               detail={detail}
-              expectedCurrentAudioDebateId={currentAudioDebateId}
+              currentAudioDebateId={currentAudioDebateId}
               labels={stageLabels}
               onDetailChange={setDetail}
+              onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
               refreshSnapshot={refreshSnapshot}
             />
           </>

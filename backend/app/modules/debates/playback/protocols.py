@@ -104,6 +104,8 @@ class MemoryTurn:
     retrieval_status: str = "no_match"
     grounding_mode: str = "general_reasoning"
     audio_duration_ms: int | None = None
+    audio_file_id: str | None = None
+    audio_size_bytes: int | None = None
     audio_sha256: str | None = None
     audio_relative_path: str | None = None
     predecessor_turn_ids: tuple[str, ...] = ()
@@ -186,6 +188,10 @@ class PlaybackRepository(Protocol):
 
     def public_turn(self, db: Any, debate: Any, turn_id: str) -> Any | None: ...
 
+    def retained_audio_file(self, db: Any, debate: Any, turn: Any) -> Any | None: ...
+
+    def mark_debate_audio_deleted(self, db: Any, debate_id: str) -> int: ...
+
 
 class TurnPreparer(Protocol):
     def __call__(
@@ -206,6 +212,7 @@ class MemoryPlaybackRepository:
         self.debates: dict[str, MemoryDebate] = {}
         self.jobs_interrupted: list[tuple[str, str]] = []
         self.course_audio: dict[str, str | None] = {}
+        self.audio_file_states: dict[str, str] = {}
 
     def add_debate(self, debate: MemoryDebate) -> MemoryDebate:
         if debate.playback is None:
@@ -297,6 +304,10 @@ class MemoryPlaybackRepository:
         turn.retrieval_status = prepared.retrieval_status
         turn.grounding_mode = prepared.grounding_mode
         turn.audio_duration_ms = getattr(audio, "duration_ms", None)
+        turn.audio_file_id = getattr(audio, "file_id", None) or (
+            f"memory-audio:{turn.id}" if getattr(audio, "relative_path", None) else None
+        )
+        turn.audio_size_bytes = getattr(audio, "size_bytes", None)
         turn.audio_sha256 = getattr(audio, "sha256", None)
         turn.audio_relative_path = getattr(audio, "relative_path", None)
         turn.attempt = prepared.generation_attempt or attempt
@@ -357,3 +368,42 @@ class MemoryPlaybackRepository:
             ),
             None,
         )
+
+    def retained_audio_file(
+        self, db: Any, debate: MemoryDebate, turn: MemoryTurn
+    ) -> dict[str, Any] | None:
+        """Expose the same durable-fact shape for the in-memory test double.
+
+        SQL tests use the real StoredFile row.  Memory tests intentionally do
+        not construct the Wave 1/2 database, so the turn's persisted audio
+        fields stand in for that row while the AudioStore still validates the
+        actual canonical bytes.
+        """
+
+        del db
+        relative = turn.audio_relative_path
+        if not relative:
+            return None
+        file_id = turn.audio_file_id or f"memory-audio:{debate.id}:{turn.id}"
+        state = self.audio_file_states.get(file_id, "active")
+        return {
+            "id": file_id,
+            "kind": "debate_audio",
+            "relative_path": relative,
+            "sha256": turn.audio_sha256,
+            "size": turn.audio_size_bytes,
+            "state": state,
+        }
+
+    def mark_debate_audio_deleted(self, db: Any, debate_id: str) -> int:
+        del db
+        changed = 0
+        debate = self.debates.get(debate_id)
+        if debate is None:
+            return 0
+        for turn in debate.turns:
+            file_id = turn.audio_file_id
+            if file_id is not None and self.audio_file_states.get(file_id) != "deleted":
+                self.audio_file_states[file_id] = "deleted"
+                changed += 1
+        return changed

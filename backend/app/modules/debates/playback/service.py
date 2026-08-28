@@ -212,6 +212,11 @@ class PlaybackService:
                         if old_debate_id:
                             self.audio_store.remove_debate(str(old_debate_id))
                             self.ticket_store.revoke_debate(str(old_debate_id))
+                            mark_deleted = getattr(
+                                self.repository, "mark_debate_audio_deleted", None
+                            )
+                            if callable(mark_deleted):
+                                mark_deleted(db, str(old_debate_id))
                     elif old_debate_id:
                         self.audio_store.restore_staged_debate(
                             course_id=course_id,
@@ -394,6 +399,11 @@ class PlaybackService:
     @staticmethod
     def _get(value: Any, *names: str, default: Any = None) -> Any:
         for name in names:
+            if isinstance(value, Mapping) and name in value:
+                result = value[name]
+                if result is not None:
+                    return result
+                continue
             if hasattr(value, name):
                 result = getattr(value, name)
                 if result is not None:
@@ -414,6 +424,138 @@ class PlaybackService:
         )
         audio = PlaybackService._get(turn, "audio_relative_path", "audio_file_id", default=None)
         return generation in {"ready", "final_ready", "completed"} and audio is not None
+
+    def _retained_audio_record(self, db: Any, debate: Any, turn: Any) -> Any | None:
+        reader = getattr(self.repository, "retained_audio_file", None)
+        if not callable(reader):
+            return None
+        try:
+            return reader(db, debate, turn)
+        except TypeError:
+            # Keep small repository doubles written before the three-argument
+            # retention contract usable; the SQL adapter always takes the
+            # exact Debate/Turn identity above.
+            try:
+                return reader(db, turn)
+            except TypeError:
+                return None
+
+    def _validated_turn_audio(
+        self,
+        db: Any,
+        debate: Any,
+        turn: Any,
+    ) -> AudioMetadata | None:
+        """Validate one turn's durable StoredFile and canonical WAV bytes.
+
+        ``AudioStore.metadata`` is only a process-local cache.  SQL playback
+        therefore requires the repository's StoredFile row and compares its
+        exact kind/state/path/hash/size facts against the bytes on disk.  The
+        in-memory repository has no SQL schema, so its turn fields provide the
+        same test-double facts while the byte validation remains identical.
+        """
+
+        if self.audio_store is None:
+            return None
+        debate_id = self._debate_id(debate)
+        turn_id = str(self._get(turn, "id", default=""))
+        if not turn_id:
+            return None
+        try:
+            course_id = self._course_id(debate)
+            canonical = self.audio_store.relative_path(course_id, debate_id, turn_id)
+        except (TypeError, ValueError):
+            return None
+
+        record = self._retained_audio_record(db, debate, turn)
+        if record is not None:
+            file_id = self._get(turn, "audio_file_id", default=None)
+            if (file_id is None and not isinstance(self.repository, MemoryPlaybackRepository)) or (
+                file_id is not None and str(self._get(record, "id", default="")) != str(file_id)
+            ):
+                return None
+            if self._get(record, "kind", default=None) != "debate_audio":
+                return None
+            if self._get(record, "state", default=None) != "active":
+                return None
+            relative_path = self._get(record, "relative_path", default=None)
+            expected_sha256 = self._get(record, "sha256", default=None)
+            expected_size = self._get(record, "size_bytes", "size", default=None)
+            if isinstance(self.repository, MemoryPlaybackRepository) and (
+                expected_sha256 is None or expected_size is None
+            ):
+                cached = self.audio_store.metadata(debate_id, turn_id)
+                if cached is not None:
+                    expected_sha256 = expected_sha256 or cached.sha256
+                    expected_size = (
+                        expected_size if expected_size is not None else cached.size_bytes
+                    )
+        else:
+            # Production SQL rows must never fall back to process metadata.
+            # MemoryPlaybackRepository intentionally models the persistence
+            # boundary with the turn's audio fields for unit-level playback
+            # tests and controller doubles.
+            if not isinstance(self.repository, MemoryPlaybackRepository):
+                return None
+            relative_path = self._get(turn, "audio_relative_path", default=None)
+            expected_sha256 = self._get(turn, "audio_sha256", default=None)
+            expected_size = self._get(turn, "audio_size_bytes", default=None)
+            if expected_sha256 is None or expected_size is None:
+                cached = self.audio_store.metadata(debate_id, turn_id)
+                if cached is not None:
+                    expected_sha256 = expected_sha256 or cached.sha256
+                    expected_size = (
+                        expected_size if expected_size is not None else cached.size_bytes
+                    )
+
+        if not isinstance(relative_path, str) or relative_path != canonical:
+            return None
+        try:
+            size_value = int(expected_size) if expected_size is not None else None
+        except (TypeError, ValueError):
+            return None
+        metadata = self.audio_store.validate_file(
+            course_id=course_id,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            relative_path=relative_path,
+            expected_sha256=(str(expected_sha256) if expected_sha256 is not None else None),
+            expected_size_bytes=size_value,
+        )
+        if metadata is not None:
+            # Rehydration happens only after the DB facts and bytes have both
+            # passed validation; a stale cache can never grant eligibility.
+            self.audio_store.rehydrate(metadata)
+        return metadata
+
+    def _replay_audio_ready(self, db: Any, debate: Any, turn: Any) -> bool:
+        if not self._turn_public(turn):
+            return False
+        if str(self._get(turn, "generation_status", default="")) != "final_ready":
+            return False
+        return self._validated_turn_audio(db, debate, turn) is not None
+
+    def audio_retained(self, db: Any, debate_id: str) -> bool:
+        """Return whether the course currently retains every public turn's bytes."""
+
+        debate = self._get_debate(db, debate_id)
+        if self.repository.current_audio_debate_id(db, self._course_id(debate)) != debate_id:
+            return False
+        turns = self._turns(db, debate)
+        public_turns = [turn for turn in turns if self._turn_public(turn)]
+        # Transcript callers also ask while the first live turn is final-ready
+        # but not public yet.  Preserve that useful retained-audio indicator,
+        # while still requiring every public turn to pass the strict replay
+        # validation once publication has begun.
+        candidates = public_turns or [
+            turn
+            for turn in turns
+            if str(self._get(turn, "generation_status", default="")) == "final_ready"
+            and self._get(turn, "audio_file_id", "audio_relative_path", default=None) is not None
+        ]
+        if not candidates:
+            return False
+        return all(self._validated_turn_audio(db, debate, turn) is not None for turn in candidates)
 
     @classmethod
     def _turn_fence_ready(cls, turns: list[Any], turn: Any) -> bool:
@@ -525,12 +667,7 @@ class PlaybackService:
             return False
         if not self._has_public_predecessor_prefix(turns, successor):
             return False
-        if self.audio_store is None:
-            return False
-        try:
-            if self.audio_store.metadata(self._debate_id(debate), str(successor.id)) is None:
-                return False
-        except (OSError, ValueError):
+        if self._validated_turn_audio(db, debate, successor) is None:
             return False
         return True
 
@@ -1487,10 +1624,14 @@ class PlaybackService:
                 transition_audio_swap,
             )
 
-            if staging and self.audio_store is not None:
-                self.audio_store.delete_staging(staging)
+            if self.audio_store is not None:
+                if staging:
+                    self.audio_store.delete_staging(staging)
                 self.audio_store.remove_debate(old_debate_id)
                 self.ticket_store.revoke_debate(old_debate_id)
+            mark_deleted = getattr(self.repository, "mark_debate_audio_deleted", None)
+            if callable(mark_deleted):
+                mark_deleted(db, old_debate_id)
             transition_audio_swap(
                 db,
                 str(journal.id),
@@ -1584,6 +1725,9 @@ class PlaybackService:
                 if outcome.old_debate_id:
                     self.audio_store.remove_debate(outcome.old_debate_id)
                     self.ticket_store.revoke_debate(outcome.old_debate_id)
+                    mark_deleted = getattr(self.repository, "mark_debate_audio_deleted", None)
+                    if callable(mark_deleted):
+                        mark_deleted(db, outcome.old_debate_id)
         return bool(journals)
 
     def _terminate_previous_playback(
@@ -2144,11 +2288,7 @@ class PlaybackService:
             state.status = "ready"
             state.pending_action = None
             state.pending_ticket_hash = None
-            metadata = (
-                self.audio_store.metadata(debate_id, str(successor.id))
-                if self.audio_store is not None
-                else None
-            )
+            metadata = self._validated_turn_audio(db, debate, successor)
             state.audio_duration_ms = int(metadata.duration_ms) if metadata is not None else 0
             state.control_version += 1
             self._save(db, debate, state)
@@ -2251,16 +2391,31 @@ class PlaybackService:
                 raise invalid_state("Replay is available only after the debate finishes.")
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
-            turns = [item for item in self._turns(db, debate) if self._turn_public(item)]
-            turns.sort(key=lambda item: int(self._get(item, "turn_index", default=0) or 0))
+            strict_retention = not isinstance(self.repository, MemoryPlaybackRepository) or (
+                self.audio_store is not None
+            )
+            if (
+                strict_retention
+                and self.repository.current_audio_debate_id(db, self._course_id(debate))
+                != debate_id
+            ):
+                raise conflict(
+                    "audio_not_retained", "The requested replay audio is no longer retained."
+                )
+            public_turns = [item for item in self._turns(db, debate) if self._turn_public(item)]
+            public_turns.sort(key=lambda item: int(self._get(item, "turn_index", default=0) or 0))
             if turn_id is not None:
-                turns = [item for item in turns if str(item.id) == turn_id]
+                turns = [item for item in public_turns if str(item.id) == turn_id]
                 if not turns:
                     raise not_found()
+            else:
+                turns = public_turns
             if not turns:
                 raise invalid_state("No retained public turn is available for replay.")
-            if self.audio_store is not None and any(
-                self.audio_store.metadata(debate_id, str(item.id)) is None for item in turns
+            # Full replay is an atomic all-or-nothing eligibility check over
+            # every public turn.  Single-turn replay validates only its target.
+            if strict_retention and any(
+                not self._replay_audio_ready(db, debate, item) for item in turns
             ):
                 raise conflict(
                     "audio_not_retained", "The requested replay audio is no longer retained."
@@ -2459,7 +2614,8 @@ class PlaybackService:
             self._validate_playback_action(state, turn, turns, action)
             if not self._turn_ready(turn):
                 raise not_found()
-            if self.audio_store is None or self.audio_store.metadata(debate_id, turn_id) is None:
+            metadata = self._validated_turn_audio(db, debate, turn)
+            if metadata is None:
                 raise not_found()
             token, binding = self.ticket_store.issue(
                 session_hash=session_hash,
@@ -2470,7 +2626,7 @@ class PlaybackService:
             )
             state.pending_action = action
             state.pending_ticket_hash = binding.token_hash
-            state.audio_duration_ms = int(self.audio_store.metadata(debate_id, turn_id).duration_ms)  # type: ignore[union-attr]
+            state.audio_duration_ms = int(metadata.duration_ms)
             self._save(db, debate, state)
             self._commit(db)
             media_url = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
@@ -2892,15 +3048,17 @@ class PlaybackService:
             raise not_found()
         current_pointer = self.repository.current_audio_debate_id(db, self._course_id(debate))
         if current_pointer != debate_id:
-            if current_pointer is not None:
-                raise PlatformError("audio_not_retained", "This audio is no longer retained.", 410)
-            raise not_found()
-        metadata = self.audio_store.metadata(debate_id, turn_id)
-        if metadata is None:
-            raise not_found()
+            raise PlatformError("audio_not_retained", "This audio is no longer retained.", 410)
         turn = next((item for item in self._turns(db, debate) if str(item.id) == turn_id), None)
-        if turn is None:
-            raise not_found()
+        # Initial live media is fetched immediately after the browser's
+        # play() promise but before started_ack publishes the turn.  It still
+        # must be a final-ready, durably validated audio row; publication is
+        # required for replay eligibility, not for this current-only ticket.
+        if turn is None or str(self._get(turn, "generation_status", default="")) != "final_ready":
+            raise PlatformError("audio_not_retained", "This audio is no longer retained.", 410)
+        metadata = self._validated_turn_audio(db, debate, turn)
+        if metadata is None:  # pragma: no cover - guarded by _replay_audio_ready
+            raise PlatformError("audio_not_retained", "This audio is no longer retained.", 410)
         if media_ticket is None:
             # Public DTOs deliberately expose only a stable queryless platform
             # path.  Bytes remain private to the active controller's ticket;
