@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { basename, dirname, relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,11 +32,15 @@ const forbiddenTrackedName =
   /(^|\/)(?:\.env$|[^/]*\.(?:sqlite3?|db(?:-[^/]*)?|wav|mp3|m4a|aac|ogg|pem|key))$/i;
 const privateCredentialName =
   /(^|\/)(?:demo[_-]?users|[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env)$/i;
-// These two files are intentionally generated local runtime state. They are
+// These files are intentionally generated local runtime state. They are
 // ignored by Git/Docker and may contain the developer's session secret or
-// Argon2 password hashes, so inspect them through the explicit existence and
-// permission checks rather than treating their values as repository content.
-const ignoredRuntimeFiles = new Set([".env", "backend/config/demo_users.yaml"]);
+// Demo credentials, so inspect them through explicit existence/permission
+// checks rather than treating their values as repository content.
+const ignoredRuntimeFiles = new Set([
+  ".env",
+  "backend/config/demo-accounts/accounts.private.md",
+  "backend/config/demo_users.yaml",
+]);
 const forbiddenReference =
   /(?:Document Validation Agent|agent-core-private|OpenMAIC-main|parallax-main|OpenAvatarChat-main|TalkingHead-main|motion-engine-main|RomanticSimulation)/i;
 const supplierUrlPattern =
@@ -56,9 +60,9 @@ const gitRoot = execFileSync(
   ["-C", root, "rev-parse", "--show-toplevel"],
   { encoding: "utf8" },
 ).trim();
-if (resolve(gitRoot) !== root || basename(gitRoot) !== "maya-platform") {
+if (resolve(gitRoot) !== root) {
   throw new Error(
-    "Git root must be exactly maya-platform; parent Maya must never be scanned as the product repository",
+    "Git root must be exactly the product directory that contains this boundary checker; parent workspaces must never be scanned as the product repository",
   );
 }
 
