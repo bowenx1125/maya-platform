@@ -133,6 +133,7 @@ const valid = [
   }),
   envelope("playback.waiting_next", 10, {
     completed_turn_id: turnId,
+    mode: "live",
     control_version: 4,
     next_turn_ready: true,
   }),
@@ -300,6 +301,7 @@ const invalid = [
     name: "waiting event missing derived readiness",
     event: envelope("playback.waiting_next", 1, {
       completed_turn_id: turnId,
+      mode: "live",
       control_version: 4,
     }),
   },
@@ -307,9 +309,18 @@ const invalid = [
     name: "waiting event exposes successor identity",
     event: envelope("playback.waiting_next", 1, {
       completed_turn_id: turnId,
+      mode: "live",
       control_version: 4,
       next_turn_ready: true,
       next_turn_id: "55555555-5555-4555-8555-555555555555",
+    }),
+  },
+  {
+    name: "waiting event missing playback mode",
+    event: envelope("playback.waiting_next", 1, {
+      completed_turn_id: turnId,
+      control_version: 4,
+      next_turn_ready: true,
     }),
   },
   {
