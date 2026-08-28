@@ -10,6 +10,7 @@
     "bootstrap:local": "uv run --directory backend python ../scripts/bootstrap_local_demo.py",
     "contracts:generate": "openapi-typescript contracts/openapi-v0.1.yaml -o frontend/lib/api/generated/schema.d.ts",
     "contracts:lint": "redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml",
+    "latin-script:check": "node scripts/check_latin_script_tables.mjs",
     "format:check": "prettier --check .",
     "frontend:dev": "pnpm --filter @maya/frontend dev",
     "frontend:lint": "pnpm --filter @maya/frontend lint",

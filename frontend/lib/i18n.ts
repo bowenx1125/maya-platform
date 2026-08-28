@@ -117,6 +117,8 @@ const enMessages = {
   debateCreated: "Draft created",
   debateCreateUnavailable: "The debate service is not available in this build.",
   debateTopicRequired: "Enter a non-empty English topic.",
+  debateTopicLanguageInvalid:
+    "Use Latin-script letters with normal numbers, spaces, and punctuation. Do not mix in other scripts or control characters.",
   debateSelectAtLeast: "Select at least two Agents.",
   debateSelectAtMost: "A Demo debate supports at most five Agents.",
   debateCandidateOrder: "Click order",
@@ -513,6 +515,8 @@ const enMessages = {
   errorInteractionNotReady: "Classroom interaction is not ready yet.",
   errorInteractionClosed: "Classroom interaction has ended.",
   errorParticipantNotInDebate: "That participant is not part of this debate.",
+  errorTopicLanguageInvalid:
+    "This topic must use Latin-script letters and cannot contain other scripts or control characters.",
   errorAudioNotRetained: "This audio is no longer retained.",
   errorBarrageInsightFailed: "Classroom insight could not be prepared.",
   errorReportFailed: "The Maya report could not be generated.",
@@ -694,6 +698,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateCreated: "草稿已创建",
   debateCreateUnavailable: "当前构建尚未提供辩论服务。",
   debateTopicRequired: "请输入非空英文议题。",
+  debateTopicLanguageInvalid:
+    "请使用包含拉丁字母的英文议题，可使用数字、空格和标点；不要混入其他文字或控制字符。",
   debateSelectAtLeast: "请至少选择两个智能体。",
   debateSelectAtMost: "Demo 单场最多支持五个智能体。",
   debateCandidateOrder: "点击顺序",
@@ -1040,6 +1046,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorInteractionNotReady: "课堂互动尚未就绪。",
   errorInteractionClosed: "课堂互动已经结束。",
   errorParticipantNotInDebate: "该参辩者不属于本场辩论。",
+  errorTopicLanguageInvalid:
+    "该议题必须使用拉丁字母，不能包含其他文字或控制字符。",
   errorAudioNotRetained: "这段语音已不再保留。",
   errorBarrageInsightFailed: "无法整理课堂意见。",
   errorReportFailed: "无法生成 Maya 报告。",
@@ -1266,6 +1274,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   interaction_not_ready: "errorInteractionNotReady",
   interaction_closed: "errorInteractionClosed",
   participant_not_in_debate: "errorParticipantNotInDebate",
+  topic_language_invalid: "errorTopicLanguageInvalid",
   audio_not_retained: "errorAudioNotRetained",
   barrage_insight_failed: "errorBarrageInsightFailed",
   report_failed: "errorReportFailed",

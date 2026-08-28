@@ -24,6 +24,7 @@ from app.core.models import (
     StoredFile,
 )
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
+from app.modules.debates.generated.latin_script_ranges import LATIN_SCRIPT_LETTER_RANGES
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.schemas import DebateDraftRequest, DebateParticipantInput
 from app.modules.debates.setup import service as setup_service
@@ -41,6 +42,14 @@ from app.modules.debates.setup.service import (
     commit_start_plan,
     create_debate_draft,
     update_debate_draft,
+)
+from app.modules.debates.topic_language import (
+    TOPIC_LANGUAGE_ERROR_CODE,
+    TOPIC_LANGUAGE_ERROR_DETAILS,
+    TOPIC_LANGUAGE_ERROR_MESSAGE,
+    TopicLanguageError,
+    _is_latin_letter,
+    validate_english_topic,
 )
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -118,6 +127,70 @@ def test_request_validates_assigned_open_and_fixed_round_shapes() -> None:
         ],
     )
     assert request.round_count == 2
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "中文议题",
+        "TikTok 推荐算法",
+        "Запрет TikTok",
+        "حظر TikTok",
+        "12345?!",
+        "English\nline",
+        "English\tline",
+        "English\u202eline",
+        "English😀",
+        "English+policy",
+        "English\u20dd",
+        "\u0301English",
+        "\u0327English",
+        "English\u2c2e",
+        "English\u2c5e",
+        "English\u2028line",
+    ],
+)
+def test_validate_english_topic_rejects_non_latin_or_unsafe_values(value: str) -> None:
+    with pytest.raises(TopicLanguageError) as error:
+        validate_english_topic(value)
+    assert error.value.code == TOPIC_LANGUAGE_ERROR_CODE
+    assert error.value.message == TOPIC_LANGUAGE_ERROR_MESSAGE
+    assert error.value.details == TOPIC_LANGUAGE_ERROR_DETAILS
+    assert value not in error.value.message
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            "  Should the United States ban TikTok's recommendation algorithm?  ",
+            "Should the United States ban TikTok's recommendation algorithm?",
+        ),
+        ("Māori perspectives on digital sovereignty", "Māori perspectives on digital sovereignty"),
+        ("São Paulo and José's classroom debate", "São Paulo and José's classroom debate"),
+        (
+            "Cafe\u0301, C\u0327edar, and A\u030angström",
+            "Cafe\u0301, C\u0327edar, and A\u030angström",
+        ),
+        ("naïve policy", "naïve policy"),
+        ("\u0149 and \u2132 perspectives", "\u0149 and \u2132 perspectives"),
+        ("\ua7cb compatibility letter", "\ua7cb compatibility letter"),
+        ("TikTok—should it be banned in 2026?", "TikTok—should it be banned in 2026?"),
+        ("A\u00a0normal\u2003space topic", "A\u00a0normal\u2003space topic"),
+    ],
+)
+def test_validate_english_topic_accepts_latin_diacritics_numbers_punctuation_and_spaces(
+    value: str, expected: str
+) -> None:
+    assert validate_english_topic(value) == expected
+
+
+def test_every_generated_latin_letter_is_reachable_even_if_python_unicode_lags() -> None:
+    for start, end in LATIN_SCRIPT_LETTER_RANGES:
+        for codepoint in range(start, end + 1):
+            character = chr(codepoint)
+            assert _is_latin_letter(character)
+            assert validate_english_topic(character) == character
 
 
 def _insert_published_agent(
@@ -316,6 +389,71 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     stale = client.patch(f"/api/v1/debates/{debate_id}", headers=headers(csrf), json=update_body)
     assert stale.status_code == 409
     assert stale.json()["code"] == "stale_revision"
+
+
+def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
+    debate_app: tuple[FastAPI, Database, TestClient],
+) -> None:
+    _app, database, client = debate_app
+    bowen_id, _version, _snapshot = _insert_published_agent(
+        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+    )
+    kaikai_id, _version, _snapshot = _insert_published_agent(
+        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+    )
+    _session, csrf = login(client)
+    participants = [
+        {"agent_id": bowen_id, "stance_mode": "open"},
+        {"agent_id": kaikai_id, "stance_mode": "open"},
+    ]
+    invalid_topic = "TikTok 推荐算法"
+    rejected = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "invalid-topic-create-001"}),
+        json={"topic": invalid_topic, "participants": participants, "round_count": 2},
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json()["code"] == TOPIC_LANGUAGE_ERROR_CODE
+    assert rejected.json()["details"] == TOPIC_LANGUAGE_ERROR_DETAILS
+    assert invalid_topic not in rejected.text
+    with database.session() as db:
+        assert db.scalar(select(Debate).where(Debate.topic == invalid_topic)) is None
+        assert (
+            db.scalar(
+                select(IdempotencyRecord).where(IdempotencyRecord.key == "invalid-topic-create-001")
+            )
+            is None
+        )
+
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "invalid-topic-update-seed"}),
+        json={
+            "topic": "A valid English topic",
+            "participants": participants,
+            "round_count": 2,
+        },
+    )
+    assert created.status_code == 201, created.text
+    debate_id = created.json()["id"]
+    before = client.get(f"/api/v1/debates/{debate_id}").json()
+    rejected_update = client.patch(
+        f"/api/v1/debates/{debate_id}",
+        headers=headers(csrf),
+        json={
+            "topic": "Запрет TikTok",
+            "participants": participants,
+            "round_count": 2,
+            "expected_revision": before["revision"],
+        },
+    )
+    assert rejected_update.status_code == 422, rejected_update.text
+    assert rejected_update.json()["code"] == TOPIC_LANGUAGE_ERROR_CODE
+    assert rejected_update.json()["details"] == TOPIC_LANGUAGE_ERROR_DETAILS
+    after = client.get(f"/api/v1/debates/{debate_id}").json()
+    assert after["revision"] == before["revision"]
+    assert after["topic"] == before["topic"]
+    assert after["participants"] == before["participants"]
 
 
 def test_each_participant_uses_one_bounded_agent_version_snapshot_join(

@@ -19,6 +19,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
+from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
 from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError
 
 from .audio import AudioMetadata, AudioStore, MediaTicketBinding, MediaTicketStore
@@ -1823,6 +1824,18 @@ class PlaybackService:
         idempotency_key: str | None = None,
         request_id: str | None = None,
     ) -> PlaybackStateDTO:
+        # A historical draft can predate the English-topic rule.  Check it
+        # before an idempotency claim, audio swap, plan/job creation, or any
+        # playback state mutation.  Replays of an already-started debate keep
+        # their existing idempotency semantics because only draft topics are
+        # subject to this preflight gate.
+        preflight_debate = self._get_debate(db, debate_id)
+        self._assert_teacher(db, preflight_debate, context)
+        if str(self._get(preflight_debate, "status", default="draft")) == "draft":
+            try:
+                validate_english_topic(self._get(preflight_debate, "topic", default=""))
+            except TopicLanguageError as exc:
+                raise PlatformError(exc.code, exc.message, 422, exc.details) from exc
         idempotency_record: Any | None = None
         if idempotency_key and context is not None:
             from app.modules.knowledge.services import (
@@ -1868,6 +1881,10 @@ class PlaybackService:
             self._assert_teacher(db, debate, context)
             if str(getattr(debate, "status", "draft")) != "draft":
                 raise invalid_state("Only a draft debate can be started.")
+            try:
+                validate_english_topic(self._get(debate, "topic", default=""))
+            except TopicLanguageError as exc:
+                raise PlatformError(exc.code, exc.message, 422, exc.details) from exc
             revision = int(self._get(debate, "revision", default=0) or 0)
             if revision != expected_revision:
                 raise conflict(

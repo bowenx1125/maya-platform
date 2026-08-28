@@ -22,6 +22,7 @@ import {
   type PublishedAgentSummary,
 } from "../../../lib/api";
 import type { MessageKey } from "../../../lib/i18n";
+import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import {
@@ -206,6 +207,7 @@ export function TeacherDebateCreate({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [topicError, setTopicError] = useState<string | null>(null);
   const createMutation = useRef<{
     requestHash: string;
     handle: IdempotencyHandle;
@@ -275,10 +277,19 @@ export function TeacherDebateCreate({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    if (!topic.trim()) {
-      setFormError(copy(t, "debateTopicRequired"));
+    const topicValidation = validateDebateTopic(topic);
+    if (!topicValidation.valid) {
+      setTopicError(
+        copy(
+          t,
+          topicValidation.reason === "required"
+            ? "debateTopicRequired"
+            : "debateTopicLanguageInvalid",
+        ),
+      );
       return;
     }
+    setTopicError(null);
     if (selectedIds.length < 2) {
       setFormError(copy(t, "debateSelectAtLeast"));
       return;
@@ -288,7 +299,7 @@ export function TeacherDebateCreate({
       return;
     }
     const payload: DebateDraftRequest = {
-      topic: topic.trim(),
+      topic: topicValidation.normalized,
       participants: selectedIds.map((agentId) => {
         const draft = participantDrafts[agentId] ?? defaultParticipant();
         return {
@@ -363,13 +374,28 @@ export function TeacherDebateCreate({
             <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
             <textarea
               aria-label={copy(t, "debateTopic")}
+              aria-describedby={topicError ? "debate-topic-error" : undefined}
+              aria-invalid={topicError !== null}
               disabled={busy}
-              onChange={(event) => setTopic(event.target.value)}
+              id="debate-topic"
+              onChange={(event) => {
+                setTopic(event.target.value);
+                if (topicError) setTopicError(null);
+              }}
               placeholder={copy(t, "debateTopicPlaceholder")}
               required
               rows={3}
               value={topic}
             />
+            {topicError ? (
+              <span
+                className={styles.fieldError}
+                id="debate-topic-error"
+                role="alert"
+              >
+                {topicError}
+              </span>
+            ) : null}
           </label>
         </SectionCard>
 

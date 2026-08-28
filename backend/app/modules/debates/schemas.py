@@ -43,7 +43,14 @@ class DebateParticipantInput(_ClosedModel):
 
 
 class DebateDraftRequest(_ClosedModel):
-    topic: str = Field(min_length=1)
+    topic: str = Field(
+        min_length=1,
+        description=(
+            "Non-empty English debate topic using Latin-script letters; Unicode Latin "
+            "diacritics, numbers, ordinary whitespace and punctuation are allowed. "
+            "Control and non-Latin letter characters are rejected at the domain boundary."
+        ),
+    )
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: Literal[2]
     total_duration_seconds: None = None

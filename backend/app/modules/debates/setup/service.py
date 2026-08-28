@@ -62,6 +62,7 @@ from app.modules.debates.setup.rules import (
     build_turn_plan,
     canonical_rule_snapshot_json,
 )
+from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
 
 
 def utc_now() -> datetime:
@@ -462,6 +463,15 @@ def _ensure_payload(payload: DebateDraftRequest) -> None:
         raise validation_failure(exc.message, code=exc.code) from exc
 
 
+def _validated_topic(value: str) -> str:
+    """Apply the shared topic boundary and expose its stable API error."""
+
+    try:
+        return validate_english_topic(value)
+    except TopicLanguageError as exc:
+        raise validation_failure(exc.message, exc.details, code=exc.code) from exc
+
+
 def _claim_create_idempotency(
     db: Session,
     *,
@@ -757,8 +767,14 @@ def create_debate_draft(
 ) -> DebateDetail:
     require_teacher_course(db, actor_user_id, course_id)
     _find_course(db, course_id)
+    topic = _validated_topic(payload.topic)
     _ensure_payload(payload)
-    body_hash = _canonical_hash({"course_id": course_id, **payload.model_dump(mode="json")})
+    body_hash = _canonical_hash(
+        {
+            "course_id": course_id,
+            **payload.model_copy(update={"topic": topic}).model_dump(mode="json"),
+        }
+    )
     record: IdempotencyRecord | None = None
     if idempotency_key:
         record, replay = _claim_create_idempotency(
@@ -775,7 +791,7 @@ def create_debate_draft(
     debate = Debate(
         id=str(uuid4()),
         course_id=course_id,
-        topic=payload.topic.strip(),
+        topic=topic,
         rule_set_id="ordered_multi_agent_rounds_demo_v1",
         rule_snapshot_json=canonical_rule_snapshot_json(),
         status="draft",
@@ -878,6 +894,7 @@ def update_debate_draft(
     require_teacher_course(db, actor_user_id, debate.course_id)
     if debate.status != "draft":
         raise invalid_state("Only a draft Debate can be updated.")
+    topic = _validated_topic(payload.topic)
     _ensure_payload(payload)
     timestamp = utc_now()
     changed = db.execute(
@@ -888,7 +905,7 @@ def update_debate_draft(
             Debate.revision == expected_revision,
         )
         .values(
-            topic=payload.topic.strip(),
+            topic=topic,
             revision=Debate.revision + 1,
             updated_at=timestamp,
         )

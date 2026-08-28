@@ -61,6 +61,7 @@ from app.modules.debates.setup.audio_swap import (
     prepare_audio_swap_journal,
     transition_audio_swap,
 )
+from app.modules.debates.topic_language import TOPIC_LANGUAGE_ERROR_DETAILS
 from app.modules.knowledge.markdown import EMBEDDING_DIMENSION, EMBEDDING_KEY, mock_embedding
 from app.modules.knowledge.recovery import recover_file_operations
 from app.modules.knowledge.services import claim_idempotency
@@ -76,6 +77,7 @@ COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
 GROUP_KAIKAI_ID = "699112be-780b-5ffd-9a87-3762f596c558"
 TOPIC = "Should the United States ban TikTok's recommendation algorithm?"
+ACCENTED_NFD_TOPIC = "Should Māori and Cafe\u0301/C\u0327 perspectives shape platform policy?"
 
 
 def _headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -515,6 +517,115 @@ def test_sql_start_prepares_only_current_and_successor_without_public_leak(
         )
         assert replay.status_code == 200
         assert replay.json()["id"] == debate_id
+
+
+def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
+    app_factory: Any,
+) -> None:
+    app, database, _settings = app_factory()
+    with TestClient(app) as client:
+        bowen_id = _insert_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="Legacy Bowen",
+            evidence="TikTok transparency, privacy, safeguards, and accountable review.",
+        )
+        kaikai_id = _insert_published_agent(
+            database,
+            group_id=GROUP_KAIKAI_ID,
+            name="Legacy KaiKai",
+            evidence="Competition, expression, proportional regulation, and user choice.",
+        )
+        _session, csrf = login(client)
+        participants = [
+            {"agent_id": bowen_id, "stance_mode": "open"},
+            {"agent_id": kaikai_id, "stance_mode": "open"},
+        ]
+        created = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=_headers(csrf, **{"Idempotency-Key": "legacy-topic-create-001"}),
+            json={
+                "topic": "A valid English topic",
+                "participants": participants,
+                "round_count": 2,
+            },
+        )
+        assert created.status_code == 201, created.text
+        debate_id = created.json()["id"]
+
+        # Simulate a pre-gate draft persisted by an earlier build.  This is a
+        # direct fixture mutation, not a product write path.
+        with database.session() as db:
+            db.execute(
+                text("UPDATE debates SET topic=:topic WHERE id=:debate_id"),
+                {"topic": "中文议题", "debate_id": debate_id},
+            )
+
+        rejected = client.post(
+            f"/api/v1/debates/{debate_id}/start",
+            headers=_headers(csrf, **{"Idempotency-Key": "legacy-topic-start-001"}),
+            json={
+                "expected_revision": 0,
+                "expected_current_audio_debate_id": None,
+                "confirm_previous_audio_cleanup": False,
+            },
+        )
+        assert rejected.status_code == 422, rejected.text
+        assert rejected.json()["code"] == "topic_language_invalid"
+        assert rejected.json()["details"] == TOPIC_LANGUAGE_ERROR_DETAILS
+        assert "中文议题" not in rejected.text
+
+        with database.session() as db:
+            debate = db.get(Debate, debate_id)
+            playback = db.scalar(
+                select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+            )
+            assert debate is not None and debate.status == "draft" and debate.topic == "中文议题"
+            assert playback is not None
+            assert playback.status == "preparing"
+            assert playback.control_version == 0
+            assert db.scalar(select(DebateTurn).where(DebateTurn.debate_id == debate_id)) is None
+            assert db.scalar(select(Job).where(Job.debate_id == debate_id)) is None
+            assert (
+                db.scalar(
+                    select(StoredFile).where(
+                        StoredFile.kind == "debate_audio",
+                        StoredFile.relative_path.like(f"%{debate_id}%"),
+                    )
+                )
+                is None
+            )
+            assert (
+                db.scalar(
+                    select(IdempotencyRecord).where(
+                        IdempotencyRecord.key == "legacy-topic-start-001"
+                    )
+                )
+                is None
+            )
+
+        repaired = client.patch(
+            f"/api/v1/debates/{debate_id}",
+            headers=_headers(csrf),
+            json={
+                "topic": TOPIC,
+                "participants": participants,
+                "round_count": 2,
+                "expected_revision": 0,
+            },
+        )
+        assert repaired.status_code == 200, repaired.text
+        started = client.post(
+            f"/api/v1/debates/{debate_id}/start",
+            headers=_headers(csrf, **{"Idempotency-Key": "legacy-topic-start-fixed-001"}),
+            json={
+                "expected_revision": repaired.json()["revision"],
+                "expected_current_audio_debate_id": None,
+                "confirm_previous_audio_cleanup": False,
+            },
+        )
+        assert started.status_code == 200, started.text
+        assert started.json()["status"] == "running"
 
 
 def test_sql_next_cross_session_claim_has_one_winner_and_stable_stale_loser(
@@ -1228,8 +1339,10 @@ async def _memory_ready_service(
     return service, debate, tasks
 
 
+@pytest.mark.parametrize("topic", [TOPIC, ACCENTED_NFD_TOPIC], ids=["plain", "accented-nfd"])
 def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
     app_factory: Any,
+    topic: str,
 ) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as client:
@@ -1253,7 +1366,7 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
             f"/api/v1/courses/{COURSE_ID}/debates",
             headers=_headers(csrf, **{"Idempotency-Key": "wave2-ws-create-0001"}),
             json={
-                "topic": TOPIC,
+                "topic": topic,
                 "participants": [
                     {
                         "agent_id": bowen_id,
@@ -1471,6 +1584,10 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                     f'["{rows[0].id}","{rows[1].id}"]',
                     f'["{rows[0].id}","{rows[1].id}","{rows[2].id}"]',
                 ]
+                assert all(row.generation_status == "final_ready" for row in rows)
+                assert all(row.publication_status == "public" for row in rows)
+                assert all(row.generation_status != "failed" for row in rows)
+                assert topic in rows[2].speech
                 structured = [json.loads(row.structured_json or "{}") for row in rows]
                 assert structured[2]["rebuttal_target_turn_id"] in {rows[0].id, rows[1].id}
                 assert structured[2]["question"]["type"] == "agent"

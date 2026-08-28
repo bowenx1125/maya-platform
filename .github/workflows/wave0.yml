@@ -118,6 +118,9 @@ jobs:
       - name: WebSocket generator clean-diff check
         run: node scripts/check_generated_ws.mjs
 
+      - name: Latin script table clean-diff check
+        run: node scripts/check_latin_script_tables.mjs
+
       - name: Route semantic comparator fixtures
         run: node scripts/test_route_surface.mjs
 

@@ -1226,6 +1226,7 @@ export interface components {
             teacher_note: string;
         };
         DebateDraftRequest: {
+            /** @description Non-empty English debate topic. The value must contain at least one Latin-script letter and may include Unicode Latin diacritics, numbers, punctuation, and ordinary Unicode space separators. Control characters, non-Latin letters, symbols, unsafe marks, and non-space separators are rejected by the domain validator; there is no product-level maximum length in Wave 2. */
             topic: string;
             participants: components["schemas"]["DebateParticipantInput"][];
             /** @constant */

@@ -12,6 +12,8 @@ import type {
   DebateSummary,
   PublishedAgentSummary,
 } from "../lib/api";
+import { validateDebateTopic } from "../lib/debate-topic";
+import { localizeError } from "../lib/i18n";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -70,6 +72,69 @@ function createdDebate(): DebateDetail {
 }
 
 describe("Wave 2 teacher debate setup", () => {
+  it.each([
+    ["中文议题", "中文"],
+    ["TikTok 推荐算法", "mixed CJK"],
+    ["Запрет TikTok", "Cyrillic"],
+    ["حظر TikTok", "Arabic"],
+    ["12345?!", "numbers and punctuation only"],
+    ["English\nline", "control character"],
+    ["English\u202Etopic", "bidi control"],
+    ["English\u2C2E", "Glagolitic letter"],
+    ["English\u2C5E", "Glagolitic letter"],
+    ["English 🙂", "emoji"],
+    ["English ∑", "mathematical symbol"],
+    ["English\u2028line", "line separator"],
+    ["\u0301English", "isolated combining mark"],
+    ["123\u0301", "combining mark after a number"],
+    ["你\u0301", "combining mark after a non-Latin letter"],
+  ])("rejects %s (%s)", (value) => {
+    expect(validateDebateTopic(value)).toEqual({
+      valid: false,
+      reason: "english",
+    });
+  });
+
+  it.each([
+    "Should the United States ban TikTok's recommendation algorithm?",
+    "Māori perspectives on digital sovereignty",
+    "Cafe\u0301 perspectives on digital sovereignty",
+    "C\u0327ultural exchange in class",
+    "A\u030Angström and cultural exchange",
+    "São Paulo and José's classroom debate",
+    "TikTok—should it be banned?",
+    "Should TikTok's algorithm be regulated in 2026?",
+    "\u0149 and \u2132 perspectives",
+    "\ua7cb compatibility letter",
+    "Should Māori and Cafe\u0301/C\u0327 perspectives shape platform policy?",
+  ])("accepts a valid Latin-script topic: %s", (value) => {
+    const result = validateDebateTopic(value);
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.normalized).toBe(value);
+  });
+
+  it("accepts a long topic without adding a product length limit", () => {
+    const value = Array.from({ length: 80 }, () => "TikTok policy").join(" ");
+    const result = validateDebateTopic(value);
+    expect(result).toEqual({ valid: true, normalized: value });
+  });
+
+  it("keeps the existing empty-topic error distinct", () => {
+    expect(validateDebateTopic(" \u00a0 ")).toEqual({
+      valid: false,
+      reason: "required",
+    });
+  });
+
+  it("localizes a server topic-language error without exposing provider data", () => {
+    expect(localizeError({ code: "topic_language_invalid" }, "zh")).toContain(
+      "拉丁字母",
+    );
+    expect(localizeError({ code: "topic_language_invalid" }, "en")).toContain(
+      "Latin-script",
+    );
+  });
+
   it("renders teacher debate summaries and links to the control surface", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const rows = [
@@ -191,5 +256,38 @@ describe("Wave 2 teacher debate setup", () => {
     );
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("blocks invalid topics before create and keeps the input accessible", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    const controller: DebateCreateController = {
+      loadCandidates: vi
+        .fn()
+        .mockResolvedValue([
+          candidate("bowen", "Bowen"),
+          candidate("kaikai", "KaiKai"),
+        ]),
+      create,
+    };
+
+    render(<TeacherDebateCreate controller={controller} />);
+    await screen.findByRole("button", { name: /Bowen/ });
+    fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+
+    const input = screen.getByLabelText("Topic (English)");
+    const invalidTopic = "Should TikTok be banned? 推荐算法";
+    fireEvent.change(input, { target: { value: invalidTopic } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create debate draft" }),
+    );
+
+    const error = await screen.findByRole("alert");
+    expect(error.textContent).toContain("Latin-script");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe("debate-topic-error");
+    expect((input as HTMLTextAreaElement).value).toBe(invalidTopic);
+    expect(create).not.toHaveBeenCalled();
   });
 });
