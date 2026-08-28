@@ -2,7 +2,7 @@
 
 Gate ID: `g0-2026-08-28.7-pre-wave3-polish`
 
-Status: `FROZEN / G0-S PASS / G1 AUTHORIZED 2026-08-28`
+Status: `FROZEN / G0-S PASS / G1 / G1.5 / G2 / G3 PASS 2026-08-28`
 
 This packet records product decisions already made by the user. Independent Sol High G0-S review passed with `P0=0 / P1=0 / P2=0` after closing stable account identity, delete/publish concurrency, description-history separation, Markdown replacement atomicity and replay/API/migration semantics. The user explicitly authorized execution on 2026-08-28 with the exact Gate ID; Luna workers may now start within the ownership and stop conditions below.
 
@@ -201,3 +201,18 @@ No Luna implementation starts until this packet is Sol-audited and the user expl
 ## 12. Stop Conditions
 
 Stop the affected Gate for any unreviewed change to published snapshot immutability, historical deletion, cross-group permissions, Session/CSRF, replay adjacency, provider calls/costs, TTS/LLM selectors, Wave 3/4 scope, public deployment or destructive migration. Other independent Gates may continue.
+
+## 13. G3 Closure Evidence
+
+Final main-window signature: `PASS`.
+
+- `PW3-A` through `PW3-E` each completed Luna implementation and independent Sol High audit with final `P0=0 / P1=0 / P2=0`.
+- Backend full regression: `321 passed`; frontend full regression: `21 files / 137 tests passed`.
+- Ruff, mypy, Prettier, ESLint, TypeScript and Next production build passed.
+- OpenAPI g0.7 and generated client passed with `53` implemented operations and `13` explicit later-Wave placeholders. Response, route semantic, frozen hash and clean-generation checks passed.
+- WebSocket fixtures passed with `30` positive / `18` negative events, `6/7` browser command fixtures and `5/6` private-result fixtures.
+- Alembic `0006_pre_wave3_polish` passed fresh, repeat, populated, downgrade and re-upgrade checks while preserving historical fingerprints and zero foreign-key violations.
+- Docker Compose built and started healthy backend, frontend and gateway containers; the live database is at `0006_pre_wave3_polish (head)`.
+- Browser acceptance passed at `1440x900`, `1280x720`, `1024x768`, `768x1024`, `390x844` and `360x800` for login, teacher home, student home, knowledge and classroom stage: no horizontal overflow, visible actions at least 44px, exactly three ordinary playback controls and two visible 3D canvases in the inspected two-Agent stage.
+- The browser did not approve replacement of the previous retained audio while inspecting a different draft debate; no retained audio was deleted during this acceptance run.
+- Real provider calls for this Gate: `0`. Real TTS remains `FAILED-DEFERRED`; real LLM/Embedding, M13-M15 and public deployment remain out of scope.
