@@ -144,6 +144,12 @@ jobs:
       - name: Backend dependency sync
         run: uv sync --directory backend --frozen
 
+      - name: Install FFmpeg for voice boundary tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ffmpeg
+          ffmpeg -version
+
       - name: Local Demo initializer safety probe
         run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 
