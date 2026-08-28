@@ -177,50 +177,52 @@ button:disabled {
   opacity: 0.55;
 }
 
-.auth-shell {
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
-  width: min(calc(100% - 40px), 920px);
-  margin: 0 auto;
-  padding: 48px 0;
-}
-
-.auth-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(250px, 0.85fr);
-  column-gap: clamp(24px, 5vw, 64px);
-  align-items: start;
+.landing-card {
+  max-width: none;
   width: 100%;
-  padding: clamp(28px, 7vw, 60px);
-  border: 1px solid rgba(232, 225, 216, 0.9);
-  border-radius: 30px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: var(--shadow);
+  padding: clamp(30px, 4.8vw, 56px);
 }
 
-.auth-card > .auth-language,
-.auth-card > .eyebrow,
-.auth-card > h1,
-.auth-card > .lede {
-  grid-column: 1 / -1;
+.landing-language {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: clamp(26px, 4vw, 44px);
+}
+
+.landing-language .locale-label {
+  display: none;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  gap: clamp(34px, 5vw, 64px);
+  align-items: start;
+}
+
+.landing-copy,
+.login-panel {
+  position: relative;
+  z-index: 1;
   min-width: 0;
 }
 
-.auth-card > .quick-switch {
-  grid-column: 1;
-  min-width: 0;
+.landing-copy h1 {
+  max-width: 620px;
 }
 
-.auth-card > .password-fallback {
-  grid-column: 2;
-  min-width: 0;
-  margin-top: 26px;
+.login-panel {
+  padding-left: clamp(28px, 4vw, 48px);
+  border-left: 1px solid var(--line);
 }
 
-.auth-card h1 {
-  margin: 18px 0 12px;
-  font-size: clamp(2.1rem, 6vw, 3.25rem);
+.login-panel h2 {
+  margin: 0 0 18px;
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -0.01em;
 }
 
 .stack-form {
@@ -438,33 +440,49 @@ textarea {
 }
 
 .quick-switch {
-  margin-top: 26px;
-  padding-top: 22px;
-  border-top: 1px solid var(--line);
+  margin: 0;
 }
 
-.password-fallback summary {
+.quick-switch .chip-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-switch .chip-button {
+  width: 100%;
+}
+
+.login-divider {
   display: flex;
   align-items: center;
-  min-height: 44px;
-  padding: 8px 0;
-  color: var(--indigo-dark);
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 760;
-  line-height: 1.35;
+  gap: 12px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
-/* Every disclosure trigger keeps a comfortable keyboard/touch target. */
+.login-divider::before,
+.login-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+  content: "";
+}
+
+.login-form {
+  margin-top: 18px;
+}
+
+.login-form .primary-action {
+  width: 100%;
+}
+
+/* Disclosure triggers elsewhere still need a comfortable keyboard/touch target. */
 details > summary {
   min-height: 44px;
   padding: 8px 0;
-}
-
-.auth-language {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 6px;
 }
 
 .locale-switcher {
@@ -1375,18 +1393,15 @@ details > summary {
     padding-top: 34px;
   }
 
-  .auth-card {
+  .landing-grid {
     grid-template-columns: minmax(0, 1fr);
-    column-gap: 0;
   }
 
-  .auth-card > .quick-switch,
-  .auth-card > .password-fallback {
-    grid-column: 1;
-  }
-
-  .auth-card > .password-fallback {
-    margin-top: 26px;
+  .login-panel {
+    padding-top: 30px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .page-intro {
@@ -1452,23 +1467,16 @@ details > summary {
     border-radius: 18px;
   }
 
-  .auth-shell {
-    place-items: start center;
-    width: min(calc(100% - 28px), 560px);
-    padding: 28px 0 44px;
+  .landing-card {
+    padding: 26px 20px 30px;
   }
 
-  .auth-card {
-    padding: 24px 20px;
-    border-radius: 22px;
+  .landing-language {
+    margin-bottom: 26px;
   }
 
-  .auth-card h1 {
-    font-size: clamp(2rem, 12vw, 3rem);
-  }
-
-  .password-fallback summary {
-    min-height: 44px;
+  .quick-switch .chip-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .section-card-header {

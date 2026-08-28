@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -20,7 +21,8 @@ import {
   type DemoIdentity,
 } from "../lib/api";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
-import { LanguageSwitcher, useLocale, useT } from "./locale";
+import { sanitizeNextPath } from "../lib/navigation";
+import { useLocale, useT } from "./locale";
 
 type SessionStatus = "loading" | "authenticated" | "anonymous";
 
@@ -39,6 +41,26 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+type SessionApiWithCsrfHelpers = PlatformApi & {
+  getCsrfToken?: () => string | undefined;
+  setCsrfToken?: (token: string | undefined) => void;
+};
+
+function readApiCsrfToken(api: PlatformApi): string | undefined {
+  const candidate = api as SessionApiWithCsrfHelpers;
+  try {
+    const token = candidate.getCsrfToken?.();
+    return typeof token === "string" ? token : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeApiCsrfToken(api: PlatformApi, token: string | undefined): void {
+  const candidate = api as SessionApiWithCsrfHelpers;
+  candidate.setCsrfToken?.(token);
+}
+
 export function SessionProvider({
   children,
   api: providedApi,
@@ -50,70 +72,215 @@ export function SessionProvider({
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [session, setSession] = useState<AuthSession | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const sessionOperationEpoch = useRef(0);
+  const sessionMutationTail = useRef<Promise<void>>(Promise.resolve());
+  const currentSession = useRef<AuthSession | null>(null);
+  const committedCsrfToken = useRef<string | undefined>(readApiCsrfToken(api));
 
-  const refresh = useCallback(async (): Promise<AuthSession | null> => {
-    try {
-      const next = await api.me();
+  const enqueueSessionMutation = useCallback(
+    <T,>(operation: () => Promise<T>): Promise<T> => {
+      const run = sessionMutationTail.current.then(operation, operation);
+      sessionMutationTail.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+    [],
+  );
+
+  const beginSessionOperation = useCallback(() => {
+    const epoch = sessionOperationEpoch.current + 1;
+    sessionOperationEpoch.current = epoch;
+    // PlatformApi methods also update their in-memory token when they settle.
+    // Restore the last accepted token before every request so a late method
+    // cannot use a token left behind by an older operation.
+    writeApiCsrfToken(api, committedCsrfToken.current);
+    return epoch;
+  }, [api]);
+
+  const restoreCommittedCsrf = useCallback(() => {
+    writeApiCsrfToken(api, committedCsrfToken.current);
+  }, [api]);
+
+  const commitAuthenticatedSession = useCallback(
+    (epoch: number, next: AuthSession): void => {
+      if (sessionOperationEpoch.current !== epoch) {
+        restoreCommittedCsrf();
+        return;
+      }
+      committedCsrfToken.current = next.csrf_token;
+      writeApiCsrfToken(api, next.csrf_token);
+      currentSession.current = next;
       setSession(next);
       setStatus("authenticated");
       setError(null);
-      return next;
-    } catch (cause) {
+    },
+    [api, restoreCommittedCsrf],
+  );
+
+  const commitAnonymousSession = useCallback(
+    (epoch: number, nextError: unknown = null): void => {
+      if (sessionOperationEpoch.current !== epoch) {
+        restoreCommittedCsrf();
+        return;
+      }
+      committedCsrfToken.current = undefined;
+      writeApiCsrfToken(api, undefined);
+      currentSession.current = null;
       setSession(null);
       setStatus("anonymous");
-      setError(
+      setError(nextError);
+    },
+    [api, restoreCommittedCsrf],
+  );
+
+  const refresh = useCallback(async (): Promise<AuthSession | null> => {
+    // A mutation may already have rotated the real cookie while its response
+    // is still settling. Wait for all queued auth mutations before starting a
+    // new /me check; the epoch below still fences an already-running /me.
+    while (true) {
+      const mutationTail = sessionMutationTail.current;
+      await mutationTail;
+      if (mutationTail === sessionMutationTail.current) break;
+    }
+    const epoch = beginSessionOperation();
+    try {
+      const next = await api.me();
+      commitAuthenticatedSession(epoch, next);
+      return next;
+    } catch (cause) {
+      if (sessionOperationEpoch.current !== epoch) {
+        restoreCommittedCsrf();
+        return null;
+      }
+      commitAnonymousSession(
+        epoch,
         cause instanceof Error && "status" in cause && cause.status === 401
           ? null
           : cause,
       );
       return null;
     }
-  }, [api]);
+  }, [
+    api,
+    beginSessionOperation,
+    commitAnonymousSession,
+    commitAuthenticatedSession,
+    restoreCommittedCsrf,
+  ]);
+
+  const preserveSessionAfterFailure = useCallback(
+    (epoch: number): void => {
+      restoreCommittedCsrf();
+      // A failed login can race the initial /me check. If no session has ever
+      // been accepted, do not leave the provider stuck in its initial loading
+      // state while the superseded refresh result is ignored.
+      if (
+        sessionOperationEpoch.current === epoch &&
+        currentSession.current === null
+      ) {
+        setStatus("anonymous");
+      }
+    },
+    [restoreCommittedCsrf],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void refresh();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      sessionOperationEpoch.current += 1;
+    };
   }, [refresh]);
 
   const login = useCallback(
-    async (username: string, password: string) => {
-      const next = await api.login(username, password);
-      setSession(next);
-      setStatus("authenticated");
-      setError(null);
-      return next;
-    },
-    [api],
+    (username: string, password: string) =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          const next = await api.login(username, password);
+          commitAuthenticatedSession(epoch, next);
+          return next;
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
   );
 
   const quickLogin = useCallback(
-    async (userId: string) => {
-      const next = await api.quickLogin(userId);
-      setSession(next);
-      setStatus("authenticated");
-      setError(null);
-      return next;
-    },
-    [api],
+    (userId: string) =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          const next = await api.quickLogin(userId);
+          commitAuthenticatedSession(epoch, next);
+          return next;
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
   );
 
-  const logout = useCallback(async () => {
-    await api.logout();
-    setSession(null);
-    setStatus("anonymous");
-  }, [api]);
+  const logout = useCallback(
+    () =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          await api.logout();
+          commitAnonymousSession(epoch);
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAnonymousSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
+  );
 
   const switchIdentity = useCallback(
-    async (userId: string) => {
-      const next = await api.switchDemoIdentity(userId);
-      setSession(next);
-      setStatus("authenticated");
-      setError(null);
-      return next;
-    },
-    [api],
+    (userId: string) =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          const next = await api.switchDemoIdentity(userId);
+          commitAuthenticatedSession(epoch, next);
+          return next;
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
   );
 
   const value = useMemo<SessionContextValue>(
@@ -182,7 +349,7 @@ export function RouteGuard({
           <p>{t("sessionRequired")}</p>
           <Link
             className="primary-action"
-            href={`/login?next=${encodeURIComponent(pathname)}`}
+            href={`/?next=${encodeURIComponent(pathname)}`}
           >
             {t("signIn")}
           </Link>
@@ -232,18 +399,25 @@ export function LoginForm() {
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
 
   useEffect(() => {
-    if (status === "authenticated" || status === "anonymous") {
-      void api
-        .demoIdentities()
-        .then(setIdentities)
-        .catch(() => setIdentities([]));
-    }
-  }, [api, status]);
+    let active = true;
+    void api
+      .demoIdentities()
+      .then((next) => {
+        if (active) setIdentities(Array.isArray(next) ? next : []);
+      })
+      .catch(() => {
+        if (active) setIdentities([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api]);
 
-  const nextPath =
+  const requestedNext =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("next")
       : null;
+  const nextPath = sanitizeNextPath(requestedNext);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -278,9 +452,10 @@ export function LoginForm() {
           ? await switchIdentity(userId)
           : await quickLogin(userId);
       router.replace(
-        session.user.courses.some((item) => item.role === "teacher")
-          ? "/teacher"
-          : "/student",
+        nextPath ||
+          (session.user.courses.some((item) => item.role === "teacher")
+            ? "/teacher"
+            : "/student"),
       );
     } catch (cause) {
       setError(cause);
@@ -289,17 +464,15 @@ export function LoginForm() {
     }
   }
 
+  const hasDemoIdentities = identities.length > 0;
+
   return (
-    <section className="auth-card" aria-labelledby="login-title">
-      <div className="auth-language">
-        <LanguageSwitcher />
-      </div>
-      <div className="eyebrow">{t("heroEyebrow")}</div>
-      <h1 id="login-title">{t("signIn")}</h1>
-      <p className="lede">{t("loginLede")}</p>
-      {identities.length > 0 ? (
+    <section className="login-panel" aria-labelledby="login-title">
+      <h2 id="login-title">
+        {hasDemoIdentities ? t("demoIdentity") : t("signIn")}
+      </h2>
+      {hasDemoIdentities ? (
         <div className="quick-switch" aria-label={t("demoIdentity")}>
-          <span className="section-label">{t("demoIdentity")}</span>
           <div className="chip-row">
             {identities.map((identity) => (
               <button
@@ -320,37 +493,35 @@ export function LoginForm() {
           {localizeError(error, locale, errorFallback)}
         </p>
       ) : null}
-      <details className="password-fallback">
-        <summary>
-          {locale === "zh"
-            ? "改用用户名和密码登录"
-            : "Use username and password instead"}
-        </summary>
-        <form className="stack-form" onSubmit={submit}>
-          <label>
-            <span>{t("username")}</span>
-            <input
-              autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            <span>{t("password")}</span>
-            <input
-              autoComplete="current-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </label>
-          <button className="primary-action" type="submit" disabled={busy}>
-            {busy ? t("signingIn") : t("login")}
-          </button>
-        </form>
-      </details>
+      {hasDemoIdentities ? (
+        <div className="login-divider" aria-hidden="true">
+          <span>{t("or")}</span>
+        </div>
+      ) : null}
+      <form className="stack-form login-form" onSubmit={submit}>
+        <label>
+          <span>{t("username")}</span>
+          <input
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          <span>{t("password")}</span>
+          <input
+            autoComplete="current-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </label>
+        <button className="primary-action" type="submit" disabled={busy}>
+          {busy ? t("signingIn") : t("signIn")}
+        </button>
+      </form>
     </section>
   );
 }

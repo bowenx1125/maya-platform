@@ -25,7 +25,7 @@ export function AppShell({
     setBusy(true);
     try {
       await logout();
-      router.replace("/login");
+      router.replace("/");
     } finally {
       setBusy(false);
     }

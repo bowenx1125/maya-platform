@@ -2,23 +2,29 @@
 
 import Link from "next/link";
 
-import { useT } from "../components/locale";
+import { LanguageSwitcher, useT } from "../components/locale";
+import { LoginForm } from "../components/session-provider";
 
 export default function HomePage() {
   const t = useT();
   return (
     <main className="shell">
-      <section className="hero-card" aria-labelledby="home-title">
-        <div className="eyebrow">{t("heroEyebrow")}</div>
-        <h1 id="home-title">{t("heroTitle")}</h1>
-        <p className="lede">{t("heroLede")}</p>
-        <div className="hero-actions">
-          <Link className="primary-action" href="/login">
-            {t("signIn")}
-          </Link>
-          <Link className="secondary-action" href="/health">
-            {t("environmentHealth")}
-          </Link>
+      <section className="hero-card landing-card" aria-labelledby="home-title">
+        <div className="landing-language">
+          <LanguageSwitcher />
+        </div>
+        <div className="landing-grid">
+          <div className="landing-copy">
+            <div className="eyebrow">{t("heroEyebrow")}</div>
+            <h1 id="home-title">{t("heroTitle")}</h1>
+            <p className="lede">{t("heroLede")}</p>
+            <div className="hero-actions">
+              <Link className="secondary-action" href="/health">
+                {t("environmentHealth")}
+              </Link>
+            </div>
+          </div>
+          <LoginForm />
         </div>
       </section>
 
