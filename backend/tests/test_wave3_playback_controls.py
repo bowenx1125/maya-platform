@@ -29,9 +29,7 @@ def _running_debate(
                 participant_id=participant.id,
                 round_no=1,
                 turn_index=index,
-                generation_status=(
-                    "final_ready" if complete or index == 0 else "pending"
-                ),
+                generation_status=("final_ready" if complete or index == 0 else "pending"),
                 publication_status="public" if complete or index == 0 else "unpublished",
                 speech=("A complete classroom speech." if complete or index == 0 else None),
                 audio_file_id=(f"audio-{index}" if complete or index == 0 else None),

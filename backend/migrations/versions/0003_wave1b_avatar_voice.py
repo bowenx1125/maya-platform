@@ -47,8 +47,7 @@ def upgrade() -> None:
             name="ck_voice_profiles_status",
         ),
         sa.CheckConstraint(
-            "(scope = 'system' AND group_id IS NULL) OR "
-            "(scope = 'group' AND group_id IS NOT NULL)",
+            "(scope = 'system' AND group_id IS NULL) OR (scope = 'group' AND group_id IS NOT NULL)",
             name="ck_voice_profiles_scope_group",
         ),
         sa.ForeignKeyConstraint(
@@ -187,9 +186,7 @@ def upgrade() -> None:
             ondelete="SET NULL",
         ),
     )
-    op.create_index(
-        "ix_voice_previews_profile_state", "voice_previews", ["profile_id", "state"]
-    )
+    op.create_index("ix_voice_previews_profile_state", "voice_previews", ["profile_id", "state"])
     op.create_index("ix_voice_previews_expiry", "voice_previews", ["expires_at"])
 
 

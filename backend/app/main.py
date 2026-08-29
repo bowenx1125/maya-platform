@@ -96,6 +96,7 @@ def create_app(
         settings=runtime_settings,
         snapshot_projector=wave3_snapshot_projection,
     )
+
     def publish_interaction_event(event: Any) -> None:
         wave3_events.publish_interaction(event)
         if event.event_type == "interaction.closed":

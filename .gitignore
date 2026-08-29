@@ -1,11 +1,27 @@
-# Local environment and secrets
+# Local environment and supplier secrets
 .env
 .env.*
 !.env.example
-backend/config/demo_users.yaml
-backend/config/demo-accounts/accounts.private.md
 *.pem
 *.key
+
+# Runtime data and personal inputs are recreated locally
+/data/
+/backend/data/
+/private-inputs/
+/archive/
+/outputs/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.log
+
+# The two Demo account catalogs are intentionally tracked in this private repo.
+# Do not add them to this ignore file:
+# backend/config/demo-accounts/accounts.private.md
+# backend/config/demo_users.yaml
 
 # JavaScript dependencies and build output
 node_modules/
@@ -27,21 +43,12 @@ backend/**/__pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Runtime data must stay outside Git
-data/
-backend/data/
-*.db
-*.db-*
-*.sqlite
-*.sqlite3
-*.sqlite3-*
-*.log
-
-# OS/editor files
+# Local Docker/coverage/editor artifacts
+docker-compose.override.yml
+htmlcov/
 .DS_Store
 .idea/
 .vscode/
 
-# Local Docker/coverage artifacts
-docker-compose.override.yml
-htmlcov/
+# Generated inspection sidecars
+*.inspect.ndjson

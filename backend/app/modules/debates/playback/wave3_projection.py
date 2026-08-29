@@ -26,9 +26,7 @@ from app.modules.reports.models import (
 
 def wave3_snapshot_projection(db: Session, debate_id: str) -> dict[str, Any]:
     window = db.scalar(
-        select(ClassroomInteractionWindow).where(
-            ClassroomInteractionWindow.debate_id == debate_id
-        )
+        select(ClassroomInteractionWindow).where(ClassroomInteractionWindow.debate_id == debate_id)
     )
     if window is None:
         raise invalid_state("The classroom interaction window is unavailable.")
@@ -105,9 +103,7 @@ def wave3_snapshot_projection(db: Session, debate_id: str) -> dict[str, Any]:
         "revision": insight.revision_no if insight is not None else None,
     }
 
-    report = db.scalar(
-        select(CivilizationReport).where(CivilizationReport.debate_id == debate_id)
-    )
+    report = db.scalar(select(CivilizationReport).where(CivilizationReport.debate_id == debate_id))
     active_revision = db.scalar(
         select(CivilizationReportRevision).where(
             CivilizationReportRevision.debate_id == debate_id,

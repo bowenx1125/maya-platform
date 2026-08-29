@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Maya Teaching Platform API",
-    "version": "0.1.0-g0.7",
+    "version": "0.1.0-g0.8-wave3",
     "description": "Demo v0.1 platform contract. Provider names, model names, external voice IDs, API keys, absolute file paths, and prepared turn text are never public fields."
   },
   "security": [
@@ -2054,6 +2054,583 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/interaction": {
+      "get": {
+        "tags": [
+          "Interaction"
+        ],
+        "operationId": "getTeacherInteraction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Window state, raw named barrages, and anonymous vote aggregates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeacherInteraction"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/interaction/open": {
+      "post": {
+        "tags": [
+          "Interaction"
+        ],
+        "operationId": "openInteraction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Interaction opened and public platform URL returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeacherInteraction"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/interaction/close": {
+      "post": {
+        "tags": [
+          "Interaction"
+        ],
+        "operationId": "closeInteraction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Input finalized; insight job then report job will run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeacherInteraction"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/classroom-interactions/{access_token}": {
+      "get": {
+        "tags": [
+          "Interaction"
+        ],
+        "security": [],
+        "operationId": "getClassroomInteractionForm",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccessToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Minimal public topic and participant options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInteractionForm"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/classroom-interactions/{access_token}/votes": {
+      "post": {
+        "tags": [
+          "Interaction"
+        ],
+        "security": [],
+        "operationId": "submitVote",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "participant_id",
+                  "client_submission_id"
+                ],
+                "properties": {
+                  "participant_id": {
+                    "$ref": "#/components/schemas/Uuid"
+                  },
+                  "client_submission_id": {
+                    "$ref": "#/components/schemas/Uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vote accepted; response contains no nickname.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "vote_submitted"
+                  ],
+                  "properties": {
+                    "vote_submitted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/classroom-interactions/{access_token}/barrages": {
+      "post": {
+        "tags": [
+          "Interaction"
+        ],
+        "security": [],
+        "operationId": "submitBarrage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "nickname",
+                  "raw_text",
+                  "client_submission_id"
+                ],
+                "properties": {
+                  "nickname": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "raw_text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "client_submission_id": {
+                    "$ref": "#/components/schemas/Uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Raw named barrage accepted; response contains no vote.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "barrage_submitted"
+                  ],
+                  "properties": {
+                    "barrage_submitted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/report": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "getCurrentReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current report and insight status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/report/generate": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "regenerateReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Insight retried if required, then a new report revision is created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/report/revisions": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "listReportRevisions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teacher-only success and failed revision metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportRevisionSummary"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/report/revisions/{revision_id}": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "getReportRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful report content or safe failed metadata for teacher.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportRevision"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/report/download": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "downloadCurrentReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en",
+                "zh-Hans"
+              ],
+              "default": "en"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Markdown file; Chinese exists only after on-demand translation.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Safe attachment filename with ASCII fallback and UTF-8 filename.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string",
+                  "const": "nosniff"
+                }
+              }
+            },
+            "content": {
+              "text/markdown; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/translations": {
+      "get": {
+        "tags": [
+          "Translation"
+        ],
+        "operationId": "listTranslationBatches",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing on-demand translation batches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranslationBatch"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Translation"
+        ],
+        "operationId": "translateCurrentPublishedContent",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Batch translates only current published English items not already valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationBatch"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/audio/{turn_id}": {
       "get": {
         "tags": [
@@ -2276,7 +2853,9 @@
         "required": true,
         "schema": {
           "type": "string",
-          "minLength": 32
+          "minLength": 111,
+          "maxLength": 111,
+          "pattern": "^v1\\.[A-Za-z0-9_-]{64}\\.[A-Za-z0-9_-]{43}$"
         }
       },
       "IdempotencyKey": {
@@ -3762,6 +4341,7 @@
       },
       "VoteAggregate": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "participant_id",
           "count",
@@ -3784,6 +4364,7 @@
       },
       "BarrageMessage": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "id",
           "nickname",
@@ -3811,27 +4392,97 @@
         }
       },
       "TeacherInteraction": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TeacherInteractionClosed"
+          },
+          {
+            "$ref": "#/components/schemas/TeacherInteractionOpen"
+          },
+          {
+            "$ref": "#/components/schemas/TeacherInteractionFinalized"
+          }
+        ]
+      },
+      "TeacherInteractionClosed": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "status",
+          "public_url",
           "votes",
           "barrages"
         ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "closed",
-              "open",
-              "finalized"
-            ]
+            "const": "closed"
           },
           "public_url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uri-reference"
+            "type": "null"
+          },
+          "votes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoteAggregate"
+            }
+          },
+          "barrages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BarrageMessage"
+            }
+          }
+        }
+      },
+      "TeacherInteractionOpen": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "public_url",
+          "votes",
+          "barrages"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "open"
+          },
+          "public_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "votes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoteAggregate"
+            }
+          },
+          "barrages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BarrageMessage"
+            }
+          }
+        }
+      },
+      "TeacherInteractionFinalized": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "public_url",
+          "votes",
+          "barrages"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "finalized"
+          },
+          "public_url": {
+            "type": "null"
           },
           "votes": {
             "type": "array",
@@ -3849,6 +4500,7 @@
       },
       "PublicInteractionForm": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "topic",
           "participants"
@@ -3861,6 +4513,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "participant_id",
                 "slot",
@@ -3890,6 +4543,7 @@
       },
       "BarrageInsightItem": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "category",
           "summary",
@@ -3915,6 +4569,7 @@
       },
       "BarrageInsight": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "status",
           "included_count",
@@ -3947,12 +4602,15 @@
           }
         }
       },
-      "ReportRevision": {
+      "ReportRevisionSummary": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "id",
           "revision_no",
           "status",
+          "word_count",
+          "safe_error_code",
           "created_at"
         ],
         "properties": {
@@ -3971,12 +4629,6 @@
               "failed"
             ]
           },
-          "english_markdown": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "word_count": {
             "type": [
               "integer",
@@ -3984,12 +4636,6 @@
             ],
             "minimum": 600,
             "maximum": 900
-          },
-          "translated_markdown": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "safe_error_code": {
             "type": [
@@ -4002,8 +4648,155 @@
           }
         }
       },
+      "ReportRevision": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/GeneratingReportRevision"
+          },
+          {
+            "$ref": "#/components/schemas/ReadyReportRevision"
+          },
+          {
+            "$ref": "#/components/schemas/FailedReportRevision"
+          }
+        ]
+      },
+      "GeneratingReportRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "english_markdown",
+          "word_count",
+          "translated_markdown",
+          "safe_error_code",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "generating"
+          },
+          "english_markdown": {
+            "type": "null"
+          },
+          "word_count": {
+            "type": "null"
+          },
+          "translated_markdown": {
+            "type": "null"
+          },
+          "safe_error_code": {
+            "type": "null"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "ReadyReportRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "english_markdown",
+          "word_count",
+          "translated_markdown",
+          "safe_error_code",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "ready"
+          },
+          "english_markdown": {
+            "type": "string",
+            "minLength": 1
+          },
+          "word_count": {
+            "type": "integer",
+            "minimum": 600,
+            "maximum": 900
+          },
+          "translated_markdown": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "safe_error_code": {
+            "type": "null"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "FailedReportRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "english_markdown",
+          "word_count",
+          "translated_markdown",
+          "safe_error_code",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "failed"
+          },
+          "english_markdown": {
+            "type": "null"
+          },
+          "word_count": {
+            "type": "null"
+          },
+          "translated_markdown": {
+            "type": "null"
+          },
+          "safe_error_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
       "Report": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "debate_id",
           "generation_status",
@@ -4048,7 +4841,7 @@
           "current_success_revision": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/ReportRevision"
+                "$ref": "#/components/schemas/ReadyReportRevision"
               },
               {
                 "type": "null"
@@ -4057,19 +4850,79 @@
           }
         }
       },
+      "TranslationItemSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "content_type",
+          "content_id",
+          "source_text_hash",
+          "status",
+          "reused",
+          "safe_error_code"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "turn",
+              "report_revision"
+            ]
+          },
+          "content_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "source_text_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "ready",
+              "failed"
+            ]
+          },
+          "reused": {
+            "type": "boolean"
+          },
+          "safe_error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "TranslationBatch": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "id",
+          "debate_id",
+          "input_hash",
           "status",
           "target_language",
+          "quality",
           "total_items",
           "succeeded_items",
-          "failed_items"
+          "failed_items",
+          "items",
+          "created_at",
+          "updated_at"
         ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Uuid"
+          },
+          "debate_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "input_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
           },
           "status": {
             "type": "string",
@@ -4085,6 +4938,10 @@
             "type": "string",
             "const": "zh-Hans"
           },
+          "quality": {
+            "type": "string",
+            "const": "test_representation"
+          },
           "total_items": {
             "type": "integer",
             "minimum": 0
@@ -4096,6 +4953,18 @@
           "failed_items": {
             "type": "integer",
             "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranslationItemSummary"
+            }
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/IsoTime"
           }
         }
       },

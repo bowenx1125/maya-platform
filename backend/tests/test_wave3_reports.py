@@ -445,9 +445,10 @@ def test_insight_rejects_mismatched_frozen_input_hash(app_factory) -> None:
             assert processed.included_count == 0
             assert processed.filtered_count == 0
         with database.session() as session:
-            assert session.scalar(
-                select(Job.state).where(Job.insight_snapshot_id == snapshot_id)
-            ) == "failed"
+            assert (
+                session.scalar(select(Job.state).where(Job.insight_snapshot_id == snapshot_id))
+                == "failed"
+            )
             assert session.get(Debate, debate_id).status == "completed"
 
 

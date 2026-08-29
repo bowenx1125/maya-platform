@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "description": "Only the two explicit Demo account catalogs may contain credentials in the private source repository. Runtime databases, generated content and personal inputs stay local.",
+  "allowed_private_files": [
+    "backend/config/demo-accounts/accounts.private.md",
+    "backend/config/demo_users.yaml"
+  ],
+  "allowed_private_prefixes": [],
+  "forbidden_tracked_files": [
+    ".env"
+  ],
+  "forbidden_tracked_prefixes": [
+    "data/",
+    "backend/data/",
+    "private-inputs/",
+    "archive/",
+    "outputs/"
+  ]
+}

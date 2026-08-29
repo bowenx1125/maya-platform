@@ -494,15 +494,15 @@ def test_restart_recovery_does_not_fail_entry_reused_by_another_running_batch(
     with db.session() as session:
         assert service.recover_startup(session) == ()
     with db.engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT status FROM translation_entries WHERE id=:id"),
+                {"id": shared_entry},
+            ).scalar_one()
+            == "running"
+        )
         assert connection.execute(
-            text("SELECT status FROM translation_entries WHERE id=:id"),
-            {"id": shared_entry},
-        ).scalar_one() == "running"
-        assert connection.execute(
-            text(
-                "SELECT status,safe_error_code FROM translation_batch_items "
-                "WHERE batch_id=:id"
-            ),
+            text("SELECT status,safe_error_code FROM translation_batch_items WHERE batch_id=:id"),
             {"id": recovering_batch},
         ).one() == ("failed", OPERATION_INTERRUPTED)
 

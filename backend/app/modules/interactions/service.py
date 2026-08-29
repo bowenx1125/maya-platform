@@ -370,9 +370,7 @@ def _final_aggregates(
         VoteAggregate(
             participant_id=_as_uuid(participant.id),
             count=final_counts[participant.id],
-            percentage=(
-                round(final_counts[participant.id] * 1000 / total) / 10 if total else 0
-            ),
+            percentage=(round(final_counts[participant.id] * 1000 / total) / 10 if total else 0),
         )
         for participant in participants
     ]
@@ -691,9 +689,7 @@ def _open_eligibility(session: Session, debate: Debate) -> None:
     participant_ids = {row.id for row in participants}
     participant_rounds = {(row.participant_id, row.round_no) for row in turns}
     expected_rounds = {
-        (participant.id, round_no)
-        for participant in participants
-        for round_no in (1, 2)
+        (participant.id, round_no) for participant in participants for round_no in (1, 2)
     }
     if (
         len(participants) < 2
@@ -702,8 +698,8 @@ def _open_eligibility(session: Session, debate: Debate) -> None:
         or {row.participant_id for row in turns} != participant_ids
         or participant_rounds != expected_rounds
         or any(
-        row.generation_status != "final_ready" or row.publication_status != "public"
-        for row in turns
+            row.generation_status != "final_ready" or row.publication_status != "public"
+            for row in turns
         )
     ):
         raise conflict(
