@@ -17,7 +17,7 @@ env:
   MAYA_ENV: test
   DEMO_MODE: "false"
   DEMO_QUICK_LOGIN: "false"
-  SESSION_SECRET: ci-only-session-secret-replace-never-use-in-demo
+  SESSION_SECRET: replace-with-at-least-32-random-characters
   CLASSROOM_PUBLIC_BASE_URL: http://127.0.0.1:8080
   LLM_PROVIDER: mock
   EMBEDDING_PROVIDER: mock
