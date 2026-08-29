@@ -1,119 +1,124 @@
 # Repository Cleanup Report
 
-## 1. 清洗目标
+## 1. Objective
 
-本次清洗把 `maya-platform` 从“包含本地运行快照的私有交接仓库”整理为“可继续开发和审计的私有源码仓库”。
+This cleanup converts `maya-platform` from a private handoff snapshot containing local runtime state into a private source repository that can be continued and audited.
 
-用户要求：
+Requested policy:
 
-- 保留 Demo 账号和密码；
-- 保留产品代码、测试、合同与项目文档；
-- 删除运行记录；
-- 删除已创建 Agent 与 Debate；
-- 删除数据库、快照、生成音频与个人音频；
-- 删除 `.env`；
-- 清楚标注大量尚未完整审计的 Wave 3 代码；
-- 重写 README、Project 与开发状态表。
+- retain Demo accounts and passwords;
+- retain product code, tests, contracts, project documents and the development workbook;
+- remove runtime records and locally created Agents/Debates;
+- remove databases, snapshots, generated audio, personal audio and `.env`;
+- clearly label large Wave 3 areas that have not received Full audit;
+- rewrite README and synchronize Project/development status.
 
-## 2. 删除内容
+## 2. Removed from current HEAD
 
-当前清洗分支从 HEAD 删除：
+- `.env`;
+- `data/`;
+- `backend/data/`;
+- all SQLite, WAL and SHM files;
+- runtime Agent, AgentVersion, KnowledgeSnapshot, Debate, Turn, Report, Interaction and Translation records;
+- group runtime Markdown and generated debate audio;
+- `private-inputs/` and the personal voice sample;
+- runtime locks, backups and temporary state;
+- `archive/`;
+- `outputs/`.
 
-- `.env`；
-- `data/`；
-- `backend/data/`；
-- 所有 SQLite、WAL、SHM；
-- 本地 Agent、Debate、Turn、Report、Interaction、Translation 记录；
-- KnowledgeSnapshot 与 group runtime Markdown；
-- 当前辩论生成音频；
-- `private-inputs/` 与个人声音样本；
-- 临时锁、备份与运行残留；
-- `archive/`；
-- `outputs/`。
+The cleanup changes current and future HEAD only. Old Git history was not rewritten.
 
-删除只影响当前及未来 HEAD，不重写旧 Git 历史。
+## 3. Retained
 
-## 3. 保留内容
+- `backend/config/demo-accounts/accounts.private.md`;
+- `backend/config/demo_users.yaml`;
+- all backend, frontend and migration code;
+- all automated tests;
+- `contracts/` and generated API types;
+- `manual-tests/`;
+- original requirements and current Gate documents;
+- updated `README.md`, `Project.md`, `docs/FILE_MAP.md`, `docs/PROJECT_STATUS.md`;
+- root `开发文档.xlsx`.
 
-- `backend/config/demo-accounts/accounts.private.md`；
-- `backend/config/demo_users.yaml`；
-- 全部后端、前端与迁移代码；
-- 全部自动测试；
-- `contracts/`；
-- `manual-tests/`；
-- 原始需求；
-- 历史 pre-code contracts；
-- 当前 Wave 3 Gate；
-- 根目录更新后的 `开发文档.xlsx`。
+## 4. Repository organization completed
 
-## 4. 文档整理
+- README now explains the product, five Waves, installation, usage, file map, current CI, unaudited code and future Demo goal.
+- Project was reduced from an accumulated historical notebook into a current authoritative project manual.
+- `AGENTS.md` defines Sol/Luna responsibilities and current data boundaries.
+- `UPLOAD_SCOPE.md` records that Demo credentials may remain, while runtime data and personal audio may not.
+- `.gitignore` and repository boundary checks prevent re-adding `.env`, databases, runtime data or personal inputs.
+- `quality.yml` is now a Wave 3 multi-job matrix instead of the old Wave 2 serial workflow.
+- Python/TypeScript files were mechanically formatted where needed. Mechanical formatting is not recorded as functional audit.
+- `开发文档.xlsx` was rebuilt as a current status workbook with project overview, Wave progress, M01–M18 alignment, unaudited code, CI results and next steps.
 
-- `README.md`：补充项目目标、已有功能、五个 Wave、安装、运行、测试、目录说明、当前 CI 与下一步；
-- `Project.md`：从历史累积式记录收敛为当前权威项目手册；
-- `AGENTS.md`：明确 Sol/Luna 分工与仓库数据边界；
-- `UPLOAD_SCOPE.md`：调整为“账号可提交、运行数据与个人音频不可提交”；
-- `docs/FILE_MAP.md`：解释主要文件与目录；
-- `docs/PROJECT_STATUS.md`：列出清洗结果、当前 CI、未审计代码、风险与未来计划；
-- `开发文档.xlsx`：更新 Wave、模块、未审计范围与下一步计划。
+## 5. Final mechanical verification snapshot
 
-## 5. 工程策略整理
+Evidence baseline: `e8a4124`.
 
-- `.gitignore` 忽略 `.env`、数据库、运行数据、个人输入、历史输出与构建产物；
-- Repository boundary checker 只允许两份精确 Demo 账号路径；
-- 其他 `.env`、数据库、音频、私有输入与源码中的 Key 继续被拒绝；
-- Bootstrap 脚本在账号目录已存在时只创建 `.env`；
-- CI 更新为 Wave 3 多 Job 质量矩阵，避免一个格式失败隐藏所有测试状态；
-- 大量 Python/TypeScript 文件只做机械格式化，未把格式化标记为功能审计。
+### Passed
 
-## 6. 第一轮 CI 结果
+- Repository policy;
+- Formatting and frozen contracts;
+- OpenAPI, generated client, Redocly, response and WebSocket/route checks;
+- Wave 1–3 migration chain;
+- Compose configuration;
+- frontend ESLint and TypeScript;
+- backend Ruff format/lint and strict mypy.
 
-基线 `91c2af5`：
+### Not passed
 
-### 通过
+Frontend:
 
-- Repository policy；
-- Prettier；
-- Frozen OpenAPI；
-- Generated Client check；
-- Redocly；
-- Response contract；
-- Compose config；
-- Wave 1–3 migration chain；
-- Frontend ESLint 与 TypeScript；
-- Backend Ruff format。
+- Vitest: `157/162` passed, 5 failed.
+- 1 legacy playback/manual-reconnect test;
+- 1 stale Stop/Continue test that conflicts with the accepted Pause/Resume copy;
+- 3 report UI/projection tests.
 
-### 未通过
+Backend:
 
-- Route fixture generator 非确定性；
-- Frontend Vitest：157/162 通过，5 个播放/Replay 测试失败；
-- Backend Ruff lint：`sql_repository.py` 两处 E501；
-- mypy 与 pytest 因 Ruff fail-fast 未运行；
-- Next build 因 Vitest 失败未运行；
-- Aggregate quality gate 失败。
+- pytest: `375/382` passed, 7 failed.
+- 1 credential permission issue in CI;
+- 5 WebSocket Origin/config mismatches;
+- 1 stale paused-restart expectation.
 
-## 7. 本次没有做什么
+The aggregate quality gate remains failed. This is intentionally reported rather than hidden by cleanup documentation.
 
-本次是仓库清洗，不是 Wave 3 功能修复：
+## 6. Large code retained without Full audit
 
-- 没有修 Translation follower P1；
-- 没有重新设计 Playback；
-- 没有修改 0007 数据结构；
-- 没有调用真实 Provider；
-- 没有把历史窄审升级为 Full G2；
-- 没有宣称完整 Demo 已完成。
+- M13 classroom interaction: `backend/app/modules/interactions/**` and audience/teacher interaction UI.
+- M14 anonymous insight and Maya report: `backend/app/modules/reports/**` and report UI.
+- M15 history/translation: `backend/app/modules/translations/**`, history and translation UI.
+- Playback Wave 3 delta: persistent Pause/Resume, Full/Partial Finish, manual Reconnect and Replay catalog.
+- Shared integration: migration 0007, OpenAPI, WebSocket schemas/fixtures, generated client and application startup recovery.
 
-## 8. 清洗后的准确状态
+These implementations are retained because they are the intended Wave 3 product work. They are not marked complete until the full test matrix and independent audit pass.
+
+## 7. Known priority issue
+
+Translation shared-entry follower liveness remains the clearest P1: a follower batch reusing an active Translation Entry can remain pending after the owner resolves. The fix must propagate ready/failed terminal state, recompute follower batches, enqueue runnable work after commit, avoid duplicate provider/event execution and cover restart/concurrency.
+
+## 8. Work deliberately not done
+
+This cleanup did not:
+
+- fix the Translation follower P1;
+- redesign Playback;
+- change migration 0007 semantics;
+- call any real Provider;
+- promote the historical narrow audit to Full G2;
+- claim that Wave 3 or the complete Demo is finished.
+
+## 9. Accurate completion statement
 
 ```text
-源码结构                 已清洗
-运行记录                 已从当前 HEAD 删除
-Demo 账号密码            保留
-README/Project/开发文档   已同步
-Wave 0–2                 历史 Mock 基线
-Wave 3 代码              大量存在
-Wave 3 Full CI           未通过
-Wave 3 Full Sol G2       未通过
-Wave 3 浏览器 G3         未通过
-Wave 4                   未开始
-完整 Demo                未完成
+Source repository cleanup   complete
+Runtime data removal        complete for current HEAD
+Demo credentials            retained
+README/Project/workbook      synchronized
+Wave 3 code preservation    complete
+Wave 3 Full CI              not passed
+Wave 3 Full Sol G2          not passed
+Wave 3 browser G3           not passed
+Wave 4                      not started
+Complete Demo               not complete
 ```
