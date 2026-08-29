@@ -5,9 +5,8 @@
 3. Do not copy source-code fragments from reference repositories. Implement from Maya contracts and tests.
 4. This private team repository intentionally tracks only these private Demo assets:
    - `backend/config/demo-accounts/accounts.private.md`;
-   - `backend/config/demo_users.yaml`;
-   - approved voice samples under `private-inputs/voice/`.
-5. Do not commit `.env`, API keys, session secrets, runtime databases, WAL/SHM files, generated debate audio, runtime snapshots, logs, locks, caches, archives, or output workbooks.
+   - `backend/config/demo_users.yaml`.
+5. Do not commit `.env`, API keys, session secrets, private input files, runtime databases, WAL/SHM files, generated debate audio, runtime snapshots, logs, locks, caches, archives, or output workbooks.
 6. Demo passwords may exist in the two approved credential files, but passwords must never appear in browser DTOs, generated frontend clients, API responses, WebSocket events, logs, errors, screenshots, or public documentation.
 7. Keep every automated test and CI job Mock-only unless a separate real-provider Gate is explicitly authorized. Never infer permission to spend provider quota from the presence of local credentials.
 8. Work only in explicitly assigned files. Other agents may be working in parallel; do not reset, clean, overwrite, or reformat unrelated changes.
