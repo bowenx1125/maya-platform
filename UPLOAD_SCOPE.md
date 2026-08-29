@@ -1,36 +1,66 @@
-# Maya Platform 私有仓库保存范围
+# Maya Platform 私有仓库范围
 
-本仓库是 Maya Platform 的团队私有开发仓库。当前树只保存可继续开发和审计的源代码、契约、测试、文档，以及用户明确要求保留的 Demo 账号配置。
+本仓库用于 Maya Demo 的团队协作和代码审计。它保持私有，但不再作为完整运行快照保存任何人的本地使用历史。
 
-## 当前允许保存
+## 当前 HEAD 保留
 
-- Backend、Frontend、迁移、脚本和 Docker 配置；
-- OpenAPI、WebSocket Schema、生成 Client 和测试 Fixture；
-- 当前 `README.md`、`Project.md`、Gate 文档、状态报告和 `开发文档.xlsx`；
-- 原始业务需求与手工测试资料；
-- `backend/config/demo-accounts/accounts.private.md`；
-- `backend/config/demo_users.yaml`。
+- 产品源码、测试、迁移与工程脚本；
+- OpenAPI、WebSocket Schema、Fixtures 与生成 Client；
+- `Project.md`、README、原始需求与当前 Gate；
+- `manual-tests/` 中的人工测试输入；
+- 根目录唯一共享状态表 `开发文档.xlsx`；
+- Demo 账号与密码：
+  - `backend/config/demo-accounts/accounts.private.md`
+  - `backend/config/demo_users.yaml`
 
-上述两份账号文件可以包含 Demo 用户名和密码，因为仓库保持私有且用于团队协作。密码不得进入普通 API、WebSocket、前端 Bundle、生成 Client、日志、错误信息、截图或公开文档。
+Demo 账号只用于授权团队，不得转移到公开仓库，也不得通过前端/API 返回密码。
 
-## 当前禁止保存
+## 当前 HEAD 不保留
 
-- `.env`、API Key、Session Secret 和真实 Provider 凭据；
-- `data/`、`backend/data/`、SQLite、WAL、SHM、数据库备份；
-- 已创建的 Agent、AgentVersion、Debate、Turn、Interaction、Vote、Barrage、Report、Translation 等运行记录；
-- 运行时知识文件、发布快照、生成的课堂音频、临时文件和锁；
-- `private-inputs/` 下的个人音频或本地诊断脚本；
-- `node_modules`、`.next`、`.venv`、Coverage 和缓存；
-- `archive/`、`outputs/` 和重复开发表格。
+- `.env` 与真实 Provider Key；
+- SQLite、WAL、SHM；
+- 本地创建的 Agent、AgentVersion、Debate、Turn、Interaction、Report 与 Translation 记录；
+- `data/`、`backend/data/`；
+- KnowledgeSnapshot 与生成音频；
+- 个人声音样本与 `private-inputs/`；
+- 锁文件、日志、缓存、依赖与构建产物；
+- 历史 `archive/` 与 `outputs/`。
 
-## 本地运行数据
+本次清洗不改写旧 Git 历史；旧提交仍可能包含曾经上传的运行快照。当前及未来分支不得再次把这些文件加入 Git。
 
-开发者从 `.env.example` 创建本地 `.env`，在忽略的 `data/` 目录中生成数据库和运行文件。创建 Agent 或 Debate 不应改变 Git 工作树。
+## 本地运行
 
-## 历史说明
+每个开发者在本地生成自己的：
 
-清理前的 Handoff Commit 仍存在于 Git 历史中；本次工作没有重写历史或强制推送。当前分支和后续主分支以“源代码 + Demo 账号配置”为干净基线。若以后需要彻底清除历史对象，需要单独执行历史重写与协作者重新克隆流程。
+```text
+.env
+data/
+backend/data/
+private-inputs/
+```
 
-## 公开前检查
+其中 `private-inputs/` 只用于本地真实服务调试，必须保持 Git ignored。
 
-仓库若要公开，必须先移除两份 Demo 账号文件、轮换相关密码，并重新执行隐私、第三方素材和真实 Provider 配置审计。
+第一次启动运行：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm bootstrap:local
+docker compose up -d --build
+```
+
+`pnpm bootstrap:local` 保留仓库中的 Demo 账号目录，只创建本地 `.env`；如果账号目录缺失，脚本才会生成一份新的固定身份目录。
+
+## CI
+
+CI 必须使用：
+
+```text
+LLM_PROVIDER=mock
+EMBEDDING_PROVIDER=mock
+TTS_PROVIDER=mock
+VOICE_PROVIDER=mock
+TRANSLATION_PROVIDER=mock
+```
+
+CI 不读取真实 Key，不调用真实 Provider，也不依赖开发者运行数据库。

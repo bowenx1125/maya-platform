@@ -1,32 +1,27 @@
-# Local environment and secrets
+# Local environment and supplier secrets
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 
-# Runtime databases and files
+# Runtime data and personal inputs are recreated locally
 /data/
 /backend/data/
+/private-inputs/
+/archive/
+/outputs/
 *.db
 *.db-*
 *.sqlite
-*.sqlite-*
 *.sqlite3
 *.sqlite3-*
 *.log
 
-# Runtime-generated audio, snapshots and temporary files
-/data/courses/
-/data/groups/
-/data/snapshots/
-/data/backups/
-/data/tmp/
-/backend/data/
-
-# Historical local output folders
-/archive/
-/outputs/
+# The two Demo account catalogs are intentionally tracked in this private repo.
+# Do not add them to this ignore file:
+# backend/config/demo-accounts/accounts.private.md
+# backend/config/demo_users.yaml
 
 # JavaScript dependencies and build output
 node_modules/
@@ -48,16 +43,12 @@ backend/**/__pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Local Docker/coverage artifacts
+# Local Docker/coverage/editor artifacts
 docker-compose.override.yml
 htmlcov/
-
-# OS/editor files
 .DS_Store
 .idea/
 .vscode/
 
-# Intentionally tracked private-team Demo assets:
-# - backend/config/demo-accounts/accounts.private.md
-# - backend/config/demo_users.yaml
-# - private-inputs/voice/**
+# Generated inspection sidecars
+*.inspect.ndjson

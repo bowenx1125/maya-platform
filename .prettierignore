@@ -1,23 +1,29 @@
+# Generated and frozen contracts
 pnpm-lock.yaml
-contracts/openapi-v0.1.yaml
-contracts/ws-events.v1.schema.json
-contracts/fixtures/*.json
+contracts/**
 frontend/lib/api/generated/schema.d.ts
-frontend/.next/**
 frontend/public/avatars/draco/**
-*.xlsx
 
-# Demo credentials are intentionally retained exactly as provided for the
-# private team Demo. Formatting must not rewrite account/password material.
-backend/config/demo_users.yaml
-backend/config/demo-accounts/accounts.private.md
-
-# Frozen or manually curated source material is preserved byte-for-byte.
+# Historical/frozen prose and manual fixtures
 AI文化互鉴教学平台-需求文档.md
 docs/pre-code-contracts/**
 manual-tests/**
 
-# This high-risk Wave 3 state-machine file is intentionally not reformatted
-# until its dedicated functional audit, so a formatting-only rewrite does not
-# obscure the behavioral diff that still needs review.
-frontend/components/debate/stage/debate-stage.tsx
+# Private Demo account catalogs are intentionally tracked verbatim
+backend/config/demo-accounts/accounts.private.md
+backend/config/demo_users.yaml
+
+# Binary, runtime and build output
+*.xlsx
+*.glb
+*.wasm
+*.wav
+*.mp3
+*.m4a
+data/**
+backend/data/**
+private-inputs/**
+archive/**
+outputs/**
+frontend/.next/**
+node_modules/**
