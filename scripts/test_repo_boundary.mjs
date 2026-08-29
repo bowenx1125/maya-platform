@@ -29,7 +29,9 @@ function runChecker(cwd, extraArgs = []) {
 const current = runChecker(root, ["--probe-generated"]);
 if (current.status !== 0) {
   throw new Error(
-    current.stderr || current.stdout || "current repository boundary check failed",
+    current.stderr ||
+      current.stdout ||
+      "current repository boundary check failed",
   );
 }
 
@@ -58,7 +60,10 @@ try {
     resolve(repo, "private-inputs/voice/test.m4a"),
     Buffer.from([0, 1, 2, 3]),
   );
-  writeFileSync(resolve(repo, "frontend/index.ts"), "export const safe = true;\n");
+  writeFileSync(
+    resolve(repo, "frontend/index.ts"),
+    "export const safe = true;\n",
+  );
 
   execFileSync("git", ["init", "--quiet", repo]);
   execFileSync("git", ["-C", repo, "add", "."]);
@@ -71,10 +76,7 @@ try {
   }
 
   const simulatedKey = `sk-${"reject".repeat(6)}`;
-  writeFileSync(
-    resolve(repo, ".env"),
-    `DASHSCOPE_API_KEY=${simulatedKey}\n`,
-  );
+  writeFileSync(resolve(repo, ".env"), `DASHSCOPE_API_KEY=${simulatedKey}\n`);
   writeFileSync(resolve(repo, "data/maya.sqlite3"), Buffer.from([0, 1, 2, 3]));
   writeFileSync(
     resolve(repo, "frontend/lib/api/generated/leak.ts"),

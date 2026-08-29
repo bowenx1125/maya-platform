@@ -347,9 +347,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "UPDATE playback_states SET status='ready', cursor_ms=0, "
                     "control_version=control_version+1, controller_epoch=NULL, "
                     "controller_owner_connection=NULL, server_started_at=NULL, "
-                    "updated_at=:updated_at"
-                    + pending_clear
-                    + " WHERE status='playing' "
+                    "updated_at=:updated_at" + pending_clear + " WHERE status='playing' "
                     "AND debate_id NOT IN (SELECT id FROM debates WHERE status='failed')"
                 ),
                 {"updated_at": _now()},
@@ -911,30 +909,34 @@ class SqlPlaybackRepository(PlaybackRepository):
         claim_session = self.session_factory()
         try:
             claim_session.execute(text("BEGIN IMMEDIATE"))
-            row = claim_session.execute(
-                text(
-                    "SELECT ps.rowid, ps.current_turn_id, ps.control_version, "
-                    "d.course_id, d.status, "
-                    "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id) AS total_turns, "
-                    "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id "
-                    "AND t.generation_status='final_ready' AND t.publication_status='public') "
-                    "AS complete_turns "
-                    "FROM playback_states ps JOIN debates d ON d.id=ps.debate_id "
-                    "WHERE ps.debate_id=:debate_id "
-                    "AND ps.control_version=:expected_control_version "
-                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
-                    "AND EXISTS (SELECT 1 FROM course_members cm WHERE cm.course_id=d.course_id "
-                    "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
-                    "AND (:expected_current_turn_id IS NULL OR "
-                    "ps.current_turn_id=:expected_current_turn_id)"
-                ),
-                {
-                    "debate_id": debate_id,
-                    "expected_control_version": expected_control_version,
-                    "expected_current_turn_id": expected_current_turn_id,
-                    "teacher_user_id": teacher_user_id,
-                },
-            ).mappings().first()
+            row = (
+                claim_session.execute(
+                    text(
+                        "SELECT ps.rowid, ps.current_turn_id, ps.control_version, "
+                        "d.course_id, d.status, "
+                        "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id) AS total_turns, "
+                        "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id "
+                        "AND t.generation_status='final_ready' AND t.publication_status='public') "
+                        "AS complete_turns "
+                        "FROM playback_states ps JOIN debates d ON d.id=ps.debate_id "
+                        "WHERE ps.debate_id=:debate_id "
+                        "AND ps.control_version=:expected_control_version "
+                        "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                        "AND EXISTS (SELECT 1 FROM course_members cm WHERE cm.course_id=d.course_id "
+                        "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
+                        "AND (:expected_current_turn_id IS NULL OR "
+                        "ps.current_turn_id=:expected_current_turn_id)"
+                    ),
+                    {
+                        "debate_id": debate_id,
+                        "expected_control_version": expected_control_version,
+                        "expected_current_turn_id": expected_current_turn_id,
+                        "teacher_user_id": teacher_user_id,
+                    },
+                )
+                .mappings()
+                .first()
+            )
             if row is None:
                 claim_session.rollback()
                 return None

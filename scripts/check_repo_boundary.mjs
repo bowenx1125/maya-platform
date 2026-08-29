@@ -20,11 +20,16 @@ function isAllowedPrivatePath(path) {
 
 function isForbiddenByPolicy(path) {
   if (policy.forbidden_tracked_files.includes(path)) return true;
-  if (policy.forbidden_tracked_prefixes.some((prefix) => path.startsWith(prefix)))
+  if (
+    policy.forbidden_tracked_prefixes.some((prefix) => path.startsWith(prefix))
+  )
     return true;
   if (/^\.env(?:\.|$)/.test(path) && path !== ".env.example") return true;
   if (/\.(?:sqlite3?|db)(?:-(?:wal|shm|journal))?$/i.test(path)) return true;
-  if (/\.(?:wav|mp3|m4a|aac|ogg|flac)$/i.test(path) && !isAllowedPrivatePath(path))
+  if (
+    /\.(?:wav|mp3|m4a|aac|ogg|flac)$/i.test(path) &&
+    !isAllowedPrivatePath(path)
+  )
     return true;
   if (
     /(^|\/)(?:[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env)$/i.test(
@@ -58,7 +63,9 @@ function nonPlaceholderAssignment(text) {
       value.startsWith("#") ||
       value.startsWith("${") ||
       value.startsWith("replace-") ||
-      /^(?:example|fixture|hidden|mock|safe|supplier|test|placeholder)$/i.test(value)
+      /^(?:example|fixture|hidden|mock|safe|supplier|test|placeholder)$/i.test(
+        value,
+      )
     )
       continue;
     return true;
@@ -67,7 +74,10 @@ function nonPlaceholderAssignment(text) {
 }
 
 function containsSecret(text) {
-  return nonPlaceholderAssignment(text) || secretPatterns.some((pattern) => pattern.test(text));
+  return (
+    nonPlaceholderAssignment(text) ||
+    secretPatterns.some((pattern) => pattern.test(text))
+  );
 }
 
 const gitRoot = execFileSync(
@@ -135,13 +145,17 @@ for (const path of tracked) {
 if (process.argv.includes("--probe-generated")) {
   const simulated = `export const key = "${"sk-" + "probe".repeat(8)}";\n`;
   if (!containsSecret(simulated)) {
-    throw new Error("generated-source secret probe did not detect a simulated key");
+    throw new Error(
+      "generated-source secret probe did not detect a simulated key",
+    );
   }
   console.log("generated-source secret probe passed");
 }
 
 if (failures.length > 0) {
-  throw new Error(`repository boundary check failed:\n- ${failures.join("\n- ")}`);
+  throw new Error(
+    `repository boundary check failed:\n- ${failures.join("\n- ")}`,
+  );
 }
 
 console.log(

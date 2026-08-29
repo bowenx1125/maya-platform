@@ -5,12 +5,8 @@
     "backend/config/demo-accounts/accounts.private.md",
     "backend/config/demo_users.yaml"
   ],
-  "allowed_private_prefixes": [
-    "private-inputs/voice/"
-  ],
-  "forbidden_tracked_files": [
-    ".env"
-  ],
+  "allowed_private_prefixes": ["private-inputs/voice/"],
+  "forbidden_tracked_files": [".env"],
   "forbidden_tracked_prefixes": [
     "data/",
     "backend/data/",

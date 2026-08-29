@@ -6,15 +6,15 @@ The project is **not a finished Demo yet**. Wave 0–2 have historical Mock-scop
 
 ## Current status
 
-| Area | Status |
-| --- | --- |
-| Wave 0 — foundation | Historical G3 pass |
-| Wave 1A — Agent/version/RAG | Historical Mock G3 pass |
-| Wave 1B — 3D/voice boundary | Mock path passed; real TTS is `FAILED-DEFERRED` |
-| Wave 1C — UI/i18n shell | Historical G3 pass |
-| Wave 2 — debate generation/playback | Historical Mock G3 pass |
-| Wave 3 — interaction/report/history/translation | Implemented in large part; narrow G2 passed; Full G2/G3 not signed |
-| Wave 4 — cross-module integration/real providers/final E2E | Not started |
+| Area                                                       | Status                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------------ |
+| Wave 0 — foundation                                        | Historical G3 pass                                                 |
+| Wave 1A — Agent/version/RAG                                | Historical Mock G3 pass                                            |
+| Wave 1B — 3D/voice boundary                                | Mock path passed; real TTS is `FAILED-DEFERRED`                    |
+| Wave 1C — UI/i18n shell                                    | Historical G3 pass                                                 |
+| Wave 2 — debate generation/playback                        | Historical Mock G3 pass                                            |
+| Wave 3 — interaction/report/history/translation            | Implemented in large part; narrow G2 passed; Full G2/G3 not signed |
+| Wave 4 — cross-module integration/real providers/final E2E | Not started                                                        |
 
 There are **five top-level Waves: 0, 1, 2, 3, and 4**. Wave 1 is split into 1A, 1B, and 1C.
 

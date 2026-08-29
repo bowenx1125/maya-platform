@@ -2728,9 +2728,9 @@ class PlaybackService:
                 partial = not is_full
                 if partial:
                     debate.status = "stopped"
-                    debate.cancellation_generation = int(
-                        self._get(debate, "cancellation_generation", default=0) or 0
-                    ) + 1
+                    debate.cancellation_generation = (
+                        int(self._get(debate, "cancellation_generation", default=0) or 0) + 1
+                    )
                     self.repository.mark_jobs_interrupted(db, debate, "debate_finished_partial")
                     self.repository.save_debate(db, debate)
                     self._set_nonplaying(state, "stopped")
@@ -2780,11 +2780,7 @@ class PlaybackService:
                 )
             else:
                 event_turn = next(
-                    (
-                        turn
-                        for turn in reversed(turns)
-                        if self._turn_public(turn)
-                    ),
+                    (turn for turn in reversed(turns) if self._turn_public(turn)),
                     turns[-1] if turns else None,
                 )
                 if event_turn is not None:
