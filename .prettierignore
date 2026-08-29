@@ -4,9 +4,10 @@ contracts/**
 frontend/lib/api/generated/schema.d.ts
 frontend/public/avatars/draco/**
 
-# Historical/frozen prose and manual fixtures
+# Historical/frozen prose, handoff reports and manual fixtures
 AI文化互鉴教学平台-需求文档.md
 docs/pre-code-contracts/**
+docs/PROJECT_STATUS.md
 manual-tests/**
 
 # Private Demo account catalogs are intentionally tracked verbatim
