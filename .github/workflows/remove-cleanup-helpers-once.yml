@@ -1,0 +1,39 @@
+name: Remove cleanup helper workflows once
+
+on:
+  push:
+    branches:
+      - sol/repository-cleanup-handoff
+
+permissions:
+  contents: write
+
+jobs:
+  remove:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out cleanup branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: sol/repository-cleanup-handoff
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Wait for the finalizer and refresh branch
+        shell: bash
+        run: |
+          sleep 90
+          git fetch origin sol/repository-cleanup-handoff
+          git reset --hard origin/sol/repository-cleanup-handoff
+
+      - name: Remove temporary cleanup workflows
+        shell: bash
+        run: |
+          git rm -f \
+            .github/workflows/finalize-cleanup-once.yml \
+            .github/workflows/remove-cleanup-helpers-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "ci: remove temporary cleanup helpers"
+          git push origin HEAD:sol/repository-cleanup-handoff
