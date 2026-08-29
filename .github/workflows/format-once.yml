@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   format:
-    if: github.event.head_commit.message != 'style: normalize repository formatting'
+    if: ${{ github.event.head_commit.message != 'style: normalize repository formatting' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Check out cleanup branch
