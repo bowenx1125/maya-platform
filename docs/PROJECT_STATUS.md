@@ -49,15 +49,15 @@ Demo 密码只供私有团队登录使用。普通 API、前端 Bundle、生成 
 
 项目共有五个顶层 Wave；Wave 1 细分为 1A、1B、1C。
 
-| Wave | 目标 | 当前结果 |
-| --- | --- | --- |
-| Wave 0 | 运行骨架、认证、数据库、契约、质量门 | 历史 G3 PASS |
-| Wave 1A | Agent、不可变版本、Markdown RAG | 历史 Mock G3 PASS |
-| Wave 1B | 3D Avatar、Voice/TTS 边界 | Mock 路径通过；真实 TTS `FAILED-DEFERRED` |
-| Wave 1C | UI/i18n 与页面外壳 | 历史 G3 PASS |
-| Wave 2 | 辩论创建、生成、播放大屏 | 历史 Mock G3 PASS |
-| Wave 3 | 互动、匿名洞察、Maya 报告、历史、翻译 | 大量 G1 实现已存在；窄范围 G2 PASS；Full G2/G3 未签 |
-| Wave 4 | 跨模块集成、真实 Provider、最终 E2E | 未开始 |
+| Wave    | 目标                                  | 当前结果                                            |
+| ------- | ------------------------------------- | --------------------------------------------------- |
+| Wave 0  | 运行骨架、认证、数据库、契约、质量门  | 历史 G3 PASS                                        |
+| Wave 1A | Agent、不可变版本、Markdown RAG       | 历史 Mock G3 PASS                                   |
+| Wave 1B | 3D Avatar、Voice/TTS 边界             | Mock 路径通过；真实 TTS `FAILED-DEFERRED`           |
+| Wave 1C | UI/i18n 与页面外壳                    | 历史 G3 PASS                                        |
+| Wave 2  | 辩论创建、生成、播放大屏              | 历史 Mock G3 PASS                                   |
+| Wave 3  | 互动、匿名洞察、Maya 报告、历史、翻译 | 大量 G1 实现已存在；窄范围 G2 PASS；Full G2/G3 未签 |
+| Wave 4  | 跨模块集成、真实 Provider、最终 E2E   | 未开始                                              |
 
 因此当前最准确的描述是：
 
