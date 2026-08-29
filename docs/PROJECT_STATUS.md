@@ -53,25 +53,25 @@
 
 ## 3. 高风险未审计范围
 
-| 编号 | 路径 | 目标 | 当前状态 | 主要风险 | 完成前必须证明 |
-| --- | --- | --- | --- | --- | --- |
-| A1 | `backend/app/modules/interactions/**` | 互动窗口、匿名 Token、投票、弹幕、Open/Close | 有实现与测试；只有历史窄审 | Token/权限、并发、关闭后提交、事件顺序 | 角色权限、幂等、`BEGIN IMMEDIATE`、Token 伪造、submit-vs-close、commit 后事件 |
-| A2 | `backend/app/modules/reports/**` | 弹幕洞察、报告 Manifest、Revision、下载 | 有实现与测试；无当前 Full G2 | nickname 泄漏、虚构计数/证据、失败覆盖旧成功 | 去昵称结构、精确计数、实际 TurnSource、600–900 词、Revision 与恢复 |
-| A3 | `backend/app/modules/translations/**` | 派生翻译、缓存、批次、Job 与启动恢复 | 有实现与测试；存在 P1 疑点 | 共享 Entry follower 永久 pending、重复 Provider/Event | ready/failed 传播、Exactly-once、不同 Key 并发、重启、终态计数 |
-| A4 | `backend/app/modules/debates/playback/**` | Pause/Resume、Finish、Reconnect、Replay、Wave 3 投影 | 部分历史审计；当前集成未完成 | 状态漂移、旧 Controller、媒体权限、Replay 越界 | CAS、重启、paused 恢复、Full/Partial Finish、逐段 Replay、不重复生成 |
-| A5 | `backend/migrations/versions/0007_wave3_interaction_report.py` | Wave 3 表、索引、约束、Job owner | 当前迁移 Job 已通过；无最终功能 Diff 的独立审计 | 旧数据保护、降级残留、FK/索引语义 | fresh、repeat、populated、downgrade、re-upgrade、fingerprint、FK=0 与 Sol 复核 |
-| A6 | `backend/app/main.py`、`core/models.py`、`core/config.py`、`core/db.py` | 路由注册、服务组合、任务恢复、数据库生命周期 | 跨模块改动存在 | 生命周期顺序、短 Session、任务重复调度 | 启停、恢复、连接池、路由与健康检查 |
+| 编号 | 路径                                                                    | 目标                                                 | 当前状态                                        | 主要风险                                              | 完成前必须证明                                                                 |
+| ---- | ----------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A1   | `backend/app/modules/interactions/**`                                   | 互动窗口、匿名 Token、投票、弹幕、Open/Close         | 有实现与测试；只有历史窄审                      | Token/权限、并发、关闭后提交、事件顺序                | 角色权限、幂等、`BEGIN IMMEDIATE`、Token 伪造、submit-vs-close、commit 后事件  |
+| A2   | `backend/app/modules/reports/**`                                        | 弹幕洞察、报告 Manifest、Revision、下载              | 有实现与测试；无当前 Full G2                    | nickname 泄漏、虚构计数/证据、失败覆盖旧成功          | 去昵称结构、精确计数、实际 TurnSource、600–900 词、Revision 与恢复             |
+| A3   | `backend/app/modules/translations/**`                                   | 派生翻译、缓存、批次、Job 与启动恢复                 | 有实现与测试；存在 P1 疑点                      | 共享 Entry follower 永久 pending、重复 Provider/Event | ready/failed 传播、Exactly-once、不同 Key 并发、重启、终态计数                 |
+| A4   | `backend/app/modules/debates/playback/**`                               | Pause/Resume、Finish、Reconnect、Replay、Wave 3 投影 | 部分历史审计；当前集成未完成                    | 状态漂移、旧 Controller、媒体权限、Replay 越界        | CAS、重启、paused 恢复、Full/Partial Finish、逐段 Replay、不重复生成           |
+| A5   | `backend/migrations/versions/0007_wave3_interaction_report.py`          | Wave 3 表、索引、约束、Job owner                     | 当前迁移 Job 已通过；无最终功能 Diff 的独立审计 | 旧数据保护、降级残留、FK/索引语义                     | fresh、repeat、populated、downgrade、re-upgrade、fingerprint、FK=0 与 Sol 复核 |
+| A6   | `backend/app/main.py`、`core/models.py`、`core/config.py`、`core/db.py` | 路由注册、服务组合、任务恢复、数据库生命周期         | 跨模块改动存在                                  | 生命周期顺序、短 Session、任务重复调度                | 启停、恢复、连接池、路由与健康检查                                             |
 
 ## 4. 前端与合同未审计范围
 
-| 编号 | 路径 | 目标 | 主要风险 | 必须验证 |
-| --- | --- | --- | --- | --- |
-| F1 | `frontend/components/interaction/**`、匿名课堂页 | 手机投票/弹幕与教师互动 | 两项状态绑定、Token 泄漏、关闭态错误、移动端溢出 | 360×800、独立 busy/success、no-store/no-referrer、关闭后不可用 |
-| F2 | `frontend/components/report/**`、`history/**` | 报告、历史、Revision 与下载 | 旧成功被隐藏、渲染不安全、数据缺失 | ready/failed/generating、下载 Header、只读历史 |
-| F3 | `frontend/components/translation/**`、`wave3/**` | 翻译批次与派生中文显示 | 失败后仍切换、译文重复、断线清空内容 | 成功才显示、英文权威、断线保留、批次终态 |
-| F4 | `frontend/components/debate/stage/**`、教师控制页 | 播放舞台、Pause/Resume、Finish、Reconnect、Replay | 状态/页面集成不一致、大组件陈旧异步结果 | 页面级测试、刷新恢复、Replay speech/source、逐段 Next |
-| C1 | `contracts/**` | OpenAPI、WS Schema、Fixtures、Allowlist | 合同与 FastAPI 漂移、业务 422 丢失、事件字段泄漏 | Redocly、hash、generated clean diff、server comparator、Ajv 反例 |
-| C2 | `frontend/lib/api/generated/**`、`platform.ts` | 类型安全 API Client | 生成文件陈旧、手写 cast 掩盖合同缺陷 | 重新生成、零 Diff、全部 Wave 3 operation 可调用 |
+| 编号 | 路径                                              | 目标                                              | 主要风险                                         | 必须验证                                                         |
+| ---- | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| F1   | `frontend/components/interaction/**`、匿名课堂页  | 手机投票/弹幕与教师互动                           | 两项状态绑定、Token 泄漏、关闭态错误、移动端溢出 | 360×800、独立 busy/success、no-store/no-referrer、关闭后不可用   |
+| F2   | `frontend/components/report/**`、`history/**`     | 报告、历史、Revision 与下载                       | 旧成功被隐藏、渲染不安全、数据缺失               | ready/failed/generating、下载 Header、只读历史                   |
+| F3   | `frontend/components/translation/**`、`wave3/**`  | 翻译批次与派生中文显示                            | 失败后仍切换、译文重复、断线清空内容             | 成功才显示、英文权威、断线保留、批次终态                         |
+| F4   | `frontend/components/debate/stage/**`、教师控制页 | 播放舞台、Pause/Resume、Finish、Reconnect、Replay | 状态/页面集成不一致、大组件陈旧异步结果          | 页面级测试、刷新恢复、Replay speech/source、逐段 Next            |
+| C1   | `contracts/**`                                    | OpenAPI、WS Schema、Fixtures、Allowlist           | 合同与 FastAPI 漂移、业务 422 丢失、事件字段泄漏 | Redocly、hash、generated clean diff、server comparator、Ajv 反例 |
+| C2   | `frontend/lib/api/generated/**`、`platform.ts`    | 类型安全 API Client                               | 生成文件陈旧、手写 cast 掩盖合同缺陷             | 重新生成、零 Diff、全部 Wave 3 operation 可调用                  |
 
 ## 5. 当前已识别的重点疑点
 
