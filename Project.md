@@ -2,26 +2,26 @@
 
 Last updated: 2026-08-29
 
-This file is the concise operational authority for the Maya Platform repository. The original teacher requirements remain in `AI文化互鉴教学平台-需求文档.md`; historical design detail remains in `docs/pre-code-contracts/` and Git history.
+This file is the concise operational authority for Maya Platform. The original teacher requirements remain in `AI文化互鉴教学平台-需求文档.md`; historical design detail remains in `docs/pre-code-contracts/`, `docs/gates/`, and Git history.
 
 ## 1. Working rules
 
 1. Read this file before changing the repository.
-2. Confirm the active Wave, scope, contracts, file ownership, and acceptance criteria before implementation.
-3. Prefer the smallest verifiable change. Do not perform broad refactors while high-risk Wave 3 code remains unaudited.
-4. Never copy source code from reference repositories. References may inform interaction, architecture, state-machine, and testing ideas only.
-5. Browser-facing DTOs must remain provider-neutral. API keys, supplier URLs, external voice IDs, local paths, passwords, and session secrets must not enter frontend responses or logs.
-6. CI and ordinary automated tests use Mock providers only. Real-provider calls require a separate explicit Gate and cost authorization.
-7. Luna implements; Sol performs independent risk review and coordinates Gate decisions. An implementation worker cannot approve its own Gate.
-8. Update this file, `docs/PROJECT_STATUS.md`, and `开发文档.xlsx` when the authoritative project state changes.
+2. Confirm the active Wave, scope, contracts, file ownership, acceptance criteria and stop conditions before implementation.
+3. Prefer the smallest verifiable change. Do not broadly refactor high-risk Wave 3 code before Full G2.
+4. Never copy source-code fragments from reference repositories. References may inform interaction, architecture, state machines and tests only.
+5. Browser-facing DTOs must remain provider-neutral. Keys, supplier URLs, external IDs, local paths, passwords and Session secrets must not enter normal frontend responses, generated clients, WebSocket events, logs or errors.
+6. Ordinary tests and CI use Mock providers only. Real-provider calls require a separate explicit Gate and cost authorization.
+7. Luna implements and self-tests. Sol coordinates the project and performs independent high-risk review. An implementation worker cannot approve its own Gate.
+8. Update this file, `docs/PROJECT_STATUS.md` and `开发文档.xlsx` whenever authoritative scope, status, risk or next steps change.
 
 ## 2. Document precedence
 
 When documents conflict, use this order:
 
-1. explicit latest user decision;
+1. latest explicit user decision;
 2. this `Project.md`;
-3. the active Wave Gate packet, currently `docs/gates/wave3/GATE_PACKET.md`;
+3. the active Gate packet, currently `docs/gates/wave3/GATE_PACKET.md`;
 4. frozen OpenAPI/WebSocket contracts in `contracts/`;
 5. historical pre-code contracts;
 6. original requirements and historical work notes.
@@ -30,26 +30,24 @@ History is evidence, not current scope.
 
 ## 3. Project goal
 
-Maya is a teaching platform where students create culture-focused AI Agents and teachers use published Agent versions in a structured classroom debate.
+Maya is a local/private teaching platform where students build culture-focused AI Agents and teachers use published Agent versions in a structured classroom debate.
 
-The target Demo demonstrates visible causality:
+The target Demo should make causality visible:
 
 - students write an `AGENT.md` identity/behavior contract;
-- students select Markdown evidence for an Agent-specific RAG snapshot;
-- published Agent versions are immutable;
-- teachers choose 2–5 published Agents and define an English debate topic;
-- a deterministic rule engine controls two rounds and speaking order;
-- each turn records whether RAG matched and which sources were actually used;
-- teachers control playback and Replay;
-- after the debate, an anonymous audience can vote and send a named barrage;
-- the teacher closes collection, Maya receives de-identified validated insight, and a mutual-learning report is generated;
+- students upload/edit Markdown evidence and choose an Agent-specific RAG set;
+- publishing freezes an immutable AgentVersion and KnowledgeSnapshot;
+- teachers choose 2–5 current published Agents and an English topic;
+- one deterministic rule engine controls two rounds and speaking order;
+- every turn records whether RAG matched and which sources were actually used;
+- teachers control playback, Pause/Resume, Next and Replay;
+- after a complete debate, an anonymous audience votes and sends named barrages;
+- the teacher closes collection, the backend creates validated anonymous insight, and Maya produces a mutual-learning report;
 - English remains authoritative; Chinese is an optional derived test representation.
 
-The product is a local/private Demo first, not a production multi-tenant service.
+The current objective is a reliable Mock Demo, not a production multi-tenant service.
 
-## 4. Current repository state
-
-### 4.1 Overall status
+## 4. Current authoritative status
 
 ```text
 Wave 0                 historical G3 PASS
@@ -65,52 +63,49 @@ Wave 4                 NOT STARTED
 Complete Demo          NOT COMPLETE
 ```
 
-There are five top-level Waves: **0, 1, 2, 3, and 4**. Wave 1 is split into 1A, 1B, and 1C.
+There are five top-level Waves: **0, 1, 2, 3 and 4**. Wave 1 is split into 1A, 1B and 1C.
 
-### 4.2 Why Wave 3 is not complete
+Wave 3 is not complete because the current code still lacks:
 
-The repository contains M13/M14/M15 implementations and focused tests, but the current code still lacks:
-
-- a complete independent audit of all Wave 3 paths;
+- a complete independent audit of all M13/M14/M15 and playback paths;
 - a fix for Translation follower-batch liveness;
-- complete verification of the latest Pause/Resume, Full/Partial Finish, manual Reconnect, and Replay changes;
-- full current-commit OpenAPI, WebSocket, generated-client, migration, frontend, backend, and Docker evidence;
-- a complete desktop/tablet/mobile browser acceptance run.
+- complete verification of Pause/Resume, Full/Partial Finish, manual Reconnect and Replay;
+- one exact commit with all contract, frontend, backend, migration and Docker checks green;
+- complete desktop/tablet/phone browser acceptance.
 
 Historical or narrow passes must not be reported as Full Wave 3 G2/G3.
 
-## 5. Repository cleanup decision
+## 5. Repository cleanup baseline
 
-On 2026-08-29, the repository was converted from a private runtime handoff snapshot into a clean source-and-contract repository.
+On 2026-08-29 the current tree was converted from a full-machine handoff snapshot into a clear source-and-contract baseline.
 
 ### 5.1 Retained in Git
 
 - product source code;
-- tests, migrations, OpenAPI, WebSocket schemas, and deterministic fixtures;
+- tests, migrations, OpenAPI, WebSocket schemas and deterministic fixtures;
 - current documentation and `开发文档.xlsx`;
+- original requirements and historical/manual test material;
 - `backend/config/demo-accounts/accounts.private.md`;
-- `backend/config/demo_users.yaml`;
-- manual Agent/RAG fixtures;
-- the approved voice sample under `private-inputs/voice/`.
+- `backend/config/demo_users.yaml`.
 
-Demo account passwords are intentionally retained because this is a private team Demo repository. They remain forbidden from ordinary API responses, generated browser code, logs, and public deployment.
+The two account files intentionally retain Demo usernames/passwords for the private project team. Passwords remain forbidden from normal API responses, browser code, generated clients, WebSocket events, logs, errors and public documentation.
 
-### 5.2 Removed from the current Git tree
+### 5.2 Removed from the current tree
 
-- `.env` and all real environment values;
-- runtime SQLite databases, WAL/SHM files, and database backups;
-- previously created users beyond seed configuration, Agents, Debates, Turns, interactions, reports, votes, barrages, and translations stored in runtime databases;
-- generated debate audio and runtime snapshots;
-- runtime locks, caches, old output directories, duplicate workbooks, and archival handoff material;
-- private provider diagnostic scripts that depended on local environment values.
+- `.env` and real environment values;
+- runtime SQLite databases, WAL/SHM and backups;
+- previously created Agents, AgentVersions, Debates, Turns, interactions, votes, barrages, reports and translations stored in runtime databases;
+- runtime Markdown, KnowledgeSnapshots and generated debate audio;
+- personal/private input files and local provider diagnostic scripts;
+- runtime locks, caches, old output directories, duplicate workbooks and archival handoff material.
 
-Git history still records the earlier handoff snapshot. The current tree is the clean development baseline.
+Earlier Git history still contains the old snapshot. This cleanup does not rewrite history or force-push. The current tree is the new development baseline.
 
 ### 5.3 Runtime policy
 
-Runtime state is created locally under `data/` and is ignored by Git. A developer may create Agents and Debates locally without changing repository history.
+Runtime state is generated locally under ignored `data/` paths. Creating an Agent or Debate locally must not modify the Git worktree.
 
-`.env` is created from `.env.example` and remains local. CI supplies explicit Mock-only environment values and must not inherit real provider credentials.
+`.env` is created from `.env.example` and remains local. CI supplies explicit Mock-only values and never inherits real provider credentials.
 
 ## 6. Frozen Demo product boundaries
 
@@ -120,30 +115,30 @@ Runtime state is created locally under `data/` and is ignored by Git. A develope
 - one teacher and two student groups for the Demo;
 - Demo membership is read-only;
 - students access only their own group workspace;
-- teachers access published Agent history for their course, not unpublished student drafts;
+- teachers see published Agent history for their course, not unpublished drafts;
 - audience interaction is anonymous and separate from user accounts;
 - Demo quick login may expose safe identity choices, never passwords.
 
 ### 6.2 Agent and version model
 
 - a group may create multiple Agents;
-- Agent description is mutable Agent-level metadata and is not part of an immutable historical version;
+- Agent description is mutable Agent-level metadata, not immutable historical content;
 - each Agent has at most one editable draft;
-- publishing freezes `AGENT.md`, selected knowledge, Avatar configuration, and voice reference into an immutable AgentVersion/KnowledgeSnapshot boundary;
+- publishing freezes `AGENT.md`, selected evidence, Avatar configuration and voice reference into an immutable AgentVersion/KnowledgeSnapshot boundary;
 - later edits require a new version;
 - a never-published, never-used Agent may be deleted;
-- an Agent with published or Debate history must be retained.
+- an Agent with published or Debate history must be retained in runtime storage.
 
 ### 6.3 Knowledge and RAG
 
 - Demo knowledge input is Markdown only;
 - `AGENT.md` defines identity/style/strategy and is separate from evidence documents;
-- knowledge documents belong to the group library and may be selected independently by Agent drafts;
-- published knowledge snapshots are immutable;
-- each formal turn performs retrieval against the frozen snapshot;
+- KnowledgeDocuments belong to the group library and are selected independently by drafts;
+- published snapshots are immutable;
+- each formal turn retrieves from the frozen snapshot;
 - matched evidence produces structured sources;
-- no match is valid and produces general reasoning with an empty source list;
-- the platform must not invent citations or silently borrow another Agent's evidence;
+- `no_match` is valid and produces general reasoning with an empty source list;
+- the platform must not invent citations or borrow another Agent's evidence;
 - `AGENT.md` maximum: 12,000 characters;
 - selected RAG Markdown maximum per draft: 100,000 characters.
 
@@ -152,45 +147,45 @@ Runtime state is created locally under `data/` and is ignored by Git. A develope
 - teacher selects 2–5 current published Agents in click order;
 - slots are assigned A–E continuously;
 - the Demo uses one deterministic two-round rule set;
-- teacher topic and authoritative speeches are English;
+- topic and authoritative speeches are English;
 - each turn is 80–200 English words, targeting roughly 160–185;
-- the backend determines order, phase, and completion;
+- the backend determines order, phase and completion;
 - the browser never decides who speaks next;
-- generated turns, sources, and position history remain auditable.
+- turns, sources and position history remain auditable.
 
 ### 6.5 Playback
 
-The latest accepted visible wording is **Pause / Resume**.
+The accepted visible wording is **Pause / Resume**.
 
 - Pause means persistent, recoverable `PlaybackState.status=paused`;
 - Pause does not cancel the Debate or convert it to terminal `stopped`;
-- refresh or process restart must revoke stale controller authority while preserving recoverable state;
+- refresh/process restart must revoke stale controller authority while preserving recoverable state;
 - teacher-paced Next controls publication/playback of the adjacent turn;
-- Replay uses retained immutable text/sources/audio and must not call RAG, LLM, or TTS again;
+- Replay uses retained immutable runtime text/sources/audio and must not call RAG, LLM or TTS again;
 - manual Reconnect attempts once and preserves already rendered state on failure;
 - a full Finish allows interaction/history/report/Replay;
-- an incomplete Finish preserves generated turns for audit but fails closed for interaction, Maya, history, and Replay.
+- an incomplete Finish preserves generated runtime turns for audit but fails closed for interaction, Maya, history and Replay.
 
 ### 6.6 Classroom interaction
 
 - interaction opens only after a fully completed Debate;
 - teacher explicitly opens and closes collection;
-- audience uses a signed anonymous access token, not a user session;
+- audience uses a signed anonymous access token, not a user Session;
 - vote and barrage are independent submissions with independent client IDs;
 - vote does not store nickname;
 - barrage stores nickname and original text for teacher display/history;
-- closing collection freezes exact message IDs and vote aggregates;
+- closing freezes exact message IDs and vote aggregates;
 - submissions after finalization fail closed;
-- a WebSocket never holds one SQLAlchemy Session for its entire lifetime;
-- events broadcast only after the authoritative transaction commits.
+- a WebSocket never holds a SQLAlchemy Session for its entire lifetime;
+- durable events broadcast only after the authoritative transaction commits.
 
 ### 6.7 Maya insight and report
 
 - raw named barrages remain visible to the teacher;
-- the insight policy receives message ID and raw text without an independent nickname/author field;
+- insight input has message ID and raw text without an independent nickname/author field;
 - counts come from database rows, not model output;
-- Maya reads only frozen public turns, actually used TurnSources, final vote aggregates, and validated anonymous insight;
-- Maya does not read unused/full RAG, private drafts, or a raw named barrage list;
+- Maya reads only frozen public turns, actually used TurnSources, final votes and validated anonymous insight;
+- Maya does not read unused/full RAG, private drafts or a raw named barrage list;
 - report revisions are immutable;
 - a later failed attempt must not hide the previous successful revision;
 - the Mock report is deterministic and 600–900 English words;
@@ -198,12 +193,12 @@ The latest accepted visible wording is **Pause / Resume**.
 
 ### 6.8 Translation and history
 
-- English text remains authoritative;
+- English remains authoritative;
 - translation is teacher-triggered derived content;
 - Mock translation is visibly labelled as test representation;
-- translation never flows into RAG, future turns, TTS, voting, insight, or report inputs;
-- cache identity includes content identity, exact source hash, target language, policy, and quality;
-- history retains text, sources, vote aggregates, named teacher-visible barrages, report revisions, and successful translations;
+- translation never flows into RAG, future turns, TTS, voting, insight or report inputs;
+- cache identity includes content identity, exact source hash, target language, policy and quality;
+- runtime history retains text, sources, votes, named teacher-visible barrages, report revisions and successful translations;
 - audio availability follows the course's current retained-audio pointer.
 
 ## 7. Technical architecture
@@ -215,12 +210,12 @@ gateway (Caddy :8080)
   ├── frontend (Next.js :3000)
   └── backend (FastAPI :8000)
         ├── SQLite WAL runtime database
-        ├── local controlled files
-        ├── in-process bounded task managers
+        ├── controlled local files
+        ├── bounded in-process task managers
         └── provider adapters (Mock by default)
 ```
 
-No Redis, Celery, PostgreSQL, cloud object storage, or external vector database is required for the Demo.
+The Demo does not require Redis, Celery, PostgreSQL, cloud object storage or an external vector database.
 
 Core principles:
 
@@ -229,17 +224,17 @@ Core principles:
 - providers are server-side adapters;
 - business state is authoritative on the backend;
 - critical writes use revision/control-version fences and short transactions;
-- expensive or ambiguous commands use idempotency keys;
+- expensive/ambiguous commands use idempotency keys;
 - database/file transitions require recoverable ordering;
-- immutable historical objects are not silently rewritten.
+- immutable historical objects are never silently rewritten.
 
-## 8. Wave plan
+## 8. Wave plan and results
 
 ### Wave 0 — foundation
 
-Modules: runtime skeleton, auth/session, seed data, database base, contracts, and quality tools.
+Runtime skeleton, auth/Session, seed data, base database, contracts and quality tools.
 
-Result: historical G3 pass. Must still be re-run against the final Demo commit.
+Result: historical G3 pass. Final Demo still requires current-commit regression.
 
 ### Wave 1A — Agent, version, RAG, teacher inspection
 
@@ -247,23 +242,23 @@ Result: historical Mock G3 pass.
 
 ### Wave 1B — Avatar and voice/TTS boundary
 
-Result: Mock boundary passed. Real TTS attempt failed validation and remains `FAILED-DEFERRED`; it must not be retried without a new Gate.
+Result: Mock boundary passed. Real TTS validation failed and remains `FAILED-DEFERRED`; do not retry without a new Gate.
 
 ### Wave 1C — UI and i18n foundation
 
 Result: historical G3 pass.
 
-### Wave 2 — debate setup, generation, and playback
+### Wave 2 — debate setup, generation and playback
 
-Result: historical Mock G3 pass. Latest playback deltas remain part of the Wave 3 completion audit.
+Result: historical Mock G3 pass. Latest playback deltas remain in the Wave 3 completion audit.
 
-### Wave 3 — interaction, Maya report, history, translation
+### Wave 3 — interaction, Maya report, history and translation
 
-Current result: substantial G1 implementation, focused tests, and a historical narrow G2 pass. Full G2/G3 remains open.
+Current result: substantial G1 implementation, focused tests and historical narrow G2. Full G2/G3 remains open.
 
 ### Wave 4 — final integration and real services
 
-Not started. Wave 4 includes cross-module integration, separately authorized real-provider spikes, final browser/LAN acceptance, and complete Demo certification.
+Not started. Wave 4 includes cross-module integration, separately authorized real-provider spikes, final LAN/browser acceptance and complete Demo certification.
 
 ## 9. Unaudited or incompletely audited code
 
@@ -275,20 +270,20 @@ Paths:
 - `frontend/components/interaction/**`
 - `frontend/app/classroom/**`
 
-Goal: signed anonymous access, independent vote/barrage submission, teacher totals/raw barrage view, and exact finalization.
+Goal: signed anonymous access, independent vote/barrage submission, teacher totals/raw barrage view and exact finalization.
 
-Status: implemented; selected token/idempotency/concurrency boundaries received narrow review. The full module, all permission branches, and mobile browser path have not completed Full G2/G3.
+Status: implemented; selected token/idempotency/concurrency boundaries received narrow review. Full module permissions, integrated races and mobile WebSocket behavior have not completed Full G2/G3.
 
-### 9.2 M14 insight and Maya reports
+### 9.2 M14 insight and Maya report
 
 Paths:
 
 - `backend/app/modules/reports/**`
 - `frontend/components/report/**`
 
-Goal: immutable de-identified insight inputs, deterministic Mock insight/report, report revisions, safe failure, and downloads.
+Goal: immutable de-identified insight input, deterministic Mock insight/report, report revisions, safe failure and downloads.
 
-Status: implemented; selected input-boundary risks received narrow review. The full task/recovery/revision/download surface remains incompletely audited.
+Status: implemented; selected input-boundary risks received narrow review. Full task recovery, revision/current-success pointer, download and browser failure paths remain incompletely audited.
 
 ### 9.3 M15 history and translation
 
@@ -298,9 +293,9 @@ Paths:
 - `frontend/components/history/**`
 - `frontend/components/translation/**`
 
-Goal: immutable English history and on-demand derived translation batches.
+Goal: immutable English history, on-demand derived translation batches and exact cache reuse.
 
-Known P1: a follower batch reusing a TranslationEntry owned by another active batch may remain pending after the owner reaches ready/failed. Terminal state must propagate to followers, counts/jobs must be recomputed, and eligible followers must be scheduled without polling or duplicate provider calls.
+Known P1: a follower batch reusing a TranslationEntry owned by another active batch may remain pending after the owner reaches ready/failed. Terminal state must propagate to followers, counts/jobs must be recomputed and eligible followers must be scheduled without polling, duplicate provider calls or duplicate terminal events.
 
 ### 9.4 Playback Wave 3 delta
 
@@ -310,24 +305,24 @@ Paths:
 - `frontend/components/debate/stage/**`
 - teacher Debate control/interaction pages
 
-Goal: Pause/Resume, full/partial Finish, manual Reconnect, Replay catalog restoration, and correct downstream availability.
+Goal: Pause/Resume, Full/Partial Finish, manual Reconnect, Replay catalog restoration and correct downstream availability.
 
-Status: partially implemented after earlier manual feedback; final state-machine audit and real-browser verification are incomplete.
+Status: partially implemented after manual feedback; final state-machine audit, current tests and real-browser verification remain incomplete.
 
-### 9.5 Migration and integration
+### 9.5 Migration and application integration
 
 Paths:
 
 - `backend/migrations/versions/0007_wave3_interaction_report.py`
 - `scripts/test_wave3_migration.py`
 - `backend/app/main.py`
-- shared core/debate model and projection changes
+- shared core/debate projection changes
 
-Goal: integrate Wave 3 tables, typed Job owners, projections, startup recovery, and routes without damaging 0001–0006 data.
+Goal: integrate Wave 3 tables, typed Job owners, routes, projections and startup recovery without damaging 0001–0006 semantics.
 
-Status: migration and tests exist; the current commit has not completed the full fresh/repeat/populated/downgrade/re-upgrade/fingerprint/FK matrix.
+Status: cleanup-branch migration chain passes. Full startup/job integration audit is still open.
 
-### 9.6 Contracts and frontend integration
+### 9.6 Contracts and frontend composition
 
 Paths:
 
@@ -338,11 +333,11 @@ Paths:
 - `frontend/app/teacher/debates/**`
 - `scripts/generate_ws_*.mjs`
 
-Goal: one closed OpenAPI/WS contract and a complete teacher workflow.
+Goal: one closed HTTP/WS contract and one coherent teacher workflow.
 
-Status: implementation exists; current-commit generated clean-diff, error states, responsive behavior, and browser acceptance are incomplete.
+Status: OpenAPI SHA, generated client and Redocly pass on the cleanup branch; route-fixture determinism and several playback tests are still unresolved.
 
-## 10. Quality and Gate method
+## 10. Gate method
 
 ```text
 G0   contract/scope frozen
@@ -359,42 +354,52 @@ Full Wave 3 completion requires:
 
 - repository policy pass;
 - OpenAPI/Redocly/response/route/generated-client pass;
-- WebSocket positive/negative fixtures and clean generation;
+- WebSocket fixtures and clean generation;
 - frontend lint/type/full Vitest/production build;
 - backend Ruff/mypy/full pytest;
-- migration 0007 full matrix and zero foreign-key violations;
-- Docker Compose configuration and healthy local stack;
+- migration 0007 matrix and zero foreign-key violations;
+- Docker configuration and healthy local stack;
 - complete teacher and anonymous-phone browser paths;
 - no new RAG/LLM/TTS call during Replay;
-- P0=0 and P1=0 in the independent Sol audit.
+- P0=0 and P1=0 in independent Sol review.
 
 ## 11. Recommended next work
 
-1. Fix M15 Translation follower terminal propagation and add owner-ready, owner-failed, mixed, concurrent, and restart tests.
-2. Upgrade GitHub Actions from the old Wave 2-shaped serial job to a Wave 3 matrix so unrelated checks still run when one job fails.
-3. Complete Pause/Resume, Full/Partial Finish, Reconnect, Replay, and translation-display integration tests.
-4. Re-run and synchronize OpenAPI, WebSocket schemas/fixtures, generated TypeScript client, and route comparison.
-5. Run the full backend/frontend/migration/Docker suite on one exact commit SHA.
-6. Perform a Full Wave 3 Sol audit.
-7. Perform real browser acceptance across desktop, tablet, and phone.
-8. Only then begin Wave 4 or any real-provider work.
+1. Fix M15 Translation follower terminal propagation and add owner-ready, owner-failed, mixed, concurrent and restart tests.
+2. Fix the two remaining backend Ruff line-length findings, then run mypy and full pytest.
+3. Investigate route-fixture nondeterminism in `scripts/test_route_surface.mjs`.
+4. Reconcile manual Reconnect/Replay behavior with four stale/failing Wave 2 tests and one Wave 3 playback test.
+5. Re-run/synchronize OpenAPI, WebSocket, generated Client and route comparison.
+6. Run the full backend/frontend/migration/Docker suite on one exact SHA.
+7. Perform Full Wave 3 Sol review.
+8. Perform real browser acceptance across desktop, tablet and phone.
+9. Begin Wave 4 only after Wave 3 G3.
 
 ## 12. Stop conditions
 
 Stop the affected Gate if work would:
 
-- change published Agent/Snapshot/Turn history in place;
-- open interaction before complete Debate or accept a submission after close;
+- rewrite published Agent/Snapshot/Turn history in place;
+- open interaction before complete Debate or accept submissions after close;
 - connect vote identity to nickname/user/device;
 - send independent nickname/author fields or raw named lists into Maya;
-- read unused/full RAG into the report;
+- read unused/full RAG into reports;
 - broadcast durable events before commit;
-- hold a request database session for a socket lifetime;
-- create unbounded retries or duplicate paid/provider work;
-- modify historical migrations 0001–0006;
-- call a real provider without explicit authorization;
-- hide a P0/P1 failure behind a documentation status change.
+- hold request DB Sessions for socket lifetime;
+- destroy migration data or modify 0001–0006 to hide a problem;
+- call a real provider without an explicit Gate;
+- copy reference source code;
+- claim Full G2/G3 from Mock, historical or narrow evidence.
 
-## 13. Current handoff
+## 13. Current next milestone
 
-This cleaned repository is a source-code and contract checkpoint, not a claim that Wave 3 is complete. Runtime records have intentionally been removed. Demo credentials remain for private team use. The next implementation session should start from the unaudited-code inventory above, not from old runtime data or historical success claims.
+The next trustworthy milestone is:
+
+```text
+clean source baseline merged
+→ M15 liveness fixed
+→ mechanical quality matrix green on one SHA
+→ Full Wave 3 Sol G2
+→ complete Mock browser G3
+→ Wave 4
+```
