@@ -6,7 +6,6 @@ frontend/lib/api/generated/schema.d.ts
 frontend/.next/**
 frontend/public/avatars/draco/**
 *.xlsx
-private-inputs/voice/**
 
 # Demo credentials are intentionally retained exactly as provided for the
 # private team Demo. Formatting must not rewrite account/password material.
