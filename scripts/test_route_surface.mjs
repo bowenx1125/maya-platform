@@ -72,9 +72,9 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  if (platformOperationCount !== 53 || placeholderCount !== 13) {
+  if (platformOperationCount !== 66 || placeholderCount !== 0) {
     throw new Error(
-      `pre-Wave3 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
+      `Wave 3 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
   }
   const nextOperation = base.paths["/api/v1/debates/{debate_id}/next"]?.post;
