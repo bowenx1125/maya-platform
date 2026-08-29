@@ -4,10 +4,15 @@ contracts/**
 frontend/lib/api/generated/schema.d.ts
 frontend/public/avatars/draco/**
 
-# Historical/frozen prose, handoff reports and manual fixtures
+# Long bilingual authority documents are maintained manually to avoid noisy rewrites
+README.md
+Project.md
 AI文化互鉴教学平台-需求文档.md
 docs/pre-code-contracts/**
 docs/PROJECT_STATUS.md
+
+# Historical handoff reports and manual fixtures
+docs/REPOSITORY_CLEANUP_REPORT.md
 manual-tests/**
 
 # Private Demo account catalogs are intentionally tracked verbatim
