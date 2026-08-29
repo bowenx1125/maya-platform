@@ -8,6 +8,11 @@ frontend/public/avatars/draco/**
 *.xlsx
 private-inputs/voice/**
 
+# Demo credentials are intentionally retained exactly as provided for the
+# private team Demo. Formatting must not rewrite account/password material.
+backend/config/demo_users.yaml
+backend/config/demo-accounts/accounts.private.md
+
 # Frozen or manually curated source material is preserved byte-for-byte.
 AI文化互鉴教学平台-需求文档.md
 docs/pre-code-contracts/**
