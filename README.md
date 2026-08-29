@@ -7,13 +7,13 @@ Maya 是一个本地优先的 AI 文化互鉴教学平台。学生以小组为�
 
 ## 1. 五个开发 Wave
 
-| Wave | 主要目标 | 当前结果 |
-| --- | --- | --- |
-| Wave 0 | 运行骨架、数据库、会话、种子、合同、质量门 | 历史 Mock Gate 通过 |
-| Wave 1 | Agent/版本、Markdown RAG、3D、音色、UI/i18n | 历史 Mock Gate 通过 |
-| Wave 2 | 辩论创建、生成、证据、播放、WebSocket、Replay | 历史 Mock Gate 通过 |
+| Wave   | 主要目标                                         | 当前结果                        |
+| ------ | ------------------------------------------------ | ------------------------------- |
+| Wave 0 | 运行骨架、数据库、会话、种子、合同、质量门       | 历史 Mock Gate 通过             |
+| Wave 1 | Agent/版本、Markdown RAG、3D、音色、UI/i18n      | 历史 Mock Gate 通过             |
+| Wave 2 | 辩论创建、生成、证据、播放、WebSocket、Replay    | 历史 Mock Gate 通过             |
 | Wave 3 | 投票/弹幕、洞察、Maya 报告、历史、翻译和播放增量 | 大量代码已实现，未获 Full G2/G3 |
-| Wave 4 | 跨模块集成、真实 Provider、局域网与完整 E2E | 未开始 |
+| Wave 4 | 跨模块集成、真实 Provider、局域网与完整 E2E      | 未开始                          |
 
 最终目标是完成一个稳定、可解释、可重复演示的 Demo，而不是一次性实现所有正式版功能。
 

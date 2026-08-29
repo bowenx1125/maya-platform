@@ -56,7 +56,10 @@ try {
     "# approved private Demo accounts\n",
   );
   writeFileSync(resolve(repo, "backend/config/demo_users.yaml"), "users: []\n");
-  writeFileSync(resolve(repo, "frontend/index.ts"), "export const safe = true;\n");
+  writeFileSync(
+    resolve(repo, "frontend/index.ts"),
+    "export const safe = true;\n",
+  );
 
   execFileSync("git", ["init", "--quiet", repo]);
   execFileSync("git", ["-C", repo, "add", "."]);
