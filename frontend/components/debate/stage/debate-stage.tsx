@@ -1033,7 +1033,13 @@ export function DebateStage({
       const payload = event.payload;
       const decision = consumeEventSequence(sequenceRef.current, event);
       if (event.event_type === "replay.started") {
-        console.warn("DEBUG replay event", decision, playbackRef.current.mode, playbackRef.current.status, event.payload);
+        console.warn(
+          "DEBUG replay event",
+          decision,
+          playbackRef.current.mode,
+          playbackRef.current.status,
+          event.payload,
+        );
       }
       if (decision.gap || !decision.accepted) {
         if (decision.gap) requestReconnect();
@@ -1850,7 +1856,8 @@ export function DebateStage({
   const handleSocketMessage = useCallback(
     (event: Event) => {
       const value = socketMessageData(event);
-      if (isRecord(value) && value.event_type === "replay.started") console.warn("DEBUG message", value);
+      if (isRecord(value) && value.event_type === "replay.started")
+        console.warn("DEBUG message", value);
       if (!value) return;
       if (isRecord(value) && typeof value.message_type === "string") {
         const privateMessage = parsePrivatePlaybackMessage(value, debateId);
