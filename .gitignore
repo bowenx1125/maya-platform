@@ -2,10 +2,31 @@
 .env
 .env.*
 !.env.example
-backend/config/demo_users.yaml
-backend/config/demo-accounts/accounts.private.md
 *.pem
 *.key
+
+# Runtime databases and files
+/data/
+/backend/data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.log
+
+# Runtime-generated audio, snapshots and temporary files
+/data/courses/
+/data/groups/
+/data/snapshots/
+/data/backups/
+/data/tmp/
+/backend/data/
+
+# Historical local output folders
+/archive/
+/outputs/
 
 # JavaScript dependencies and build output
 node_modules/
@@ -27,21 +48,16 @@ backend/**/__pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Runtime data must stay outside Git
-data/
-backend/data/
-*.db
-*.db-*
-*.sqlite
-*.sqlite3
-*.sqlite3-*
-*.log
+# Local Docker/coverage artifacts
+docker-compose.override.yml
+htmlcov/
 
 # OS/editor files
 .DS_Store
 .idea/
 .vscode/
 
-# Local Docker/coverage artifacts
-docker-compose.override.yml
-htmlcov/
+# Intentionally tracked private-team Demo assets:
+# - backend/config/demo-accounts/accounts.private.md
+# - backend/config/demo_users.yaml
+# - private-inputs/voice/**

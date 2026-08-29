@@ -1,9 +1,18 @@
 # Maya Platform Agent Rules
 
-1. Before changing this repository, read `../Project.md` completely, including the embedded original requirements. Current implementation authority is `../Project.md` sections 0, 5 and 8 plus `../docs/pre-code-contracts/`.
-2. Do not copy any source-code fragment from the reference repositories under `../`. References are read-only for design, interaction and test ideas. Implement from Maya contracts.
-3. Work only inside the files explicitly assigned by the main agent. Other agents are working in the same checkout; do not revert, overwrite or reformat their changes.
-4. Keep the frontend provider-neutral. No provider name, model ID, external voice ID, API key or supplier URL may enter browser-facing DTOs.
-5. Do not create or commit real `.env`, credentials, student audio, private reference code or local data. Use `.env.example` and Mock providers.
-6. Run the assigned deterministic checks before reporting completion. A worker cannot approve its own Gate; final status belongs to the main agent after Sol audit.
-7. Do not edit `../Project.md` or the frozen pre-code contracts unless the main agent explicitly assigns that file.
+1. Read `Project.md` before changing the repository. It is the current operational authority; `AI文化互鉴教学平台-需求文档.md` and `docs/pre-code-contracts/` are historical/reference inputs.
+2. Confirm the active Wave, Gate, file ownership, and acceptance criteria before implementation.
+3. Do not copy source-code fragments from reference repositories. Implement from Maya contracts and tests.
+4. This private team repository intentionally tracks only these private Demo assets:
+   - `backend/config/demo-accounts/accounts.private.md`;
+   - `backend/config/demo_users.yaml`;
+   - approved voice samples under `private-inputs/voice/`.
+5. Do not commit `.env`, API keys, session secrets, runtime databases, WAL/SHM files, generated debate audio, runtime snapshots, logs, locks, caches, archives, or output workbooks.
+6. Demo passwords may exist in the two approved credential files, but passwords must never appear in browser DTOs, generated frontend clients, API responses, WebSocket events, logs, errors, screenshots, or public documentation.
+7. Keep every automated test and CI job Mock-only unless a separate real-provider Gate is explicitly authorized. Never infer permission to spend provider quota from the presence of local credentials.
+8. Work only in explicitly assigned files. Other agents may be working in parallel; do not reset, clean, overwrite, or reformat unrelated changes.
+9. Avoid broad refactors of Wave 3 code before Full G2. Formatting or structural rewrites must not obscure functional diffs under review.
+10. Run the assigned deterministic checks before reporting completion. Report exact commands and failures; do not reuse historical test counts as current evidence.
+11. Luna implements and self-tests. Sol reviews high-risk design/code and coordinates Gate decisions. An implementation worker never approves its own Gate.
+12. Update `Project.md`, `docs/PROJECT_STATUS.md`, and `开发文档.xlsx` when authoritative status, scope, risk, or next steps change.
+13. Never describe Mock success, a narrow audit, or a previous commit's result as Full Wave 3 G2/G3 or real-provider acceptance.

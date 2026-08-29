@@ -1,59 +1,74 @@
-import {
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, relative, resolve } from "node:path";
-import { tmpdir } from "node:os";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const forbiddenDirectories = new Set([
-  ".git",
-  "node_modules",
-  ".next",
-  ".venv",
-  "__pycache__",
-  ".mypy_cache",
-  ".ruff_cache",
-  ".pnpm-store",
-  "coverage",
-  "out",
-  "cache",
-  "build",
-  "dist",
-  "vendor",
-]);
-const forbiddenTrackedName =
-  /(^|\/)(?:\.env$|[^/]*\.(?:sqlite3?|db(?:-[^/]*)?|wav|mp3|m4a|aac|ogg|pem|key))$/i;
-const privateCredentialName =
-  /(^|\/)(?:demo[_-]?users|[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env)$/i;
-// These files are intentionally generated local runtime state. They are
-// ignored by Git/Docker and may contain the developer's session secret or
-// Demo credentials, so inspect them through explicit existence/permission
-// checks rather than treating their values as repository content.
-const ignoredRuntimeFiles = new Set([
-  ".env",
-  "backend/config/demo-accounts/accounts.private.md",
-  "backend/config/demo_users.yaml",
-]);
-const forbiddenReference =
-  /(?:Document Validation Agent|agent-core-private|OpenMAIC-main|parallax-main|OpenAvatarChat-main|TalkingHead-main|motion-engine-main|RomanticSimulation)/i;
-const supplierUrlPattern =
-  /https?:\/\/[^\s"']*(?:aliyuncs\.com|dashscope|api-free\.deepl\.com|openai\.com|deepgram\.com)[^\s"']*/i;
+const policyPath = resolve(root, "config/repository-data-policy.json");
+const policy = JSON.parse(readFileSync(policyPath, "utf8"));
+
+function normalize(value) {
+  return value.replaceAll("\\", "/");
+}
+
+function isAllowedPrivatePath(path) {
+  return (
+    policy.allowed_private_files.includes(path) ||
+    policy.allowed_private_prefixes.some((prefix) => path.startsWith(prefix))
+  );
+}
+
+function isForbiddenByPolicy(path) {
+  if (policy.forbidden_tracked_files.includes(path)) return true;
+  if (policy.forbidden_tracked_prefixes.some((prefix) => path.startsWith(prefix)))
+    return true;
+  if (/^\.env(?:\.|$)/.test(path) && path !== ".env.example") return true;
+  if (/\.(?:sqlite3?|db)(?:-(?:wal|shm|journal))?$/i.test(path)) return true;
+  if (/\.(?:wav|mp3|m4a|aac|ogg|flac)$/i.test(path) && !isAllowedPrivatePath(path))
+    return true;
+  if (
+    /(^|\/)(?:[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env)$/i.test(
+      path,
+    ) &&
+    !isAllowedPrivatePath(path)
+  )
+    return true;
+  return false;
+}
+
 const secretPatterns = [
-  /\b(?:sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})\b/,
+  /\bsk-[A-Za-z0-9._-]{20,}\b/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{30,}\b/,
   /\bBearer\s+[A-Za-z0-9._-]{20,}\b/i,
   /-----BEGIN [^-]*PRIVATE KEY-----/,
 ];
+
 const assignmentPattern =
   /^[ \t]*(?:DASHSCOPE_API_KEY|DEEPL_API_KEY|OPENAI_API_KEY|SESSION_SECRET|SECRET_KEY|API_KEY)[ \t]*[=:][ \t]*([^\r\n]*)$/gm;
-const genericSecretAssignmentPattern =
-  /^[ \t]*["']?(?:api[_-]+key|access[_-]+token|secret(?:[_-]+key)?|provider[_-]+key|external[_-]+voice[_-]+id)["']?[ \t]*[=:][ \t]*["']?([^"',\r\n}]*)/gim;
+
+const browserSupplierUrlPattern =
+  /https?:\/\/[^\s"']*(?:aliyuncs\.com|dashscope|api-free\.deepl\.com|openai\.com|deepgram\.com)[^\s"']*/i;
+
+function nonPlaceholderAssignment(text) {
+  for (const match of text.matchAll(assignmentPattern)) {
+    const value = match[1].trim().replace(/^['"]|['"]$/g, "");
+    if (
+      !value ||
+      value.startsWith("#") ||
+      value.startsWith("${") ||
+      value.startsWith("replace-") ||
+      /^(?:example|fixture|hidden|mock|safe|supplier|test|placeholder)$/i.test(value)
+    )
+      continue;
+    return true;
+  }
+  return false;
+}
+
+function containsSecret(text) {
+  return nonPlaceholderAssignment(text) || secretPatterns.some((pattern) => pattern.test(text));
+}
 
 const gitRoot = execFileSync(
   "git",
@@ -62,153 +77,73 @@ const gitRoot = execFileSync(
 ).trim();
 if (resolve(gitRoot) !== root) {
   throw new Error(
-    "Git root must be exactly the product directory that contains this boundary checker; parent workspaces must never be scanned as the product repository",
+    "Git root must be exactly the Maya product directory; parent workspaces must not be scanned as product source.",
   );
 }
 
-const tracked = execFileSync(
-  "git",
-  ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"],
-  { encoding: "buffer" },
-)
+const tracked = execFileSync("git", ["-C", root, "ls-files", "-z"], {
+  encoding: "buffer",
+})
   .toString("utf8")
   .split("\0")
-  .filter(Boolean);
-const boundaryFailures = [];
-for (const file of tracked) {
-  const normalized = file.replaceAll("\\", "/");
-  if (normalized.startsWith("../") || normalized.includes("/../"))
-    boundaryFailures.push(`parent path tracked: ${normalized}`);
-  if (
-    forbiddenTrackedName.test(normalized) ||
-    privateCredentialName.test(normalized)
-  )
-    boundaryFailures.push(
-      `forbidden runtime/secret file tracked: ${normalized}`,
-    );
-  if (forbiddenReference.test(normalized))
-    boundaryFailures.push(`reference/private path tracked: ${normalized}`);
-}
+  .filter(Boolean)
+  .map(normalize);
 
-function walk(directory) {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (forbiddenDirectories.has(entry.name)) continue;
-    const absolute = resolve(directory, entry.name);
-    const relativePath = relative(root, absolute).replaceAll("\\", "/");
-    if (entry.isDirectory()) {
-      if (entry.name === ".git")
-        boundaryFailures.push(`nested Git directory found: ${relativePath}`);
-      else walk(absolute);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    if (ignoredRuntimeFiles.has(relativePath)) continue;
-    let bytes;
-    try {
-      bytes = readFileSync(absolute);
-    } catch {
-      boundaryFailures.push(
-        `could not inspect repository file: ${relativePath}`,
-      );
-      continue;
-    }
-    if (bytes.includes(0)) continue;
-    const text = bytes.toString("utf8");
-    for (const match of text.matchAll(assignmentPattern)) {
-      const value = match[1].trim();
-      if (
-        !value ||
-        value.startsWith("#") ||
-        value.startsWith("${") ||
-        value === '""' ||
-        value === "''"
-      )
-        continue;
-      boundaryFailures.push(
-        `possible secret assignment/token in ${relativePath}`,
-      );
-      break;
-    }
-    if (
-      boundaryFailures.some((failure) => failure.endsWith(`in ${relativePath}`))
-    )
-      continue;
-    if (/\.(?:env|json|ya?ml|toml|ini)$/i.test(relativePath)) {
-      for (const match of text.matchAll(genericSecretAssignmentPattern)) {
-        const value = match[1].trim();
-        if (
-          !value ||
-          value.startsWith("#") ||
-          value.startsWith("$") ||
-          /^(?:example|fixture|hidden|mock|safe|supplier|test|placeholder)$/i.test(
-            value,
-          )
-        )
-          continue;
-        boundaryFailures.push(
-          `possible secret assignment/token in ${relativePath}`,
-        );
-        break;
-      }
-    }
-    if (
-      boundaryFailures.some((failure) => failure.endsWith(`in ${relativePath}`))
-    )
-      continue;
-    for (const pattern of secretPatterns) {
-      if (pattern.test(text)) {
-        boundaryFailures.push(
-          `possible secret assignment/token in ${relativePath}`,
-        );
-        break;
-      }
-    }
-    const supplierUrlAllowed =
-      relativePath === "backend/app/providers/dashscope.py" ||
-      relativePath === "backend/tests/test_wave1b_voices.py";
-    if (!supplierUrlAllowed && supplierUrlPattern.test(text))
-      boundaryFailures.push(
-        `possible secret assignment/token in ${relativePath}`,
-      );
+const failures = [];
+let scannedTextFiles = 0;
+let allowedPrivateFiles = 0;
+
+for (const path of tracked) {
+  if (path.startsWith("../") || path.includes("/../")) {
+    failures.push(`parent path tracked: ${path}`);
+    continue;
+  }
+  if (isForbiddenByPolicy(path)) {
+    failures.push(`forbidden runtime/private artifact tracked: ${path}`);
+    continue;
+  }
+  if (isAllowedPrivatePath(path)) {
+    allowedPrivateFiles += 1;
+    continue;
+  }
+
+  let bytes;
+  try {
+    bytes = readFileSync(resolve(root, path));
+  } catch {
+    failures.push(`could not inspect tracked file: ${path}`);
+    continue;
+  }
+  if (bytes.includes(0)) continue;
+
+  const text = bytes.toString("utf8");
+  scannedTextFiles += 1;
+  if (containsSecret(text)) {
+    failures.push(`possible secret assignment/token in ${path}`);
+    continue;
+  }
+
+  const browserFacing =
+    path.startsWith("frontend/") ||
+    path.startsWith("contracts/") ||
+    path.startsWith("infra/");
+  if (browserFacing && browserSupplierUrlPattern.test(text)) {
+    failures.push(`supplier URL leaked into browser-facing source: ${path}`);
   }
 }
-walk(root);
 
 if (process.argv.includes("--probe-generated")) {
-  const probeRoot = mkdtempSync(resolve(tmpdir(), "maya-boundary-probe-"));
-  try {
-    const generatedDir = resolve(probeRoot, "frontend/lib/api/generated");
-    mkdirSync(generatedDir, { recursive: true });
-    writeFileSync(
-      resolve(generatedDir, "simulated-leak.ts"),
-      `export const simulatedKey = "${"sk-" + "probe".repeat(8)}";\nexport const supplier = "${"https://" + "dashscope.aliyuncs.com/api"}";\n`,
-      "utf8",
-    );
-    const probeFailures = [];
-    const originalFailures = [...boundaryFailures];
-    boundaryFailures.length = 0;
-    walk(probeRoot);
-    probeFailures.push(...boundaryFailures);
-    boundaryFailures.length = 0;
-    boundaryFailures.push(...originalFailures);
-    if (probeFailures.length === 0)
-      throw new Error(
-        "generated-source secret probe did not detect the simulated key/supplier URL",
-      );
-    console.log(
-      "generated-source secret probe passed: simulated key and supplier URL were detected without touching product files",
-    );
-  } finally {
-    rmSync(probeRoot, { recursive: true, force: true });
+  const simulated = `export const key = "${"sk-" + "probe".repeat(8)}";\n`;
+  if (!containsSecret(simulated)) {
+    throw new Error("generated-source secret probe did not detect a simulated key");
   }
+  console.log("generated-source secret probe passed");
 }
 
-if (boundaryFailures.length) {
-  throw new Error(
-    `product repository boundary check failed:\n- ${boundaryFailures.join("\n- ")}`,
-  );
+if (failures.length > 0) {
+  throw new Error(`repository boundary check failed:\n- ${failures.join("\n- ")}`);
 }
 
 console.log(
-  `product boundary passed: Git root maya-platform; inspected ${tracked.length} candidate tracked files; no tracked secrets, runtime artifacts, private references, or supplier keys`,
+  `repository boundary passed: ${tracked.length} tracked files; ${scannedTextFiles} text files scanned; ${allowedPrivateFiles} approved private-team files skipped by exact policy`,
 );

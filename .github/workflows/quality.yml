@@ -1,0 +1,211 @@
+name: Maya Wave 3 quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maya-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  MAYA_ENV: test
+  DEMO_MODE: "false"
+  DEMO_QUICK_LOGIN: "false"
+  SESSION_SECRET: ci-only-session-secret-replace-never-use-in-demo
+  CLASSROOM_PUBLIC_BASE_URL: http://127.0.0.1:8080
+  LLM_PROVIDER: mock
+  EMBEDDING_PROVIDER: mock
+  TTS_PROVIDER: mock
+  VOICE_PROVIDER: mock
+  TRANSLATION_PROVIDER: mock
+  DASHSCOPE_API_KEY: ""
+  DASHSCOPE_WORKSPACE_ID: ""
+  DEEPL_API_KEY: ""
+  FALLBACK_VOICE_PROFILE_ID: ""
+
+jobs:
+  repository-policy:
+    name: Repository policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.14.0
+
+      - name: Check tracked-data boundary
+        run: |
+          node scripts/check_repo_boundary.mjs
+          node scripts/test_repo_boundary.mjs
+
+  contracts:
+    name: Formatting and contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.14.0
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.19.0 --activate
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm exec prettier --check .
+
+      - name: Check frozen OpenAPI and generated client
+        run: |
+          node scripts/check_frozen_openapi.mjs
+          node scripts/test_frozen_openapi.mjs
+          node scripts/check_generated_contracts.mjs
+
+      - name: Lint OpenAPI
+        run: pnpm exec redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml
+
+      - name: Check response and route contracts
+        run: |
+          node scripts/check_openapi_responses.mjs
+          node scripts/test_openapi_responses.mjs
+          node scripts/test_route_surface.mjs
+
+      - name: Check WebSocket contracts
+        run: |
+          node scripts/test_ws_events.mjs
+          node scripts/test_ws_commands.mjs
+          node scripts/check_generated_ws.mjs
+
+      - name: Check generated Latin-script tables
+        run: node scripts/check_latin_script_tables.mjs
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.14.0
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.19.0 --activate
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, test and build
+        run: |
+          pnpm --filter @maya/frontend lint
+          pnpm --filter @maya/frontend typecheck
+          pnpm --filter @maya/frontend test
+          pnpm --filter @maya/frontend build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182
+        with:
+          version: 0.12.0
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ffmpeg
+
+      - name: Install Python dependencies
+        run: uv sync --directory backend --frozen
+
+      - name: Ruff, mypy and full pytest
+        working-directory: backend
+        run: |
+          uv run ruff format --check app tests migrations
+          uv run ruff check app tests migrations
+          uv run mypy app
+          uv run pytest
+
+  migrations:
+    name: Migration chain
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182
+        with:
+          version: 0.12.0
+
+      - name: Install Python dependencies
+        run: uv sync --directory backend --frozen
+
+      - name: Empty database upgrade twice
+        run: |
+          root="$(mktemp -d)"
+          DATABASE_URL="sqlite:///$root/maya.sqlite3" uv run --directory backend alembic upgrade head
+          DATABASE_URL="sqlite:///$root/maya.sqlite3" uv run --directory backend alembic upgrade head
+
+      - name: Populated migration preservation
+        run: |
+          uv run --directory backend python ../scripts/test_wave1_migration.py
+          uv run --directory backend python ../scripts/test_wave2_migration.py
+          uv run --directory backend python ../scripts/test_wave3_migration.py
+
+  compose:
+    name: Compose configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Validate Compose
+        run: docker compose config --quiet
+
+  quality-gate:
+    name: Wave 3 quality gate
+    if: always()
+    needs:
+      - repository-policy
+      - contracts
+      - frontend
+      - backend
+      - migrations
+      - compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all independent jobs
+        env:
+          REPOSITORY_POLICY: ${{ needs.repository-policy.result }}
+          CONTRACTS: ${{ needs.contracts.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          BACKEND: ${{ needs.backend.result }}
+          MIGRATIONS: ${{ needs.migrations.result }}
+          COMPOSE: ${{ needs.compose.result }}
+        run: |
+          test "$REPOSITORY_POLICY" = success
+          test "$CONTRACTS" = success
+          test "$FRONTEND" = success
+          test "$BACKEND" = success
+          test "$MIGRATIONS" = success
+          test "$COMPOSE" = success
