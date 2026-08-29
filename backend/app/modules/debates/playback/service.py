@@ -109,6 +109,7 @@ class PlaybackService:
         tts_provider: TTSProvider | None = None,
         session_factory: Callable[[], Any] | None = None,
         settings: Any | None = None,
+        snapshot_projector: Callable[[Any, str], dict[str, Any]] | None = None,
     ) -> None:
         self.repository: PlaybackRepository = repository or MemoryPlaybackRepository()
         self.audio_store = audio_store
@@ -123,6 +124,7 @@ class PlaybackService:
         self.tts_provider = tts_provider or MockTTSProvider()
         self.session_factory = session_factory
         self.settings = settings
+        self.snapshot_projector = snapshot_projector
         self._db_hint: Any | None = None
         self._connection_callbacks: dict[
             str, Callable[[dict[str, Any]], Awaitable[None] | None]
@@ -164,7 +166,13 @@ class PlaybackService:
                         self._get(turn, "generation_status", default="") == "running"
                         for turn in candidate_turns
                     )
-                    if candidate_id in affected_set or in_flight:
+                    paused_recoverable = (
+                        str(self._get(candidate.playback, "status", default="")) == "paused"
+                        and str(self._get(candidate, "status", default="")) == "running"
+                    )
+                    if (candidate_id in affected_set and not paused_recoverable) or (
+                        in_flight and not paused_recoverable
+                    ):
                         affected_set.add(candidate_id)
                         candidate.status = "failed"
                         for candidate_turn in candidate_turns:
@@ -189,7 +197,7 @@ class PlaybackService:
                         self._save(db, candidate, state)
                     else:
                         state = self._state(db, candidate)
-                        if state.status in {"playing", "paused"}:
+                        if state.status == "playing":
                             self._set_nonplaying(state, "ready", 0)
                             state.control_version += 1
                             state.controller_epoch = None
@@ -199,6 +207,20 @@ class PlaybackService:
                             state.pending_ticket_hash = None
                             state.pending_media_command_id = None
                             state.audio_duration_ms = 0
+                            self._clear_media_results(candidate_id)
+                            self._save(db, candidate, state)
+                        elif state.status == "paused":
+                            # Explicit Pause survives restart.  Revoke only
+                            # the process-local authority/ticket and keep the
+                            # paused cursor so a fresh controller can Continue.
+                            state.controller_epoch = None
+                            state.controller_session_hash = None
+                            state.controller_connection_id = None
+                            state.pending_action = None
+                            state.pending_ticket_hash = None
+                            state.pending_media_command_id = None
+                            state.audio_duration_ms = 0
+                            state.control_version += 1
                             self._clear_media_results(candidate_id)
                             self._save(db, candidate, state)
                         elif (
@@ -508,6 +530,59 @@ class PlaybackService:
                 allowed = checker(db, debate, context.user)
             if not allowed:
                 raise forbidden()
+
+    def _claim_control_idempotency(
+        self,
+        db: Any,
+        *,
+        context: AuthContext | None,
+        operation: str,
+        key: str | None,
+        body: Mapping[str, Any],
+    ) -> tuple[Any | None, bool]:
+        """Claim a teacher control key without coupling the runtime to HTTP.
+
+        Playback tests and the in-memory repository intentionally omit the
+        Wave 0 idempotency tables.  In the SQL composition, the shared
+        idempotency helper commits a short claim before the control CAS; an
+        exact replay simply reloads the authoritative state and performs no
+        second transition/event.
+        """
+
+        if not key or context is None or isinstance(self.repository, MemoryPlaybackRepository):
+            return None, False
+        from app.modules.knowledge.services import claim_idempotency, request_hash
+
+        body_hash = request_hash(
+            operation,
+            str(context.user.id),
+            [str(body.get("debate_id"))],
+            body,
+        )
+        record, replay = claim_idempotency(
+            db,
+            context,
+            operation,
+            key,
+            body_hash,
+            data_root=(
+                getattr(self.settings, "resolved_data_root", None)
+                if self.settings is not None
+                else None
+            ),
+        )
+        if replay is not None:
+            self._rollback(db)
+            return None, True
+        return record, False
+
+    @staticmethod
+    def _finish_control_idempotency(db: Any, record: Any | None, state: PlaybackStateDTO) -> None:
+        if record is None:
+            return
+        from app.modules.knowledge.services import finish_idempotency
+
+        finish_idempotency(db, record, 200, state.model_dump(mode="json"))
 
     @staticmethod
     def _debate_id(debate: Any) -> str:
@@ -2320,24 +2395,61 @@ class PlaybackService:
         *,
         expected_control_version: int,
         context: AuthContext | None = None,
+        idempotency_key: str | None = None,
     ) -> PlaybackStateDTO:
+        record: Any | None = None
+        replay = False
         paused_event: EventRecord | None = None
         async with self._lock:
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
+            record, replay = self._claim_control_idempotency(
+                db,
+                context=context,
+                operation="pauseDebate",
+                key=idempotency_key,
+                body={
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                },
+            )
+            if replay:
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+                return self._state_dto(state, db, debate)
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
             if state.status != "playing" or state.current_turn_id is None:
                 raise invalid_state("Playback is not currently playing.")
             cursor = self._cursor(state)
-            self._set_nonplaying(state, "paused", cursor)
-            state.control_version += 1
-            state.pending_action = None
-            state.pending_ticket_hash = None
-            state.pending_media_command_id = None
-            state.audio_duration_ms = 0
-            self._clear_media_results(debate_id)
-            self._save(db, debate, state)
+            claim_pause = getattr(self.repository, "claim_pause_playback", None)
+            if callable(claim_pause) and context is not None:
+                # End any read snapshot before the independent writer CAS.
+                self._rollback(db)
+                claimed = bool(
+                    claim_pause(
+                        debate_id=debate_id,
+                        expected_control_version=expected_control_version,
+                        cursor_ms=cursor,
+                        teacher_user_id=str(context.user.id),
+                    )
+                )
+                if not claimed:
+                    raise conflict(
+                        "stale_control_version",
+                        "The playback state changed before Pause was committed.",
+                    )
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+            else:
+                self._set_nonplaying(state, "paused", cursor)
+                state.control_version += 1
+                state.pending_action = None
+                state.pending_ticket_hash = None
+                state.pending_media_command_id = None
+                state.audio_duration_ms = 0
+                self._clear_media_results(debate_id)
+                self._save(db, debate, state)
             turn_id = state.current_turn_id
             payload = {
                 "turn_id": turn_id,
@@ -2346,11 +2458,14 @@ class PlaybackService:
                 "playback_rate": state.playback_rate,
             }
             paused_event = self._stage_event(db, debate_id, "playback.paused", payload)
+            result = self._state_dto(state, db, debate)
+            self._finish_control_idempotency(db, record, result)
             self._commit(db)
-        self.ticket_store.revoke_item(debate_id, turn_id)
+        if turn_id is not None:
+            self.ticket_store.revoke_item(debate_id, turn_id)
         if paused_event is not None:
             await self._publish_event(paused_event)
-        return self._state_dto(state, db, debate)
+        return result
 
     async def resume(
         self,
@@ -2359,10 +2474,28 @@ class PlaybackService:
         *,
         expected_control_version: int,
         context: AuthContext | None = None,
+        idempotency_key: str | None = None,
     ) -> PlaybackStateDTO:
+        record: Any | None = None
+        replay = False
+        resumed_event: EventRecord | None = None
         async with self._lock:
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
+            record, replay = self._claim_control_idempotency(
+                db,
+                context=context,
+                operation="resumeDebate",
+                key=idempotency_key,
+                body={
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                },
+            )
+            if replay:
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+                return self._state_dto(state, db, debate)
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
             if state.status != "paused" or state.current_turn_id is None:
@@ -2370,15 +2503,48 @@ class PlaybackService:
             turn = self._current_turn(db, debate, state)
             if not self._turn_ready(turn):
                 raise invalid_state("The current turn is not ready for playback.")
-            self._set_nonplaying(state, "ready")
-            state.control_version += 1
-            state.pending_action = None
-            state.pending_ticket_hash = None
-            state.pending_media_command_id = None
-            state.audio_duration_ms = 0
-            self._save(db, debate, state)
+            claim_resume = getattr(self.repository, "claim_resume_playback", None)
+            if callable(claim_resume) and context is not None:
+                self._rollback(db)
+                claimed = bool(
+                    claim_resume(
+                        debate_id=debate_id,
+                        expected_control_version=expected_control_version,
+                        teacher_user_id=str(context.user.id),
+                    )
+                )
+                if not claimed:
+                    raise conflict(
+                        "stale_control_version",
+                        "The playback state changed before Continue was committed.",
+                    )
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+            else:
+                self._set_nonplaying(state, "ready")
+                state.control_version += 1
+                state.pending_action = None
+                state.pending_ticket_hash = None
+                state.pending_media_command_id = None
+                state.audio_duration_ms = 0
+                self._save(db, debate, state)
+            resumed_event = self._stage_event(
+                db,
+                debate_id,
+                "playback.resumed",
+                {
+                    "turn_id": state.current_turn_id,
+                    "cursor_ms": state.cursor_ms,
+                    "control_version": state.control_version,
+                    "playback_rate": state.playback_rate,
+                },
+            )
+            result = self._state_dto(state, db, debate)
+            self._finish_control_idempotency(db, record, result)
             self._commit(db)
-            return self._state_dto(state, db, debate)
+        if resumed_event is not None:
+            await self._publish_event(resumed_event)
+        return result
 
     async def skip(
         self,
@@ -2466,6 +2632,186 @@ class PlaybackService:
         if next_turn_to_enqueue is not None:
             await self._enqueue(debate, next_turn_to_enqueue)
         return self._state_dto(state, db, debate)
+
+    async def finish(
+        self,
+        db: Any,
+        debate_id: str,
+        *,
+        expected_control_version: int,
+        expected_current_turn_id: str | None = None,
+        context: AuthContext | None = None,
+        idempotency_key: str | None = None,
+    ) -> PlaybackStateDTO:
+        """Finish a Debate as full or partial under one teacher CAS.
+
+        A full finish requires every planned turn to be final-ready and
+        already public.  A partial finish is intentionally represented by the
+        existing ``stopped`` Debate status so older list/detail contracts stay
+        stable; immutable generated/public turns remain in the database but
+        all downstream interaction/report/history/replay routes can fail
+        closed on that status.
+        """
+
+        record: Any | None = None
+        replay = False
+        terminal_event: EventRecord | None = None
+        terminal_epoch: str | None = None
+        partial = False
+        async with self._lock:
+            debate = self._get_debate(db, debate_id)
+            self._assert_teacher(db, debate, context)
+            record, replay = self._claim_control_idempotency(
+                db,
+                context=context,
+                operation="finishDebate",
+                key=idempotency_key,
+                body={
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                    "expected_current_turn_id": expected_current_turn_id,
+                },
+            )
+            if replay:
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+                return self._state_dto(state, db, debate)
+            state = self._state(db, debate)
+            self._check_control(state, expected_control_version)
+            if (
+                expected_current_turn_id is not None
+                and state.current_turn_id != expected_current_turn_id
+            ):
+                raise conflict(
+                    "stale_control_version",
+                    "The playback current turn is stale.",
+                    {"current_current_turn_id": state.current_turn_id},
+                )
+            if str(self._get(debate, "status", default="")) != "running":
+                raise invalid_state("Only a running debate can be finished.")
+
+            turns = self._turns(db, debate)
+            total = len(turns)
+            complete_count = sum(
+                1
+                for turn in turns
+                if self._get(turn, "generation_status", default="") == "final_ready"
+                and self._get(turn, "publication_status", default="") in {"public", "published"}
+            )
+            is_full = total > 0 and complete_count == total
+            claim_finish = getattr(self.repository, "claim_finish_playback", None)
+            if callable(claim_finish) and context is not None:
+                # Keep the old process-local epoch before the independent
+                # SQL claim clears it.  The callback is revoked after commit
+                # so a stale WebSocket cannot continue issuing commands.
+                terminal_epoch = state.controller_epoch
+                self._rollback(db)
+                claimed = claim_finish(
+                    debate_id=debate_id,
+                    expected_control_version=expected_control_version,
+                    expected_current_turn_id=expected_current_turn_id,
+                    teacher_user_id=str(context.user.id),
+                )
+                if not claimed:
+                    raise conflict(
+                        "stale_control_version",
+                        "The Debate changed before Finish was committed.",
+                    )
+                partial = str(claimed.get("kind")) == "partial"
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+                self._controller_sessions.pop(debate_id, None)
+                # The fresh SQL claim is authoritative; do not let a stale
+                # request-session count override its full/partial decision.
+                is_full = not partial
+            else:
+                partial = not is_full
+                if partial:
+                    debate.status = "stopped"
+                    debate.cancellation_generation = int(
+                        self._get(debate, "cancellation_generation", default=0) or 0
+                    ) + 1
+                    self.repository.mark_jobs_interrupted(db, debate, "debate_finished_partial")
+                    self.repository.save_debate(db, debate)
+                    self._set_nonplaying(state, "stopped")
+                else:
+                    debate.status = "debate_finished"
+                    if hasattr(debate, "finished_at"):
+                        debate.finished_at = datetime.now(UTC)
+                    self.repository.save_debate(db, debate)
+                    self._set_nonplaying(state, "completed")
+                state.control_version += 1
+                state.current_turn_id = None
+                state.mode = "live"
+                state.replay_scope = None
+                state.replay_turn_ids = []
+                state.replay_index = None
+                state.pending_action = None
+                state.pending_ticket_hash = None
+                state.pending_media_command_id = None
+                state.audio_duration_ms = 0
+                terminal_epoch = state.controller_epoch
+                state.controller_epoch = None
+                state.controller_session_hash = None
+                state.controller_connection_id = None
+                self._controller_sessions.pop(debate_id, None)
+                self._clear_media_results(debate_id)
+                self._save(db, debate, state)
+
+            # Reloaded SQL state already has a terminal status and cleared
+            # authority.  Build one durable event from that exact state.
+            terminal_epoch = terminal_epoch or state.controller_epoch
+            if partial:
+                terminal_event = self._stage_event(
+                    db,
+                    debate_id,
+                    "debate.stopped",
+                    {
+                        "final_states": {
+                            "debate": "stopped",
+                            "playback": self._state_dto(state, db, debate).model_dump(mode="json"),
+                            "interaction": "closed",
+                            "insight": "not_started",
+                            "report": "not_started",
+                        },
+                        "downstream_outcome": "stopped",
+                        "safe_error_code": "debate_finished_partial",
+                    },
+                )
+            else:
+                event_turn = next(
+                    (
+                        turn
+                        for turn in reversed(turns)
+                        if self._turn_public(turn)
+                    ),
+                    turns[-1] if turns else None,
+                )
+                if event_turn is not None:
+                    terminal_event = self._stage_event(
+                        db,
+                        debate_id,
+                        "playback.completed",
+                        {
+                            "turn_id": str(event_turn.id),
+                            "cursor_ms": 0,
+                            "control_version": state.control_version,
+                            "playback_rate": state.playback_rate,
+                        },
+                    )
+            result = self._state_dto(state, db, debate)
+            self._finish_control_idempotency(db, record, result)
+            self._commit(db)
+        if partial:
+            await self.task_manager.cancel_debate(debate_id)
+            self.ticket_store.revoke_debate(debate_id)
+        else:
+            self.ticket_store.revoke_debate(debate_id)
+        if terminal_epoch is not None:
+            self._revoke_epoch(terminal_epoch, debate_id, "debate_terminal")
+        if terminal_event is not None:
+            await self._publish_event(terminal_event)
+        return result
 
     async def next(
         self,
@@ -3901,35 +4247,45 @@ class PlaybackService:
             last_sequence = int(last_sequence_reader(db, debate_id))
         else:
             last_sequence = self.event_hub.store.last_sequence(debate_id)
+        wave3 = (
+            self.snapshot_projector(db, debate_id)
+            if self.snapshot_projector is not None
+            else {
+                "interaction_status": "closed",
+                "insight_status": "not_started",
+                "report_status": "not_started",
+                "interaction": {
+                    "status": "closed",
+                    "votes": [],
+                    "barrage_count": 0,
+                    "total_votes": 0,
+                },
+                "report": {
+                    "generation_status": "not_started",
+                    "latest_attempt_status": "not_started",
+                    "insight": {
+                        "status": "not_started",
+                        "included_count": 0,
+                        "filtered_count": 0,
+                        "snapshot_id": None,
+                        "revision": None,
+                    },
+                    "active_revision_id": None,
+                    "current_success_revision_id": None,
+                    "current_success_word_count": None,
+                },
+            }
+        )
         payload = {
             "debate_status": str(getattr(debate, "status", "draft")),
             "playback_status": state.status,
-            "interaction_status": str(self._get(debate, "interaction_status", default="closed")),
-            "insight_status": str(self._get(debate, "insight_status", default="not_started")),
-            "report_status": str(self._get(debate, "report_status", default="not_started")),
+            "interaction_status": wave3["interaction_status"],
+            "insight_status": wave3["insight_status"],
+            "report_status": wave3["report_status"],
             "public_turns": public_turns,
             "playback": self._state_dto(state, db, debate).model_dump(mode="json"),
-            "interaction": {
-                "status": str(self._get(debate, "interaction_status", default="closed")),
-                "votes": [],
-                "barrage_count": 0,
-                "total_votes": 0,
-                "public_url": None,
-            },
-            "report": {
-                "generation_status": str(self._get(debate, "report_status", default="not_started")),
-                "latest_attempt_status": str(
-                    self._get(debate, "report_status", default="not_started")
-                ),
-                "insight": {
-                    "status": str(self._get(debate, "insight_status", default="not_started")),
-                    "included_count": 0,
-                    "filtered_count": 0,
-                    "items": [],
-                },
-                "active_revision_id": None,
-                "current_success_revision": None,
-            },
+            "interaction": wave3["interaction"],
+            "report": wave3["report"],
             "latest_sequence": last_sequence,
         }
         return payload, last_sequence

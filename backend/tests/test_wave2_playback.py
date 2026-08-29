@@ -3021,22 +3021,23 @@ async def test_snapshot_stream_race_delivers_one_committed_event_after_watermark
         },
         "interaction": {
             "status": "closed",
-            "votes": [],
-            "barrage_count": 0,
-            "total_votes": 0,
-            "public_url": None,
+                "votes": [],
+                "barrage_count": 0,
+                "total_votes": 0,
         },
         "report": {
             "generation_status": "not_started",
             "latest_attempt_status": "not_started",
             "insight": {
                 "status": "not_started",
-                "included_count": 0,
-                "filtered_count": 0,
-                "items": [],
-            },
-            "active_revision_id": None,
-            "current_success_revision": None,
+                    "included_count": 0,
+                    "filtered_count": 0,
+                    "snapshot_id": None,
+                    "revision": None,
+                },
+                "active_revision_id": None,
+                "current_success_revision_id": None,
+                "current_success_word_count": None,
         },
     }
 

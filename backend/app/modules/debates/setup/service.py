@@ -63,6 +63,7 @@ from app.modules.debates.setup.rules import (
     canonical_rule_snapshot_json,
 )
 from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
+from app.modules.interactions.service import create_closed_window
 
 
 def utc_now() -> datetime:
@@ -806,6 +807,10 @@ def create_debate_draft(
     )
     db.add(debate)
     db.flush()
+    # Wave 3 interaction state is a required Debate child, never a lazily
+    # created side record.  Keeping it in this writer transaction guarantees
+    # every committed new Debate has exactly one closed classroom window.
+    create_closed_window(db, debate)
     runtime_settings = _settings(db, settings)
     participant_rows = [
         _participant_row(

@@ -1,0 +1,2224 @@
+openapi: 3.1.0
+info:
+  title: Maya Teaching Platform API
+  version: 0.1.0-g0.8-wave3
+  description: >-
+    Demo v0.1 platform contract. Provider names, model names, external voice IDs,
+    API keys, absolute file paths, and prepared turn text are never public fields.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+tags:
+  - name: Auth
+  - name: Organization
+  - name: Knowledge
+  - name: Agents
+  - name: Voices
+  - name: Debates
+  - name: Interaction
+  - name: Reports
+  - name: Translation
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session created and CSRF token returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/switch:
+    post:
+      tags: [Auth]
+      operationId: switchDemoIdentity
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      description: Available only when DEMO_MODE=true; rotates the server session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { $ref: "#/components/schemas/Uuid" }
+      responses:
+        "200":
+          description: New session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /auth/demo-identities:
+    get:
+      tags: [Auth]
+      security: []
+      operationId: listDemoIdentities
+      description: Anonymous safe catalog available only when DEMO_MODE and DEMO_QUICK_LOGIN are enabled; never returns passwords.
+      responses:
+        "200":
+          description: Safe identity options.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [user_id, display_name, role]
+                  properties:
+                    user_id: { $ref: "#/components/schemas/Uuid" }
+                    display_name: { type: string }
+                    role: { type: string, enum: [teacher, student] }
+        "404": { $ref: "#/components/responses/Error" }
+  /auth/quick-login:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: quickLogin
+      description: Passwordless Demo identity selection; rotates any existing Session and CSRF token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemoQuickLoginRequest" }
+      responses:
+        "200":
+          description: Passwordless Demo session created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: Current user, memberships, refreshed CSRF token and session expiry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204": { description: Session revoked. }
+
+  /courses:
+    get:
+      tags: [Organization]
+      operationId: listCourses
+      responses:
+        "200":
+          description: Courses visible to current user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Course" }
+  /courses/{course_id}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Organization]
+      operationId: getCourse
+      responses:
+        "200":
+          description: Course detail and read-only members.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+  /courses/{course_id}/groups:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Organization]
+      operationId: listCourseGroups
+      responses:
+        "200":
+          description: Seeded groups visible in this course.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Group" }
+        "404": { $ref: "#/components/responses/Error" }
+  /groups/{group_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [Organization]
+      operationId: getGroup
+      responses:
+        "200":
+          description: Group and read-only members.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /groups/{group_id}/knowledge-documents:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [Knowledge]
+      operationId: listKnowledgeDocuments
+      responses:
+        "200":
+          description: Current group Markdown library.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/KnowledgeDocument" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Knowledge]
+      operationId: uploadKnowledgeDocument
+      description: Creates an immutable Markdown document; no content deduplication.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                target_agent_version_id: { $ref: "#/components/schemas/Uuid" }
+                expected_revision: { type: integer, minimum: 0 }
+      responses:
+        "201":
+          description: Document stored and indexed; a target draft is updated only when explicitly supplied.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocumentMutation" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /knowledge-documents/{document_id}:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      tags: [Knowledge]
+      operationId: getKnowledgeDocument
+      responses:
+        "200":
+          description: Group-scoped document metadata.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocument" }
+        "404": { $ref: "#/components/responses/Error" }
+  /knowledge-documents/{document_id}/replace:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Knowledge]
+      operationId: replaceKnowledgeDocument
+      description: Creates an immutable copy-on-write replacement and atomically updates every current draft reference.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, expected_content_hash, expected_index_revision]
+              properties:
+                file: { type: string, format: binary }
+                expected_content_hash: { type: string }
+                expected_index_revision: { type: integer, minimum: 0 }
+      responses:
+        "201":
+          description: Immutable replacement created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocument" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /knowledge-documents/{document_id}/download:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      tags: [Knowledge]
+      operationId: downloadKnowledgeDocument
+      responses:
+        "200":
+          description: Original Markdown bytes.
+          content:
+            text/markdown:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
+  /knowledge-documents/{document_id}/reindex:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Knowledge]
+      operationId: reindexKnowledgeDocument
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: Indexing job accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobStatus" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /knowledge-documents/{document_id}/hide:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Knowledge]
+      operationId: hideKnowledgeDocument
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      description: Hides the group workspace document; published snapshots remain immutable.
+      responses:
+        "200":
+          description: Workspace state changed to hidden.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocument" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /groups/{group_id}/agents:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [Agents]
+      operationId: listGroupAgents
+      parameters:
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Group agents and current draft/published summary.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AgentSummary" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Agents]
+      operationId: createAgent
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1 }
+                description: { type: string, default: "" }
+      responses:
+        "201":
+          description: Agent and V1.0 draft created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+  /agents/{agent_id}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [Agents]
+      operationId: getAgent
+      responses:
+        "200":
+          description: Student group agent or teacher published-only projection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Agents]
+      operationId: updateAgentMetadata
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAgentMetadataRequest" }
+      responses:
+        "200":
+          description: Mutable Agent metadata updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Agents]
+      operationId: deleteAgent
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204": { description: Eligible Agent and its draft state deleted. }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /agents/{agent_id}/versions:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [Agents]
+      operationId: listAgentVersions
+      responses:
+        "200":
+          description: Student sees own draft/history; teacher sees published history only.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Agents]
+      operationId: createNextAgentVersion
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "201":
+          description: Current published version cloned into the one allowed draft.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+    get:
+      tags: [Agents]
+      operationId: getAgentVersion
+      responses:
+        "200":
+          description: Version projection according to role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Agents]
+      operationId: updateAgentDraft
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAgentDraftRequest" }
+      responses:
+        "200":
+          description: Draft saved with incremented revision.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}/agent-md/download:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+    get:
+      tags: [Agents]
+      operationId: downloadAgentMd
+      description: Downloads immutable AGENT.md from a published or superseded visible version.
+      responses:
+        "200":
+          description: Published immutable AGENT.md.
+          content:
+            text/markdown:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}/knowledge-documents:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+    put:
+      tags: [Knowledge]
+      operationId: setAgentVersionDocuments
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision, document_ids]
+              properties:
+                expected_revision: { type: integer, minimum: 0 }
+                document_ids:
+                  type: array
+                  items: { $ref: "#/components/schemas/Uuid" }
+      responses:
+        "200":
+          description: Enabled set replaced and draft revision incremented.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}/rag-preview:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+    get:
+      tags: [Knowledge]
+      operationId: getRagPreview
+      responses:
+        "200":
+          description: Draft-only combined Markdown/index summary; no formal snapshot created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RagPreview" }
+        "404": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}/agent-md/upload:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+    post:
+      tags: [Agents]
+      operationId: uploadAgentMd
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, expected_revision]
+              properties:
+                file: { type: string, format: binary }
+                expected_revision: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: AGENT.md replaced on the draft and revision incremented.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}/chat:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+    post:
+      tags: [Agents]
+      operationId: testAgentDraft
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Non-persistent test answer with retrieval receipt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestChatResponse" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /agent-versions/{version_id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/VersionId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [Agents]
+      operationId: publishAgentVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision]
+              properties:
+                expected_revision: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Immutable version and KnowledgeSnapshot published atomically.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentVersion" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /avatar-templates:
+    get:
+      tags: [Agents]
+      operationId: listAvatarTemplates
+      responses:
+        "200":
+          description: Platform templates and supported parameter capabilities.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AvatarTemplate" }
+
+  /groups/{group_id}/voice-profiles:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [Voices]
+      operationId: listVoiceProfiles
+      responses:
+        "200":
+          description: Platform voice profiles; no external IDs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VoiceProfile" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Voices]
+      operationId: enrollVoice
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, consent_accepted]
+              properties:
+                file: { type: string, format: binary }
+                consent_accepted: { type: boolean, const: true }
+                consent_copy_version: { type: string }
+      responses:
+        "202":
+          description: Enrollment job accepted; temporary samples will be deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoiceProfile" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /voice-profiles/{voice_profile_id}:
+    parameters:
+      - $ref: "#/components/parameters/VoiceProfileId"
+    get:
+      tags: [Voices]
+      operationId: getVoiceProfile
+      responses:
+        "200":
+          description: Platform voice status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoiceProfile" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Voices]
+      operationId: deleteVoiceProfile
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: External resource deleted and platform record marked deleted; references use fallback.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoiceProfile" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /voice-profiles/{voice_profile_id}/preview:
+    parameters:
+      - $ref: "#/components/parameters/VoiceProfileId"
+    post:
+      tags: [Voices]
+      operationId: createVoicePreview
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Short-lived platform preview URL.
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/VoicePreviewPlaybackResource" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /voice-profiles/{voice_profile_id}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/VoiceProfileId"
+    post:
+      tags: [Voices]
+      operationId: confirmVoiceProfile
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Preview accepted; status ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoiceProfile" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /courses/{course_id}/published-agents:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Agents]
+      operationId: listPublishedAgentsForTeacher
+      responses:
+        "200":
+          description: Current non-archived candidates plus teacher history links.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublishedAgentSummary" }
+        "404": { $ref: "#/components/responses/Error" }
+  /knowledge-snapshots/{snapshot_id}:
+    get:
+      tags: [Knowledge]
+      operationId: getKnowledgeSnapshot
+      parameters:
+        - $ref: "#/components/parameters/SnapshotId"
+      responses:
+        "200":
+          description: Published immutable snapshot metadata; teachers only through published scope.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeSnapshot" }
+        "404": { $ref: "#/components/responses/Error" }
+  /knowledge-snapshots/{snapshot_id}/download:
+    get:
+      tags: [Knowledge]
+      operationId: downloadSnapshotRag
+      parameters:
+        - $ref: "#/components/parameters/SnapshotId"
+      responses:
+        "200":
+          description: Frozen combined RAG Markdown.
+          content:
+            text/markdown:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
+  /knowledge-snapshots/{snapshot_id}/documents/{snapshot_document_id}/download:
+    get:
+      tags: [Knowledge]
+      operationId: downloadSnapshotDocument
+      parameters:
+        - $ref: "#/components/parameters/SnapshotId"
+        - $ref: "#/components/parameters/SnapshotDocumentId"
+      responses:
+        "200":
+          description: Frozen source Markdown from the published snapshot.
+          content:
+            text/markdown:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /courses/{course_id}/debates:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Debates]
+      operationId: listDebates
+      responses:
+        "200":
+          description: Draft, active, and historical debates for teacher.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DebateSummary" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Debates]
+      operationId: createDebate
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DebateDraftRequest" }
+      responses:
+        "201":
+          description: Draft created and selected versions/snapshots fixed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateDetail" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}:
+    parameters:
+      - $ref: "#/components/parameters/DebateId"
+    get:
+      tags: [Debates]
+      operationId: getDebate
+      responses:
+        "200":
+          description: Authoritative debate snapshot for teacher.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateDetail" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Debates]
+      operationId: updateDebateDraft
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DebateDraftUpdateRequest" }
+      responses:
+        "200":
+          description: Draft updated and selected current versions/snapshots re-fixed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateDetail" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/start:
+    parameters:
+      - $ref: "#/components/parameters/DebateId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [Debates]
+      operationId: startDebate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [
+                  expected_revision,
+                  expected_current_audio_debate_id,
+                  confirm_previous_audio_cleanup,
+                ]
+              properties:
+                expected_revision: { type: integer, minimum: 0 }
+                expected_current_audio_debate_id:
+                  oneOf:
+                    [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+                confirm_previous_audio_cleanup: { type: boolean }
+      responses:
+        "200":
+          description: Debate started; prior retained audio swap committed if confirmed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateDetail" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/next:
+    post:
+      tags: [Debates]
+      operationId: advanceDebatePlayback
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdvancePlaybackRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/PlaybackState" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/replay:
+    post:
+      tags: [Debates]
+      operationId: replayDebate
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody: { $ref: "#/components/requestBodies/ControlCommand" }
+      responses:
+        "200": { $ref: "#/components/responses/PlaybackState" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/events:
+    get:
+      tags: [Debates]
+      operationId: connectDebateEvents
+      description: WebSocket upgrade. First event is an authoritative snapshot.
+      x-websocket: true
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - name: since_sequence
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "101": { description: Switching Protocols. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/transcript:
+    get:
+      tags: [Debates]
+      operationId: getDebateTranscript
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+      responses:
+        "200":
+          description: Published English turns, sources, optional translations, and retained playback resources.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transcript" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /debates/{debate_id}/interaction:
+    get:
+      tags: [Interaction]
+      operationId: getTeacherInteraction
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+      responses:
+        "200":
+          description: Window state, raw named barrages, and anonymous vote aggregates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherInteraction" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/interaction/open:
+    post:
+      tags: [Interaction]
+      operationId: openInteraction
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Interaction opened and public platform URL returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherInteraction" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/interaction/close:
+    post:
+      tags: [Interaction]
+      operationId: closeInteraction
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: Input finalized; insight job then report job will run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherInteraction" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /classroom-interactions/{access_token}:
+    get:
+      tags: [Interaction]
+      security: []
+      operationId: getClassroomInteractionForm
+      parameters:
+        - $ref: "#/components/parameters/AccessToken"
+      responses:
+        "200":
+          description: Minimal public topic and participant options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicInteractionForm" }
+        "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+  /classroom-interactions/{access_token}/votes:
+    post:
+      tags: [Interaction]
+      security: []
+      operationId: submitVote
+      parameters:
+        - $ref: "#/components/parameters/AccessToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [participant_id, client_submission_id]
+              properties:
+                participant_id: { $ref: "#/components/schemas/Uuid" }
+                client_submission_id: { $ref: "#/components/schemas/Uuid" }
+      responses:
+        "201":
+          description: Vote accepted; response contains no nickname.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [vote_submitted]
+                properties:
+                  vote_submitted: { type: boolean, const: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /classroom-interactions/{access_token}/barrages:
+    post:
+      tags: [Interaction]
+      security: []
+      operationId: submitBarrage
+      parameters:
+        - $ref: "#/components/parameters/AccessToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nickname, raw_text, client_submission_id]
+              properties:
+                nickname: { type: string, minLength: 1 }
+                raw_text: { type: string, minLength: 1 }
+                client_submission_id: { $ref: "#/components/schemas/Uuid" }
+      responses:
+        "201":
+          description: Raw named barrage accepted; response contains no vote.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [barrage_submitted]
+                properties:
+                  barrage_submitted: { type: boolean, const: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /debates/{debate_id}/report:
+    get:
+      tags: [Reports]
+      operationId: getCurrentReport
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+      responses:
+        "200":
+          description: Current report and insight status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Report" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/report/generate:
+    post:
+      tags: [Reports]
+      operationId: regenerateReport
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: Insight retried if required, then a new report revision is created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Report" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/report/revisions:
+    get:
+      tags: [Reports]
+      operationId: listReportRevisions
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+      responses:
+        "200":
+          description: Teacher-only success and failed revision metadata.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ReportRevisionSummary" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/report/revisions/{revision_id}:
+    get:
+      tags: [Reports]
+      operationId: getReportRevision
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/RevisionId"
+      responses:
+        "200":
+          description: Successful report content or safe failed metadata for teacher.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRevision" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/report/download:
+    get:
+      tags: [Reports]
+      operationId: downloadCurrentReport
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - name: language
+          in: query
+          schema: { type: string, enum: [en, zh-Hans], default: en }
+      responses:
+        "200":
+          description: Markdown file; Chinese exists only after on-demand translation.
+          headers:
+            Content-Disposition:
+              description: Safe attachment filename with ASCII fallback and UTF-8 filename.
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            text/markdown; charset=utf-8:
+              schema: { type: string }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/translations:
+    get:
+      tags: [Translation]
+      operationId: listTranslationBatches
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+      responses:
+        "200":
+          description: Existing on-demand translation batches.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TranslationBatch" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Translation]
+      operationId: translateCurrentPublishedContent
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "202":
+          description: Batch translates only current published English items not already valid.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranslationBatch" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /debates/{debate_id}/audio/{turn_id}:
+    get:
+      tags: [Debates]
+      operationId: streamRetainedTurnAudio
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/TurnId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/IfRange"
+        - $ref: "#/components/parameters/MediaTicket"
+      responses:
+        "200":
+          description: Teacher-authorized complete retained audio.
+          headers:
+            Accept-Ranges: { $ref: "#/components/headers/AcceptRangesBytes" }
+            ETag: { $ref: "#/components/headers/AudioEtag" }
+            Content-Length: { $ref: "#/components/headers/ContentLength" }
+          content:
+            audio/wav:
+              schema: { type: string, format: binary }
+        "206":
+          description: Teacher-authorized single byte range of retained audio.
+          headers:
+            Accept-Ranges: { $ref: "#/components/headers/AcceptRangesBytes" }
+            ETag: { $ref: "#/components/headers/AudioEtag" }
+            Content-Length: { $ref: "#/components/headers/ContentLength" }
+            Content-Range: { $ref: "#/components/headers/ContentRange" }
+          content:
+            audio/wav:
+              schema: { type: string, format: binary }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+        "416":
+          description: Requested byte range cannot be satisfied for this retained audio.
+          headers:
+            Content-Range:
+              { $ref: "#/components/headers/UnsatisfiedContentRange" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: maya_session
+  parameters:
+    CourseId:
+      {
+        name: course_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    GroupId:
+      {
+        name: group_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    AgentId:
+      {
+        name: agent_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    VersionId:
+      {
+        name: version_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    SnapshotId:
+      {
+        name: snapshot_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    SnapshotDocumentId:
+      {
+        name: snapshot_document_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    DocumentId:
+      {
+        name: document_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    VoiceProfileId:
+      {
+        name: voice_profile_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    DebateId:
+      {
+        name: debate_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    TurnId:
+      {
+        name: turn_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    RevisionId:
+      {
+        name: revision_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/Uuid" },
+      }
+    AccessToken:
+      {
+        name: access_token,
+        in: path,
+        required: true,
+        schema:
+          {
+            type: string,
+            minLength: 111,
+            maxLength: 111,
+            pattern: '^v1\.[A-Za-z0-9_-]{64}\.[A-Za-z0-9_-]{43}$',
+          },
+      }
+    IdempotencyKey:
+      {
+        name: Idempotency-Key,
+        in: header,
+        required: true,
+        schema: { type: string, minLength: 16 },
+      }
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Raw per-session CSRF token returned by AuthSession; required on authenticated mutations.
+      schema: { type: string, minLength: 32 }
+    Range:
+      name: Range
+      in: header
+      required: false
+      description: A single RFC 9110 byte range used by the classroom audio element.
+      schema: { type: string, pattern: "^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$" }
+    IfRange:
+      name: If-Range
+      in: header
+      required: false
+      description: Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio.
+      schema:
+        oneOf:
+          - { type: string, pattern: '^"[0-9a-f]{64}"$' }
+          - {
+              type: string,
+              pattern: "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$",
+            }
+    MediaTicket:
+      name: media_ticket
+      in: query
+      required: false
+      description: Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token.
+      schema:
+        {
+          type: string,
+          minLength: 43,
+          maxLength: 43,
+          pattern: "^[A-Za-z0-9_-]{43}$",
+        }
+  headers:
+    AcceptRangesBytes:
+      description: The platform supports a single byte range.
+      schema: { type: string, const: bytes }
+    AudioEtag:
+      description: Stable strong validator derived from immutable retained audio bytes.
+      schema: { type: string, pattern: '^"[0-9a-f]{64}"$' }
+    ContentLength:
+      description: Number of bytes in this response body.
+      schema: { type: integer, minimum: 0 }
+    ContentRange:
+      description: Inclusive byte range and complete representation size.
+      schema: { type: string, pattern: "^bytes [0-9]+-[0-9]+/[0-9]+$" }
+    UnsatisfiedContentRange:
+      description: Complete representation size for an unsatisfied range.
+      schema: { type: string, pattern: '^bytes \*/[0-9]+$' }
+  requestBodies:
+    ControlCommand:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [expected_control_version]
+            properties:
+              expected_control_version: { type: integer, minimum: 0 }
+  responses:
+    Error:
+      description: Stable platform error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PlaybackState:
+      description: Authoritative playback state.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/PlaybackState" }
+  schemas:
+    Uuid: { type: string, format: uuid }
+    IsoTime: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+        request_id: { $ref: "#/components/schemas/Uuid" }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+    DemoQuickLoginRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { $ref: "#/components/schemas/Uuid" }
+    AuthSession:
+      type: object
+      required: [user, csrf_token, expires_at]
+      properties:
+        user: { $ref: "#/components/schemas/CurrentUser" }
+        csrf_token: { type: string, minLength: 32 }
+        expires_at: { $ref: "#/components/schemas/IsoTime" }
+    CurrentUser:
+      type: object
+      required: [id, username, display_name, courses, groups]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        username: { type: string }
+        display_name: { type: string }
+        courses:
+          type: array
+          items: { $ref: "#/components/schemas/CourseMembership" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/GroupMembership" }
+    CourseMembership:
+      type: object
+      required: [course_id, role]
+      properties:
+        course_id: { $ref: "#/components/schemas/Uuid" }
+        role: { type: string, enum: [teacher, student] }
+    GroupMembership:
+      type: object
+      required: [group_id, role]
+      properties:
+        group_id: { $ref: "#/components/schemas/Uuid" }
+        role: { type: string, enum: [leader, admin, member] }
+    Course:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        code: { type: string }
+        name: { type: string }
+        current_audio_debate_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+    CourseDetail:
+      allOf:
+        - $ref: "#/components/schemas/Course"
+        - type: object
+          properties:
+            members:
+              type: array
+              items: { $ref: "#/components/schemas/Member" }
+    Group:
+      type: object
+      required: [id, course_id, name]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        course_id: { $ref: "#/components/schemas/Uuid" }
+        name: { type: string }
+    GroupDetail:
+      allOf:
+        - $ref: "#/components/schemas/Group"
+        - type: object
+          properties:
+            members:
+              type: array
+              items: { $ref: "#/components/schemas/Member" }
+    Member:
+      type: object
+      required: [user_id, display_name, role]
+      properties:
+        user_id: { $ref: "#/components/schemas/Uuid" }
+        display_name: { type: string }
+        role: { type: string }
+    KnowledgeDocument:
+      type: object
+      required:
+        [
+          id,
+          group_id,
+          source_filename,
+          char_count,
+          content_hash,
+          index_revision,
+          index_status,
+          workspace_state,
+          created_at,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        group_id: { $ref: "#/components/schemas/Uuid" }
+        source_filename: { type: string }
+        char_count: { type: integer, minimum: 1 }
+        content_hash:
+          {
+            type: string,
+            minLength: 64,
+            maxLength: 64,
+            pattern: "^[0-9a-f]{64}$",
+          }
+        index_revision: { type: integer, minimum: 0 }
+        index_status: { type: string, enum: [pending, indexing, ready, failed] }
+        workspace_state: { type: string, enum: [active, hidden] }
+        safe_error_code: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    SnapshotDocument:
+      type: object
+      required: [id, source_filename, char_count, order_index]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        source_filename: { type: string }
+        char_count: { type: integer, minimum: 1 }
+        order_index: { type: integer, minimum: 0 }
+    KnowledgeSnapshot:
+      type: object
+      required:
+        [
+          id,
+          agent_version_id,
+          content_hash,
+          total_char_count,
+          documents,
+          created_at,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        agent_version_id: { $ref: "#/components/schemas/Uuid" }
+        content_hash: { type: string }
+        total_char_count: { type: integer, minimum: 1, maximum: 100000 }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/SnapshotDocument" }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    KnowledgeDocumentMutation:
+      type: object
+      required: [document]
+      properties:
+        document: { $ref: "#/components/schemas/KnowledgeDocument" }
+        agent_version:
+          oneOf:
+            - { $ref: "#/components/schemas/AgentVersion" }
+            - { type: "null" }
+    AgentSummary:
+      type: object
+      required: [id, group_id, name, metadata_revision, status]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        group_id: { $ref: "#/components/schemas/Uuid" }
+        name: { type: string }
+        description: { type: string }
+        metadata_revision: { type: integer, minimum: 0 }
+        status: { type: string, enum: [active, archived] }
+        current_published_version_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        current_draft_version_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+    AgentDetail:
+      allOf:
+        - $ref: "#/components/schemas/AgentSummary"
+        - type: object
+          properties:
+            versions:
+              type: array
+              items: { $ref: "#/components/schemas/AgentVersion" }
+    AgentVersion:
+      type: object
+      required:
+        [
+          id,
+          agent_id,
+          version_label,
+          state,
+          revision,
+          avatar_config,
+          voice_fallback_active,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        agent_id: { $ref: "#/components/schemas/Uuid" }
+        version_label: { type: string, pattern: '^V[0-9]+\.[0-9]+$' }
+        state: { type: string, enum: [draft, published, superseded] }
+        revision: { type: integer, minimum: 0 }
+        agent_md: { type: string, maxLength: 12000 }
+        avatar_config: { $ref: "#/components/schemas/AvatarConfig" }
+        voice_profile_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        effective_voice_profile_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        voice_fallback_active: { type: boolean }
+        knowledge_snapshot_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        enabled_documents:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocument" }
+        publish_blockers:
+          type: array
+          items: { type: string }
+    UpdateAgentDraftRequest:
+      type: object
+      required: [expected_revision]
+      properties:
+        expected_revision: { type: integer, minimum: 0 }
+        agent_md: { type: string, maxLength: 12000 }
+        avatar_config: { $ref: "#/components/schemas/AvatarConfig" }
+        voice_profile_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+    UpdateAgentMetadataRequest:
+      type: object
+      required: [expected_metadata_revision]
+      properties:
+        expected_metadata_revision: { type: integer, minimum: 0 }
+        description: { type: [string, "null"], default: "" }
+    AvatarConfig:
+      type: object
+      required:
+        [
+          template_id,
+          material_theme,
+          default_expression,
+          expression_strength,
+          motion_style,
+        ]
+      properties:
+        template_id: { type: string }
+        material_theme: { type: string }
+        eye_color: { type: [string, "null"] }
+        default_expression:
+          {
+            type: string,
+            enum: [neutral, attentive, happy, serious_angry, sad],
+          }
+        expression_strength: { type: string, enum: [low, medium, high] }
+        motion_style: { type: string, enum: [calm, active] }
+    AvatarTemplate:
+      type: object
+      required: [id, name, available, supported_parameters]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        available: { type: boolean }
+        supported_parameters:
+          type: array
+          items: { type: string }
+    RagPreview:
+      type: object
+      required:
+        [version_id, total_char_count, limit, document_count, index_status]
+      properties:
+        version_id: { $ref: "#/components/schemas/Uuid" }
+        total_char_count: { type: integer }
+        limit: { type: integer, const: 100000 }
+        document_count: { type: integer }
+        index_status: { type: string, enum: [pending, ready, failed] }
+        combined_markdown: { type: string }
+    RetrievalSource:
+      type: object
+      required: [source_filename]
+      properties:
+        source_filename: { type: string }
+        chunk_id: { $ref: "#/components/schemas/Uuid" }
+    TestChatResponse:
+      type: object
+      required: [answer, retrieval_status, grounding_mode, sources]
+      properties:
+        answer: { type: string }
+        retrieval_status: { type: string, enum: [matched, no_match] }
+        grounding_mode:
+          { type: string, enum: [rag_grounded, mixed, general_reasoning] }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/RetrievalSource" }
+    VoiceProfile:
+      type: object
+      required: [id, scope, status, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        scope: { type: string, enum: [system, group] }
+        group_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                validating,
+                enrolling,
+                preview_ready,
+                ready,
+                deleting,
+                outcome_unknown,
+                failed,
+                deleted,
+              ],
+          }
+        source_filename: { type: string }
+        safe_error_code: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    VoicePreviewPlaybackResource:
+      type: object
+      required: [playback_url, expires_at]
+      properties:
+        playback_url:
+          type: string
+          format: uri-reference
+        expires_at: { $ref: "#/components/schemas/IsoTime" }
+    DebatePlaybackResource:
+      type: object
+      required: [playback_url, expires_at]
+      properties:
+        playback_url:
+          type: string
+          pattern: "^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        expires_at: { $ref: "#/components/schemas/IsoTime" }
+    PublishedAgentSummary:
+      type: object
+      required: [agent, current_version]
+      properties:
+        agent: { $ref: "#/components/schemas/AgentSummary" }
+        current_version: { $ref: "#/components/schemas/AgentVersion" }
+    DebateParticipantInput:
+      type: object
+      required: [agent_id, stance_mode]
+      properties:
+        agent_id: { $ref: "#/components/schemas/Uuid" }
+        stance_mode: { type: string, enum: [assigned, open] }
+        assigned_stance:
+          { type: [string, "null"], enum: [support, oppose, neutral, null] }
+        teacher_note: { type: string, default: "" }
+    DebateDraftRequest:
+      type: object
+      required: [topic, participants, round_count]
+      properties:
+        topic:
+          type: string
+          minLength: 1
+          description: >-
+            Non-empty English debate topic. The value must contain at least one
+            Latin-script letter and may include Unicode Latin diacritics,
+            numbers, punctuation, and ordinary Unicode space separators.
+            Control characters, non-Latin letters, symbols, unsafe marks, and
+            non-space separators are rejected by the domain validator; there is
+            no product-level maximum length in Wave 2.
+        participants:
+          type: array
+          minItems: 2
+          maxItems: 5
+          items: { $ref: "#/components/schemas/DebateParticipantInput" }
+        round_count: { type: integer, const: 2 }
+        total_duration_seconds: { type: "null" }
+        turn_duration_seconds: { type: "null" }
+    DebateDraftUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/DebateDraftRequest"
+        - type: object
+          required: [expected_revision]
+          properties:
+            expected_revision: { type: integer, minimum: 0 }
+    AdvancePlaybackRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_control_version, expected_current_turn_id]
+      properties:
+        expected_control_version: { type: integer, minimum: 0 }
+        expected_current_turn_id: { $ref: "#/components/schemas/Uuid" }
+    DebateParticipant:
+      type: object
+      required:
+        [
+          id,
+          slot,
+          order_index,
+          agent_id,
+          agent_name,
+          agent_version_id,
+          version_label,
+          knowledge_snapshot_id,
+          avatar_config,
+          effective_voice_profile_id,
+          voice_fallback_active,
+          stance_mode,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        slot: { type: string, enum: [A, B, C, D, E] }
+        order_index: { type: integer, minimum: 0, maximum: 4 }
+        agent_id: { $ref: "#/components/schemas/Uuid" }
+        agent_name: { type: string }
+        agent_version_id: { $ref: "#/components/schemas/Uuid" }
+        version_label: { type: string, pattern: '^V[0-9]+\.[0-9]+$' }
+        knowledge_snapshot_id: { $ref: "#/components/schemas/Uuid" }
+        avatar_config: { $ref: "#/components/schemas/AvatarConfig" }
+        effective_voice_profile_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        voice_fallback_active: { type: boolean }
+        stance_mode: { type: string, enum: [assigned, open] }
+        initial_stance:
+          { type: [string, "null"], enum: [support, oppose, neutral, null] }
+        current_stance:
+          { type: [string, "null"], enum: [support, oppose, neutral, null] }
+        current_position_summary: { type: string }
+    DebateSummary:
+      type: object
+      required: [id, course_id, topic, status, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        course_id: { $ref: "#/components/schemas/Uuid" }
+        topic: { type: string }
+        status:
+          {
+            type: string,
+            enum: [draft, running, debate_finished, completed, failed, stopped],
+          }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    DebateDetail:
+      allOf:
+        - $ref: "#/components/schemas/DebateSummary"
+        - type: object
+          required:
+            [
+              revision,
+              last_sequence,
+              rule_set_id,
+              participants,
+              public_turns,
+              playback,
+              interaction_status,
+              insight_status,
+              report_status,
+            ]
+          properties:
+            revision: { type: integer, minimum: 0 }
+            last_sequence: { type: integer, minimum: 0 }
+            rule_set_id:
+              { type: string, const: ordered_multi_agent_rounds_demo_v1 }
+            participants:
+              type: array
+              items: { $ref: "#/components/schemas/DebateParticipant" }
+            public_turns:
+              type: array
+              items: { $ref: "#/components/schemas/DebateTurn" }
+            playback: { $ref: "#/components/schemas/PlaybackState" }
+            interaction_status:
+              { type: string, enum: [closed, open, finalized] }
+            insight_status:
+              { type: string, enum: [not_started, generating, ready, failed] }
+            report_status:
+              { type: string, enum: [not_started, generating, ready, failed] }
+    PlaybackState:
+      type: object
+      required:
+        [
+          status,
+          mode,
+          cursor_ms,
+          playback_rate,
+          control_version,
+          next_turn_ready,
+        ]
+      properties:
+        status:
+          {
+            type: string,
+            enum:
+              [
+                preparing,
+                ready,
+                playing,
+                paused,
+                waiting_next,
+                completed,
+                stopped,
+              ],
+          }
+        mode: { type: string, enum: [live, replay] }
+        current_turn_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        cursor_ms: { type: integer, minimum: 0 }
+        playback_rate: { type: number, minimum: 0.95, maximum: 1.25 }
+        control_version: { type: integer, minimum: 0 }
+        next_turn_ready:
+          type: boolean
+          description: Derived readiness of the deterministic adjacent live successor; always false outside live waiting_next.
+    DebateTurn:
+      type: object
+      required:
+        [
+          id,
+          participant_id,
+          round_no,
+          turn_index,
+          speech,
+          retrieval_status,
+          grounding_mode,
+          sources,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        participant_id: { $ref: "#/components/schemas/Uuid" }
+        round_no: { type: integer, minimum: 1, maximum: 2 }
+        turn_index: { type: integer, minimum: 0 }
+        speech: { type: string }
+        retrieval_status: { type: string, enum: [matched, no_match] }
+        grounding_mode:
+          { type: string, enum: [rag_grounded, mixed, general_reasoning] }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/RetrievalSource" }
+        translated_text: { type: [string, "null"] }
+        playback_resource:
+          {
+            oneOf:
+              [
+                { $ref: "#/components/schemas/DebatePlaybackResource" },
+                { type: "null" },
+              ],
+          }
+    Transcript:
+      type: object
+      required: [debate_id, turns, audio_retained]
+      properties:
+        debate_id: { $ref: "#/components/schemas/Uuid" }
+        turns:
+          type: array
+          items: { $ref: "#/components/schemas/DebateTurn" }
+        audio_retained: { type: boolean }
+    VoteAggregate:
+      type: object
+      additionalProperties: false
+      required: [participant_id, count, percentage]
+      properties:
+        participant_id: { $ref: "#/components/schemas/Uuid" }
+        count: { type: integer, minimum: 0 }
+        percentage: { type: number, minimum: 0, maximum: 100 }
+    BarrageMessage:
+      type: object
+      additionalProperties: false
+      required: [id, nickname, raw_text, sequence, submitted_at]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        nickname: { type: string }
+        raw_text: { type: string }
+        sequence: { type: integer, minimum: 1 }
+        submitted_at: { $ref: "#/components/schemas/IsoTime" }
+    TeacherInteraction:
+      oneOf:
+        - $ref: "#/components/schemas/TeacherInteractionClosed"
+        - $ref: "#/components/schemas/TeacherInteractionOpen"
+        - $ref: "#/components/schemas/TeacherInteractionFinalized"
+    TeacherInteractionClosed:
+      type: object
+      additionalProperties: false
+      required: [status, public_url, votes, barrages]
+      properties:
+        status: { type: string, const: closed }
+        public_url: { type: "null" }
+        votes:
+          { type: array, items: { $ref: "#/components/schemas/VoteAggregate" } }
+        barrages:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/BarrageMessage" },
+          }
+    TeacherInteractionOpen:
+      type: object
+      additionalProperties: false
+      required: [status, public_url, votes, barrages]
+      properties:
+        status: { type: string, const: open }
+        public_url: { type: string, format: uri }
+        votes:
+          { type: array, items: { $ref: "#/components/schemas/VoteAggregate" } }
+        barrages:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/BarrageMessage" },
+          }
+    TeacherInteractionFinalized:
+      type: object
+      additionalProperties: false
+      required: [status, public_url, votes, barrages]
+      properties:
+        status: { type: string, const: finalized }
+        public_url: { type: "null" }
+        votes:
+          { type: array, items: { $ref: "#/components/schemas/VoteAggregate" } }
+        barrages:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/BarrageMessage" },
+          }
+    PublicInteractionForm:
+      type: object
+      additionalProperties: false
+      required: [topic, participants]
+      properties:
+        topic: { type: string }
+        participants:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [participant_id, slot, name]
+            properties:
+              participant_id: { $ref: "#/components/schemas/Uuid" }
+              slot: { type: string, enum: [A, B, C, D, E] }
+              name: { type: string }
+    BarrageInsightItem:
+      type: object
+      additionalProperties: false
+      required: [category, summary, count]
+      properties:
+        category: { type: string, enum: [support, challenge, question] }
+        summary: { type: string }
+        count: { type: integer, minimum: 1 }
+    BarrageInsight:
+      type: object
+      additionalProperties: false
+      required: [status, included_count, filtered_count, items]
+      properties:
+        status: { type: string, enum: [not_started, generating, ready, failed] }
+        included_count: { type: integer, minimum: 0 }
+        filtered_count: { type: integer, minimum: 0 }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BarrageInsightItem" }
+    ReportRevisionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        [id, revision_no, status, word_count, safe_error_code, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        revision_no: { type: integer, minimum: 1 }
+        status: { type: string, enum: [generating, ready, failed] }
+        word_count: { type: [integer, "null"], minimum: 600, maximum: 900 }
+        safe_error_code: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    ReportRevision:
+      oneOf:
+        - $ref: "#/components/schemas/GeneratingReportRevision"
+        - $ref: "#/components/schemas/ReadyReportRevision"
+        - $ref: "#/components/schemas/FailedReportRevision"
+    GeneratingReportRevision:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          revision_no,
+          status,
+          english_markdown,
+          word_count,
+          translated_markdown,
+          safe_error_code,
+          created_at,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        revision_no: { type: integer, minimum: 1 }
+        status: { type: string, const: generating }
+        english_markdown: { type: "null" }
+        word_count: { type: "null" }
+        translated_markdown: { type: "null" }
+        safe_error_code: { type: "null" }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    ReadyReportRevision:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          revision_no,
+          status,
+          english_markdown,
+          word_count,
+          translated_markdown,
+          safe_error_code,
+          created_at,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        revision_no: { type: integer, minimum: 1 }
+        status: { type: string, const: ready }
+        english_markdown: { type: string, minLength: 1 }
+        word_count: { type: integer, minimum: 600, maximum: 900 }
+        translated_markdown: { type: [string, "null"] }
+        safe_error_code: { type: "null" }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    FailedReportRevision:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          revision_no,
+          status,
+          english_markdown,
+          word_count,
+          translated_markdown,
+          safe_error_code,
+          created_at,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        revision_no: { type: integer, minimum: 1 }
+        status: { type: string, const: failed }
+        english_markdown: { type: "null" }
+        word_count: { type: "null" }
+        translated_markdown: { type: "null" }
+        safe_error_code: { type: string, minLength: 1 }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+    Report:
+      type: object
+      additionalProperties: false
+      required: [debate_id, generation_status, latest_attempt_status, insight]
+      properties:
+        debate_id: { $ref: "#/components/schemas/Uuid" }
+        generation_status:
+          { type: string, enum: [not_started, generating, ready, failed] }
+        latest_attempt_status:
+          { type: string, enum: [not_started, generating, ready, failed] }
+        insight: { $ref: "#/components/schemas/BarrageInsight" }
+        active_revision_id:
+          { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
+        current_success_revision:
+          {
+            oneOf:
+              [
+                { $ref: "#/components/schemas/ReadyReportRevision" },
+                { type: "null" },
+              ],
+          }
+    TranslationItemSummary:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          content_type,
+          content_id,
+          source_text_hash,
+          status,
+          reused,
+          safe_error_code,
+        ]
+      properties:
+        content_type: { type: string, enum: [turn, report_revision] }
+        content_id: { $ref: "#/components/schemas/Uuid" }
+        source_text_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        status: { type: string, enum: [pending, running, ready, failed] }
+        reused: { type: boolean }
+        safe_error_code: { type: [string, "null"] }
+    TranslationBatch:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          debate_id,
+          input_hash,
+          status,
+          target_language,
+          quality,
+          total_items,
+          succeeded_items,
+          failed_items,
+          items,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        debate_id: { $ref: "#/components/schemas/Uuid" }
+        input_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        status:
+          { type: string, enum: [pending, running, completed, partial, failed] }
+        target_language: { type: string, const: zh-Hans }
+        quality: { type: string, const: test_representation }
+        total_items: { type: integer, minimum: 0 }
+        succeeded_items: { type: integer, minimum: 0 }
+        failed_items: { type: integer, minimum: 0 }
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/TranslationItemSummary" },
+          }
+        created_at: { $ref: "#/components/schemas/IsoTime" }
+        updated_at: { $ref: "#/components/schemas/IsoTime" }
+    JobStatus:
+      type: object
+      required: [id, kind, status]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        kind: { type: string }
+        status:
+          {
+            type: string,
+            enum: [pending, running, completed, failed, interrupted],
+          }
+        safe_error_code: { type: [string, "null"] }

@@ -1,0 +1,292 @@
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { create } from "qrcode";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  AudienceInteractionForm,
+  QrCode,
+  TeacherInteractionPanel,
+  type AudienceInteractionApi,
+  type TeacherInteraction,
+} from "../components/interaction";
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+const participants = [
+  { id: "participant-a", slot: "A" as const, name: "Bowen" },
+  { id: "participant-b", slot: "B" as const, name: "KaiKai" },
+];
+
+const openInteraction: TeacherInteraction = {
+  status: "open",
+  public_url: "http://192.168.1.25:8080/classroom/v1.example",
+  votes: [
+    { participant_id: "participant-a", count: 2, percentage: 66.7 },
+    { participant_id: "participant-b", count: 1, percentage: 33.3 },
+  ],
+  barrages: [
+    {
+      id: "message-1",
+      nickname: "Learner",
+      raw_text: "I want to hear both sides.",
+      sequence: 1,
+      submitted_at: "2026-08-29T00:00:00Z",
+    },
+  ],
+};
+
+function audienceApi(): AudienceInteractionApi {
+  return {
+    getForm: vi.fn(async () => ({
+      topic: "Should classrooms use anonymous questions?",
+      participants: participants.map((participant) => ({
+        participant_id: participant.id,
+        slot: participant.slot,
+        name: participant.name,
+      })),
+    })),
+    submitVote: vi.fn(async () => ({ vote_submitted: true as const })),
+    submitBarrage: vi.fn(async () => ({ barrage_submitted: true as const })),
+  };
+}
+
+describe("M13 teacher interaction panel", () => {
+  it("renders QR, aggregate totals, and raw named barrages while open", () => {
+    const onClose = vi.fn();
+    render(
+      <TeacherInteractionPanel
+        debateId="debate-1"
+        interaction={openInteraction}
+        participants={participants}
+        onClose={onClose}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: /Scan to join/ })).toBeTruthy();
+    expect(screen.getByText("66.7%")).toBeTruthy();
+    expect(screen.getByText("Learner")).toBeTruthy();
+    const rawHeading = screen.getByText("Raw barrages / 原始弹幕");
+    const voteHeading = screen.getByText("Live vote / 实时投票");
+    expect(
+      rawHeading.compareDocumentPosition(voteHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: /End collection & prepare report/ }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("only offers opening for a closed window", () => {
+    const onOpen = vi.fn();
+    render(
+      <TeacherInteractionPanel
+        debateId="debate-1"
+        interaction={{
+          status: "closed",
+          public_url: null,
+          votes: [],
+          barrages: [],
+        }}
+        participants={participants}
+        onOpen={onOpen}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Open classroom interaction/ }),
+    );
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /End collection/ })).toBeNull();
+  });
+
+  it("renders a real qrcode module matrix with a four-module quiet zone", () => {
+    const value = "http://192.168.1.25:8080/classroom/v1.example";
+    const moduleCount = create(value, { errorCorrectionLevel: "M" }).modules
+      .size;
+    render(<QrCode value={value} />);
+
+    const svg = screen.getByRole("img", { name: /Scan to join/ });
+    expect(svg.getAttribute("viewBox")).toBe(
+      `0 0 ${moduleCount + 8} ${moduleCount + 8}`,
+    );
+    const darkCells = [...svg.querySelectorAll("g rect")];
+    expect(darkCells.length).toBeGreaterThan(0);
+    expect(
+      darkCells.every(
+        (cell) =>
+          Number(cell.getAttribute("x")) >= 4 &&
+          Number(cell.getAttribute("y")) >= 4,
+      ),
+    ).toBe(true);
+  });
+
+  it("auto-scrolls raw barrages, pauses on hover, and respects reduced motion", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
+    render(
+      <TeacherInteractionPanel
+        debateId="debate-1"
+        interaction={{
+          ...openInteraction,
+          barrages: [
+            ...openInteraction.barrages,
+            {
+              ...openInteraction.barrages[0],
+              id: "message-2",
+              sequence: 2,
+            },
+          ],
+        }}
+        participants={participants}
+      />,
+    );
+    const feed = screen.getByLabelText("Raw classroom barrages");
+    Object.defineProperty(feed, "scrollHeight", {
+      configurable: true,
+      value: 500,
+    });
+    Object.defineProperty(feed, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    feed.scrollTop = 0;
+    act(() => vi.advanceTimersByTime(160));
+    expect(feed.scrollTop).toBeGreaterThan(0);
+
+    fireEvent.mouseEnter(feed);
+    const pausedAt = feed.scrollTop;
+    act(() => vi.advanceTimersByTime(240));
+    expect(feed.scrollTop).toBe(pausedAt);
+    fireEvent.mouseLeave(feed);
+    act(() => vi.advanceTimersByTime(160));
+    expect(feed.scrollTop).toBeGreaterThan(pausedAt);
+
+    cleanup();
+    const interval = vi.spyOn(window, "setInterval");
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    );
+    render(
+      <TeacherInteractionPanel
+        debateId="debate-2"
+        interaction={{
+          ...openInteraction,
+          barrages: [
+            ...openInteraction.barrages,
+            {
+              ...openInteraction.barrages[0],
+              id: "message-reduced",
+              sequence: 2,
+            },
+          ],
+        }}
+        participants={participants}
+      />,
+    );
+    expect(interval).not.toHaveBeenCalled();
+  });
+});
+
+describe("M13 anonymous audience form", () => {
+  it("does not reveal vote or barrage sections before a nickname is entered", async () => {
+    const api = audienceApi();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+
+    expect(screen.queryByText("Vote / 投票")).toBeNull();
+    expect(screen.queryByText("Barrage / 弹幕")).toBeNull();
+    expect(
+      screen.getByText(/Enter a nickname to unlock both areas/),
+    ).toBeTruthy();
+  });
+
+  it("keeps vote and barrage submissions independent", async () => {
+    const api = audienceApi();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+
+    const nickname = screen.getByLabelText("Nickname for barrages / 弹幕昵称");
+    fireEvent.change(nickname, { target: { value: "Class 1" } });
+    const voteButton = screen.getByRole("button", {
+      name: /Submit anonymous vote/,
+    });
+    const barrageButton = screen.getByRole("button", { name: /Send barrage/ });
+    expect((voteButton as HTMLButtonElement).disabled).toBe(false);
+    expect((barrageButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(voteButton);
+    await waitFor(() => expect(api.submitVote).toHaveBeenCalledTimes(1));
+    expect((barrageButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Submitted / 已提交")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText(/Share a thought/), {
+      target: { value: "A useful question" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Send barrage/ }));
+    await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(1));
+    expect(api.submitBarrage).toHaveBeenCalledWith(
+      "token",
+      expect.objectContaining({
+        nickname: "Class 1",
+        raw_text: "A useful question",
+      }),
+    );
+    expect(
+      screen.getByRole("heading", {
+        name: "Submitted successfully / 提交成功",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("reuses valid UUID submission identities after an ambiguous failure", async () => {
+    const api = audienceApi();
+    vi.mocked(api.submitVote)
+      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockResolvedValueOnce({ vote_submitted: true });
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+    fireEvent.change(
+      screen.getByLabelText("Nickname for barrages / 弹幕昵称"),
+      {
+        target: { value: "Retry learner" },
+      },
+    );
+
+    const voteButton = screen.getByRole("button", {
+      name: /Submit anonymous vote/,
+    });
+    fireEvent.click(voteButton);
+    await screen.findByText("connection reset");
+    fireEvent.click(voteButton);
+    await waitFor(() => expect(api.submitVote).toHaveBeenCalledTimes(2));
+
+    const firstPayload = vi.mocked(api.submitVote).mock.calls[0]?.[1];
+    const secondPayload = vi.mocked(api.submitVote).mock.calls[1]?.[1];
+    expect(firstPayload).toEqual(secondPayload);
+    expect(firstPayload?.client_submission_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+});

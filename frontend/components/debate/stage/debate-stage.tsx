@@ -48,7 +48,7 @@ import type {
 
 type ConnectionState =
   "connecting" | "connected" | "reconnecting" | "disconnected";
-type ControlAction = "start" | "next" | "replay";
+type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
 
 const TERMINAL_PLAYBACK: readonly DebatePlaybackState["status"][] = [
   "completed",
@@ -363,7 +363,7 @@ function statusCopy(
   if (playbackStatus === "preparing") return labels.statusPreparing;
   if (playbackStatus === "ready") return labels.statusReady;
   if (playbackStatus === "playing") return labels.statusPlaying;
-  if (playbackStatus === "paused") return labels.statusReady;
+  if (playbackStatus === "paused") return labels.statusPaused;
   if (detailStatus === "debate_finished" || detailStatus === "completed") {
     return labels.debateComplete;
   }
@@ -447,6 +447,19 @@ export function DebateStage({
   const mountedRef = useRef(false);
   const closingRef = useRef(false);
   const reconnectTimerRef = useRef<number | null>(null);
+  const replayCatalogRef = useRef<Map<string, VisiblePlaybackTurn>>(
+    new Map(
+      normalisePublicTurns(detail.public_turns).map((turn) => [
+        turn.id,
+        {
+          ...turn,
+          sources: turn.sources.map((source) => ({ ...source })),
+        },
+      ]),
+    ),
+  );
+  const catalogDebateIdRef = useRef(debateId);
+  const [reconnectBusy, setReconnectBusy] = useState(false);
   const socketGenerationRef = useRef(0);
   const connectAttemptRef = useRef(0);
   const recoveryFenceRef = useRef<{
@@ -470,6 +483,8 @@ export function DebateStage({
     undefined,
   );
   const startIdempotencyRef = useRef<IdempotencyHandle | null>(null);
+  const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
+  const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const labelsRef = useRef(labels);
 
@@ -482,6 +497,20 @@ export function DebateStage({
     audioPointerOverride.source === audioPointerInput
       ? audioPointerOverride.value
       : audioPointerInput;
+
+  useEffect(() => {
+    if (catalogDebateIdRef.current === debateId) return;
+    catalogDebateIdRef.current = debateId;
+    replayCatalogRef.current = new Map(
+      normalisePublicTurns(detail.public_turns).map((turn) => [
+        turn.id,
+        {
+          ...turn,
+          sources: turn.sources.map((source) => ({ ...source })),
+        },
+      ]),
+    );
+  }, [debateId, detail.public_turns]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setAudioPointerOverride(null), 0);
@@ -497,6 +526,35 @@ export function DebateStage({
       onCurrentAudioDebateIdChange?.(nextDebateId);
     },
     [audioPointerInput, onCurrentAudioDebateIdChange],
+  );
+
+  const rememberReplayCatalog = useCallback(
+    (turns: readonly VisiblePlaybackTurn[]) => {
+      const catalog = replayCatalogRef.current;
+      for (const turn of turns) {
+        // A replay catalog is immutable for the lifetime of this stage.  If a
+        // later snapshot omits/clears public turns, the original speech and
+        // source list remain available to replay.started.
+        if (!catalog.has(turn.id)) {
+          catalog.set(turn.id, {
+            ...turn,
+            sources: turn.sources.map((source) => ({ ...source })),
+          });
+        }
+      }
+    },
+    [],
+  );
+
+  const catalogTurnById = useCallback(
+    (turnId: string | null | undefined): VisiblePlaybackTurn | null => {
+      if (!turnId) return null;
+      const turn = replayCatalogRef.current.get(turnId);
+      return turn
+        ? { ...turn, sources: turn.sources.map((source) => ({ ...source })) }
+        : null;
+    },
+    [],
   );
 
   const markControllerReady = useCallback((value: boolean) => {
@@ -521,6 +579,7 @@ export function DebateStage({
   const commitDetail = useCallback(
     (next: DebateDetail, notify = true) => {
       const turns = normalisePublicTurns(next.public_turns);
+      rememberReplayCatalog(turns);
       const committed = {
         ...next,
         public_turns: turns as DebateTurn[],
@@ -539,11 +598,12 @@ export function DebateStage({
       setPlayback(committed.playback);
       if (notify) onDetailChange?.(committed);
     },
-    [markPlaybackItem, onDetailChange],
+    [markPlaybackItem, onDetailChange, rememberReplayCatalog],
   );
 
   const updatePublicTurns = useCallback(
     (next: VisiblePlaybackTurn[]) => {
+      rememberReplayCatalog(next);
       publicTurnsRef.current = next;
       setPublicTurns(next);
       const detailNext = {
@@ -554,7 +614,7 @@ export function DebateStage({
       setDetailState(detailNext);
       onDetailChange?.(detailNext);
     },
-    [onDetailChange],
+    [onDetailChange, rememberReplayCatalog],
   );
 
   const pauseAudio = useCallback((clearSource = false) => {
@@ -589,7 +649,7 @@ export function DebateStage({
         socket.send(JSON.stringify(command));
         return true;
       } catch {
-        setConnection("reconnecting");
+        setConnection("disconnected");
         return false;
       }
     },
@@ -638,11 +698,16 @@ export function DebateStage({
     if (!mountedRef.current || closingRef.current) return;
     connectAttemptRef.current += 1;
     pauseAudio(false);
-    setConnection("reconnecting");
+    // A sequence gap/socket failure is surfaced as a stable disconnected
+    // state.  Reconnect is now an explicit teacher action; there is no timer
+    // or background snapshot refresh that can change the page behind them.
+    setConnection("disconnected");
     markControllerReady(false);
     acquirePendingRef.current = false;
     controllerEpochRef.current = null;
-    setFailure(labelsRef.current.connectionReconnecting);
+    setFailure(labelsRef.current.connectionError);
+    recoveryFenceRef.current.active = false;
+    recoveryFenceRef.current.refreshInFlight = false;
     socketGenerationRef.current += 1;
     const staleSocket = socketRef.current;
     socketRef.current = null;
@@ -650,12 +715,6 @@ export function DebateStage({
       staleSocket?.close(1012, "sequence recovery");
     } catch {
       // The close callback will still schedule recovery for normal sockets.
-    }
-    if (reconnectTimerRef.current === null) {
-      reconnectTimerRef.current = window.setTimeout(() => {
-        reconnectTimerRef.current = null;
-        void connectRef.current?.(true);
-      }, 700);
     }
   }, [markControllerReady, pauseAudio]);
 
@@ -973,6 +1032,9 @@ export function DebateStage({
     (event: PlaybackEvent) => {
       const payload = event.payload;
       const decision = consumeEventSequence(sequenceRef.current, event);
+      if (event.event_type === "replay.started") {
+        console.warn("DEBUG replay event", decision, playbackRef.current.mode, playbackRef.current.status, event.payload);
+      }
       if (decision.gap || !decision.accepted) {
         if (decision.gap) requestReconnect();
         return;
@@ -1541,11 +1603,53 @@ export function DebateStage({
           setFailure(null);
           break;
         }
+        case "playback.resumed": {
+          if (!isNonEmptyString(payload.turn_id)) break;
+          if (
+            playbackRef.current.current_turn_id &&
+            playbackRef.current.current_turn_id !== payload.turn_id
+          ) {
+            break;
+          }
+          const resumedTurn =
+            catalogTurnById(payload.turn_id) ??
+            publicTurnById(publicTurnsRef.current, payload.turn_id);
+          if (resumedTurn) {
+            setActiveParticipant(resumedTurn.participant_id);
+            setVisible(resumedTurn);
+          }
+          pauseAudio(false);
+          pendingActionRef.current = "resume";
+          applyPlayback({
+            status: "ready",
+            mode: playbackRef.current.mode,
+            current_turn_id: payload.turn_id,
+            cursor_ms: Math.max(
+              0,
+              integer(payload.cursor_ms, playbackRef.current.cursor_ms),
+            ),
+            playback_rate: numberValue(
+              payload.playback_rate,
+              playbackRef.current.playback_rate,
+            ),
+            control_version: Math.max(
+              playbackRef.current.control_version,
+              integer(
+                payload.control_version,
+                playbackRef.current.control_version,
+              ),
+            ),
+          });
+          scheduleMediaPrepare();
+          break;
+        }
         case "replay.started": {
           if (!isNonEmptyString(payload.turn_id)) break;
           if (playbackRef.current.mode !== "replay") break;
           pendingActionRef.current = "replay";
-          const replayTurn = visibleTurnFromPublic(payload.turn_id);
+          const replayTurn =
+            catalogTurnById(payload.turn_id) ??
+            visibleTurnFromPublic(payload.turn_id);
           setActiveParticipant(replayTurn?.participant_id ?? null);
           setVisible(replayTurn);
           setAvatars([]);
@@ -1731,6 +1835,7 @@ export function DebateStage({
       pauseAudio,
       recoverFromStartedTurnMismatch,
       refreshSnapshot,
+      catalogTurnById,
       setActiveParticipant,
       requestReconnect,
       refreshRecoverySnapshot,
@@ -1745,6 +1850,7 @@ export function DebateStage({
   const handleSocketMessage = useCallback(
     (event: Event) => {
       const value = socketMessageData(event);
+      if (isRecord(value) && value.event_type === "replay.started") console.warn("DEBUG message", value);
       if (!value) return;
       if (isRecord(value) && typeof value.message_type === "string") {
         const privateMessage = parsePrivatePlaybackMessage(value, debateId);
@@ -1776,7 +1882,7 @@ export function DebateStage({
       };
       const onError = () => {
         if (!isCurrentSocket()) return;
-        setConnection("reconnecting");
+        setConnection("disconnected");
         setFailure(labelsRef.current.connectionError);
       };
       const onClose = (event?: Event) => {
@@ -1795,17 +1901,11 @@ export function DebateStage({
           setActiveParticipant(null);
           return;
         }
-        setConnection("reconnecting");
+        setConnection("disconnected");
         acquirePendingRef.current = false;
         markControllerReady(false);
         controllerEpochRef.current = null;
         pauseAudio(false);
-        if (reconnectTimerRef.current === null) {
-          reconnectTimerRef.current = window.setTimeout(() => {
-            reconnectTimerRef.current = null;
-            void connectRef.current?.(true);
-          }, 700);
-        }
       };
       if (socket.addEventListener) {
         socket.addEventListener("open", onOpen);
@@ -1863,7 +1963,12 @@ export function DebateStage({
           setLastSequence(next.last_sequence);
           setFailure(null);
         } catch (cause) {
+          // A failed manual attempt must not discard the current page or
+          // trigger another refresh/retry in the background.
+          setConnection("disconnected");
           setFailure(errorText(cause, labelsRef.current.connectionError));
+          setReconnectBusy(false);
+          return;
         }
       }
       if (
@@ -1887,6 +1992,8 @@ export function DebateStage({
       } catch (cause) {
         setConnection("disconnected");
         setFailure(errorText(cause, labelsRef.current.connectionError));
+      } finally {
+        if (refresh) setReconnectBusy(false);
       }
     },
     [
@@ -1898,6 +2005,27 @@ export function DebateStage({
       socketUrl,
     ],
   );
+
+  const reconnect = useCallback(() => {
+    if (
+      readOnly ||
+      !mountedRef.current ||
+      closingRef.current ||
+      reconnectBusy ||
+      connection === "connected" ||
+      connection === "connecting"
+    ) {
+      return;
+    }
+    setReconnectBusy(true);
+    setConnection("reconnecting");
+    void connect(true).catch((cause: unknown) => {
+      if (!mountedRef.current || closingRef.current) return;
+      setConnection("disconnected");
+      setFailure(errorText(cause, labelsRef.current.connectionError));
+      setReconnectBusy(false);
+    });
+  }, [connect, connection, readOnly, reconnectBusy]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (
@@ -2009,6 +2137,26 @@ export function DebateStage({
       ) {
         return;
       }
+      if (
+        action === "pause" &&
+        (!controllerReadyRef.current ||
+          acquirePendingRef.current ||
+          playbackRef.current.status !== "playing" ||
+          !playbackRef.current.current_turn_id ||
+          typeof api.pauseDebate !== "function")
+      ) {
+        return;
+      }
+      if (
+        action === "resume" &&
+        (!controllerReadyRef.current ||
+          acquirePendingRef.current ||
+          playbackRef.current.status !== "paused" ||
+          !playbackRef.current.current_turn_id ||
+          typeof api.resumeDebate !== "function")
+      ) {
+        return;
+      }
       const requestToken = ++nextControlRequestRef.current;
       controlRequestRef.current = requestToken;
       const requestGeneration = playbackGenerationRef.current;
@@ -2108,6 +2256,45 @@ export function DebateStage({
           scheduleMediaPrepare();
           return;
         }
+        if (action === "pause") {
+          const idempotency =
+            pauseIdempotencyRef.current ?? createIdempotencyHandle();
+          pauseIdempotencyRef.current = idempotency;
+          const paused = await api.pauseDebate!(
+            debateId,
+            { expected_control_version: current.control_version },
+            { idempotency },
+          );
+          if (!isCurrentRequest()) return;
+          pauseIdempotencyRef.current = null;
+          pauseAudio(false);
+          applyPlayback({
+            ...paused,
+            status: "paused",
+            current_turn_id: paused.current_turn_id ?? current.current_turn_id,
+          });
+          return;
+        }
+        if (action === "resume") {
+          const idempotency =
+            resumeIdempotencyRef.current ?? createIdempotencyHandle();
+          resumeIdempotencyRef.current = idempotency;
+          const resumed = await api.resumeDebate!(
+            debateId,
+            { expected_control_version: current.control_version },
+            { idempotency },
+          );
+          if (!isCurrentRequest()) return;
+          resumeIdempotencyRef.current = null;
+          applyPlayback({
+            ...resumed,
+            status: "ready",
+            current_turn_id: resumed.current_turn_id ?? current.current_turn_id,
+          });
+          pendingActionRef.current = "resume";
+          scheduleMediaPrepare();
+          return;
+        }
       } catch (cause) {
         if (controlRequestRef.current === requestToken) {
           setControlError(errorText(cause, labelsRef.current.connectionError));
@@ -2135,6 +2322,7 @@ export function DebateStage({
       setAvatars,
       setVisible,
       updatePublicTurns,
+      pauseAudio,
     ],
   );
 
@@ -2194,6 +2382,22 @@ export function DebateStage({
     controllerReady &&
     busyAction === null &&
     (playback.mode === "live" || playback.mode === "replay");
+  const canPause =
+    !readOnly &&
+    typeof api.pauseDebate === "function" &&
+    playback.mode === "live" &&
+    playback.status === "playing" &&
+    playback.current_turn_id !== null &&
+    controllerReady &&
+    busyAction === null;
+  const canResume =
+    !readOnly &&
+    typeof api.resumeDebate === "function" &&
+    playback.mode === "live" &&
+    playback.status === "paused" &&
+    playback.current_turn_id !== null &&
+    controllerReady &&
+    busyAction === null;
   const activeVisibleTurn =
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
@@ -2243,6 +2447,16 @@ export function DebateStage({
             ? labels.connectionDisconnected
             : labels.connectionReconnecting}
           <small>{labels.connectionWaiting}</small>
+          {!readOnly && connection === "disconnected" ? (
+            <button
+              className={styles.reconnectButton}
+              type="button"
+              onClick={reconnect}
+              disabled={reconnectBusy}
+            >
+              {reconnectBusy ? labels.connectionReconnecting : labels.reconnect}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -2420,6 +2634,22 @@ export function DebateStage({
             >
               {labels.next}
             </button>
+            {(playback.status === "playing" || playback.status === "paused") &&
+            (typeof api.pauseDebate === "function" ||
+              typeof api.resumeDebate === "function") ? (
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={playback.status === "paused" ? !canResume : !canPause}
+                onClick={() =>
+                  void runControl(
+                    playback.status === "paused" ? "resume" : "pause",
+                  )
+                }
+              >
+                {playback.status === "paused" ? labels.resume : labels.pause}
+              </button>
+            ) : null}
             <button
               className="secondary-action"
               type="button"

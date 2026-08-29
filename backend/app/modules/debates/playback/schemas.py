@@ -164,18 +164,132 @@ class ErrorPayload(ClosedModel):
 
 class SnapshotInteractionDTO(ClosedModel):
     status: Literal["closed", "open", "finalized"]
-    votes: list[dict[str, object]] = Field(default_factory=list)
+    votes: list[SnapshotVoteAggregateDTO]
     barrage_count: int = Field(ge=0)
-    total_votes: int | None = Field(default=None, ge=0)
-    public_url: str | None = None
+    total_votes: int = Field(ge=0)
+
+
+class SnapshotVoteAggregateDTO(ClosedModel):
+    participant_id: UUID
+    count: int = Field(ge=0)
+    percentage: float = Field(ge=0, le=100)
+
+
+class SnapshotInsightDTO(ClosedModel):
+    status: Literal["not_started", "generating", "ready", "failed"]
+    included_count: int = Field(ge=0)
+    filtered_count: int = Field(ge=0)
+    snapshot_id: UUID | None
+    revision: int | None = Field(ge=1)
 
 
 class SnapshotReportDTO(ClosedModel):
     generation_status: Literal["not_started", "generating", "ready", "failed"]
     latest_attempt_status: Literal["not_started", "generating", "ready", "failed"]
-    insight: dict[str, object]
-    active_revision_id: UUID | None = None
-    current_success_revision: dict[str, object] | None = None
+    insight: SnapshotInsightDTO
+    active_revision_id: UUID | None
+    current_success_revision_id: UUID | None
+    current_success_word_count: int | None = Field(ge=600, le=900)
+
+
+class InteractionOpenedPayload(ClosedModel):
+    window_id: UUID
+    aggregate_zeros: list[SnapshotVoteAggregateDTO]
+    status: Literal["open"]
+
+
+class InteractionVoteCreatedPayload(ClosedModel):
+    participant_id: UUID
+    slot: Literal["A", "B", "C", "D", "E"] | None = None
+    new_count: int = Field(ge=0)
+    percentage: float = Field(ge=0, le=100)
+    total_votes: int = Field(ge=0)
+
+
+class InteractionBarrageCreatedPayload(ClosedModel):
+    message_id: UUID
+    nickname: str = Field(min_length=1)
+    raw_text: str = Field(min_length=1)
+    sequence: int = Field(ge=1)
+
+
+class InteractionClosedTotals(ClosedModel):
+    total_votes: int = Field(ge=0)
+    total_barrages: int = Field(ge=0)
+
+
+class InteractionClosedPayload(ClosedModel):
+    totals: InteractionClosedTotals
+    message_count: int = Field(ge=0)
+    input_hash: str = Field(min_length=1)
+
+
+class BarrageInsightStartedPayload(ClosedModel):
+    revision: int = Field(ge=1)
+    status: Literal["generating"] | None = None
+
+
+class BarrageInsightCompletedPayload(ClosedModel):
+    snapshot_id: UUID
+    revision: int = Field(ge=1)
+    status: Literal["ready"]
+    included_count: int = Field(ge=0)
+    filtered_count: int = Field(ge=0)
+
+
+class BarrageInsightFailedPayload(ClosedModel):
+    revision: int = Field(ge=1)
+    status: Literal["failed"]
+    included_count: int | None = Field(default=None, ge=0)
+    filtered_count: int | None = Field(default=None, ge=0)
+    safe_error_code: str = Field(min_length=1)
+
+
+class ReportStartedPayload(ClosedModel):
+    revision_id: UUID
+    status: Literal["generating"]
+
+
+class ReportCompletedPayload(ClosedModel):
+    revision_id: UUID
+    revision_no: int = Field(ge=1)
+    status: Literal["ready"]
+    current_success_revision_id: UUID
+    latest_attempt_status: Literal["ready"]
+    word_count: int = Field(ge=600, le=900)
+
+
+class ReportFailedPayload(ClosedModel):
+    revision_id: UUID
+    revision_no: int = Field(ge=1)
+    status: Literal["failed"]
+    current_success_revision_id: UUID | None
+    latest_attempt_status: Literal["failed"]
+    safe_error_code: str = Field(min_length=1)
+
+
+class TranslationBatchStartedPayload(ClosedModel):
+    batch_id: UUID
+    status: Literal["running"]
+    total_items: int = Field(ge=0)
+    succeeded_items: int = Field(ge=0)
+    failed_items: int = Field(ge=0)
+
+
+class TranslationBatchCompletedPayload(ClosedModel):
+    batch_id: UUID
+    status: Literal["completed", "partial"]
+    total_items: int = Field(ge=0)
+    succeeded_items: int = Field(ge=0)
+    failed_items: int = Field(ge=0)
+
+
+class TranslationBatchFailedPayload(ClosedModel):
+    batch_id: UUID
+    status: Literal["failed"]
+    total_items: int = Field(ge=0)
+    succeeded_items: int = Field(ge=0)
+    failed_items: int = Field(ge=0)
 
 
 class DebateTerminalPayload(ClosedModel):
@@ -342,3 +456,5 @@ class AudioResponseHeaders(ClosedModel):
 
 
 DebateStartedPayload.model_rebuild()
+SnapshotInteractionDTO.model_rebuild()
+SnapshotReportDTO.model_rebuild()

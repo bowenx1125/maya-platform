@@ -222,9 +222,21 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if not self._has_table(db, "debates"):
             return ()
+        paused_ids: set[str] = set()
+        if self._has_table(db, "playback_states"):
+            paused_ids = {
+                str(row[0])
+                for row in db.execute(
+                    text(
+                        "SELECT ps.debate_id FROM playback_states AS ps "
+                        "JOIN debates AS d ON d.id=ps.debate_id "
+                        "WHERE ps.status='paused' AND d.status='running'"
+                    )
+                ).all()
+            }
         affected: tuple[str, ...] = ()
         if self._has_table(db, "jobs"):
-            affected = tuple(
+            all_inflight = tuple(
                 str(row[0])
                 for row in db.execute(
                     text(
@@ -233,10 +245,40 @@ class SqlPlaybackRepository(PlaybackRepository):
                     )
                 ).all()
             )
-            # A durable Job and its dependent Turn share one restart outcome.
-            # Mark the Turn while the Job still has its pre-restart state;
-            # otherwise the Debate would fail while its generation row still
-            # looked resumable to later code and diagnostics.
+            # A paused run keeps its cancellation generation and can continue
+            # after the teacher reconnects.  Only non-paused in-flight runs
+            # are interrupted and converted to failed debates on restart.
+            affected = tuple(item for item in all_inflight if item not in paused_ids)
+            if paused_ids:
+                if self._has_table(db, "debate_turns"):
+                    db.execute(
+                        text(
+                            "UPDATE debate_turns SET generation_status='pending', "
+                            "preparation_stage='generation', safe_error_code=NULL, "
+                            "updated_at=:updated_at WHERE generation_status IN "
+                            "('pending','running') "
+                            "AND id IN (SELECT j.turn_id FROM jobs AS j "
+                            "JOIN playback_states AS ps ON ps.debate_id=j.debate_id "
+                            "JOIN debates AS d ON d.id=ps.debate_id "
+                            "WHERE j.turn_id IS NOT NULL AND j.state IN ('pending','running') "
+                            "AND ps.status='paused' AND d.status='running')"
+                        ),
+                        {"updated_at": _now()},
+                    )
+                db.execute(
+                    text(
+                        "UPDATE jobs SET state='pending', safe_error_code=NULL, "
+                        "claim_token=NULL, updated_at=:updated_at "
+                        "WHERE state IN ('pending','running') AND debate_id IN "
+                        "(SELECT ps.debate_id FROM playback_states AS ps "
+                        "JOIN debates AS d ON d.id=ps.debate_id "
+                        "WHERE ps.status='paused' AND d.status='running')"
+                    ),
+                    {"updated_at": _now()},
+                )
+            # Mark the Turn while its Job still has the pre-restart state;
+            # otherwise diagnostics could observe a failed Debate with a
+            # generation row that still looks resumable.
             if self._has_table(db, "debate_turns"):
                 db.execute(
                     text(
@@ -252,7 +294,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                 text(
                     "UPDATE jobs SET state='interrupted', safe_error_code='process_restarted', "
                     "updated_at=:updated_at WHERE debate_id IS NOT NULL "
-                    "AND state IN ('pending','running')"
+                    "AND state IN ('pending','running') AND debate_id NOT IN "
+                    "(SELECT ps.debate_id FROM playback_states AS ps "
+                    "JOIN debates AS d ON d.id=ps.debate_id "
+                    "WHERE ps.status='paused' AND d.status='running')"
                 ),
                 {"updated_at": _now()},
             )
@@ -304,8 +349,22 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "controller_owner_connection=NULL, server_started_at=NULL, "
                     "updated_at=:updated_at"
                     + pending_clear
-                    + " WHERE status IN ('playing','paused') "
+                    + " WHERE status='playing' "
                     "AND debate_id NOT IN (SELECT id FROM debates WHERE status='failed')"
+                ),
+                {"updated_at": _now()},
+            )
+            # Explicit Pause is durable.  Revoke only process-local authority
+            # and media tickets; preserve status and cursor so Continue can
+            # resume the same turn after a fresh controller acquire.
+            db.execute(
+                text(
+                    "UPDATE playback_states SET controller_epoch=NULL, "
+                    "controller_owner_connection=NULL, server_started_at=NULL, "
+                    "control_version=control_version+1, updated_at=:updated_at"
+                    + pending_clear
+                    + " WHERE status='paused' AND debate_id NOT IN "
+                    "(SELECT id FROM debates WHERE status='failed')"
                 ),
                 {"updated_at": _now()},
             )
@@ -683,6 +742,293 @@ class SqlPlaybackRepository(PlaybackRepository):
             # leak a transient 503 for this teacher command.
             claim_session.rollback()
             return False
+        finally:
+            claim_session.close()
+
+    def claim_pause_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        cursor_ms: int,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        """CAS a playing item into durable, recoverable ``paused`` state.
+
+        The request Session may have an old WAL read snapshot (for example
+        after loading a teacher page).  Use a fresh ``BEGIN IMMEDIATE`` writer
+        and repeat the teacher/current-version checks there so a concurrent
+        tab can win deterministically without a database lock promotion error.
+        """
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            candidate = claim_session.execute(
+                text(
+                    "SELECT ps.rowid, ps.current_turn_id, ps.control_version "
+                    "FROM playback_states AS ps JOIN debates AS d ON d.id=ps.debate_id "
+                    "WHERE ps.debate_id=:debate_id AND ps.status='playing' "
+                    "AND ps.current_turn_id IS NOT NULL "
+                    "AND ps.control_version=:expected_control_version "
+                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND EXISTS (SELECT 1 FROM course_members AS cm "
+                    "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
+                    "AND cm.role='teacher')"
+                ),
+                {
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                    "teacher_user_id": teacher_user_id,
+                },
+            ).first()
+            if candidate is None:
+                claim_session.rollback()
+                return False
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET status='paused', cursor_ms=:cursor_ms, "
+                    "control_version=:next_control_version, server_started_at=NULL, "
+                    "pending_action=NULL, pending_ticket_hash=NULL, "
+                    "pending_media_command_id=NULL, audio_duration_ms=0, "
+                    "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                    "AND status='playing' AND control_version=:expected_control_version"
+                ),
+                {
+                    "rowid": candidate[0],
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                    "next_control_version": expected_control_version + 1,
+                    "cursor_ms": max(0, int(cursor_ms)),
+                    "updated_at": _now(),
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
+
+    def claim_resume_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        """CAS a paused item back to ``ready`` after rechecking its audio."""
+
+        if self.session_factory is None:
+            return False
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            candidate = claim_session.execute(
+                text(
+                    "SELECT ps.rowid, ps.current_turn_id FROM playback_states AS ps "
+                    "JOIN debates AS d ON d.id=ps.debate_id "
+                    "JOIN debate_turns AS t ON t.id=ps.current_turn_id "
+                    "AND t.debate_id=ps.debate_id "
+                    "WHERE ps.debate_id=:debate_id AND ps.status='paused' "
+                    "AND ps.current_turn_id IS NOT NULL "
+                    "AND ps.control_version=:expected_control_version "
+                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND EXISTS (SELECT 1 FROM course_members AS cm "
+                    "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
+                    "AND cm.role='teacher') "
+                    "AND t.generation_status='final_ready' "
+                    "AND t.preparation_stage='ready' "
+                    "AND trim(COALESCE(t.speech,'')) <> '' "
+                    "AND t.audio_file_id IS NOT NULL "
+                    "AND t.audio_duration_ms IS NOT NULL AND t.audio_duration_ms > 0 "
+                    "AND EXISTS (SELECT 1 FROM stored_files AS sf "
+                    "WHERE sf.id=t.audio_file_id AND sf.kind='debate_audio' "
+                    "AND sf.state='active')"
+                ),
+                {
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                    "teacher_user_id": teacher_user_id,
+                },
+            ).first()
+            if candidate is None:
+                claim_session.rollback()
+                return False
+            changed = claim_session.execute(
+                text(
+                    "UPDATE playback_states SET status='ready', cursor_ms=0, "
+                    "control_version=:next_control_version, server_started_at=NULL, "
+                    "pending_action=NULL, pending_ticket_hash=NULL, "
+                    "pending_media_command_id=NULL, audio_duration_ms=0, "
+                    "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                    "AND status='paused' AND control_version=:expected_control_version"
+                ),
+                {
+                    "rowid": candidate[0],
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                    "next_control_version": expected_control_version + 1,
+                    "updated_at": _now(),
+                },
+            )
+            if int(getattr(changed, "rowcount", 0)) != 1:
+                claim_session.rollback()
+                return False
+            claim_session.commit()
+            return True
+        except OperationalError:
+            claim_session.rollback()
+            return False
+        finally:
+            claim_session.close()
+
+    def claim_finish_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        expected_current_turn_id: str | None = None,
+        teacher_user_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Atomically finish a running Debate as full or partial.
+
+        ``full`` requires every planned turn to be final-ready *and public*;
+        anything less is a partial finish.  Partial completion keeps all
+        immutable turn rows but bumps the cancellation generation and
+        interrupts pending work, preventing late workers from publishing into
+        a downstream-ineligible Debate.
+        """
+
+        if self.session_factory is None:
+            return None
+        claim_session = self.session_factory()
+        try:
+            claim_session.execute(text("BEGIN IMMEDIATE"))
+            row = claim_session.execute(
+                text(
+                    "SELECT ps.rowid, ps.current_turn_id, ps.control_version, "
+                    "d.course_id, d.status, "
+                    "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id) AS total_turns, "
+                    "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id "
+                    "AND t.generation_status='final_ready' AND t.publication_status='public') "
+                    "AS complete_turns "
+                    "FROM playback_states ps JOIN debates d ON d.id=ps.debate_id "
+                    "WHERE ps.debate_id=:debate_id "
+                    "AND ps.control_version=:expected_control_version "
+                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND EXISTS (SELECT 1 FROM course_members cm WHERE cm.course_id=d.course_id "
+                    "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
+                    "AND (:expected_current_turn_id IS NULL OR "
+                    "ps.current_turn_id=:expected_current_turn_id)"
+                ),
+                {
+                    "debate_id": debate_id,
+                    "expected_control_version": expected_control_version,
+                    "expected_current_turn_id": expected_current_turn_id,
+                    "teacher_user_id": teacher_user_id,
+                },
+            ).mappings().first()
+            if row is None:
+                claim_session.rollback()
+                return None
+            total = int(row["total_turns"] or 0)
+            complete = total > 0 and int(row["complete_turns"] or 0) == total
+            now = _now()
+            next_version = int(row["control_version"] or 0) + 1
+            if complete:
+                changed = claim_session.execute(
+                    text(
+                        "UPDATE debates SET status='debate_finished', finished_at=:finished_at, "
+                        "updated_at=:updated_at WHERE id=:debate_id AND status='running'"
+                    ),
+                    {"debate_id": debate_id, "finished_at": now, "updated_at": now},
+                )
+                if int(getattr(changed, "rowcount", 0)) != 1:
+                    claim_session.rollback()
+                    return None
+                playback_changed = claim_session.execute(
+                    text(
+                        "UPDATE playback_states SET status='completed', mode='live', "
+                        "current_turn_id=NULL, cursor_ms=0, control_version=:control_version, "
+                        "controller_epoch=NULL, controller_owner_connection=NULL, "
+                        "server_started_at=NULL, replay_scope=NULL, replay_index=NULL, "
+                        "pending_action=NULL, pending_ticket_hash=NULL, "
+                        "pending_media_command_id=NULL, audio_duration_ms=0, "
+                        "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                        "AND control_version=:expected_control_version"
+                    ),
+                    {
+                        "rowid": row["rowid"],
+                        "debate_id": debate_id,
+                        "expected_control_version": expected_control_version,
+                        "control_version": next_version,
+                        "updated_at": now,
+                    },
+                )
+                if int(getattr(playback_changed, "rowcount", 0)) != 1:
+                    claim_session.rollback()
+                    return None
+            else:
+                changed = claim_session.execute(
+                    text(
+                        "UPDATE debates SET status='stopped', cancellation_generation="
+                        "cancellation_generation+1, finished_at=:finished_at, "
+                        "updated_at=:updated_at WHERE id=:debate_id AND status='running'"
+                    ),
+                    {"debate_id": debate_id, "finished_at": now, "updated_at": now},
+                )
+                if int(getattr(changed, "rowcount", 0)) != 1:
+                    claim_session.rollback()
+                    return None
+                claim_session.execute(
+                    text(
+                        "UPDATE jobs SET state='interrupted', "
+                        "safe_error_code='debate_finished_partial', "
+                        "updated_at=:updated_at WHERE debate_id=:debate_id "
+                        "AND state IN ('pending','running')"
+                    ),
+                    {"debate_id": debate_id, "updated_at": now},
+                )
+                playback_changed = claim_session.execute(
+                    text(
+                        "UPDATE playback_states SET status='stopped', mode='live', "
+                        "current_turn_id=NULL, cursor_ms=0, control_version=:control_version, "
+                        "controller_epoch=NULL, controller_owner_connection=NULL, "
+                        "server_started_at=NULL, replay_scope=NULL, replay_index=NULL, "
+                        "pending_action=NULL, pending_ticket_hash=NULL, "
+                        "pending_media_command_id=NULL, audio_duration_ms=0, "
+                        "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                        "AND control_version=:expected_control_version"
+                    ),
+                    {
+                        "rowid": row["rowid"],
+                        "debate_id": debate_id,
+                        "expected_control_version": expected_control_version,
+                        "control_version": next_version,
+                        "updated_at": now,
+                    },
+                )
+                if int(getattr(playback_changed, "rowcount", 0)) != 1:
+                    claim_session.rollback()
+                    return None
+            claim_session.commit()
+            return {
+                "kind": "full" if complete else "partial",
+                "control_version": next_version,
+                "current_turn_id": row["current_turn_id"],
+                "total_turns": total,
+                "complete_turns": int(row["complete_turns"] or 0),
+            }
+        except OperationalError:
+            claim_session.rollback()
+            return None
         finally:
             claim_session.close()
 

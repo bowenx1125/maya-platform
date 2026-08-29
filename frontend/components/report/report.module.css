@@ -1,0 +1,218 @@
+.panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(24, 39, 61, 0.12);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 40px rgba(24, 39, 61, 0.08);
+}
+
+.header,
+.cardHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header h2,
+.cardHeading h3 {
+  margin: 0;
+  color: #1d2b42;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: #947248;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.lede,
+.empty,
+.loading,
+.notice,
+.error {
+  margin: 0.5rem 0 0;
+  color: #56657a;
+  line-height: 1.55;
+}
+
+.actions,
+.cardHeading button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.actions button,
+.cardHeading button,
+.history button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgba(48, 69, 98, 0.24);
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #304562;
+  cursor: pointer;
+  font: inherit;
+}
+
+.actions button:last-child,
+.cardHeading button {
+  border-color: #304562;
+  background: #304562;
+  color: #fff;
+}
+
+.actions button:disabled,
+.cardHeading button:disabled,
+.history button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.statusCard,
+.reportCard,
+.history {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgba(24, 39, 61, 0.1);
+  border-radius: 0.95rem;
+  background: #fbfcfe;
+}
+
+.statusCard {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.statusCard span,
+.statusCard small,
+.revisionStatus,
+.cardHeading small {
+  color: #69778b;
+  font-size: 0.8rem;
+}
+
+.statusCard strong {
+  color: #304562;
+}
+
+.error {
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.7rem;
+  background: #fff0ee;
+  color: #a34842;
+}
+
+.notice {
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.7rem;
+  background: #fff8ec;
+  color: #8b6532;
+}
+
+.insightList,
+.history ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insightList li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(24, 39, 61, 0.1);
+  border-radius: 0.7rem;
+}
+
+.insightList li span {
+  color: #947248;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.insightList li p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown {
+  max-height: 42rem;
+  margin: 1rem 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.65;
+  color: #2f4057;
+}
+
+.history {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.history li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(24, 39, 61, 0.08);
+}
+
+.history li:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 680px) {
+  .panel {
+    padding: 1rem;
+  }
+
+  .header,
+  .cardHeading {
+    flex-direction: column;
+  }
+
+  .actions,
+  .actions button,
+  .cardHeading button {
+    width: 100%;
+  }
+
+  .statusGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .history li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .history li .revisionStatus {
+    grid-column: 1;
+  }
+
+  .history li button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}

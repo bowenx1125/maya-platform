@@ -1481,7 +1481,8 @@
           "required": [
             "status",
             "votes",
-            "barrage_count"
+            "barrage_count",
+            "total_votes"
           ],
           "properties": {
             "status": {
@@ -1527,17 +1528,6 @@
             "total_votes": {
               "type": "integer",
               "minimum": 0
-            },
-            "public_url": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "uri-reference"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "additionalProperties": false
@@ -1547,7 +1537,10 @@
           "required": [
             "generation_status",
             "latest_attempt_status",
-            "insight"
+            "insight",
+            "active_revision_id",
+            "current_success_revision_id",
+            "current_success_word_count"
           ],
           "properties": {
             "generation_status": {
@@ -1574,7 +1567,8 @@
                 "status",
                 "included_count",
                 "filtered_count",
-                "items"
+                "snapshot_id",
+                "revision"
               ],
               "properties": {
                 "status": {
@@ -1594,36 +1588,27 @@
                   "type": "integer",
                   "minimum": 0
                 },
-                "items": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": [
-                      "category",
-                      "summary",
-                      "count"
-                    ],
-                    "properties": {
-                      "category": {
-                        "type": "string",
-                        "enum": [
-                          "support",
-                          "challenge",
-                          "question"
-                        ]
-                      },
-                      "summary": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "count": {
-                        "type": "integer",
-                        "minimum": 1
-                      }
+                "snapshot_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
                     },
-                    "additionalProperties": false
-                  },
-                  "minItems": 0
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "additionalProperties": false
@@ -1639,81 +1624,23 @@
                 }
               ]
             },
-            "current_success_revision": {
+            "current_success_revision_id": {
               "anyOf": [
                 {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "revision_no",
-                    "status",
-                    "created_at"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "revision_no": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "generating",
-                        "ready",
-                        "failed"
-                      ]
-                    },
-                    "english_markdown": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "word_count": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": 600,
-                          "maximum": 900
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "translated_markdown": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "safe_error_code": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "created_at": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "additionalProperties": false
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "current_success_word_count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 600,
+                  "maximum": 900
                 },
                 {
                   "type": "null"
@@ -2284,6 +2211,7 @@
       "type": "object",
       "required": [
         "batch_id",
+        "status",
         "total_items",
         "succeeded_items",
         "failed_items"
@@ -2292,16 +2220,6 @@
         "batch_id": {
           "type": "string",
           "format": "uuid"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "running",
-            "completed",
-            "partial",
-            "failed"
-          ]
         },
         "total_items": {
           "type": "integer",
@@ -2314,6 +2232,10 @@
         "failed_items": {
           "type": "integer",
           "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "running"
         }
       },
       "additionalProperties": false
@@ -2322,6 +2244,7 @@
       "type": "object",
       "required": [
         "batch_id",
+        "status",
         "total_items",
         "succeeded_items",
         "failed_items"
@@ -2330,16 +2253,6 @@
         "batch_id": {
           "type": "string",
           "format": "uuid"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "running",
-            "completed",
-            "partial",
-            "failed"
-          ]
         },
         "total_items": {
           "type": "integer",
@@ -2352,6 +2265,13 @@
         "failed_items": {
           "type": "integer",
           "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "partial"
+          ]
         }
       },
       "additionalProperties": false
@@ -2360,6 +2280,7 @@
       "type": "object",
       "required": [
         "batch_id",
+        "status",
         "total_items",
         "succeeded_items",
         "failed_items"
@@ -2368,16 +2289,6 @@
         "batch_id": {
           "type": "string",
           "format": "uuid"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "running",
-            "completed",
-            "partial",
-            "failed"
-          ]
         },
         "total_items": {
           "type": "integer",
@@ -2390,6 +2301,10 @@
         "failed_items": {
           "type": "integer",
           "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "failed"
         }
       },
       "additionalProperties": false
@@ -2397,18 +2312,14 @@
     "payload_interaction_opened": {
       "type": "object",
       "required": [
-        "public_url",
-        "qr_payload",
-        "aggregate_zeros"
+        "window_id",
+        "aggregate_zeros",
+        "status"
       ],
       "properties": {
-        "public_url": {
+        "window_id": {
           "type": "string",
-          "format": "uri-reference"
-        },
-        "qr_payload": {
-          "type": "string",
-          "minLength": 1
+          "format": "uuid"
         },
         "aggregate_zeros": {
           "type": "array",
@@ -2569,12 +2480,17 @@
     "payload_barrage_insight_completed": {
       "type": "object",
       "required": [
+        "snapshot_id",
         "revision",
+        "status",
         "included_count",
-        "filtered_count",
-        "themes"
+        "filtered_count"
       ],
       "properties": {
+        "snapshot_id": {
+          "type": "string",
+          "format": "uuid"
+        },
         "revision": {
           "type": "integer",
           "minimum": 1
@@ -2590,37 +2506,6 @@
         "filtered_count": {
           "type": "integer",
           "minimum": 0
-        },
-        "themes": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "category",
-              "summary",
-              "count"
-            ],
-            "properties": {
-              "category": {
-                "type": "string",
-                "enum": [
-                  "support",
-                  "challenge",
-                  "question"
-                ]
-              },
-              "summary": {
-                "type": "string",
-                "minLength": 1
-              },
-              "count": {
-                "type": "integer",
-                "minimum": 1
-              }
-            },
-            "additionalProperties": false
-          },
-          "minItems": 0
         }
       },
       "additionalProperties": false
@@ -2678,198 +2563,37 @@
       "type": "object",
       "required": [
         "revision_id",
+        "revision_no",
         "status",
-        "report"
+        "current_success_revision_id",
+        "latest_attempt_status",
+        "word_count"
       ],
       "properties": {
         "revision_id": {
           "type": "string",
           "format": "uuid"
         },
+        "revision_no": {
+          "type": "integer",
+          "minimum": 1
+        },
         "status": {
           "type": "string",
           "const": "ready"
         },
-        "report": {
-          "type": "object",
-          "required": [
-            "generation_status",
-            "latest_attempt_status",
-            "insight"
-          ],
-          "properties": {
-            "generation_status": {
-              "type": "string",
-              "enum": [
-                "not_started",
-                "generating",
-                "ready",
-                "failed"
-              ]
-            },
-            "latest_attempt_status": {
-              "type": "string",
-              "enum": [
-                "not_started",
-                "generating",
-                "ready",
-                "failed"
-              ]
-            },
-            "insight": {
-              "type": "object",
-              "required": [
-                "status",
-                "included_count",
-                "filtered_count",
-                "items"
-              ],
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "not_started",
-                    "generating",
-                    "ready",
-                    "failed"
-                  ]
-                },
-                "included_count": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "filtered_count": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "items": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": [
-                      "category",
-                      "summary",
-                      "count"
-                    ],
-                    "properties": {
-                      "category": {
-                        "type": "string",
-                        "enum": [
-                          "support",
-                          "challenge",
-                          "question"
-                        ]
-                      },
-                      "summary": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "count": {
-                        "type": "integer",
-                        "minimum": 1
-                      }
-                    },
-                    "additionalProperties": false
-                  },
-                  "minItems": 0
-                }
-              },
-              "additionalProperties": false
-            },
-            "active_revision_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "current_success_revision": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "revision_no",
-                    "status",
-                    "created_at"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "revision_no": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "generating",
-                        "ready",
-                        "failed"
-                      ]
-                    },
-                    "english_markdown": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "word_count": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": 600,
-                          "maximum": 900
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "translated_markdown": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "safe_error_code": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "created_at": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "additionalProperties": false
+        "current_success_revision_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "latest_attempt_status": {
+          "type": "string",
+          "const": "ready"
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 600,
+          "maximum": 900
         }
       },
       "additionalProperties": false
@@ -2878,7 +2602,10 @@
       "type": "object",
       "required": [
         "revision_id",
+        "revision_no",
         "status",
+        "current_success_revision_id",
+        "latest_attempt_status",
         "safe_error_code"
       ],
       "properties": {
@@ -2886,7 +2613,26 @@
           "type": "string",
           "format": "uuid"
         },
+        "revision_no": {
+          "type": "integer",
+          "minimum": 1
+        },
         "status": {
+          "type": "string",
+          "const": "failed"
+        },
+        "current_success_revision_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latest_attempt_status": {
           "type": "string",
           "const": "failed"
         },

@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0006_pre_wave3_polish"
+ALEMBIC_HEAD = "0007_wave3_interaction_report"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
@@ -68,11 +68,14 @@ class Database:
         does not create any later-wave tables.
         """
 
-        # Register Wave 2's vertical-domain tables before isolated tests call
+        # Register Wave 2/3 vertical-domain tables before isolated tests call
         # create_all. Deployment still uses Alembic as the source of truth.
         from app.modules.debates import models as _debate_models
+        from app.modules.interactions import models as _interaction_models
+        from app.modules.reports import models as _report_models
+        from app.modules.translations import models as _translation_models
 
-        del _debate_models
+        del _debate_models, _interaction_models, _report_models, _translation_models
         if self.engine.url.get_backend_name() == "sqlite":
             database = self.engine.url.database
             if database and database != ":memory:":

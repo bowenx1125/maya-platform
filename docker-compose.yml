@@ -50,7 +50,7 @@ services:
       DEMO_MODE: ${DEMO_MODE:-true}
       DEMO_QUICK_LOGIN: ${DEMO_QUICK_LOGIN:-true}
       SESSION_SECRET: ${SESSION_SECRET:-}
-      CLASSROOM_PUBLIC_BASE_URL: ${CLASSROOM_PUBLIC_BASE_URL:-http://localhost:8080}
+      CLASSROOM_PUBLIC_BASE_URL: ${CLASSROOM_PUBLIC_BASE_URL:-}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/maya.sqlite3}
       DATA_ROOT: ${DATA_ROOT:-/app/data}
       DEMO_USERS_FILE: ${DEMO_USERS_FILE:-/app/config/demo_users.yaml}

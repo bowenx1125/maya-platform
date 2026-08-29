@@ -192,6 +192,35 @@ class PlaybackRepository(Protocol):
 
     def mark_debate_audio_deleted(self, db: Any, debate_id: str) -> int: ...
 
+    # Teacher Stop/Continue/Finish controls use independent fresh-session
+    # CAS methods in the SQL adapter.  The service keeps a small in-memory
+    # fallback for unit tests that do not implement these optional seams.
+    def claim_pause_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        cursor_ms: int,
+        teacher_user_id: str | None = None,
+    ) -> bool: ...
+
+    def claim_resume_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        teacher_user_id: str | None = None,
+    ) -> bool: ...
+
+    def claim_finish_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        expected_current_turn_id: str | None = None,
+        teacher_user_id: str | None = None,
+    ) -> Mapping[str, Any] | None: ...
+
 
 class TurnPreparer(Protocol):
     def __call__(
@@ -336,6 +365,128 @@ class MemoryPlaybackRepository:
     def mark_jobs_interrupted(self, db: Any, debate: MemoryDebate, code: str) -> None:
         del db
         self.jobs_interrupted.append((debate.id, code))
+
+    def claim_pause_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        cursor_ms: int,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        del teacher_user_id
+        debate = self.debates.get(debate_id)
+        if debate is None:
+            return False
+        state = self.playback_state(None, debate)
+        if (
+            debate.status != "running"
+            or state.status != "playing"
+            or state.current_turn_id is None
+            or state.control_version != expected_control_version
+        ):
+            return False
+        state.status = "paused"
+        state.cursor_ms = max(0, int(cursor_ms))
+        state.started_monotonic = None
+        state.control_version += 1
+        state.pending_action = None
+        state.pending_ticket_hash = None
+        state.pending_media_command_id = None
+        state.audio_duration_ms = 0
+        return True
+
+    def claim_resume_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        teacher_user_id: str | None = None,
+    ) -> bool:
+        del teacher_user_id
+        debate = self.debates.get(debate_id)
+        if debate is None:
+            return False
+        state = self.playback_state(None, debate)
+        if (
+            debate.status != "running"
+            or state.status != "paused"
+            or state.current_turn_id is None
+            or state.control_version != expected_control_version
+        ):
+            return False
+        turn = next(
+            (item for item in debate.turns if item.id == state.current_turn_id),
+            None,
+        )
+        if turn is None or turn.generation_status not in {"ready", "final_ready", "completed"}:
+            return False
+        state.status = "ready"
+        state.control_version += 1
+        state.pending_action = None
+        state.pending_ticket_hash = None
+        state.pending_media_command_id = None
+        state.audio_duration_ms = 0
+        return True
+
+    def claim_finish_playback(
+        self,
+        *,
+        debate_id: str,
+        expected_control_version: int,
+        expected_current_turn_id: str | None = None,
+        teacher_user_id: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        del teacher_user_id
+        debate = self.debates.get(debate_id)
+        if debate is None:
+            return None
+        state = self.playback_state(None, debate)
+        if debate.status != "running" or state.control_version != expected_control_version:
+            return None
+        if (
+            expected_current_turn_id is not None
+            and state.current_turn_id != expected_current_turn_id
+        ):
+            return None
+        turns = self.turns(None, debate)
+        complete = bool(turns) and all(
+            item.generation_status == "final_ready" and item.publication_status == "public"
+            for item in turns
+        )
+        if complete:
+            debate.status = "debate_finished"
+            state.status = "completed"
+        else:
+            debate.status = "stopped"
+            debate.cancellation_generation += 1
+            self.mark_jobs_interrupted(None, debate, "debate_finished_partial")
+            state.status = "stopped"
+        state.mode = "live"
+        state.current_turn_id = None
+        state.cursor_ms = 0
+        state.control_version += 1
+        state.controller_epoch = None
+        state.controller_session_hash = None
+        state.controller_connection_id = None
+        state.pending_action = None
+        state.pending_ticket_hash = None
+        state.pending_media_command_id = None
+        state.audio_duration_ms = 0
+        state.replay_scope = None
+        state.replay_index = None
+        state.replay_turn_ids = []
+        return {
+            "kind": "full" if complete else "partial",
+            "control_version": state.control_version,
+            "current_turn_id": None,
+            "total_turns": len(turns),
+            "complete_turns": sum(
+                1
+                for item in turns
+                if item.generation_status == "final_ready" and item.publication_status == "public"
+            ),
+        }
 
     def write_playback_reset_audit(
         self,

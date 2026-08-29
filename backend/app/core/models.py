@@ -641,6 +641,33 @@ class Job(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     cancellation_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    insight_snapshot_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "barrage_insight_snapshots.id",
+            name="fk_jobs_insight_snapshot",
+            ondelete="CASCADE",
+        ),
+        nullable=True,
+    )
+    report_revision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "civilization_report_revisions.id",
+            name="fk_jobs_report_revision",
+            ondelete="CASCADE",
+        ),
+        nullable=True,
+    )
+    translation_batch_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "translation_batches.id",
+            name="fk_jobs_translation_batch",
+            ondelete="CASCADE",
+        ),
+        nullable=True,
+    )
     operation: Mapped[str] = mapped_column(String(40), nullable=False)
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -653,9 +680,39 @@ class Job(Base):
             "state IN ('pending', 'running', 'completed', 'failed', 'interrupted')",
             name="ck_jobs_state",
         ),
+        CheckConstraint(
+            "(operation = 'barrage_insight.generate' AND insight_snapshot_id IS NOT NULL "
+            "AND report_revision_id IS NULL AND translation_batch_id IS NULL) OR "
+            "(operation = 'report.generate' AND insight_snapshot_id IS NULL "
+            "AND report_revision_id IS NOT NULL AND translation_batch_id IS NULL) OR "
+            "(operation = 'translation.generate' AND insight_snapshot_id IS NULL "
+            "AND report_revision_id IS NULL AND translation_batch_id IS NOT NULL) OR "
+            "(operation NOT IN ('barrage_insight.generate', 'report.generate', "
+            "'translation.generate') AND insight_snapshot_id IS NULL "
+            "AND report_revision_id IS NULL AND translation_batch_id IS NULL)",
+            name="ck_jobs_wave3_typed_owner",
+        ),
         Index("ix_jobs_document", "document_id"),
         Index("ix_jobs_debate", "debate_id"),
         Index("ix_jobs_turn", "turn_id"),
+        Index(
+            "uq_jobs_insight_snapshot",
+            "insight_snapshot_id",
+            unique=True,
+            sqlite_where=insight_snapshot_id.is_not(None),
+        ),
+        Index(
+            "uq_jobs_report_revision",
+            "report_revision_id",
+            unique=True,
+            sqlite_where=report_revision_id.is_not(None),
+        ),
+        Index(
+            "uq_jobs_translation_batch",
+            "translation_batch_id",
+            unique=True,
+            sqlite_where=translation_batch_id.is_not(None),
+        ),
         Index(
             "uq_jobs_operation_idempotency_key",
             "operation",

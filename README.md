@@ -1,5 +1,11 @@
 # Maya Teaching Platform
 
+> **Private handoff snapshot:** this repository was explicitly requested as a
+> private Demo handoff and therefore includes the local `.env`, Demo account
+> files, and runtime `data/` snapshot. Do not copy these files to a public
+> repository, share the repository beyond the intended Sol reviewers, or reuse
+> the credentials outside this Demo.
+
 Maya is a local-first classroom platform for building culture-focused agents and running a structured, evidence-aware debate.
 
 The current private Demo provides:
@@ -8,11 +14,14 @@ The current private Demo provides:
 - `frontend`: Next.js student, teacher and classroom interfaces using the frozen V2 visual language;
 - `backend`: FastAPI image boundary with Python 3.12, FFmpeg, and a real readiness probe.
 
-The audited local candidate includes Demo quick login, Agent/version workflows,
+The local manual-check candidate includes Demo quick login, Agent/version workflows,
 Markdown RAG and immutable snapshots, teacher inspection, 3D avatar previews,
-two-round Mock debate generation and teacher-paced classroom playback. Real
-LLM/Embedding/TTS acceptance and the later classroom interaction/Maya report
-modules are intentionally not claimed as complete.
+two-round Mock debate generation, teacher-paced classroom playback, anonymous
+QR interaction, named raw barrages, anonymous voting, Mock Maya reports,
+read-only history, and on-demand Mock Chinese test representation. Wave 3 has
+passed deterministic tests and Docker integration; the requested high-risk
+boundaries have also passed a narrow independent Sol review. Full Wave 3 G2/G3,
+real LLM/Embedding/TTS acceptance and Wave 4 remain out of scope.
 
 The frontend follows the Wave 0 frozen dependency set: TypeScript `5.9.3`, ESLint `9.39.1`, Next.js `16.3.3`, React `19.2.8`, Vitest `4.1.11`, Vite `8.2.2`, jsdom `29.0.1`, and the pinned type/test tooling listed in the gate packet. ESLint 9 is the approved compatibility override because ESLint 10 currently crashes inside the Next.js 16.3.3 transitive parser/plugin before linting source files; the lint command still covers TypeScript and TSX with the full Next ruleset. TypeScript 5.9.3 is required by openapi-typescript 7.13.0, and jsdom 29.0.1 matches the frozen Node 24.14 runtime.
 
@@ -27,8 +36,13 @@ The frontend follows the Wave 0 frozen dependency set: TypeScript `5.9.3`, ESLin
    docker compose ps
    ```
 
-3. Confirm `backend` and `frontend` are `healthy`, then open
-   `http://localhost:8080`.
+3. Confirm `backend` and `frontend` are `healthy`.
+4. For ordinary single-computer work, open `http://localhost:8080`. For QR,
+   phone, or live WebSocket classroom checks, set `CLASSROOM_PUBLIC_BASE_URL`
+   in the ignored `.env` to this Mac's current private-LAN origin, rebuild or
+   restart the stack, and open the teacher page through that same origin (for
+   example `http://192.168.x.x:8080`). Do not mix localhost and the LAN origin
+   during one classroom run.
 
 Use `docker compose up -d --build` instead when application code, dependencies,
 Dockerfiles or build-time settings changed.
@@ -67,6 +81,8 @@ pnpm install --frozen-lockfile
 pnpm --filter @maya/frontend lint
 pnpm --filter @maya/frontend typecheck
 pnpm --filter @maya/frontend test
+uv run --directory backend pytest -q
+uv run --directory backend python ../scripts/test_wave3_migration.py
 docker compose config
 ```
 
@@ -76,9 +92,10 @@ For a local browser shell without containers:
 pnpm --filter @maya/frontend dev
 ```
 
-The complete local stack is exposed at `http://localhost:8080`. Never commit
-`.env`, `backend/config/demo-accounts/accounts.private.md`, supplier credentials,
-or runtime data.
+The complete local stack is exposed at `http://localhost:8080`. In ordinary
+development, keep `.env`, `backend/config/demo-accounts/accounts.private.md`,
+supplier credentials, and runtime data local. This private handoff snapshot is
+an explicit exception for Demo review and contains those files by request.
 
 ## Logs and shutdown
 

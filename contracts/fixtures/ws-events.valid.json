@@ -25,7 +25,8 @@
       "interaction": {
         "status": "closed",
         "votes": [],
-        "barrage_count": 0
+        "barrage_count": 0,
+        "total_votes": 0
       },
       "report": {
         "generation_status": "not_started",
@@ -34,8 +35,12 @@
           "status": "not_started",
           "included_count": 0,
           "filtered_count": 0,
-          "items": []
-        }
+          "snapshot_id": null,
+          "revision": null
+        },
+        "active_revision_id": null,
+        "current_success_revision_id": null,
+        "current_success_word_count": null
       },
       "latest_sequence": 0
     }
@@ -242,6 +247,7 @@
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
       "batch_id": "55555555-5555-4555-8555-555555555555",
+      "status": "running",
       "total_items": 5,
       "succeeded_items": 0,
       "failed_items": 0
@@ -273,8 +279,8 @@
       "batch_id": "55555555-5555-4555-8555-555555555555",
       "status": "failed",
       "total_items": 5,
-      "succeeded_items": 4,
-      "failed_items": 1
+      "succeeded_items": 0,
+      "failed_items": 5
     }
   },
   {
@@ -285,8 +291,8 @@
     "sequence": 17,
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
-      "public_url": "/classroom/fixture-access-token",
-      "qr_payload": "/classroom/fixture-access-token",
+      "window_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "status": "open",
       "aggregate_zeros": [
         {
           "participant_id": "22222222-2222-4222-8222-222222222222",
@@ -364,17 +370,11 @@
     "sequence": 22,
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
+      "snapshot_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "revision": 1,
       "status": "ready",
       "included_count": 1,
-      "filtered_count": 0,
-      "themes": [
-        {
-          "category": "question",
-          "summary": "Learners ask for comparable evidence.",
-          "count": 1
-        }
-      ]
+      "filtered_count": 0
     }
   },
   {
@@ -411,17 +411,11 @@
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
       "revision_id": "77777777-7777-4777-8777-777777777777",
+      "revision_no": 1,
       "status": "ready",
-      "report": {
-        "generation_status": "not_started",
-        "latest_attempt_status": "not_started",
-        "insight": {
-          "status": "not_started",
-          "included_count": 0,
-          "filtered_count": 0,
-          "items": []
-        }
-      }
+      "current_success_revision_id": "77777777-7777-4777-8777-777777777777",
+      "latest_attempt_status": "ready",
+      "word_count": 640
     }
   },
   {
@@ -433,7 +427,10 @@
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
       "revision_id": "77777777-7777-4777-8777-777777777777",
+      "revision_no": 2,
       "status": "failed",
+      "current_success_revision_id": "77777777-7777-4777-8777-777777777777",
+      "latest_attempt_status": "failed",
       "safe_error_code": "report_failed"
     }
   },

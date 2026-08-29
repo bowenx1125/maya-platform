@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import secrets
 from functools import lru_cache
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -94,6 +95,32 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("classroom_public_base_url", mode="before")
+    @classmethod
+    def classroom_public_url_is_origin(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if not isinstance(value, str):
+            raise ValueError("CLASSROOM_PUBLIC_BASE_URL must be an HTTP origin")
+        parsed = urlsplit(value.strip())
+        try:
+            _ = parsed.port
+        except ValueError:
+            raise ValueError("CLASSROOM_PUBLIC_BASE_URL has an invalid port") from None
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+            or parsed.path not in {"", "/"}
+        ):
+            raise ValueError(
+                "CLASSROOM_PUBLIC_BASE_URL must be an absolute HTTP origin without a path"
+            )
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @field_validator("demo_mode", mode="before")
     @classmethod
@@ -232,6 +259,33 @@ class Settings(BaseSettings):
         # Keep a clear failure even if a caller uses the property before the
         # lifespan validator.
         raise RuntimeError("SESSION_SECRET must contain at least 32 bytes")
+
+    @property
+    def classroom_public_origin(self) -> str | None:
+        """Return a phone-reachable private-LAN origin or ``None``.
+
+        Loopback is valid for the ordinary local site but cannot be placed in
+        a QR code: a phone would resolve it to itself.  Wave 3 deliberately
+        accepts only a private numeric address or a local-network hostname.
+        """
+
+        value = self.classroom_public_base_url
+        if value is None:
+            return None
+        hostname = (urlsplit(value).hostname or "").lower().rstrip(".")
+        if hostname == "localhost":
+            return None
+        try:
+            address = ip_address(hostname)
+        except ValueError:
+            return value if hostname.endswith(".local") else None
+        private_networks = (
+            ip_network("10.0.0.0/8"),
+            ip_network("172.16.0.0/12"),
+            ip_network("192.168.0.0/16"),
+            ip_network("fc00::/7"),
+        )
+        return value if any(address in network for network in private_networks) else None
 
     @property
     def resolved_data_root(self) -> Path:

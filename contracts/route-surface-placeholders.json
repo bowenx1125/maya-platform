@@ -1,61 +1,8 @@
 {
   "schema_version": 1,
-  "contract_version": "g0-2026-08-28.7-pre-wave3-polish",
-  "description": "Explicit allow-list for frozen operations whose backend routes belong to later waves.",
-  "allowed_missing_operation_ids": {
-    "getTeacherInteraction": {
-      "owner": "M13",
-      "reason": "Classroom interaction routes are a Wave 3 deliverable."
-    },
-    "openInteraction": {
-      "owner": "M13",
-      "reason": "Classroom interaction routes are a Wave 3 deliverable."
-    },
-    "closeInteraction": {
-      "owner": "M13",
-      "reason": "Classroom interaction routes are a Wave 3 deliverable."
-    },
-    "getClassroomInteractionForm": {
-      "owner": "M13",
-      "reason": "Classroom interaction routes are a Wave 3 deliverable."
-    },
-    "submitVote": {
-      "owner": "M13",
-      "reason": "Classroom interaction routes are a Wave 3 deliverable."
-    },
-    "submitBarrage": {
-      "owner": "M13",
-      "reason": "Classroom interaction routes are a Wave 3 deliverable."
-    },
-    "getCurrentReport": {
-      "owner": "M14",
-      "reason": "Maya report routes are a Wave 3 deliverable."
-    },
-    "regenerateReport": {
-      "owner": "M14",
-      "reason": "Maya report routes are a Wave 3 deliverable."
-    },
-    "listReportRevisions": {
-      "owner": "M14",
-      "reason": "Maya report routes are a Wave 3 deliverable."
-    },
-    "getReportRevision": {
-      "owner": "M14",
-      "reason": "Maya report routes are a Wave 3 deliverable."
-    },
-    "downloadCurrentReport": {
-      "owner": "M14",
-      "reason": "Maya report routes are a Wave 3 deliverable."
-    },
-    "listTranslationBatches": {
-      "owner": "M15",
-      "reason": "Translation routes are a Wave 3 deliverable."
-    },
-    "translateCurrentPublishedContent": {
-      "owner": "M15",
-      "reason": "Translation routes are a Wave 3 deliverable."
-    }
-  },
+  "contract_version": "g0-2026-08-29.3-wave3",
+  "description": "Wave 3 implements every frozen product operation; only infrastructure health probes remain classified extras.",
+  "allowed_missing_operation_ids": {},
   "allowed_extra_operation_ids": {
     "health_live_health_live_get": {
       "owner": "M01",

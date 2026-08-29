@@ -2,6 +2,7 @@ import type {
   DebateDetail,
   DebatePlaybackState,
   DebateTurn,
+  IdempotencyHandle,
   PlatformApi,
 } from "../../../lib/api";
 import type { AvatarConfig, AvatarExpression, AvatarState } from "../../avatar";
@@ -18,7 +19,19 @@ export type PlaybackAction = "start" | "resume" | "next" | "replay";
 export type DebatePlaybackApi = Pick<
   PlatformApi,
   "startDebate" | "advanceDebatePlayback" | "replayDebate"
->;
+> & {
+  /** Wave 3 teacher controls are optional until the shared generated client is regenerated. */
+  pauseDebate?: (
+    debateId: string,
+    body: { expected_control_version: number },
+    options?: { idempotency?: IdempotencyHandle },
+  ) => Promise<DebatePlaybackState>;
+  resumeDebate?: (
+    debateId: string,
+    body: { expected_control_version: number },
+    options?: { idempotency?: IdempotencyHandle },
+  ) => Promise<DebatePlaybackState>;
+};
 
 export type DebateStartRequest = Parameters<PlatformApi["startDebate"]>[1];
 export type AdvancePlaybackRequest = Parameters<
@@ -29,7 +42,11 @@ export type PlaybackStageLabels = {
   stageTitle?: string;
   stageDescription?: string;
   start?: string;
+  pause?: string;
+  resume?: string;
   replayAll?: string;
+  reconnect?: string;
+  finish?: string;
   transcript?: string;
   sources?: string;
   noSources?: string;
@@ -42,6 +59,7 @@ export type PlaybackStageLabels = {
   statusPreparing?: string;
   statusReady?: string;
   statusPlaying?: string;
+  statusPaused?: string;
   waitingNext?: string;
   next?: string;
   waitingForAudio?: string;
