@@ -1,0 +1,93 @@
+name: One-time mechanical synchronization
+
+on:
+  push:
+    branches:
+      - sol/repository-cleanup-handoff
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: github.ref == 'refs/heads/sol/repository-cleanup-handoff'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out cleanup branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: sol/repository-cleanup-handoff
+          fetch-depth: 0
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.14.0
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.19.0 --activate
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Split overlong SQL literals
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/app/modules/debates/playback/sql_repository.py")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              '                        "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id) AS total_turns, "\n': (
+                  '                        "(SELECT COUNT(*) FROM debate_turns t WHERE t.debate_id=d.id) "\n'
+                  '                        "AS total_turns, "\n'
+              ),
+              '                        "AND EXISTS (SELECT 1 FROM course_members cm WHERE cm.course_id=d.course_id "\n': (
+                  '                        "AND EXISTS (SELECT 1 FROM course_members cm "\n'
+                  '                        "WHERE cm.course_id=d.course_id "\n'
+              ),
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one SQL literal match, found {count}: {old!r}")
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Regenerate the complete Wave 3 route fixture
+        run: |
+          node scripts/generate_route_fixture.mjs
+          pnpm exec prettier --write \
+            scripts/generate_route_fixture.mjs \
+            scripts/test_route_surface.mjs \
+            contracts/fixtures/route-surface-server.json
+
+      - name: Verify targeted mechanical checks
+        run: |
+          pnpm exec prettier --check \
+            scripts/generate_route_fixture.mjs \
+            scripts/test_route_surface.mjs \
+            contracts/fixtures/route-surface-server.json
+          node scripts/test_route_surface.mjs
+
+      - name: Remove this one-time workflow
+        run: rm .github/workflows/mechanical-sync.yml
+
+      - name: Commit synchronized files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/app/modules/debates/playback/sql_repository.py \
+            scripts/generate_route_fixture.mjs \
+            scripts/test_route_surface.mjs \
+            contracts/fixtures/route-surface-server.json \
+            .github/workflows/mechanical-sync.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "ci: synchronize Wave 3 route fixture and lint"
+          git push origin HEAD:sol/repository-cleanup-handoff
