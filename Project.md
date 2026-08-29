@@ -1416,6 +1416,7 @@ Demo 不引入任务队列，但 LLM、Embedding、声音注册、TTS、翻译�
 - 首次 HTTPS push 因代理/分块上传返回 400 并保持远端空仓库；没有伪报成功。最终只对该次 push 使用 `http.version=HTTP/1.1 + http.postBuffer=524288000`，未改全局 Git 配置，随后成功建立 `origin/main`；
 - README 已从过时的 Wave 0/demo_users.yaml 说明更新为当前标准启动流程：日常启动只需 Docker Desktop + `docker compose up -d`；代码或依赖变化使用 `--build`；新机器先执行 frozen install 和 `pnpm bootstrap:local`，后者只创建被忽略且0600的 `.env` 与 `accounts.private.md`；正常停止使用 `docker compose stop` 保留本地数据；
 - 当前 Mock RAG 对照仍可验收检索链而非真实模型文风：Mock Embedding 确实执行分块、256维向量、两档阈值、top_k与 matched/no_match，Mock LLM 根据结构化检索收据生成确定性发言。可以用相同问题比较优质相关 Markdown 与无命中/无关 Markdown的 `retrieval_status / grounding_mode / sources / 具体事实`；但不能据此声称真实 Embedding 语义泛化、百炼 LLM 辩论质量或正式 TikTok 内容已通过。
+- 应用户明确确认，本窗口保留旧仓库 `bowenx1125/maya-teaching-platform`，另创建私有仓库 `bowenx1125/maya-platform`（项目描述为 `Maya Platform - private Demo handoff snapshot`）。新仓库从当前产品 Git 历史建立隔离上传副本，并纳入全部未提交代码、`Project.md`、原始需求、开发工作簿、合同/手工测试/历史输出、`.env`、Demo 账号文件、`data/` 与 `backend/data/`（SQLite/WAL/SHM、快照、Markdown、生成音频）以及 `private-inputs/` 个人音频；不纳入独立参考项目和操作系统/依赖/构建缓存。首次 push 的 HTTP 400 已按 HTTP/1.1 + 500MB post buffer 仅对该次命令重试成功；旧仓库 remote 未改写。此私有快照含真实凭据和个人音频，不能公开或转发给未授权人员。
 
 ### 2026-08-28
 
