@@ -41,9 +41,9 @@ try {
   mkdirSync(resolve(repo, "scripts"), { recursive: true });
   mkdirSync(resolve(repo, "config"), { recursive: true });
   mkdirSync(resolve(repo, "backend/config/demo-accounts"), { recursive: true });
-  mkdirSync(resolve(repo, "private-inputs/voice"), { recursive: true });
   mkdirSync(resolve(repo, "frontend/lib/api/generated"), { recursive: true });
   mkdirSync(resolve(repo, "data"), { recursive: true });
+  mkdirSync(resolve(repo, "private-inputs"), { recursive: true });
 
   copyFileSync(checker, resolve(repo, "scripts/check_repo_boundary.mjs"));
   copyFileSync(policy, resolve(repo, "config/repository-data-policy.json"));
@@ -56,14 +56,7 @@ try {
     "# approved private Demo accounts\n",
   );
   writeFileSync(resolve(repo, "backend/config/demo_users.yaml"), "users: []\n");
-  writeFileSync(
-    resolve(repo, "private-inputs/voice/test.m4a"),
-    Buffer.from([0, 1, 2, 3]),
-  );
-  writeFileSync(
-    resolve(repo, "frontend/index.ts"),
-    "export const safe = true;\n",
-  );
+  writeFileSync(resolve(repo, "frontend/index.ts"), "export const safe = true;\n");
 
   execFileSync("git", ["init", "--quiet", repo]);
   execFileSync("git", ["-C", repo, "add", "."]);
@@ -71,13 +64,17 @@ try {
   const allowed = runChecker(repo);
   if (allowed.status !== 0) {
     throw new Error(
-      `approved-private-file probe failed:\n${allowed.stdout}\n${allowed.stderr}`,
+      `approved-Demo-credential probe failed:\n${allowed.stdout}\n${allowed.stderr}`,
     );
   }
 
   const simulatedKey = `sk-${"reject".repeat(6)}`;
   writeFileSync(resolve(repo, ".env"), `DASHSCOPE_API_KEY=${simulatedKey}\n`);
   writeFileSync(resolve(repo, "data/maya.sqlite3"), Buffer.from([0, 1, 2, 3]));
+  writeFileSync(
+    resolve(repo, "private-inputs/voice.m4a"),
+    Buffer.from([0, 1, 2, 3]),
+  );
   writeFileSync(
     resolve(repo, "frontend/lib/api/generated/leak.ts"),
     `export const key = "${simulatedKey}";\n`,
@@ -89,17 +86,19 @@ try {
     "-f",
     ".env",
     "data/maya.sqlite3",
+    "private-inputs/voice.m4a",
     "frontend/lib/api/generated/leak.ts",
   ]);
 
   const rejected = runChecker(repo);
   if (rejected.status === 0) {
-    throw new Error("forbidden runtime/secret probe unexpectedly passed");
+    throw new Error("forbidden runtime/private probe unexpectedly passed");
   }
   const output = `${rejected.stdout}\n${rejected.stderr}`;
   for (const expected of [
     ".env",
     "data/maya.sqlite3",
+    "private-inputs/voice.m4a",
     "frontend/lib/api/generated/leak.ts",
   ]) {
     if (!output.includes(expected)) {
@@ -108,7 +107,7 @@ try {
   }
 
   console.log(
-    "repository boundary tests passed: approved Demo credentials/voice are allowed; .env, runtime DB, and generated frontend secret are rejected",
+    "repository boundary tests passed: only approved Demo credential files are allowed; .env, runtime DB, private input, and generated frontend secret are rejected",
   );
 } finally {
   rmSync(probeRoot, { recursive: true, force: true });
