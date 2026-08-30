@@ -337,6 +337,7 @@ def _query_batch(
     queries: tuple[tuple[str, str], ...],
     identity: EmbeddingIdentityV1,
     snapshot_id: str,
+    build_manifest_hash: str | None = None,
 ) -> tuple[EmbeddingBatchV1, tuple[str, ...], int]:
     token_counts: list[int] = []
     for value, _ in queries:
@@ -357,7 +358,7 @@ def _query_batch(
             "query batch exceeds the fixed token limit", code="query_embedding_batch_too_large"
         )
     query_hashes = tuple(key for _, key in queries)
-    build_manifest_hash = _canonical_hash(
+    resolved_build_manifest_hash = build_manifest_hash or _canonical_hash(
         {
             "version": QUERY_EMBEDDING_VERSION,
             "snapshot_id": snapshot_id,
@@ -372,13 +373,21 @@ def _query_batch(
             "token_counts": token_counts,
         }
     )
+    if (
+        not isinstance(resolved_build_manifest_hash, str)
+        or len(resolved_build_manifest_hash) != 64
+        or any(char not in "0123456789abcdef" for char in resolved_build_manifest_hash)
+    ):
+        raise QueryEmbeddingError(
+            "query build manifest hash is invalid", code="query_embedding_manifest_invalid"
+        )
     items = tuple(
         EmbeddingItemV1(
             chunk_id=key,
             text=value,
             token_count=token_count,
             chunk_sha256=key,
-            build_manifest_hash=build_manifest_hash,
+            build_manifest_hash=resolved_build_manifest_hash,
             document_id=f"query:{key}",
             document_order=index,
             chunk_index=0,
@@ -389,7 +398,7 @@ def _query_batch(
         EmbeddingBatchV1(
             batch_index=0,
             build_id=f"query:{snapshot_id}",
-            build_manifest_hash=build_manifest_hash,
+            build_manifest_hash=resolved_build_manifest_hash,
             model_key=identity.model_key,
             dimension=identity.dimension,
             items=items,
@@ -439,6 +448,10 @@ class QueryEmbeddingService:
     cache: QueryEmbeddingCache | MutableMapping[str, QueryEmbeddingV1] = field(
         default_factory=QueryEmbeddingCache
     )
+    # Optional persisted build hash used by an application control adapter.
+    # When omitted, the historical deterministic query-request hash remains
+    # unchanged for standalone callers.
+    build_manifest_hash: str | None = None
 
     def embed_query(
         self,
@@ -524,7 +537,12 @@ class QueryEmbeddingService:
         manifest_method = _require_port_method(self.manifest, "require_exact_manifest")
         control_method = _require_port_method(self.control, "require_query_preflight")
         budget_method = _require_port_method(self.budget, "reserve_query")
-        batch, query_hashes, total_tokens = _query_batch(queries, identity, snapshot_id)
+        batch, query_hashes, total_tokens = _query_batch(
+            queries,
+            identity,
+            snapshot_id,
+            self.build_manifest_hash,
+        )
         try:
             cast(CallableQueryPreflight, manifest_method)(
                 snapshot_id=snapshot_id,
