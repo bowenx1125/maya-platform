@@ -36,6 +36,8 @@ const implemented = new Set([
   "updateAgentDraft",
   "downloadAgentMd",
   "uploadAgentMd",
+  "compileAgentPersona",
+  "confirmAgentPersona",
   "publishAgentVersion",
   "listKnowledgeDocuments",
   "uploadKnowledgeDocument",

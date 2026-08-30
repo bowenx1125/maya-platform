@@ -381,6 +381,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agent-versions/{version_id}/persona/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["compileAgentPersona"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent-versions/{version_id}/persona/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmAgentPersona"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent-versions/{version_id}/knowledge-documents": {
         parameters: {
             query?: never;
@@ -1137,6 +1173,81 @@ export interface components {
             knowledge_snapshot_id?: components["schemas"]["Uuid"] | null;
             enabled_documents?: components["schemas"]["KnowledgeDocument"][];
             publish_blockers?: string[];
+            raw_agent_md_hash?: string | null;
+            persona_spec?: components["schemas"]["PersonaSpecV1"] | null;
+            persona_spec_hash?: string | null;
+            persona_compiler_version?: string | null;
+            persona_diagnostics?: components["schemas"]["PersonaDiagnostic"][];
+            persona_confirmation_revision?: number | null;
+            /** @default false */
+            persona_confirmed: boolean;
+            student_confirmed_at?: components["schemas"]["IsoTime"] | null;
+        };
+        PersonaIdentity: {
+            name: string;
+            role: string;
+            historical_or_cultural_context: string;
+        };
+        PersonaSpeakingStyle: {
+            tone: string;
+            argument_pattern: string;
+            concession_style: string;
+            question_style: string;
+        };
+        PersonaSpecV1: {
+            /**
+             * @default persona_spec_v1
+             * @constant
+             */
+            schema_version: "persona_spec_v1";
+            identity: components["schemas"]["PersonaIdentity"];
+            cultural_lens: string[];
+            core_values: string[];
+            initial_position: string;
+            speaking_style: components["schemas"]["PersonaSpeakingStyle"];
+            debate_strategy: string[];
+            boundaries: string[];
+            source_agent_md_hash: string;
+            /**
+             * @default persona_template_v1
+             * @constant
+             */
+            compiler_version: "persona_template_v1";
+        };
+        PersonaDiagnostic: {
+            code: string;
+            message: string;
+            field?: string | null;
+            line?: number | null;
+        };
+        CompilePersonaRequest: {
+            expected_revision: number;
+        };
+        ConfirmPersonaRequest: {
+            expected_revision: number;
+            raw_agent_md_hash: string;
+            persona_spec_hash: string;
+            /**
+             * @default persona_template_v1
+             * @constant
+             */
+            compiler_version: "persona_template_v1";
+        };
+        PersonaCompileResponse: {
+            version_id: components["schemas"]["Uuid"];
+            revision: number;
+            compiled: boolean;
+            raw_agent_md_hash: string;
+            persona_spec?: components["schemas"]["PersonaSpecV1"] | null;
+            persona_spec_hash?: string | null;
+            /**
+             * @default persona_template_v1
+             * @constant
+             */
+            compiler_version: "persona_template_v1";
+            diagnostics?: components["schemas"]["PersonaDiagnostic"][];
+            /** @default false */
+            persona_confirmed: boolean;
         };
         UpdateAgentDraftRequest: {
             expected_revision: number;
@@ -1225,8 +1336,12 @@ export interface components {
             /** @description Non-empty English debate topic. The value must contain at least one Latin-script letter and may include Unicode Latin diacritics, numbers, punctuation, and ordinary Unicode space separators. Control characters, non-Latin letters, symbols, unsafe marks, and non-space separators are rejected by the domain validator; there is no product-level maximum length in Wave 2. */
             topic: string;
             participants: components["schemas"]["DebateParticipantInput"][];
-            /** @constant */
-            round_count: 2;
+            /**
+             * @default ordered_multi_agent_rounds_demo_v2
+             * @enum {string}
+             */
+            rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
+            round_count: number;
             total_duration_seconds?: null;
             turn_duration_seconds?: null;
         };
@@ -1274,7 +1389,8 @@ export interface components {
             revision: number;
             last_sequence: number;
             /** @enum {string} */
-            rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2";
+            rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
+            round_count: number;
             participants: components["schemas"]["DebateParticipant"][];
             public_turns: components["schemas"]["DebateTurn"][];
             playback: components["schemas"]["PlaybackState"];
@@ -1284,6 +1400,7 @@ export interface components {
             insight_status: "not_started" | "generating" | "ready" | "failed";
             /** @enum {string} */
             report_status: "not_started" | "generating" | "ready" | "failed";
+            mutual_learning_synthesis?: components["schemas"]["MutualLearningSynthesisV1"] | null;
         };
         PlaybackState: {
             /** @enum {string} */
@@ -1310,6 +1427,83 @@ export interface components {
             sources: components["schemas"]["RetrievalSource"][];
             translated_text?: string | null;
             playback_resource?: components["schemas"]["DebatePlaybackResource"] | null;
+            /** @enum {string|null} */
+            phase?: "opening" | "exchange" | "final_integration" | "rebuttal" | null;
+            mutual_learning?: components["schemas"]["MutualLearningTurnResultV1"] | null;
+        };
+        TurnQuestion: {
+            /**
+             * @default none
+             * @enum {string}
+             */
+            type: "agent" | "audience_reflection" | "none";
+            target_participant_id?: string | null;
+            text?: string | null;
+        };
+        EngagementV1: {
+            target_turn_id: string;
+            target_claim_id?: string | null;
+            /** @enum {string} */
+            relation: "agree" | "extend" | "qualify" | "challenge" | "reconcile";
+            faithful_summary: string;
+            response_summary: string;
+        };
+        KeyClaimV1: {
+            claim_id: string;
+            claim_text: string;
+            /** @enum {string} */
+            claim_type: "factual" | "interpretation" | "value_judgement" | "proposal";
+            used_evidence_ids?: string[];
+        };
+        MutualLearningDisagreementV1: {
+            summary: string;
+            /** @enum {string} */
+            category: "different_persona_or_framework" | "different_evidence" | "evidence_conflict" | "insufficient_information" | "value_tradeoff";
+            claim_ids?: string[];
+        };
+        MutualLearningTurnResultV1: {
+            speech: string;
+            key_claims?: components["schemas"]["KeyClaimV1"][];
+            engagements?: components["schemas"]["EngagementV1"][];
+            answered_question_ids?: string[];
+            learned_from_others?: string[];
+            /** @default  */
+            position_summary: string;
+            /**
+             * @default unchanged
+             * @enum {string}
+             */
+            position_update: "unchanged" | "clarified" | "extended" | "qualified" | "partially_revised" | "substantially_revised";
+            position_update_reason?: string | null;
+            remaining_uncertainty?: string[];
+            unresolved_issue?: string | null;
+            question?: components["schemas"]["TurnQuestion"];
+            used_evidence_id?: string[];
+            missing_information?: string[];
+            unresolved_questions?: string[];
+            unresolved_question_ids?: string[];
+            change_from_opening?: string | null;
+            final_consensus?: string[];
+            final_disagreements?: components["schemas"]["MutualLearningDisagreementV1"][];
+            final_recommendation?: string | null;
+        };
+        MutualLearningPositionChangeV1: {
+            participant_id: string;
+            change: string;
+        };
+        MutualLearningEvidenceConflictV1: {
+            summary: string;
+            claim_ids?: string[];
+        };
+        MutualLearningSynthesisV1: {
+            direct_answer: string;
+            consensus?: string[];
+            complementary_views?: string[];
+            remaining_disagreements?: components["schemas"]["MutualLearningDisagreementV1"][];
+            position_changes?: components["schemas"]["MutualLearningPositionChangeV1"][];
+            evidence_conflicts?: components["schemas"]["MutualLearningEvidenceConflictV1"][];
+            remaining_uncertainty?: string[];
+            recommended_next_steps?: string[];
         };
         Transcript: {
             debate_id: components["schemas"]["Uuid"];
@@ -2236,6 +2430,69 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    compileAgentPersona: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                version_id: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilePersonaRequest"];
+            };
+        };
+        responses: {
+            /** @description Deterministic Persona preview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonaCompileResponse"];
+                };
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    confirmAgentPersona: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                version_id: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPersonaRequest"];
+            };
+        };
+        responses: {
+            /** @description Persona confirmed for the exact draft. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentVersion"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     setAgentVersionDocuments: {

@@ -1363,8 +1363,35 @@
               },
               "round_no": {
                 "type": "integer",
-                "minimum": 1,
-                "maximum": 2
+                "minimum": 1
+              },
+              "phase": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "opening",
+                      "exchange",
+                      "final_integration",
+                      "rebuttal"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "round_count": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 5
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "turn_index": {
                 "type": "integer",
@@ -1667,7 +1694,20 @@
           "type": "string",
           "enum": [
             "ordered_multi_agent_rounds_demo_v1",
-            "ordered_multi_agent_rounds_demo_v2"
+            "ordered_multi_agent_rounds_demo_v2",
+            "ordered_multi_expert_mutual_learning_v1"
+          ]
+        },
+        "round_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "participants": {
@@ -1773,8 +1813,35 @@
       "properties": {
         "round_no": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 2
+          "minimum": 1
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "opening",
+                "exchange",
+                "final_integration",
+                "rebuttal"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "round_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "turn_count": {
           "type": "integer",
@@ -1807,8 +1874,35 @@
         },
         "round_no": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 2
+          "minimum": 1
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "opening",
+                "exchange",
+                "final_integration",
+                "rebuttal"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "round_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "stage": {
           "type": "string",
@@ -1846,8 +1940,35 @@
         },
         "round_no": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 2
+          "minimum": 1
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "opening",
+                "exchange",
+                "final_integration",
+                "rebuttal"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "round_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "audio_ready": {
           "type": "boolean",
@@ -1902,8 +2023,35 @@
         },
         "round_no": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 2
+          "minimum": 1
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "opening",
+                "exchange",
+                "final_integration",
+                "rebuttal"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "round_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 5
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "speech": {
           "type": "string",

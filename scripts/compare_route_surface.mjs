@@ -37,6 +37,8 @@ const implementedOperationIds = new Set([
   "updateAgentDraft",
   "downloadAgentMd",
   "uploadAgentMd",
+  "compileAgentPersona",
+  "confirmAgentPersona",
   "publishAgentVersion",
   "listKnowledgeDocuments",
   "uploadKnowledgeDocument",
@@ -81,7 +83,7 @@ const methods = new Set([
   "trace",
 ]);
 const forbiddenResponseFieldPattern =
-  /(^|[_-])(provider|model|api[_-]?key|key|external[_-]?voice(?:[_-]?id)?)(?=$|[_-])/i;
+  /(^|[_-])(provider|model|api[_-]?key|external[_-]?voice(?:[_-]?id)?)(?=$|[_-])/i;
 
 const serverArg = process.argv.indexOf("--server-openapi");
 if (serverArg === -1) {

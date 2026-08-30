@@ -42,6 +42,11 @@ const closed = (properties, required = []) => ({
   additionalProperties: false,
 });
 const nullable = (schema) => ({ anyOf: [schema, { type: "null" }] });
+const roundPhase = {
+  type: "string",
+  enum: ["opening", "exchange", "final_integration", "rebuttal"],
+};
+const roundCount = integer(2, 5);
 
 const retrievalSource = closed({ source_filename: nonEmpty, chunk_id: uuid }, [
   "source_filename",
@@ -50,7 +55,9 @@ const publicTurn = closed(
   {
     id: uuid,
     participant_id: uuid,
-    round_no: integer(1, 2),
+    round_no: integer(1),
+    phase: nullable(roundPhase),
+    round_count: nullable(roundCount),
     turn_index: integer(0),
     speech: nonEmpty,
     retrieval_status: { type: "string", enum: ["matched", "no_match"] },
@@ -267,8 +274,10 @@ const payloads = {
           enum: [
             "ordered_multi_agent_rounds_demo_v1",
             "ordered_multi_agent_rounds_demo_v2",
+            "ordered_multi_expert_mutual_learning_v1",
           ],
         },
+        round_count: nullable(roundCount),
         participants: arrayOf(participantSlot, 2),
         participant_slots: arrayOf(participantSlot, 2),
       },
@@ -283,14 +292,22 @@ const payloads = {
     ];
     return payload;
   })(),
-  "round.started": closed({ round_no: integer(1, 2), turn_count: integer(1) }, [
-    "round_no",
-  ]),
+  "round.started": closed(
+    {
+      round_no: integer(1),
+      phase: nullable(roundPhase),
+      round_count: nullable(roundCount),
+      turn_count: integer(1),
+    },
+    ["round_no"],
+  ),
   "turn.preparing": closed(
     {
       turn_id: uuid,
       slot,
-      round_no: integer(1, 2),
+      round_no: integer(1),
+      phase: nullable(roundPhase),
+      round_count: nullable(roundCount),
       stage: { type: "string", enum: ["rag", "llm", "tts"] },
     },
     ["turn_id", "slot", "round_no"],
@@ -299,7 +316,9 @@ const payloads = {
     {
       turn_id: uuid,
       slot,
-      round_no: integer(1, 2),
+      round_no: integer(1),
+      phase: nullable(roundPhase),
+      round_count: nullable(roundCount),
       audio_ready: { type: "boolean", const: true },
       retrieval_status: { type: "string", enum: ["matched", "no_match"] },
       grounding_mode: {
@@ -314,7 +333,9 @@ const payloads = {
     {
       turn_id: uuid,
       slot,
-      round_no: integer(1, 2),
+      round_no: integer(1),
+      phase: nullable(roundPhase),
+      round_count: nullable(roundCount),
       speech: nonEmpty,
       sources: arrayOf(retrievalSource),
       playback_url: publicMediaPath,
