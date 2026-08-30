@@ -1,6 +1,6 @@
 # ProviderDataCallV1
 
-Status: `FROZEN / CONTROL+LEDGER IMPLEMENTED CANDIDATE / RUNTIME GATES INCOMPLETE / REAL CALLS 0`
+Status: `FROZEN / REAL EMBEDDING DIMENSION 1024 / RUNTIME GATES INCOMPLETE / FORMAL MAYA RUNTIME CALLS 0`
 
 ## Fixed supplier resources
 
@@ -10,7 +10,7 @@ The intended local Demo supplier is Alibaba Cloud Model Studio in the existing
 | Operation        | Fixed resource                                        | Mode                                                                    |
 | ---------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
 | Debate LLM       | `qwen3.7-plus-2026-05-26`                             | non-thinking, structured output, temperature `0.2`, top_p `0.8`         |
-| Text embedding   | `text-embedding-v4`, dimension `256`                  | synchronous; max 10 inputs, 8,000 tokens/item and 30,000 tokens/request |
+| Text embedding   | `text-embedding-v4`, dimension `1024`                 | synchronous; max 10 inputs, 8,000 tokens/item and 30,000 tokens/request |
 | Voice-clone TTS  | `qwen3-tts-vc-2026-01-22`                             | HTTP, language `English`                                                |
 | Voice enrollment | `qwen-voice-enrollment` targeting the fixed TTS model | separate TTS Gate only                                                  |
 
@@ -27,7 +27,8 @@ Official references checked 2026-08-30:
 - <https://help.aliyun.com/zh/model-studio/what-is-model-studio>
 
 The checked documentation reports structured output for the fixed Qwen generation
-family, 256-dimensional support and a ten-input batch limit for `text-embedding-v4`,
+family, selectable dimensions including 1024 and a ten-input batch limit for
+`text-embedding-v4`,
 and English support for the fixed voice-clone TTS snapshot. Price values are a
 preflight card, not UI content: embedding CNY 0.5/million input tokens and TTS CNY
 0.8/10,000 billed characters were the Beijing list prices at review time. The LLM Gate
@@ -39,6 +40,14 @@ Maya deliberately freezes the lower 30,000-token request ceiling and an 8,000-to
 per-item ceiling. W4-EMBED pins a supplier-compatible local tokenizer and asset hash.
 Until that tokenizer can authorize a request, conservative preflight counts each UTF-8
 byte as one token. It may reject safe text but cannot undercount a long unbroken input.
+
+An independent, no-student-data account preflight recorded one successful 256-dimension
+Embedding request and one successful structured LLM request. Those two calls prove only
+basic account/workspace/API availability. They did not change Maya's all-Mock runtime,
+do not authorize another 256 or LLM preflight, and are not a W4-EMBED/W4-LLM Gate PASS.
+The user subsequently froze the formal real Embedding dimension at 1024. A separate
+1024 preflight is required after fake-transport, migration, publication, query,
+retrieval, restart and Sol audit boundaries pass.
 
 ## Supplier data-processing preflight
 
@@ -104,7 +113,8 @@ before network I/O. Preparation freezes:
 - exact draft revision and confirmed PersonaSpec hash;
 - normalized source bytes, document IDs/order, source/content hashes and total size;
 - chunking contract/version plus every chunk ID, source offsets, text and hash;
-- fixed embedding model/dimension and the canonical build-manifest hash.
+- fixed embedding provider/model/region/dimension/policy version and the canonical
+  build-manifest hash.
 
 The build is not a published KnowledgeSnapshot, cannot be selected by Debate setup and
 contains no vector result yet. The teacher's `external_export_allowed` CAS signs its
@@ -133,12 +143,24 @@ result or marks it `abandoned`. Abandonment creates no AgentVersion/KnowledgeSna
 future work needs a new build and confirmation. Staged bytes are deleted only after a
 terminal outcome and the existing file-recovery journal has recorded cleanup.
 
-On success, the server verifies response count/order, dimension 256, finite numeric
+On success, the server verifies response count/order, dimension 1024, finite numeric
 values, fixed model key and every batch/build hash. One local transaction then creates
 the immutable AgentVersion/KnowledgeSnapshot/vector rows from that exact build and
 marks publication complete. Any validation, CAS or commit failure publishes nothing;
-no existing published version or snapshot is changed. Mock embedding uses the same
+no existing published version or snapshot is changed. Mock embedding remains the
+separate `mock / mock-sha256-v1 / local / 256 / w4-mock-v1` identity and uses the same
 build/publish invariants without external-export confirmation or network states.
+
+Every DashScope request must visibly declare `parameters.dimension = 1024`; supplier
+defaults are forbidden. That value is part of the frozen request hash and must match
+the SnapshotBuild, export manifest, staged response, persisted Snapshot identity and
+query identity. The server never pads, truncates or converts a wrong-dimensional
+response.
+
+Real query retrieval must match the published Snapshot on provider, model, region,
+dimension and embedding policy version. A Mock query against a real Snapshot, a real
+query against a Mock Snapshot, or any other identity mismatch fails closed before
+scoring.
 
 ## Operation caps
 

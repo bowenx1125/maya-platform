@@ -1,14 +1,16 @@
 # W4-EMBED G1.5 Gate Packet
 
-Status: `CANDIDATE / INDEPENDENT SOL AUDIT REQUIRED / REAL CALLS 0`
+Status: `G2 CHANGES_REQUIRED / P0=0 / P1=5 / P2=0 / FORMAL MAYA RUNTIME CALLS 0`
 
 Issues: `#19 W4-EMBED-RUNTIME`, `#20 W4-PROVIDER-PREFLIGHT`
 
 ## Authorized scope
 
-This candidate implements and tests the real-Embedding control seams without making an
-external request. It does not authorize a real Provider call or claim a complete real
-RAG path.
+This candidate implements and tests the real-Embedding control seams without making a
+formal Maya runtime request. It does not authorize a real Provider call or claim a
+complete real RAG path. An independent account-only preflight made one 256-dimension
+Embedding request and one LLM request with non-student fixtures; those are availability
+evidence only. Formal real Embedding is now frozen at 1024 and has not run.
 
 Implemented boundaries:
 
@@ -43,7 +45,7 @@ Implemented boundaries:
   platform operations and zero placeholders;
 - repository/secret boundary and generated-source red-team probe passed;
 - migrations 0001–0012 and formal-content acceptance passed;
-- real Provider calls: `0`.
+- formal Maya runtime Provider calls: `0`; independent preflight calls: `2`.
 
 ## Known incomplete seams for Sol classification
 
@@ -58,7 +60,17 @@ Implemented boundaries:
 
 ## G2 audit question
 
-Sol High must return `PASS | CHANGES_REQUIRED` with P0/P1/P2 counts for this exact clean
-SHA. A PASS on the foundation only permits the next local repair slice. W4-EMBED real
-G3 requires all P0/P1 findings closed, a newly confirmed exact export manifest and a
-separately recorded bounded call authorization.
+Sol High audited exact clean SHA `8be48334db4d564a7c13287973771d3cd28d727a`
+and returned `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`:
+
+1. the candidate used dimension 256 and omitted provider-visible dimension plus exact
+   endpoint/policy binding;
+2. accepted vectors were process-local and not restart-recoverable;
+3. student publication did not prepare/confirm/run the real SnapshotBuild path;
+4. query embedding and retrieval remained Mock 256;
+5. teacher disclosure was not page-reachable or course/build-authorized.
+
+A new clean SHA must close all P1 findings and receive read-only Sol High PASS before
+the one permitted 1024 preflight. W4-EMBED real G3 then still requires publication,
+query, retrieval, Evidence receipt, restart and browser evidence under a newly
+confirmed exact manifest.

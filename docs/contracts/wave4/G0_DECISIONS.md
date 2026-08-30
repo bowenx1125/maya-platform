@@ -1,6 +1,6 @@
 # W4-G0 Required Decisions
 
-Status: `FROZEN CANDIDATE`
+Status: `FROZEN / REAL EMBEDDING 1024 DELTA`
 
 1. **Why write AGENT.md?** It is student authorship compiled into a confirmed Persona
    that visibly controls six expression/argument dimensions.
@@ -32,7 +32,7 @@ Status: `FROZEN CANDIDATE`
     before confirming the exact export manifest.
 12. **Are student names, nicknames, audio or identity sent?** No. Voice enrollment is
     a separate TTS Gate using one approved sample and is not an LLM/Embedding input.
-13. **Fixed model versions?** `qwen3.7-plus-2026-05-26`, `text-embedding-v4` at 256
+13. **Fixed model versions?** `qwen3.7-plus-2026-05-26`, `text-embedding-v4` at 1024
     dimensions and `qwen3-tts-vc-2026-01-22`; no `latest` fallback.
 14. **Maximum charge?** CNY 0.15/request and CNY 3.00 per full Debate LLM run; other
     operation caps are the table in ProviderDataCallV1. Embedding additionally limits
@@ -43,10 +43,14 @@ Status: `FROZEN CANDIDATE`
     published; safe codes hide supplier details.
 16. **Which Gates are fully Mock-completable?** W4-PERSONA, W4-RAG-TRACE, W4-PROMPT and
     W4-CONTENT. Their G1/G2/G3 must finish before real Provider evidence.
-17. **When does billed work begin?** The first permitted real request is W4-EMBED G3,
-    after its implementation, deterministic checks, independent Sol audit, formal
-    content hash, immutable SnapshotBuild and exact teacher export-manifest
-    confirmation pass. The account must also be a verified pay-as-you-go API or Token
-    Plan Team account with an accepted ProviderPolicySnapshot; personal/Coding/unknown
-    plans stop at zero calls. The user's standing authorization removes a repeated
-    per-call confirmation, but no Gate or cap.
+17. **When does billed work begin?** Two isolated account preflight calls already
+    occurred: one 256-dimension Embedding request and one structured LLM request, both
+    with non-student fixtures while Maya's selectors stayed Mock. They are availability
+    evidence only and are not Gate evidence. The next permitted real request is one
+    W4-EMBED 1024 preflight after its implementation, deterministic checks, independent
+    Sol audit, formal content hash, immutable SnapshotBuild and exact teacher
+    export-manifest confirmation pass. The account must also be a verified
+    pay-as-you-go API or Token Plan Team account with an accepted
+    ProviderPolicySnapshot; personal/Coding/unknown plans stop at zero calls. The
+    user's standing authorization removes a repeated per-call confirmation, but no
+    Gate or cap. A 256 or LLM preflight must not be repeated.

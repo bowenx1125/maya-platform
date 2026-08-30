@@ -119,8 +119,12 @@ criteria pass. Tests or contracts are never weakened to manufacture a pass.
 
 - Never commit API keys, `.env`, private accounts, student audio, runtime databases,
   generated media or private reference code.
-- The browser uses platform DTOs only. Supplier names, model IDs, external resource
-  IDs, credentials and private paths remain server-side.
+- The browser uses platform DTOs only. Ordinary product DTOs remain provider-neutral.
+  The dedicated teacher-only ProviderDataCallV1 disclosure may show the approved
+  supplier display name, region, purpose, outbound data classes and storage/privacy
+  facts plus exact policy/manifest/revision CAS. Model IDs, endpoints, workspace or
+  resource IDs, credentials, private paths, raw ledgers and raw responses remain
+  server-side.
 - Do not copy source fragments from reference repositories. References are read-only
   design and test inputs.
 - Real calls must satisfy the active Provider Gate's model, input, call-count, cost,

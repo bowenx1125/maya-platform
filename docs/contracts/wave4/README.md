@@ -1,6 +1,6 @@
 # Wave 4 Contract Set
 
-Status: `G0-S PASS / PERSONA MOCK PASS / MOCK G2 SOL PASS / W4-EMBED G1.5 CANDIDATE / REAL CALLS 0`
+Status: `G0-S PASS / PERSONA MOCK PASS / MOCK G2 SOL PASS / REAL EMBEDDING 1024 CONTRACT FROZEN / FORMAL MAYA RUNTIME CALLS 0`
 
 These files freeze the pre-code contract for Issue #8. They distinguish three layers:
 
@@ -8,8 +8,12 @@ These files freeze the pre-code contract for Issue #8. They distinguish three la
 2. server-only external-data, usage and failure controls;
 3. Gate-specific authorization for Mock, implementation and real-service evidence.
 
-No browser DTO exposes supplier identity, model ID, external resource ID, raw usage
-ledger, price table, key, endpoint or private path. No Wave 4 product implementation or
+Ordinary browser DTOs expose no supplier identity, model ID, external resource ID, raw
+usage ledger, price table, key, endpoint or private path. The dedicated teacher-only
+ProviderDataCallV1 disclosure may show the approved supplier display name, region,
+purpose, outbound data classes and storage/no-training/retention facts plus exact
+policy/manifest/revision CAS. It never shows model IDs, endpoints, workspace or
+resource IDs, credentials, private paths, raw ledgers or raw supplier responses. No Wave 4 product implementation or
 real Provider request started before Sol High G0-S returned
 `PASS / P0=0 / P1=0 / P2=0` on contract candidate `c5604fd`. Mock-first implementation
 is now authorized; each real Provider remains separately gated.

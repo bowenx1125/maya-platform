@@ -4,7 +4,7 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G1_5_CANDIDATE / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_CHANGES_REQUIRED_P1_5 / REAL_EMBED_1024_NOT_RUN`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -26,8 +26,8 @@ clearly different projections, and no Evidence fabrication/raw private leakage. 
 current implementation satisfies all seven, so Persona Mock is PASS and further
 arbitrary-string uniqueness optimization has stopped. Final Sol High audit of exact
 clean SHA `48ff91f` returned `PASS / P0=0 / P1=0 / P2=0`. This unlocks W4-EMBED code
-and fake-transport acceptance, not an automatic real request. No real Provider request
-has been made.
+and fake-transport acceptance, not an automatic real request. No formal Maya runtime
+Provider request has been made.
 
 ## Source and remote
 
@@ -109,8 +109,17 @@ No real Provider was called.
   runtime selector, no-redirect single-attempt transport, exact teacher disclosure and
   confirmation CAS, durable policy/export/budget ledgers, and an atomic SQL Snapshot
   publication seam exercised only through injected fake transport. It has made zero
-  external calls. Product publish orchestration, durable accepted-vector recovery and
-  real query-vector retrieval are not yet complete, so real Embedding is not signed.
+  formal Maya runtime calls. Independent audit of exact clean SHA `8be4833` returned
+  `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`: the candidate still used dimension 256,
+  accepted vectors were process-local, student publication did not enter the runtime,
+  query retrieval remained Mock 256, and the teacher confirmation UI/authorization was
+  not bound to the build's course. Real Embedding is not signed.
+- An independent account-only preflight used non-student fixtures for one 256-dimension
+  Embedding request and one structured LLM request. Both succeeded as basic API
+  availability evidence while Maya's formal selectors stayed Mock. They are not Gate
+  PASS evidence and must not be repeated. The formal real Embedding identity is now
+  frozen at `dashscope / text-embedding-v4 / cn-beijing / 1024 / w4-embed-v1`; its
+  preflight has not run.
 - Later real calls are authorized in principle by the user but still require the exact
   policy/export/budget Gate and must fail closed if the account plan or controls cannot
   be verified.
@@ -145,12 +154,11 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Freeze the current W4-EMBED G1.5 candidate and obtain an independent Sol High read-only
-audit before any real request. The candidate extends the signed Mock evidence with
-backend `711/711`, frontend `32 files / 206 tests`, mypy/Ruff,
-ESLint/TypeScript/Prettier/Next build, OpenAPI `73` operations, strict FastAPI route
-comparison, WebSocket `35/18`, repository/secret boundary, formal-content acceptance
-and migrations 0001–0012. The audit must classify the still-missing durable accepted
-stage, product publication orchestration and real query-vector retrieval before a real
-Embedding Gate can pass. After P0/P1 closure, continue fixed structured LLM and TTS
-Gates. GitHub CI remains deferred to the final integrated Wave 4 PR.
+Repair all five W4-EMBED P1 findings under the frozen 1024 identity: explicit request
+dimension and exact endpoint/policy binding, durable accepted-vector recovery, real
+student publication orchestration, identity-matched real query retrieval, and a
+course-bound reachable teacher confirmation workflow. Run fake-transport and full
+local checks, then obtain Sol High P0/P1 closure before the one permitted 1024
+preflight. A successful preflight still does not sign W4-EMBED; publication, retrieval,
+Evidence receipt, restart and browser G3 must also pass. GitHub CI remains deferred to
+the final integrated Wave 4 PR.
