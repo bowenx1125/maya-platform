@@ -312,13 +312,8 @@ def _resolve_agent_version(
         ):
             effective_voice_id = configured_fallback.id
             effective_voice_kind = "platform_profile"
-    selectors = (
-        settings.llm_provider,
-        settings.embedding_provider,
-        settings.tts_provider,
-        settings.voice_provider,
-    )
-    if effective_voice_id is None and any(value != "mock" for value in selectors):
+    voice_selectors = (settings.tts_provider, settings.voice_provider)
+    if effective_voice_id is None and any(value != "mock" for value in voice_selectors):
         raise validation_failure(
             "A ready platform voice is required before this Debate can start.",
             code="voice_unavailable_fallback_used",

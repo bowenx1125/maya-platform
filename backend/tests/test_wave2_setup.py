@@ -399,6 +399,37 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     assert stale.json()["code"] == "stale_revision"
 
 
+def test_embedding_only_slice_keeps_mock_voice_fallback(
+    debate_app: tuple[FastAPI, Database, TestClient],
+) -> None:
+    app, database, client = debate_app
+    app.state.settings.embedding_provider = "dashscope"
+    bowen_id, _bowen_version, _bowen_snapshot = _insert_published_agent(
+        database, group_id=GROUP_BOWEN_ID, name="Embedding Bowen"
+    )
+    kaikai_id, _kaikai_version, _kaikai_snapshot = _insert_published_agent(
+        database, group_id=GROUP_KAIKAI_ID, name="Embedding KaiKai"
+    )
+    _session, csrf = login(client)
+    response = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "embed-only-mock-voice-001"}),
+        json={
+            "topic": "Should platforms explain their recommendation systems?",
+            "participants": [
+                {"agent_id": bowen_id, "stance_mode": "open"},
+                {"agent_id": kaikai_id, "stance_mode": "open"},
+            ],
+            "round_count": 2,
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert all(item["voice_fallback_active"] for item in response.json()["participants"])
+    assert all(
+        item["effective_voice_profile_id"] is None for item in response.json()["participants"]
+    )
+
+
 def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
     debate_app: tuple[FastAPI, Database, TestClient],
 ) -> None:

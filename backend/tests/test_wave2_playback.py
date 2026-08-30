@@ -1163,6 +1163,7 @@ def test_tts_voice_is_revalidated_custom_then_system_then_mock(app_factory: Any)
             assert fallback_row is not None
             fallback_row.status = "deleted"
         with database.session() as db:
+            settings.embedding_provider = "dashscope"
             sentinel = SqlPlaybackRepository.resolve_effective_voice(
                 db, frozen_participant, settings
             )

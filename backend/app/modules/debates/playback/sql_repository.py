@@ -206,14 +206,11 @@ class SqlPlaybackRepository(PlaybackRepository):
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
         if ready_profile(fallback_id, system_only=True):
             return ResolvedTurnVoice("platform_profile", str(fallback_id), str(fallback_id))
-        selectors = (
-            getattr(settings, "llm_provider", "mock"),
-            getattr(settings, "embedding_provider", "mock"),
+        voice_selectors = (
             getattr(settings, "tts_provider", "mock"),
             getattr(settings, "voice_provider", "mock"),
-            getattr(settings, "translation_provider", None) or "mock",
         )
-        if all(value == "mock" for value in selectors):
+        if all(value == "mock" for value in voice_selectors):
             return ResolvedTurnVoice("mock_sentinel", None, "mock")
         raise RuntimeError("no ready effective voice is available")
 

@@ -1640,14 +1640,16 @@ class PlaybackService:
 
     def _provider_allowed(self) -> None:
         if self.settings is not None:
-            selectors = (
+            embedding = getattr(self.settings, "embedding_provider", "mock")
+            blocked_selectors = (
                 getattr(self.settings, "llm_provider", "mock"),
-                getattr(self.settings, "embedding_provider", "mock"),
                 getattr(self.settings, "tts_provider", "mock"),
                 getattr(self.settings, "voice_provider", "mock"),
                 getattr(self.settings, "translation_provider", None) or "mock",
             )
-            if any(value != "mock" for value in selectors):
+            if embedding not in {"mock", "dashscope"} or any(
+                value != "mock" for value in blocked_selectors
+            ):
                 raise PlatformError(
                     "provider_unavailable", "The service is temporarily unavailable.", 503
                 )

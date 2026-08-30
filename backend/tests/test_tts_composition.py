@@ -86,6 +86,24 @@ def test_embedding_dashscope_only_is_allowed_without_network(tmp_path: Path) -> 
     assert selected.config.region == "cn-beijing"
 
 
+def test_embedding_only_slice_keeps_mock_playback_provider_allowed(tmp_path: Path) -> None:
+    settings = _settings(
+        tmp_path,
+        embedding_provider="dashscope",
+        dashscope_api_key="fixture-key",
+        dashscope_workspace_id="workspace123",
+        dashscope_region="cn-beijing",
+    )
+    database = Database(settings.database_url, settings.data_root)
+    try:
+        app = create_app(settings, database, initialize_database=False)
+        service = app.state.playback_service
+        assert isinstance(service.tts_provider, MockTTSProvider)
+        service._provider_allowed()
+    finally:
+        database.dispose()
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
