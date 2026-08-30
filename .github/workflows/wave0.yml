@@ -110,10 +110,12 @@ jobs:
           test -f backend/migrations/versions/0009_persona_structured_fields.py
           test -f backend/migrations/versions/0010_provider_control_ledger.py
           test -f backend/migrations/versions/0011_evidence_trace_json.py
+          test -f backend/migrations/versions/0012_persona_activation.py
           test -f scripts/test_wave4_migration.py
           test -f scripts/test_wave4_evidence_migration.py
           test -f backend/tests/test_wave4_mutual_learning.py
           test -f backend/tests/test_wave4_persona_persistence.py
+          test -f backend/tests/test_wave4_persona_activation_migration.py
           test -f backend/tests/test_wave4_provider_control_orm.py
           test -f backend/tests/test_wave4_prompt.py
           test -f backend/tests/test_wave4_evidence_trace.py

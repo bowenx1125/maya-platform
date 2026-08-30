@@ -235,6 +235,12 @@ class AgentVersion(Base):
         DateTime(timezone=True), nullable=True
     )
     persona_confirming_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Internal activation marker.  Existing published/superseded rows remain
+    # false for historical read/Replay compatibility; every active draft path
+    # sets this true so raw Markdown shape can never decide eligibility.
+    persona_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     avatar_config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     voice_profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     knowledge_snapshot_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
