@@ -9,6 +9,7 @@ guessable key.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
@@ -48,6 +49,10 @@ class Settings(BaseSettings):
         validation_alias="DASHSCOPE_WORKSPACE_ID",
     )
     dashscope_region: str | None = Field(default=None, validation_alias="DASHSCOPE_REGION")
+    provider_policy_hash: str | None = Field(
+        default=None,
+        validation_alias="PROVIDER_POLICY_HASH",
+    )
     deepl_api_key: str | None = Field(default=None, validation_alias="DEEPL_API_KEY")
     # Provider selectors intentionally default to local mocks.  They are
     # server-only switches; no provider identity is returned in API DTOs.
@@ -178,6 +183,15 @@ class Settings(BaseSettings):
             raise ValueError("FALLBACK_VOICE_PROFILE_ID must be a UUID") from None
         return value
 
+    @field_validator("provider_policy_hash", mode="before")
+    @classmethod
+    def provider_policy_hash_is_explicit_sha256(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value.strip()) is None:
+            raise ValueError("PROVIDER_POLICY_HASH must be a lowercase SHA-256 value")
+        return value.strip()
+
     @property
     def is_test(self) -> bool:
         """Whether ephemeral test-only defaults may be used."""
@@ -251,6 +265,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("DASHSCOPE_WORKSPACE_ID is required for real Provider work")
             if self.dashscope_region != "cn-beijing":
                 raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
+        if self.embedding_provider == "dashscope" and self.provider_policy_hash is None:
+            raise RuntimeError("PROVIDER_POLICY_HASH is required for real Embedding publication")
 
     @property
     def secret_bytes(self) -> bytes:

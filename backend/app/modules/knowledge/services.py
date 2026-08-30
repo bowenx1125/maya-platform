@@ -713,6 +713,46 @@ def assert_claim_owned(db: Session, record: IdempotencyRecord) -> None:
         raise invalid_state("The idempotency claim is no longer owned by this request.")
 
 
+def renew_idempotency_lease(
+    db: Session,
+    record: IdempotencyRecord,
+    *,
+    lease_seconds: int = 900,
+) -> datetime:
+    """Extend an actively owned claim before bounded Provider work.
+
+    The CAS runs in its own short transaction and never surrounds network I/O.
+    An expired or replaced token cannot be revived.  Wave 4 Embedding permits
+    at most twenty bounded requests, so fifteen minutes is the hard renewal
+    ceiling rather than an open-ended heartbeat.
+    """
+
+    if isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 900:
+        raise ValueError("idempotency lease renewal must be between 30 and 900 seconds")
+    timestamp = now_utc()
+    new_expiry = timestamp + timedelta(seconds=lease_seconds)
+    session = _independent_session(db)
+    try:
+        changed = session.execute(
+            update(IdempotencyRecord)
+            .where(
+                IdempotencyRecord.id == record.id,
+                IdempotencyRecord.state == "pending",
+                IdempotencyRecord.claim_token == record.claim_token,
+                IdempotencyRecord.lease_expires_at > timestamp,
+            )
+            .values(lease_expires_at=new_expiry, updated_at=timestamp)
+        )
+        if getattr(changed, "rowcount", 0) != 1:
+            session.rollback()
+            raise invalid_state("The idempotency claim is no longer owned by this request.")
+        session.commit()
+    finally:
+        session.close()
+    db.expire_all()
+    return new_expiry
+
+
 def saga_checkpoint(boundary: str) -> None:
     """Crash-injection seam used by deterministic recovery tests.
 

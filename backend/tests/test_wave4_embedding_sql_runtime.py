@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
 import pytest
 from app.core.db import Database
+from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
     AgentVersion,
     AgentVersionDocument,
+    IdempotencyRecord,
     KnowledgeDocument,
     KnowledgeSnapshot,
+    User,
 )
 from app.modules.knowledge.providers import (
     MOCK_EMBEDDING_MODEL,
@@ -30,7 +33,7 @@ from app.modules.knowledge.providers import (
     prepare_snapshot_build,
 )
 from app.modules.knowledge.providers.snapshot_build import SnapshotBuildInputDocument
-from app.modules.knowledge.services import document_file_content
+from app.modules.knowledge.services import document_file_content, renew_idempotency_lease
 from app.providers.control import (
     ExportFieldV1,
     ExportManifestV1,
@@ -220,6 +223,58 @@ def test_sql_stage_store_rejects_corrupt_vector_without_silent_shape_repair(
         stages.get(operation_id)
 
     assert raised.value.code == "embedding_stage_invalid"
+    database.dispose()
+
+
+def test_provider_publish_lease_renewal_is_bounded_and_exact_token_cas(
+    tmp_path: Path,
+) -> None:
+    database = Database(f"sqlite:///{tmp_path}/embedding-lease.sqlite3")
+    database.initialize_schema()
+    timestamp = datetime.now(UTC)
+    with database.session() as db:
+        db.add(
+            User(
+                id="student-bowen-1",
+                username="embedding-lease-student",
+                display_name="Embedding Lease Student",
+                status="active",
+                created_at=timestamp,
+            )
+        )
+        db.flush()
+        db.add(
+            IdempotencyRecord(
+                id="embedding-publish-lease",
+                actor_user_id="student-bowen-1",
+                operation="publishAgentVersion",
+                key="embedding-publish-lease-key",
+                request_hash="a" * 64,
+                state="pending",
+                claim_token="exact-claim-token",
+                lease_expires_at=timestamp + timedelta(seconds=60),
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        db.commit()
+    with database.session() as db:
+        record = db.get(IdempotencyRecord, "embedding-publish-lease")
+        assert record is not None
+        renewed = renew_idempotency_lease(db, record, lease_seconds=900)
+        assert renewed > timestamp + timedelta(seconds=60)
+    with database.session() as db:
+        record = db.get(IdempotencyRecord, "embedding-publish-lease")
+        assert record is not None
+        persisted_expiry = record.lease_expires_at
+        if persisted_expiry.tzinfo is None:
+            persisted_expiry = persisted_expiry.replace(tzinfo=UTC)
+        assert persisted_expiry >= renewed
+        record.claim_token = "replaced-token"
+        db.commit()
+        record.claim_token = "exact-claim-token"
+        with pytest.raises(PlatformError, match="no longer owned"):
+            renew_idempotency_lease(db, record, lease_seconds=900)
     database.dispose()
 
 

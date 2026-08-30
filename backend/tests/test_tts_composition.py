@@ -25,6 +25,7 @@ def _settings(tmp_path: Path, **updates: object) -> Settings:
         "llm_provider": "mock",
         "embedding_provider": "mock",
         "translation_provider": None,
+        "provider_policy_hash": "a" * 64,
     }
     values.update(updates)
     return Settings(**values)
@@ -84,6 +85,22 @@ def test_embedding_dashscope_only_is_allowed_without_network(tmp_path: Path) -> 
     selected = embedding_provider(settings, transport=NoCallTransport())  # type: ignore[arg-type]
     assert isinstance(selected, DashScopeEmbeddingAdapter)
     assert selected.config.region == "cn-beijing"
+
+
+def test_embedding_dashscope_requires_exact_frozen_policy_hash(tmp_path: Path) -> None:
+    settings = _settings(
+        tmp_path,
+        embedding_provider="dashscope",
+        dashscope_api_key="fixture-key",
+        dashscope_workspace_id="workspace123",
+        dashscope_region="cn-beijing",
+        provider_policy_hash=None,
+    )
+    with pytest.raises(RuntimeError, match="PROVIDER_POLICY_HASH"):
+        settings.validate_provider_configuration()
+
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        _settings(tmp_path, provider_policy_hash="not-a-policy-hash")
 
 
 def test_embedding_only_slice_keeps_mock_playback_provider_allowed(tmp_path: Path) -> None:
