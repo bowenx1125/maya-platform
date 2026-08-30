@@ -16,7 +16,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import PlatformError
 from app.core.models import AgentVersion, KnowledgeChunk, SnapshotDocument
+from app.modules.agents.persona_service import (
+    PERSONA_CONFIRMATION_REQUIRED,
+    is_persona_confirmed,
+)
 from app.modules.debates.generation import (
     FinalReadyTurn,
     GenerationContext,
@@ -150,6 +155,14 @@ class SqlTurnPreparer:
         current = next((row for row in turn_rows if row.id == str(turn.id)), None)
         if current is None:
             raise ValueError("planned turn is unavailable")
+        # Historical completed Debates are read/replay-only and do not enter
+        # this generation adapter.  Any running generation that reaches this
+        # boundary must nevertheless bind every frozen AgentVersion to an
+        # exact, current Persona confirmation.  This deliberately ignores
+        # ``persona_required``: pre-activation running rows may be legacy, but
+        # they cannot resume or call a provider without the exact Persona
+        # integrity tuple.
+        self._require_confirmed_personas(db, participant_rows)
         participants = tuple(self._participant(db, row) for row in participant_rows)
         participant = next(
             (item for item in participants if item.participant_id == current.participant_id),
@@ -291,6 +304,26 @@ class SqlTurnPreparer:
         if attempt != 1:
             raise ValueError("generation fencing starts at attempt one")
         return generation_fence(db, debate, turn)
+
+    @staticmethod
+    def _require_confirmed_personas(
+        db: Session,
+        rows: list[DebateParticipant],
+    ) -> None:
+        blocked: list[str] = []
+        for row in rows:
+            version = db.get(AgentVersion, row.agent_version_id)
+            # Preserve the adapter's existing unavailable-version diagnostic;
+            # the subsequent participant projection reports that typed error.
+            if version is not None and not is_persona_confirmed(version):
+                blocked.append(str(row.agent_version_id))
+        if blocked:
+            raise PlatformError(
+                PERSONA_CONFIRMATION_REQUIRED,
+                "Every running Debate participant must have a confirmed Persona.",
+                422,
+                {"agent_version_ids": blocked},
+            )
 
     @staticmethod
     def _participant(db: Session, row: DebateParticipant) -> ParticipantContext:

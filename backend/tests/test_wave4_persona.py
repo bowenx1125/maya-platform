@@ -19,6 +19,7 @@ from app.modules.agents.persona import (
 )
 from app.modules.agents.persona_mock import (
     TEACHING_DIMENSIONS,
+    bounded_teaching_dimensions_for_persona,
     compare_contrasting_personas,
     contrasting_persona_fixtures,
 )
@@ -399,12 +400,5 @@ def test_actual_provider_prompt_mock_uses_six_persona_dimensions_only() -> None:
     assert prompts[0].request.rule_set_id == prompts[1].request.rule_set_id
     assert prompts[0].request.output_schema_id == prompts[1].request.output_schema_id
     for persona, result in zip((first, second), results, strict=True):
-        dimensions = (
-            persona.speaking_style.tone,
-            persona.core_values[0],
-            persona.speaking_style.argument_pattern,
-            persona.speaking_style.concession_style,
-            persona.speaking_style.question_style,
-            persona.debate_strategy[0],
-        )
-        assert all(dimension in result.speech for dimension in dimensions)
+        projection = bounded_teaching_dimensions_for_persona(persona)
+        assert all(sentence in result.speech for sentence in projection.model_dump().values())

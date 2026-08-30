@@ -8,6 +8,7 @@ attribute the response difference to the confirmed Persona itself.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from typing import Literal
 
@@ -29,6 +30,18 @@ TEACHING_DIMENSIONS = (
     "question_style",
     "debate_strategy",
 )
+# The Persona compiler deliberately accepts rich authored fields (up to 240
+# characters for style/list items).  Those fields are useful in the provider
+# view, but should not be pasted wholesale into a bounded classroom sentence.
+# Keep this limit in the Mock projection rather than weakening the Persona
+# compiler or turn validator.  The projection uses word boundaries and emits a
+# complete, explicitly-labelled sentence for every dimension.
+SPEECH_DIMENSION_WORD_LIMIT = 8
+# Numeric tokens are intentionally excluded from the speech projection.  The
+# authoritative validator treats numbers as concrete factual claims, while a
+# Persona style/value is not evidence.  Keeping only alphabetic words avoids
+# turning an authored label such as ``method-2`` into an unsupported fact.
+_SPEECH_WORD_RE = re.compile(r"[A-Za-z]+(?:['’\-][A-Za-z]+)*")
 TeachingDimension = Literal[
     "tone",
     "value_priority",
@@ -37,7 +50,7 @@ TeachingDimension = Literal[
     "question_style",
     "debate_strategy",
 ]
-PersonaInput = PersonaSpecV1 | PersonaProviderViewV1
+type PersonaInput = PersonaSpecV1 | PersonaProviderViewV1
 
 
 class MockPersonaModel(BaseModel):
@@ -117,13 +130,14 @@ def mock_persona_response(
         else "I have no matching evidence, so this is general reasoning."
     )
     dimensions = teaching_dimensions_for_persona(persona)
+    speech_dimensions = bounded_teaching_dimensions_for_persona(persona)
     speech = (
-        f"{opening} My tone is {dimensions.tone}. On {topic.strip()}, I prioritize "
-        f"{dimensions.value_priority}. "
-        f"I use this argument pattern: {dimensions.argument_pattern}. "
-        f"When another view is reasonable, I {dimensions.concession_style}. "
-        f"My debate strategy is to {dimensions.debate_strategy}. "
-        f"I ask questions in this way: {dimensions.question_style}. {grounding}"
+        f"{opening} On {topic.strip()}, {speech_dimensions.value_priority_sentence} "
+        f"{speech_dimensions.tone_sentence} "
+        f"{speech_dimensions.argument_pattern_sentence} "
+        f"{speech_dimensions.concession_style_sentence} "
+        f"{speech_dimensions.debate_strategy_sentence} "
+        f"{speech_dimensions.question_style_sentence} {grounding}"
     )
     return MockPersonaResponse(
         stance=stance,
@@ -154,6 +168,84 @@ def teaching_dimensions_for_persona(persona: PersonaInput) -> MockTeachingDimens
         concession_style=persona.speaking_style.concession_style,
         question_style=persona.speaking_style.question_style,
         debate_strategy=persona.debate_strategy[0],
+    )
+
+
+class MockSpeechTeachingDimensions(MockPersonaModel):
+    """Bounded, sentence-complete projection used inside Mock speech.
+
+    ``MockTeachingDimensions`` remains the full six-dimension comparison
+    projection.  This separate DTO makes the lossy boundary explicit: raw
+    Persona values stay available to the structured comparison/UI, while
+    generated speech receives only short complete sentences.  No hash,
+    identity metadata, or private authored field is added to the speech.
+    """
+
+    tone_sentence: str
+    value_priority_sentence: str
+    argument_pattern_sentence: str
+    concession_style_sentence: str
+    question_style_sentence: str
+    debate_strategy_sentence: str
+
+
+def bounded_dimension_sentence(label: str, value: str) -> str:
+    """Return one bounded, complete sentence for a teaching dimension.
+
+    Short values are preserved verbatim (apart from surrounding whitespace and
+    terminal punctuation), so the normal contrasting fixtures remain directly
+    observable.  Longer values preserve both their opening and closing words
+    inside an explicit ``opening/closing`` description rather than cutting a
+    sentence at an arbitrary character or word boundary.
+    """
+
+    normalized = " ".join(value.split()).strip()
+    if not normalized:
+        raise ValueError("a teaching dimension cannot be empty")
+    words = _SPEECH_WORD_RE.findall(normalized)
+    # A valid Persona value may contain punctuation, separators or numerals
+    # that do not belong in a source-bearing classroom claim.  Project from a
+    # conservative alphabetic token shape so legal authored values cannot
+    # overflow the 80-200 word contract or manufacture a numeric citation.
+    if words and len(words) <= SPEECH_DIMENSION_WORD_LIMIT and not re.search(r"\d", normalized):
+        visible = normalized.rstrip(".!?")
+        return f"My {label} is {visible}."
+    if not words:
+        return f"My teaching {label} remains bounded by the authored Persona."
+
+    # Three opening words + the conjunction + two closing words keep the
+    # complete labelled sentence compact while retaining a stable signal from
+    # both ends of a maximal authored field.
+    opening = " ".join(words[:3])
+    closing = " ".join(words[-2:])
+    return (
+        f'My {label} uses "{opening}" and "{closing}".'
+    )
+
+
+def bounded_teaching_dimensions_for_persona(
+    persona: PersonaInput,
+) -> MockSpeechTeachingDimensions:
+    """Project the six allowed dimensions into bounded complete sentences."""
+
+    dimensions = teaching_dimensions_for_persona(persona)
+    return MockSpeechTeachingDimensions(
+        tone_sentence=bounded_dimension_sentence("tone", dimensions.tone),
+        value_priority_sentence=bounded_dimension_sentence(
+            "value priority", dimensions.value_priority
+        ),
+        argument_pattern_sentence=bounded_dimension_sentence(
+            "argument pattern", dimensions.argument_pattern
+        ),
+        concession_style_sentence=bounded_dimension_sentence(
+            "concession style", dimensions.concession_style
+        ),
+        question_style_sentence=bounded_dimension_sentence(
+            "question style", dimensions.question_style
+        ),
+        debate_strategy_sentence=bounded_dimension_sentence(
+            "debate strategy", dimensions.debate_strategy
+        ),
     )
 
 
@@ -307,16 +399,20 @@ compare_persona_responses = compare_personas
 __all__ = [
     "MOCK_PERSONA_RULE_SET_ID",
     "MOCK_PERSONA_SCHEMA_VERSION",
+    "SPEECH_DIMENSION_WORD_LIMIT",
     "TEACHING_DIMENSIONS",
     "MockPersonaComparison",
     "MockPersonaModel",
     "MockPersonaResponse",
+    "MockSpeechTeachingDimensions",
     "MockTeachingDimensions",
     "TeachingDimension",
     "compare_contrasting_personas",
     "compare_persona_responses",
     "compare_personas",
     "contrasting_persona_fixtures",
+    "bounded_dimension_sentence",
+    "bounded_teaching_dimensions_for_persona",
     "mock_persona_comparison",
     "mock_persona_response",
     "teaching_dimensions_for_persona",

@@ -10,6 +10,7 @@ without changing the generation service or public DTOs.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -17,7 +18,10 @@ from types import SimpleNamespace
 from typing import Literal, Protocol, cast
 
 from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
-from app.modules.agents.persona_mock import teaching_dimensions_for_persona
+from app.modules.agents.persona_mock import (
+    bounded_teaching_dimensions_for_persona,
+    teaching_dimensions_for_persona,
+)
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.mutual_learning_prompts import (
     build_mutual_learning_prompt,
@@ -38,6 +42,50 @@ from app.modules.debates.generation.types import (
 )
 
 MutualClaimType = Literal["factual", "interpretation", "value_judgement", "proposal"]
+_SPEECH_ALPHA_WORD_RE = re.compile(r"[A-Za-z]+(?:['’\-][A-Za-z]+)*")
+
+
+def _complete_excerpt(value: str, *, max_words: int = 8) -> str:
+    """Keep Mock evidence wording bounded without cutting a sentence in half."""
+
+    normalized = " ".join(value.split()).strip()
+    if not normalized:
+        raise LLMStructuredOutputError("mock receipt text is empty")
+    sentences = re.split(r"(?<=[.!?])\s+", normalized)
+    for sentence in sentences:
+        words = sentence.split()
+        if words and len(words) <= max_words:
+            return sentence.rstrip(".!?")
+    words = normalized.split()
+    # The explicit continuation clause makes the bounded excerpt a complete
+    # statement rather than an arbitrary character/word fragment.  It is a
+    # display projection only; the server still owns the full receipt text.
+    # Two source words plus the four-word continuation clause stay within the
+    # eight-word excerpt bound while making the truncation explicit and
+    # sentence-complete inside the surrounding source statement.
+    head = " ".join(words[: max_words - 6])
+    return f"Excerpt begins {head}; receipt text continues elsewhere"
+
+
+def _bounded_identity(value: str, *, max_words: int = 3) -> str:
+    """Keep a display name readable without copying a long authored field."""
+
+    normalized = " ".join(value.split()).strip()
+    words = _SPEECH_ALPHA_WORD_RE.findall(normalized)
+    if words and len(words) <= max_words and not re.search(r"\d", normalized):
+        return normalized.rstrip(".!?")
+    return "this expert"
+
+
+def _bounded_question_excerpt(value: str, *, max_words: int = 8) -> str:
+    """Project a pending question into a short, source-neutral phrase."""
+
+    words = _SPEECH_ALPHA_WORD_RE.findall(" ".join(value.split()).strip())
+    if not words:
+        return "the assigned concern"
+    if len(words) <= max_words:
+        return " ".join(words)
+    return " ".join(words[: max_words - 3]) + " and related concerns"
 
 
 class LLMProviderError(GenerationProviderError):
@@ -352,28 +400,28 @@ class MockLLMProvider:
             if isinstance(persona, (PersonaSpecV1, PersonaProviderViewV1))
             else None
         )
-        safe_name = (
-            participant.agent_name
-            if dimensions is None
-            and not any(character.isdigit() for character in participant.agent_name)
-            else "this expert"
+        speech_dimensions = (
+            bounded_teaching_dimensions_for_persona(persona)
+            if isinstance(persona, (PersonaSpecV1, PersonaProviderViewV1))
+            else None
         )
+        safe_name = _bounded_identity(participant.agent_name)
         teaching_line = (
             ""
-            if dimensions is None
+            if speech_dimensions is None
             else (
-                f"My teaching tone is {dimensions.tone}; I prioritize "
-                f"{dimensions.value_priority}. I follow this argument pattern: "
-                f"{dimensions.argument_pattern}. I handle a reasonable concern by "
-                f"{dimensions.concession_style}. My debate strategy is to "
-                f"{dimensions.debate_strategy}; I ask questions by "
-                f"{dimensions.question_style}. "
+                f"{speech_dimensions.tone_sentence} "
+                f"{speech_dimensions.value_priority_sentence} "
+                f"{speech_dimensions.argument_pattern_sentence} "
+                f"{speech_dimensions.concession_style_sentence} "
+                f"{speech_dimensions.debate_strategy_sentence} "
+                f"{speech_dimensions.question_style_sentence} "
             )
         )
         phase = prompt.phase
         source_excerpt = ""
         if used:
-            source_excerpt = " ".join(prompt.receipts[0].text.split())[:140]
+            source_excerpt = _complete_excerpt(prompt.receipts[0].text)
             evidence_line = (
                 f'The current snapshot passage says, "{source_excerpt}". '
                 "I use it only as this participant's bounded evidence."
@@ -417,8 +465,9 @@ class MockLLMProvider:
         answered: list[str] = []
         if prompt.pending_question is not None and phase != "opening":
             answered = [prompt.pending_question.question_id]
+            question_excerpt = _bounded_question_excerpt(prompt.pending_question.text)
             answer_text = (
-                f"I answer the assigned question directly: {prompt.pending_question.text} "
+                f'I answer the assigned question directly: "{question_excerpt}". '
                 "A practical response should test the concern against the available evidence. "
             )
         question = TurnQuestion(type="none")
@@ -503,15 +552,13 @@ class MockLLMProvider:
                 f"As {safe_name}, I return to my opening position and integrate what I learned. "
                 f"{teaching_line}"
                 f"{engagement_text}{answer_text}{evidence_line} "
-                "I learned that an accountable answer must make its trade-offs visible "
-                "and provide a route for correction. "
-                "My final position is therefore more explicit about review, community "
-                "voice, and evidence boundaries. "
+                "I learned that accountability requires visible trade-offs and correction. "
+                "My final position adds review, community voice, and evidence boundaries. "
                 "The remaining uncertainty is whether implementation would distribute "
                 "burdens fairly. "
-                "My final recommendation is to adopt transparent safeguards with "
-                "independent review and a correction path. "
-                "I preserve reasonable differences about how much restriction is justified."
+                "My final recommendation is transparent safeguards with independent review "
+                "and correction. "
+                "Reasonable differences remain."
             )
             claims, trace_claims = _mutual_claims(
                 speech,
@@ -523,18 +570,16 @@ class MockLLMProvider:
                 has_receipts=bool(prompt.receipts),
                 core_claims=(
                     (
-                        "I learned that an accountable answer must make its trade-offs visible "
-                        "and provide a route for correction.",
+                        "I learned that accountability requires visible trade-offs and correction.",
                         "interpretation",
                     ),
                     (
-                        "My final position is therefore more explicit about review, community "
-                        "voice, and evidence boundaries.",
+                        "My final position adds review, community voice, and evidence boundaries.",
                         "interpretation",
                     ),
                     (
-                        "My final recommendation is to adopt transparent safeguards with "
-                        "independent review and a correction path.",
+                        "My final recommendation is transparent safeguards with independent review "
+                        "and correction.",
                         "proposal",
                     ),
                 ),
