@@ -1,6 +1,6 @@
 # Wave 4 Contract Set
 
-Status: `G0-S PASS / MOCK-FIRST IMPLEMENTATION AUTHORIZED / REAL CALLS 0`
+Status: `G0-S PASS / MOCK G1.5 PASS / SOL G2 PENDING / REAL CALLS 0`
 
 These files freeze the pre-code contract for Issue #8. They distinguish three layers:
 

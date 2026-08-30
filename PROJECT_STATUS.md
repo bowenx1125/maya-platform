@@ -4,10 +4,12 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MUTUAL_LEARNING_IN_PROGRESS / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_SOL_PENDING / REAL_PROVIDER_CALLS_0`
 
-Wave 4 R0 is a documentation, repository and workflow Gate. It does not implement
-Persona, Evidence Trace, Prompt changes or a real Provider.
+The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
+protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
+formal content, Embedding/provider ports and durable provider-control foundations.
+It has not passed independent G2 code audit and has made no real Provider request.
 
 ## Source and remote
 
@@ -56,8 +58,16 @@ No real Provider was called.
 - Student Agent/version workflow, Markdown knowledge, immutable RAG snapshots,
   publishing, safe delete and teacher published-history inspection.
 - Local 3D avatar rendering and Mock/real-safe voice boundaries.
-- Two-round 2–5 Agent debate setup, honest Mock RAG hit/no-hit, closed structured turn
-  output and teacher-paced playback/recovery/Replay.
+- Versioned 2–5 Agent, 2–5 round mutual learning with opening/exchange/final phases,
+  same-round isolation, pending questions, preserved disagreement and synthesis.
+- Confirmed structured Persona with raw authorship retention, comparison UI and strict
+  new-mutual-Debate eligibility while legacy Debate history remains compatible.
+- Claim-level Evidence Trace with server IDs, exact UTF-16 speech spans, honest
+  no-match/general-reasoning teaching UI and immutable Replay/history projection.
+- Canonical two-message PromptRequestV1 with complete predecessor speech, one Persona
+  provider view, deduplicated evidence, bounded retry and hard pre-send budgets.
+- Immutable SnapshotBuild/embedding adapter ports plus server-only policy, export,
+  atomic budget and acceptance-unknown ledgers. Real selectors remain fail-closed.
 - Independent anonymous vote/barrage, anonymous insight, Mock Maya report,
   history/download and on-demand Mock Chinese representation.
 
@@ -76,17 +86,19 @@ No real Provider was called.
 - Real TTS attempts 1–3 failed; attempt 3 ended `tts_audio_invalid` and remains
   `FAILED-DEFERRED` until the Wave 4 TTS Gate fixes endpoint/language/diagnostic
   contracts before another request.
-- Real LLM, Embedding and Translation implementations remain fail-closed/Mock-only.
-- No R0 action may call a real Provider. Later real calls are authorized in principle
-  by the user but still require the corresponding frozen Gate before the first request.
+- Real LLM and Translation remain unavailable. The reviewed real Embedding transport
+  port exists but has no runtime selector/publication wiring and has made zero calls.
+- Later real calls are authorized in principle by the user but still require the exact
+  policy/export/budget Gate and must fail closed if the account plan or controls cannot
+  be verified.
 
 ## Confirmed Wave 4 decisions
 
 - Repository-root `PROJECT.md` becomes the only portable authority entry.
 - Workers use `PROJECT_STATUS.md + Issue/Task Packet + named ADR/contracts + assigned
 code`, not the full historical monolith.
-- Every Wave 4 coding task uses an Issue, branch, independent worktree, owner, PR, CI,
-  independent Sol High audit and main-window integration.
+- Every Wave 4 coding task uses an Issue, branch, independent worktree and owner;
+  intermediate validation is local plus Sol High, with one final integrated PR/CI.
 - New Agent versions keep raw `AGENT.md` and add an extraction-only Persona confirmed
   by a current group member before publication. The compiler cannot improve or invent.
 - Every debate turn continues to receive the complete text of all previous turns.
@@ -101,16 +113,16 @@ code`, not the full historical monolith.
 
 1. The old continuity monolith contains superseded current-looking statements; it is
    archived and must not be a default task input.
-2. Persona extraction from arbitrary Markdown needs an explicit closed contract; it
-   cannot silently infer or improve student intent.
-3. Claim-level evidence can prove lineage, not factual correctness.
+2. Claim-level evidence proves lineage, not factual correctness.
+3. Real Provider policy/account/logging controls have not been verified against the
+   current private account, so every real call remains blocked.
 4. TTS is still a hard blocker for complete real-service G5.
 
 ## Next Gate
 
-Migration 0008 was explicitly authorized and its empty/repeat/populated,
-downgrade/re-upgrade, round-five, invalid-round and foreign-key probes pass locally.
-Luna Max is implementing the versioned mutual-learning RuleSet while separate local
-worktrees implement Persona and formal content. Integrate shared DTO/OpenAPI/WS/client
-changes, run local full regression and Sol code audit, then continue the remaining Wave
-4 Gates. One GitHub CI is deferred to the final integrated candidate.
+Freeze the current integrated Mock candidate and run independent Sol High G2 audit.
+The local G1.5 evidence is backend `528`, frontend `31 files / 203 tests`, mypy/Ruff,
+ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, WebSocket `35/18`,
+repository/secret boundary, formal-content acceptance and migrations 0001–0011. After
+P0/P1 closure, continue real Embedding publication, fixed structured LLM and TTS Gates.
+GitHub CI remains deferred to the final integrated Wave 4 PR.

@@ -1,6 +1,6 @@
 # Ordered Multi-Expert Mutual Learning V1
 
-Status: `CONTRACT CANDIDATE / IMPLEMENTATION BLOCKED ON MIGRATION AUTHORIZATION`
+Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 PENDING`
 
 RuleSet ID: `ordered_multi_expert_mutual_learning_v1`
 

@@ -1,6 +1,6 @@
 # PromptBudgetV1 and PromptRequestV1
 
-Status: `FROZEN CANDIDATE / NOT IMPLEMENTED`
+Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 PENDING`
 
 ## Logical request
 
