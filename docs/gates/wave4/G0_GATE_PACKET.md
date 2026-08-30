@@ -29,6 +29,12 @@ client, Provider selector or secret/configuration value is in scope.
 - Evidence Trace distinguishes lineage from truth and hides unused receipts;
 - fixed resources, allowed external fields, caps, retries and uncertain outcomes are
   explicit;
+- all new Mock/real W4 debates reject unconfirmed legacy Persona through one stable
+  path; existing output remains read/replay-only;
+- real embedding uses a teacher-confirmed immutable pre-provider SnapshotBuild and
+  publishes a new Snapshot only after validated success;
+- every real request atomically reserves count/max-cost before I/O and has
+  crash-recoverable accepted-unknown semantics;
 - no numeric Token-reduction KPI and no cost-display product task returns;
 - formal content is honestly not yet frozen and blocks real embedding;
 - document authority, links, format and repository/secret boundaries pass;

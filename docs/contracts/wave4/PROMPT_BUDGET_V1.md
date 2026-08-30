@@ -81,6 +81,11 @@ Every external attempt records server-side:
 acceptance state, safe error code, price-card version, estimated cost and nullable
 reconciled actual cost.
 
+Before network I/O, the attempt and its worst-case count/cost allowance are atomically
+reserved through the durable state machine in ProviderDataCallV1. A read-then-send
+budget check is forbidden. Concurrent workers therefore cannot each observe spare
+budget and exceed the Debate cap.
+
 Supplier request IDs are encrypted/restricted operations data and never enter normal
 API responses. API keys never enter the database or logs. There is no Wave 4 cost
 dashboard or teacher/operator cost-display feature; the ledger exists for Gate audit,

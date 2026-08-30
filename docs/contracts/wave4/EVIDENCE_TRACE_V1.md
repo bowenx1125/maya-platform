@@ -16,6 +16,12 @@ snapshot ID. Every receipt adds the immutable evidence ID, chunk ID, source file
 source locator, excerpt, score, rank and threshold key. The Provider receives query
 and evidence IDs plus the necessary excerpt; it cannot assign IDs.
 
+`source_locator` is server-derived as
+`md:<source-document-uuid>:chars:<start>-<end>`, where offsets are half-open Unicode
+code-point offsets into the normalized immutable Markdown source. The browser resolves
+the authorized document UUID to its display filename; the locator sent to or returned
+by a Provider never contains a local path.
+
 Every key claim produces one or more trace rows:
 
 ```json

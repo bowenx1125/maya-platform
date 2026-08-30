@@ -120,15 +120,28 @@ to a Provider or browser DTO outside existing authorized membership views.
   exact draft revision, raw hash, Persona hash and compiler version CAS;
 - any intervening edit makes confirmation stale;
 - publication requires `confirmed`; published raw and structured values are immutable;
-- legacy published AgentVersions are not backfilled or rewritten. They remain
-  downloadable/replayable but must be cloned, compiled and confirmed before selection
-  for a new Wave 4 real-provider debate.
+- legacy published AgentVersions are not backfilled or rewritten;
+- after PersonaSpecV1 activation, every new debate requires every selected published
+  AgentVersion to have a confirmed Persona, regardless of Mock or real Provider. Setup
+  availability and start both reject a legacy selection with the stable safe code
+  `persona_confirmation_required` and the authorized AgentVersion IDs;
+- there is no default Persona, raw-`AGENT.md` generation fallback or Mock-only legacy
+  path. A legacy version must be cloned, compiled, confirmed and republished, then used
+  in a new debate;
+- completed legacy debates remain readable, downloadable and replayable from their
+  frozen outputs. An incomplete legacy debate may be stopped, but generation/resume is
+  rejected with `persona_confirmation_required`; it cannot be silently upgraded in
+  place.
 
 ## Provider view and causal acceptance
 
 `persona_provider_view_v1` contains the seven semantic fields once, with no audit
 hashes, confirmation identity or raw Markdown. The whole view is sent once per turn;
 there is no second `agent_md` field.
+
+Before an external LLM call, the Persona hash is also part of the exact teacher-signed
+export manifest in ProviderDataCallV1. Its identity name is a fictional/cultural Agent
+name, not a student name; personal identity in any Persona field blocks export.
 
 Mock acceptance uses two deliberately contrasting Persona fixtures under the same
 topic, stance, receipts, rules and deterministic seed. Tests must show differences in
