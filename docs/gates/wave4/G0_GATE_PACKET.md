@@ -35,6 +35,8 @@ client, Provider selector or secret/configuration value is in scope.
   publishes a new Snapshot only after validated success;
 - every real request atomically reserves count/max-cost before I/O and has
   crash-recoverable accepted-unknown semantics;
+- supplier storage/no-training terms, account product, Beijing endpoint and optional
+  logging/backflow controls are verified and bound to teacher export confirmation;
 - no numeric Token-reduction KPI and no cost-display product task returns;
 - formal content is honestly not yet frozen and blocks real embedding;
 - document authority, links, format and repository/secret boundaries pass;

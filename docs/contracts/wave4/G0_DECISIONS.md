@@ -26,7 +26,9 @@ Status: `FROZEN CANDIDATE`
     before any LLM request. Structural repair reuses the frozen receipt set.
 11. **What is sent externally?** The exact allowlist in ProviderDataCallV1: structured
     current Persona, topic/rules, complete predecessor speeches, current queries and
-    evidence excerpts, opaque IDs and current TTS speech where applicable.
+    evidence excerpts, opaque IDs and current TTS speech where applicable. The teacher
+    sees the supplier, Beijing region, purpose, storage fact and no-training basis
+    before confirming the exact export manifest.
 12. **Are student names, nicknames, audio or identity sent?** No. Voice enrollment is
     a separate TTS Gate using one approved sample and is not an LLM/Embedding input.
 13. **Fixed model versions?** `qwen3.7-plus-2026-05-26`, `text-embedding-v4` at 256
@@ -43,5 +45,7 @@ Status: `FROZEN CANDIDATE`
 17. **When does billed work begin?** The first permitted real request is W4-EMBED G3,
     after its implementation, deterministic checks, independent Sol audit, formal
     content hash, immutable SnapshotBuild and exact teacher export-manifest
-    confirmation pass. The user's standing authorization removes a repeated per-call
-    confirmation, but no Gate or cap.
+    confirmation pass. The account must also be a verified pay-as-you-go API or Token
+    Plan Team account with an accepted ProviderPolicySnapshot; personal/Coding/unknown
+    plans stop at zero calls. The user's standing authorization removes a repeated
+    per-call confirmation, but no Gate or cap.

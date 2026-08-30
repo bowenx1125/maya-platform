@@ -23,6 +23,8 @@ Official references checked 2026-08-30:
 - <https://help.aliyun.com/zh/model-studio/embedding>
 - <https://help.aliyun.com/zh/model-studio/tts-model>
 - <https://help.aliyun.com/zh/model-studio/model-pricing>
+- <https://help.aliyun.com/zh/model-studio/privacy-notice>
+- <https://help.aliyun.com/zh/model-studio/what-is-model-studio>
 
 The checked documentation reports structured output for the fixed Qwen generation
 family, 256-dimensional support and a ten-input batch limit for `text-embedding-v4`,
@@ -37,6 +39,37 @@ Maya deliberately freezes the lower 30,000-token request ceiling and an 8,000-to
 per-item ceiling. W4-EMBED pins a supplier-compatible local tokenizer and asset hash.
 Until that tokenizer can authorize a request, conservative preflight counts each UTF-8
 byte as one token. It may reject safe text but cannot undercount a long unbroken input.
+
+## Supplier data-processing preflight
+
+The official privacy page checked on 2026-08-30 states that call data is stored as
+required by applicable law. The official product FAQ limits its no-training assurance
+to pay-as-you-go API and Token Plan Team; Token Plan Personal and Coding Plan have
+different terms. Maya therefore makes no “not stored” claim.
+
+Before the first external request of a Gate, a server-side `ProviderPolicySnapshot`
+and Gate evidence must verify and freeze:
+
+- Alibaba account product type is pay-as-you-go API or Token Plan Team; Token Plan
+  Personal, Coding Plan and an unknown/unverifiable plan are forbidden;
+- the API key, workspace and exact endpoint belong to `cn-beijing`; a key/endpoint for
+  another product or region is rejected before request construction;
+- the then-current official privacy notice, product FAQ and applicable service terms
+  URLs, retrieval timestamps and content hashes;
+- the applicable no-training basis for that account product;
+- every account/workspace inference-log, prompt/response logging, log-backflow and
+  service-improvement control visible to the account. Optional content logging or
+  backflow must be disabled; an unavailable or ambiguous control is a zero-call stop;
+- the supplier's disclosed storage fact and any available retention/deletion setting.
+  An unspecified retention duration is recorded as unknown, never invented.
+
+The teacher export-confirmation screen names Alibaba Cloud Model Studio, Beijing, the
+operation purpose, every outbound field class from the matrix below, the fact that the
+supplier stores call data, the verified no-training basis and the known/unknown
+retention setting. Confirmation binds the ProviderPolicySnapshot hash and export
+manifest hash. A policy/account/plan/control change invalidates it. This local Demo
+still sends no personal identity; formal minors/school use remains a separate privacy
+and legal release Gate.
 
 ## External data matrix
 
@@ -55,10 +88,11 @@ byte as one token. It may reject safe text but cannot undercount a long unbroken
 
 Before real LLM/Embedding, a teacher confirms an exact export manifest by CAS. The
 manifest binds the PersonaSpec hash, the immutable SnapshotBuild candidate described
-below, operation types, data classification and a declaration that no field contains a
-secret, credential, student identity/name, nickname, private audio transcript or
-unrelated personal data. Any hash/revision change invalidates confirmation. Published
-immutable snapshots are never modified in place.
+below, ProviderPolicySnapshot hash, operation types, data classification and a
+declaration that no field contains a secret, credential, student identity/name,
+nickname, private audio transcript or unrelated personal data. Any hash/revision or
+policy change invalidates confirmation. Published immutable snapshots are never
+modified in place.
 
 ## Pre-provider SnapshotBuild lifecycle
 
@@ -124,9 +158,9 @@ budget silently. Translation is outside this contract and remains Mock/disabled.
 ## Fail-closed and uncertainty
 
 Pre-send validates active Gate ID/SHA, operation allowance, selector composition,
-fixed model, region, exact export-manifest/build confirmation, token/character estimate,
-cumulative count/cost and generation fence. Failure produces a safe local code with
-zero request.
+fixed model, region, allowed account product, current ProviderPolicySnapshot, exact
+export-manifest/build confirmation, token/character estimate, cumulative count/cost
+and generation fence. Failure produces a safe local code with zero request.
 
 Every external request uses one shared durable reservation contract:
 
