@@ -57,6 +57,7 @@ function version(
       motion_style: "calm",
     },
     voice_fallback_active: true,
+    persona_confirmed: false,
     knowledge_snapshot_id: snapshotId,
     enabled_documents: [],
     publish_blockers: [],

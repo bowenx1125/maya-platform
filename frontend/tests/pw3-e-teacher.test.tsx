@@ -57,6 +57,7 @@ function version(): AgentVersion {
     voice_profile_id: null,
     effective_voice_profile_id: null,
     voice_fallback_active: true,
+    persona_confirmed: false,
     knowledge_snapshot_id: snapshotId,
     enabled_documents: [],
     publish_blockers: [],

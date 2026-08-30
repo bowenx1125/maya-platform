@@ -71,6 +71,7 @@ function draftVersion(): AgentVersion {
       motion_style: "calm",
     },
     voice_fallback_active: true,
+    persona_confirmed: false,
     enabled_documents: [],
     publish_blockers: ["agent_md_missing"],
   } as AgentVersion;

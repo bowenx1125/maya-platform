@@ -160,6 +160,7 @@ describe("G2 idempotency key lifecycle", () => {
         motion_style: "calm",
       },
       voice_fallback_active: true,
+      persona_confirmed: false,
       enabled_documents: [],
       publish_blockers: [],
     } as AgentVersion;

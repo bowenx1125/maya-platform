@@ -28,6 +28,7 @@ const detail = {
   revision: 1,
   last_sequence: 3,
   rule_set_id: "ordered_multi_agent_rounds_demo_v1",
+  round_count: 2,
   participants: [],
   public_turns: [],
   playback: { ...playback, status: "stopped", current_turn_id: null },

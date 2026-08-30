@@ -70,6 +70,7 @@ function runningDetail(): DebateDetail {
     revision: 1,
     last_sequence: 0,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",
+    round_count: 2,
     participants: [
       {
         id: participantId,

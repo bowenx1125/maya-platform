@@ -48,6 +48,7 @@ function finishedDetail(): DebateDetail {
     revision: 1,
     last_sequence: 1,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",
+    round_count: 2,
     participants: [],
     public_turns: [],
     playback: {
@@ -96,6 +97,7 @@ describe("Wave 3 dedicated teacher page", () => {
       revision: 1,
       last_sequence: 1,
       rule_set_id: "ordered_multi_agent_rounds_demo_v1",
+      round_count: 2,
       participants: [],
       public_turns: [],
       playback: {
