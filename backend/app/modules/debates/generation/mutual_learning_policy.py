@@ -148,9 +148,7 @@ class MutualLearningPolicy:
 
 def _round_value(turn: object) -> int:
     raw_value = (
-        turn.get("round_no")
-        if isinstance(turn, Mapping)
-        else getattr(turn, "round_no", None)
+        turn.get("round_no") if isinstance(turn, Mapping) else getattr(turn, "round_no", None)
     )
     try:
         value = int(cast(Any, raw_value))
@@ -192,8 +190,7 @@ def visible_turn_ids(
     current: TurnPlan | object,
 ) -> tuple[str, ...]:
     return tuple(
-        str(_value(turn, "turn_id", ""))
-        for turn in visible_prior_round_turns(turns, current)
+        str(_value(turn, "turn_id", "")) for turn in visible_prior_round_turns(turns, current)
     )
 
 
@@ -231,9 +228,7 @@ def _question_from_turn(turn: object) -> PendingQuestion | None:
         if isinstance(question, Mapping)
         else _value(question, "target_participant_id")
     )
-    text = (
-        question.get("text") if isinstance(question, Mapping) else _value(question, "text")
-    )
+    text = question.get("text") if isinstance(question, Mapping) else _value(question, "text")
     source_id = str(_value(turn, "turn_id", ""))
     source_participant = str(_value(turn, "participant_id", ""))
     if not target or not text or not source_id or not source_participant:

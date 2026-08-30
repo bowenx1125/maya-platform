@@ -283,9 +283,13 @@ class TurnGenerationService:
             ) from exc
 
         for attempt in (1, 2):
-            attempt_record = first_attempt if attempt == 1 else GenerationAttempt(
-                attempt=attempt,
-                retrieval_count=len(receipts),
+            attempt_record = (
+                first_attempt
+                if attempt == 1
+                else GenerationAttempt(
+                    attempt=attempt,
+                    retrieval_count=len(receipts),
+                )
             )
             try:
                 attempt_record = replace(attempt_record, provider_called=True)
@@ -387,8 +391,7 @@ class TurnGenerationService:
                 )
                 if (
                     getattr(exc, "failure_kind", None) == "structure_invalid"
-                    and getattr(exc, "acceptance_state", None)
-                    == PromptAcceptanceState.ACCEPTED
+                    and getattr(exc, "acceptance_state", None) == PromptAcceptanceState.ACCEPTED
                 ):
                     if attempt == 2:
                         if self.fence is not None and active_claim is not None:
@@ -634,9 +637,7 @@ class TurnGenerationService:
                             subqueries,
                             snapshot_id=context.participant.snapshot_id,
                         )
-                        aligned_result = align_mutual_learning_claim_ids(
-                            validated.result, bundle
-                        )
+                        aligned_result = align_mutual_learning_claim_ids(validated.result, bundle)
                         validated = replace(
                             validated,
                             result=aligned_result,

@@ -460,9 +460,7 @@ def _engagement_projection(value: object) -> tuple[PromptEngagementV1, ...]:
                     _read(item, "target_turn_id"), label="engagement.target_turn_id"
                 ),
                 target_claim_id=(
-                    str(_read(item, "target_claim_id"))
-                    if _read(item, "target_claim_id")
-                    else None
+                    str(_read(item, "target_claim_id")) if _read(item, "target_claim_id") else None
                 ),
                 relation=cast(Any, _as_str(_read(item, "relation"), label="engagement.relation")),
                 faithful_summary=_as_str(
@@ -499,9 +497,7 @@ def predecessor_projection(turn: FinalReadyTurn | object) -> PromptPredecessorTu
     structured = _structured_dump(turn)
     speech = _read(turn, "speech", structured.get("speech"))
     turn_id = _as_str(_read(turn, "turn_id"), label="predecessor.turn_id")
-    participant_id = _as_str(
-        _read(turn, "participant_id"), label="predecessor.participant_id"
-    )
+    participant_id = _as_str(_read(turn, "participant_id"), label="predecessor.participant_id")
     claims = _claims_projection(structured.get("key_claims", ()))
     engagement = _engagement_projection(structured.get("engagements", ()))
     answered = structured.get("answered_question_ids", ())
@@ -883,9 +879,10 @@ def build_prompt_request(
     predecessor_models = tuple(predecessor_projection(item) for item in visible)
     predecessor_ids = tuple(item.turn_id for item in predecessor_models)
     planned_ids = _read(turn_plan, "predecessor_turn_ids", ())
-    if _sequence(planned_ids) and tuple(
-        str(item) for item in _sequence(planned_ids)
-    ) != predecessor_ids:
+    if (
+        _sequence(planned_ids)
+        and tuple(str(item) for item in _sequence(planned_ids)) != predecessor_ids
+    ):
         raise PromptRequestError("visible predecessors do not match the frozen turn plan")
     resolved_round_count = round_count
     if resolved_round_count is None:
@@ -1164,9 +1161,7 @@ class PromptRequestBuilder:
     ) -> PromptRequestV1:
         return build_prompt_request(context, rules=self.rules, **kwargs)
 
-    def build(
-        self, context: GenerationContext | None = None, **kwargs: Any
-    ) -> ProviderPromptV1:
+    def build(self, context: GenerationContext | None = None, **kwargs: Any) -> ProviderPromptV1:
         return build_provider_prompt(
             context,
             token_counter=self.token_counter,

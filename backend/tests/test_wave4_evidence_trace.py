@@ -296,9 +296,7 @@ def test_mutual_key_claims_use_the_same_server_id_as_trace_rows() -> None:
                 claim_type="proposal",
             )
         ],
-        evidence_trace_claims=[
-            EvidenceTraceClaimV1(claim_text=speech, claim_type="proposal")
-        ],
+        evidence_trace_claims=[EvidenceTraceClaimV1(claim_text=speech, claim_type="proposal")],
         position_summary="A transparent review is a proposal.",
         position_update="unchanged",
         remaining_uncertainty=["Implementation remains uncertain."],

@@ -196,11 +196,15 @@ def _generate_three_protocol_phases(
             participants=people,
             predecessors=predecessors,
         )
-        return TurnGenerationService(
-            _FixedRetriever(evidence_text=evidence_text),
-            MockLLMProvider(),
-            rule_set_id=_RULE_SET,
-        ).generate(context).final_ready
+        return (
+            TurnGenerationService(
+                _FixedRetriever(evidence_text=evidence_text),
+                MockLLMProvider(),
+                rule_set_id=_RULE_SET,
+            )
+            .generate(context)
+            .final_ready
+        )
 
     opening_a = generate(0, ())
     opening_b = generate(1, ())

@@ -133,9 +133,7 @@ def test_complete_generation_matrix_has_one_opening_exchange_span_and_final(
     )
     assert [item.phase for item in plans] == expected_phases
     assert [item.round_no for item in plans] == [
-        round_no
-        for round_no in range(1, round_count + 1)
-        for _ in range(participant_count)
+        round_no for round_no in range(1, round_count + 1) for _ in range(participant_count)
     ]
     assert all(isinstance(turn.structured, MutualLearningTurnResultV1) for turn in turns)
     for turn in turns:
@@ -301,9 +299,7 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
                 attempt=1,
                 cancellation_generation=0,
             )
-            prepared_result = MutualLearningTurnResultV1.model_validate(
-                first_prepared.structured
-            )
+            prepared_result = MutualLearningTurnResultV1.model_validate(first_prepared.structured)
             assert first_prepared.evidence_trace
             claim_ids = {claim.claim_id for claim in prepared_result.key_claims}
             trace_ids = {row["claim_id"] for row in first_prepared.evidence_trace}

@@ -663,9 +663,7 @@ class PlaybackService:
         except (TypeError, ValueError) as exc:
             # A malformed trace must never be downgraded to []: that would
             # make a corrupted replay indistinguishable from legacy history.
-            raise EvidenceTraceCorruptError(
-                "persisted evidence trace is unavailable"
-            ) from exc
+            raise EvidenceTraceCorruptError("persisted evidence trace is unavailable") from exc
 
     @staticmethod
     def _evidence_trace_payload(turn: Any) -> dict[str, Any]:
@@ -958,9 +956,7 @@ class PlaybackService:
             turns, successor, rule_set_id=rule_set_id
         ):
             return False
-        if not self._has_public_predecessor_prefix(
-            turns, successor, rule_set_id=rule_set_id
-        ):
+        if not self._has_public_predecessor_prefix(turns, successor, rule_set_id=rule_set_id):
             return False
         if self._validated_turn_audio(db, debate, successor) is None:
             return False
@@ -1099,11 +1095,7 @@ class PlaybackService:
                 candidate_round = int(cls._get(candidate, "round_no", default=1) or 1)
             except (TypeError, ValueError):
                 return False
-            if (
-                candidate_round < current_round
-                if is_mutual
-                else candidate_index < current_index
-            ):
+            if candidate_round < current_round if is_mutual else candidate_index < current_index:
                 predecessors.append(candidate)
         predecessors.sort(key=lambda candidate: int(cls._get(candidate, "turn_index", default=-1)))
         if is_mutual:

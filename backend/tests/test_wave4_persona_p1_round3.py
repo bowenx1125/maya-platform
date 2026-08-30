@@ -37,9 +37,7 @@ def _collision_value(marker: str) -> str:
     """Long value with identical edges and an intentionally varied center."""
 
     return (
-        "shared opening descriptor alpha beta "
-        f"{marker} gamma delta "
-        "shared closing descriptor omega"
+        f"shared opening descriptor alpha beta {marker} gamma delta shared closing descriptor omega"
     )
 
 
@@ -47,9 +45,7 @@ def _with_dimension(persona: PersonaSpecV1, field: str, value: str) -> PersonaSp
     if field == "value_priority":
         return persona.model_copy(update={"core_values": (value, *persona.core_values[1:])})
     if field == "debate_strategy":
-        return persona.model_copy(
-            update={"debate_strategy": (value, *persona.debate_strategy[1:])}
-        )
+        return persona.model_copy(update={"debate_strategy": (value, *persona.debate_strategy[1:])})
     if field in {"tone", "argument_pattern", "concession_style", "question_style"}:
         style = persona.speaking_style.model_copy(update={field: value})
         return persona.model_copy(update={"speaking_style": style})
@@ -196,9 +192,10 @@ def test_middle_only_dimension_changes_reach_actual_provider_mock(
     assert 80 <= count_turn_words(second_result.speech) <= 190
     first_projection = bounded_teaching_dimensions_for_persona(first)
     second_projection = bounded_teaching_dimensions_for_persona(second)
-    assert first_projection.model_dump()[f"{dimension}_sentence"] != second_projection.model_dump()[
-        f"{dimension}_sentence"
-    ]
+    assert (
+        first_projection.model_dump()[f"{dimension}_sentence"]
+        != second_projection.model_dump()[f"{dimension}_sentence"]
+    )
     assert first_projection.model_dump()[f"{dimension}_sentence"] in first_result.speech
     assert second_projection.model_dump()[f"{dimension}_sentence"] in second_result.speech
     assert first_result.used_evidence_id == second_result.used_evidence_id == ["receipt-shared"]

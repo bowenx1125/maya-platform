@@ -206,8 +206,7 @@ class PromptBudgetV1:
             self.max_attempts,
         )
         if any(
-            isinstance(value, bool) or not isinstance(value, int) or value < 0
-            for value in values
+            isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values
         ):
             raise ValueError("prompt budget counts and limits must be non-negative integers")
         if not self.tokenizer_id.strip() or not self.tokenizer_asset_hash.strip():

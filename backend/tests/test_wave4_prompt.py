@@ -157,9 +157,7 @@ def test_provider_prompt_has_exactly_two_messages_and_safe_persona_projection() 
     first = _ready(
         "turn-0", "participant-0", 1, 0, "The complete first speech is never summarized."
     )
-    second = _ready(
-        "turn-1", "participant-1", 1, 1, "The complete second speech remains exact."
-    )
+    second = _ready("turn-1", "participant-1", 1, 1, "The complete second speech remains exact.")
     prompt = build_provider_prompt(
         _context(2, predecessors=(first, second)),
         persona=_persona(),
@@ -298,8 +296,9 @@ def test_structure_repair_preserves_frozen_hashes_and_only_adds_safe_feedback() 
         repair_prompt_request(repaired, safe_error_code="again")
 
 
-def test_context_requires_confirmed_structured_persona_and_does_not_fallback_to_raw_markdown(
-) -> None:
+def test_context_requires_confirmed_structured_persona_and_does_not_fallback_to_raw_markdown() -> (
+    None
+):
     with pytest.raises(PromptRequestError) as error:
         build_provider_prompt(_context(1), queries=(TurnSubquery("viewpoint", "view"),))
     assert error.value.code == "persona_provider_view_required"
@@ -335,8 +334,9 @@ def test_prompt_hash_matches_existing_mutual_transcript_fence() -> None:
     assert prompt.request.transcript_hash == compute_mutual_transcript_hash((first, second))
 
 
-def test_strict_persona_service_path_sends_two_safe_messages_and_reuses_retrieval_on_repair(
-) -> None:
+def test_strict_persona_service_path_sends_two_safe_messages_and_reuses_retrieval_on_repair() -> (
+    None
+):
     from app.modules.debates.generation import SnapshotRetriever, TurnGenerationService
     from app.providers.llm import MockLLMProvider
 

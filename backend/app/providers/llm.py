@@ -204,9 +204,7 @@ def _mutual_claims(
             claim_text=text,
             claim_type="background" if claim_type == "interpretation" else claim_type,
             used_evidence_ids=evidence_ids,
-            support_mode=cast(
-                EvidenceTraceSupportMode, "direct" if evidence_ids else default_mode
-            ),
+            support_mode=cast(EvidenceTraceSupportMode, "direct" if evidence_ids else default_mode),
         )
         for text, claim_type, evidence_ids in candidates
     ]
@@ -272,9 +270,7 @@ class MockLLMProvider:
         )
         failure = self._failures.popleft() if self._failures else None
         if failure in {"technical"}:
-            raise LLMProviderError(
-                "mock technical provider failure", acceptance_state="not_sent"
-            )
+            raise LLMProviderError("mock technical provider failure", acceptance_state="not_sent")
         if failure in {"json", "shape"}:
             raise LLMStructuredOutputError("mock malformed structured output")
         if failure in {"word", "long"}:

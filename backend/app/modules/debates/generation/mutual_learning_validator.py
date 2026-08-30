@@ -303,9 +303,7 @@ class MutualLearningValidator:
                 if not result.learned_from_others:
                     raise TurnValidationError("Final integration must record learned_from_others.")
                 if not result.remaining_uncertainty:
-                    raise TurnValidationError(
-                        "Final integration must list remaining uncertainty."
-                    )
+                    raise TurnValidationError("Final integration must list remaining uncertainty.")
                 _strings(result.learned_from_others, "learned_from_others")
                 _nonblank(result.change_from_opening, "change_from_opening")
                 _nonblank(result.final_recommendation, "final_recommendation")

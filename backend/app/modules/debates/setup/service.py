@@ -116,12 +116,8 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
         return False
     is_mutual = str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING
     if is_mutual:
-        expected_ids = [
-            row.id for row in turns if int(row.round_no) < int(successor.round_no)
-        ]
-        visible_predecessors = [
-            row for row in turns if int(row.round_no) < int(successor.round_no)
-        ]
+        expected_ids = [row.id for row in turns if int(row.round_no) < int(successor.round_no)]
+        visible_predecessors = [row for row in turns if int(row.round_no) < int(successor.round_no)]
     else:
         expected_ids = [row.id for row in turns if row.turn_index < successor.turn_index]
         visible_predecessors = [row for row in turns if row.turn_index < successor.turn_index]
@@ -134,9 +130,7 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
         return False
     if predecessor_ids != expected_ids:
         return False
-    if any(
-        row.publication_status != "public" for row in visible_predecessors
-    ):
+    if any(row.publication_status != "public" for row in visible_predecessors):
         return False
     return (
         db.scalar(
@@ -402,8 +396,7 @@ def _fence_resolved_agent_chain(
             AgentVersion.persona_spec_json == version.persona_spec_json,
             AgentVersion.persona_spec_hash == version.persona_spec_hash,
             AgentVersion.persona_compiler_version == version.persona_compiler_version,
-            AgentVersion.persona_confirmation_revision
-            == version.persona_confirmation_revision,
+            AgentVersion.persona_confirmation_revision == version.persona_confirmation_revision,
             AgentVersion.student_confirmed_at == version.student_confirmed_at,
             AgentVersion.persona_confirming_user_id == version.persona_confirming_user_id,
         )
@@ -827,9 +820,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
     synthesis = None
     if str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING:
         round_count = _round_count_from_snapshot(debate)
-        final_inputs = [
-            item for item in synthesis_inputs if item["round_no"] == round_count
-        ]
+        final_inputs = [item for item in synthesis_inputs if item["round_no"] == round_count]
         if len(final_inputs) == len(participants):
             from app.modules.debates.generation.mutual_learning_synthesis import (
                 build_mutual_learning_synthesis,

@@ -414,9 +414,7 @@ class SqlTurnPreparer:
                 ),
                 excerpt=(str(payload["excerpt"]) if payload.get("excerpt") is not None else None),
                 query_id=(
-                    str(payload["query_id"])
-                    if payload.get("query_id") is not None
-                    else None
+                    str(payload["query_id"]) if payload.get("query_id") is not None else None
                 ),
             )
         except (TypeError, ValueError) as exc:
@@ -489,8 +487,7 @@ class SqlTurnPreparer:
             try:
                 trace_value = json.loads(str(raw_trace))
                 evidence_trace = tuple(
-                    item.model_dump(mode="json")
-                    for item in public_evidence_trace(trace_value)
+                    item.model_dump(mode="json") for item in public_evidence_trace(trace_value)
                 )
             except (TypeError, ValueError) as exc:
                 raise ValueError("a predecessor evidence trace is invalid") from exc

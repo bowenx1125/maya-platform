@@ -117,9 +117,7 @@ def _prepare_publishable_draft(
         headers=_headers(csrf),
         json={
             "expected_revision": 0,
-            "agent_md": confirmed_persona_fields(
-                name, datetime.now(UTC)
-            )["agent_md"],
+            "agent_md": confirmed_persona_fields(name, datetime.now(UTC))["agent_md"],
             "avatar_config": detail.json()["versions"][0]["avatar_config"],
         },
     )

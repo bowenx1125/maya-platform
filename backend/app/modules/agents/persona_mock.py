@@ -144,8 +144,7 @@ def mock_persona_response(
         stance=stance,
         speech=speech,
         position_summary=(
-            f"Prioritize {dimensions.value_priority} by applying "
-            f"{dimensions.debate_strategy}."
+            f"Prioritize {dimensions.value_priority} by applying {dimensions.debate_strategy}."
         ),
         teaching_dimensions=dimensions,
         evidence_ids=ordered_evidence,

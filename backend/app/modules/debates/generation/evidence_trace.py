@@ -419,9 +419,7 @@ def _receipt_row(
                 matching.query_kind
                 if matching
                 else (
-                    cast(EvidenceTraceQueryKind, receipt.query_kind)
-                    if receipt.query_id
-                    else None
+                    cast(EvidenceTraceQueryKind, receipt.query_kind) if receipt.query_id else None
                 )
             ),
             query_text=matching.text if matching else None,
@@ -588,9 +586,7 @@ def build_evidence_trace_bundle(
         query = next((item for item in query_rows if item.query_id == query_id), None)
         evidence_values: tuple[str | None, ...] = evidence_ids or (None,)
         for trace_evidence_id in evidence_values:
-            receipt = (
-                receipt_map.get(trace_evidence_id) if trace_evidence_id else None
-            )
+            receipt = receipt_map.get(trace_evidence_id) if trace_evidence_id else None
             traces.append(
                 EvidenceTraceV1(
                     turn_id=turn_id,
@@ -703,9 +699,7 @@ def align_mutual_learning_claim_ids(
     for trace in bundle.traces:
         ids_by_text.setdefault(trace.claim_text, trace.claim_id)
     missing = [
-        claim.claim_text
-        for claim in result.key_claims
-        if claim.claim_text not in ids_by_text
+        claim.claim_text for claim in result.key_claims if claim.claim_text not in ids_by_text
     ]
     if missing:
         raise EvidenceTraceValidationError(
@@ -713,14 +707,10 @@ def align_mutual_learning_claim_ids(
             code="claim_alignment_invalid",
         )
     key_evidence_ids = {
-        evidence_id
-        for claim in result.key_claims
-        for evidence_id in claim.used_evidence_ids
+        evidence_id for claim in result.key_claims for evidence_id in claim.used_evidence_ids
     }
     trace_evidence_ids = {
-        trace.evidence_id
-        for trace in bundle.traces
-        if trace.evidence_id is not None
+        trace.evidence_id for trace in bundle.traces if trace.evidence_id is not None
     }
     if key_evidence_ids != trace_evidence_ids:
         raise EvidenceTraceValidationError(

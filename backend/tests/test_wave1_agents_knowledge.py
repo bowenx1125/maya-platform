@@ -153,9 +153,7 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
         headers=_headers(csrf),
         json={
             "expected_revision": 0,
-            "agent_md": confirmed_persona_fields(
-                "Maya Guide", datetime.now(UTC)
-            )["agent_md"],
+            "agent_md": confirmed_persona_fields("Maya Guide", datetime.now(UTC))["agent_md"],
             "avatar_config": avatar,
         },
     )
@@ -462,9 +460,7 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
             headers=_headers(csrf),
             json={
                 "expected_revision": 0,
-                "agent_md": confirmed_persona_fields(
-                    "Maya Guide", datetime.now(UTC)
-                )["agent_md"],
+                "agent_md": confirmed_persona_fields("Maya Guide", datetime.now(UTC))["agent_md"],
                 "avatar_config": agent["versions"][0]["avatar_config"],
             },
         )

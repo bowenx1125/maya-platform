@@ -29,9 +29,7 @@ def upgrade() -> None:
             server_default=sa.false(),
         ),
     )
-    op.execute(
-        sa.text("UPDATE agent_versions SET persona_required = 1 WHERE state = 'draft'")
-    )
+    op.execute(sa.text("UPDATE agent_versions SET persona_required = 1 WHERE state = 'draft'"))
 
 
 def downgrade() -> None:

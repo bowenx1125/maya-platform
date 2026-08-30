@@ -114,9 +114,7 @@ class ProviderDisclosureStoreError(RuntimeError):
 class ProviderDisclosureStore(Protocol):
     """Persistence and teacher-membership port for the disclosure service."""
 
-    def get_policy_snapshot(
-        self, reference: str | None = None
-    ) -> ProviderPolicySnapshotV1 | None:
+    def get_policy_snapshot(self, reference: str | None = None) -> ProviderPolicySnapshotV1 | None:
         """Return a policy by immutable ID/hash, or the configured current row."""
 
     def get_export_manifest(self, reference: str | None = None) -> ExportManifestV1 | None:
