@@ -1012,6 +1012,45 @@ class SnapshotEmbeddingRuntime:
 
     execute = run
 
+    def continue_from_stages(
+        self,
+        build: SnapshotBuildV1,
+        *,
+        operations: Sequence[EmbeddingOperationV1] | None = None,
+        stages: (
+            Sequence[AcceptedEmbeddingStageV1] | Mapping[str, AcceptedEmbeddingStageV1] | None
+        ) = None,
+        scope_id: str | None = None,
+        attempt_no: int | None = None,
+        plan: EmbeddingPlanV1 | None = None,
+        current_build: SnapshotBuildV1 | None = None,
+        current_documents: Sequence[SnapshotBuildDocumentInput] | None = None,
+        current_persona_spec_hash: str | None = None,
+        current_build_verifier: Callable[[SnapshotBuildV1], object] | None = None,
+        existing_snapshot_ids: Sequence[str] = (),
+    ) -> SnapshotEmbeddingRunV1:
+        """Delegate bounded multi-batch restart continuation."""
+
+        from .continuation import continue_from_stages
+
+        return continue_from_stages(
+            self,
+            build,
+            operations=operations,
+            stages=stages,
+            scope_id=scope_id,
+            attempt_no=attempt_no,
+            plan=plan,
+            current_build=current_build,
+            current_documents=current_documents,
+            current_persona_spec_hash=current_persona_spec_hash,
+            current_build_verifier=current_build_verifier,
+            existing_snapshot_ids=existing_snapshot_ids,
+        )
+
+    continue_missing_batches = continue_from_stages
+    resume_missing_batches = continue_from_stages
+
     def resume_from_stages(
         self,
         build: SnapshotBuildV1,

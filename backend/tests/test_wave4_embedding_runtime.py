@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 import pytest
@@ -155,6 +155,49 @@ class _Transport:
         if self.failure == "nonfinite":
             cast(list[object], data[0]["embedding"])[0] = float("nan")
         return {"model": "text-embedding-v4", "data": data}
+
+
+class _SecondBatchNotSentTransport:
+    """Accept the first planned batch, then prove the second was not sent."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Mapping[str, object]]] = []
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        json: Mapping[str, object],
+        timeout: float,
+    ) -> object:
+        del headers, timeout
+        self.calls.append((url, json))
+        values = json.get("input")
+        texts = values.get("texts") if isinstance(values, Mapping) else values
+        if not isinstance(texts, list):
+            raise AssertionError("runtime sent an invalid input envelope")
+        if len(self.calls) == 2:
+            raise EmbeddingTransportNotSent()
+        return {
+            "model": "text-embedding-v4",
+            "data": [{"index": index, "embedding": [0.0] * 1024} for index, _ in enumerate(texts)],
+        }
+
+
+class _CountingPublisher(InMemorySnapshotPublicationStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    def publish_atomic(
+        self,
+        candidate: object,
+        *,
+        operation_ids: tuple[str, ...] = (),
+    ) -> object:
+        self.calls += 1
+        return super().publish_atomic(cast(Any, candidate), operation_ids=operation_ids)
 
 
 @dataclass
@@ -586,3 +629,149 @@ def test_resume_from_missing_or_corrupt_stage_is_unknown_and_never_published() -
     )
     assert corrupt.status == "acceptance_unknown"
     assert corrupt.safe_error_code == "embedding_stage_invalid"
+
+
+def test_continuation_reuses_accepted_batch_and_sends_only_missing_next_attempt() -> None:
+    build = _multi_batch_build()
+    tokenizer = PinnedTokenizerV1("test", "a" * 64, lambda _: 1)
+    control = InMemoryEmbeddingLedger(max_requests=2)
+    stage_store = InMemoryEmbeddingStageStore()
+    publisher = _CountingPublisher()
+    first_transport = _SecondBatchNotSentTransport()
+    first_runtime = SnapshotEmbeddingRuntime.with_dashscope(
+        control=control,
+        publisher=publisher,
+        config=DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport=first_transport,
+        stage_store=stage_store,
+        tokenizer=tokenizer,
+    )
+
+    first = first_runtime.run(build, scope_id="continuation-scope", current_build=build)
+
+    assert first.status == "not_sent"
+    assert [item.operation.state for item in first.outcomes] == ["accepted", "not_sent"]
+    assert len(first_transport.calls) == 2
+    assert len(stage_store.values()) == 1
+
+    second_transport = _Transport()
+    second_runtime = SnapshotEmbeddingRuntime.with_dashscope(
+        control=control,
+        publisher=publisher,
+        config=DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport=second_transport,
+        stage_store=stage_store,
+        tokenizer=tokenizer,
+    )
+    second = second_runtime.continue_from_stages(
+        build,
+        scope_id="continuation-scope",
+        operations=first.operations,
+        plan=first.plan,
+        current_build=build,
+    )
+
+    assert second.status == "succeeded"
+    assert len(second_transport.calls) == 1
+    assert second_transport.calls[0][1]["input"]["texts"] == ["one"]  # type: ignore[index]
+    assert publisher.calls == 1
+    assert [item.status for item in second.outcomes] == ["succeeded", "succeeded"]
+    assert [item.operation.attempt_no for item in second.outcomes] == [1, 2]
+    history = control.operations(scope_id="continuation-scope")
+    assert len(history) == 3
+    initial_missing = next(item for item in first.operations if item.logical_item_id == "batch-1")
+    retry = next(
+        item for item in history if item.logical_item_id == "batch-1" and item.attempt_no == 2
+    )
+    assert retry.request_hash == initial_missing.request_hash
+    assert len(stage_store.values()) == 2
+    candidate = publisher.get(build.knowledge_snapshot_id)
+    assert candidate is not None
+    assert candidate.chunk_ids == tuple(chunk.chunk_id for chunk in build.chunks)
+
+    repeated = second_runtime.continue_from_stages(
+        build,
+        scope_id="continuation-scope",
+        operations=second.operations,
+        plan=second.plan,
+        current_build=build,
+    )
+    assert repeated.status == "succeeded"
+    assert len(second_transport.calls) == 1
+    assert publisher.calls == 1
+    assert len(control.operations(scope_id="continuation-scope")) == 3
+
+
+def test_continuation_unknown_or_request_mismatch_fails_before_provider_call() -> None:
+    build = _multi_batch_build()
+    tokenizer = PinnedTokenizerV1("test", "a" * 64, lambda _: 1)
+    control = InMemoryEmbeddingLedger(max_requests=2)
+    stage_store = InMemoryEmbeddingStageStore()
+    publisher = _CountingPublisher()
+    first_transport = _SecondBatchNotSentTransport()
+    first_runtime = SnapshotEmbeddingRuntime.with_dashscope(
+        control=control,
+        publisher=publisher,
+        config=DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport=first_transport,
+        stage_store=stage_store,
+        tokenizer=tokenizer,
+    )
+    first = first_runtime.run(build, scope_id="fail-closed-scope", current_build=build)
+    assert first.status == "not_sent"
+
+    control.mark_acceptance_unknown(first.operations[0].id)
+    unknown_transport = _Transport()
+    unknown_runtime = SnapshotEmbeddingRuntime.with_dashscope(
+        control=control,
+        publisher=publisher,
+        config=DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport=unknown_transport,
+        stage_store=stage_store,
+        tokenizer=tokenizer,
+    )
+    unknown = unknown_runtime.continue_from_stages(
+        build,
+        scope_id="fail-closed-scope",
+        operations=first.operations,
+        plan=first.plan,
+    )
+    assert unknown.status == "acceptance_unknown"
+    assert unknown_transport.calls == []
+
+    # A separate ledger keeps the request-mismatch assertion independent from
+    # the unknown transition above.
+    control2 = InMemoryEmbeddingLedger(max_requests=2)
+    stage_store2 = InMemoryEmbeddingStageStore()
+    first_runtime2 = SnapshotEmbeddingRuntime.with_dashscope(
+        control=control2,
+        publisher=InMemorySnapshotPublicationStore(),
+        config=DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport=_SecondBatchNotSentTransport(),
+        stage_store=stage_store2,
+        tokenizer=tokenizer,
+    )
+    partial = first_runtime2.run(build, scope_id="hash-fail-scope", current_build=build)
+    bad_operations = tuple(
+        replace(operation, request_hash="0" * 64)
+        if operation.logical_item_id == "batch-1"
+        else operation
+        for operation in partial.operations
+    )
+    mismatch_transport = _Transport()
+    mismatch_runtime = SnapshotEmbeddingRuntime.with_dashscope(
+        control=control2,
+        publisher=InMemorySnapshotPublicationStore(),
+        config=DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport=mismatch_transport,
+        stage_store=stage_store2,
+        tokenizer=tokenizer,
+    )
+    mismatch = mismatch_runtime.continue_from_stages(
+        build,
+        scope_id="hash-fail-scope",
+        operations=bad_operations,
+        plan=partial.plan,
+    )
+    assert mismatch.status == "acceptance_unknown"
+    assert mismatch_transport.calls == []
