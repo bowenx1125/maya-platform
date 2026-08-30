@@ -32,10 +32,20 @@ export type DebateDraftUpdateRequest =
   operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
 export type AdvancePlaybackRequest =
   operations["advanceDebatePlayback"]["requestBody"]["content"]["application/json"];
+export type PlaybackControlRequest =
+  operations["pauseDebate"]["requestBody"]["content"]["application/json"];
+export type FinishDebateRequest =
+  operations["finishDebate"]["requestBody"]["content"]["application/json"];
 export type DebateParticipant = components["schemas"]["DebateParticipant"];
 export type DebateTurn = components["schemas"]["DebateTurn"];
 export type DebatePlaybackState = components["schemas"]["PlaybackState"];
 export type DebateTranscript = components["schemas"]["Transcript"];
+export type TeacherInteraction = components["schemas"]["TeacherInteraction"];
+export type CivilizationReport = components["schemas"]["Report"];
+export type ReportRevision = components["schemas"]["ReportRevision"];
+export type ReportRevisionSummary =
+  components["schemas"]["ReportRevisionSummary"];
+export type TranslationBatch = components["schemas"]["TranslationBatch"];
 export type AvatarTemplate = components["schemas"]["AvatarTemplate"];
 export type VoiceProfile = components["schemas"]["VoiceProfile"];
 export type PlaybackResource =
@@ -956,6 +966,69 @@ export class PlatformApi {
     );
   }
 
+  async pauseDebate(
+    debateId: string,
+    body: PlaybackControlRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebatePlaybackState> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/pause", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
+  }
+
+  async resumeDebate(
+    debateId: string,
+    body: PlaybackControlRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebatePlaybackState> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/resume", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
+  }
+
+  async finishDebate(
+    debateId: string,
+    body: FinishDebateRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateDetail> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/finish", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
+  }
+
   async replayDebate(
     debateId: string,
     expectedControlVersion: number,
@@ -976,6 +1049,152 @@ export class PlatformApi {
       await this.client.GET("/debates/{debate_id}/transcript", {
         params: { path: { debate_id: debateId } },
       }),
+    );
+  }
+
+  async teacherInteraction(debateId: string): Promise<TeacherInteraction> {
+    return unwrap<TeacherInteraction>(
+      (await this.client.GET("/debates/{debate_id}/interaction", {
+        params: { path: { debate_id: debateId } },
+      })) as unknown as ClientResult<TeacherInteraction>,
+    );
+  }
+
+  async openInteraction(
+    debateId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TeacherInteraction> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap<TeacherInteraction>(
+        (await this.client.POST("/debates/{debate_id}/interaction/open", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+        })) as unknown as ClientResult<TeacherInteraction>,
+      ),
+    );
+  }
+
+  async closeInteraction(
+    debateId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TeacherInteraction> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap<TeacherInteraction>(
+        (await this.client.POST("/debates/{debate_id}/interaction/close", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+        })) as unknown as ClientResult<TeacherInteraction>,
+      ),
+    );
+  }
+
+  async getCurrentReport(debateId: string): Promise<CivilizationReport> {
+    return unwrap<CivilizationReport>(
+      (await this.client.GET("/debates/{debate_id}/report", {
+        params: { path: { debate_id: debateId } },
+      })) as unknown as ClientResult<CivilizationReport>,
+    );
+  }
+
+  async regenerateReport(
+    debateId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<CivilizationReport> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap<CivilizationReport>(
+        (await this.client.POST("/debates/{debate_id}/report/generate", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+        })) as unknown as ClientResult<CivilizationReport>,
+      ),
+    );
+  }
+
+  async listReportRevisions(
+    debateId: string,
+  ): Promise<ReportRevisionSummary[]> {
+    return unwrap(
+      await this.client.GET("/debates/{debate_id}/report/revisions", {
+        params: { path: { debate_id: debateId } },
+      }),
+    );
+  }
+
+  async getReportRevision(
+    debateId: string,
+    revisionId: string,
+  ): Promise<ReportRevision> {
+    return unwrap<ReportRevision>(
+      (await this.client.GET(
+        "/debates/{debate_id}/report/revisions/{revision_id}",
+        {
+          params: {
+            path: { debate_id: debateId, revision_id: revisionId },
+          },
+        },
+      )) as unknown as ClientResult<ReportRevision>,
+    );
+  }
+
+  async downloadCurrentReport(
+    debateId: string,
+    language: "en" | "zh-Hans" = "en",
+  ): Promise<MarkdownDownload> {
+    const result = await this.client.GET(
+      "/debates/{debate_id}/report/download",
+      {
+        parseAs: "text",
+        params: { path: { debate_id: debateId }, query: { language } },
+      },
+    );
+    return {
+      content: await unwrap(result),
+      filename: responseDownloadFilename(
+        result.response,
+        language === "en" ? "maya-report.md" : "maya-report--zh-Hans.md",
+      ),
+    };
+  }
+
+  async listTranslationBatches(debateId: string): Promise<TranslationBatch[]> {
+    return unwrap(
+      await this.client.GET("/debates/{debate_id}/translations", {
+        params: { path: { debate_id: debateId } },
+      }),
+    );
+  }
+
+  async translateCurrentPublishedContent(
+    debateId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TranslationBatch> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/translations", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+        }),
+      ),
     );
   }
 

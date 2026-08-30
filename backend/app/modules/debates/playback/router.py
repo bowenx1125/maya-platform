@@ -28,10 +28,13 @@ from app.modules.debates.schemas import (
     AdvancePlaybackRequest,
     DebateDetail,
     DebateStartRequest,
+    FinishDebateRequest,
     PlaybackCommandRequest,
+    PlaybackControlRequest,
     PlaybackState,
     Transcript,
 )
+from app.modules.translations.service import attach_translated_text
 from app.providers.factory import tts_provider
 
 from .audio import AudioStore
@@ -142,6 +145,102 @@ async def start_debate_route(
     return _state_or_detail(service, db, str(debate_id), state, context)
 
 
+@router.post(
+    "/debates/{debate_id}/pause",
+    operation_id="pauseDebate",
+    response_model=PlaybackState,
+    responses={
+        200: {"description": "Authoritative paused playback state."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def pause_debate_route(
+    debate_id: UUID,
+    payload: PlaybackControlRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    return await service.pause(
+        db,
+        str(debate_id),
+        expected_control_version=payload.expected_control_version,
+        context=context,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post(
+    "/debates/{debate_id}/resume",
+    operation_id="resumeDebate",
+    response_model=PlaybackState,
+    responses={
+        200: {"description": "Authoritative resumed playback state."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def resume_debate_route(
+    debate_id: UUID,
+    payload: PlaybackControlRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    return await service.resume(
+        db,
+        str(debate_id),
+        expected_control_version=payload.expected_control_version,
+        context=context,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post(
+    "/debates/{debate_id}/finish",
+    operation_id="finishDebate",
+    response_model=DebateDetail,
+    responses={
+        200: {"description": "Debate finished fully or partially."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def finish_debate_route(
+    debate_id: UUID,
+    payload: FinishDebateRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    state = await service.finish(
+        db,
+        str(debate_id),
+        expected_control_version=payload.expected_control_version,
+        expected_current_turn_id=(
+            str(payload.expected_current_turn_id)
+            if payload.expected_current_turn_id is not None
+            else None
+        ),
+        context=context,
+        idempotency_key=idempotency_key,
+    )
+    return _state_or_detail(service, db, str(debate_id), state, context)
+
+
 def _control_dependencies() -> dict[str, Any]:
     return {
         "responses": {
@@ -220,11 +319,21 @@ async def transcript_route(
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
 ) -> Transcript:
+    # A partial Finish is represented by the legacy ``stopped`` Debate status.
+    # Its immutable turns remain stored for audit/recovery, but the public
+    # history/transcript surface is intentionally unavailable.
+    debate = service._get_debate(db, str(debate_id))
+    if str(getattr(debate, "status", "")) == "stopped":
+        raise not_found()
     snapshot, _ = await service.snapshot(db, str(debate_id), context)
     return Transcript.model_validate(
         {
             "debate_id": str(debate_id),
-            "turns": snapshot["public_turns"],
+            "turns": attach_translated_text(
+                db,
+                debate_id=str(debate_id),
+                turns=snapshot["public_turns"],
+            ),
             "audio_retained": service.audio_retained(db, str(debate_id)),
         }
     )
@@ -369,6 +478,23 @@ async def debate_events_route(
                 try:
                     event = event_task.result()
                 except StopAsyncIteration:
+                    break
+                # Public stream events can include the one reviewed raw-text
+                # exception, ``interaction.barrage_created``.  Revalidate the
+                # live session and course-teacher scope immediately before
+                # every delivery so revocation or membership changes cannot
+                # leave a long-lived socket authorized to receive it.
+                delivery_authorized = False
+                with _websocket_session(database, settings) as delivery_db:
+                    fresh = get_auth_context(delivery_db, settings, raw_token)
+                    if fresh is not None:
+                        try:
+                            await service.snapshot(delivery_db, str(debate_id), fresh)
+                            delivery_authorized = True
+                        except PlatformError:
+                            delivery_authorized = False
+                if not delivery_authorized:
+                    await _close_ws(websocket, 4401)
                     break
                 await websocket.send_json(event)
                 event_task = asyncio.create_task(stream.__anext__())

@@ -21,6 +21,8 @@ const batchId = "55555555-5555-4555-8555-555555555555";
 const messageId = "66666666-6666-4666-8666-666666666666";
 const revisionId = "77777777-7777-4777-8777-777777777777";
 const requestId = "88888888-8888-4888-8888-888888888888";
+const windowId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const insightSnapshotId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const occurredAt = "2026-08-26T12:00:00.000Z";
 const source = { source_filename: "fixture.md" };
 const avatar = (id, slot, motion_state, expression) => ({
@@ -58,8 +60,12 @@ const report = {
     status: "not_started",
     included_count: 0,
     filtered_count: 0,
-    items: [],
+    snapshot_id: null,
+    revision: null,
   },
+  active_revision_id: null,
+  current_success_revision_id: null,
+  current_success_word_count: null,
 };
 const finalStates = {
   debate: "debate_finished",
@@ -78,7 +84,12 @@ const valid = [
     report_status: "not_started",
     public_turns: [],
     playback,
-    interaction: { status: "closed", votes: [], barrage_count: 0 },
+    interaction: {
+      status: "closed",
+      votes: [],
+      barrage_count: 0,
+      total_votes: 0,
+    },
     report,
     latest_sequence: 0,
   }),
@@ -146,6 +157,7 @@ const valid = [
   envelope("replay.completed", 13, { scope: "turn", turn_id: turnId }),
   envelope("translation.batch_started", 14, {
     batch_id: batchId,
+    status: "running",
     total_items: 5,
     succeeded_items: 0,
     failed_items: 0,
@@ -161,12 +173,12 @@ const valid = [
     batch_id: batchId,
     status: "failed",
     total_items: 5,
-    succeeded_items: 4,
-    failed_items: 1,
+    succeeded_items: 0,
+    failed_items: 5,
   }),
   envelope("interaction.opened", 17, {
-    public_url: "/classroom/fixture-access-token",
-    qr_payload: "/classroom/fixture-access-token",
+    window_id: windowId,
+    status: "open",
     aggregate_zeros: [
       { participant_id: participantA, count: 0, percentage: 0 },
       { participant_id: participantB, count: 0, percentage: 0 },
@@ -191,17 +203,11 @@ const valid = [
   }),
   envelope("barrage_insight.started", 21, { revision: 1 }),
   envelope("barrage_insight.completed", 22, {
+    snapshot_id: insightSnapshotId,
     revision: 1,
     status: "ready",
     included_count: 1,
     filtered_count: 0,
-    themes: [
-      {
-        category: "question",
-        summary: "Learners ask for comparable evidence.",
-        count: 1,
-      },
-    ],
   }),
   envelope("barrage_insight.failed", 23, {
     revision: 2,
@@ -214,12 +220,18 @@ const valid = [
   }),
   envelope("report.completed", 25, {
     revision_id: revisionId,
+    revision_no: 1,
     status: "ready",
-    report,
+    current_success_revision_id: revisionId,
+    latest_attempt_status: "ready",
+    word_count: 640,
   }),
   envelope("report.failed", 26, {
     revision_id: revisionId,
+    revision_no: 2,
     status: "failed",
+    current_success_revision_id: revisionId,
+    latest_attempt_status: "failed",
     safe_error_code: "report_failed",
   }),
   envelope("debate.completed", 27, {
@@ -274,7 +286,12 @@ const invalid = [
       report_status: "not_started",
       public_turns: [],
       playback,
-      interaction: { status: "closed", votes: [], barrage_count: 0 },
+      interaction: {
+        status: "closed",
+        votes: [],
+        barrage_count: 0,
+        total_votes: 0,
+      },
       report,
       latest_sequence: 1,
     }),
@@ -291,7 +308,12 @@ const invalid = [
         report_status: "not_started",
         public_turns: [],
         playback: legacyPlayback,
-        interaction: { status: "closed", votes: [], barrage_count: 0 },
+        interaction: {
+          status: "closed",
+          votes: [],
+          barrage_count: 0,
+          total_votes: 0,
+        },
         report,
         latest_sequence: 0,
       });

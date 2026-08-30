@@ -185,6 +185,8 @@ function apiFor(
     startDebate: vi.fn().mockResolvedValue(initial),
     advanceDebatePlayback: vi.fn().mockResolvedValue(replay),
     replayDebate: vi.fn().mockResolvedValue(replay),
+    pauseDebate: vi.fn().mockResolvedValue({ ...replay, status: "paused" }),
+    resumeDebate: vi.fn().mockResolvedValue({ ...replay, status: "ready" }),
   };
 }
 

@@ -139,7 +139,7 @@ const enMessages = {
   debateStageDescription: "A teacher-controlled, server-timed classroom stage.",
   debateStart: "Start debate",
   debatePause: "Pause",
-  debateResume: "Resume",
+  debateResume: "Continue",
   debateSkip: "Skip current turn",
   debateNext: "Next / 下一步",
   debateStop: "Stop debate",
@@ -402,7 +402,7 @@ const enMessages = {
     "Choose current published Agents and set their speaking order.",
   controlClassroom: "Control classroom playback",
   controlClassroomLede:
-    "Use Start, Next, and Replay to lead the classroom stage.",
+    "Use Start, Next, Pause/Continue, Finish, and Replay to lead the classroom stage.",
   reviewHistory: "Review immutable history",
   reviewHistoryLede:
     "Return to prior published versions and completed classroom debates.",
@@ -1005,7 +1005,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   createDebate: "创建课堂辩论",
   createDebateLede: "选择当前已发布 Agent 并设置发言顺序。",
   controlClassroom: "控制课堂播放",
-  controlClassroomLede: "使用开始、下一步和重播带领课堂舞台。",
+  controlClassroomLede: "使用开始、下一步、暂停/继续、结束和重播带领课堂舞台。",
   reviewHistory: "查看不可变历史",
   reviewHistoryLede: "返回以前的已发布版本和已完成课堂辩论。",
   studentDraftBoundary: "学生草稿边界",

@@ -1873,6 +1873,7 @@ async def test_controller_ticket_pause_resume_and_current_only_audio(tmp_path: P
     )
     events = list(service.event_hub.store.events_after(debate.id, 0))
     assert events[-1].event_type == "playback.resumed"
+    assert sum(event.event_type == "playback.resumed" for event in events) == 1
     assert sum(event.event_type == "playback.started" for event in events) == 1
     advanced = await service.ended_ack(
         None,
@@ -2861,9 +2862,9 @@ async def test_restart_matrix_fences_generation_and_resets_ready_playback(tmp_pa
 
     assert retained.id not in affected
     assert retained.status == "running"
-    assert retained_state.status == "ready"
+    assert retained_state.status == "paused"
     assert retained_state.current_turn_id == retained_turn.id
-    assert retained_state.cursor_ms == 0
+    assert retained_state.cursor_ms == 321
     assert retained_state.control_version == retained_control_before + 1
     assert retained_state.controller_epoch is None
     await tasks.close()
@@ -3024,7 +3025,6 @@ async def test_snapshot_stream_race_delivers_one_committed_event_after_watermark
             "votes": [],
             "barrage_count": 0,
             "total_votes": 0,
-            "public_url": None,
         },
         "report": {
             "generation_status": "not_started",
@@ -3033,10 +3033,12 @@ async def test_snapshot_stream_race_delivers_one_committed_event_after_watermark
                 "status": "not_started",
                 "included_count": 0,
                 "filtered_count": 0,
-                "items": [],
+                "snapshot_id": None,
+                "revision": None,
             },
             "active_revision_id": None,
-            "current_success_revision": None,
+            "current_success_revision_id": None,
+            "current_success_word_count": None,
         },
     }
 

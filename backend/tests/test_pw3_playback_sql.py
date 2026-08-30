@@ -24,6 +24,9 @@ from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 from app.modules.debates.playback.task_manager import TaskManager
+from app.modules.interactions.service import InteractionService
+from app.modules.reports.service import get_current_report
+from app.modules.translations.service import TranslationService
 from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
@@ -152,6 +155,237 @@ def _add_live_successor(database: Database, debate_id: str, first_turn_id: str) 
         playback.pending_media_command_id = None
         playback.audio_duration_ms = 0
     return successor_id
+
+
+def _set_live_playing(database: Database, debate_id: str, turn_id: str) -> None:
+    with database.session() as db:
+        db.execute(
+            text("UPDATE debates SET status='running', finished_at=NULL WHERE id=:debate_id"),
+            {"debate_id": debate_id},
+        )
+        db.execute(
+            text(
+                "UPDATE playback_states SET status='playing', mode='live', "
+                "current_turn_id=:turn_id, cursor_ms=321, control_version=7, "
+                "controller_epoch=NULL, controller_owner_connection=NULL, "
+                "pending_action=NULL, pending_ticket_hash=NULL, "
+                "pending_media_command_id=NULL, audio_duration_ms=0 "
+                "WHERE debate_id=:debate_id"
+            ),
+            {"debate_id": debate_id, "turn_id": turn_id},
+        )
+
+
+@pytest.mark.asyncio
+async def test_sql_pause_survives_restart_and_continue_revalidates_audio(
+    app_factory: Any,
+) -> None:
+    database, settings, debate_id, turn_id = _seed_one_turn(app_factory)
+    _set_live_playing(database, debate_id, turn_id)
+    context = SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID))
+    tasks = TaskManager()
+    service = PlaybackService(
+        SqlPlaybackRepository(session_factory=database.session_factory),
+        audio_store=AudioStore(settings.resolved_data_root),
+        task_manager=tasks,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    try:
+        with database.session() as db:
+            paused = await service.pause(
+                db,
+                debate_id,
+                expected_control_version=7,
+                context=context,
+            )
+        assert paused.status == "paused"
+        assert paused.cursor_ms == 321
+
+        restarted = PlaybackService(
+            SqlPlaybackRepository(session_factory=database.session_factory),
+            audio_store=AudioStore(settings.resolved_data_root),
+            task_manager=tasks,
+            session_factory=database.session_factory,
+            settings=settings,
+        )
+        with database.session() as db:
+            assert await restarted.recover_startup(db) == ()
+            persisted = db.execute(
+                text(
+                    "SELECT d.status,ps.status,ps.cursor_ms,ps.control_version "
+                    "FROM debates d JOIN playback_states ps ON ps.debate_id=d.id "
+                    "WHERE d.id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            ).one()
+            assert persisted == ("running", "paused", 321, 9)
+            resumed = await restarted.resume(
+                db,
+                debate_id,
+                expected_control_version=9,
+                context=context,
+            )
+        assert resumed.status == "ready"
+        assert resumed.cursor_ms == 0
+        assert resumed.control_version == 10
+    finally:
+        await tasks.close()
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sql_full_finish_is_normal_and_retains_generated_turn(
+    app_factory: Any,
+) -> None:
+    database, settings, debate_id, turn_id = _seed_one_turn(app_factory)
+    _set_live_playing(database, debate_id, turn_id)
+    context = SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID))
+    tasks = TaskManager()
+    service = PlaybackService(
+        SqlPlaybackRepository(session_factory=database.session_factory),
+        task_manager=tasks,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    try:
+        with database.session() as db:
+            finished = await service.finish(
+                db,
+                debate_id,
+                expected_control_version=7,
+                expected_current_turn_id=turn_id,
+                context=context,
+            )
+        assert finished.status == "completed"
+        with database.session() as db:
+            assert db.get(Debate, debate_id).status == "debate_finished"
+            assert db.get(DebateTurn, turn_id) is not None
+    finally:
+        await tasks.close()
+        database.dispose()
+
+
+def test_sql_pause_and_finish_race_has_one_fresh_writer_winner(app_factory: Any) -> None:
+    database, settings, debate_id, turn_id = _seed_one_turn(app_factory)
+    _set_live_playing(database, debate_id, turn_id)
+    other_database = Database(database.database_url, settings.resolved_data_root)
+    pause_repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    finish_repository = SqlPlaybackRepository(session_factory=other_database.session_factory)
+    try:
+
+        def pause() -> bool:
+            return pause_repository.claim_pause_playback(
+                debate_id=debate_id,
+                expected_control_version=7,
+                cursor_ms=321,
+                teacher_user_id=TEACHER_ID,
+            )
+
+        def finish() -> dict[str, Any] | None:
+            return finish_repository.claim_finish_playback(
+                debate_id=debate_id,
+                expected_control_version=7,
+                expected_current_turn_id=turn_id,
+                teacher_user_id=TEACHER_ID,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            pause_result, finish_result = tuple(pool.map(lambda call: call(), (pause, finish)))
+        assert bool(pause_result) ^ bool(finish_result)
+        with database.session() as db:
+            row = db.execute(
+                text(
+                    "SELECT d.status,ps.status,ps.control_version "
+                    "FROM debates d JOIN playback_states ps ON ps.debate_id=d.id "
+                    "WHERE d.id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            ).one()
+            assert row[2] == 8
+            assert row[:2] in {("running", "paused"), ("debate_finished", "completed")}
+    finally:
+        other_database.dispose()
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surface(
+    app_factory: Any,
+) -> None:
+    database, settings, debate_id, first_turn_id = _seed_one_turn(app_factory)
+    successor_id = _add_live_successor(database, debate_id, first_turn_id)
+    with database.session() as db:
+        db.execute(
+            text("UPDATE jobs SET state='pending' WHERE turn_id=:turn_id"),
+            {"turn_id": successor_id},
+        )
+    context = SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID))
+    tasks = TaskManager()
+    service = PlaybackService(
+        SqlPlaybackRepository(session_factory=database.session_factory),
+        task_manager=tasks,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    try:
+        with database.session() as db:
+            partial = await service.finish(
+                db,
+                debate_id,
+                expected_control_version=8,
+                expected_current_turn_id=first_turn_id,
+                context=context,
+            )
+        assert partial.status == "stopped"
+        with database.session() as db:
+            debate = db.get(Debate, debate_id)
+            assert debate is not None and debate.status == "stopped"
+            assert db.scalar(select(Job.state).where(Job.turn_id == successor_id)) == "interrupted"
+            assert (
+                len(
+                    list(
+                        db.scalars(
+                            select(DebateTurn).where(DebateTurn.debate_id == debate_id)
+                        ).all()
+                    )
+                )
+                == 2
+            )
+            with pytest.raises(PlatformError) as report_denied:
+                get_current_report(db, actor_user_id=TEACHER_ID, debate_id=debate_id)
+            assert report_denied.value.code == "not_found"
+            with pytest.raises(PlatformError) as translation_denied:
+                TranslationService(
+                    database.session_factory,
+                    settings=settings,
+                ).list_batches(
+                    db,
+                    actor_user_id=TEACHER_ID,
+                    debate_id=debate_id,
+                )
+            assert translation_denied.value.code == "not_found"
+        with pytest.raises(PlatformError) as interaction_denied:
+            InteractionService(
+                session_factory=database.session_factory,
+                settings=settings,
+            ).get_teacher_interaction(
+                actor_user_id=TEACHER_ID,
+                debate_id=debate_id,
+            )
+        assert interaction_denied.value.code == "not_found"
+        with database.session() as db:
+            with pytest.raises(PlatformError) as replay_denied:
+                await service.replay_all(
+                    db,
+                    debate_id,
+                    expected_control_version=partial.control_version,
+                    context=context,
+                )
+            assert replay_denied.value.code == "invalid_state"
+    finally:
+        await tasks.close()
+        database.dispose()
 
 
 @pytest.mark.asyncio

@@ -9,9 +9,12 @@ from alembic import context
 from app.core.db import _sqlite_pragmas
 from app.core.models import Base
 from app.modules.debates import models as _debate_models
+from app.modules.interactions import models as _interaction_models
+from app.modules.reports import models as _report_models
+from app.modules.translations import models as _translation_models
 from sqlalchemy import engine_from_config, event, pool
 
-del _debate_models
+del _debate_models, _interaction_models, _report_models, _translation_models
 
 config = context.config
 if config.config_file_name is not None:
@@ -24,7 +27,10 @@ def _database_url() -> str:
     configured = config.attributes.get("database_url")
     if isinstance(configured, str):
         return configured
-    return os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    resolved = os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    if not resolved:
+        raise RuntimeError("DATABASE_URL is required for migrations")
+    return resolved
 
 
 def run_migrations_offline() -> None:

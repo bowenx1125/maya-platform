@@ -137,19 +137,10 @@ const interactionSummary = closed(
     votes: arrayOf(voteAggregate),
     barrage_count: integer(0),
     total_votes: integer(0),
-    public_url: nullable({ type: "string", format: "uri-reference" }),
   },
-  ["status", "votes", "barrage_count"],
+  ["status", "votes", "barrage_count", "total_votes"],
 );
-const insightItem = closed(
-  {
-    category: { type: "string", enum: ["support", "challenge", "question"] },
-    summary: nonEmpty,
-    count: integer(1),
-  },
-  ["category", "summary", "count"],
-);
-const insight = closed(
+const insightSummary = closed(
   {
     status: {
       type: "string",
@@ -157,24 +148,12 @@ const insight = closed(
     },
     included_count: integer(0),
     filtered_count: integer(0),
-    items: arrayOf(insightItem),
+    snapshot_id: nullableUuid,
+    revision: nullable(integer(1)),
   },
-  ["status", "included_count", "filtered_count", "items"],
+  ["status", "included_count", "filtered_count", "snapshot_id", "revision"],
 );
-const reportRevision = closed(
-  {
-    id: uuid,
-    revision_no: integer(1),
-    status: { type: "string", enum: ["generating", "ready", "failed"] },
-    english_markdown: nullable({ type: "string" }),
-    word_count: nullable(integer(600, 900)),
-    translated_markdown: nullable({ type: "string" }),
-    safe_error_code: nullable({ type: "string" }),
-    created_at: isoTime,
-  },
-  ["id", "revision_no", "status", "created_at"],
-);
-const report = closed(
+const reportSummary = closed(
   {
     generation_status: {
       type: "string",
@@ -184,11 +163,19 @@ const report = closed(
       type: "string",
       enum: ["not_started", "generating", "ready", "failed"],
     },
-    insight,
+    insight: insightSummary,
     active_revision_id: nullableUuid,
-    current_success_revision: nullable(reportRevision),
+    current_success_revision_id: nullableUuid,
+    current_success_word_count: nullable(integer(600, 900)),
   },
-  ["generation_status", "latest_attempt_status", "insight"],
+  [
+    "generation_status",
+    "latest_attempt_status",
+    "insight",
+    "active_revision_id",
+    "current_success_revision_id",
+    "current_success_word_count",
+  ],
 );
 const finalStates = closed(
   {
@@ -256,7 +243,7 @@ const payloads = {
       public_turns: arrayOf(publicTurn),
       playback: playbackState,
       interaction: interactionSummary,
-      report,
+      report: reportSummary,
       latest_sequence: integer(0),
     },
     [
@@ -404,34 +391,35 @@ const payloads = {
   ),
 };
 
-for (const eventType of [
-  "translation.batch_started",
-  "translation.batch_completed",
-  "translation.batch_failed",
-]) {
-  payloads[eventType] = closed(
-    {
-      batch_id: uuid,
-      status: {
-        type: "string",
-        enum: ["pending", "running", "completed", "partial", "failed"],
-      },
-      total_items: integer(0),
-      succeeded_items: integer(0),
-      failed_items: integer(0),
-    },
-    ["batch_id", "total_items", "succeeded_items", "failed_items"],
-  );
-}
+const translationCounts = {
+  batch_id: uuid,
+  total_items: integer(0),
+  succeeded_items: integer(0),
+  failed_items: integer(0),
+};
+payloads["translation.batch_started"] = closed(
+  { ...translationCounts, status: { type: "string", const: "running" } },
+  ["batch_id", "status", "total_items", "succeeded_items", "failed_items"],
+);
+payloads["translation.batch_completed"] = closed(
+  {
+    ...translationCounts,
+    status: { type: "string", enum: ["completed", "partial"] },
+  },
+  ["batch_id", "status", "total_items", "succeeded_items", "failed_items"],
+);
+payloads["translation.batch_failed"] = closed(
+  { ...translationCounts, status: { type: "string", const: "failed" } },
+  ["batch_id", "status", "total_items", "succeeded_items", "failed_items"],
+);
 
 payloads["interaction.opened"] = closed(
   {
-    public_url: { type: "string", format: "uri-reference" },
-    qr_payload: nonEmpty,
+    window_id: uuid,
     aggregate_zeros: arrayOf(voteAggregate),
     status: { type: "string", const: "open" },
   },
-  ["public_url", "qr_payload", "aggregate_zeros"],
+  ["window_id", "aggregate_zeros", "status"],
 );
 payloads["interaction.vote_created"] = closed(
   {
@@ -470,13 +458,13 @@ payloads["barrage_insight.started"] = closed(
 );
 payloads["barrage_insight.completed"] = closed(
   {
+    snapshot_id: uuid,
     revision: integer(1),
     status: { type: "string", const: "ready" },
     included_count: integer(0),
     filtered_count: integer(0),
-    themes: arrayOf(insightItem),
   },
-  ["revision", "included_count", "filtered_count", "themes"],
+  ["snapshot_id", "revision", "status", "included_count", "filtered_count"],
 );
 payloads["barrage_insight.failed"] = closed(
   {
@@ -494,16 +482,40 @@ payloads["report.started"] = closed(
   ["revision_id", "status"],
 );
 payloads["report.completed"] = closed(
-  { revision_id: uuid, status: { type: "string", const: "ready" }, report },
-  ["revision_id", "status", "report"],
+  {
+    revision_id: uuid,
+    revision_no: integer(1),
+    status: { type: "string", const: "ready" },
+    current_success_revision_id: uuid,
+    latest_attempt_status: { type: "string", const: "ready" },
+    word_count: integer(600, 900),
+  },
+  [
+    "revision_id",
+    "revision_no",
+    "status",
+    "current_success_revision_id",
+    "latest_attempt_status",
+    "word_count",
+  ],
 );
 payloads["report.failed"] = closed(
   {
     revision_id: uuid,
+    revision_no: integer(1),
     status: { type: "string", const: "failed" },
+    current_success_revision_id: nullableUuid,
+    latest_attempt_status: { type: "string", const: "failed" },
     safe_error_code: nonEmpty,
   },
-  ["revision_id", "status", "safe_error_code"],
+  [
+    "revision_id",
+    "revision_no",
+    "status",
+    "current_success_revision_id",
+    "latest_attempt_status",
+    "safe_error_code",
+  ],
 );
 
 payloads["debate.completed"] = closed(

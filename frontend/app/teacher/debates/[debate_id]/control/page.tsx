@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DebateStage } from "../../../../../components/debate/stage";
 import { AppShell } from "../../../../../components/app-shell";
@@ -15,7 +15,11 @@ import {
   LoadingCard,
   PageIntro,
 } from "../../../../../components/ui";
-import type { DebateDetail } from "../../../../../lib/api";
+import {
+  createIdempotencyHandle,
+  type DebateDetail,
+  type IdempotencyHandle,
+} from "../../../../../lib/api";
 import { useT } from "../../../../../components/locale";
 
 export default function TeacherDebateControlPage() {
@@ -31,12 +35,8 @@ export default function TeacherDebateControlPage() {
       start: t("debateStart"),
       pause: t("debatePause"),
       resume: t("debateResume"),
-      skip: t("debateSkip"),
       next: t("debateNext"),
-      stop: t("debateStop"),
       replayAll: t("debateReplayAll"),
-      replayTurn: t("debateReplayTurn"),
-      retryPlayback: t("debateRetryPlayback"),
       transcript: t("debateTranscript"),
       sources: t("debateSources"),
       noSources: t("debateNoSources"),
@@ -52,7 +52,6 @@ export default function TeacherDebateControlPage() {
       statusPaused: t("statusPaused"),
       waitingNext: t("debateWaitingNext"),
       waitingForAudio: t("debateWaitingForAudio"),
-      audioPaused: t("debateAudioPaused"),
       connectionReady: t("debateConnectionReady"),
       connectionReconnecting: t("debateConnectionReconnecting"),
       connectionDisconnected: t("debateConnectionDisconnected"),
@@ -74,6 +73,8 @@ export default function TeacherDebateControlPage() {
   >(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const [finishBusy, setFinishBusy] = useState(false);
+  const finishKey = useRef<IdempotencyHandle | null>(null);
 
   const load = useCallback(async () => {
     if (!debateId) {
@@ -117,6 +118,33 @@ export default function TeacherDebateControlPage() {
     return next;
   }, [api, debateId]);
 
+  const finish = useCallback(async () => {
+    if (!detail || !debateId) {
+      return;
+    }
+    setFinishBusy(true);
+    setError(null);
+    const handle = finishKey.current ?? createIdempotencyHandle();
+    finishKey.current = handle;
+    try {
+      const next = await api.finishDebate(
+        debateId,
+        {
+          expected_control_version: detail.playback.control_version,
+          expected_current_turn_id: detail.playback.current_turn_id,
+        },
+        { idempotency: handle },
+      );
+      finishKey.current = null;
+      setDetail(next);
+      await refreshSnapshot();
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setFinishBusy(false);
+    }
+  }, [api, debateId, detail, refreshSnapshot]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
@@ -136,9 +164,32 @@ export default function TeacherDebateControlPage() {
               title={detail.topic}
               description={t("debateListLede")}
               action={
-                <Link className="secondary-action" href="/teacher/debates">
-                  {t("debateBack")}
-                </Link>
+                <div className="button-row">
+                  <Link className="secondary-action" href="/teacher/debates">
+                    {t("debateBack")}
+                  </Link>
+                  {detail.status === "running" ? (
+                    <button
+                      className="primary-action"
+                      type="button"
+                      onClick={() => void finish()}
+                      disabled={finishBusy}
+                    >
+                      {finishBusy
+                        ? "Finishing… / 正在结束…"
+                        : "Finish debate / 结束辩论"}
+                    </button>
+                  ) : null}
+                  {(detail.status === "debate_finished" ||
+                    detail.status === "completed") && (
+                    <Link
+                      className="primary-action"
+                      href={`/teacher/debates/${debateId}/interaction`}
+                    >
+                      Classroom interaction &amp; report / 课堂互动与报告
+                    </Link>
+                  )}
+                </div>
               }
             />
             {error ? (

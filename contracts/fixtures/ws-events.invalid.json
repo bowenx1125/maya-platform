@@ -67,7 +67,8 @@
         "interaction": {
           "status": "closed",
           "votes": [],
-          "barrage_count": 0
+          "barrage_count": 0,
+          "total_votes": 0
         },
         "report": {
           "generation_status": "not_started",
@@ -76,8 +77,12 @@
             "status": "not_started",
             "included_count": 0,
             "filtered_count": 0,
-            "items": []
-          }
+            "snapshot_id": null,
+            "revision": null
+          },
+          "active_revision_id": null,
+          "current_success_revision_id": null,
+          "current_success_word_count": null
         },
         "latest_sequence": 1
       }
@@ -110,7 +115,8 @@
         "interaction": {
           "status": "closed",
           "votes": [],
-          "barrage_count": 0
+          "barrage_count": 0,
+          "total_votes": 0
         },
         "report": {
           "generation_status": "not_started",
@@ -119,8 +125,12 @@
             "status": "not_started",
             "included_count": 0,
             "filtered_count": 0,
-            "items": []
-          }
+            "snapshot_id": null,
+            "revision": null
+          },
+          "active_revision_id": null,
+          "current_success_revision_id": null,
+          "current_success_word_count": null
         },
         "latest_sequence": 0
       }

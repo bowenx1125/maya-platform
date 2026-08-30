@@ -1,4 +1,4 @@
-name: Maya Wave 2 quality
+name: Maya Wave 3 quality
 
 on:
   push:
@@ -89,6 +89,22 @@ jobs:
           test -f frontend/tests/wave2-setup.test.tsx
           test -f frontend/tests/wave2-playback.test.tsx
 
+      - name: Assert Wave 3 inputs
+        run: |
+          test -f backend/migrations/versions/0007_wave3_interaction_report.py
+          test -f backend/tests/test_wave3_interactions.py
+          test -f backend/tests/test_wave3_reports.py
+          test -f backend/tests/test_wave3_translations.py
+          test -f backend/tests/test_wave3_playback_controls.py
+          test -f scripts/test_wave3_migration.py
+          test -d backend/app/modules/interactions
+          test -d backend/app/modules/reports
+          test -d backend/app/modules/translations
+          test -f frontend/tests/wave3-interaction.test.tsx
+          test -f frontend/tests/wave3-report.test.tsx
+          test -f frontend/tests/wave3-history-translation.test.tsx
+          test -f frontend/tests/wave3-playback-controls.test.tsx
+
       - name: Frozen JavaScript install
         run: pnpm install --frozen-lockfile
 
@@ -153,10 +169,10 @@ jobs:
       - name: Local Demo initializer safety probe
         run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 
-      - name: Wave 2 backend tests and migration smoke
+      - name: Wave 3 backend tests and migration smoke
         working-directory: backend
         run: |
-          uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py migrations/versions/0006_pre_wave3_polish.py
+          uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py migrations/versions/0006_pre_wave3_polish.py migrations/versions/0007_wave3_interaction_report.py
           uv run ruff check app
           uv run ruff check tests
           uv run ruff check migrations
@@ -177,10 +193,13 @@ jobs:
       - name: Populated Wave 2 migration preservation evidence
         run: uv run --directory backend python ../scripts/test_wave2_migration.py
 
-      - name: Export Wave 2 FastAPI OpenAPI for route comparison
+      - name: Populated Wave 3 migration preservation evidence
+        run: uv run --directory backend python ../scripts/test_wave3_migration.py
+
+      - name: Export Wave 3 FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
-      - name: Strict Wave 2 FastAPI route and schema comparison
+      - name: Strict Wave 3 FastAPI route and schema comparison
         run: node scripts/compare_route_surface.mjs --server-openapi "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
       - name: Compose configuration

@@ -703,6 +703,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pauseDebate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debates/{debate_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeDebate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debates/{debate_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["finishDebate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/replay": {
         parameters: {
             query?: never;
@@ -1189,6 +1237,10 @@ export interface components {
             expected_control_version: number;
             expected_current_turn_id: components["schemas"]["Uuid"];
         };
+        PlaybackControlRequest: {
+            expected_control_version: number;
+            expected_current_turn_id?: components["schemas"]["Uuid"] | null;
+        };
         DebateParticipant: {
             id: components["schemas"]["Uuid"];
             /** @enum {string} */
@@ -1276,11 +1328,26 @@ export interface components {
             sequence: number;
             submitted_at: components["schemas"]["IsoTime"];
         };
-        TeacherInteraction: {
-            /** @enum {string} */
-            status: "closed" | "open" | "finalized";
-            /** Format: uri-reference */
-            public_url?: string | null;
+        TeacherInteraction: components["schemas"]["TeacherInteractionClosed"] | components["schemas"]["TeacherInteractionOpen"] | components["schemas"]["TeacherInteractionFinalized"];
+        TeacherInteractionClosed: {
+            /** @constant */
+            status: "closed";
+            public_url: null;
+            votes: components["schemas"]["VoteAggregate"][];
+            barrages: components["schemas"]["BarrageMessage"][];
+        };
+        TeacherInteractionOpen: {
+            /** @constant */
+            status: "open";
+            /** Format: uri */
+            public_url: string;
+            votes: components["schemas"]["VoteAggregate"][];
+            barrages: components["schemas"]["BarrageMessage"][];
+        };
+        TeacherInteractionFinalized: {
+            /** @constant */
+            status: "finalized";
+            public_url: null;
             votes: components["schemas"]["VoteAggregate"][];
             barrages: components["schemas"]["BarrageMessage"][];
         };
@@ -1306,15 +1373,47 @@ export interface components {
             filtered_count: number;
             items: components["schemas"]["BarrageInsightItem"][];
         };
-        ReportRevision: {
+        ReportRevisionSummary: {
             id: components["schemas"]["Uuid"];
             revision_no: number;
             /** @enum {string} */
             status: "generating" | "ready" | "failed";
-            english_markdown?: string | null;
-            word_count?: number | null;
-            translated_markdown?: string | null;
-            safe_error_code?: string | null;
+            word_count: number | null;
+            safe_error_code: string | null;
+            created_at: components["schemas"]["IsoTime"];
+        };
+        ReportRevision: components["schemas"]["GeneratingReportRevision"] | components["schemas"]["ReadyReportRevision"] | components["schemas"]["FailedReportRevision"];
+        GeneratingReportRevision: {
+            id: components["schemas"]["Uuid"];
+            revision_no: number;
+            /** @constant */
+            status: "generating";
+            english_markdown: null;
+            word_count: null;
+            translated_markdown: null;
+            safe_error_code: null;
+            created_at: components["schemas"]["IsoTime"];
+        };
+        ReadyReportRevision: {
+            id: components["schemas"]["Uuid"];
+            revision_no: number;
+            /** @constant */
+            status: "ready";
+            english_markdown: string;
+            word_count: number;
+            translated_markdown: string | null;
+            safe_error_code: null;
+            created_at: components["schemas"]["IsoTime"];
+        };
+        FailedReportRevision: {
+            id: components["schemas"]["Uuid"];
+            revision_no: number;
+            /** @constant */
+            status: "failed";
+            english_markdown: null;
+            word_count: null;
+            translated_markdown: null;
+            safe_error_code: string;
             created_at: components["schemas"]["IsoTime"];
         };
         Report: {
@@ -1325,17 +1424,34 @@ export interface components {
             latest_attempt_status: "not_started" | "generating" | "ready" | "failed";
             insight: components["schemas"]["BarrageInsight"];
             active_revision_id?: components["schemas"]["Uuid"] | null;
-            current_success_revision?: components["schemas"]["ReportRevision"] | null;
+            current_success_revision?: components["schemas"]["ReadyReportRevision"] | null;
+        };
+        TranslationItemSummary: {
+            /** @enum {string} */
+            content_type: "turn" | "report_revision";
+            content_id: components["schemas"]["Uuid"];
+            source_text_hash: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "ready" | "failed";
+            reused: boolean;
+            safe_error_code: string | null;
         };
         TranslationBatch: {
             id: components["schemas"]["Uuid"];
+            debate_id: components["schemas"]["Uuid"];
+            input_hash: string;
             /** @enum {string} */
             status: "pending" | "running" | "completed" | "partial" | "failed";
             /** @constant */
             target_language: "zh-Hans";
+            /** @constant */
+            quality: "test_representation";
             total_items: number;
             succeeded_items: number;
             failed_items: number;
+            items: components["schemas"]["TranslationItemSummary"][];
+            created_at: components["schemas"]["IsoTime"];
+            updated_at: components["schemas"]["IsoTime"];
         };
         JobStatus: {
             id: components["schemas"]["Uuid"];
@@ -2742,6 +2858,92 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
+    pauseDebate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackControlRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PlaybackState"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    resumeDebate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackControlRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PlaybackState"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    finishDebate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackControlRequest"];
+            };
+        };
+        responses: {
+            /** @description Debate finished fully or partially without deleting generated turns. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebateDetail"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
     replayDebate: {
         parameters: {
             query?: never;
@@ -2831,6 +3033,7 @@ export interface operations {
                     "application/json": components["schemas"]["TeacherInteraction"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -2858,7 +3061,10 @@ export interface operations {
                     "application/json": components["schemas"]["TeacherInteraction"];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     closeInteraction: {
@@ -2885,6 +3091,8 @@ export interface operations {
                     "application/json": components["schemas"]["TeacherInteraction"];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -2942,6 +3150,8 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             410: components["responses"]["Error"];
             422: components["responses"]["Error"];
@@ -2978,6 +3188,8 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             410: components["responses"]["Error"];
             422: components["responses"]["Error"];
@@ -3003,6 +3215,7 @@ export interface operations {
                     "application/json": components["schemas"]["Report"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -3030,6 +3243,8 @@ export interface operations {
                     "application/json": components["schemas"]["Report"];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -3050,9 +3265,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReportRevision"][];
+                    "application/json": components["schemas"]["ReportRevisionSummary"][];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -3077,6 +3293,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReportRevision"];
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -3096,12 +3313,17 @@ export interface operations {
             /** @description Markdown file; Chinese exists only after on-demand translation. */
             200: {
                 headers: {
+                    /** @description Safe attachment filename with ASCII fallback and UTF-8 filename. */
+                    "Content-Disposition"?: string;
+                    "Cache-Control"?: "no-store";
+                    "X-Content-Type-Options"?: "nosniff";
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/markdown": string;
+                    "text/markdown; charset=utf-8": string;
                 };
             };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -3125,6 +3347,8 @@ export interface operations {
                     "application/json": components["schemas"]["TranslationBatch"][];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     translateCurrentPublishedContent: {
@@ -3151,6 +3375,9 @@ export interface operations {
                     "application/json": components["schemas"]["TranslationBatch"];
                 };
             };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             422: components["responses"]["Error"];
         };
     };

@@ -80,6 +80,22 @@ class PlaybackCommandRequest(_ClosedModel):
     expected_control_version: int = Field(ge=0)
 
 
+class PlaybackControlRequest(_ClosedModel):
+    """Teacher control CAS shared by pause/resume/finish routes.
+
+    ``expected_current_turn_id`` is optional because a finish command may be
+    issued while the controller is parked without a current item.  The
+    service still revalidates the live row under its writer lock; this field
+    is only an additional stale-tab fence, never a client-selected successor.
+    """
+
+    expected_control_version: int = Field(ge=0)
+    expected_current_turn_id: UUID | None = None
+
+
+FinishDebateRequest = PlaybackControlRequest
+
+
 class AdvancePlaybackRequest(_ClosedModel):
     expected_control_version: int = Field(ge=0)
     expected_current_turn_id: UUID
@@ -222,6 +238,8 @@ __all__ = [
     "DebateTurn",
     "PlaybackCommandRequest",
     "PlaybackState",
+    "PlaybackControlRequest",
+    "FinishDebateRequest",
     "RetrievalSource",
     "RULE_SET_ID",
     "Transcript",

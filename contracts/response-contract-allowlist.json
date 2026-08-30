@@ -1,5 +1,5 @@
 {
-  "contract_version": "g0-2026-08-28.6-manual-advance",
+  "contract_version": "g0-2026-08-29.3-wave3",
   "description": "Explicit exceptions for generic Redocly response-completeness recommendations; frozen statuses remain mandatory.",
   "allow_response_schema_supersets": {},
   "allow_missing_4xx": {
@@ -11,9 +11,6 @@
     },
     "listAvatarTemplates": {
       "reason": "The static platform-template collection intentionally declares only its successful response."
-    },
-    "listTranslationBatches": {
-      "reason": "The teacher translation-history collection intentionally declares only its successful response."
     }
   },
   "allow_missing_2xx": {

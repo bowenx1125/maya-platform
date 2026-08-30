@@ -36,10 +36,19 @@ from app.modules.debates.playback.router import router as debate_playback_router
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlEventStore, SqlPlaybackRepository
 from app.modules.debates.playback.task_manager import TaskManager
+from app.modules.debates.playback.wave3_bridge import Wave3EventPublisher
+from app.modules.debates.playback.wave3_projection import wave3_snapshot_projection
 from app.modules.debates.setup.router import router as debate_setup_router
+from app.modules.interactions.router import router as interaction_router
+from app.modules.interactions.service import InteractionService
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
+from app.modules.reports.router import router as reports_router
+from app.modules.reports.service import ReportInsightEnqueuer, recover_report_jobs
+from app.modules.reports.task_manager import ReportTaskManager
+from app.modules.translations.router import router as translations_router
+from app.modules.translations.service import TranslationService, startup_translation_service
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.providers.factory import tts_provider
@@ -67,22 +76,48 @@ def create_app(
     playback_tasks = TaskManager()
     playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
     selected_tts = tts_provider(runtime_settings)
+    event_hub = DebateEventHub(SqlEventStore(runtime_database.session_factory))
+    wave3_events = Wave3EventPublisher(runtime_database.session_factory, event_hub)
+    report_tasks = ReportTaskManager(
+        runtime_database.session_factory,
+        wave3_events.publish_summary,
+    )
     playback_service = PlaybackService(
         playback_repository,
         audio_store=AudioStore(
             runtime_settings.resolved_data_root,
             tts_provider=selected_tts,
         ),
-        event_hub=DebateEventHub(SqlEventStore(runtime_database.session_factory)),
+        event_hub=event_hub,
         task_manager=playback_tasks,
         turn_preparer=SqlTurnPreparer(settings=runtime_settings),
         tts_provider=selected_tts,
         session_factory=runtime_database.session_factory,
         settings=runtime_settings,
+        snapshot_projector=wave3_snapshot_projection,
+    )
+
+    def publish_interaction_event(event: Any) -> None:
+        wave3_events.publish_interaction(event)
+        if event.event_type == "interaction.closed":
+            report_tasks.wake(str(event.debate_id))
+
+    interaction_service = InteractionService(
+        session_factory=runtime_database.session_factory,
+        settings=runtime_settings,
+        event_publisher=publish_interaction_event,
+        insight_enqueuer=ReportInsightEnqueuer(),
+    )
+    translation_service = TranslationService(
+        runtime_database.session_factory,
+        settings=runtime_settings,
+        event_publisher=wave3_events.publish_summary,
     )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        wave3_events.bind_running_loop()
+        report_tasks.bind_running_loop()
         runtime_settings.validate_runtime()
         runtime_settings.ensure_data_root()
         if initialize_database:
@@ -113,20 +148,31 @@ def create_app(
                 recover_startup(session, runtime_settings.resolved_data_root)
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
                 await playback_service.recover_startup(session)
+                recover_report_jobs(session)
+            report_tasks.schedule_pending()
+            await startup_translation_service(translation_service)
         try:
             yield
         finally:
+            await translation_service.task_manager.close()
+            await report_tasks.close()
             await playback_tasks.close()
             runtime_database.dispose()
 
     app = FastAPI(
         title="Maya Teaching Platform API",
-        version="0.1.0-g0.7",
+        version="0.1.0-g0.8-wave3",
         lifespan=lifespan,
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
     app.state.playback_service = playback_service
+    app.state.interaction_service = interaction_service
+    app.state.interaction_event_publisher = publish_interaction_event
+    app.state.insight_enqueuer = interaction_service.insight_enqueuer
+    app.state.translation_service = translation_service
+    app.state.wave3_event_publisher = wave3_events
+    app.state.report_task_manager = report_tasks
     if settings is not None:
         # Route dependencies use get_settings; keep injected app instances
         # internally consistent without changing global process settings.
@@ -186,6 +232,17 @@ def create_app(
         request.state.request_id = str(uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
+        path = request.url.path
+        teacher_interaction_path = path.startswith("/api/v1/debates/") and path.endswith(
+            ("/interaction", "/interaction/open", "/interaction/close")
+        )
+        if path.startswith("/api/v1/classroom-interactions/") or teacher_interaction_path:
+            # Public classroom capabilities must never be cached or leaked by
+            # a referrer, including PlatformError/validation responses that
+            # replace the route's injected Response object.
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
     @app.get("/health/live", tags=["Health"])
@@ -206,6 +263,9 @@ def create_app(
     app.include_router(voices_router, prefix="/api/v1")
     app.include_router(debate_setup_router, prefix="/api/v1")
     app.include_router(debate_playback_router, prefix="/api/v1")
+    app.include_router(interaction_router, prefix="/api/v1")
+    app.include_router(reports_router, prefix="/api/v1")
+    app.include_router(translations_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -341,6 +401,9 @@ def create_app(
                             "createDebate",
                             "updateDebateDraft",
                             "startDebate",
+                            "submitVote",
+                            "submitBarrage",
+                            "translateCurrentPublishedContent",
                         }:
                             operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]
