@@ -2,7 +2,7 @@
 
 Gate: `w4-r0-2026-08-30`
 
-Status: `G2 PASS / MAIN INTEGRATION PENDING / PRODUCT CODE NOT AUTHORIZED BY THIS GATE / REAL CALLS 0`
+Status: `R0 PASS / READY FOR W4-G0 / PRODUCT CODE NOT AUTHORIZED BY THIS GATE / REAL CALLS 0`
 
 Issue: `#5 W4-R0: canonical docs and reproducible development workflow`
 
@@ -79,5 +79,22 @@ ref mismatch or any product-code/provider change.
 - private PR CI run `33310839438`: PASS on the audited candidate;
 - PR head, local branch head, both CI runs and the Sol audit referenced the same SHA;
 - PR `#6` was mergeable when the candidate was signed;
-- final R0 remains unsigned until the resulting `dev-main` merge SHA passes the same
-  deterministic CI and the main window verifies the integrated tree.
+- at G2, final R0 remained unsigned until the resulting `dev-main` merge SHA passed
+  the same deterministic CI and the main window verified the integrated tree.
+
+## Main-window integration evidence
+
+- PR `#6` merged as `5a681f324e6b1ec034af8f8c021ee58889e053fb`;
+- deterministic CI run `33311493356` on the exact `dev-main` merge SHA: PASS;
+- guarded canonical-main update required the previously verified runtime-only SHA as
+  its force-with-lease value;
+- deterministic CI run `33311811470` on canonical `main` at the same SHA: PASS;
+- remote `main` and `dev-main` both resolved to `5a681f3` after the update;
+- runtime-only `2fd8078` remained protected by both branch and tag
+  `runtime-handoff-20260830`;
+- canonical local checkout fast-forwarded cleanly to `5a681f3` and tracks
+  `origin/main`;
+- parent `Project.md` matched the immutable Git archive checksum before it and the
+  stale parent pre-code contracts were moved to the recoverable R0 backup;
+- repository root `PROJECT.md` is now the single portable authority entry;
+- main-window final audit: `R0 PASS / P0=0 / P1=0 / REAL CALLS 0`.

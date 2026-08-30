@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / READY_FOR_WAVE_4 / W4_R0_G2_PASS / MAIN_INTEGRATION_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
+`WAVE_3_G3_PASS / W4_R0_PASS / READY_FOR_W4_G0 / WAVE_4_PRODUCT_CODE_NOT_STARTED`
 
 Wave 4 R0 is a documentation, repository and workflow Gate. It does not implement
 Persona, Evidence Trace, Prompt changes or a real Provider.
@@ -16,20 +16,18 @@ Persona, Evidence Trace, Prompt changes or a real Provider.
 - Local protection tag: `pre-wave4-a235c29`.
 - Verified complete bundle: `backups/pre-wave4-a235c29/maya-platform-a235c29.bundle`
   outside the repository; SHA-256 starts `553b852a1f51`.
-- Canonical private repository candidate: `bowenx1125/maya-platform`.
+- Canonical private repository: `bowenx1125/maya-platform`.
 - The old runtime-only remote main `2fd80784bd79c88261eb2319a961b5c659b9e687`
   is preserved as branch and tag `runtime-handoff-20260830`.
-- The full baseline is available on remote branch `dev-main`; remote main has not yet
-  been replaced.
-- Active R0 Issue: `#5 W4-R0: canonical docs and reproducible development workflow`.
-- Active branch/worktree: `w4/r0/05-doc-workflow` in `maya-wt-r0-05`.
-- Active PR: `#6 W4-R0: establish portable project authority`, targeting `dev-main`.
-- The exact R0 candidate identity is the PR head SHA reported by Git/GitHub/CI. It is
-  intentionally not duplicated inside the candidate commit because a commit cannot
-  contain its own final SHA. Candidate `3c07fe1` passed two private CI runs and an
-  independent Sol High audit with `P0=0 / P1=0 / P2=0`; `a235c29` remains the last
-  signed product baseline until the resulting merge SHA passes main-window
-  integration.
+- Remote `main` and `dev-main` both contain the complete source, tests, contracts and
+  CI at signed R0 integration SHA `5a681f324e6b1ec034af8f8c021ee58889e053fb`.
+- R0 Issue `#5` and PR `#6` record the Issue/worktree/owner/PR/audit trail.
+- Candidate `3c07fe1` passed two private CI runs and independent Sol High audit;
+  evidence-only head `dc6f699` passed two more CI runs and Sol incremental audit. Both
+  audits returned `P0=0 / P1=0 / P2=0`.
+- Merge SHA `5a681f3` passed full deterministic CI on `dev-main` and again after the
+  guarded canonical `main` switch. The main window verified the integrated tree and
+  signed R0.
 
 ## Signed Wave 3 evidence
 
@@ -98,20 +96,16 @@ code`, not the full historical monolith.
 
 ## Active risks
 
-1. The runtime-only remote tree is not a reproducible development branch until R0 is
-   merged and CI runs on the full source SHA.
-2. The old continuity monolith contains superseded current-looking statements; it is
+1. The old continuity monolith contains superseded current-looking statements; it is
    archived and must not be a default task input.
-3. Persona extraction from arbitrary Markdown needs an explicit closed contract; it
+2. Persona extraction from arbitrary Markdown needs an explicit closed contract; it
    cannot silently infer or improve student intent.
-4. Claim-level evidence can prove lineage, not factual correctness.
-5. TTS is still a hard blocker for complete real-service G5.
+3. Claim-level evidence can prove lineage, not factual correctness.
+4. TTS is still a hard blocker for complete real-service G5.
 
 ## Next Gate
 
-Candidate `3c07fe1` passed two private CI runs and independent Sol High review. Validate
-this evidence-only update on PR #6, merge into `dev-main`, verify full CI on the
-resulting merge SHA, and then move the canonical remote development main. After R0 is
-signed, draft Wave 4 G0 contracts for PersonaSpecV1, EvidenceTraceV1, complete-history
-Prompt request assembly, formal content, Provider data/call limits and failure
-semantics.
+Create a W4-G0 Issue and independent worktree. Freeze PersonaSpecV1,
+EvidenceTraceV1, complete-history Prompt request assembly, formal content, external
+Provider data/call limits and failure semantics. Obtain independent Sol High G0-S
+`PASS / P0=0 / P1=0` before any Wave 4 product implementation or real Provider call.
