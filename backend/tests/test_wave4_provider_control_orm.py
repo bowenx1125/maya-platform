@@ -157,6 +157,23 @@ def test_policy_manifest_confirmation_round_trip_and_stale_hash_fails_closed(
     assert policy is not None and policy.policy_hash == manifest.policy_hash
     persisted_manifest = repository.get_export_manifest(manifest.manifest_hash)
     assert persisted_manifest is not None
+    assert (
+        repository.ensure_export_manifest(
+            manifest,
+            policy_snapshot_id="policy-scope-1",
+        )
+        == "manifest-scope-1"
+    )
+    confirmation = repository.get_export_confirmation(manifest.manifest_hash)
+    assert confirmation is not None
+    assert confirmation.manifest_hash == manifest.manifest_hash
+    assert confirmation.policy_hash == manifest.policy_hash
+    with pytest.raises(ProviderRepositoryError, match="different ownership"):
+        repository.ensure_export_manifest(
+            manifest,
+            policy_snapshot_id="policy-scope-1",
+            course_id="different-course",
+        )
     request = _request(manifest)
     repository.assert_hashes_current(request)
     assert repository.get_scope_budget(manifest.scope_id) is not None

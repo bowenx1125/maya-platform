@@ -236,6 +236,51 @@ class ProviderRepository:
 
     persist_export_manifest = save_export_manifest
 
+    def ensure_export_manifest(
+        self,
+        manifest: ExportManifestV1,
+        *,
+        policy_snapshot_id: str,
+        manifest_id: str | None = None,
+        course_id: str | None = None,
+        group_id: str | None = None,
+        agent_version_id: str | None = None,
+    ) -> str:
+        """Insert once or verify the exact immutable manifest and owner tuple."""
+
+        try:
+            return self.save_export_manifest(
+                manifest,
+                policy_snapshot_id=policy_snapshot_id,
+                manifest_id=manifest_id,
+                course_id=course_id,
+                group_id=group_id,
+                agent_version_id=agent_version_id,
+            )
+        except ProviderRepositoryError as error:
+            row = self._read_one(
+                select(_MANIFEST_TABLE).where(
+                    _MANIFEST_TABLE.c.manifest_hash == manifest.manifest_hash
+                )
+            )
+            if row is None:
+                raise
+            try:
+                persisted = _manifest_from_row(row)
+            except Exception as exc:
+                raise ProviderRepositoryError("provider export manifest is corrupt") from exc
+            if (
+                persisted != manifest
+                or str(row["policy_snapshot_id"]) != policy_snapshot_id
+                or _optional_string(row["course_id"]) != course_id
+                or _optional_string(row["group_id"]) != group_id
+                or _optional_string(row["agent_version_id"]) != agent_version_id
+            ):
+                raise ProviderRepositoryError(
+                    "provider export manifest already exists with different ownership"
+                ) from error
+            return str(row["id"])
+
     def get_export_manifest(self, manifest_hash_or_id: str) -> ExportManifestV1 | None:
         table = _MANIFEST_TABLE
         row = self._read_one(
@@ -244,6 +289,12 @@ class ProviderRepository:
             )
         )
         return _manifest_from_row(row) if row is not None else None
+
+    def get_export_confirmation(self, manifest_hash: str) -> ExportConfirmationV1 | None:
+        row = self._read_one(
+            select(_CONFIRMATION_TABLE).where(_CONFIRMATION_TABLE.c.manifest_hash == manifest_hash)
+        )
+        return _confirmation_from_row(row) if row is not None else None
 
     def save_export_confirmation(
         self,
@@ -743,6 +794,10 @@ def _as_float(value: object) -> float:
     return float(str(value))
 
 
+def _optional_string(value: object) -> str | None:
+    return str(value) if value is not None else None
+
+
 def _policy_from_row(row: Mapping[str, object]) -> ProviderPolicySnapshotV1:
     return ProviderPolicySnapshotV1(
         policy_id=str(row["policy_id"]),
@@ -792,6 +847,15 @@ def _manifest_from_row(row: Mapping[str, object]) -> ExportManifestV1:
         contains_identity=bool(row["contains_identity"]),
         contains_private_audio=bool(row["contains_private_audio"]),
         contains_teacher_note=bool(row["contains_teacher_note"]),
+    )
+
+
+def _confirmation_from_row(row: Mapping[str, object]) -> ExportConfirmationV1:
+    return ExportConfirmationV1(
+        manifest_hash=str(row["manifest_hash"]),
+        policy_hash=str(row["policy_hash"]),
+        confirmed_at=str(row["confirmed_at"]),
+        confirmation_revision=_as_int(row["confirmation_revision"]),
     )
 
 
