@@ -1,9 +1,30 @@
 # Maya Platform Agent Rules
 
-1. Before changing this repository, read `../Project.md` completely, including the embedded original requirements. Current implementation authority is `../Project.md` sections 0, 5 and 8 plus `../docs/pre-code-contracts/`.
-2. Do not copy any source-code fragment from the reference repositories under `../`. References are read-only for design, interaction and test ideas. Implement from Maya contracts.
-3. Work only inside the files explicitly assigned by the main agent. Other agents are working in the same checkout; do not revert, overwrite or reformat their changes.
-4. Keep the frontend provider-neutral. No provider name, model ID, external voice ID, API key or supplier URL may enter browser-facing DTOs.
-5. Do not create or commit real `.env`, credentials, student audio, private reference code or local data. Use `.env.example` and Mock providers.
-6. Run the assigned deterministic checks before reporting completion. A worker cannot approve its own Gate; final status belongs to the main agent after Sol audit.
-7. Do not edit `../Project.md` or the frozen pre-code contracts unless the main agent explicitly assigns that file.
+1. Read repository-root `PROJECT_STATUS.md`, then the current Issue/Task Packet and
+   only the ADRs/contracts/code named by that packet. `PROJECT.md` is the authority
+   index. Do not read `docs/worklog/` or `docs/archive/` unless the task explicitly
+   needs historical evidence.
+2. Work in the branch and independent worktree assigned to the Issue. Do not edit the
+   main checkout, another Agent's worktree, or files outside explicit ownership.
+3. Models, migrations, OpenAPI, WebSocket schemas, public configuration, generated
+   clients and root status are main-window/integrator-owned unless the Task Packet
+   assigns them explicitly.
+4. Do not copy any source fragment from reference repositories. References are
+   read-only inputs for interaction, architecture and test ideas. Implement from Maya
+   contracts.
+5. Keep the frontend provider-neutral. Supplier names, model IDs, external resource
+   IDs, API keys, supplier URLs and private paths may not enter browser-facing DTOs.
+6. Never create or commit a real `.env`, credentials, student audio, runtime data,
+   databases, generated media, logs or private reference code. Use `.env.example` and
+   isolated test/Mock inputs.
+7. Every turn continues to receive the complete text of all predecessor turns. Do not
+   replace history with summaries. Prompt work may remove duplicate serialization and
+   reuse stable retrieval on a structure-only retry only when the active contract says
+   so.
+8. Run the assigned deterministic checks before reporting completion. Debug and retest
+   within the Gate until its criteria pass; never weaken a test or contract to make it
+   green.
+9. A worker cannot approve its own Gate. Sol audit is read-only, and final status
+   belongs to the main window after the exact candidate/merge SHA is verified.
+10. Do not edit `PROJECT.md`, `PROJECT_STATUS.md`, active Gate packets or shared
+    contracts unless the Task Packet makes you their named owner.

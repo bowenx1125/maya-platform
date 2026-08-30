@@ -1,5 +1,10 @@
 # Maya Teaching Platform
 
+Development authority starts at [PROJECT.md](PROJECT.md). Read
+[PROJECT_STATUS.md](PROJECT_STATUS.md) for the current SHA, active Gate, real-provider
+state and next action. Historical worklogs and the archived pre-Wave-4 monolith are not
+default task inputs.
+
 > **Private local Demo:** Git contains source and non-secret fixtures only. The
 > ignored mode-0600 `.env` and
 > `backend/config/demo-accounts/accounts.private.md` are the only retained
@@ -28,6 +33,18 @@ with on-demand controller acquisition, and a versioned Mock lexical RAG guard.
 Pause/Continue are no longer ordinary teacher controls. Wave 4 has not started; real
 LLM/Embedding/TTS, formal content quality, classroom load and public deployment
 still require separate gates.
+
+## Development workflow
+
+The private development repository contains product source, tests, migrations,
+machine contracts, Gate evidence and CI. Wave 4 coding changes use one GitHub Issue,
+one branch, one independent worktree and one implementation owner. CI and independent
+Sol review apply to an exact candidate SHA; the main integration window reruns checks
+on a different merge SHA before signing it.
+
+Runtime handoffs are produced from a passing full-source SHA as a Release/Docker
+artifact. A reduced runtime tree is not used as the development main branch. See
+[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md).
 
 The frontend follows the Wave 0 frozen dependency set: TypeScript `5.9.3`, ESLint `9.39.1`, Next.js `16.3.3`, React `19.2.8`, Vitest `4.1.11`, Vite `8.2.2`, jsdom `29.0.1`, and the pinned type/test tooling listed in the gate packet. ESLint 9 is the approved compatibility override because ESLint 10 currently crashes inside the Next.js 16.3.3 transitive parser/plugin before linting source files; the lint command still covers TypeScript and TSX with the full Next ruleset. TypeScript 5.9.3 is required by openapi-typescript 7.13.0, and jsdom 29.0.1 matches the frozen Node 24.14 runtime.
 
@@ -85,6 +102,7 @@ From this directory:
 
 ```text
 pnpm install --frozen-lockfile
+pnpm docs:check
 pnpm --filter @maya/frontend lint
 pnpm --filter @maya/frontend typecheck
 pnpm --filter @maya/frontend test
