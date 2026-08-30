@@ -43,6 +43,7 @@ from app.modules.debates.playback.wave3_projection import wave3_snapshot_project
 from app.modules.debates.setup.router import router as debate_setup_router
 from app.modules.interactions.router import router as interaction_router
 from app.modules.interactions.service import InteractionService
+from app.modules.knowledge.providers import recover_embedding_provider_startup
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
@@ -156,6 +157,7 @@ def create_app(
                 with runtime_database.session() as session:
                     if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
                         seed_demo_data(session)
+            recover_embedding_provider_startup(runtime_database)
             with runtime_database.session() as session:
                 recover_startup(session, runtime_settings.resolved_data_root)
                 startup_voice_cleanup(runtime_settings.resolved_data_root)

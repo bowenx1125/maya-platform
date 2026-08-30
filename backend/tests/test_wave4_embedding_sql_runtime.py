@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -30,7 +31,10 @@ from app.modules.knowledge.providers import (
     SqlAlchemyEmbeddingControlAdapter,
     SqlAlchemyEmbeddingStageStore,
     SqlAlchemySnapshotPublicationStore,
+    plan_embedding_batches,
     prepare_snapshot_build,
+    recover_embedding_provider_startup,
+    reservation_request_for_batch,
 )
 from app.modules.knowledge.providers.snapshot_build import SnapshotBuildInputDocument
 from app.modules.knowledge.services import document_file_content, renew_idempotency_lease
@@ -93,14 +97,15 @@ def _prepare_control(
     *,
     confirmed: bool,
     build: SnapshotBuildV1 | None = None,
+    policy: ProviderPolicySnapshotV1 | None = None,
 ) -> tuple[SqlAlchemyEmbeddingControlAdapter, ProviderRepository, SnapshotBuildV1]:
     selected_build = build or _build()
-    policy = _policy()
+    selected_policy = policy or _policy()
     manifest = ExportManifestV1(
         scope_id=selected_build.build_id,
         provider_operation="embedding",
         model_key=MOCK_EMBEDDING_MODEL,
-        policy_hash=policy.policy_hash,
+        policy_hash=selected_policy.policy_hash,
         build_manifest_hash=selected_build.manifest_hash,
         persona_spec_hash=selected_build.persona_spec_hash,
         fields=(
@@ -109,7 +114,7 @@ def _prepare_control(
         ),
     )
     repository = ProviderRepository(database)
-    policy_id = repository.save_policy_snapshot(policy)
+    policy_id = repository.save_policy_snapshot(selected_policy)
     manifest_id = repository.save_export_manifest(
         manifest,
         policy_snapshot_id=policy_id,
@@ -119,14 +124,14 @@ def _prepare_control(
             manifest_id,
             confirm_export_manifest(
                 manifest,
-                policy,
+                selected_policy,
                 confirmed_at=datetime.now(UTC).isoformat(),
             ),
         )
     return (
         SqlAlchemyEmbeddingControlAdapter(
             database,
-            policy_hash=policy.policy_hash,
+            policy_hash=selected_policy.policy_hash,
             export_manifest_hash=manifest.manifest_hash,
             build_manifest_hash=manifest.build_manifest_hash,
         ),
@@ -275,6 +280,101 @@ def test_provider_publish_lease_renewal_is_bounded_and_exact_token_cas(
         record.claim_token = "exact-claim-token"
         with pytest.raises(PlatformError, match="no longer owned"):
             renew_idempotency_lease(db, record, lease_seconds=900)
+    database.dispose()
+
+
+def test_embedding_startup_recovery_never_retries_and_preserves_complete_stage(
+    tmp_path: Path,
+) -> None:
+    database = Database(f"sqlite:///{tmp_path}/embedding-recovery.sqlite3")
+    database.initialize_schema()
+    control, repository, build = _prepare_control(database, confirmed=True)
+    batch = plan_embedding_batches(build).batches[0]
+
+    reserved = control.create_prepared(
+        reservation_request_for_batch(
+            batch,
+            scope_id=build.build_id,
+            attempt_no=1,
+            provider_operation="embedding",
+        )
+    )
+    control.reserve(reserved)
+    recovered = recover_embedding_provider_startup(database)
+    assert tuple(item.state for item in recovered) == ("not_sent",)
+
+    sending = control.create_prepared(
+        reservation_request_for_batch(
+            batch,
+            scope_id=build.build_id,
+            attempt_no=2,
+            provider_operation="embedding",
+        )
+    )
+    control.reserve(sending)
+    control.mark_sending(sending.id)
+    recovered = recover_embedding_provider_startup(database)
+    assert tuple(item.state for item in recovered) == ("acceptance_unknown",)
+
+    class ProcessCrash(BaseException):
+        pass
+
+    class CrashAfterAcceptedStage:
+        atomic_operation_success = True
+
+        def publish_atomic(self, *args: object, **kwargs: object) -> object:
+            del args, kwargs
+            raise ProcessCrash
+
+    other_build = prepare_snapshot_build(
+        agent_version_id=build.agent_version_id,
+        knowledge_snapshot_id="snapshot-recovery-accepted",
+        draft_revision=build.draft_revision,
+        persona_spec_hash=build.persona_spec_hash,
+        documents=tuple(
+            {
+                "document_id": document.document_id,
+                "source_filename": document.source_filename,
+                "text": document.normalized_text,
+                "order_index": document.order_index,
+                "source_sha256": document.source_sha256,
+            }
+            for document in build.documents
+        ),
+    )
+    accepted_control, _other_repository, _ = _prepare_control(
+        database,
+        confirmed=True,
+        build=other_build,
+        policy=replace(_policy(), snapshot_revision=2),
+    )
+    provider = MockEmbeddingProvider()
+    with pytest.raises(ProcessCrash):
+        SnapshotEmbeddingRuntime(
+            control=accepted_control,
+            provider=provider,
+            publisher=CrashAfterAcceptedStage(),  # type: ignore[arg-type]
+            stage_store=SqlAlchemyEmbeddingStageStore(database),
+            provider_operation="embedding",
+        ).run(
+            other_build,
+            scope_id=other_build.build_id,
+            current_build=other_build,
+        )
+    assert provider.call_count == 1
+    recovered = recover_embedding_provider_startup(database)
+    assert tuple(item.state for item in recovered) == ("accepted",)
+    assert provider.call_count == 1
+    accepted_operation = repository.operations(scope_id=other_build.build_id)[0]
+    assert accepted_operation.state == "accepted"
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "DELETE FROM embedding_accepted_vectors WHERE operation_id = ?",
+            (accepted_operation.id,),
+        )
+    recovered = recover_embedding_provider_startup(database)
+    assert tuple(item.state for item in recovered) == ("acceptance_unknown",)
+    assert provider.call_count == 1
     database.dispose()
 
 

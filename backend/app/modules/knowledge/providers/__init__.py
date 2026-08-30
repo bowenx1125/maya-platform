@@ -74,6 +74,7 @@ from .packing import (
     pack_embedding_batches,
     plan_embedding_batches,
 )
+from .recovery import recover_embedding_provider_startup
 from .runtime import (
     AcceptedEmbeddingStageV1,
     AcceptedResponseStagePort,
@@ -287,6 +288,7 @@ __all__ = [
     "assert_snapshot_build_current",
     "run_dashscope_snapshot_embedding",
     "run_snapshot_embedding",
+    "recover_embedding_provider_startup",
     "orchestrate_snapshot_embedding",
     "validate_embedding_batch_response",
     "validate_embedding_response",
