@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.agents.schemas import AvatarConfig
+from app.modules.debates.generation.evidence_trace import EvidenceTraceV1
 from app.modules.debates.generation.types import (
     MutualLearningSynthesisV1,
     MutualLearningTurnResultV1,
@@ -196,6 +197,7 @@ class DebateTurn(_ClosedModel):
     translated_text: str | None = None
     playback_resource: DebatePlaybackResource | None = None
     mutual_learning: MutualLearningTurnResultV1 | None = None
+    evidence_trace: list[EvidenceTraceV1] | None = None
 
 
 class Transcript(_ClosedModel):

@@ -12,6 +12,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.debates.generation.evidence_trace import EvidenceTraceV1
+
 
 class ClosedModel(BaseModel):
     """Schema objects are closed so accidental supplier fields fail loudly."""
@@ -55,6 +57,7 @@ class PublicTurnDTO(ClosedModel):
     retrieval_status: Literal["matched", "no_match"]
     grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"]
     sources: list[RetrievalSourceDTO]
+    evidence_trace: list[EvidenceTraceV1] | None = None
 
 
 class AvatarStateDTO(ClosedModel):
@@ -85,6 +88,7 @@ class PlaybackStartedPayload(ClosedModel):
     round_count: int | None = Field(default=None, ge=2, le=5)
     speech: str = Field(min_length=1)
     sources: list[RetrievalSourceDTO]
+    evidence_trace: list[EvidenceTraceV1] | None = None
     playback_url: str = Field(
         pattern=(
             r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"

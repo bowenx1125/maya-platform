@@ -23,6 +23,11 @@ class PreparedSource:
     rank: int
     score: float
     text: str
+    source_document_id: str | None = None
+    source_start_offset: int | None = None
+    source_end_offset: int | None = None
+    excerpt: str | None = None
+    query_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,7 @@ class PreparedTurn:
     cutoff_turn_index: int | None = None
     word_count: int | None = None
     generation_attempt: int = 1
+    evidence_trace: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass
@@ -112,6 +118,7 @@ class MemoryTurn:
     predecessor_hash: str | None = None
     attempt: int = 1
     failed_code: str | None = None
+    evidence_trace: list[Mapping[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -364,6 +371,7 @@ class MemoryPlaybackRepository:
         turn.attempt = prepared.generation_attempt or attempt
         turn.predecessor_turn_ids = prepared.predecessor_turn_ids
         turn.predecessor_hash = prepared.transcript_hash
+        turn.evidence_trace = [dict(item) for item in prepared.evidence_trace]
         return True
 
     def publish_turn(self, db: Any, turn: MemoryTurn) -> bool:

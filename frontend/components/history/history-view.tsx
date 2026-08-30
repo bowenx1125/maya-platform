@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { statusLabel } from "../../lib/i18n";
+import { EvidenceTraceInspector } from "../evidence";
 import { useLocale } from "../locale";
 import type {
   HistoryInteraction,
@@ -95,6 +96,10 @@ export function TranscriptHistory({
                   ? turn.translated_text
                   : turn.speech}
               </p>
+              <EvidenceTraceInspector
+                speech={turn.speech}
+                trace={turn.evidence_trace}
+              />
               {showTranslated && turn.translated_text ? (
                 <span className={styles.muted}>
                   {label(locale, {

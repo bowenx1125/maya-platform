@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import cast
 
+from .evidence_trace import EvidenceTraceQueryKind, EvidenceTraceQueryV1, server_query_id
 from .mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
     pending_question_for_turn,
     visible_prior_round_turns,
 )
+from .retrieval import TurnSubquery
 from .round_phase import resolve_round_phase
 from .types import (
     FinalReadyTurn,
@@ -52,7 +54,19 @@ def _hash(value: object) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
-def _receipt_payload(receipt: SnapshotRetrievalReceipt) -> dict[str, object]:
+def _receipt_payload(
+    receipt: SnapshotRetrievalReceipt,
+    queries: Sequence[Mapping[str, object]] = (),
+) -> dict[str, object]:
+    query = next(
+        (
+            item
+            for item in queries
+            if item.get("query_kind") == receipt.query_kind
+            and item.get("query_hash") == receipt.query_hash
+        ),
+        None,
+    )
     return {
         "evidence_id": receipt.resolved_evidence_id(),
         "snapshot_id": receipt.snapshot_id,
@@ -64,6 +78,7 @@ def _receipt_payload(receipt: SnapshotRetrievalReceipt) -> dict[str, object]:
         "chunk_id": receipt.chunk_id,
         "source_filename": receipt.source_filename,
         "text": receipt.text,
+        "query_id": query.get("query_id") if query else receipt.query_id,
     }
 
 
@@ -152,6 +167,7 @@ def _schedule_payload(participant: ParticipantContext) -> dict[str, object]:
 def make_mutual_learning_prompt_input(
     context: GenerationContext,
     receipts: Sequence[SnapshotRetrievalReceipt] = (),
+    queries: Sequence[TurnSubquery] = (),
 ) -> MutualLearningPromptInput:
     """Build the request using only the resolved prior-round barrier."""
 
@@ -178,6 +194,17 @@ def make_mutual_learning_prompt_input(
     for receipt in typed_receipts:
         if receipt.snapshot_id != context.participant.snapshot_id:
             raise TurnValidationError("A receipt belongs to a different participant snapshot.")
+    query_rows = tuple(
+        EvidenceTraceQueryV1(
+            query_id=server_query_id(context.turn.turn_id, index, query),
+            query_kind=cast(EvidenceTraceQueryKind, query.query_kind),
+            text=query.text,
+            query_hash=query.query_hash,
+            turn_id=context.turn.turn_id,
+            snapshot_id=context.participant.snapshot_id,
+        ).model_dump(mode="json")
+        for index, query in enumerate(queries)
+    )
     transcript_hash = compute_mutual_transcript_hash(visible)
     pending = context.pending_question
     if pending is None:
@@ -205,6 +232,7 @@ def make_mutual_learning_prompt_input(
         cutoff_turn_index=cutoff,
         transcript_hash=transcript_hash,
         receipts=typed_receipts,
+        queries=query_rows,
         pending_question=pending,
     )
 
@@ -237,7 +265,8 @@ def _payload(prompt: MutualLearningPromptInput) -> dict[str, object]:
         "cutoff_turn_index": prompt.cutoff_turn_index,
         "transcript_hash": prompt.transcript_hash,
         "predecessors": [_structured_public_payload(item) for item in prompt.predecessors],
-        "receipts": [_receipt_payload(item) for item in prompt.receipts],
+        "queries": list(prompt.queries),
+        "receipts": [_receipt_payload(item, prompt.queries) for item in prompt.receipts],
         "receipt_hash": compute_mutual_receipt_hash(prompt.receipts),
         "pending_question": (
             {

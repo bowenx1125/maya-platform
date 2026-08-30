@@ -761,6 +761,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         ).all()
         mutual_result = None
         phase = None
+        evidence_trace: list[dict[str, Any]] = []
         if str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING and row.structured_json:
             from app.modules.debates.generation.round_phase import phase_for_round
             from app.modules.debates.generation.types import MutualLearningTurnResultV1
@@ -780,6 +781,23 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 )
             except (TypeError, ValueError) as exc:
                 raise invalid_state("A mutual-learning turn has invalid structured data.") from exc
+        raw_trace = getattr(row, "evidence_trace_json", None)
+        if raw_trace is None:
+            raw_trace = getattr(row, "evidence_trace", None)
+        if raw_trace is None:
+            raw_trace = getattr(row, "evidence_traces", None)
+        if raw_trace:
+            from app.modules.debates.generation.evidence_trace import public_evidence_trace
+
+            try:
+                trace_value = (
+                    json.loads(str(raw_trace)) if isinstance(raw_trace, str) else raw_trace
+                )
+                evidence_trace = [
+                    item.model_dump(mode="json") for item in public_evidence_trace(trace_value)
+                ]
+            except (TypeError, ValueError) as exc:
+                raise invalid_state("A Debate turn has invalid evidence trace data.") from exc
         turn_dtos.append(
             DebateTurnDTO.model_validate(
                 {
@@ -799,6 +817,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                         for source in source_rows
                     ],
                     "mutual_learning": mutual_result,
+                    "evidence_trace": evidence_trace,
                 }
             )
         )

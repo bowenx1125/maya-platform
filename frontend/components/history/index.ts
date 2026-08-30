@@ -9,3 +9,5 @@ export {
   type ReportRevisionSummary,
   type ReportRevisionView,
 } from "./history-view";
+
+export { EvidenceTraceInspector } from "../evidence";

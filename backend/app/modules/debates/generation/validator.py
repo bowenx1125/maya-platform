@@ -525,6 +525,7 @@ def final_ready_turn(
         cutoff_turn_index=cutoff_turn_index,
         transcript_hash=transcript_hash,
         attempt=attempt,  # type: ignore[arg-type]
+        evidence_trace=validated.evidence_trace,
     )
 
 

@@ -5,6 +5,7 @@ import type {
   PlatformApi,
 } from "../../../lib/api";
 import type { AvatarConfig, AvatarExpression, AvatarState } from "../../avatar";
+import type { EvidenceTraceRow } from "../../evidence";
 
 export type PlaybackStatus = DebatePlaybackState["status"];
 export type PlaybackMode = DebatePlaybackState["mode"];
@@ -116,6 +117,7 @@ export type VisiblePlaybackTurn = Pick<
   "id" | "participant_id" | "round_no" | "turn_index" | "speech" | "sources"
 > & {
   phase?: DebateRoundPhase;
+  evidence_trace?: EvidenceTraceRow[];
 };
 
 export type PlaybackEventType =

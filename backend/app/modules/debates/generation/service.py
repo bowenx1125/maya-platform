@@ -8,6 +8,11 @@ from typing import Protocol, cast
 
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 
+from .evidence_trace import (
+    align_mutual_learning_claim_ids,
+    build_evidence_trace_bundle,
+    derive_exact_speech_span,
+)
 from .fencing import GenerationFence, GenerationFenceError, TurnClaim
 from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from .mutual_learning_prompts import make_mutual_learning_prompt_input
@@ -32,11 +37,13 @@ from .retrieval import (
     build_turn_subqueries,
 )
 from .types import (
+    EvidenceTraceClaimV1,
     FinalReadyTurn,
     GenerationContext,
     GenerationDiscarded,
     GenerationFailed,
     GenerationProviderError,
+    KeyClaimV1,
     MutualLearningPromptInput,
     MutualLearningTurnResultV1,
     ParticipantContext,
@@ -524,7 +531,7 @@ class TurnGenerationService:
                     )
                 receipts = self._receipts(retrieval)
                 attempt_record = replace(attempt_record, retrieval_count=len(receipts))
-                prompt = make_mutual_learning_prompt_input(context, receipts)
+                prompt = make_mutual_learning_prompt_input(context, receipts, subqueries)
                 if self.fence is not None:
                     active_claim = self._claim_for_attempt(
                         context,
@@ -542,6 +549,43 @@ class TurnGenerationService:
                     receipts=receipts,
                     predecessors=prompt.predecessors,
                 )
+                if isinstance(validated.result, MutualLearningTurnResultV1):
+                    trace_claims: Sequence[EvidenceTraceClaimV1 | KeyClaimV1] = (
+                        validated.result.evidence_trace_claims
+                    )
+                    if not trace_claims and validated.result.key_claims:
+                        try:
+                            for key_claim in validated.result.key_claims:
+                                derive_exact_speech_span(
+                                    validated.result.speech, key_claim.claim_text
+                                )
+                        except ValueError:
+                            # Legacy Mock turns use concise summaries rather
+                            # than exact speech slices.  Keep those turns
+                            # readable until a provider opts into exact
+                            # claim-level provenance.
+                            trace_claims = ()
+                        else:
+                            trace_claims = validated.result.key_claims
+                    if trace_claims:
+                        bundle = build_evidence_trace_bundle(
+                            context.turn.turn_id,
+                            validated.result.speech,
+                            trace_claims,
+                            receipts,
+                            subqueries,
+                            snapshot_id=context.participant.snapshot_id,
+                        )
+                        aligned_result = align_mutual_learning_claim_ids(
+                            validated.result, bundle
+                        )
+                        validated = replace(
+                            validated,
+                            result=aligned_result,
+                            evidence_trace=tuple(
+                                item.model_dump(mode="json") for item in bundle.traces
+                            ),
+                        )
                 result = final_ready_turn(
                     validated,
                     turn_id=context.turn.turn_id,

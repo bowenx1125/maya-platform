@@ -53,6 +53,8 @@ DisagreementCategory = Literal[
     "insufficient_information",
     "value_tradeoff",
 ]
+EvidenceTraceClaimType = Literal["factual", "background", "value_judgement", "proposal"]
+EvidenceTraceSupportMode = Literal["direct", "contextual", "general_reasoning", "no_match"]
 
 
 class TurnValidationError(ValueError):
@@ -156,6 +158,17 @@ class KeyClaimV1(BaseModel):
     used_evidence_ids: list[str] = Field(default_factory=list)
 
 
+class EvidenceTraceClaimV1(BaseModel):
+    """Exact speech claim input used to derive server-owned trace rows."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    claim_text: str = Field(min_length=1)
+    claim_type: EvidenceTraceClaimType
+    used_evidence_ids: list[str] = Field(default_factory=list)
+    support_mode: EvidenceTraceSupportMode | None = None
+
+
 class MutualLearningDisagreementV1(BaseModel):
     """A preserved disagreement and its reason category."""
 
@@ -184,6 +197,7 @@ class MutualLearningTurnResultV1(BaseModel):
 
     speech: str = Field(min_length=1)
     key_claims: list[KeyClaimV1] = Field(default_factory=list)
+    evidence_trace_claims: list[EvidenceTraceClaimV1] = Field(default_factory=list)
     engagements: list[EngagementV1] = Field(default_factory=list)
     answered_question_ids: list[str] = Field(default_factory=list)
     learned_from_others: list[str] = Field(default_factory=list)
@@ -292,6 +306,11 @@ class SnapshotRetrievalReceipt:
     source_filename: str
     text: str
     evidence_id: str = ""
+    source_document_id: str | None = None
+    source_start_offset: int | None = None
+    source_end_offset: int | None = None
+    excerpt: str | None = None
+    query_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.snapshot_id or not self.query_kind or not self.query_hash:
@@ -313,6 +332,16 @@ class SnapshotRetrievalReceipt:
                 "evidence_id",
                 "evidence-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32],
             )
+        if (self.source_start_offset is None) != (self.source_end_offset is None):
+            raise ValueError("source document offsets must be supplied as one complete tuple")
+        if self.source_start_offset is not None and self.source_document_id is None:
+            raise ValueError("source document id is required with source document offsets")
+        if self.source_start_offset is not None and (
+            self.source_start_offset < 0
+            or self.source_end_offset is None
+            or self.source_end_offset <= self.source_start_offset
+        ):
+            raise ValueError("source document offsets must be a non-empty half-open span")
 
     def identity_key(self) -> tuple[str, str]:
         return self.snapshot_id, self.chunk_id
@@ -475,6 +504,10 @@ class MutualLearningPromptInput:
     cutoff_turn_index: int
     transcript_hash: str
     receipts: tuple[SnapshotRetrievalReceipt, ...] = ()
+    # Server-assigned query catalog.  Mappings keep this DTO independent from
+    # the evidence persistence adapter while still exposing exact query IDs to
+    # the provider-facing canonical payload.
+    queries: tuple[Mapping[str, object], ...] = ()
     pending_question: PendingQuestion | None = None
 
     def __post_init__(self) -> None:
@@ -507,10 +540,32 @@ class FinalReadyTurn:
     transcript_hash: str
     attempt: Literal[1, 2]
     publication_status: Literal["final_ready", "public"] = "final_ready"
+    evidence_trace: tuple[Mapping[str, object], ...] = ()
 
     def __post_init__(self) -> None:
         if self.speech != self.structured.speech:
             raise ValueError("final-ready speech must match its structured result")
+        if self.evidence_trace and isinstance(self.structured, MutualLearningTurnResultV1):
+            # Import lazily: evidence_trace consumes these provider-neutral
+            # types, while final-ready validation only needs it when an
+            # optional trace has actually been attached.
+            from .evidence_trace import public_evidence_trace, validate_exact_speech_span
+
+            try:
+                trace_rows = public_evidence_trace(self.evidence_trace)
+            except ValueError as exc:
+                raise ValueError("final-ready evidence trace is invalid") from exc
+            key_ids = {claim.claim_id for claim in self.structured.key_claims}
+            trace_ids = {row.claim_id for row in trace_rows}
+            if any(row.turn_id != self.turn_id for row in trace_rows):
+                raise ValueError("final-ready evidence trace crossed its turn")
+            if not trace_ids.issubset(key_ids) or not key_ids.issubset(trace_ids):
+                raise ValueError("final-ready evidence trace does not cover key claims")
+            for row in trace_rows:
+                try:
+                    validate_exact_speech_span(self.speech, row.claim_text, row.speech_span)
+                except ValueError as exc:
+                    raise ValueError("final-ready evidence trace span is invalid") from exc
         structured_evidence_ids = (
             tuple(self.structured.used_evidence_id)
             if isinstance(self.structured, StructuredTurnResult)
@@ -558,6 +613,7 @@ class ValidatedTurn:
     used_receipts: tuple[SnapshotRetrievalReceipt, ...]
     public_sources: tuple[PublicSource, ...]
     word_count: int
+    evidence_trace: tuple[Mapping[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -634,6 +690,9 @@ __all__ = [
     "EngagementRelation",
     "ClaimType",
     "DisagreementCategory",
+    "EvidenceTraceClaimType",
+    "EvidenceTraceSupportMode",
+    "EvidenceTraceClaimV1",
     "EngagementV1",
     "Engagement",
     "KeyClaim",

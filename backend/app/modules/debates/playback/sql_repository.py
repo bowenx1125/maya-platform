@@ -1666,20 +1666,29 @@ class SqlPlaybackRepository(PlaybackRepository):
             ).first()
             if chunk is None or str(chunk[0]) != source.text:
                 return False
-            receipt_payload.append(
-                {
-                    "snapshot_id": source.snapshot_id,
-                    "query_kind": source.query_kind,
-                    "query_hash": source.query_hash,
-                    "threshold_key": source.threshold_key,
-                    "source_filename": source.source_filename,
-                    "chunk_id": source.chunk_id,
-                    "evidence_id": source.evidence_id,
-                    "rank": source.rank,
-                    "score": source.score,
-                    "text": source.text,
-                }
-            )
+            receipt_value: dict[str, Any] = {
+                "snapshot_id": source.snapshot_id,
+                "query_kind": source.query_kind,
+                "query_hash": source.query_hash,
+                "threshold_key": source.threshold_key,
+                "source_filename": source.source_filename,
+                "chunk_id": source.chunk_id,
+                "evidence_id": source.evidence_id,
+                "rank": source.rank,
+                "score": source.score,
+                "text": source.text,
+            }
+            for key in (
+                "source_document_id",
+                "source_start_offset",
+                "source_end_offset",
+                "excerpt",
+                "query_id",
+            ):
+                value = getattr(source, key, None)
+                if value is not None:
+                    receipt_value[key] = value
+            receipt_payload.append(receipt_value)
         columns = self._columns(db, "debate_turns")
         values: dict[str, Any] = {
             "generation_status": "final_ready",
@@ -1693,6 +1702,16 @@ class SqlPlaybackRepository(PlaybackRepository):
             "grounding_mode": prepared.grounding_mode,
             "retrieval_receipts_json": json.dumps(
                 receipt_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            # New hosts may expose this optional column (or persist the same
+            # immutable rows in a dedicated trace table).  Filtering against
+            # the reflected columns below keeps pre-trace databases and old
+            # replay rows byte-compatible while making the trace part of the
+            # final-ready UPDATE transaction when available.
+            "evidence_trace_json": json.dumps(
+                [dict(item) for item in prepared.evidence_trace],
                 sort_keys=True,
                 separators=(",", ":"),
             ),

@@ -9,6 +9,7 @@ complete final-ready predecessor prefix, and returns one validated
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 from uuid import UUID
 
@@ -26,6 +27,7 @@ from app.modules.debates.generation import (
     TurnGenerationService,
     TurnPolicy,
     compute_transcript_hash,
+    public_evidence_trace,
 )
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
@@ -75,6 +77,38 @@ class SqlSnapshotSearch:
             for chunk, document in rows
         ]
         return tuple(MockVectorStore(vectors).search(query, top_k=top_k))
+
+
+class SqlSnapshotRetriever(SnapshotRetriever):
+    """Snapshot retriever that binds immutable document offsets to receipts."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+        super().__init__(SqlSnapshotSearch(db))
+
+    def retrieve(self, *args: Any, **kwargs: Any) -> Any:
+        result = super().retrieve(*args, **kwargs)
+        enriched = []
+        for receipt in result.receipts:
+            chunk = self._db.get(KnowledgeChunk, receipt.chunk_id)
+            document = (
+                self._db.get(SnapshotDocument, chunk.snapshot_document_id)
+                if chunk is not None
+                else None
+            )
+            if chunk is None or document is None:
+                enriched.append(receipt)
+                continue
+            enriched.append(
+                replace(
+                    receipt,
+                    source_document_id=str(document.id),
+                    source_start_offset=int(chunk.start_offset),
+                    source_end_offset=int(chunk.end_offset),
+                    excerpt=str(chunk.chunk_text),
+                )
+            )
+        return replace(result, receipts=tuple(enriched))
 
 
 class SqlTurnPreparer:
@@ -149,7 +183,7 @@ class SqlTurnPreparer:
             predecessors=predecessors,
         )
         generator = TurnGenerationService(
-            SnapshotRetriever(SqlSnapshotSearch(db)),
+            SqlSnapshotRetriever(db),
             self.llm,
             rule_set_id=persisted_rule_set_id,
             mock_retrieval_policy_id=(
@@ -186,6 +220,11 @@ class SqlTurnPreparer:
                 rank=receipt.rank,
                 score=receipt.score,
                 text=receipt.text,
+                source_document_id=receipt.source_document_id,
+                source_start_offset=receipt.source_start_offset,
+                source_end_offset=receipt.source_end_offset,
+                excerpt=receipt.excerpt,
+                query_id=receipt.query_id,
             )
             for receipt in final.used_receipts
         )
@@ -223,6 +262,7 @@ class SqlTurnPreparer:
                 else None,
             ),
             generation_attempt=final.attempt,
+            evidence_trace=tuple(dict(item) for item in final.evidence_trace),
         )
 
     @staticmethod
@@ -303,7 +343,14 @@ class SqlTurnPreparer:
             "score",
             "text",
         }
-        if set(payload) != required:
+        optional = {
+            "source_document_id",
+            "source_start_offset",
+            "source_end_offset",
+            "excerpt",
+            "query_id",
+        }
+        if not required.issubset(payload) or set(payload) - required - optional:
             raise ValueError("persisted retrieval receipt shape is not exact")
         try:
             return SnapshotRetrievalReceipt(
@@ -317,6 +364,27 @@ class SqlTurnPreparer:
                 rank=int(payload["rank"]),
                 score=float(payload["score"]),
                 text=str(payload["text"]),
+                source_document_id=(
+                    str(payload["source_document_id"])
+                    if payload.get("source_document_id") is not None
+                    else None
+                ),
+                source_start_offset=(
+                    int(payload["source_start_offset"])
+                    if payload.get("source_start_offset") is not None
+                    else None
+                ),
+                source_end_offset=(
+                    int(payload["source_end_offset"])
+                    if payload.get("source_end_offset") is not None
+                    else None
+                ),
+                excerpt=(str(payload["excerpt"]) if payload.get("excerpt") is not None else None),
+                query_id=(
+                    str(payload["query_id"])
+                    if payload.get("query_id") is not None
+                    else None
+                ),
             )
         except (TypeError, ValueError) as exc:
             raise ValueError("persisted retrieval receipt is invalid") from exc
@@ -378,6 +446,21 @@ class SqlTurnPreparer:
         if persisted is None:
             raise ValueError("a final-ready predecessor has no exact receipt payload")
         receipts = persisted
+        evidence_trace: tuple[dict[str, Any], ...] = ()
+        raw_trace = getattr(row, "evidence_trace_json", None)
+        if raw_trace is None:
+            raw_trace = getattr(row, "evidence_trace", None)
+        if raw_trace is None:
+            raw_trace = getattr(row, "evidence_traces", None)
+        if raw_trace:
+            try:
+                trace_value = json.loads(str(raw_trace))
+                evidence_trace = tuple(
+                    item.model_dump(mode="json")
+                    for item in public_evidence_trace(trace_value)
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("a predecessor evidence trace is invalid") from exc
         predecessor_ids = _decode_predecessor_ids(row)
         if row.transcript_hash is None or row.cutoff_turn_index is None:
             raise ValueError("a predecessor generation fence is incomplete")
@@ -397,6 +480,7 @@ class SqlTurnPreparer:
             transcript_hash=row.transcript_hash,
             attempt=row.attempt,  # type: ignore[arg-type]
             publication_status=("public" if row.publication_status == "public" else "final_ready"),
+            evidence_trace=evidence_trace,
         )
 
 
@@ -509,4 +593,4 @@ def generation_fence(db: Session, debate: Any, turn: Any) -> PreparedGenerationF
     )
 
 
-__all__ = ["SqlSnapshotSearch", "SqlTurnPreparer", "generation_fence"]
+__all__ = ["SqlSnapshotRetriever", "SqlSnapshotSearch", "SqlTurnPreparer", "generation_fence"]

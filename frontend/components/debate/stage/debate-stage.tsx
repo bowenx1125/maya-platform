@@ -16,6 +16,7 @@ import type {
   IdempotencyHandle,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
+import { EvidenceTraceInspector, normaliseEvidenceTrace } from "../../evidence";
 import {
   AvatarPreview,
   AVATAR_EXPRESSIONS,
@@ -267,6 +268,7 @@ function normalisePublicTurns(value: unknown): VisiblePlaybackTurn[] {
     ) {
       return [];
     }
+    const evidenceTrace = normaliseEvidenceTrace(item.evidence_trace);
     return [
       {
         id: item.id,
@@ -275,6 +277,7 @@ function normalisePublicTurns(value: unknown): VisiblePlaybackTurn[] {
         turn_index: integer(item.turn_index, 0),
         speech: item.speech,
         sources: normaliseSources(item.sources),
+        ...(evidenceTrace.length > 0 ? { evidence_trace: evidenceTrace } : {}),
         ...(item.phase === "opening" ||
         item.phase === "exchange" ||
         item.phase === "final_integration"
@@ -2921,6 +2924,10 @@ export function DebateStage({
                 </span>
               </div>
               <p className={styles.speechText}>{activeVisibleTurn.speech}</p>
+              <EvidenceTraceInspector
+                speech={activeVisibleTurn.speech}
+                trace={activeVisibleTurn.evidence_trace}
+              />
               <div className={styles.sourceBlock}>
                 <h3>{labels.sources}</h3>
                 {activeVisibleTurn.sources.length > 0 ? (
@@ -3004,6 +3011,10 @@ export function DebateStage({
                       </span>
                     </div>
                     <p>{turn.speech}</p>
+                    <EvidenceTraceInspector
+                      speech={turn.speech}
+                      trace={turn.evidence_trace}
+                    />
                   </article>
                 );
               })}

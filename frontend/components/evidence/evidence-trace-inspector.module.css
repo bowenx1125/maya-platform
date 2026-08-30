@@ -1,0 +1,106 @@
+.inspector {
+  margin-top: 12px;
+  border: 1px solid rgba(84, 73, 166, 0.2);
+  border-radius: 12px;
+  padding: 9px 11px;
+  background: rgba(247, 245, 252, 0.74);
+}
+
+.inspector summary {
+  cursor: pointer;
+  color: var(--indigo-dark);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.count {
+  display: inline-grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  margin-left: 4px;
+  border-radius: 999px;
+  color: var(--indigo-dark);
+  background: rgba(84, 73, 166, 0.12);
+  font-size: 0.72rem;
+}
+
+.disclaimer,
+.detail {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.claimList {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim {
+  border: 1px solid rgba(232, 225, 216, 0.95);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.claimHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.mode {
+  color: var(--indigo-dark);
+  font-size: 0.74rem;
+}
+
+.highlightedSpeech {
+  margin: 8px 0 0;
+  line-height: 1.55;
+}
+
+.highlightedSpeech mark {
+  border-radius: 4px;
+  padding: 2px 3px;
+  color: var(--ink);
+  background: var(--gold-soft);
+}
+
+.detailLabel {
+  margin-right: 5px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.source {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+}
+
+.source div {
+  display: grid;
+  grid-template-columns: 4.7rem minmax(0, 1fr);
+  gap: 8px;
+}
+
+.source dt {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.source dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 0.76rem;
+}

@@ -1,4 +1,5 @@
 import type { DebateTranscript, DebateTurn } from "../../lib/api";
+import type { EvidenceTraceRow } from "../evidence";
 
 export type HistoryInteraction = {
   status: "closed" | "open" | "finalized";
@@ -39,6 +40,9 @@ export type HistoryReport = {
   revisions: ReportRevisionSummary[];
 };
 
-export type HistoryTranscript = DebateTranscript & {
-  turns: (DebateTurn & { translated_text?: string | null })[];
+export type HistoryTranscript = Omit<DebateTranscript, "turns"> & {
+  turns: (DebateTurn & {
+    translated_text?: string | null;
+    evidence_trace?: EvidenceTraceRow[] | null;
+  })[];
 };

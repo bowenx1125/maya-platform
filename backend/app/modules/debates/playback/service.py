@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
+from app.modules.debates.generation.evidence_trace import public_evidence_trace
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.round_phase import phase_for_round
 from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
@@ -625,6 +626,28 @@ class PlaybackService:
         )
         audio = PlaybackService._get(turn, "audio_relative_path", "audio_file_id", default=None)
         return generation in {"ready", "final_ready", "completed"} and audio is not None
+
+    @staticmethod
+    def _evidence_trace(turn: Any) -> list[dict[str, Any]]:
+        """Return only validated public trace rows from a frozen turn."""
+
+        raw = PlaybackService._get(turn, "evidence_trace_json", "evidence_trace", default=None)
+        if raw is None:
+            raw = PlaybackService._get(turn, "evidence_traces", default=None)
+        if raw is None or raw == "":
+            return []
+        try:
+            value = json.loads(raw) if isinstance(raw, str) else raw
+            return [item.model_dump(mode="json") for item in public_evidence_trace(value)]
+        except (TypeError, ValueError):
+            # A malformed optional trace must never make private audit data
+            # visible; the persistence/replay owner will fail the turn closed.
+            return []
+
+    @staticmethod
+    def _evidence_trace_payload(turn: Any) -> dict[str, Any]:
+        trace = PlaybackService._evidence_trace(turn)
+        return {"evidence_trace": trace} if trace else {}
 
     def _retained_audio_record(self, db: Any, debate: Any, turn: Any) -> Any | None:
         reader = getattr(self.repository, "retained_audio_file", None)
@@ -1407,6 +1430,7 @@ class PlaybackService:
                         self._get(participant, "effective_voice_profile_id", default="mock")
                         or "mock"
                     ),
+                    evidence_trace=tuple(self._evidence_trace(turn)),
                 )
             return self._default_prepared(debate, turn, participant)
         result = self.turn_preparer(
@@ -1467,6 +1491,12 @@ class PlaybackService:
                 int(result["word_count"]) if result.get("word_count") is not None else None
             ),
             generation_attempt=int(result.get("generation_attempt", attempt) or attempt),
+            evidence_trace=tuple(
+                dict(item)
+                for item in self._evidence_trace(
+                    {"evidence_trace": result.get("evidence_trace", ())}
+                )
+            ),
         )
 
     async def _generation_fence(
@@ -4051,6 +4081,7 @@ class PlaybackService:
                     "round_no": self._round(turn),
                     "speech": str(self._get(turn, "speech", "original_text", default="")),
                     "sources": self._sources(turn),
+                    **self._evidence_trace_payload(turn),
                     **self._mutual_phase_payload(debate, turn),
                     "playback_url": f"/api/v1/debates/{debate_id}/audio/{turn_id}",
                     "avatar_states": self._avatar_states(participants, turn),
@@ -4378,6 +4409,7 @@ class PlaybackService:
                         self._get(turn, "grounding_mode", default="general_reasoning")
                     ),
                     "sources": self._sources(turn),
+                    **self._evidence_trace_payload(turn),
                 }
             )
         # Read the watermark from the same transaction/session as the
