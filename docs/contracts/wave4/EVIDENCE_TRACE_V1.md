@@ -1,6 +1,6 @@
 # EvidenceTraceV1
 
-Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 PENDING`
+Status: `FROZEN / P1 REPAIRED / LOCAL G1.5 PASS / SOL G2 REAUDIT READY`
 
 ## Meaning
 
@@ -81,6 +81,11 @@ TTS/publication. Replay, report input and history read the same immutable trace;
 not regenerate it. A claim inspector shows the highlighted speech, retrieval reason,
 query, source locator/excerpt and support mode. General reasoning and no-match displays
 an empty source list.
+
+For the strict Wave 4 path, an empty/malformed claim trace or a non-exact/ambiguous
+speech slice fails generation closed; it is never coerced to `[]`. Corrupt persisted
+trace makes Replay unavailable with a stable safe error before any normal replay event.
+Legacy turns whose persisted trace is the valid empty list remain readable.
 
 Reports may consume only evidence IDs actually used by source turns. They cannot
 upgrade contextual evidence to direct or convert general reasoning into a citation.

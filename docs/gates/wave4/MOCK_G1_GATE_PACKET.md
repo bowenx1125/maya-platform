@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `LOCAL G1.5 PASS / SOL G2 CHANGES_REQUIRED / P1 REPAIR ACTIVE / REAL CALLS 0`
+Status: `P1 REPAIRS LOCAL PASS / SOL G2 REAUDIT READY / REAL CALLS 0`
 
 ## Scope
 
@@ -24,22 +24,24 @@ request remain outside this Gate.
 
 - Legacy RuleSet v1/v2 semantics and historical Replay are not rewritten.
 - Legacy AgentVersion rows remain nullable and are not backfilled with a Persona.
-- New mutual-learning Debates require a confirmed Persona; legacy RuleSets remain
-  usable with their historical published versions.
-- Migrations 0008–0011 are append-only. Lossy downgrade is refused for round >2,
-  populated Persona/provider-control rows and retained EvidenceTrace rows.
+- Every newly created or started Debate requires confirmed selected Personas,
+  regardless of RuleSet. Legacy AgentVersion rows remain available only to their
+  frozen historical read/download/Replay paths.
+- Migrations 0008–0012 are append-only. Lossy downgrade is refused for round >2,
+  populated Persona/provider-control rows and retained EvidenceTrace rows; 0012 adds
+  the internal activation marker without rewriting immutable legacy versions.
 
 ## Local evidence
 
-- backend: `528 passed`;
-- frontend: `31 files / 203 tests passed`;
+- backend: `536 passed`;
+- frontend: `31 files / 204 tests passed`;
 - mypy `133` source files, Ruff, ESLint, TypeScript and Prettier: pass;
 - Next production build: pass;
 - OpenAPI: `71` operations, generated client and strict FastAPI comparison: pass;
 - WebSocket: `35` positive / `18` negative; commands `6/7`; results `5/6`;
 - document authority, repository/secret boundary and generated-source red-team probe:
   pass;
-- migrations 0001–0011, including Wave 4 round and EvidenceTrace lossless probes:
+- migrations 0001–0012, including Wave 4 round, Persona activation and EvidenceTrace probes:
   pass;
 - formal content: corpus hash
   `7fab29d2bddc241ea2021284f2766e6e6cecb705b9a56ff041838c1fe606c24a`,
@@ -80,3 +82,24 @@ All five are blocking repair items. The transcript decision is now explicit: the
 RuleSet receives every earlier-round public/final-ready speech in full and exactly
 once, while same-round turns remain invisible. The repair SHA requires a fresh Sol
 audit; this packet must not be relabeled G2 PASS from the original candidate.
+
+## Repair evidence
+
+The integrated repair candidate closes every finding without a real Provider call:
+
+1. PROJECT/AGENTS/PromptBudget/RuleSet and Issue #15 now use the same versioned
+   earlier-round visibility definition;
+2. migration 0012 persists an explicit Persona activation marker, publication no
+   longer inspects raw shape, and create/start preflight applies to every RuleSet;
+3. the actual strict Mock path returns unique exact speech-slice claims and non-empty
+   server-derived EvidenceTrace or fails closed;
+4. Replay fails before a normal event when stored trace is corrupt, while valid
+   Replay/history projections remain identical and valid legacy `[]` remains compatible;
+5. the actual ProviderPromptV1 Mock and student preview compare all six allowed Persona
+   dimensions under the same input while evidence IDs/order/rules/schema remain fixed.
+
+The complete local matrix is backend `536/536`, frontend `204/204`, Ruff/mypy,
+ESLint/TypeScript/Prettier/Next build, OpenAPI/generated client/strict route comparison,
+WebSocket, repository/secret boundary, formal-content acceptance, empty/populated
+migrations through 0012 and the prior historical migration probes. A fresh read-only
+audit must bind its result to the exact clean repair SHA.

@@ -4,14 +4,15 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_CHANGES_REQUIRED / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_REAUDIT_READY / REAL_PROVIDER_CALLS_0`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
 formal content, Embedding/provider ports and durable provider-control foundations.
 Independent G2 audit of `2af97df` returned `CHANGES_REQUIRED` with
-`P0=0 / P1=5 / P2=0`. The P1 repair loop is active; no real Provider Gate is unlocked
-and no real Provider request has been made.
+`P0=0 / P1=5 / P2=0`. All five repairs now pass the complete local deterministic
+matrix and await an exact-SHA Sol re-audit. No real Provider Gate is unlocked and no
+real Provider request has been made.
 
 ## Source and remote
 
@@ -125,10 +126,10 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Close the five P1 findings from the independent Sol High G2 audit of `2af97df`, rerun
-the complete local suite and submit the exact repair SHA for a fresh read-only audit.
-The pre-audit local G1.5 evidence is backend `528`, frontend `31 files / 203 tests`, mypy/Ruff,
-ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, WebSocket `35/18`,
-repository/secret boundary, formal-content acceptance and migrations 0001–0011. After
-P0/P1 closure, continue real Embedding publication, fixed structured LLM and TTS Gates.
-GitHub CI remains deferred to the final integrated Wave 4 PR.
+Submit the integrated P1 repair candidate for a fresh read-only Sol High G2 audit.
+Current local evidence is backend `536/536`, frontend `31 files / 204 tests`, mypy/Ruff,
+ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, strict FastAPI route
+comparison, WebSocket `35/18`, repository/secret boundary, formal-content acceptance
+and migrations 0001–0012. After P0/P1 closure, continue real Embedding publication,
+fixed structured LLM and TTS Gates. GitHub CI remains deferred to the final integrated
+Wave 4 PR.

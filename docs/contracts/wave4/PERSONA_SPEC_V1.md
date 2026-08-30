@@ -1,6 +1,6 @@
 # PersonaSpecV1
 
-Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 PENDING`
+Status: `FROZEN / P1 REPAIRED / LOCAL G1.5 PASS / SOL G2 REAUDIT READY`
 
 ## Teaching contract
 
@@ -108,6 +108,11 @@ Hashes cover normalized UTF-8 bytes or canonical JSON encoded with sorted keys,
 UTF-8 characters and no insignificant whitespace. The confirming user ID is never sent
 to a Provider or browser DTO outside existing authorized membership views.
 
+The server-only `persona_required` activation marker is not a browser or Provider
+field. Migration 0012 leaves immutable published/superseded legacy rows false, marks
+every still-mutable draft true and every product draft-creation path writes true.
+Eligibility never infers activation from raw Markdown shape.
+
 ## Compile and confirmation state machine
 
 `uncompiled -> compiled_unconfirmed -> confirmed`
@@ -120,6 +125,10 @@ to a Provider or browser DTO outside existing authorized membership views.
   exact draft revision, raw hash, Persona hash and compiler version CAS;
 - any intervening edit makes confirmation stale;
 - publication requires `confirmed`; published raw and structured values are immutable;
+- publication or a knowledge-only draft revision that leaves raw/spec bytes unchanged
+  atomically advances `persona_confirmation_revision` with the AgentVersion revision;
+  hashes, confirmation time and confirmer remain unchanged, and a failed CAS cannot
+  half-update either state;
 - legacy published AgentVersions are not backfilled or rewritten;
 - after PersonaSpecV1 activation, every new debate requires every selected published
   AgentVersion to have a confirmed Persona, regardless of Mock or real Provider. Setup
