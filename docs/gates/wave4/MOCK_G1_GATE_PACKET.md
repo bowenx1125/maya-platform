@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `THIRD P1 REPAIRS LOCAL PASS / SOL G2 REAUDIT READY_3 / REAL CALLS 0`
+Status: `SOL G2 CHANGES_REQUIRED_4 / EFFECTIVE PROJECTION REPAIR ACTIVE / REAL CALLS 0`
 
 ## Scope
 
@@ -173,3 +173,23 @@ causality tests plus strict three-phase, 80–190-word, non-empty exact-trace ac
 
 An exact clean repair SHA still requires read-only `PASS / P0=0 / P1=0` before any
 real Provider implementation Gate starts.
+
+## Fourth G2 result
+
+Sol High audited exact clean SHA
+`8e83c017af6412b3efa1449cf98f3b59da2b2aa1`. It verified source-shaped values no
+longer trigger EvidenceTrace and found no regression in the previous fixes, then
+returned `CHANGES_REQUIRED / P0=0 / P1=2 / P2=0`:
+
+1. any bounded head/middle/tail sample can still omit a legal internal difference;
+2. mapping every source-shaped phrase to one safe sentence preserves safety but hides
+   meaningful category differences.
+
+The combined promise that every arbitrary free-text difference must generate unique
+speech, every turn remains at most 190 words and no hash/code may enter classroom text
+is not implementable. The correction is a closed, deterministic and student-visible
+effective Mock behavior projection. Meaningfully different projection dimensions must
+change actual Mock behavior; raw edits that normalize to the same effective behavior
+must be shown honestly as unchanged in preview/comparison. Safe attribution/evidence,
+quantity, link, document and source categories remain human-readable and never become
+receipt claims.

@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_REAUDIT_READY_3 / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_CHANGES_REQUIRED_4 / REAL_PROVIDER_CALLS_0`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -17,9 +17,11 @@ legacy Debates could still reach generation without confirmed Persona. Both incr
 P1 repairs passed the full local matrix. The exact-SHA audit of `cd2c5b5` verified the
 legacy-generation fix but found two further Persona projection P1s: mid-field
 differences could collide, and legal source-shaped Persona wording could enter speech
-as an unsupported attribution. Both repairs now pass the complete local matrix and
-await exact-SHA read-only audit. No real Provider Gate is unlocked and no real Provider
-request has been made.
+as an unsupported attribution. The audit of `8e83c01` verified source safety but showed
+that bounded free-text sampling cannot honestly promise a unique speech for every
+possible raw difference. A student-visible effective Mock behavior projection is now
+the active correction. No real Provider Gate is unlocked and no real Provider request
+has been made.
 
 ## Source and remote
 
@@ -133,8 +135,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Submit the third integrated repair candidate for exact-SHA read-only Sol High audit.
-The complete local evidence is backend `671/671`, frontend `31 files / 204 tests`, mypy/Ruff,
+Freeze and implement the effective Mock behavior projection, rerun the full matrix and
+submit another exact clean SHA. The last complete local evidence is backend `671/671`,
+frontend `31 files / 204 tests`, mypy/Ruff,
 ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, strict FastAPI route
 comparison, WebSocket `35/18`, repository/secret boundary, formal-content acceptance
 and migrations 0001–0012. After P0/P1 closure, continue real Embedding publication,
