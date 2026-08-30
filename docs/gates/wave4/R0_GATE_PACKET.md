@@ -2,7 +2,7 @@
 
 Gate: `w4-r0-2026-08-30`
 
-Status: `G1.5 PASS / SOL HIGH R0 AUDIT PENDING / PRODUCT CODE NOT AUTHORIZED BY THIS GATE / REAL CALLS 0`
+Status: `G2 PASS / MAIN INTEGRATION PENDING / PRODUCT CODE NOT AUTHORIZED BY THIS GATE / REAL CALLS 0`
 
 Issue: `#5 W4-R0: canonical docs and reproducible development workflow`
 
@@ -70,3 +70,14 @@ ref mismatch or any product-code/provider change.
   probes, historical fingerprints and foreign-key checks: PASS;
 - Compose configuration: PASS;
 - real Provider calls: `0`.
+
+## G2 candidate evidence
+
+- audited candidate: `3c07fe16de24833d4a903e0a78822ab0ff34f52f`;
+- independent Sol High read-only audit: `PASS / P0=0 / P1=0 / P2=0`;
+- private push CI run `33310837178`: PASS on the audited candidate;
+- private PR CI run `33310839438`: PASS on the audited candidate;
+- PR head, local branch head, both CI runs and the Sol audit referenced the same SHA;
+- PR `#6` was mergeable when the candidate was signed;
+- final R0 remains unsigned until the resulting `dev-main` merge SHA passes the same
+  deterministic CI and the main window verifies the integrated tree.

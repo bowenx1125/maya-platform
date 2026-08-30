@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / READY_FOR_WAVE_4 / W4_R0_G1.5_PASS / SOL_R0_AUDIT_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
+`WAVE_3_G3_PASS / READY_FOR_WAVE_4 / W4_R0_G2_PASS / MAIN_INTEGRATION_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
 
 Wave 4 R0 is a documentation, repository and workflow Gate. It does not implement
 Persona, Evidence Trace, Prompt changes or a real Provider.
@@ -26,8 +26,10 @@ Persona, Evidence Trace, Prompt changes or a real Provider.
 - Active PR: `#6 W4-R0: establish portable project authority`, targeting `dev-main`.
 - The exact R0 candidate identity is the PR head SHA reported by Git/GitHub/CI. It is
   intentionally not duplicated inside the candidate commit because a commit cannot
-  contain its own final SHA. `a235c29` remains the last signed product baseline until
-  R0 passes CI, Sol High and main-window integration.
+  contain its own final SHA. Candidate `3c07fe1` passed two private CI runs and an
+  independent Sol High audit with `P0=0 / P1=0 / P2=0`; `a235c29` remains the last
+  signed product baseline until the resulting merge SHA passes main-window
+  integration.
 
 ## Signed Wave 3 evidence
 
@@ -107,9 +109,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Keep PR #6 open while its exact head passes private CI and independent Sol High review.
-Fix findings on the same branch and rerun the affected/full checks. Merge into
-`dev-main` only after `P0=0 / P1=0`, verify CI on the resulting merge SHA, and then move
-the canonical remote development main. After R0 is signed, draft Wave 4 G0 contracts
-for PersonaSpecV1, EvidenceTraceV1, complete-history Prompt request assembly, formal
-content, Provider data/call limits and failure semantics.
+Candidate `3c07fe1` passed two private CI runs and independent Sol High review. Validate
+this evidence-only update on PR #6, merge into `dev-main`, verify full CI on the
+resulting merge SHA, and then move the canonical remote development main. After R0 is
+signed, draft Wave 4 G0 contracts for PersonaSpecV1, EvidenceTraceV1, complete-history
+Prompt request assembly, formal content, Provider data/call limits and failure
+semantics.
