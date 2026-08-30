@@ -19,6 +19,7 @@ from app.modules.agents.persona import (
     PersonaSpecV1,
     compile_persona_or_raise,
 )
+from app.modules.debates.generation.validator import has_explicit_source_claim
 
 MOCK_PERSONA_SCHEMA_VERSION: Literal["persona_mock_response_v1"] = "persona_mock_response_v1"
 MOCK_PERSONA_RULE_SET_ID = "persona_mock_teaching_v1"
@@ -194,9 +195,9 @@ def bounded_dimension_sentence(label: str, value: str) -> str:
 
     Short values are preserved verbatim (apart from surrounding whitespace and
     terminal punctuation), so the normal contrasting fixtures remain directly
-    observable.  Longer values preserve both their opening and closing words
-    inside an explicit ``opening/closing`` description rather than cutting a
-    sentence at an arbitrary character or word boundary.
+    observable.  Longer values preserve opening, middle and closing words
+    inside one compact sentence rather than cutting at an arbitrary character
+    or hiding the internal distinction in a non-classroom field.
     """
 
     normalized = " ".join(value.split()).strip()
@@ -209,18 +210,35 @@ def bounded_dimension_sentence(label: str, value: str) -> str:
     # overflow the 80-200 word contract or manufacture a numeric citation.
     if words and len(words) <= SPEECH_DIMENSION_WORD_LIMIT and not re.search(r"\d", normalized):
         visible = normalized.rstrip(".!?")
-        return f"My {label} is {visible}."
+        return _source_neutral_sentence(label, f"My {label} is {visible}.")
     if not words:
         return f"My teaching {label} remains bounded by the authored Persona."
 
-    # Three opening words + the conjunction + two closing words keep the
-    # complete labelled sentence compact while retaining a stable signal from
-    # both ends of a maximal authored field.
-    opening = " ".join(words[:3])
+    # Two opening, middle and closing words keep the complete labelled
+    # sentence compact while ensuring a long value's internal distinction is
+    # visible.  This avoids the old first/last-only collision boundary.
+    opening = " ".join(words[:2])
+    middle_start = max(0, (len(words) // 2) - 1)
+    middle = " ".join(words[middle_start : middle_start + 2])
     closing = " ".join(words[-2:])
-    return (
-        f'My {label} uses "{opening}" and "{closing}".'
-    )
+    sentence = f'My {label} balances "{opening}" with "{middle}" and "{closing}".'
+    return _source_neutral_sentence(label, sentence)
+
+
+def _source_neutral_sentence(label: str, sentence: str) -> str:
+    """Keep arbitrary Persona prose from looking like sourced fact.
+
+    The validator's public source-claim predicate is the single source of
+    truth here.  If a legal authored dimension happens to contain an
+    attribution, quantity, URL or filename pattern, replace that *rendered
+    sentence* with an honest authored-perspective sentence.  This is a
+    semantic boundary, not a hand-maintained list of trigger words, and it
+    never invents a receipt.
+    """
+
+    if has_explicit_source_claim(sentence):
+        return f"My {label} reflects a bounded authored perspective."
+    return sentence
 
 
 def bounded_teaching_dimensions_for_persona(
