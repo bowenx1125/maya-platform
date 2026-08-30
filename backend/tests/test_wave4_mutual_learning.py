@@ -315,9 +315,8 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
             )
             assert second_prepared.predecessor_turn_ids == ()
             assert len(llm.inputs) == 2
-            assert llm.inputs[1].predecessors == ()
-            assert llm.inputs[1].predecessor_turn_ids == ()
-            assert llm.inputs[1].transcript_hash == compute_mutual_transcript_hash(())
+            assert llm.inputs[1].request.predecessors == ()
+            assert llm.inputs[1].request.transcript_hash == compute_mutual_transcript_hash(())
 
 
 @pytest.mark.parametrize("round_count", (3, 5))
