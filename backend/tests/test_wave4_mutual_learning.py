@@ -21,6 +21,7 @@ from app.modules.debates.generation import (
     TurnPolicy,
     TurnQuestion,
     TurnValidationError,
+    ValidatedTurn,
     build_mutual_learning_prompt,
     build_mutual_learning_synthesis,
     compute_mutual_transcript_hash,
@@ -137,6 +138,17 @@ def test_complete_generation_matrix_has_one_opening_exchange_span_and_final(
         for _ in range(participant_count)
     ]
     assert all(isinstance(turn.structured, MutualLearningTurnResultV1) for turn in turns)
+    for turn in turns:
+        assert isinstance(turn.structured, MutualLearningTurnResultV1)
+        claims = turn.structured.key_claims
+        assert 1 <= len(claims) <= 12
+        claim_texts = [claim.claim_text for claim in claims]
+        assert len(claim_texts) == len(set(claim_texts))
+        assert all(text and text in turn.speech for text in claim_texts)
+        assert turn.evidence_trace
+        assert {claim.claim_id for claim in claims} == {
+            row["claim_id"] for row in turn.evidence_trace
+        }
     assert all(
         turn.structured.final_recommendation
         for turn in turns[-participant_count:]
@@ -288,6 +300,19 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
                 turns[0],
                 attempt=1,
                 cancellation_generation=0,
+            )
+            prepared_result = MutualLearningTurnResultV1.model_validate(
+                first_prepared.structured
+            )
+            assert first_prepared.evidence_trace
+            claim_ids = {claim.claim_id for claim in prepared_result.key_claims}
+            trace_ids = {row["claim_id"] for row in first_prepared.evidence_trace}
+            assert claim_ids == trace_ids
+            assert all(
+                claim.claim_text == row["claim_text"]
+                for claim in prepared_result.key_claims
+                for row in first_prepared.evidence_trace
+                if row["claim_id"] == claim.claim_id
             )
             # Make A genuinely final-ready in the same SQL transaction.  B's
             # prompt must still omit it because both rows belong to opening.
@@ -701,6 +726,51 @@ def test_evidence_is_current_snapshot_only_and_no_match_has_no_source() -> None:
         .grounding_mode
         == "general_reasoning"
     )
+
+
+def test_strict_trace_construction_fails_closed_instead_of_downgrading_to_empty() -> None:
+    """A malformed exact-claim catalog cannot become an ungrounded turn."""
+
+    from app.modules.debates.generation.service import TurnGenerationService
+
+    people = (participant(0), participant(1))
+    plan = MutualLearningPolicy().plan(people, round_count=2)[0]
+    context = GenerationContext(
+        debate_id="d",
+        topic="Topic",
+        turn=plan,
+        participant=people[0],
+        participants=people,
+    )
+    result = MutualLearningTurnResultV1(
+        speech=" ".join(["speech"] * 80),
+        key_claims=[
+            KeyClaimV1(
+                claim_id="provider-id",
+                claim_text="This claim is absent from speech.",
+                claim_type="proposal",
+            )
+        ],
+        position_summary="An opening position.",
+        remaining_uncertainty=["More context is needed."],
+        missing_information=["Local details are missing."],
+    )
+    validated = ValidatedTurn(
+        result=result,
+        retrieval_status="no_match",
+        grounding_mode="general_reasoning",
+        used_receipts=(),
+        public_sources=(),
+        word_count=80,
+    )
+    with pytest.raises(TurnValidationError) as raised:
+        TurnGenerationService._attach_mutual_learning_evidence_trace(
+            validated,
+            context=context,
+            receipts=(),
+            subqueries=(),
+        )
+    assert raised.value.code == "span_non_exact"
 
 
 def test_deterministic_synthesis_preserves_disagreement_and_recommendations() -> None:

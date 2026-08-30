@@ -24,6 +24,8 @@ from app.modules.debates.generation.prompt_request import ProviderPromptV1
 from app.modules.debates.generation.prompts import build_turn_prompt, prompt_hash
 from app.modules.debates.generation.types import (
     EngagementV1,
+    EvidenceTraceClaimV1,
+    EvidenceTraceSupportMode,
     GenerationProviderError,
     KeyClaimV1,
     MutualLearningPromptInput,
@@ -32,6 +34,8 @@ from app.modules.debates.generation.types import (
     TurnPromptInput,
     TurnQuestion,
 )
+
+MutualClaimType = Literal["factual", "interpretation", "value_judgement", "proposal"]
 
 
 class LLMProviderError(GenerationProviderError):
@@ -109,6 +113,54 @@ def _prompt_next_participant_id(
     if isinstance(prompt, ProviderPromptV1):
         return prompt.request.next_participant_id
     return prompt.turn_plan.next_participant_id
+
+
+def _mutual_claims(
+    speech: str,
+    *,
+    turn_id: str,
+    source_sentence: str | None,
+    used_evidence_ids: list[str],
+    has_receipts: bool,
+    core_claims: tuple[tuple[str, MutualClaimType], ...],
+) -> tuple[list[KeyClaimV1], list[EvidenceTraceClaimV1]]:
+    """Build Mock claims from exact spans already present in the speech.
+
+    Provider claim IDs are placeholders only.  The server derives the final
+    IDs after validating each exact speech span and receipt boundary.
+    """
+
+    candidates: list[tuple[str, MutualClaimType, list[str]]] = []
+    if source_sentence is not None and used_evidence_ids:
+        candidates.append((source_sentence, "interpretation", list(used_evidence_ids)))
+    candidates.extend((text, claim_type, []) for text, claim_type in core_claims)
+    if not candidates or any(text not in speech for text, _claim_type, _ids in candidates):
+        raise LLMStructuredOutputError("mock could not construct exact mutual claim spans")
+    claim_texts = [text for text, _claim_type, _ids in candidates]
+    if len(claim_texts) != len(set(claim_texts)):
+        raise LLMStructuredOutputError("mock produced duplicate mutual claim spans")
+    claims = [
+        KeyClaimV1(
+            claim_id=f"{turn_id}:provider-claim-{index + 1}",
+            claim_text=text,
+            claim_type=claim_type,
+            used_evidence_ids=evidence_ids,
+        )
+        for index, (text, claim_type, evidence_ids) in enumerate(candidates)
+    ]
+    default_mode = "general_reasoning" if has_receipts else "no_match"
+    trace_claims = [
+        EvidenceTraceClaimV1(
+            claim_text=text,
+            claim_type="background" if claim_type == "interpretation" else claim_type,
+            used_evidence_ids=evidence_ids,
+            support_mode=cast(
+                EvidenceTraceSupportMode, "direct" if evidence_ids else default_mode
+            ),
+        )
+        for text, claim_type, evidence_ids in candidates
+    ]
+    return claims, trace_claims
 
 
 @dataclass
@@ -309,25 +361,6 @@ class MockLLMProvider:
                 "No relevant passage was retrieved, so this is honest general reasoning "
                 "without a claimed source."
             )
-        claim_evidence = used
-        claims = [
-            KeyClaimV1(
-                claim_id=f"{prompt.turn_plan.turn_id}:claim-1",
-                claim_text=(
-                    "A responsible answer should balance agency, safety, and community effects."
-                ),
-                claim_type="interpretation",
-                used_evidence_ids=claim_evidence,
-            ),
-            KeyClaimV1(
-                claim_id=f"{prompt.turn_plan.turn_id}:claim-2",
-                claim_text=(
-                    "Transparent safeguards and review make a recommendation more accountable."
-                ),
-                claim_type="proposal",
-                used_evidence_ids=[],
-            ),
-        ]
         predecessor = next(
             (
                 item
@@ -392,9 +425,36 @@ class MockLLMProvider:
                 "local context, "
                 "and keep the position open to future learning."
             )
+            claims, trace_claims = _mutual_claims(
+                speech,
+                turn_id=prompt.turn_plan.turn_id,
+                source_sentence=(
+                    f'The current snapshot passage says, "{source_excerpt}".' if used else None
+                ),
+                used_evidence_ids=used,
+                has_receipts=bool(prompt.receipts),
+                core_claims=(
+                    (
+                        "My focus is to protect agency while taking public safety and community "
+                        "effects seriously.",
+                        "interpretation",
+                    ),
+                    (
+                        "One key point is that a policy should be transparent enough to be "
+                        "examined.",
+                        "proposal",
+                    ),
+                    (
+                        "A second key point is that safeguards should leave room for responsible "
+                        "innovation.",
+                        "proposal",
+                    ),
+                ),
+            )
             return MutualLearningTurnResultV1(
                 speech=speech,
                 key_claims=claims,
+                evidence_trace_claims=trace_claims,
                 position_summary=(
                     "Balance agency, safety, innovation, and community effects through "
                     "accountable safeguards."
@@ -424,9 +484,36 @@ class MockLLMProvider:
                 "independent review and a correction path. "
                 "I preserve reasonable differences about how much restriction is justified."
             )
+            claims, trace_claims = _mutual_claims(
+                speech,
+                turn_id=prompt.turn_plan.turn_id,
+                source_sentence=(
+                    f'The current snapshot passage says, "{source_excerpt}".' if used else None
+                ),
+                used_evidence_ids=used,
+                has_receipts=bool(prompt.receipts),
+                core_claims=(
+                    (
+                        "I learned that an accountable answer must make its trade-offs visible "
+                        "and provide a route for correction.",
+                        "interpretation",
+                    ),
+                    (
+                        "My final position is therefore more explicit about review, community "
+                        "voice, and evidence boundaries.",
+                        "interpretation",
+                    ),
+                    (
+                        "My final recommendation is to adopt transparent safeguards with "
+                        "independent review and a correction path.",
+                        "proposal",
+                    ),
+                ),
+            )
             return MutualLearningTurnResultV1(
                 speech=speech,
                 key_claims=claims,
+                evidence_trace_claims=trace_claims,
                 engagements=list(engagement),
                 answered_question_ids=answered,
                 learned_from_others=[
@@ -467,9 +554,31 @@ class MockLLMProvider:
             "independent review, and an opportunity for affected communities to be heard. "
             f"{question_text} I mark the remaining uncertainty as the fair distribution of burdens."
         )
+        claims, trace_claims = _mutual_claims(
+            speech,
+            turn_id=prompt.turn_plan.turn_id,
+            source_sentence=(
+                f'The current snapshot passage says, "{source_excerpt}".' if used else None
+            ),
+            used_evidence_ids=used,
+            has_receipts=bool(prompt.receipts),
+            core_claims=(
+                (
+                    "I keep the exchange civil and update my position toward transparent "
+                    "safeguards, independent review, and an opportunity for affected "
+                    "communities to be heard.",
+                    "interpretation",
+                ),
+                (
+                    "I mark the remaining uncertainty as the fair distribution of burdens.",
+                    "value_judgement",
+                ),
+            ),
+        )
         return MutualLearningTurnResultV1(
             speech=speech,
             key_claims=claims,
+            evidence_trace_claims=trace_claims,
             engagements=list(engagement),
             answered_question_ids=answered,
             position_summary=(

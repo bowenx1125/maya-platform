@@ -56,6 +56,10 @@ _SAFE_GENERATION_CODES = {
 }
 
 
+class EvidenceTraceCorruptError(ValueError):
+    """Persisted evidence trace cannot be projected under the frozen DTO."""
+
+
 @dataclass
 class PlaybackRuntime:
     status: str = "preparing"
@@ -631,18 +635,36 @@ class PlaybackService:
     def _evidence_trace(turn: Any) -> list[dict[str, Any]]:
         """Return only validated public trace rows from a frozen turn."""
 
-        raw = PlaybackService._get(turn, "evidence_trace_json", "evidence_trace", default=None)
-        if raw is None:
-            raw = PlaybackService._get(turn, "evidence_traces", default=None)
-        if raw is None or raw == "":
+        found = False
+        raw: Any = None
+        for name in ("evidence_trace_json", "evidence_trace", "evidence_traces"):
+            if isinstance(turn, Mapping) and name in turn:
+                found = True
+                raw = turn[name]
+                break
+            try:
+                raw = getattr(turn, name)
+            except AttributeError:
+                continue
+            found = True
+            break
+        # Turns written before EvidenceTraceV1 did not have a trace field at
+        # all (and some in-memory compatibility rows use None).  They remain
+        # replayable with the historical empty projection.  Once a field is
+        # present, however, malformed JSON is corruption, not an empty trace.
+        if not found or raw is None:
             return []
+        if isinstance(raw, str) and not raw.strip():
+            raise EvidenceTraceCorruptError("persisted evidence trace is empty or malformed")
         try:
             value = json.loads(raw) if isinstance(raw, str) else raw
             return [item.model_dump(mode="json") for item in public_evidence_trace(value)]
-        except (TypeError, ValueError):
-            # A malformed optional trace must never make private audit data
-            # visible; the persistence/replay owner will fail the turn closed.
-            return []
+        except (TypeError, ValueError) as exc:
+            # A malformed trace must never be downgraded to []: that would
+            # make a corrupted replay indistinguishable from legacy history.
+            raise EvidenceTraceCorruptError(
+                "persisted evidence trace is unavailable"
+            ) from exc
 
     @staticmethod
     def _evidence_trace_payload(turn: Any) -> dict[str, Any]:
@@ -753,6 +775,10 @@ class PlaybackService:
         return metadata
 
     def _replay_audio_ready(self, db: Any, debate: Any, turn: Any) -> bool:
+        try:
+            self._evidence_trace(turn)
+        except EvidenceTraceCorruptError:
+            return False
         if not self._turn_public(turn):
             return False
         if str(self._get(turn, "generation_status", default="")) != "final_ready":
@@ -3564,6 +3590,14 @@ class PlaybackService:
                 turns = public_turns
             if not turns:
                 raise invalid_state("No retained public turn is available for replay.")
+            try:
+                # Validate the complete selected queue before changing the
+                # playback mode.  A corrupt trace is an unavailable replay,
+                # never a normal replay event with an empty evidence list.
+                for item in turns:
+                    self._evidence_trace(item)
+            except EvidenceTraceCorruptError as exc:
+                raise invalid_state("Replay evidence trace is unavailable.") from exc
             # Full replay is an atomic all-or-nothing eligibility check over
             # every public turn.  Single-turn replay validates only its target.
             if strict_retention and any(
@@ -3821,6 +3855,11 @@ class PlaybackService:
             )
             if not self._turn_ready(turn):
                 raise not_found()
+            if action == "replay":
+                try:
+                    self._evidence_trace(turn)
+                except EvidenceTraceCorruptError as exc:
+                    raise invalid_state("Replay evidence trace is unavailable.") from exc
             metadata = self._validated_turn_audio(db, debate, turn)
             if (
                 action == "replay"
@@ -4044,6 +4083,16 @@ class PlaybackService:
             token_hash, binding = ticket
             if binding.control_version != expected_control_version:
                 raise conflict("invalid_state", "The playback media ticket is stale.")
+            if action == "replay":
+                try:
+                    self._evidence_trace(turn)
+                except EvidenceTraceCorruptError as exc:
+                    raise invalid_state("Replay evidence trace is unavailable.") from exc
+            else:
+                try:
+                    evidence_trace_payload = self._evidence_trace_payload(turn)
+                except EvidenceTraceCorruptError as exc:
+                    raise invalid_state("Evidence trace is unavailable.") from exc
             self.ticket_store.mark_binding_started(
                 binding,
                 audio_duration_ms=state.audio_duration_ms,
@@ -4081,7 +4130,7 @@ class PlaybackService:
                     "round_no": self._round(turn),
                     "speech": str(self._get(turn, "speech", "original_text", default="")),
                     "sources": self._sources(turn),
-                    **self._evidence_trace_payload(turn),
+                    **evidence_trace_payload,
                     **self._mutual_phase_payload(debate, turn),
                     "playback_url": f"/api/v1/debates/{debate_id}/audio/{turn_id}",
                     "avatar_states": self._avatar_states(participants, turn),

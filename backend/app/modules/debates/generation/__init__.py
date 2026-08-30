@@ -188,6 +188,7 @@ from .types import (
     Engagement,
     EngagementRelation,
     EngagementV1,
+    EvidenceTraceClaimType,
     FinalDisagreementV1,
     FinalReadyTurn,
     GenerationContext,

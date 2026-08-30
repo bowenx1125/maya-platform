@@ -296,6 +296,12 @@ class TurnGenerationService:
                     receipts=receipts,
                     predecessors=mutual_input.predecessors,
                 )
+                validated = self._attach_mutual_learning_evidence_trace(
+                    validated,
+                    context=context,
+                    receipts=receipts,
+                    subqueries=subqueries,
+                )
                 result = final_ready_turn(
                     validated,
                     turn_id=context.turn.turn_id,
@@ -469,6 +475,58 @@ class TurnGenerationService:
             receipts=receipts,
             predecessors=predecessors,
             pending_question=context.effective_pending_question,
+        )
+
+    @staticmethod
+    def _attach_mutual_learning_evidence_trace(
+        validated: ValidatedTurn,
+        *,
+        context: GenerationContext,
+        receipts: Sequence[SnapshotRetrievalReceipt],
+        subqueries: Sequence[TurnSubquery],
+    ) -> ValidatedTurn:
+        """Close strict Mock/provider claims into immutable trace rows.
+
+        Strict W4 turns never silently discard trace failures.  A provider may
+        use the explicit evidence-trace claim catalog or, for compatibility,
+        exact key-claim text; either path must produce a complete server-owned
+        trace before final-ready publication.
+        """
+
+        if not isinstance(validated.result, MutualLearningTurnResultV1):
+            raise TurnValidationError("The mutual-learning result has no traceable claims.")
+        trace_claims: Sequence[EvidenceTraceClaimV1 | KeyClaimV1] = (
+            validated.result.evidence_trace_claims or validated.result.key_claims
+        )
+        if not trace_claims:
+            raise TurnValidationError(
+                "Strict mutual-learning turns require evidence trace claims.",
+                code="evidence_trace_missing",
+            )
+        try:
+            bundle = build_evidence_trace_bundle(
+                context.turn.turn_id,
+                validated.result.speech,
+                trace_claims,
+                receipts,
+                subqueries,
+                snapshot_id=context.participant.snapshot_id,
+            )
+            aligned_result = align_mutual_learning_claim_ids(validated.result, bundle)
+        except Exception as exc:
+            raise TurnValidationError(
+                "Strict mutual-learning evidence trace validation failed.",
+                code=getattr(exc, "code", "evidence_trace_invalid"),
+            ) from exc
+        if not bundle.traces:
+            raise TurnValidationError(
+                "Strict mutual-learning turns require a non-empty evidence trace.",
+                code="evidence_trace_missing",
+            )
+        return replace(
+            validated,
+            result=aligned_result,
+            evidence_trace=tuple(item.model_dump(mode="json") for item in bundle.traces),
         )
 
     @staticmethod

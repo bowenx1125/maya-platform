@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import pytest
 from app.core.errors import PlatformError
+from app.modules.debates.generation.evidence_trace import EvidenceTraceV1, utf16_length
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.protocols import (
     MemoryDebate,
@@ -209,6 +210,50 @@ async def test_replay_snapshot_keeps_the_full_authoritative_transcript(
     # public transcript. Both saved turns remain visible while the first item
     # waits for the teacher's explicit Next.
     assert [item["turn_index"] for item in payload["public_turns"]] == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_replay_rejects_corrupt_evidence_trace_before_state_or_event(
+    tmp_path: Path,
+) -> None:
+    service, repository, debate, _first_id, _second_id = await _replay_fixture(tmp_path)
+    debate.turns[0].evidence_trace = "not-json"  # type: ignore[assignment]
+    events = await service.event_hub.subscribe(debate.id)
+
+    with pytest.raises(PlatformError) as raised:
+        await service.replay_all(None, debate.id, expected_control_version=0)
+
+    assert raised.value.code == "invalid_state"
+    state = repository.playback_state(None, debate)
+    assert state.mode == "live"
+    assert state.status == "completed"
+    with pytest.raises(asyncio.QueueEmpty):
+        events.get_nowait()
+    await service.event_hub.unsubscribe(debate.id, events)
+
+
+@pytest.mark.asyncio
+async def test_valid_trace_projection_matches_replay_history_projection(
+    tmp_path: Path,
+) -> None:
+    service, _repository, debate, first_id, _second_id = await _replay_fixture(tmp_path)
+    speech = "A unique claim appears once in this authoritative speech."
+    debate.turns[0].speech = speech
+    trace = EvidenceTraceV1(
+        turn_id=first_id,
+        claim_id="server-claim-1",
+        claim_text=speech,
+        claim_type="proposal",
+        support_mode="no_match",
+        speech_span={"start_utf16": 0, "end_utf16": utf16_length(speech)},
+    )
+    debate.turns[0].evidence_trace = [trace.model_dump(mode="json")]
+
+    payload, _sequence = await service.snapshot(None, debate.id)
+    projected = PlaybackService._evidence_trace(debate.turns[0])
+
+    assert payload["public_turns"][0]["evidence_trace"] == [trace.model_dump(mode="json")]
+    assert projected == [trace.model_dump(mode="json")]
 
 
 @pytest.mark.asyncio
