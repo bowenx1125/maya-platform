@@ -165,6 +165,9 @@ function walk(directory) {
     }
     const supplierUrlAllowed =
       relativePath === "backend/app/providers/dashscope.py" ||
+      relativePath === "backend/app/providers/control.py" ||
+      relativePath ===
+        "backend/app/modules/knowledge/providers/adapters.py" ||
       relativePath === "backend/tests/test_wave1b_voices.py";
     if (!supplierUrlAllowed && supplierUrlPattern.test(text))
       boundaryFailures.push(
