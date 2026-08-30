@@ -54,6 +54,9 @@ STORAGE_FACT = "The supplier stores call data as required by applicable law."
 
 _PURPOSES: Mapping[str, str] = {
     "embedding": "Build an evidence search index from an approved immutable snapshot.",
+    "embedding_query": (
+        "Embed approved retrieval questions to search one immutable evidence snapshot."
+    ),
     "llm_debate": "Generate the teacher-approved classroom debate speech.",
     "tts": "Synthesize the current classroom speech for teacher-controlled playback.",
     "voice_enrollment": "Enroll an approved voice sample for a separate voice operation.",

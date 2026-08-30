@@ -134,6 +134,27 @@ def test_disclosure_has_exact_teacher_allowlist_and_no_provider_secrets() -> Non
     assert response.manifest_hash == manifest.manifest_hash
 
 
+def test_query_embedding_disclosure_is_exact_and_provider_neutral() -> None:
+    policy = _policy()
+    manifest = ExportManifestV1(
+        scope_id="debate-query-scope",
+        provider_operation="embedding_query",
+        model_key=FIXED_MODELS["embedding_query"],
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=_digest("query-build"),
+        persona_spec_hash=_digest("query-persona"),
+        fields=(ExportFieldV1("current_evidence_excerpt", _digest("query-text")),),
+    )
+    response = ProviderDisclosureService(
+        InMemoryProviderDisclosureStore(policy, manifest)
+    ).disclose("teacher")
+
+    assert response.manifest_hash == manifest.manifest_hash
+    assert response.disclosure.outbound_field_classes == ("current_evidence_excerpt",)
+    assert "retrieval questions" in response.disclosure.purpose
+    assert FIXED_MODELS["embedding_query"] not in json.dumps(response.model_dump(mode="json"))
+
+
 @pytest.mark.parametrize(
     "changes",
     (

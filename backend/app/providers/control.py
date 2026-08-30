@@ -29,6 +29,7 @@ FIXED_REGION = "cn-beijing"
 FIXED_MODELS: Mapping[str, str] = MappingProxyType(
     {
         "embedding": "text-embedding-v4",
+        "embedding_query": "text-embedding-v4",
         "llm_debate": "qwen3.7-plus-2026-05-26",
         "tts": "qwen3-tts-vc-2026-01-22",
         "voice_enrollment": "qwen-voice-enrollment",
