@@ -2,7 +2,7 @@
 
 Gate: `w4-g0-2026-08-30`
 
-Status: `G0 DRAFT / SOL HIGH G0-S PENDING / PRODUCT CODE NOT AUTHORIZED / REAL CALLS 0`
+Status: `G0-S PASS / MOCK-FIRST PRODUCT CODE AUTHORIZED / REAL CALLS 0`
 
 Issue: `#8 W4-G0: freeze teaching, Persona, Evidence, Prompt and Provider contracts`
 
@@ -59,3 +59,15 @@ Sol is read-only and must challenge, at minimum:
 Any P0/P1 returns the packet to the main window for repair and exact re-audit. A PASS
 authorizes only the next Mock-first implementation Issues. Real calls begin no earlier
 than the W4-EMBED G3 boundary in `G0_DECISIONS.md`.
+
+## G0-S evidence
+
+- exact audited contract candidate: `c5604fd9aff8533962d653f869b326b8a0a94825`;
+- independent Sol High: `PASS / P0=0 / P1=0 / P2=0`;
+- five P1 findings were repaired before PASS: legacy Persona path, pre-provider
+  SnapshotBuild lifecycle, embedding item/batch limits, atomic request reservations and
+  supplier storage/account-plan policy preflight;
+- local document authority, Prettier, repository/secret boundary and diff checks: PASS;
+- user changed the Wave 4 process after G0-S: intermediate loops use local tests plus
+  Sol audit, and GitHub CI runs once on the complete final integration PR;
+- real Provider calls through G0-S: `0`.

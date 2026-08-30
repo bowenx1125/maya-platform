@@ -1,6 +1,6 @@
 # W4 Mutual Learning Migration Proposal
 
-Status: `USER AUTHORIZATION REQUIRED / IMPLEMENTATION NOT STARTED / REAL CALLS 0`
+Status: `AUTHORIZED / 0008 LOCAL G1.5 PASS / INTEGRATION IN PROGRESS / REAL CALLS 0`
 
 Task: `W4-MUTUAL-LEARNING-RULESET`
 
@@ -58,5 +58,7 @@ exact audited head will fast-forward canonical main, avoiding a second merge-SHA
 
 ## Requested authorization
 
-Authorize exactly the 0008 constraint replacement and its lossless tests above. This
-does not authorize any other schema change or real Provider call.
+The user explicitly authorized exactly the 0008 constraint replacement and its
+lossless tests, then authorized autonomous continuation through Wave 4. Local evidence:
+`WAVE4_MIGRATION_OK`, Ruff PASS and existing Wave 2 setup/generation regression PASS.
+This does not authorize a real Provider call outside its later active Gate.

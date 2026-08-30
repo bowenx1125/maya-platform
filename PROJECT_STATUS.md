@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / MUTUAL_LEARNING_MIGRATION_AUTH_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MUTUAL_LEARNING_IN_PROGRESS / REAL_PROVIDER_CALLS_0`
 
 Wave 4 R0 is a documentation, repository and workflow Gate. It does not implement
 Persona, Evidence Trace, Prompt changes or a real Provider.
@@ -108,9 +108,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Review `docs/gates/wave4/MUTUAL_LEARNING_MIGRATION_PROPOSAL.md`. The current database
-constraint rejects round 3+, so the requested general RuleSet cannot be implemented
-honestly within a no-migration scope. Await explicit authorization for only migration
-0008 before dispatching Luna Max. Intermediate Wave 4 loops use local tests plus Sol
-audit; one GitHub CI is deferred to the final integrated Wave 4 candidate. Real
-Provider calls remain forbidden for this task.
+Migration 0008 was explicitly authorized and its empty/repeat/populated,
+downgrade/re-upgrade, round-five, invalid-round and foreign-key probes pass locally.
+Luna Max is implementing the versioned mutual-learning RuleSet while separate local
+worktrees implement Persona and formal content. Integrate shared DTO/OpenAPI/WS/client
+changes, run local full regression and Sol code audit, then continue the remaining Wave
+4 Gates. One GitHub CI is deferred to the final integrated candidate.
