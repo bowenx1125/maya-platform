@@ -156,8 +156,11 @@ def main() -> None:
         root = Path(temporary)
 
         fresh = root / "fresh.sqlite3"
-        run_alembic(fresh, "head")
-        run_alembic(fresh, "head")
+        # Keep this probe pinned to 0008 as later Wave 4 migrations are
+        # appended. Database readiness and the Persona migration have their
+        # own head-specific tests.
+        run_alembic(fresh, REVISION_0008)
+        run_alembic(fresh, REVISION_0008)
         _assert_revision_and_fks(fresh, REVISION_0008)
         if _round_check(fresh) != "round_no>=1":
             raise AssertionError(f"unexpected positive-round check: {_round_check(fresh)}")

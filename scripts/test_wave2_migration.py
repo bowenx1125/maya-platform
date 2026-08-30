@@ -33,7 +33,6 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.core.db import Database
 from app.core.models import (
-    AgentVersion,
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeSnapshot,
@@ -218,24 +217,37 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
             )
         )
         session.flush()
-        session.add(
-            AgentVersion(
-                id=version_id,
-                agent_id=agent_id,
-                version_seq=0,
-                state="published",
-                revision=1,
-                agent_md="# Migration Agent",
-                avatar_config_json=(
+        # AgentVersion gained nullable Persona columns in 0009. Keep this
+        # historical 0003 fixture column-explicit just like Agent above so an
+        # old-revision probe never asks SQLite to insert future ORM fields.
+        session.execute(
+            text(
+                "INSERT INTO agent_versions "
+                "(id, agent_id, version_seq, state, revision, agent_md, "
+                "avatar_config_json, voice_profile_id, knowledge_snapshot_id, "
+                "published_at, created_at, updated_at) "
+                "VALUES (:id, :agent_id, :version_seq, :state, :revision, :agent_md, "
+                ":avatar_config_json, :voice_profile_id, :knowledge_snapshot_id, "
+                ":published_at, :created_at, :updated_at)"
+            ),
+            {
+                "id": version_id,
+                "agent_id": agent_id,
+                "version_seq": 0,
+                "state": "published",
+                "revision": 1,
+                "agent_md": "# Migration Agent",
+                "avatar_config_json": (
                     '{"template_id":"wave1-default-head","material_theme":"demo",'
                     '"default_expression":"neutral","expression_strength":"medium",'
                     '"motion_style":"calm"}'
                 ),
-                knowledge_snapshot_id=snapshot_id,
-                published_at=now,
-                created_at=now,
-                updated_at=now,
-            )
+                "voice_profile_id": None,
+                "knowledge_snapshot_id": snapshot_id,
+                "published_at": now,
+                "created_at": now,
+                "updated_at": now,
+            },
         )
         session.add(
             KnowledgeSnapshot(
