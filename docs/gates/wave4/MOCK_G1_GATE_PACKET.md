@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `SOL G2 CHANGES_REQUIRED_2 / SECOND P1 REPAIR ACTIVE / REAL CALLS 0`
+Status: `SECOND P1 REPAIRS LOCAL PASS / SOL G2 REAUDIT READY_2 / REAL CALLS 0`
 
 ## Scope
 
@@ -122,3 +122,21 @@ complete 80–200 word turns and exact non-empty trace at every phase. The gener
 adapter must reject an unconfirmed participant before any Mock/real call while leaving
 Stop and completed historical read/download/Replay intact. Both require full local
 regression and another exact-SHA read-only audit.
+
+## Second repair evidence
+
+- Persona, identity, pending-question and evidence text use bounded complete-sentence
+  projections in the actual strict Mock path. Contract-limit combinations remain
+  within 80–190 counted words for opening, exchange and final integration; every result
+  retains non-empty exact EvidenceTrace and unchanged receipt identity/order.
+- `SqlTurnPreparer` checks exact confirmed Persona before retrieval/Provider work for
+  legacy v1, legacy v2 and mutual-learning rows. Migration-era running/pending fixtures
+  return `persona_confirmation_required` with the frozen version IDs and record zero
+  Mock calls. Playback preserves that safe code; Stop and completed historical paths
+  remain covered by their compatibility tests.
+- Integrated local evidence is backend `557/557`, frontend `204/204`, Ruff/mypy,
+  ESLint/TypeScript/Prettier/Next build, OpenAPI/generated-client/strict route and
+  WebSocket checks, document/repository boundaries and zero real Provider calls.
+
+A new exact clean SHA must receive read-only `PASS / P0=0 / P1=0` before any real
+Provider implementation Gate starts.

@@ -1,6 +1,6 @@
 # PersonaSpecV1
 
-Status: `FROZEN / SECOND P1 REPAIR ACTIVE / LOCAL G1.5 PASS / REAL CALLS 0`
+Status: `FROZEN / SECOND P1 REPAIRED / LOCAL G1.5 PASS / SOL G2 REAUDIT READY`
 
 ## Teaching contract
 
@@ -157,3 +157,15 @@ topic, stance, receipts, rules and deterministic seed. Tests must show differenc
 all six allowed teaching dimensions and equality of evidence IDs, source set, order,
 rules and schema. The UI compares raw versions, canonical structured differences and a
 same-input Mock response pair, and labels which dimensions can and cannot change.
+
+The deterministic Mock projects each allowed dimension as a bounded complete sentence;
+it does not echo arbitrarily long legal fields verbatim. Contract-limit Persona,
+identity, pending-question and evidence combinations must produce every phase within
+80–190 counted words, preserve all six explainable dimensions and retain exact non-empty
+EvidenceTrace. No service-layer output truncation is permitted.
+
+The playback generation adapter rechecks every frozen participant's exact confirmed
+Persona before retrieval or any Mock/real Provider call, regardless of RuleSet. A
+migration-era incomplete run with an unconfirmed participant fails with
+`persona_confirmation_required` and the authorized version IDs; Provider call count is
+zero. Stop and completed historical read/download/Replay remain unchanged.
