@@ -78,8 +78,7 @@ export type MockPersonaResponsePair = {
   second: MockPersonaResponse;
 };
 
-const mockResponseTopic =
-  "How should a community share a scarce resource?";
+const mockResponseTopic = "How should a community share a scarce resource?";
 // The preview intentionally uses no retrieval result.  This keeps the demo
 // honest: general reasoning must not display fabricated source identifiers.
 const mockResponseEvidenceIds = [] as const;
@@ -383,8 +382,7 @@ function MockResponsePair({ pair }: { pair: MockPersonaResponsePair }) {
       <div className={styles.mockPairInput}>
         <span>Input</span>
         <p>
-          {pair.topic} · stance: {pair.stance} · seed: {pair.seed} · evidence:
-          {" "}
+          {pair.topic} · stance: {pair.stance} · seed: {pair.seed} · evidence:{" "}
           {pair.evidence_ids.join(", ") || "none"}
         </p>
       </div>

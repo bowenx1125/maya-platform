@@ -73,18 +73,18 @@ and legal release Gate.
 
 ## External data matrix
 
-| Data                                 |            LLM |      Embedding |                 TTS | Rule                                   |
-| ------------------------------------ | -------------: | -------------: | ------------------: | -------------------------------------- |
-| topic and platform rules             |            yes |     query only |                  no | no user identity                       |
-| confirmed structured current Persona |            yes |             no |                  no | raw `AGENT.md` never sent              |
+| Data                                  |            LLM |      Embedding |                 TTS | Rule                                   |
+| ------------------------------------- | -------------: | -------------: | ------------------: | -------------------------------------- |
+| topic and platform rules              |            yes |     query only |                  no | no user identity                       |
+| confirmed structured current Persona  |            yes |             no |                  no | raw `AGENT.md` never sent              |
 | complete RuleSet-visible prior speech |            yes |             no | current speech only | mutual learning excludes same round    |
-| current evidence excerpt/query       |            yes |            yes |                  no | only confirmed exportable snapshot     |
-| opaque evidence/query/turn IDs       |            yes |             no |                  no | supplier cannot resolve local identity |
-| source filename/absolute path        |             no |             no |                  no | server resolves display metadata       |
-| teacher note                         |             no |             no |                  no | internal only                          |
-| student name/user ID/nickname        |             no |             no |                  no | forbidden                              |
-| audio/voice sample                   |             no |             no |    speech text only | enrollment is separate Gate            |
-| API key/workspace ID                 | transport only | transport only |      transport only | server secret; never prompt/log/DTO    |
+| current evidence excerpt/query        |            yes |            yes |                  no | only confirmed exportable snapshot     |
+| opaque evidence/query/turn IDs        |            yes |             no |                  no | supplier cannot resolve local identity |
+| source filename/absolute path         |             no |             no |                  no | server resolves display metadata       |
+| teacher note                          |             no |             no |                  no | internal only                          |
+| student name/user ID/nickname         |             no |             no |                  no | forbidden                              |
+| audio/voice sample                    |             no |             no |    speech text only | enrollment is separate Gate            |
+| API key/workspace ID                  | transport only | transport only |      transport only | server secret; never prompt/log/DTO    |
 
 Before real LLM/Embedding, a teacher confirms an exact export manifest by CAS. The
 manifest binds the PersonaSpec hash, the immutable SnapshotBuild candidate described
