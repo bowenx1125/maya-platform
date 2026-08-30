@@ -459,12 +459,15 @@ def _participant_row(
         agent_id=str(item.agent_id),
         settings=settings,
     )
-    if (
-        str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING
-        and not is_persona_confirmed(version)
-    ):
+    # Persona activation is a product boundary, not a RuleSet feature flag.
+    # Every newly-created Debate must bind confirmed structured Personas;
+    # legacy published rows remain immutable historical read/replay inputs but
+    # cannot be selected for a new Debate.  Never infer this from raw
+    # AGENT.md shape.
+    if not is_persona_confirmed(version):
         raise validation_failure(
             "Every selected Agent version must have a confirmed Persona.",
+            {"agent_version_ids": [str(version.id)]},
             code="persona_confirmation_required",
         )
     # Revalidate the complete captured relationship immediately before the
@@ -1100,6 +1103,24 @@ def commit_start_plan(
         .where(DebateParticipant.debate_id == debate.id)
         .order_by(DebateParticipant.order_index)
     ).all()
+    # Recheck the frozen AgentVersion bindings immediately before planning as
+    # well as during draft setup.  This closes the start path for pre-existing
+    # drafts created before Persona activation without changing any historical
+    # completed Debate rows.
+    blocked_persona_ids = [
+        str(participant.agent_version_id)
+        for participant in participants
+        if (
+            (version := db.get(AgentVersion, participant.agent_version_id)) is None
+            or not is_persona_confirmed(version)
+        )
+    ]
+    if blocked_persona_ids:
+        raise validation_failure(
+            "Every selected Agent version must have a confirmed Persona.",
+            {"agent_version_ids": blocked_persona_ids},
+            code="persona_confirmation_required",
+        )
     try:
         plan = build_turn_plan(
             [row.id for row in participants],

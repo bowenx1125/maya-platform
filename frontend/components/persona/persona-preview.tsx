@@ -49,6 +49,121 @@ export type PersonaDiff = {
   changed: boolean;
 };
 
+export type MockPersonaTeachingDimensions = {
+  tone: string;
+  value_priority: string;
+  argument_pattern: string;
+  concession_style: string;
+  question_style: string;
+  debate_strategy: string;
+};
+
+export type MockPersonaResponse = {
+  schema_version: "persona_mock_response_v1";
+  stance: string;
+  speech: string;
+  position_summary: string;
+  teaching_dimensions: MockPersonaTeachingDimensions;
+  evidence_ids: readonly string[];
+  rule_set_id: "persona_mock_teaching_v1";
+  seed: number;
+};
+
+export type MockPersonaResponsePair = {
+  topic: string;
+  stance: string;
+  seed: number;
+  evidence_ids: readonly string[];
+  first: MockPersonaResponse;
+  second: MockPersonaResponse;
+};
+
+const mockResponseTopic =
+  "How should a community share a scarce resource?";
+// The preview intentionally uses no retrieval result.  This keeps the demo
+// honest: general reasoning must not display fabricated source identifiers.
+const mockResponseEvidenceIds = [] as const;
+
+/** Build the deterministic student-facing Mock response from six dimensions. */
+export function buildMockPersonaResponse(
+  persona: PersonaPreviewSpec,
+  options: {
+    topic: string;
+    evidenceIds: readonly string[];
+    stance: string;
+    seed: number;
+  },
+): MockPersonaResponse {
+  const dimensions: MockPersonaTeachingDimensions = {
+    tone: persona.speaking_style.tone,
+    value_priority: persona.core_values[0] ?? "the stated values",
+    argument_pattern: persona.speaking_style.argument_pattern,
+    concession_style: persona.speaking_style.concession_style,
+    question_style: persona.speaking_style.question_style,
+    debate_strategy: persona.debate_strategy[0] ?? "the stated strategy",
+  };
+  const openings = [
+    "I begin by locating the question in its wider context.",
+    "I begin by naming the practical choice before us.",
+    "I begin by making the underlying responsibility explicit.",
+    "I begin by separating what is known from what is valued.",
+  ];
+  const opening = openings[Math.abs(options.seed) % openings.length];
+  const grounding = options.evidenceIds.length
+    ? `I draw on the supplied evidence in its fixed order (${options.evidenceIds.length} item(s)).`
+    : "I have no matching evidence, so this is general reasoning.";
+  const speech = [
+    opening,
+    `My tone is ${dimensions.tone}. On ${options.topic.trim()}, I prioritize ${dimensions.value_priority}.`,
+    `I use this argument pattern: ${dimensions.argument_pattern}.`,
+    `When another view is reasonable, I ${dimensions.concession_style}.`,
+    `My debate strategy is to ${dimensions.debate_strategy}.`,
+    `I ask questions in this way: ${dimensions.question_style}.`,
+    grounding,
+  ].join(" ");
+  return {
+    schema_version: "persona_mock_response_v1",
+    stance: options.stance,
+    speech,
+    position_summary: `Prioritize ${dimensions.value_priority} by applying ${dimensions.debate_strategy}.`,
+    teaching_dimensions: dimensions,
+    evidence_ids: [...options.evidenceIds],
+    rule_set_id: "persona_mock_teaching_v1",
+    seed: options.seed,
+  };
+}
+
+/** Keep topic, stance, seed, receipts, RuleSet and schema fixed for comparison. */
+export function buildMockPersonaResponsePair(
+  first: PersonaPreviewSpec,
+  second: PersonaPreviewSpec,
+  options: {
+    topic?: string;
+    evidenceIds?: readonly string[];
+    stance?: string;
+    seed?: number;
+  } = {},
+): MockPersonaResponsePair {
+  const topic = options.topic ?? mockResponseTopic;
+  const evidenceIds = options.evidenceIds ?? mockResponseEvidenceIds;
+  const stance = options.stance ?? "open";
+  const seed = options.seed ?? 7;
+  const input = { topic, evidenceIds, stance, seed };
+  const firstResponse = buildMockPersonaResponse(first, input);
+  const secondResponse = buildMockPersonaResponse(second, {
+    ...input,
+    evidenceIds: firstResponse.evidence_ids,
+  });
+  return {
+    topic,
+    stance,
+    seed,
+    evidence_ids: firstResponse.evidence_ids,
+    first: firstResponse,
+    second: secondResponse,
+  };
+}
+
 const teachingDimensions: readonly {
   key: PersonaDiffKey;
   label: string;
@@ -119,6 +234,9 @@ export function PersonaPreview({
 }) {
   const diff = diffPersonaSpec(previousSpec, spec);
   const hasDiff = previousSpec != null && spec != null;
+  const mockPair = hasDiff
+    ? buildMockPersonaResponsePair(previousSpec, spec)
+    : null;
 
   return (
     <section className="section-card" data-testid="persona-preview">
@@ -223,6 +341,7 @@ export function PersonaPreview({
               </div>
             </div>
           ) : null}
+          {mockPair ? <MockResponsePair pair={mockPair} /> : null}
           <div className={styles.immutable}>
             <strong>Does not change</strong>
             <span>KnowledgeSnapshot and evidence IDs</span>
@@ -248,6 +367,52 @@ export function PersonaPreview({
         </details>
       ) : null}
     </section>
+  );
+}
+
+function MockResponsePair({ pair }: { pair: MockPersonaResponsePair }) {
+  return (
+    <div className={styles.mockPair} data-testid="persona-mock-response-pair">
+      <div className={styles.mockPairHeader}>
+        <h3>Same-input Mock response pair</h3>
+        <span>
+          Topic, stance, seed, evidence IDs, RuleSet and output schema are
+          fixed; only Persona teaching dimensions vary.
+        </span>
+      </div>
+      <div className={styles.mockPairInput}>
+        <span>Input</span>
+        <p>
+          {pair.topic} · stance: {pair.stance} · seed: {pair.seed} · evidence:
+          {" "}
+          {pair.evidence_ids.join(", ") || "none"}
+        </p>
+      </div>
+      <div className={styles.mockPairGrid}>
+        <MockResponseCard label="Previous Persona" response={pair.first} />
+        <MockResponseCard label="Current Persona" response={pair.second} />
+      </div>
+    </div>
+  );
+}
+
+function MockResponseCard({
+  label,
+  response,
+}: {
+  label: string;
+  response: MockPersonaResponse;
+}) {
+  return (
+    <article className={styles.mockCard}>
+      <strong>{label}</strong>
+      <p>{response.speech}</p>
+      <span>Position: {response.position_summary}</span>
+      <span>Evidence IDs: {response.evidence_ids.join(", ") || "none"}</span>
+      <span>
+        {response.rule_set_id} · {response.schema_version}
+      </span>
+    </article>
   );
 }
 

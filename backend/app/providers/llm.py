@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Literal, Protocol, cast
 
+from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
+from app.modules.agents.persona_mock import teaching_dimensions_for_persona
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.mutual_learning_prompts import (
     build_mutual_learning_prompt,
@@ -302,6 +304,7 @@ class MockLLMProvider:
                 participant=SimpleNamespace(
                     agent_name=request.persona_provider_view.identity.name,
                     participant_id=request.participant_id,
+                    persona=request.persona_provider_view,
                 ),
                 phase=request.phase,
                 receipts=tuple(
@@ -343,10 +346,29 @@ class MockLLMProvider:
         receipt_ids = [receipt.resolved_evidence_id() for receipt in prompt.receipts]
         used = receipt_ids[:1]
         participant = prompt.participant
+        persona = getattr(participant, "persona", None)
+        dimensions = (
+            teaching_dimensions_for_persona(persona)
+            if isinstance(persona, (PersonaSpecV1, PersonaProviderViewV1))
+            else None
+        )
         safe_name = (
             participant.agent_name
-            if not any(character.isdigit() for character in participant.agent_name)
+            if dimensions is None
+            and not any(character.isdigit() for character in participant.agent_name)
             else "this expert"
+        )
+        teaching_line = (
+            ""
+            if dimensions is None
+            else (
+                f"My teaching tone is {dimensions.tone}; I prioritize "
+                f"{dimensions.value_priority}. I follow this argument pattern: "
+                f"{dimensions.argument_pattern}. I handle a reasonable concern by "
+                f"{dimensions.concession_style}. My debate strategy is to "
+                f"{dimensions.debate_strategy}; I ask questions by "
+                f"{dimensions.question_style}. "
+            )
         )
         phase = prompt.phase
         source_excerpt = ""
@@ -414,6 +436,7 @@ class MockLLMProvider:
             speech = (
                 f"As {safe_name}, I understand the question from this expert's "
                 "professional perspective. "
+                f"{teaching_line}"
                 "My focus is to protect agency while taking public safety and community "
                 "effects seriously. "
                 "One key point is that a policy should be transparent enough to be examined. "
@@ -457,7 +480,12 @@ class MockLLMProvider:
                 evidence_trace_claims=trace_claims,
                 position_summary=(
                     "Balance agency, safety, innovation, and community effects through "
-                    "accountable safeguards."
+                    "accountable safeguards"
+                    + (
+                        f", prioritizing {dimensions.value_priority}."
+                        if dimensions is not None
+                        else "."
+                    )
                 ),
                 position_update="unchanged",
                 remaining_uncertainty=[
@@ -473,6 +501,7 @@ class MockLLMProvider:
         if final:
             speech = (
                 f"As {safe_name}, I return to my opening position and integrate what I learned. "
+                f"{teaching_line}"
                 f"{engagement_text}{answer_text}{evidence_line} "
                 "I learned that an accountable answer must make its trade-offs visible "
                 "and provide a route for correction. "
@@ -521,7 +550,12 @@ class MockLLMProvider:
                 ],
                 position_summary=(
                     "Recommend transparent safeguards, independent review, and an "
-                    "affected-community correction path."
+                    "affected-community correction path"
+                    + (
+                        f", prioritizing {dimensions.value_priority}."
+                        if dimensions is not None
+                        else "."
+                    )
                 ),
                 position_update="clarified",
                 position_update_reason=(
@@ -548,7 +582,8 @@ class MockLLMProvider:
                 question=TurnQuestion(type="none"),
             )
         speech = (
-            f"As {safe_name}, I continue from the earlier round. {engagement_text}{answer_text}"
+            f"As {safe_name}, I continue from the earlier round. {teaching_line}"
+            f"{engagement_text}{answer_text}"
             f"{evidence_line} I keep the exchange civil and update my position toward "
             "transparent safeguards, "
             "independent review, and an opportunity for affected communities to be heard. "
@@ -583,7 +618,12 @@ class MockLLMProvider:
             answered_question_ids=answered,
             position_summary=(
                 "Refine the balance toward transparent safeguards, independent review, "
-                "and community voice."
+                "and community voice"
+                + (
+                    f", prioritizing {dimensions.value_priority}."
+                    if dimensions is not None
+                    else "."
+                )
             ),
             position_update="clarified",
             position_update_reason=(

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import select, text, update
+from sqlalchemy import case, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
@@ -385,6 +385,13 @@ def replace_document_copy_on_write(
                 .values(
                     revision=AgentVersion.revision + 1,
                     updated_at=timestamp,
+                    persona_confirmation_revision=case(
+                        (
+                            AgentVersion.persona_confirmation_revision.is_not(None),
+                            AgentVersion.revision + 1,
+                        ),
+                        else_=None,
+                    ),
                 )
             )
             if getattr(version_changed, "rowcount", 0) != 1:

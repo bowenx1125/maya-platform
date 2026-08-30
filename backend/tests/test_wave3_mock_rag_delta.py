@@ -68,7 +68,7 @@ def _insert_sql_published_agent(
     group_id: str,
     name: str,
     evidence: str,
-    confirmed_persona: bool = False,
+    confirmed_persona: bool = True,
 ) -> str:
     now = datetime.now(UTC)
     agent_id, version_id, snapshot_id, document_id, file_id, snapshot_document_id = (

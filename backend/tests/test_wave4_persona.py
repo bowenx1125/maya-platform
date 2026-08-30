@@ -20,6 +20,7 @@ from app.modules.agents.persona import (
 from app.modules.agents.persona_mock import (
     TEACHING_DIMENSIONS,
     compare_contrasting_personas,
+    contrasting_persona_fixtures,
 )
 from app.modules.agents.persona_service import (
     PERSONA_CONFIRMATION_REQUIRED,
@@ -30,6 +31,7 @@ from app.modules.agents.persona_service import (
     PersonaVersionState,
     debate_eligibility,
     is_persona_confirmed,
+    persona_publication_blocker,
     publication_eligibility,
 )
 
@@ -293,6 +295,27 @@ def test_publication_and_debate_eligibility_have_stable_legacy_blocker() -> None
     assert debate_eligibility([published]).eligible
 
 
+def test_publication_scope_uses_server_marker_not_raw_markdown_shape() -> None:
+    # A pre-activation published row may remain readable as legacy history,
+    # but its marker must be the only reason it is outside the new publish
+    # gate.  Raw text shape is deliberately irrelevant.
+    legacy = _state().model_copy(
+        update={
+            "state": "published",
+            "agent_md": "arbitrary legacy text",
+            "persona_required": False,
+        }
+    )
+    assert persona_publication_blocker(legacy) is None
+    assert publication_eligibility(legacy).eligible
+
+    post_activation = legacy.model_copy(update={"state": "draft", "persona_required": True})
+    assert persona_publication_blocker(post_activation) == PERSONA_CONFIRMATION_REQUIRED
+
+    malformed = post_activation.model_copy(update={"agent_md": "not a Persona template"})
+    assert persona_publication_blocker(malformed) == PERSONA_CONFIRMATION_REQUIRED
+
+
 def test_contrasting_mock_changes_all_allowed_dimensions_only() -> None:
     comparison = compare_contrasting_personas(
         topic="How should a community share a scarce resource?",
@@ -314,3 +337,74 @@ def test_mock_without_evidence_never_invents_a_source() -> None:
     assert comparison.second.evidence_ids == ()
     assert "general reasoning" in comparison.first.speech.lower()
     assert "receipt" not in comparison.first.speech.lower()
+
+
+def test_actual_provider_prompt_mock_uses_six_persona_dimensions_only() -> None:
+    from app.modules.debates.generation import (
+        GenerationContext,
+        MutualLearningPolicy,
+        ParticipantContext,
+        SnapshotRetrievalReceipt,
+        build_provider_prompt,
+    )
+    from app.providers.llm import MockLLMProvider
+
+    first, second = contrasting_persona_fixtures()
+    people = tuple(
+        ParticipantContext(
+            participant_id=f"participant-{index}",
+            agent_id=f"agent-{index}",
+            agent_name=f"Agent {index}",
+            slot=chr(65 + index),
+            order_index=index,
+            snapshot_id="snapshot-shared",
+            persona=persona,
+            persona_spec_hash=persona_spec_hash(persona),
+        )
+        for index, persona in enumerate((first, second))
+    )
+    plans = MutualLearningPolicy().plan(people, round_count=2)
+    receipt = SnapshotRetrievalReceipt(
+        snapshot_id="snapshot-shared",
+        query_kind="viewpoint",
+        query_hash="query-hash",
+        threshold_key="strict",
+        rank=1,
+        score=1.0,
+        chunk_id="chunk-shared",
+        source_filename="source.md",
+        text="A bounded current snapshot passage.",
+        evidence_id="receipt-shared",
+    )
+    prompts = []
+    results = []
+    for index, persona in enumerate((first, second)):
+        prompt = build_provider_prompt(
+            GenerationContext(
+                "mock-persona-debate",
+                "How should a community share a scarce resource?",
+                plans[index],
+                people[index],
+                people,
+            ),
+            persona=persona,
+            receipts=(receipt,),
+            queries=(),
+        )
+        prompts.append(prompt)
+        results.append(MockLLMProvider().generate_turn(prompt))
+
+    assert results[0].speech != results[1].speech
+    assert results[0].used_evidence_id == results[1].used_evidence_id == ["receipt-shared"]
+    assert prompts[0].request.rule_set_id == prompts[1].request.rule_set_id
+    assert prompts[0].request.output_schema_id == prompts[1].request.output_schema_id
+    for persona, result in zip((first, second), results, strict=True):
+        dimensions = (
+            persona.speaking_style.tone,
+            persona.core_values[0],
+            persona.speaking_style.argument_pattern,
+            persona.speaking_style.concession_style,
+            persona.speaking_style.question_style,
+            persona.debate_strategy[0],
+        )
+        assert all(dimension in result.speech for dimension in dimensions)

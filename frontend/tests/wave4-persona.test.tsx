@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  buildMockPersonaResponsePair,
   PersonaPreview,
   diffPersonaSpec,
   type PersonaPreviewSpec,
@@ -74,6 +75,24 @@ describe("Wave 4 structured Persona student preview", () => {
     expect(screen.getAllByText(/Tone/)).not.toHaveLength(0);
     expect(screen.getByText(/Calm → Direct/)).toBeTruthy();
     expect(screen.getByText("Authored AGENT.md")).toBeTruthy();
+    expect(screen.getByTestId("persona-mock-response-pair")).toBeTruthy();
+    expect(screen.getByText("Same-input Mock response pair")).toBeTruthy();
+    expect(screen.getAllByText(/evidence: none/)).not.toHaveLength(0);
+  });
+
+  it("keeps the same Mock input while exposing Persona-driven response differences", () => {
+    const pair = buildMockPersonaResponsePair(first, second, {
+      evidenceIds: ["receipt-a", "receipt-b"],
+      seed: 7,
+    });
+    expect(pair.first.evidence_ids).toEqual(pair.second.evidence_ids);
+    expect(pair.first.rule_set_id).toBe(pair.second.rule_set_id);
+    expect(pair.first.schema_version).toBe(pair.second.schema_version);
+    expect(pair.first.seed).toBe(pair.second.seed);
+    expect(pair.first.speech).not.toBe(pair.second.speech);
+    expect(pair.first.teaching_dimensions.tone).not.toBe(
+      pair.second.teaching_dimensions.tone,
+    );
   });
 
   it("keeps an uncompiled draft explicit and never invents a default Persona", () => {

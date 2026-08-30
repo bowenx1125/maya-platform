@@ -23,7 +23,6 @@ from app.modules.agents.persona import (
     PersonaSpecV1,
     canonical_json,
     compile_persona,
-    looks_like_persona_template,
     persona_spec_hash,
     raw_agent_md_hash,
 )
@@ -57,6 +56,10 @@ class PersonaVersionState(PersonaDomainModel):
     student_confirmed_at: datetime | None = None
     # Internal only.  This field is never part of a provider/browser DTO.
     confirming_user_id: str | None = None
+    # Server-only activation marker.  A missing value in an adapter projection
+    # fails closed (the default is True); the SQL adapter supplies ``False``
+    # explicitly for immutable pre-activation legacy rows.
+    persona_required: bool = True
 
 
 class PersonaConfirmationRequest(PersonaDomainModel):
@@ -278,6 +281,8 @@ def publication_eligibility(
     """New Persona publications require a confirmed extraction."""
 
     state = _as_mapping(version)
+    if not is_persona_required(version):
+        return PersonaEligibility(eligible=True)
     if is_persona_confirmed(version):
         return PersonaEligibility(eligible=True)
     # Empty drafts still report the existing ``agent_md_missing`` blocker in
@@ -287,21 +292,42 @@ def publication_eligibility(
     return PersonaEligibility(eligible=False, code=PERSONA_CONFIRMATION_REQUIRED)
 
 
+def is_persona_required(
+    version: PersonaVersionState | Mapping[str, object] | object,
+) -> bool:
+    """Read the server-only activation marker with a fail-closed default."""
+
+    # ``None`` is what an older ORM projection returns before the migration
+    # adds the non-null marker.  Treat it as required; only an explicit False
+    # may identify an activation-before legacy row.
+    return _as_mapping(version).get("persona_required") is not False
+
+
 def persona_publication_blocker(
     version: PersonaVersionState | Mapping[str, object] | object,
 ) -> str | None:
-    """Return the Persona-specific publish blocker, if a Persona is in scope."""
+    """Return the Persona-specific publish blocker.
+
+    Once PersonaSpecV1 is active, every draft is in scope regardless of the
+    shape of its raw AGENT.md.  In particular, this function must never infer
+    legacy eligibility from Markdown headings or other authored text: that
+    would let a malformed post-activation version bypass confirmation.
+    """
 
     state = _as_mapping(version)
     raw = state.get("agent_md")
-    if not isinstance(raw, str) or not raw.strip() or is_persona_confirmed(version):
+    # The activation marker is authoritative.  Never infer this boundary from
+    # raw Markdown shape, diagnostics or nullable Persona columns.
+    if not is_persona_required(version):
         return None
+    if is_persona_confirmed(version):
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        return PERSONA_COMPILE_REQUIRED
     diagnostics = state.get("persona_diagnostics_json") or state.get("persona_diagnostics")
     if diagnostics:
         return PERSONA_COMPILE_FAILED
-    if looks_like_persona_template(raw):
-        return PERSONA_CONFIRMATION_REQUIRED
-    return None
+    return PERSONA_CONFIRMATION_REQUIRED
 
 
 def legacy_persona_version_ids(
@@ -368,6 +394,7 @@ def _as_mapping(value: PersonaVersionState | Mapping[str, object] | object) -> M
         "persona_diagnostics_json",
         "persona_diagnostics",
         "revision",
+        "persona_required",
     )
     return {name: getattr(value, name, None) for name in names}
 
@@ -394,6 +421,7 @@ __all__ = [
     "PersonaVersionState",
     "debate_eligibility",
     "is_persona_confirmed",
+    "is_persona_required",
     "legacy_persona_version_ids",
     "publication_eligibility",
     "persona_publication_blocker",

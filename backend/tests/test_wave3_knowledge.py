@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Barrier, Event, Thread
 from typing import Any, cast
@@ -33,6 +34,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tests.conftest import login
+from tests.persona_fixtures import confirmed_persona_fields
 
 BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
@@ -75,6 +77,32 @@ def _upload(
     return cast(dict[str, Any], response.json())
 
 
+def _confirm_persona(
+    client: TestClient,
+    csrf: str,
+    version_id: str,
+    expected_revision: int,
+) -> None:
+    compiled = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/compile",
+        headers=_headers(csrf),
+        json={"expected_revision": expected_revision},
+    )
+    assert compiled.status_code == 200, compiled.text
+    body = compiled.json()
+    confirmed = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/confirm",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": expected_revision,
+            "raw_agent_md_hash": body["raw_agent_md_hash"],
+            "persona_spec_hash": body["persona_spec_hash"],
+            "compiler_version": "persona_template_v1",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+
 def _prepare_publishable_draft(
     client: TestClient,
     csrf: str,
@@ -89,7 +117,9 @@ def _prepare_publishable_draft(
         headers=_headers(csrf),
         json={
             "expected_revision": 0,
-            "agent_md": f"# {name}",
+            "agent_md": confirmed_persona_fields(
+                name, datetime.now(UTC)
+            )["agent_md"],
             "avatar_config": detail.json()["versions"][0]["avatar_config"],
         },
     )
@@ -103,6 +133,7 @@ def _prepare_publishable_draft(
         b"# Race\n\nEvidence",
         1,
     )
+    _confirm_persona(client, csrf, version_id, expected_revision=2)
     return agent_id, version_id, uploaded
 
 
@@ -453,10 +484,15 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
     detail = client.get(f"/api/v1/agents/{agent_id}")
     assert detail.status_code == 200, detail.text
     avatar = detail.json()["versions"][0]["avatar_config"]
+    persona_source = confirmed_persona_fields("Download Agent", datetime.now(UTC))["agent_md"]
     updated = client.patch(
         f"/api/v1/agent-versions/{version_id}",
         headers=_headers(csrf),
-        json={"expected_revision": 0, "agent_md": "# Download Agent", "avatar_config": avatar},
+        json={
+            "expected_revision": 0,
+            "agent_md": persona_source,
+            "avatar_config": avatar,
+        },
     )
     assert updated.status_code == 200, updated.text
     first = _upload(
@@ -477,6 +513,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
         b"# Second\n\nBeta",
         2,
     )
+    _confirm_persona(client, csrf, version_id, expected_revision=3)
     published = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "download-publish-123456"}),
@@ -488,7 +525,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
 
     agent_md = client.get(f"/api/v1/agent-versions/{version_id}/agent-md/download")
     assert agent_md.status_code == 200, agent_md.text
-    assert agent_md.text == "# Download Agent"
+    assert agent_md.text == persona_source
     assert agent_md.headers["content-disposition"].startswith(
         'attachment; filename="AGENT--Download-Agent--V1.0.md"'
     )
@@ -1048,6 +1085,7 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
         )
         assert next_version.status_code == 201, next_version.text
         second_version = next_version.json()["id"]
+        _confirm_persona(client, csrf, second_version, expected_revision=0)
         second_published = client.post(
             f"/api/v1/agent-versions/{second_version}/publish",
             headers=_headers(csrf, **{"Idempotency-Key": "fingerprint-publish-two"}),

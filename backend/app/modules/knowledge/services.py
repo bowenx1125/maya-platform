@@ -14,7 +14,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_, delete, exists, or_, select, text, update
+from sqlalchemy import and_, case, delete, exists, or_, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -1377,6 +1377,17 @@ def create_snapshot(
                 knowledge_snapshot_id=snapshot_id,
                 published_at=timestamp,
                 updated_at=timestamp,
+                # Confirmation is bound to the immutable published revision.
+                # Publishing increments the draft revision, so carry the
+                # exact confirmation forward atomically instead of violating
+                # the all-or-none/revision check constraint.
+                persona_confirmation_revision=case(
+                    (
+                        AgentVersion.persona_confirmation_revision.is_not(None),
+                        AgentVersion.revision + 1,
+                    ),
+                    else_=None,
+                ),
             )
         )
         if getattr(changed, "rowcount", 0) != 1:

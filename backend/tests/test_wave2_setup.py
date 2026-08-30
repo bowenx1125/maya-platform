@@ -57,6 +57,7 @@ from pydantic import ValidationError
 from sqlalchemy import event, select, update
 
 from tests.conftest import login
+from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
@@ -237,13 +238,13 @@ def _insert_published_agent(
                 version_seq=0,
                 state="published",
                 revision=1,
-                agent_md=f"# {name}\n\nA careful cultural perspective.",
                 avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
                 voice_profile_id=None,
                 knowledge_snapshot_id=snapshot_id,
                 published_at=now,
                 created_at=now,
                 updated_at=now,
+                **confirmed_persona_fields(name, now),
             )
         )
         session.add(

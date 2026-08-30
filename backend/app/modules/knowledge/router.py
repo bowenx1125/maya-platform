@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Request, Response
-from sqlalchemy import delete, select, update
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -334,7 +334,17 @@ async def upload_knowledge_document(
                     AgentVersion.state == "draft",
                     AgentVersion.revision == expected_revision,
                 )
-                .values(revision=AgentVersion.revision + 1, updated_at=_now())
+                .values(
+                    revision=AgentVersion.revision + 1,
+                    updated_at=_now(),
+                    persona_confirmation_revision=case(
+                        (
+                            AgentVersion.persona_confirmation_revision.is_not(None),
+                            AgentVersion.revision + 1,
+                        ),
+                        else_=None,
+                    ),
+                )
             )
             if getattr(changed, "rowcount", 0) != 1:
                 current_revision = db.scalar(
@@ -850,7 +860,17 @@ def set_agent_version_documents(
             AgentVersion.state == "draft",
             AgentVersion.revision == expected_revision,
         )
-        .values(revision=AgentVersion.revision + 1, updated_at=_now())
+        .values(
+            revision=AgentVersion.revision + 1,
+            updated_at=_now(),
+            persona_confirmation_revision=case(
+                (
+                    AgentVersion.persona_confirmation_revision.is_not(None),
+                    AgentVersion.revision + 1,
+                ),
+                else_=None,
+            ),
+        )
     )
     if getattr(changed, "rowcount", 0) != 1:
         current_revision = db.scalar(

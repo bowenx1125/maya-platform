@@ -220,6 +220,164 @@ def test_compile_failure_does_not_keep_prior_persona_and_publish_blocks_strict_t
     assert publish.json()["code"] == "persona_confirmation_required"
 
 
+def test_publishing_confirmed_persona_rebinds_confirmation_to_immutable_revision(
+    client: TestClient,
+) -> None:
+    _user, csrf = login(client, "student-bowen-1")
+    agent = _create_agent(client, csrf, "persona-api-publish-confirmed")
+    version_id = agent["versions"][0]["id"]
+    updated = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 0,
+            "agent_md": _persona_md("River Keeper"),
+            "avatar_config": agent["versions"][0]["avatar_config"],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    uploaded = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "persona-api-publish-upload"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        files={"file": ("publish.md", b"# Publish\n\nBounded evidence.", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    compiled = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/compile",
+        headers=_headers(csrf),
+        json={"expected_revision": 2},
+    )
+    assert compiled.status_code == 200, compiled.text
+    compiled_body = compiled.json()
+    confirmed = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/confirm",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 2,
+            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
+            "persona_spec_hash": compiled_body["persona_spec_hash"],
+            "compiler_version": "persona_template_v1",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    published = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=_headers(csrf, **{"Idempotency-Key": "persona-api-publish-confirmed"}),
+        json={"expected_revision": 2},
+    )
+    assert published.status_code == 200, published.text
+    body = published.json()
+    assert body["revision"] == 3
+    assert body["persona_confirmation_revision"] == 3
+    assert body["persona_confirmed"] is True
+    assert body["raw_agent_md_hash"] == compiled_body["raw_agent_md_hash"]
+    assert body["persona_spec_hash"] == compiled_body["persona_spec_hash"]
+
+
+def test_document_revision_cas_preserves_confirmed_persona_without_half_update(
+    client: TestClient,
+) -> None:
+    _user, csrf = login(client, "student-bowen-1")
+    agent = _create_agent(client, csrf, "persona-api-document-revision")
+    version_id = agent["versions"][0]["id"]
+    updated = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 0,
+            "agent_md": _persona_md("River Keeper"),
+            "avatar_config": agent["versions"][0]["avatar_config"],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    first = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "persona-doc-one-123456"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        files={"file": ("one.md", b"# One\n\nFirst evidence.", "text/markdown")},
+    )
+    assert first.status_code == 201, first.text
+    compiled = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/compile",
+        headers=_headers(csrf),
+        json={"expected_revision": 2},
+    )
+    assert compiled.status_code == 200, compiled.text
+    compiled_body = compiled.json()
+    confirmed = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/confirm",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 2,
+            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
+            "persona_spec_hash": compiled_body["persona_spec_hash"],
+            "compiler_version": "persona_template_v1",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    baseline = confirmed.json()
+    first_document_id = first.json()["document"]["id"]
+
+    second = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "persona-doc-two-123456"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "2"},
+        files={"file": ("two.md", b"# Two\n\nSecond evidence.", "text/markdown")},
+    )
+    assert second.status_code == 201, second.text
+    second_version = second.json()["agent_version"]
+    assert second_version["revision"] == 3
+    assert second_version["persona_confirmation_revision"] == 3
+    assert second_version["persona_spec_hash"] == baseline["persona_spec_hash"]
+    assert second_version["student_confirmed_at"].removesuffix("Z") == baseline[
+        "student_confirmed_at"
+    ].removesuffix("Z")
+
+    set_documents = client.put(
+        f"/api/v1/agent-versions/{version_id}/knowledge-documents",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 3,
+            "document_ids": [first_document_id, second.json()["document"]["id"]],
+        },
+    )
+    assert set_documents.status_code == 200, set_documents.text
+    set_body = set_documents.json()
+    assert set_body["revision"] == 4
+    assert set_body["persona_confirmation_revision"] == 4
+    assert set_body["persona_spec_hash"] == baseline["persona_spec_hash"]
+
+    stale = client.put(
+        f"/api/v1/agent-versions/{version_id}/knowledge-documents",
+        headers=_headers(csrf),
+        json={"expected_revision": 3, "document_ids": [first_document_id]},
+    )
+    assert stale.status_code == 409, stale.text
+    current = client.get(f"/api/v1/agent-versions/{version_id}")
+    assert current.status_code == 200, current.text
+    assert current.json()["revision"] == 4
+    assert current.json()["persona_confirmation_revision"] == 4
+    assert current.json()["persona_spec_hash"] == baseline["persona_spec_hash"]
+
+    old_document = first.json()["document"]
+    replacement = client.post(
+        f"/api/v1/knowledge-documents/{first_document_id}/replace",
+        headers=_headers(csrf, **{"Idempotency-Key": "persona-doc-replace-123456"}),
+        data={
+            "expected_content_hash": old_document["content_hash"],
+            "expected_index_revision": str(old_document["index_revision"]),
+        },
+        files={"file": ("replacement.md", b"# Replacement\n\nNew evidence.", "text/markdown")},
+    )
+    assert replacement.status_code == 201, replacement.text
+    replaced = client.get(f"/api/v1/agent-versions/{version_id}")
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["revision"] == 5
+    assert replaced.json()["persona_confirmation_revision"] == 5
+    assert replaced.json()["persona_spec_hash"] == baseline["persona_spec_hash"]
+
+
 def test_0009_columns_are_nullable_for_legacy_and_constraints_are_reversible(
     tmp_path: Path,
 ) -> None:

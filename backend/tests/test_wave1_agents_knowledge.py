@@ -26,6 +26,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login
+from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
@@ -55,6 +56,35 @@ def _assert_business_error(response: Any, code: str) -> dict[str, Any]:
     assert set(body) == {"code", "message", "details", "request_id"}
     assert isinstance(body["details"], dict)
     UUID(body["request_id"])
+    return body
+
+
+def _confirm_persona(
+    client: TestClient,
+    csrf: str,
+    version_id: str,
+    expected_revision: int,
+) -> dict[str, Any]:
+    """Compile and confirm a post-activation draft before publishing it."""
+
+    compiled = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/compile",
+        headers=_headers(csrf),
+        json={"expected_revision": expected_revision},
+    )
+    assert compiled.status_code == 200, compiled.text
+    body = compiled.json()
+    confirmed = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/confirm",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": expected_revision,
+            "raw_agent_md_hash": body["raw_agent_md_hash"],
+            "persona_spec_hash": body["persona_spec_hash"],
+            "compiler_version": "persona_template_v1",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
     return body
 
 
@@ -123,7 +153,9 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
         headers=_headers(csrf),
         json={
             "expected_revision": 0,
-            "agent_md": "# Maya\nExplain the source.",
+            "agent_md": confirmed_persona_fields(
+                "Maya Guide", datetime.now(UTC)
+            )["agent_md"],
             "avatar_config": avatar,
         },
     )
@@ -164,6 +196,8 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
     )
     assert replay.status_code == 201
     assert replay.json() == mutation
+
+    _confirm_persona(client, csrf, version_id, expected_revision=2)
 
     chat = client.post(
         f"/api/v1/agent-versions/{version_id}/chat",
@@ -428,7 +462,9 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
             headers=_headers(csrf),
             json={
                 "expected_revision": 0,
-                "agent_md": "# Agent",
+                "agent_md": confirmed_persona_fields(
+                    "Maya Guide", datetime.now(UTC)
+                )["agent_md"],
                 "avatar_config": agent["versions"][0]["avatar_config"],
             },
         )
@@ -439,6 +475,7 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
         )
         assert uploaded.status_code == 201, uploaded.text
+        _confirm_persona(client, csrf, version_id, expected_revision=2)
         published = client.post(
             f"/api/v1/agent-versions/{version_id}/publish",
             headers=_headers(csrf, **{"Idempotency-Key": "cross-snapshot-publish-001"}),
@@ -660,8 +697,8 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
         headers=_headers(csrf, **{"Idempotency-Key": "business-publish-001"}),
         json={"expected_revision": 0},
     )
-    publish_body = _assert_business_error(publish_error, "agent_md_missing")
-    assert publish_body["details"] == {"publish_blockers": ["agent_md_missing", "rag_missing"]}
+    publish_body = _assert_business_error(publish_error, "persona_compile_required")
+    assert publish_body["details"] == {"publish_blockers": ["persona_compile_required"]}
 
 
 def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(

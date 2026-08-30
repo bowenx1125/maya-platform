@@ -401,7 +401,7 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
         assert detail.json()["round_count"] == round_count
 
 
-def test_new_mutual_debate_requires_confirmed_persona_but_legacy_rule_stays_compatible(
+def test_every_new_debate_requires_confirmed_persona_but_legacy_history_stays_compatible(
     app_factory: object,
 ) -> None:
     from fastapi.testclient import TestClient
@@ -422,12 +422,14 @@ def test_new_mutual_debate_requires_confirmed_persona_but_legacy_rule_stays_comp
             group_id=GROUP_BOWEN_ID,
             name="Legacy Persona A",
             evidence="A legacy immutable snapshot.",
+            confirmed_persona=False,
         )
         second = _insert_sql_published_agent(
             database,
             group_id=GROUP_KAIKAI_ID,
             name="Legacy Persona B",
             evidence="A second legacy immutable snapshot.",
+            confirmed_persona=False,
         )
         _session, csrf = login(client)
         payload = {
@@ -455,8 +457,8 @@ def test_new_mutual_debate_requires_confirmed_persona_but_legacy_rule_stays_comp
                 "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
-        assert legacy.status_code == 201, legacy.text
-        assert legacy.json()["rule_set_id"] == "ordered_multi_agent_rounds_demo_v2"
+        assert legacy.status_code == 422, legacy.text
+        assert legacy.json()["code"] == "persona_confirmation_required"
 
 
 def _opening_result(turn_id: str, evidence_ids: Sequence[str] = ()) -> MutualLearningTurnResultV1:

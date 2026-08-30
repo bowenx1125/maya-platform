@@ -53,6 +53,7 @@ class SqlAlchemyPersonaStore(PersonaStore):
             persona_confirmation_revision=version.persona_confirmation_revision,
             student_confirmed_at=version.student_confirmed_at,
             confirming_user_id=version.persona_confirming_user_id,
+            persona_required=bool(getattr(version, "persona_required", True)),
         )
 
     def is_current_group_member(self, user_id: str, group_id: str) -> bool:

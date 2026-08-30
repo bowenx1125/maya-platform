@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.agents.persona import (
+    PersonaProviderViewV1,
     PersonaSpecV1,
     compile_persona_or_raise,
 )
@@ -36,6 +37,7 @@ TeachingDimension = Literal[
     "question_style",
     "debate_strategy",
 ]
+PersonaInput = PersonaSpecV1 | PersonaProviderViewV1
 
 
 class MockPersonaModel(BaseModel):
@@ -88,7 +90,7 @@ class MockPersonaComparison(MockPersonaModel):
 
 
 def mock_persona_response(
-    persona: PersonaSpecV1,
+    persona: PersonaInput,
     *,
     topic: str,
     evidence_ids: Iterable[str] = (),
@@ -102,14 +104,6 @@ def mock_persona_response(
     if not stance.strip():
         raise ValueError("stance must not be empty")
     ordered_evidence = tuple(evidence_ids)
-    dimensions = MockTeachingDimensions(
-        tone=persona.speaking_style.tone,
-        value_priority=persona.core_values[0],
-        argument_pattern=persona.speaking_style.argument_pattern,
-        concession_style=persona.speaking_style.concession_style,
-        question_style=persona.speaking_style.question_style,
-        debate_strategy=persona.debate_strategy[0],
-    )
     openings = (
         "I begin by locating the question in its wider context.",
         "I begin by naming the practical choice before us.",
@@ -122,9 +116,10 @@ def mock_persona_response(
         if ordered_evidence
         else "I have no matching evidence, so this is general reasoning."
     )
+    dimensions = teaching_dimensions_for_persona(persona)
     speech = (
         f"{opening} My tone is {dimensions.tone}. On {topic.strip()}, I prioritize "
-        f"{dimensions.value_priority}. {persona.initial_position} "
+        f"{dimensions.value_priority}. "
         f"I use this argument pattern: {dimensions.argument_pattern}. "
         f"When another view is reasonable, I {dimensions.concession_style}. "
         f"My debate strategy is to {dimensions.debate_strategy}. "
@@ -133,7 +128,10 @@ def mock_persona_response(
     return MockPersonaResponse(
         stance=stance,
         speech=speech,
-        position_summary=persona.initial_position,
+        position_summary=(
+            f"Prioritize {dimensions.value_priority} by applying "
+            f"{dimensions.debate_strategy}."
+        ),
         teaching_dimensions=dimensions,
         evidence_ids=ordered_evidence,
         rule_set_id=MOCK_PERSONA_RULE_SET_ID,
@@ -141,9 +139,27 @@ def mock_persona_response(
     )
 
 
+def teaching_dimensions_for_persona(persona: PersonaInput) -> MockTeachingDimensions:
+    """Project exactly the six allowed teaching dimensions for the Mock.
+
+    Identity, cultural context, boundaries, hashes and other audit fields are
+    intentionally excluded.  This same projection is used by the direct
+    acceptance helper and by the actual ``MockLLMProvider`` path.
+    """
+
+    return MockTeachingDimensions(
+        tone=persona.speaking_style.tone,
+        value_priority=persona.core_values[0],
+        argument_pattern=persona.speaking_style.argument_pattern,
+        concession_style=persona.speaking_style.concession_style,
+        question_style=persona.speaking_style.question_style,
+        debate_strategy=persona.debate_strategy[0],
+    )
+
+
 def compare_personas(
-    first: PersonaSpecV1,
-    second: PersonaSpecV1,
+    first: PersonaInput,
+    second: PersonaInput,
     *,
     topic: str,
     evidence_ids: Iterable[str] = (),
@@ -303,4 +319,5 @@ __all__ = [
     "contrasting_persona_fixtures",
     "mock_persona_comparison",
     "mock_persona_response",
+    "teaching_dimensions_for_persona",
 ]

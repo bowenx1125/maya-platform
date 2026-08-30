@@ -34,6 +34,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login
+from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
@@ -140,13 +141,13 @@ def _insert_published_agent(
                 version_seq=0,
                 state="published",
                 revision=1,
-                agent_md=f"# {name}\n\nA careful cultural perspective.",
                 avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
                 voice_profile_id=None,
                 knowledge_snapshot_id=snapshot_id,
                 published_at=now,
                 created_at=now,
                 updated_at=now,
+                **confirmed_persona_fields(name, now),
             )
         )
         session.add(
@@ -190,10 +191,11 @@ def _prepare_draft_for_publish(
     version = agent["versions"][0]
     version_id = version["id"]
     avatar = version["avatar_config"]
+    persona_source = confirmed_persona_fields("Metadata Agent", datetime.now(UTC))["agent_md"]
     updated = client.patch(
         f"/api/v1/agent-versions/{version_id}",
         headers=_headers(csrf),
-        json={"expected_revision": 0, "agent_md": "# Race agent", "avatar_config": avatar},
+        json={"expected_revision": 0, "agent_md": persona_source, "avatar_config": avatar},
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
@@ -203,6 +205,24 @@ def _prepare_draft_for_publish(
         files={"file": ("race.md", b"# Race\n\nEvidence", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
+    compiled = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/compile",
+        headers=_headers(csrf),
+        json={"expected_revision": 2},
+    )
+    assert compiled.status_code == 200, compiled.text
+    compiled_body = compiled.json()
+    confirmed = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/confirm",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 2,
+            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
+            "persona_spec_hash": compiled_body["persona_spec_hash"],
+            "compiler_version": "persona_template_v1",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
     return agent["id"], version_id
 
 
@@ -413,10 +433,11 @@ def test_delete_rejects_published_history_with_stable_code(client: TestClient) -
     assert metadata.status_code == 200, metadata.text
     version_id = agent["versions"][0]["id"]
     avatar = agent["versions"][0]["avatar_config"]
+    persona_source = confirmed_persona_fields("Metadata Agent", datetime.now(UTC))["agent_md"]
     updated = client.patch(
         f"/api/v1/agent-versions/{version_id}",
         headers=_headers(csrf),
-        json={"expected_revision": 0, "agent_md": "# Agent", "avatar_config": avatar},
+        json={"expected_revision": 0, "agent_md": persona_source, "avatar_config": avatar},
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
@@ -426,6 +447,24 @@ def test_delete_rejects_published_history_with_stable_code(client: TestClient) -
         files={"file": ("published.md", b"# Published", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
+    compiled = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/compile",
+        headers=_headers(csrf),
+        json={"expected_revision": 2},
+    )
+    assert compiled.status_code == 200, compiled.text
+    compiled_body = compiled.json()
+    confirmed = client.post(
+        f"/api/v1/agent-versions/{version_id}/persona/confirm",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 2,
+            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
+            "persona_spec_hash": compiled_body["persona_spec_hash"],
+            "compiler_version": "persona_template_v1",
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
     published = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-publish-agent-001"}),
