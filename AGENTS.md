@@ -15,7 +15,8 @@
 5. Keep ordinary frontend DTOs provider-neutral. The dedicated teacher-only
    ProviderDataCallV1 disclosure DTO may expose only the supplier display name, region,
    purpose, outbound field classes, storage fact, no-training basis and retention
-   setting required for informed confirmation. Model IDs, supplier endpoints/URLs,
+   setting required for informed confirmation, plus the policy hash, manifest hash and
+   confirmation revision needed for exact CAS. Model IDs, supplier endpoints/URLs,
    external resource IDs, API keys, raw ledgers and private paths may not enter any
    browser-facing DTO.
 6. Never create or commit a real `.env`, credentials, student audio, runtime data,
