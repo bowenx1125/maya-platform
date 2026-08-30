@@ -324,7 +324,7 @@ class DebateTurn(Base):
         UniqueConstraint("debate_id", "turn_index", name="uq_debate_turns_debate_index"),
         UniqueConstraint("id", "participant_id", name="uq_debate_turns_id_participant"),
         UniqueConstraint("id", "debate_id", name="uq_debate_turns_id_debate"),
-        CheckConstraint("round_no >= 1 AND round_no <= 2", name="ck_debate_turns_round"),
+        CheckConstraint("round_no >= 1", name="ck_debate_turns_round"),
         CheckConstraint("turn_index >= 0", name="ck_debate_turns_index"),
         CheckConstraint(
             "generation_status IN "
