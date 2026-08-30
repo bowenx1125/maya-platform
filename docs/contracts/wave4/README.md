@@ -1,6 +1,6 @@
 # Wave 4 Contract Set
 
-Status: `G0-S PASS / PERSONA MOCK PASS / SOL G2 FINAL AUDIT READY / REAL CALLS 0`
+Status: `G0-S PASS / PERSONA MOCK PASS / MOCK G2 SOL PASS / W4-EMBED NEXT / REAL CALLS 0`
 
 These files freeze the pre-code contract for Issue #8. They distinguish three layers:
 

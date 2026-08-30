@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `PERSONA MOCK PASS / SOL G2 FINAL AUDIT READY / REAL CALLS 0`
+Status: `PERSONA MOCK PASS / SOL G2 PASS / P0=0 / P1=0 / P2=0 / REAL CALLS 0`
 
 ## Scope
 
@@ -206,3 +206,21 @@ Arbitrary word-level differences that normalize to the same bounded Mock project
 are not a Gate failure. The existing source-neutral renderer remains required so
 Persona text cannot masquerade as receipt-backed facts. The final G2 audit must apply
 these seven frozen criteria and must not reintroduce the superseded uniqueness KPI.
+
+## Final G2 result
+
+Sol High audited exact clean SHA
+`48ff91fea21ed0a1522b8e1b83ab23c552dda44f` under the user-frozen seven Persona Mock
+criteria and returned `PASS / P0=0 / P1=0 / P2=0`. It confirmed all previously repaired
+barrier, activation, all-RuleSet/running generation, exact EvidenceTrace, corrupt
+Replay, Prompt, revision-CAS, word-bound and source-neutral boundaries without
+reintroducing arbitrary-string uniqueness as a KPI.
+
+Read-only audit evidence was backend `285` targeted tests, frontend `204`, document
+authority, frozen/generated OpenAPI, WebSocket `35/18`, commands `6/7`, results `5/6`,
+clean diff/HEAD and zero Provider calls. The main-window complete local matrix remains
+backend `671/671` plus the same frontend and contract checks.
+
+This PASS unlocks the W4-EMBED implementation and fake-transport Gate only. A real
+Embedding request still requires exact account/policy/export/confirmation/budget
+preflight and a separate audited candidate.

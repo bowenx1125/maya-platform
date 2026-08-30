@@ -1,6 +1,6 @@
 # PersonaSpecV1
 
-Status: `FROZEN / PERSONA MOCK GATE PASS / REAL CALLS 0`
+Status: `FROZEN / PERSONA MOCK GATE PASS / SOL G2 PASS / REAL CALLS 0`
 
 ## Teaching contract
 

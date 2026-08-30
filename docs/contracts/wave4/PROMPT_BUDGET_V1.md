@@ -1,6 +1,6 @@
 # PromptBudgetV1 and PromptRequestV1
 
-Status: `FROZEN / P1 REPAIRED / LOCAL G1.5 PASS / SOL G2 FINAL AUDIT READY`
+Status: `FROZEN / P1 REPAIRED / SOL G2 PASS / REAL CALLS 0`
 
 ## Logical request
 

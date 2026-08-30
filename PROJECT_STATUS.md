@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_G2_FINAL_AUDIT_READY / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / READY_FOR_W4_EMBED_G1 / REAL_PROVIDER_CALLS_0`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -24,8 +24,10 @@ criteria: stable PersonaSpec, visible six dimensions, required confirmation, cor
 freeze/hash/version, no unconfirmed Debate/Provider, visibly different behavior for
 clearly different projections, and no Evidence fabrication/raw private leakage. The
 current implementation satisfies all seven, so Persona Mock is PASS and further
-arbitrary-string uniqueness optimization has stopped. No real Provider Gate is
-unlocked and no real Provider request has been made.
+arbitrary-string uniqueness optimization has stopped. Final Sol High audit of exact
+clean SHA `48ff91f` returned `PASS / P0=0 / P1=0 / P2=0`. This unlocks W4-EMBED code
+and fake-transport acceptance, not an automatic real request. No real Provider request
+has been made.
 
 ## Source and remote
 
@@ -139,9 +141,10 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Submit the user-frozen Persona Mock PASS plus all earlier P1 repairs for one final exact
-clean-SHA Sol High G2 audit. The complete local evidence is backend `671/671`, frontend
-`31 files / 204 tests`, mypy/Ruff,
+Implement the W4-EMBED runtime selector/publication path and exact teacher export
+confirmation through fake transport, then obtain independent Sol audit before any real
+request. The signed Mock candidate evidence is backend `671/671`, frontend `31 files /
+204 tests`, mypy/Ruff,
 ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, strict FastAPI route
 comparison, WebSocket `35/18`, repository/secret boundary, formal-content acceptance
 and migrations 0001–0012. After P0/P1 closure, continue real Embedding publication,
