@@ -1430,6 +1430,7 @@ export interface components {
             /** @enum {string|null} */
             phase?: "opening" | "exchange" | "final_integration" | "rebuttal" | null;
             mutual_learning?: components["schemas"]["MutualLearningTurnResultV1"] | null;
+            evidence_trace?: components["schemas"]["EvidenceTraceV1"][] | null;
         };
         TurnQuestion: {
             /**
@@ -1455,6 +1456,41 @@ export interface components {
             claim_type: "factual" | "interpretation" | "value_judgement" | "proposal";
             used_evidence_ids?: string[];
         };
+        SpeechSpanV1: {
+            start_utf16: number;
+            end_utf16: number;
+        };
+        EvidenceTraceClaimV1: {
+            claim_text: string;
+            /** @enum {string} */
+            claim_type: "factual" | "background" | "value_judgement" | "proposal";
+            used_evidence_ids?: string[];
+            /** @enum {string|null} */
+            support_mode?: "direct" | "contextual" | "general_reasoning" | "no_match" | null;
+        };
+        EvidenceTraceV1: {
+            /**
+             * @default evidence_trace_v1
+             * @constant
+             */
+            trace_version: "evidence_trace_v1";
+            turn_id: string;
+            claim_id: string;
+            claim_text: string;
+            /** @enum {string} */
+            claim_type: "factual" | "background" | "value_judgement" | "proposal";
+            query_id?: string | null;
+            /** @enum {string|null} */
+            query_kind?: "viewpoint" | "pending_question" | "rebuttal" | "updated_position" | "context" | null;
+            query_text?: string | null;
+            evidence_id?: string | null;
+            chunk_id?: string | null;
+            source_filename?: string | null;
+            source_locator?: string | null;
+            /** @enum {string} */
+            support_mode: "direct" | "contextual" | "general_reasoning" | "no_match";
+            speech_span: components["schemas"]["SpeechSpanV1"];
+        };
         MutualLearningDisagreementV1: {
             summary: string;
             /** @enum {string} */
@@ -1465,6 +1501,7 @@ export interface components {
             speech: string;
             key_claims?: components["schemas"]["KeyClaimV1"][];
             engagements?: components["schemas"]["EngagementV1"][];
+            evidence_trace_claims?: components["schemas"]["EvidenceTraceClaimV1"][];
             answered_question_ids?: string[];
             learned_from_others?: string[];
             /** @default  */

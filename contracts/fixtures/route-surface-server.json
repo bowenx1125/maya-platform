@@ -4951,6 +4951,19 @@
                 "type": "null"
               }
             ]
+          },
+          "evidence_trace": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EvidenceTraceV1"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -5055,6 +5068,168 @@
           }
         }
       },
+      "SpeechSpanV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "start_utf16",
+          "end_utf16"
+        ],
+        "properties": {
+          "start_utf16": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_utf16": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "EvidenceTraceClaimV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_text",
+          "claim_type"
+        ],
+        "properties": {
+          "claim_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_type": {
+            "type": "string",
+            "enum": [
+              "factual",
+              "background",
+              "value_judgement",
+              "proposal"
+            ]
+          },
+          "used_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "support_mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "direct",
+              "contextual",
+              "general_reasoning",
+              "no_match",
+              null
+            ]
+          }
+        }
+      },
+      "EvidenceTraceV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "turn_id",
+          "claim_id",
+          "claim_text",
+          "claim_type",
+          "support_mode",
+          "speech_span"
+        ],
+        "properties": {
+          "trace_version": {
+            "type": "string",
+            "const": "evidence_trace_v1",
+            "default": "evidence_trace_v1"
+          },
+          "turn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_type": {
+            "type": "string",
+            "enum": [
+              "factual",
+              "background",
+              "value_judgement",
+              "proposal"
+            ]
+          },
+          "query_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "query_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "viewpoint",
+              "pending_question",
+              "rebuttal",
+              "updated_position",
+              "context",
+              null
+            ]
+          },
+          "query_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chunk_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_locator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "support_mode": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "contextual",
+              "general_reasoning",
+              "no_match"
+            ]
+          },
+          "speech_span": {
+            "$ref": "#/components/schemas/SpeechSpanV1"
+          }
+        }
+      },
       "MutualLearningDisagreementV1": {
         "type": "object",
         "additionalProperties": false,
@@ -5106,6 +5281,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EngagementV1"
+            }
+          },
+          "evidence_trace_claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceTraceClaimV1"
             }
           },
           "answered_question_ids": {

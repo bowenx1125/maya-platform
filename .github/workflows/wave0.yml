@@ -107,8 +107,19 @@ jobs:
       - name: Assert Wave 4 inputs
         run: |
           test -f backend/migrations/versions/0008_wave4_mutual_learning_rounds.py
+          test -f backend/migrations/versions/0009_persona_structured_fields.py
+          test -f backend/migrations/versions/0010_provider_control_ledger.py
+          test -f backend/migrations/versions/0011_evidence_trace_json.py
           test -f scripts/test_wave4_migration.py
-          test -f frontend/tests/wave3-playback-controls.test.tsx
+          test -f scripts/test_wave4_evidence_migration.py
+          test -f backend/tests/test_wave4_mutual_learning.py
+          test -f backend/tests/test_wave4_persona_persistence.py
+          test -f backend/tests/test_wave4_provider_control_orm.py
+          test -f backend/tests/test_wave4_prompt.py
+          test -f backend/tests/test_wave4_evidence_trace.py
+          test -f frontend/tests/wave4-mutual-learning.test.tsx
+          test -f frontend/tests/wave4-persona.test.tsx
+          test -f frontend/tests/wave4-evidence-trace.test.tsx
 
       - name: Assert portable project authority
         run: |
@@ -216,10 +227,13 @@ jobs:
       - name: Populated Wave 4 migration preservation evidence
         run: uv run --directory backend python ../scripts/test_wave4_migration.py
 
-      - name: Export Wave 3 FastAPI OpenAPI for route comparison
+      - name: Evidence Trace migration preservation evidence
+        run: uv run --directory backend python ../scripts/test_wave4_evidence_migration.py
+
+      - name: Export Wave 4 FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
-      - name: Strict Wave 3 FastAPI route and schema comparison
+      - name: Strict Wave 4 FastAPI route and schema comparison
         run: node scripts/compare_route_surface.mjs --server-openapi "$RUNNER_TEMP/maya-fastapi-openapi.json"
 
       - name: Compose configuration

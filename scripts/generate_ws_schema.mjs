@@ -51,6 +51,50 @@ const roundCount = integer(2, 5);
 const retrievalSource = closed({ source_filename: nonEmpty, chunk_id: uuid }, [
   "source_filename",
 ]);
+const evidenceTrace = closed(
+  {
+    trace_version: { type: "string", const: "evidence_trace_v1" },
+    turn_id: nonEmpty,
+    claim_id: nonEmpty,
+    claim_text: nonEmpty,
+    claim_type: {
+      type: "string",
+      enum: ["factual", "background", "value_judgement", "proposal"],
+    },
+    query_id: nullable(nonEmpty),
+    query_kind: nullable({
+      type: "string",
+      enum: [
+        "viewpoint",
+        "pending_question",
+        "rebuttal",
+        "updated_position",
+        "context",
+      ],
+    }),
+    query_text: nullable({ type: "string" }),
+    evidence_id: nullable(nonEmpty),
+    chunk_id: nullable(nonEmpty),
+    source_filename: nullable(nonEmpty),
+    source_locator: nullable(nonEmpty),
+    support_mode: {
+      type: "string",
+      enum: ["direct", "contextual", "general_reasoning", "no_match"],
+    },
+    speech_span: closed({ start_utf16: integer(0), end_utf16: integer(0) }, [
+      "start_utf16",
+      "end_utf16",
+    ]),
+  },
+  [
+    "turn_id",
+    "claim_id",
+    "claim_text",
+    "claim_type",
+    "support_mode",
+    "speech_span",
+  ],
+);
 const publicTurn = closed(
   {
     id: uuid,
@@ -66,6 +110,7 @@ const publicTurn = closed(
       enum: ["rag_grounded", "mixed", "general_reasoning"],
     },
     sources: arrayOf(retrievalSource),
+    evidence_trace: nullable(arrayOf(evidenceTrace)),
   },
   [
     "id",

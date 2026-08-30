@@ -285,6 +285,7 @@ class DebateTurn(Base):
     retrieval_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     grounding_mode: Mapped[str | None] = mapped_column(String(24), nullable=True)
     retrieval_receipts_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    evidence_trace_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     word_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     audio_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
