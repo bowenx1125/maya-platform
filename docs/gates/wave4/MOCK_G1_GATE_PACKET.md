@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `P1 REPAIRS LOCAL PASS / SOL G2 REAUDIT READY / REAL CALLS 0`
+Status: `SOL G2 CHANGES_REQUIRED_2 / SECOND P1 REPAIR ACTIVE / REAL CALLS 0`
 
 ## Scope
 
@@ -103,3 +103,22 @@ ESLint/TypeScript/Prettier/Next build, OpenAPI/generated client/strict route com
 WebSocket, repository/secret boundary, formal-content acceptance, empty/populated
 migrations through 0012 and the prior historical migration probes. A fresh read-only
 audit must bind its result to the exact clean repair SHA.
+
+## Second G2 result
+
+Sol High re-audited exact clean SHA
+`1aa7170c974879f49b7f6569b38b1f4a2374121d`. It verified closure of all first-round
+findings, then returned `CHANGES_REQUIRED / P0=0 / P1=2 / P2=0`:
+
+1. legal Persona fields at their contract limits could be copied verbatim into Mock
+   speech and exceed the frozen 200-word turn limit, making a confirmed Persona unable
+   to complete generation;
+2. a migration-era `running` legacy Debate with pending turns could reach the playback
+   generation adapter without the create/start Persona guard, despite the contract
+   allowing only Stop for incomplete legacy runs.
+
+The bounded Persona renderer must preserve six explainable dimensions while producing
+complete 80–200 word turns and exact non-empty trace at every phase. The generation
+adapter must reject an unconfirmed participant before any Mock/real call while leaving
+Stop and completed historical read/download/Replay intact. Both require full local
+regression and another exact-SHA read-only audit.

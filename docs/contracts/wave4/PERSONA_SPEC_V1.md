@@ -1,6 +1,6 @@
 # PersonaSpecV1
 
-Status: `FROZEN / P1 REPAIRED / LOCAL G1.5 PASS / SOL G2 REAUDIT READY`
+Status: `FROZEN / SECOND P1 REPAIR ACTIVE / LOCAL G1.5 PASS / REAL CALLS 0`
 
 ## Teaching contract
 
