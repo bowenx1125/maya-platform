@@ -29,7 +29,11 @@ from .operations import (
     OperationState,
     ReservationRequestV1,
 )
-from .snapshot_build import FIXED_EMBEDDING_MODEL, SnapshotPublishCandidateV1
+from .snapshot_build import (
+    MOCK_EMBEDDING_MODEL,
+    REAL_EMBEDDING_MODEL,
+    SnapshotPublishCandidateV1,
+)
 
 EMBEDDING_PROVIDER_OPERATION = "embedding"
 EMBEDDING_MAX_REQUESTS = 20
@@ -93,7 +97,10 @@ class SqlAlchemyEmbeddingControlAdapter:
         policy_hash: str,
         export_manifest_hash: str,
         build_manifest_hash: str,
-        model_key: str = FIXED_EMBEDDING_MODEL,
+        # Mock is the safe default for existing local/history flows.  A real
+        # run must pass REAL_EMBEDDING_MODEL explicitly and use a matching
+        # confirmed export manifest.
+        model_key: str = MOCK_EMBEDDING_MODEL,
     ) -> None:
         self.repository = ProviderRepository(database)  # type: ignore[arg-type]
         self.policy_hash = policy_hash
@@ -105,7 +112,7 @@ class SqlAlchemyEmbeddingControlAdapter:
         if (
             request.provider_operation != EMBEDDING_PROVIDER_OPERATION
             or request.build_manifest_hash != self.build_manifest_hash
-            or self.model_key != FIXED_EMBEDDING_MODEL
+            or self.model_key not in {MOCK_EMBEDDING_MODEL, REAL_EMBEDDING_MODEL}
         ):
             raise ValueError("embedding operation does not match the confirmed manifest")
         self.repository.save_scope_budget(
@@ -128,8 +135,8 @@ class SqlAlchemyEmbeddingControlAdapter:
                 policy_hash=self.policy_hash,
                 export_manifest_hash=self.export_manifest_hash,
                 build_manifest_hash=request.build_manifest_hash,
-                model_key=self.model_key,
                 operation_id=request.operation_id,
+                model_key=self.model_key,
             )
         )
         return _operation(value)

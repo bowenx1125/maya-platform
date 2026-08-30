@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
+from .snapshot_build import embedding_policy_version_for
 from .tokenizer import PinnedTokenizer, TokenizerError, count_tokens
 
 if TYPE_CHECKING:
@@ -81,6 +82,9 @@ class EmbeddingBatchV1:
     dimension: int
     items: tuple[EmbeddingItemV1, ...]
     total_tokens: int
+    policy_version: str = ""
+    embedding_provider: str = ""
+    embedding_region: str = ""
 
     @property
     def request_index(self) -> int:
@@ -107,8 +111,11 @@ class EmbeddingBatchV1:
             "batch_index": self.batch_index,
             "build_id": self.build_id,
             "build_manifest_hash": self.build_manifest_hash,
+            "embedding_provider": self.embedding_provider,
             "model_key": self.model_key,
+            "embedding_region": self.embedding_region,
             "dimension": self.dimension,
+            "policy_version": self.policy_version,
             "total_tokens": self.total_tokens,
             "items": [item.as_record() for item in self.items],
         }
@@ -127,6 +134,9 @@ class EmbeddingPlanV1:
     estimated_cost_cny: float
     tokenizer_id: str
     tokenizer_asset_hash: str
+    policy_version: str = ""
+    embedding_provider: str = ""
+    embedding_region: str = ""
 
     @property
     def request_count(self) -> int:
@@ -154,13 +164,17 @@ class EmbeddingPlanV1:
         payload = {
             "build_id": self.build_id,
             "build_manifest_hash": self.build_manifest_hash,
+            "embedding_provider": self.embedding_provider,
             "model_key": self.model_key,
+            "embedding_region": self.embedding_region,
             "dimension": self.dimension,
+            "policy_version": self.policy_version,
             "batches": [
                 {
                     "batch_index": batch.batch_index,
                     "chunk_ids": list(batch.chunk_ids),
                     "token_counts": [item.token_count for item in batch.items],
+                    "parameters": {"dimension": self.dimension},
                 }
                 for batch in self.batches
             ],
@@ -177,6 +191,9 @@ class EmbeddingPlanV1:
             "build_manifest_hash": self.build_manifest_hash,
             "model_key": self.model_key,
             "dimension": self.dimension,
+            "embedding_provider": self.embedding_provider,
+            "embedding_region": self.embedding_region,
+            "policy_version": self.policy_version,
             "total_tokens": self.total_tokens,
             "estimated_cost_cny": self.estimated_cost_cny,
             "tokenizer_id": self.tokenizer_id,
@@ -239,6 +256,16 @@ def plan_embedding_batches(
 
     if not build.chunks:
         raise EmbeddingPlanError("SnapshotBuild has no chunks", code="embedding_plan_empty")
+    policy_version = build.embedding_policy_version
+    if not policy_version:
+        policy_version = (
+            embedding_policy_version_for(build.embedding_model_key, build.embedding_dimension) or ""
+        )
+    if not policy_version:
+        raise EmbeddingPlanError(
+            "embedding resource has no supported policy version",
+            code="embedding_resource_invalid",
+        )
     effective_tokenizer = tokenizer if tokenizer is not None else Utf8ByteTokenizer()
     tokenizer_id = str(getattr(effective_tokenizer, "tokenizer_id", "unknown"))
     tokenizer_asset_hash = str(getattr(effective_tokenizer, "asset_hash", "unknown"))
@@ -279,6 +306,9 @@ def plan_embedding_batches(
                     dimension=build.embedding_dimension,
                     items=tuple(current),
                     total_tokens=current_tokens,
+                    policy_version=policy_version,
+                    embedding_provider=build.embedding_provider,
+                    embedding_region=build.embedding_region,
                 )
             )
             current = []
@@ -295,6 +325,9 @@ def plan_embedding_batches(
                 dimension=build.embedding_dimension,
                 items=tuple(current),
                 total_tokens=current_tokens,
+                policy_version=policy_version,
+                embedding_provider=build.embedding_provider,
+                embedding_region=build.embedding_region,
             )
         )
 
@@ -319,6 +352,9 @@ def plan_embedding_batches(
         estimated_cost_cny=float(estimated),
         tokenizer_id=tokenizer_id,
         tokenizer_asset_hash=tokenizer_asset_hash,
+        policy_version=policy_version,
+        embedding_provider=build.embedding_provider,
+        embedding_region=build.embedding_region,
     )
 
 

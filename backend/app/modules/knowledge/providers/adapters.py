@@ -9,6 +9,7 @@ perform its own Gate/policy/reservation checks first.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -24,7 +25,13 @@ from .packing import (
     EmbeddingBatchV1,
     EmbeddingPlanError,
 )
-from .snapshot_build import FIXED_EMBEDDING_DIMENSION, FIXED_EMBEDDING_MODEL
+from .snapshot_build import (
+    REAL_EMBEDDING_DIMENSION,
+    REAL_EMBEDDING_MODEL,
+    REAL_EMBEDDING_POLICY_VERSION,
+    REAL_EMBEDDING_PROVIDER,
+    REAL_EMBEDDING_REGION,
+)
 
 DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH = (
     "/api/v1/services/embeddings/text-embedding/text-embedding"
@@ -106,6 +113,14 @@ class EmbeddingProviderError(RuntimeError):
         self.code = code
 
 
+class EmbeddingHTTPRejected(EmbeddingProviderError):
+    """A supplier HTTP status explicitly rejected the request."""
+
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+        super().__init__(code="provider_http_rejected")
+
+
 class EmbeddingTransportNotSent(EmbeddingProviderError):
     """Transport proved that no supplier request could have been accepted."""
 
@@ -135,16 +150,17 @@ class DashScopeEmbeddingConfig:
     resource is allowed and provide a transport explicitly.
     """
 
-    api_key: str = ""
+    api_key: str = field(default="", repr=False)
     workspace_id: str = ""
-    region: str = "cn-beijing"
-    model_key: str = FIXED_EMBEDDING_MODEL
-    dimension: int = FIXED_EMBEDDING_DIMENSION
+    region: str = REAL_EMBEDDING_REGION
+    model_key: str = REAL_EMBEDDING_MODEL
+    dimension: int = REAL_EMBEDDING_DIMENSION
+    policy_version: str = REAL_EMBEDDING_POLICY_VERSION
     endpoint: str | None = None
 
     @property
     def resolved_endpoint(self) -> str:
-        if self.region != "cn-beijing":
+        if self.region != REAL_EMBEDDING_REGION:
             raise ValueError("embedding endpoint must be in cn-beijing")
         if self.endpoint is not None:
             _validate_https_endpoint(self.endpoint)
@@ -170,6 +186,31 @@ def _validate_https_endpoint(value: str) -> None:
         raise ValueError("embedding endpoint is invalid")
 
 
+def _validate_dashscope_resource(config: DashScopeEmbeddingConfig) -> str:
+    """Validate the exact real-provider resource before request construction."""
+
+    if (
+        config.region != REAL_EMBEDDING_REGION
+        or config.model_key != REAL_EMBEDDING_MODEL
+        or config.dimension != REAL_EMBEDDING_DIMENSION
+        or config.policy_version != REAL_EMBEDDING_POLICY_VERSION
+        or not config.workspace_id
+    ):
+        raise ValueError("DashScope embedding resource is not the fixed 1024 contract")
+    endpoint = config.resolved_endpoint
+    parsed = urlsplit(endpoint)
+    expected_host = f"{config.workspace_id}.cn-beijing.maas.aliyuncs.com".lower()
+    if (
+        parsed.scheme.lower() != "https"
+        or parsed.hostname != expected_host
+        or parsed.path != DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("DashScope embedding endpoint is not the fixed Beijing workspace")
+    return endpoint
+
+
 def _response_parts(response: object) -> tuple[int, object]:
     if isinstance(response, EmbeddingTransportResponse):
         return response.status_code, response.payload
@@ -185,7 +226,15 @@ def _response_parts(response: object) -> tuple[int, object]:
     raise EmbeddingAdapterError("embedding transport returned an invalid response")
 
 
-def _validate_batch_before_send(batch: EmbeddingBatchV1) -> None:
+def _validate_batch_before_send(
+    batch: EmbeddingBatchV1,
+    *,
+    expected_model: str | None = None,
+    expected_dimension: int | None = None,
+    expected_provider: str | None = None,
+    expected_region: str | None = None,
+    expected_policy_version: str | None = None,
+) -> None:
     if not batch.items:
         raise EmbeddingPlanError("embedding batch cannot be empty", code="embedding_plan_empty")
     if len(batch.items) > MAX_BATCH_ITEMS:
@@ -212,12 +261,51 @@ def _validate_batch_before_send(batch: EmbeddingBatchV1) -> None:
             "embedding batch contains a different SnapshotBuild",
             code="embedding_build_mismatch",
         )
+    if any(
+        hashlib.sha256(item.text.encode("utf-8")).hexdigest() != item.chunk_sha256
+        for item in batch.items
+    ):
+        raise EmbeddingPlanError(
+            "embedding batch contains altered chunk text",
+            code="embedding_build_mismatch",
+        )
+    if expected_model is not None and batch.model_key != expected_model:
+        raise EmbeddingPlanError(
+            "embedding batch model does not match the selected resource",
+            code="embedding_model_mismatch",
+        )
+    if expected_dimension is not None and batch.dimension != expected_dimension:
+        raise EmbeddingPlanError(
+            "embedding batch dimension does not match the selected resource",
+            code="embedding_dimension_mismatch",
+        )
+    if expected_provider is not None and batch.embedding_provider != expected_provider:
+        raise EmbeddingPlanError(
+            "embedding batch provider does not match the selected resource",
+            code="embedding_provider_mismatch",
+        )
+    if expected_region is not None and batch.embedding_region != expected_region:
+        raise EmbeddingPlanError(
+            "embedding batch region does not match the selected resource",
+            code="embedding_region_mismatch",
+        )
+    if expected_policy_version is not None and batch.policy_version != expected_policy_version:
+        raise EmbeddingPlanError(
+            "embedding batch policy does not match the selected resource",
+            code="embedding_policy_mismatch",
+        )
 
 
 class OpenAICompatibleEmbeddingAdapter:
     """Embedding adapter for an injected OpenAI-compatible transport."""
 
     key = "openai-compatible"
+    # This generic adapter is retained as an inert compatibility seam.  It is
+    # not a permitted Maya identity; the fixed production path is DashScope
+    # below.  Leaving provider blank avoids pretending that an arbitrary
+    # OpenAI-compatible endpoint is a closed resource.
+    provider = ""
+    region = ""
 
     def __init__(
         self,
@@ -225,18 +313,22 @@ class OpenAICompatibleEmbeddingAdapter:
         *,
         endpoint: str,
         api_key: str = "",
-        model_key: str = FIXED_EMBEDDING_MODEL,
-        dimension: int = FIXED_EMBEDDING_DIMENSION,
+        model_key: str = REAL_EMBEDDING_MODEL,
+        dimension: int = REAL_EMBEDDING_DIMENSION,
+        policy_version: str = REAL_EMBEDDING_POLICY_VERSION,
         timeout_seconds: float = 30.0,
     ) -> None:
         _validate_https_endpoint(endpoint)
         if not model_key or dimension < 1 or timeout_seconds <= 0:
             raise ValueError("embedding adapter configuration is invalid")
+        if not policy_version:
+            raise ValueError("embedding adapter policy version is required")
         self.transport = transport
         self.endpoint = endpoint
         self.api_key = api_key
         self.model_key = model_key
         self.dimension = dimension
+        self.policy_version = policy_version
         self.timeout_seconds = timeout_seconds
 
     @property
@@ -251,7 +343,14 @@ class OpenAICompatibleEmbeddingAdapter:
         }
 
     def embed_batch(self, batch: EmbeddingBatchV1) -> ValidatedEmbeddingBatchV1:
-        _validate_batch_before_send(batch)
+        _validate_batch_before_send(
+            batch,
+            expected_model=self.model_key,
+            expected_dimension=self.dimension,
+            expected_provider=self.provider or None,
+            expected_region=self.region or None,
+            expected_policy_version=self.policy_version,
+        )
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -264,6 +363,17 @@ class OpenAICompatibleEmbeddingAdapter:
             )
         except EmbeddingProviderError:
             raise
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            # Keep this classification here as well as in HttpxEmbeddingTransport:
+            # injected fakes may raise the concrete HTTPX exception directly.
+            raise EmbeddingTransportNotSent() from exc
+        except (
+            httpx.ReadTimeout,
+            httpx.RemoteProtocolError,
+            httpx.NetworkError,
+            httpx.TimeoutException,
+        ) as exc:
+            raise EmbeddingAcceptanceUnknown() from exc
         except (TimeoutError, ConnectionError, OSError) as exc:
             # A generic broken connection cannot prove whether the supplier
             # accepted the request.  Callers must persist this state and never
@@ -273,12 +383,15 @@ class OpenAICompatibleEmbeddingAdapter:
             raise EmbeddingProviderError() from exc
         status_code, payload = _response_parts(response)
         if status_code < 200 or status_code >= 300:
-            raise EmbeddingProviderError(code="provider_http_rejected")
+            raise EmbeddingHTTPRejected(status_code)
         return validate_embedding_batch_response(
             payload,
             batch,
             expected_model=self.model_key,
             expected_dimension=self.dimension,
+            expected_provider=self.provider,
+            expected_region=self.region or None,
+            expected_policy_version=self.policy_version,
         )
 
     def embed(self, batch: EmbeddingBatchV1) -> ValidatedEmbeddingBatchV1:
@@ -289,6 +402,8 @@ class DashScopeEmbeddingAdapter(OpenAICompatibleEmbeddingAdapter):
     """Fixed Beijing DashScope adapter over a caller-injected transport."""
 
     key = "dashscope"
+    provider = REAL_EMBEDDING_PROVIDER
+    region = REAL_EMBEDDING_REGION
 
     def __init__(
         self,
@@ -297,12 +412,14 @@ class DashScopeEmbeddingAdapter(OpenAICompatibleEmbeddingAdapter):
         *,
         timeout_seconds: float = 30.0,
     ) -> None:
+        endpoint = _validate_dashscope_resource(config)
         super().__init__(
             transport,
-            endpoint=config.resolved_endpoint,
+            endpoint=endpoint,
             api_key=config.api_key,
             model_key=config.model_key,
             dimension=config.dimension,
+            policy_version=config.policy_version,
             timeout_seconds=timeout_seconds,
         )
         self.config = config
@@ -313,6 +430,7 @@ class DashScopeEmbeddingAdapter(OpenAICompatibleEmbeddingAdapter):
         return {
             "model": self.model_key,
             "input": {"texts": list(batch.texts)},
+            "parameters": {"dimension": REAL_EMBEDDING_DIMENSION},
         }
 
 
@@ -329,6 +447,7 @@ __all__ = [
     "DashScopeEmbeddingProvider",
     "EmbeddingAcceptanceUnknown",
     "EmbeddingAdapterError",
+    "EmbeddingHTTPRejected",
     "EmbeddingProviderError",
     "EmbeddingTransport",
     "EmbeddingTransportNotSent",

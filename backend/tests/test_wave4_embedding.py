@@ -12,6 +12,11 @@ from app.modules.debates.generation.retrieval import SnapshotRetriever, TurnSubq
 from app.modules.knowledge.markdown import mock_embedding
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers import (
+    REAL_EMBEDDING_DIMENSION,
+    REAL_EMBEDDING_MODEL,
+    REAL_EMBEDDING_POLICY_VERSION,
+    REAL_EMBEDDING_PROVIDER,
+    EmbeddingHTTPRejected,
     EmbeddingPlanError,
     EmbeddingResponseError,
     EmbeddingShapeError,
@@ -24,12 +29,15 @@ from app.modules.knowledge.providers import (
     Utf8ByteTokenizer,
     plan_embedding_batches,
     prepare_snapshot_build,
+    reservation_request_for_batch,
+    validate_real_embedding_response,
 )
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingAdapter,
     DashScopeEmbeddingConfig,
     EmbeddingAcceptanceUnknown,
     EmbeddingTransportNotSent,
+    EmbeddingTransportResponse,
 )
 from app.modules.knowledge.providers.embedding import validate_embedding_response
 from app.modules.knowledge.providers.operations import (
@@ -39,7 +47,11 @@ from app.modules.knowledge.providers.operations import (
 from app.modules.knowledge.vector import MockVectorStore, StoredVectorRow
 
 
-def _build(text: str = "TikTok recommendation governance and public safety.") -> SnapshotBuildV1:
+def _build(
+    text: str = "TikTok recommendation governance and public safety.",
+    *,
+    dimension: int = 256,
+) -> SnapshotBuildV1:
     return prepare_snapshot_build(
         agent_version_id="agent-version-1",
         knowledge_snapshot_id="snapshot-new-1",
@@ -52,6 +64,17 @@ def _build(text: str = "TikTok recommendation governance and public safety.") ->
                 "text": text,
             }
         ],
+        embedding_model_key=(
+            REAL_EMBEDDING_MODEL if dimension == REAL_EMBEDDING_DIMENSION else "mock-sha256-v1"
+        ),
+        embedding_dimension=dimension,
+        embedding_provider=(
+            REAL_EMBEDDING_PROVIDER if dimension == REAL_EMBEDDING_DIMENSION else "mock"
+        ),
+        embedding_region=("cn-beijing" if dimension == REAL_EMBEDDING_DIMENSION else "local"),
+        embedding_policy_version=(
+            REAL_EMBEDDING_POLICY_VERSION if dimension == REAL_EMBEDDING_DIMENSION else "w4-mock-v1"
+        ),
     )
 
 
@@ -85,6 +108,11 @@ def _manual_build(chunk_count: int = 12, *, token_count: int = 3) -> SnapshotBui
         draft_revision=1,
         persona_spec_hash="persona-hash",
         documents=(document,),
+        embedding_model_key="mock-sha256-v1",
+        embedding_dimension=256,
+        embedding_provider="mock",
+        embedding_region="local",
+        embedding_policy_version="w4-mock-v1",
     )
 
 
@@ -110,6 +138,27 @@ def test_snapshot_build_manifest_is_canonical_and_changes_on_source_or_persona_d
         ],
     )
     assert changed_persona.manifest_hash != first.manifest_hash
+
+
+def test_snapshot_chunk_ids_are_stable_per_snapshot_but_not_cross_snapshot() -> None:
+    first = _build()
+    rebuilt = _build()
+    other_snapshot = prepare_snapshot_build(
+        agent_version_id=first.agent_version_id,
+        knowledge_snapshot_id="snapshot-new-2",
+        draft_revision=first.draft_revision,
+        persona_spec_hash=first.persona_spec_hash,
+        documents=[
+            {
+                "document_id": "document-1",
+                "source_filename": "lesson.md",
+                "text": first.documents[0].normalized_text,
+            }
+        ],
+    )
+
+    assert first.chunks[0].chunk_id == rebuilt.chunks[0].chunk_id
+    assert first.chunks[0].chunk_id != other_snapshot.chunks[0].chunk_id
 
 
 def test_utf8_fallback_rejects_long_unbroken_input_before_provider_call() -> None:
@@ -197,10 +246,10 @@ class _FakeTransport:
 
 
 def test_dashscope_adapter_uses_only_injected_transport_and_validates_fixed_shape() -> None:
-    build = _build()
+    build = _build(dimension=1024)
     plan = plan_embedding_batches(build)
     transport = _FakeTransport(
-        {"model": "text-embedding-v4", "data": [{"index": 0, "embedding": [0.0] * 256}]}
+        {"model": "text-embedding-v4", "data": [{"index": 0, "embedding": [0.0] * 1024}]}
     )
     adapter = DashScopeEmbeddingAdapter(
         DashScopeEmbeddingConfig(api_key="test-only", workspace_id="workspace"), transport
@@ -209,6 +258,99 @@ def test_dashscope_adapter_uses_only_injected_transport_and_validates_fixed_shap
     assert result.count == 1
     assert len(transport.calls) == 1
     assert transport.calls[0][1]["model"] == "text-embedding-v4"
+
+
+def test_real_dashscope_payload_pins_dimension_and_request_hash_without_key() -> None:
+    build = _build(dimension=REAL_EMBEDDING_DIMENSION)
+    plan = plan_embedding_batches(build)
+    transport = _FakeTransport(
+        {
+            "model": REAL_EMBEDDING_MODEL,
+            "data": [{"index": 0, "embedding": [0.0] * REAL_EMBEDDING_DIMENSION}],
+        }
+    )
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(
+            api_key="fixture-secret-that-must-not-enter-json",
+            workspace_id="workspace",
+        ),
+        transport,
+    )
+
+    result = adapter.embed_batch(plan.batches[0])
+    request = reservation_request_for_batch(plan.batches[0], scope_id="real-scope")
+    payload = transport.calls[0][1]
+
+    assert result.dimension == REAL_EMBEDDING_DIMENSION
+    assert result.policy_version == REAL_EMBEDDING_POLICY_VERSION
+    assert plan.policy_version == REAL_EMBEDDING_POLICY_VERSION
+    assert plan.batches[0].as_record()["dimension"] == REAL_EMBEDDING_DIMENSION
+    assert plan.batches[0].as_record()["policy_version"] == REAL_EMBEDDING_POLICY_VERSION
+    assert len(request.request_hash) == 64
+    assert plan.plan_hash == plan_embedding_batches(build).plan_hash
+    assert payload["parameters"] == {"dimension": REAL_EMBEDDING_DIMENSION}
+    assert "api_key" not in payload
+    assert "authorization" not in payload
+
+
+@pytest.mark.parametrize("dimension", [256, 768, 1023, 1025])
+def test_real_validator_rejects_every_non_1024_dimension(dimension: int) -> None:
+    with pytest.raises(EmbeddingShapeError):
+        validate_real_embedding_response(
+            {
+                "model": REAL_EMBEDDING_MODEL,
+                "data": [{"index": 0, "embedding": [0.0] * dimension}],
+            },
+            expected_count=1,
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not-a-vector",
+        [0.0] * 1023,
+        ["not-a-number"] * REAL_EMBEDDING_DIMENSION,
+        [float("nan")] + [0.0] * 1023,
+        [float("inf")] + [0.0] * 1023,
+    ],
+)
+def test_real_validator_rejects_non_numeric_nonfinite_or_malformed_vectors(value: object) -> None:
+    with pytest.raises(EmbeddingShapeError):
+        validate_real_embedding_response(
+            {"model": REAL_EMBEDDING_MODEL, "data": [{"index": 0, "embedding": value}]},
+            expected_count=1,
+        )
+
+
+@pytest.mark.parametrize("status_code", [429, 500])
+def test_dashscope_http_rejection_is_explicit_and_never_retried(status_code: int) -> None:
+    build = _build(dimension=REAL_EMBEDDING_DIMENSION)
+    batch = plan_embedding_batches(build).batches[0]
+    transport = _FakeTransport(EmbeddingTransportResponse(status_code, {"error": "redacted"}))
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"),
+        transport,
+    )
+
+    with pytest.raises(EmbeddingHTTPRejected) as error:
+        adapter.embed_batch(batch)
+    assert error.value.status_code == status_code
+    assert error.value.code == "provider_http_rejected"
+    assert len(transport.calls) == 1
+
+
+def test_mock_embedding_contract_remains_256_and_mock_key() -> None:
+    build = _build()
+    batch = plan_embedding_batches(build).batches[0]
+    provider = MockEmbeddingProvider()
+
+    result = provider.embed_batch(batch)
+
+    assert provider.key == "mock-sha256-v1"
+    assert result.dimension == 256
+    assert result.policy_version == "w4-mock-v1"
+    assert all(len(vector) == 256 for vector in result.vectors)
 
 
 def test_acceptance_unknown_is_durable_and_not_auto_retried() -> None:
@@ -285,7 +427,7 @@ def test_adapter_timeout_is_acceptance_unknown_and_proven_not_sent_is_distinct()
             del url, headers, json, timeout
             raise EmbeddingTransportNotSent()
 
-    build = _build()
+    build = _build(dimension=1024)
     batch = plan_embedding_batches(build).batches[0]
     timeout_adapter = DashScopeEmbeddingAdapter(
         DashScopeEmbeddingConfig(workspace_id="workspace"), TimeoutTransport()

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from app.core.config import Settings
 from app.modules.knowledge.providers import (
+    REAL_EMBEDDING_DIMENSION,
+    REAL_EMBEDDING_MODEL,
+    REAL_EMBEDDING_POLICY_VERSION,
+    REAL_EMBEDDING_REGION,
     DashScopeEmbeddingAdapter,
     DashScopeEmbeddingConfig,
     EmbeddingProvider,
@@ -83,7 +87,10 @@ def embedding_provider(
         DashScopeEmbeddingConfig(
             api_key=settings.dashscope_api_key,
             workspace_id=settings.dashscope_workspace_id,
-            region=settings.dashscope_region,
+            region=REAL_EMBEDDING_REGION,
+            model_key=REAL_EMBEDDING_MODEL,
+            dimension=REAL_EMBEDDING_DIMENSION,
+            policy_version=REAL_EMBEDDING_POLICY_VERSION,
         ),
         transport or HttpxEmbeddingTransport(),
     )

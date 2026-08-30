@@ -8,6 +8,11 @@ from typing import Any, cast
 
 import pytest
 from app.modules.knowledge.providers import (
+    REAL_EMBEDDING_DIMENSION,
+    REAL_EMBEDDING_MODEL,
+    REAL_EMBEDDING_POLICY_VERSION,
+    REAL_EMBEDDING_PROVIDER,
+    REAL_EMBEDDING_REGION,
     EmbeddingPlanError,
     InMemoryEmbeddingLedger,
     MockEmbeddingProvider,
@@ -15,13 +20,17 @@ from app.modules.knowledge.providers import (
     SnapshotBuildChunkV1,
     SnapshotBuildDocumentV1,
     SnapshotBuildV1,
+    plan_embedding_batches,
     prepare_snapshot_build,
 )
 from app.modules.knowledge.providers.adapters import (
+    DashScopeEmbeddingAdapter,
     DashScopeEmbeddingConfig,
     EmbeddingTransportNotSent,
 )
+from app.modules.knowledge.providers.operations import EmbeddingOperationV1
 from app.modules.knowledge.providers.runtime import (
+    AcceptedEmbeddingStageV1,
     InMemoryEmbeddingStageStore,
     InMemorySnapshotPublicationStore,
     SnapshotBuildDriftError,
@@ -29,6 +38,8 @@ from app.modules.knowledge.providers.runtime import (
     SnapshotEmbeddingRuntimeError,
     SnapshotPublicationError,
     SnapshotPublicationPort,
+    _reservation_request,
+    _response_hash,
 )
 
 
@@ -45,6 +56,11 @@ def _build(text: str = "TikTok recommendation governance and public safety.") ->
                 "text": text,
             }
         ],
+        embedding_model_key=REAL_EMBEDDING_MODEL,
+        embedding_dimension=REAL_EMBEDDING_DIMENSION,
+        embedding_provider=REAL_EMBEDDING_PROVIDER,
+        embedding_region=REAL_EMBEDDING_REGION,
+        embedding_policy_version=REAL_EMBEDDING_POLICY_VERSION,
     )
 
 
@@ -75,6 +91,11 @@ def _multi_batch_build(chunk_count: int = 11) -> SnapshotBuildV1:
         draft_revision=1,
         persona_spec_hash="persona-hash",
         documents=(document,),
+        embedding_model_key=REAL_EMBEDDING_MODEL,
+        embedding_dimension=REAL_EMBEDDING_DIMENSION,
+        embedding_provider=REAL_EMBEDDING_PROVIDER,
+        embedding_region=REAL_EMBEDDING_REGION,
+        embedding_policy_version=REAL_EMBEDDING_POLICY_VERSION,
     )
 
 
@@ -104,7 +125,7 @@ class _Transport:
             texts = values
         if not isinstance(texts, list):
             raise AssertionError("runtime sent an invalid input envelope")
-        data = [{"index": index, "embedding": [0.0] * 256} for index, _ in enumerate(texts)]
+        data = [{"index": index, "embedding": [0.0] * 1024} for index, _ in enumerate(texts)]
         if self.failure == "wrong_model":
             return {"model": "different-model", "data": data}
         if self.failure == "short":
@@ -139,7 +160,7 @@ class _Transport:
 @dataclass
 class _BadResponseProvider:
     model_key: str = "text-embedding-v4"
-    dimension: int = 256
+    dimension: int = 1024
 
     def embed_batch(self, batch: Any) -> object:
         del batch
@@ -174,6 +195,44 @@ def _runtime(
     return runtime, wire, ledger, destination
 
 
+def _accepted_stage_fixture(
+    build: SnapshotBuildV1,
+) -> tuple[
+    InMemoryEmbeddingLedger,
+    InMemoryEmbeddingStageStore,
+    tuple[EmbeddingOperationV1, ...],
+    AcceptedEmbeddingStageV1,
+]:
+    control = InMemoryEmbeddingLedger()
+    stage_store = InMemoryEmbeddingStageStore()
+    transport = _Transport()
+    provider = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"), transport
+    )
+    batch = plan_embedding_batches(build).batches[0]
+    request = _reservation_request(
+        batch,
+        scope_id="resume-scope",
+        attempt_no=1,
+        provider_operation="embedding_snapshot",
+        price_cny_per_million=0.5,
+    )
+    operation = control.create_prepared(request)
+    control.reserve(operation)
+    operation = control.mark_sending(operation.id)
+    result = provider.embed_batch(batch)
+    stage = AcceptedEmbeddingStageV1.from_result(
+        operation.id,
+        result,
+        response_hash=_response_hash(result),
+    )
+    stage_store.bind_control(control)
+    stage_store.stage_accepted(stage)
+    current = control.get(operation.id)
+    assert current is not None
+    return control, stage_store, (current,), stage
+
+
 def test_runtime_orders_reserve_send_stage_accept_publish_and_succeed() -> None:
     build = _build()
     stage_store = InMemoryEmbeddingStageStore()
@@ -184,6 +243,7 @@ def test_runtime_orders_reserve_send_stage_accept_publish_and_succeed() -> None:
     assert result.succeeded
     assert result.snapshot_id == build.knowledge_snapshot_id
     assert len(transport.calls) == 1
+    assert transport.calls[0][1]["parameters"] == {"dimension": 1024}
     assert len(result.operations) == 1
     assert result.operations[0].state == "succeeded"
     assert result.operations[0].reservation_id is not None
@@ -433,3 +493,96 @@ def test_dashscope_config_rejects_non_workspace_endpoint_before_transport() -> N
             ),
             transport=_Transport(),
         )
+
+
+def test_runtime_keeps_existing_mock_snapshot_path_at_256_dimensions() -> None:
+    build = prepare_snapshot_build(
+        agent_version_id="mock-agent-version",
+        knowledge_snapshot_id="mock-snapshot",
+        draft_revision=1,
+        persona_spec_hash="mock-persona",
+        documents=[
+            {
+                "document_id": "mock-document",
+                "source_filename": "lesson.md",
+                "text": "Existing Mock snapshot content.",
+            }
+        ],
+    )
+    provider = MockEmbeddingProvider()
+    runtime = SnapshotEmbeddingRuntime(
+        control=InMemoryEmbeddingLedger(),
+        provider=provider,
+        publisher=InMemorySnapshotPublicationStore(),
+    )
+
+    result = runtime.run(build, scope_id="mock-runtime")
+
+    assert result.status == "succeeded"
+    assert build.embedding_dimension == 256
+    assert result.plan.dimension == 256
+    assert provider.call_count == 1
+
+
+def test_resume_from_complete_stages_publishes_without_provider_call() -> None:
+    build = _build()
+    control, stage_store, operations, stage = _accepted_stage_fixture(build)
+    publisher = InMemorySnapshotPublicationStore()
+    runtime = SnapshotEmbeddingRuntime(
+        control=control,
+        provider=_BadResponseProvider(),
+        publisher=publisher,
+        stage_store=stage_store,
+    )
+
+    result = runtime.resume_from_stages(
+        build,
+        operations=operations,
+        stages=(stage,),
+        scope_id="resume-scope",
+    )
+
+    assert result.status == "succeeded"
+    assert publisher.get(build.knowledge_snapshot_id) is not None
+    assert result.operations[0].state == "succeeded"
+
+
+def test_resume_from_missing_or_corrupt_stage_is_unknown_and_never_published() -> None:
+    build = _build()
+    control, stage_store, operations, stage = _accepted_stage_fixture(build)
+    publisher = InMemorySnapshotPublicationStore()
+    runtime = SnapshotEmbeddingRuntime(
+        control=control,
+        provider=_BadResponseProvider(),
+        publisher=publisher,
+        stage_store=stage_store,
+    )
+
+    missing = runtime.resume_from_stages(
+        build,
+        operations=operations,
+        stages=(),
+        scope_id="resume-scope",
+    )
+    assert missing.status == "acceptance_unknown"
+    assert missing.safe_error_code == "embedding_stage_missing"
+    assert publisher.published_snapshot_ids == ()
+
+    # Use an independent accepted operation so the first unknown transition
+    # does not mask the corrupt-stage check.
+    control2, stage_store2, operations2, stage2 = _accepted_stage_fixture(build)
+    object.__setattr__(stage2, "dimension", 256)
+    corrupt_runtime = SnapshotEmbeddingRuntime(
+        control=control2,
+        provider=_BadResponseProvider(),
+        publisher=InMemorySnapshotPublicationStore(),
+        stage_store=stage_store2,
+    )
+    corrupt = corrupt_runtime.resume_from_stages(
+        build,
+        operations=operations2,
+        stages=(stage2,),
+        scope_id="resume-scope",
+    )
+    assert corrupt.status == "acceptance_unknown"
+    assert corrupt.safe_error_code == "embedding_stage_invalid"

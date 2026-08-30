@@ -18,6 +18,7 @@ from app.core.models import (
     KnowledgeSnapshot,
 )
 from app.modules.knowledge.providers import (
+    MOCK_EMBEDDING_MODEL,
     InMemorySnapshotPublicationStore,
     MockEmbeddingProvider,
     SnapshotBuildV1,
@@ -29,7 +30,6 @@ from app.modules.knowledge.providers import (
 from app.modules.knowledge.providers.snapshot_build import SnapshotBuildInputDocument
 from app.modules.knowledge.services import document_file_content
 from app.providers.control import (
-    FIXED_MODELS,
     ExportFieldV1,
     ExportManifestV1,
     ProviderPolicySnapshotV1,
@@ -94,7 +94,7 @@ def _prepare_control(
     manifest = ExportManifestV1(
         scope_id=selected_build.build_id,
         provider_operation="embedding",
-        model_key=FIXED_MODELS["embedding"],
+        model_key=MOCK_EMBEDDING_MODEL,
         policy_hash=policy.policy_hash,
         build_manifest_hash=selected_build.manifest_hash,
         persona_spec_hash=selected_build.persona_spec_hash,
@@ -276,7 +276,7 @@ def test_sql_publisher_commits_real_vector_snapshot_and_operation_success_atomic
         assert published is not None and published.state == "published"
         assert published.knowledge_snapshot_id == build.knowledge_snapshot_id
         snapshot = db.get(KnowledgeSnapshot, build.knowledge_snapshot_id)
-        assert snapshot is not None and snapshot.embedding_key == "text-embedding-v4"
+        assert snapshot is not None and snapshot.embedding_key == "mock-sha256-v1"
         assert snapshot.chunks
         assert all(chunk.embedding_dimension == 256 for chunk in snapshot.chunks)
     operations = repository.operations(scope_id=build.build_id)

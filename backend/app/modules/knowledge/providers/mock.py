@@ -12,7 +12,14 @@ from app.modules.knowledge.markdown import mock_embedding
 from .adapters import EmbeddingAcceptanceUnknown, EmbeddingTransportNotSent
 from .embedding import ValidatedEmbeddingBatchV1
 from .packing import EmbeddingBatchV1
-from .snapshot_build import FIXED_EMBEDDING_DIMENSION, FIXED_EMBEDDING_MODEL
+from .snapshot_build import (
+    MOCK_EMBEDDING_DIMENSION,
+    MOCK_EMBEDDING_KEY,
+    MOCK_EMBEDDING_MODEL,
+    MOCK_EMBEDDING_POLICY_VERSION,
+    MOCK_EMBEDDING_PROVIDER,
+    MOCK_EMBEDDING_REGION,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,17 +35,22 @@ class MockEmbeddingCall:
 class MockEmbeddingProvider:
     """Byte-stable 256-dimensional vectors with explicit test failures."""
 
-    model_key: str = FIXED_EMBEDDING_MODEL
-    dimension: int = FIXED_EMBEDDING_DIMENSION
-    key: str = "mock-sha256-v1"
+    model_key: str = MOCK_EMBEDDING_MODEL
+    dimension: int = MOCK_EMBEDDING_DIMENSION
+    key: str = MOCK_EMBEDDING_KEY
+    policy_version: str = MOCK_EMBEDDING_POLICY_VERSION
+    provider: str = MOCK_EMBEDDING_PROVIDER
+    region: str = MOCK_EMBEDDING_REGION
     failures: Iterable[str] = ()
     calls: int = field(default=0, init=False)
     call_log: list[MockEmbeddingCall] = field(default_factory=list, init=False)
     _failures: deque[str] = field(default_factory=deque, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if self.dimension != FIXED_EMBEDDING_DIMENSION:
+        if self.dimension != MOCK_EMBEDDING_DIMENSION:
             raise ValueError("W4-EMBED Mock vectors must be dimension 256")
+        if self.policy_version != MOCK_EMBEDDING_POLICY_VERSION:
+            raise ValueError("W4-EMBED Mock policy is mock-sha256-v1")
         self._failures.extend(str(item) for item in self.failures)
 
     @property
@@ -61,7 +73,22 @@ class MockEmbeddingProvider:
         # Mock acceptance honest without involving export confirmation.
         from .adapters import _validate_batch_before_send
 
-        _validate_batch_before_send(batch)
+        _validate_batch_before_send(
+            batch,
+            expected_model=self.model_key,
+            expected_dimension=self.dimension,
+            expected_provider=self.provider,
+            expected_region=self.region,
+            expected_policy_version=self.policy_version,
+        )
+        if (
+            batch.model_key != self.model_key
+            or batch.dimension != self.dimension
+            or batch.embedding_provider != self.provider
+            or batch.embedding_region != self.region
+            or batch.policy_version != self.policy_version
+        ):
+            raise ValueError("Mock embedding batch does not match mock-sha256-v1/256")
         self.calls += 1
         self.call_log.append(
             MockEmbeddingCall(batch.build_manifest_hash, batch.batch_index, len(batch.items))
@@ -71,7 +98,10 @@ class MockEmbeddingProvider:
             raise EmbeddingTransportNotSent()
         if failure in {"acceptance_unknown", "timeout", "transport_unknown"}:
             raise EmbeddingAcceptanceUnknown()
-        vectors = [list(struct.unpack("<256f", mock_embedding(item.text))) for item in batch.items]
+        vectors = [
+            list(struct.unpack(f"<{MOCK_EMBEDDING_DIMENSION}f", mock_embedding(item.text)))
+            for item in batch.items
+        ]
         data: list[dict[str, object]] = [
             {"index": index, "embedding": vector} for index, vector in enumerate(vectors)
         ]
@@ -104,7 +134,15 @@ class MockEmbeddingProvider:
         # Mock cannot accidentally publish partial or malformed vectors.
         from .embedding import validate_embedding_batch_response
 
-        return validate_embedding_batch_response(payload, batch, expected_model=self.model_key)
+        return validate_embedding_batch_response(
+            payload,
+            batch,
+            expected_model=self.model_key,
+            expected_dimension=MOCK_EMBEDDING_DIMENSION,
+            expected_provider=MOCK_EMBEDDING_PROVIDER,
+            expected_region=MOCK_EMBEDDING_REGION,
+            expected_policy_version=MOCK_EMBEDDING_POLICY_VERSION,
+        )
 
     def embed(self, batch: EmbeddingBatchV1) -> ValidatedEmbeddingBatchV1:
         return self.embed_batch(batch)

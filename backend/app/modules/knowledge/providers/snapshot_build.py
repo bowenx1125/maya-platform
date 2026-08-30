@@ -19,9 +19,119 @@ from uuid import NAMESPACE_URL, uuid5
 from app.modules.knowledge.markdown import MarkdownDocument, chunk_markdown, normalize_markdown
 
 DEFAULT_CHUNKING_VERSION = "markdown-heading-paragraph-v1"
-FIXED_EMBEDDING_MODEL = "text-embedding-v4"
-FIXED_EMBEDDING_DIMENSION = 256
+
+# Embedding identity is deliberately closed.  In particular, the Mock and
+# real resources do not share a model name with a dimension-based switch: a
+# persisted build must say which provider resource produced its vectors.
+MOCK_EMBEDDING_PROVIDER = "mock"
+MOCK_EMBEDDING_MODEL = "mock-sha256-v1"
+MOCK_EMBEDDING_MODEL_KEY = MOCK_EMBEDDING_MODEL
+MOCK_EMBEDDING_REGION = "local"
+MOCK_EMBEDDING_DIMENSION = 256
+MOCK_EMBEDDING_POLICY_VERSION = "w4-mock-v1"
+
+REAL_EMBEDDING_MODEL = "text-embedding-v4"
+REAL_EMBEDDING_MODEL_KEY = REAL_EMBEDDING_MODEL
+REAL_EMBEDDING_DIMENSION = 1024
+REAL_EMBEDDING_REGION = "cn-beijing"
+REAL_EMBEDDING_POLICY_VERSION = "w4-embed-v1"
+
+REAL_EMBEDDING_PROVIDER = "dashscope"
+
+# Historical aliases identify the pre-Wave-4 deterministic Mock format.  New
+# code should use the explicit MOCK_* or REAL_* names above.
+MOCK_EMBEDDING_KEY = MOCK_EMBEDDING_MODEL_KEY
+FIXED_EMBEDDING_MODEL = MOCK_EMBEDDING_MODEL
+FIXED_EMBEDDING_DIMENSION = MOCK_EMBEDDING_DIMENSION
 SNAPSHOT_BUILD_VERSION = "snapshot-build-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class EmbeddingIdentityV1:
+    """The complete provider/model/region/dimension/policy identity."""
+
+    provider: str
+    model_key: str
+    region: str
+    dimension: int
+    policy_version: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.provider, str)
+            or not self.provider
+            or not isinstance(self.model_key, str)
+            or not self.model_key
+            or not isinstance(self.region, str)
+            or not self.region
+            or not isinstance(self.policy_version, str)
+            or not self.policy_version
+            or isinstance(self.dimension, bool)
+            or not isinstance(self.dimension, int)
+            or self.dimension < 1
+        ):
+            raise ValueError("embedding identity is invalid")
+
+    def as_record(self) -> dict[str, object]:
+        return {
+            "provider": self.provider,
+            "model_key": self.model_key,
+            "region": self.region,
+            "dimension": self.dimension,
+            "policy_version": self.policy_version,
+        }
+
+
+MOCK_EMBEDDING_IDENTITY = EmbeddingIdentityV1(
+    provider=MOCK_EMBEDDING_PROVIDER,
+    model_key=MOCK_EMBEDDING_MODEL,
+    region=MOCK_EMBEDDING_REGION,
+    dimension=MOCK_EMBEDDING_DIMENSION,
+    policy_version=MOCK_EMBEDDING_POLICY_VERSION,
+)
+REAL_EMBEDDING_IDENTITY = EmbeddingIdentityV1(
+    provider=REAL_EMBEDDING_PROVIDER,
+    model_key=REAL_EMBEDDING_MODEL,
+    region=REAL_EMBEDDING_REGION,
+    dimension=REAL_EMBEDDING_DIMENSION,
+    policy_version=REAL_EMBEDDING_POLICY_VERSION,
+)
+
+
+def embedding_identity_for(
+    model_key: str,
+    dimension: int,
+    *,
+    provider: str | None = None,
+    region: str | None = None,
+    policy_version: str | None = None,
+) -> EmbeddingIdentityV1 | None:
+    """Resolve a supported identity and reject all cross-field combinations."""
+
+    if model_key == MOCK_EMBEDDING_MODEL and dimension == MOCK_EMBEDDING_DIMENSION:
+        candidate = MOCK_EMBEDDING_IDENTITY
+    elif model_key == REAL_EMBEDDING_MODEL and dimension == REAL_EMBEDDING_DIMENSION:
+        candidate = REAL_EMBEDDING_IDENTITY
+    else:
+        return None
+    if (
+        provider is not None
+        and provider != candidate.provider
+        or region is not None
+        and region != candidate.region
+        or policy_version is not None
+        and policy_version != candidate.policy_version
+    ):
+        return None
+    return candidate
+
+
+def embedding_policy_version_for(model_key: str, dimension: int) -> str | None:
+    """Return the frozen policy identity for an exact supported resource pair."""
+
+    identity = embedding_identity_for(model_key, dimension)
+    return identity.policy_version if identity is not None else None
+
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_FILENAME_RE = re.compile(r"^[^/\\\x00\x00-\x1f\x7f]+$")
@@ -232,8 +342,11 @@ class SnapshotBuildV1:
     persona_spec_hash: str
     documents: tuple[SnapshotBuildDocumentV1, ...]
     chunking_version: str = DEFAULT_CHUNKING_VERSION
-    embedding_model_key: str = FIXED_EMBEDDING_MODEL
-    embedding_dimension: int = FIXED_EMBEDDING_DIMENSION
+    embedding_model_key: str = MOCK_EMBEDDING_MODEL
+    embedding_dimension: int = MOCK_EMBEDDING_DIMENSION
+    embedding_provider: str = MOCK_EMBEDDING_PROVIDER
+    embedding_region: str = MOCK_EMBEDDING_REGION
+    embedding_policy_version: str = MOCK_EMBEDDING_POLICY_VERSION
 
     def __post_init__(self) -> None:
         if not self.build_id or not self.agent_version_id or not self.knowledge_snapshot_id:
@@ -245,16 +358,29 @@ class SnapshotBuildV1:
         if not self.chunking_version.strip():
             raise SnapshotBuildError("chunking version is required")
         if (
-            not self.embedding_model_key.strip()
+            not isinstance(self.embedding_model_key, str)
+            or not self.embedding_model_key.strip()
             or self.embedding_model_key.lower() == "latest"
+            or isinstance(self.embedding_dimension, bool)
+            or not isinstance(self.embedding_dimension, int)
             or self.embedding_dimension < 1
+            or not isinstance(self.embedding_provider, str)
+            or not self.embedding_provider.strip()
+            or not isinstance(self.embedding_region, str)
+            or not self.embedding_region.strip()
+            or not isinstance(self.embedding_policy_version, str)
+            or not self.embedding_policy_version.strip()
         ):
             raise SnapshotBuildError("embedding model and dimension are required")
-        if (
-            self.embedding_model_key == FIXED_EMBEDDING_MODEL
-            and self.embedding_dimension != FIXED_EMBEDDING_DIMENSION
-        ):
-            raise SnapshotBuildError("text-embedding-v4 requires dimension 256")
+        identity = embedding_identity_for(
+            self.embedding_model_key,
+            self.embedding_dimension,
+            provider=self.embedding_provider,
+            region=self.embedding_region,
+            policy_version=self.embedding_policy_version,
+        )
+        if identity is None:
+            raise SnapshotBuildError("embedding identity does not match a closed resource")
         ordered = tuple(self.documents)
         if not ordered:
             raise SnapshotBuildError("a SnapshotBuild must contain a document")
@@ -277,6 +403,21 @@ class SnapshotBuildV1:
         return tuple(chunk for document in self.documents for chunk in document.chunks)
 
     @property
+    def embedding_identity(self) -> EmbeddingIdentityV1:
+        """Return the frozen five-field identity for this build."""
+
+        identity = embedding_identity_for(
+            self.embedding_model_key,
+            self.embedding_dimension,
+            provider=self.embedding_provider,
+            region=self.embedding_region,
+            policy_version=self.embedding_policy_version,
+        )
+        if identity is None:  # pragma: no cover - guarded by __post_init__
+            raise SnapshotBuildError("embedding identity does not match a closed resource")
+        return identity
+
+    @property
     def total_char_count(self) -> int:
         return sum(document.char_count for document in self.documents)
 
@@ -296,8 +437,11 @@ class SnapshotBuildV1:
             "draft_revision": self.draft_revision,
             "persona_spec_hash": self.persona_spec_hash,
             "chunking_version": self.chunking_version,
+            "embedding_provider": self.embedding_provider,
             "embedding_model_key": self.embedding_model_key,
+            "embedding_region": self.embedding_region,
             "embedding_dimension": self.embedding_dimension,
+            "embedding_policy_version": self.embedding_policy_version,
             "total_char_count": self.total_char_count,
             "total_byte_count": self.total_byte_count,
             "documents": [document.canonical() for document in self.documents],
@@ -367,6 +511,10 @@ class SnapshotBuildV1:
         frozen_vectors: list[tuple[float, ...]] = []
         for vector in vectors:
             try:
+                if any(
+                    isinstance(item, bool) or not isinstance(item, (int, float)) for item in vector
+                ):
+                    raise TypeError("non-numeric vector item")
                 values = tuple(float(item) for item in vector)
             except (TypeError, ValueError) as exc:
                 raise SnapshotBuildError("embedding vector contains a non-numeric value") from exc
@@ -382,6 +530,9 @@ class SnapshotBuildV1:
             vectors=tuple(frozen_vectors),
             model_key=chosen_model,
             dimension=chosen_dimension,
+            embedding_provider=self.embedding_provider,
+            embedding_region=self.embedding_region,
+            policy_version=self.embedding_policy_version,
         )
 
     @classmethod
@@ -395,8 +546,11 @@ class SnapshotBuildV1:
         documents: Sequence[SnapshotBuildInputDocument | MarkdownDocument | Mapping[str, object]],
         build_id: str | None = None,
         chunking_version: str = DEFAULT_CHUNKING_VERSION,
-        embedding_model_key: str = FIXED_EMBEDDING_MODEL,
-        embedding_dimension: int = FIXED_EMBEDDING_DIMENSION,
+        embedding_model_key: str = MOCK_EMBEDDING_MODEL,
+        embedding_dimension: int = MOCK_EMBEDDING_DIMENSION,
+        embedding_provider: str = MOCK_EMBEDDING_PROVIDER,
+        embedding_region: str = MOCK_EMBEDDING_REGION,
+        embedding_policy_version: str = MOCK_EMBEDDING_POLICY_VERSION,
     ) -> SnapshotBuildV1:
         if not documents:
             raise SnapshotBuildError("a SnapshotBuild needs at least one document")
@@ -411,7 +565,12 @@ class SnapshotBuildV1:
                     chunk_id=str(
                         uuid5(
                             NAMESPACE_URL,
-                            "maya:snapshot-build-v1:" + document.document_id + ":" + str(index),
+                            "maya:snapshot-build-v1:"
+                            + knowledge_snapshot_id
+                            + ":"
+                            + document.document_id
+                            + ":"
+                            + str(index),
                         )
                     ),
                     document_id=document.document_id,
@@ -456,6 +615,9 @@ class SnapshotBuildV1:
             chunking_version=chunking_version,
             embedding_model_key=embedding_model_key,
             embedding_dimension=embedding_dimension,
+            embedding_provider=embedding_provider,
+            embedding_region=embedding_region,
+            embedding_policy_version=embedding_policy_version,
         )
 
 
@@ -469,6 +631,9 @@ class SnapshotPublishCandidateV1:
     vectors: tuple[tuple[float, ...], ...]
     model_key: str
     dimension: int
+    embedding_provider: str = ""
+    embedding_region: str = ""
+    policy_version: str = ""
 
     def __post_init__(self) -> None:
         self.build.verify_manifest_hash(self.build_manifest_hash)
@@ -479,12 +644,28 @@ class SnapshotPublishCandidateV1:
             or self.dimension != self.build.embedding_dimension
         ):
             raise SnapshotBuildError("publish candidate metadata does not match build")
+        identity = self.build.embedding_identity
+        provider = self.embedding_provider or identity.provider
+        region = self.embedding_region or identity.region
+        policy = self.policy_version or identity.policy_version
+        if (
+            provider != identity.provider
+            or region != identity.region
+            or policy != identity.policy_version
+        ):
+            raise SnapshotBuildError("publish candidate identity does not match build")
+        object.__setattr__(self, "embedding_provider", provider)
+        object.__setattr__(self, "embedding_region", region)
+        object.__setattr__(self, "policy_version", policy)
         if len(self.vectors) != len(self.chunk_ids):
             raise SnapshotBuildError("publish candidate vector count does not match build")
         for vector in self.vectors:
             try:
                 valid = len(vector) == self.dimension and all(
-                    math.isfinite(float(value)) for value in vector
+                    not isinstance(value, bool)
+                    and isinstance(value, (int, float))
+                    and math.isfinite(float(value))
+                    for value in vector
                 )
             except (TypeError, ValueError):
                 valid = False
@@ -555,8 +736,11 @@ def prepare_snapshot_build(
     documents: Sequence[SnapshotBuildInputDocument | MarkdownDocument | Mapping[str, object]],
     build_id: str | None = None,
     chunking_version: str = DEFAULT_CHUNKING_VERSION,
-    embedding_model_key: str = FIXED_EMBEDDING_MODEL,
-    embedding_dimension: int = FIXED_EMBEDDING_DIMENSION,
+    embedding_model_key: str = MOCK_EMBEDDING_MODEL,
+    embedding_dimension: int = MOCK_EMBEDDING_DIMENSION,
+    embedding_provider: str = MOCK_EMBEDDING_PROVIDER,
+    embedding_region: str = MOCK_EMBEDDING_REGION,
+    embedding_policy_version: str = MOCK_EMBEDDING_POLICY_VERSION,
 ) -> SnapshotBuildV1:
     """Build a deterministic candidate without writing or calling a provider."""
 
@@ -570,6 +754,9 @@ def prepare_snapshot_build(
         chunking_version=chunking_version,
         embedding_model_key=embedding_model_key,
         embedding_dimension=embedding_dimension,
+        embedding_provider=embedding_provider,
+        embedding_region=embedding_region,
+        embedding_policy_version=embedding_policy_version,
     )
 
 
@@ -583,6 +770,22 @@ __all__ = [
     "DEFAULT_CHUNKING_VERSION",
     "FIXED_EMBEDDING_DIMENSION",
     "FIXED_EMBEDDING_MODEL",
+    "MOCK_EMBEDDING_DIMENSION",
+    "MOCK_EMBEDDING_KEY",
+    "MOCK_EMBEDDING_MODEL",
+    "MOCK_EMBEDDING_MODEL_KEY",
+    "MOCK_EMBEDDING_PROVIDER",
+    "MOCK_EMBEDDING_REGION",
+    "MOCK_EMBEDDING_IDENTITY",
+    "MOCK_EMBEDDING_POLICY_VERSION",
+    "REAL_EMBEDDING_DIMENSION",
+    "REAL_EMBEDDING_IDENTITY",
+    "REAL_EMBEDDING_MODEL",
+    "REAL_EMBEDDING_MODEL_KEY",
+    "REAL_EMBEDDING_POLICY_VERSION",
+    "REAL_EMBEDDING_PROVIDER",
+    "REAL_EMBEDDING_REGION",
+    "EmbeddingIdentityV1",
     "SNAPSHOT_BUILD_VERSION",
     "SnapshotBuildChunk",
     "SnapshotBuildChunkV1",
@@ -593,5 +796,7 @@ __all__ = [
     "SnapshotBuildV1",
     "SnapshotPublishCandidateV1",
     "build_snapshot",
+    "embedding_identity_for",
+    "embedding_policy_version_for",
     "prepare_snapshot_build",
 ]

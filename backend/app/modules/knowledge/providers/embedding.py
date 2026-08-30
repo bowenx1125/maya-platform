@@ -9,7 +9,20 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from .packing import EmbeddingBatchV1
-from .snapshot_build import FIXED_EMBEDDING_DIMENSION, FIXED_EMBEDDING_MODEL
+from .snapshot_build import (
+    FIXED_EMBEDDING_DIMENSION,
+    MOCK_EMBEDDING_DIMENSION,
+    MOCK_EMBEDDING_MODEL,
+    MOCK_EMBEDDING_POLICY_VERSION,
+    MOCK_EMBEDDING_PROVIDER,
+    MOCK_EMBEDDING_REGION,
+    REAL_EMBEDDING_DIMENSION,
+    REAL_EMBEDDING_MODEL,
+    REAL_EMBEDDING_POLICY_VERSION,
+    REAL_EMBEDDING_PROVIDER,
+    REAL_EMBEDDING_REGION,
+    embedding_identity_for,
+)
 
 
 class EmbeddingValidationError(ValueError):
@@ -41,6 +54,9 @@ class EmbeddingProvider(Protocol):
 
     model_key: str
     dimension: int
+    provider: str
+    region: str
+    policy_version: str
 
     def embed_batch(self, batch: EmbeddingBatchV1) -> ValidatedEmbeddingBatchV1:
         """Embed one preflighted batch."""
@@ -57,18 +73,46 @@ class ValidatedEmbeddingBatchV1:
     vectors: tuple[tuple[float, ...], ...]
     model_key: str
     dimension: int
+    embedding_provider: str = ""
+    embedding_region: str = ""
+    policy_version: str = ""
 
     def __post_init__(self) -> None:
         if not self.build_id or not self.build_manifest_hash or self.batch_index < 0:
             raise EmbeddingValidationError("validated embedding identity is invalid")
         if len(self.chunk_ids) != len(self.vectors):
             raise EmbeddingShapeError("validated vector count does not match chunk IDs")
-        if not self.model_key or self.dimension < 1:
+        if (
+            not isinstance(self.model_key, str)
+            or not self.model_key
+            or isinstance(self.dimension, bool)
+            or not isinstance(self.dimension, int)
+            or self.dimension < 1
+        ):
             raise EmbeddingValidationError("validated embedding metadata is invalid")
-        for vector in self.vectors:
-            # Reuse the same strict checks used for provider JSON.  Calling
-            # the helper here is safe because it returns an immutable tuple.
-            _vector(vector, dimension=self.dimension)
+        identity = embedding_identity_for(
+            self.model_key,
+            self.dimension,
+            provider=self.embedding_provider or None,
+            region=self.embedding_region or None,
+            policy_version=self.policy_version or None,
+        )
+        if self.model_key in {MOCK_EMBEDDING_MODEL, REAL_EMBEDDING_MODEL} and identity is None:
+            raise EmbeddingValidationError(
+                "validated embedding identity is not a closed resource",
+                code="embedding_identity_mismatch",
+            )
+        if identity is not None:
+            object.__setattr__(self, "embedding_provider", identity.provider)
+            object.__setattr__(self, "embedding_region", identity.region)
+            object.__setattr__(self, "policy_version", identity.policy_version)
+        # Reuse the same strict checks used for provider JSON and freeze the
+        # sanitized numeric tuples at the stage boundary.
+        object.__setattr__(
+            self,
+            "vectors",
+            tuple(_vector(vector, dimension=self.dimension) for vector in self.vectors),
+        )
 
     @property
     def count(self) -> int:
@@ -118,7 +162,10 @@ def _normalise_response(
     if isinstance(output, Mapping) and "data" not in payload:
         raw_embeddings = output.get("embeddings")
         if isinstance(raw_embeddings, list):
-            model = payload.get("model", output.get("model", expected_model))
+            # Do not manufacture a model identity when the supplier omits it.
+            # A response is accepted only when the fixed model is explicit in
+            # the returned envelope.
+            model = payload.get("model", output.get("model"))
             normalized: dict[str, object] = {
                 "model": model,
                 "data": raw_embeddings,
@@ -165,8 +212,11 @@ def validate_embedding_response(
     response: object,
     *,
     expected_count: int,
-    expected_model: str = FIXED_EMBEDDING_MODEL,
-    expected_dimension: int = FIXED_EMBEDDING_DIMENSION,
+    expected_model: str = MOCK_EMBEDDING_MODEL,
+    expected_dimension: int | None = None,
+    expected_provider: str | None = None,
+    expected_region: str | None = None,
+    expected_policy_version: str | None = None,
     expected_build_manifest_hash: str | None = None,
 ) -> tuple[tuple[float, ...], ...]:
     """Validate exact model/count/order/dimension/finite values.
@@ -176,8 +226,39 @@ def validate_embedding_response(
     Mock adapter does), it must match rather than being silently ignored.
     """
 
-    if expected_count < 0 or expected_dimension < 1 or not expected_model:
+    resolved_dimension = expected_dimension
+    if resolved_dimension is None:
+        # The legacy generic/Mock call shape remains 256 unless the caller
+        # explicitly asks for the fixed real model.  Real callers should also
+        # pass the dimension carried by their frozen request.
+        resolved_dimension = (
+            REAL_EMBEDDING_DIMENSION
+            if expected_model == REAL_EMBEDDING_MODEL
+            else MOCK_EMBEDDING_DIMENSION
+        )
+    if (
+        isinstance(expected_count, bool)
+        or not isinstance(expected_count, int)
+        or expected_count < 0
+        or isinstance(resolved_dimension, bool)
+        or not isinstance(resolved_dimension, int)
+        or resolved_dimension < 1
+        or not isinstance(expected_model, str)
+        or not expected_model
+    ):
         raise EmbeddingValidationError("embedding validation expectation is invalid")
+    identity = embedding_identity_for(
+        expected_model,
+        resolved_dimension,
+        provider=expected_provider,
+        region=expected_region,
+        policy_version=expected_policy_version,
+    )
+    if expected_model in {MOCK_EMBEDDING_MODEL, REAL_EMBEDDING_MODEL} and identity is None:
+        raise EmbeddingValidationError(
+            "embedding validation identity is not a closed resource",
+            code="embedding_identity_mismatch",
+        )
     payload = _normalise_response(response, expected_model=expected_model)
     model = payload.get("model")
     if model != expected_model:
@@ -206,7 +287,7 @@ def validate_embedding_response(
                 "embedding response order does not match the request",
                 code="embedding_order_mismatch",
             )
-        vectors.append(_vector(item.get("embedding"), dimension=expected_dimension))
+        vectors.append(_vector(item.get("embedding"), dimension=resolved_dimension))
     return tuple(vectors)
 
 
@@ -216,16 +297,27 @@ def validate_embedding_batch_response(
     *,
     expected_model: str | None = None,
     expected_dimension: int | None = None,
+    expected_provider: str | None = None,
+    expected_region: str | None = None,
+    expected_policy_version: str | None = None,
 ) -> ValidatedEmbeddingBatchV1:
     """Validate a provider result against one exact planned batch."""
 
     model = expected_model or batch.model_key
-    dimension = expected_dimension or batch.dimension
+    dimension = batch.dimension if expected_dimension is None else expected_dimension
+    provider = batch.embedding_provider if expected_provider is None else expected_provider
+    region = batch.embedding_region if expected_region is None else expected_region
+    policy_version = (
+        batch.policy_version if expected_policy_version is None else expected_policy_version
+    )
     vectors = validate_embedding_response(
         response,
         expected_count=len(batch.items),
         expected_model=model,
         expected_dimension=dimension,
+        expected_provider=provider or None,
+        expected_region=region or None,
+        expected_policy_version=policy_version or None,
         expected_build_manifest_hash=batch.build_manifest_hash,
     )
     payload = _normalise_response(response, expected_model=model)
@@ -243,6 +335,9 @@ def validate_embedding_batch_response(
         vectors=vectors,
         model_key=model,
         dimension=dimension,
+        embedding_provider=provider,
+        embedding_region=region,
+        policy_version=policy_version,
     )
 
 
@@ -264,6 +359,46 @@ validate_embedding_result = validate_embedding_batch_response
 EmbeddingBatchResultV1 = ValidatedEmbeddingBatchV1
 
 
+def validate_real_embedding_response(
+    response: object,
+    *,
+    expected_count: int,
+    expected_build_manifest_hash: str | None = None,
+) -> tuple[tuple[float, ...], ...]:
+    """Validate the fixed real text-embedding-v4/1024 response shape."""
+
+    return validate_embedding_response(
+        response,
+        expected_count=expected_count,
+        expected_model=REAL_EMBEDDING_MODEL,
+        expected_dimension=REAL_EMBEDDING_DIMENSION,
+        expected_provider=REAL_EMBEDDING_PROVIDER,
+        expected_region=REAL_EMBEDDING_REGION,
+        expected_policy_version=REAL_EMBEDDING_POLICY_VERSION,
+        expected_build_manifest_hash=expected_build_manifest_hash,
+    )
+
+
+def validate_mock_embedding_response(
+    response: object,
+    *,
+    expected_count: int,
+    expected_build_manifest_hash: str | None = None,
+) -> tuple[tuple[float, ...], ...]:
+    """Validate the existing Mock ``mock-sha256-v1``/256 response shape."""
+
+    return validate_embedding_response(
+        response,
+        expected_count=expected_count,
+        expected_model=MOCK_EMBEDDING_MODEL,
+        expected_dimension=MOCK_EMBEDDING_DIMENSION,
+        expected_provider=MOCK_EMBEDDING_PROVIDER,
+        expected_region=MOCK_EMBEDDING_REGION,
+        expected_policy_version=MOCK_EMBEDDING_POLICY_VERSION,
+        expected_build_manifest_hash=expected_build_manifest_hash,
+    )
+
+
 __all__ = [
     "EmbeddingBatchResultV1",
     "EmbeddingDimensionError",
@@ -277,4 +412,6 @@ __all__ = [
     "validate_embedding_response",
     "validate_embedding_result",
     "validate_embedding_vectors",
+    "validate_mock_embedding_response",
+    "validate_real_embedding_response",
 ]
