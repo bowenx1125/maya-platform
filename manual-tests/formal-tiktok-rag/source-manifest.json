@@ -1,0 +1,269 @@
+{
+  "manifest_version": "formal-tiktok-rag-manifest-v1",
+  "corpus_id": "formal-tiktok-recommendation-governance-v1",
+  "content_path": "tiktok-recommendation-governance.md",
+  "content_sha256": "7fab29d2bddc241ea2021284f2766e6e6cecb705b9a56ff041838c1fe606c24a",
+  "sha256_manifest_path": "SHA256SUMS",
+  "language": "en",
+  "evidence_freeze_date": "2026-08-30",
+  "chunking_version": "markdown-heading-paragraph-v1",
+  "topic": "Should the United States ban TikTok's recommendation algorithm?",
+  "scope": {
+    "fact_scope": "Public materials published or effective through 2026-08-30; platform facts are first-party statements and legal facts are limited to the identified US law and opinion.",
+    "value_scope": "Original classroom analysis of safety, expression, innovation, user agency, and cross-cultural diversity; proposals are not source findings.",
+    "exclusions": [
+      "No claim that a source proves a causal mental-health outcome.",
+      "No claim that a platform statement is an independent audit.",
+      "No prediction of post-freeze enforcement or legal advice.",
+      "No personal data, student identity, credentials, audio, or private account material."
+    ]
+  },
+  "url_review": {
+    "reviewed_on": "2026-08-30",
+    "method": "Each direct URL was opened through an official-page/web extraction and checked with a local HTTP HEAD where available. No source body is vendored in this repository.",
+    "notes": [
+      "Some public-sector or platform hosts may challenge automated clients; browser-readable official pages remain the source of record.",
+      "A changed or withdrawn URL requires a new manifest/content version rather than silently editing a published snapshot."
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "S01",
+      "title": "TikTok Inc. v. Garland, 604 U.S. ___ (2025), Nos. 24-656 and 24-657",
+      "publisher": "Supreme Court of the United States",
+      "publication_date": "2025-01-17",
+      "direct_url": "https://www.supremecourt.gov/opinions/24pdf/24-656_new_3dq3.pdf",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "US government judicial opinion; public-domain government text summarized and paraphrased with page references; no extended quotation.",
+      "scope_note": "Court description and holding in this case, not an independent current audit of platform operations.",
+      "readability_check": "HTTP 200 application/pdf and official web extraction on 2026-08-30.",
+      "claim_ids": ["C01", "C02", "C07", "C11"]
+    },
+    {
+      "source_id": "S02",
+      "title": "Public Law 118-50, Division H: Protecting Americans from Foreign Adversary Controlled Applications Act",
+      "publisher": "United States Congress / GovInfo",
+      "publication_date": "2024-04-24",
+      "direct_url": "https://www.govinfo.gov/content/pkg/PLAW-118publ50/pdf/PLAW-118publ50.pdf",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "US government statute; public-domain text summarized and paraphrased by section; no extended quotation.",
+      "scope_note": "Division H, especially section 2(a), 2(c), and 2(g)(6); this corpus does not infer later enforcement.",
+      "readability_check": "HTTP 200 application/pdf and official web extraction on 2026-08-30.",
+      "claim_ids": ["C05", "C06"]
+    },
+    {
+      "source_id": "S03",
+      "title": "How TikTok recommends content",
+      "publisher": "TikTok Support",
+      "publication_date": null,
+      "publication_date_note": "Undated first-party support page; frozen by access date.",
+      "direct_url": "https://support.tiktok.com/en/using-tiktok/exploring-videos/how-tiktok-recommends-content",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "First-party platform documentation; factual claims are explicitly labelled as platform statements and paraphrased with a direct link; no copied page text.",
+      "scope_note": "TikTok's description of recommendation inputs, diversification, safety filtering, and user controls; not an independent audit.",
+      "readability_check": "HTTP 200 text/html and official web extraction on 2026-08-30.",
+      "claim_ids": ["C03", "C04", "C12"]
+    },
+    {
+      "source_id": "S04",
+      "title": "TikTok Under 13 Experience",
+      "publisher": "TikTok Support",
+      "publication_date": null,
+      "publication_date_note": "Undated first-party support page; frozen by access date.",
+      "direct_url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/tiktok-under-13-experience",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "First-party platform documentation; policy details are labelled as platform statements and paraphrased with a direct link; no copied page text.",
+      "scope_note": "US under-13 experience as described by TikTok; implementation, regional differences, and policy changes require fresh review.",
+      "readability_check": "HTTP 200 text/html and official web extraction on 2026-08-30.",
+      "claim_ids": ["C08"]
+    },
+    {
+      "source_id": "S05",
+      "title": "Privacy and safety settings for users under age 18",
+      "publisher": "TikTok Support",
+      "publication_date": null,
+      "publication_date_note": "Undated first-party support page; frozen by access date.",
+      "direct_url": "https://support.tiktok.com/en/account-and-privacy/account-privacy-settings/privacy-and-safety-settings-for-users-under-age-18",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "First-party platform documentation; policy details are labelled as platform statements and paraphrased with a direct link; no copied page text.",
+      "scope_note": "Age-dependent privacy defaults and local-law caveat as described by TikTok; not a compliance audit.",
+      "readability_check": "HTTP 200 text/html and official web extraction on 2026-08-30.",
+      "claim_ids": ["C09"]
+    },
+    {
+      "source_id": "S06",
+      "title": "Kids' Privacy (COPPA)",
+      "publisher": "US Federal Trade Commission",
+      "publication_date": null,
+      "publication_date_note": "Current official explainer; COPPA was enacted in 1998 and the page is frozen by access date.",
+      "direct_url": "https://www.ftc.gov/news-events/topics/protecting-consumer-privacy-security/kids-privacy-coppa",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "US government consumer-protection guidance; public-domain policy summary paraphrased with direct link; no extended quotation.",
+      "scope_note": "COPPA privacy obligations for covered operators handling children's personal information; not a complete recommendation-safety regime.",
+      "readability_check": "HTTP 200 text/html from the official FTC host on 2026-08-30.",
+      "claim_ids": ["C10"]
+    },
+    {
+      "source_id": "S07",
+      "title": "Guidelines for the Governance of Digital Platforms",
+      "publisher": "United Nations Educational, Scientific and Cultural Organization (UNESCO)",
+      "publication_date": null,
+      "publication_date_note": "Published in 2023; UNESCO does not state an exact publication day on the reviewed page. Frozen by access date.",
+      "direct_url": "https://www.unesco.org/en/internet-trust/guidelines",
+      "access_date": "2026-08-30",
+      "license_or_usage_basis": "UNESCO 2023 publication, Open Access under CC BY-SA 3.0 IGO; original classroom synthesis and paraphrase with attribution and direct link.",
+      "scope_note": "Normative, multistakeholder governance framework; not a TikTok-specific audit or a binding US rule.",
+      "readability_check": "HTTP 200 text/html and official web extraction on 2026-08-30.",
+      "claim_ids": ["C13", "C14"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "C01",
+      "claim_type": "factual",
+      "epistemic_status": "court_description",
+      "claim_text": "The Supreme Court described TikTok's For You page as personalized and said that interactions such as watching, following, and commenting help tailor a feed; moderation and promotion or demotion decisions also shape what a user sees.",
+      "source_ids": ["S01"],
+      "source_locator": "Opinion pp. 2-3"
+    },
+    {
+      "claim_id": "C02",
+      "claim_type": "factual",
+      "epistemic_status": "court_description",
+      "claim_text": "The Court described the recommendation algorithm as proprietary and discussed ByteDance's role in ownership and development in the context of the government's national-security concerns.",
+      "source_ids": ["S01"],
+      "source_locator": "Opinion pp. 3-4"
+    },
+    {
+      "claim_id": "C03",
+      "claim_type": "factual",
+      "epistemic_status": "platform_statement",
+      "claim_text": "TikTok says recommendation inputs can include user interactions, video information such as captions, sounds, and hashtags, and device or account settings, with stronger signals generally carrying more weight than weaker contextual signals.",
+      "source_ids": ["S03"],
+      "source_locator": "Recommendation factors section"
+    },
+    {
+      "claim_id": "C04",
+      "claim_type": "factual",
+      "epistemic_status": "platform_statement",
+      "claim_text": "TikTok describes user controls including Why this post, Not interested, feed refresh, keyword filters, and topic preferences.",
+      "source_ids": ["S03"],
+      "source_locator": "Why this post and feed controls sections"
+    },
+    {
+      "claim_id": "C05",
+      "claim_type": "factual",
+      "epistemic_status": "statutory_rule",
+      "claim_text": "The Protecting Americans from Foreign Adversary Controlled Applications Act prohibits covered distribution, maintenance, updating, or hosting services for a foreign-adversary-controlled application while providing an exception for a qualified divestiture.",
+      "source_ids": ["S02"],
+      "source_locator": "Division H, sections 2(a) and 2(c)"
+    },
+    {
+      "claim_id": "C06",
+      "claim_type": "factual",
+      "epistemic_status": "statutory_rule",
+      "claim_text": "The Act's qualified-divestiture definition requires ending foreign-adversary control and specified continuing operational relationships, including relationships concerning the content recommendation algorithm or data sharing.",
+      "source_ids": ["S02"],
+      "source_locator": "Division H, section 2(g)(6)"
+    },
+    {
+      "claim_id": "C07",
+      "claim_type": "factual",
+      "epistemic_status": "court_holding",
+      "claim_text": "The Supreme Court's per curiam opinion recognized TikTok as an outlet for expression and concluded that the challenged provisions do not violate First Amendment rights on the record before it.",
+      "source_ids": ["S01"],
+      "source_locator": "Per curiam opinion pp. 1-2 and 19-20"
+    },
+    {
+      "claim_id": "C08",
+      "claim_type": "factual",
+      "epistemic_status": "platform_statement",
+      "claim_text": "TikTok says US users below age 13 are directed to a separate experience with age-appropriate feeds, private accounts, a one-hour screen-time limit, device-only video saving, and no commenting, sharing, or messaging.",
+      "source_ids": ["S04"],
+      "source_locator": "TikTok Under 13 Experience"
+    },
+    {
+      "claim_id": "C09",
+      "claim_type": "factual",
+      "epistemic_status": "platform_statement",
+      "claim_text": "TikTok says ages 13-15 start with private accounts and that some features, including direct messaging, are unavailable until a later age, while local law can change the applicable setting.",
+      "source_ids": ["S05"],
+      "source_locator": "Default privacy settings and direct messaging sections"
+    },
+    {
+      "claim_id": "C10",
+      "claim_type": "factual",
+      "epistemic_status": "agency_guidance",
+      "claim_text": "The FTC explains that COPPA concerns covered operators collecting personal information from children under 13 and requires verifiable parental consent in covered circumstances.",
+      "source_ids": ["S06"],
+      "source_locator": "What parents should know"
+    },
+    {
+      "claim_id": "C11",
+      "claim_type": "factual",
+      "epistemic_status": "court_description",
+      "claim_text": "The Court's opinion recognized that TikTok had a very large US audience at the time of the case, while Justice Sotomayor's concurrence described compiling and curating material as expressive activity.",
+      "source_ids": ["S01"],
+      "source_locator": "Per curiam opinion pp. 1-2; Sotomayor concurrence pp. 1-2"
+    },
+    {
+      "claim_id": "C12",
+      "claim_type": "factual",
+      "epistemic_status": "platform_statement",
+      "claim_text": "TikTok says it tries to diversify recommendations by introducing new creators, ideas, and perspectives and may show content outside a user's expressed interests.",
+      "source_ids": ["S03"],
+      "source_locator": "Diversifying recommendations section"
+    },
+    {
+      "claim_id": "C13",
+      "claim_type": "factual",
+      "epistemic_status": "normative_framework",
+      "claim_text": "UNESCO's platform-governance Guidelines call for freedom of expression and access to information together with transparency, accountability, human-rights due diligence, and protection of cultural diversity.",
+      "source_ids": ["S07"],
+      "source_locator": "Objectives and overarching principles"
+    },
+    {
+      "claim_id": "C14",
+      "claim_type": "factual",
+      "epistemic_status": "normative_framework",
+      "claim_text": "UNESCO's Guidelines describe media and information literacy as a way to empower users and support cultural diversity, social inclusion, and global citizenship.",
+      "source_ids": ["S07"],
+      "source_locator": "Media and information literacy guidance"
+    }
+  ],
+  "fixtures": [
+    {
+      "fixture_id": "relevant",
+      "path": "fixtures/relevant/tiktok-recommendation-governance.md",
+      "expected_retrieval_status": "matched",
+      "expected_grounding_mode": "snapshot_evidence",
+      "description": "Relevant compact paraphrase containing multiple topic anchors and formal-corpus claim markers."
+    },
+    {
+      "fixture_id": "adjacent",
+      "path": "fixtures/adjacent/cultural-expression-and-youth-privacy.md",
+      "expected_retrieval_status": "no_match",
+      "expected_grounding_mode": "general_reasoning",
+      "description": "Adjacent expression and youth-privacy values without a recommendation-system topic anchor."
+    },
+    {
+      "fixture_id": "unrelated",
+      "path": "fixtures/unrelated/mineral-field-notes.md",
+      "expected_retrieval_status": "no_match",
+      "expected_grounding_mode": "general_reasoning",
+      "description": "Clearly unrelated geology note."
+    }
+  ],
+  "personas": [
+    {
+      "persona_id": "safety-first",
+      "path": "personas/safety-first/AGENT.md",
+      "lens": "youth protection and platform accountability"
+    },
+    {
+      "persona_id": "creator-culture",
+      "path": "personas/creator-culture/AGENT.md",
+      "lens": "expression, innovation, and cultural diversity"
+    }
+  ]
+}
