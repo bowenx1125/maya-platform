@@ -302,6 +302,10 @@ class MutualLearningValidator:
             if phase is RoundPhase.FINAL_INTEGRATION:
                 if not result.learned_from_others:
                     raise TurnValidationError("Final integration must record learned_from_others.")
+                if not result.remaining_uncertainty:
+                    raise TurnValidationError(
+                        "Final integration must list remaining uncertainty."
+                    )
                 _strings(result.learned_from_others, "learned_from_others")
                 _nonblank(result.change_from_opening, "change_from_opening")
                 _nonblank(result.final_recommendation, "final_recommendation")
@@ -319,10 +323,6 @@ class MutualLearningValidator:
                 ):
                     raise TurnValidationError("Unresolved question ID projections differ.")
             else:
-                if phase is RoundPhase.FINAL_INTEGRATION and not result.remaining_uncertainty:
-                    raise TurnValidationError(
-                        "Final integration must list remaining uncertainty."
-                    )
                 if (
                     phase is RoundPhase.EXCHANGE
                     and not result.remaining_uncertainty

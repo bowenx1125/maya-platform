@@ -551,6 +551,20 @@ def test_final_rules_and_question_queue_are_enforced_once() -> None:
             participants=people,
             predecessors=turns[:-2],
         )
+    for missing_final_field in (
+        {"learned_from_others": []},
+        {"change_from_opening": None},
+        {"final_recommendation": None},
+        {"remaining_uncertainty": []},
+    ):
+        with pytest.raises(TurnValidationError):
+            MutualLearningValidator().validate(
+                final.structured.model_copy(update=missing_final_field),
+                plan=final_plan,
+                participant=people[0],
+                participants=people,
+                predecessors=turns[:-2],
+            )
 
     exchange = turns[3]
     assert exchange.structured.question.type == "agent"
