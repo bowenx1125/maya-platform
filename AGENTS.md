@@ -21,9 +21,10 @@
    replace history with summaries. Prompt work may remove duplicate serialization and
    reuse stable retrieval on a structure-only retry only when the active contract says
    so.
-8. Run the assigned deterministic checks before reporting completion. Debug and retest
-   within the Gate until its criteria pass; never weaken a test or contract to make it
-   green.
+8. Run the assigned local deterministic checks before reporting completion. Debug and
+   retest within the Gate until its criteria pass; never weaken a test or contract to
+   make it green. Intermediate Wave 4 branches stay local. GitHub CI runs once on the
+   complete final integration Pull Request, not on each worker/fix commit.
 9. A worker cannot approve its own Gate. Sol audit is read-only, and final status
    belongs to the main window after the exact candidate/merge SHA is verified.
 10. Do not edit `PROJECT.md`, `PROJECT_STATUS.md`, active Gate packets or shared

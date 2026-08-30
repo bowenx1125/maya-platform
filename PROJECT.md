@@ -90,9 +90,14 @@ requires historical evidence.
 
 ## 6. Engineering workflow
 
-Every Wave 4 coding change follows:
+Intermediate Wave 4 coding changes follow:
 
-`Issue -> branch -> independent worktree -> one implementation owner -> PR -> CI -> Sol High read-only audit -> fix/retest loop -> main-window integration`
+`Issue -> local branch -> independent worktree -> one implementation owner -> local checks -> Sol High read-only audit -> fix/retest loop -> main-window integration`
+
+Only the complete Wave 4 integration candidate is pushed as a Pull Request. That exact
+head runs one GitHub CI through the `pull_request` workflow; after PASS the same audited
+head fast-forwards canonical `main`. Intermediate branches are not pushed and do not
+consume duplicate push/PR CI runs.
 
 Shared files such as models, migrations, OpenAPI, WebSocket schemas, provider factory,
 generated clients and root status are owned by the main window or an explicitly named

@@ -1,8 +1,8 @@
 name: Maya Wave 3 quality
 
 on:
-  push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
