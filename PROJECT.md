@@ -120,7 +120,9 @@ criteria pass. Tests or contracts are never weakened to manufacture a pass.
 
 ## 8. Document map
 
-- [PROJECT_STATUS.md](PROJECT_STATUS.md): current phase, SHA, evidence and next Gate.
+- [PROJECT_STATUS.md](PROJECT_STATUS.md): current phase, last signed baseline, active
+  branch/PR, evidence and next Gate. Git/PR/CI owns the exact candidate SHA so the
+  document does not make a self-referential SHA claim.
 - [ARCHITECTURE.md](ARCHITECTURE.md): stable system and data boundaries.
 - [contracts/](contracts/): current machine-readable OpenAPI/WebSocket contracts.
 - [docs/contracts/](docs/contracts/): human contracts and baseline provenance.

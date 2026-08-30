@@ -23,6 +23,11 @@ Persona, Evidence Trace, Prompt changes or a real Provider.
   been replaced.
 - Active R0 Issue: `#5 W4-R0: canonical docs and reproducible development workflow`.
 - Active branch/worktree: `w4/r0/05-doc-workflow` in `maya-wt-r0-05`.
+- Active PR: `#6 W4-R0: establish portable project authority`, targeting `dev-main`.
+- The exact R0 candidate identity is the PR head SHA reported by Git/GitHub/CI. It is
+  intentionally not duplicated inside the candidate commit because a commit cannot
+  contain its own final SHA. `a235c29` remains the last signed product baseline until
+  R0 passes CI, Sol High and main-window integration.
 
 ## Signed Wave 3 evidence
 
@@ -102,8 +107,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Commit the R0 candidate, obtain Sol High R0 PASS, run private PR/CI, and move the
-canonical remote development branch only after the merge SHA passes CI. Then draft
-Wave 4 G0 contracts
+Keep PR #6 open while its exact head passes private CI and independent Sol High review.
+Fix findings on the same branch and rerun the affected/full checks. Merge into
+`dev-main` only after `P0=0 / P1=0`, verify CI on the resulting merge SHA, and then move
+the canonical remote development main. After R0 is signed, draft Wave 4 G0 contracts
 for PersonaSpecV1, EvidenceTraceV1, complete-history Prompt request assembly, formal
 content, Provider data/call limits and failure semantics.

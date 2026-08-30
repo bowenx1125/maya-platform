@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 
 const root = process.cwd();
 const required = [
@@ -21,8 +21,39 @@ for (const relative of required) {
   if (!existsSync(resolve(root, relative)))
     failures.push(`missing required file: ${relative}`);
 }
-if (readdirSync(root).includes("Project.md")) {
-  failures.push("legacy root Project.md must not exist");
+const projectCaseVariants = readdirSync(root).filter(
+  (name) => name.toLocaleLowerCase("en-US") === "project.md",
+);
+if (
+  projectCaseVariants.length !== 1 ||
+  projectCaseVariants[0] !== "PROJECT.md"
+) {
+  failures.push(
+    `root authority must be exactly PROJECT.md; found: ${projectCaseVariants.join(", ") || "none"}`,
+  );
+}
+
+function exactCasePathExists(absolute) {
+  const relativePath = relative(root, absolute);
+  if (!relativePath || relativePath === ".") return true;
+  if (relativePath === ".." || relativePath.startsWith(`..${sep}`))
+    return false;
+  let cursor = root;
+  for (const segment of relativePath.split(sep)) {
+    if (!readdirSync(cursor).includes(segment)) return false;
+    cursor = resolve(cursor, segment);
+  }
+  return true;
+}
+
+if (!exactCasePathExists(resolve(root, "PROJECT.md"))) {
+  failures.push("exact-case PROJECT.md self-test failed");
+}
+if (exactCasePathExists(resolve(root, "Project.md"))) {
+  failures.push("case-variant Project.md negative self-test failed");
+}
+if (exactCasePathExists(resolve(root, "docs/ADR/README.md"))) {
+  failures.push("case-variant nested path negative self-test failed");
 }
 
 const limits = new Map([
@@ -83,7 +114,8 @@ for (const relative of activeMarkdown) {
     )
       continue;
     const localTarget = decodeURIComponent(target.split("#", 1)[0]);
-    if (!existsSync(resolve(dirname(absolute), localTarget))) {
+    const resolvedTarget = resolve(dirname(absolute), localTarget);
+    if (!existsSync(resolvedTarget) || !exactCasePathExists(resolvedTarget)) {
       failures.push(`${relative} has missing link target: ${target}`);
     }
   }
