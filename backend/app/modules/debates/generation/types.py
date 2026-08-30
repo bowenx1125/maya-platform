@@ -30,6 +30,28 @@ QuestionType = Literal["agent", "audience_reflection", "none"]
 RetrievalStatus = Literal["matched", "no_match"]
 GroundingMode = Literal["rag_grounded", "mixed", "general_reasoning"]
 
+# These literals are deliberately separate from the historical v1/v2
+# ``PositionUpdate`` and ``QuestionType`` values.  A legacy turn is parsed by
+# its legacy RuleSet and therefore never has to reinterpret one of these new
+# values.
+EngagementRelation = Literal["agree", "extend", "qualify", "challenge", "reconcile"]
+ClaimType = Literal["factual", "interpretation", "value_judgement", "proposal"]
+MutualPositionUpdate = Literal[
+    "unchanged",
+    "clarified",
+    "extended",
+    "qualified",
+    "partially_revised",
+    "substantially_revised",
+]
+DisagreementCategory = Literal[
+    "different_persona_or_framework",
+    "different_evidence",
+    "evidence_conflict",
+    "insufficient_information",
+    "value_tradeoff",
+]
+
 
 class TurnValidationError(ValueError):
     """A closed structured-result or evidence contract was violated."""
@@ -107,6 +129,142 @@ class StructuredTurnResult(BaseModel):
             return cls.model_validate(value)
         except Exception as exc:
             raise TurnValidationError("The LLM returned an invalid closed turn object.") from exc
+
+
+class EngagementV1(BaseModel):
+    """A public, claim-level response to an earlier expert turn."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    target_turn_id: str = Field(min_length=1)
+    target_claim_id: str | None = Field(default=None, min_length=1)
+    relation: EngagementRelation
+    faithful_summary: str = Field(min_length=1)
+    response_summary: str = Field(min_length=1)
+
+
+class KeyClaimV1(BaseModel):
+    """A structured claim whose evidence lineage is server-checked."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    claim_id: str = Field(min_length=1)
+    claim_text: str = Field(min_length=1)
+    claim_type: ClaimType
+    used_evidence_ids: list[str] = Field(default_factory=list)
+
+
+class MutualLearningDisagreementV1(BaseModel):
+    """A preserved disagreement and its reason category."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    summary: str = Field(min_length=1)
+    category: DisagreementCategory
+    claim_ids: list[str] = Field(default_factory=list)
+
+
+# ``FinalDisagreementV1`` is a descriptive alias used by public adapters.
+FinalDisagreementV1 = MutualLearningDisagreementV1
+Engagement = EngagementV1
+KeyClaim = KeyClaimV1
+
+
+class MutualLearningTurnResultV1(BaseModel):
+    """Versioned structured output for one mutual-learning turn.
+
+    Final-only fields remain nullable/empty at the DTO boundary so persisted
+    JSON can be read by generic tooling.  ``MutualLearningValidator`` closes
+    those fields according to the resolved phase.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    speech: str = Field(min_length=1)
+    key_claims: list[KeyClaimV1] = Field(default_factory=list)
+    engagements: list[EngagementV1] = Field(default_factory=list)
+    answered_question_ids: list[str] = Field(default_factory=list)
+    learned_from_others: list[str] = Field(default_factory=list)
+    position_summary: str = ""
+    position_update: MutualPositionUpdate = "unchanged"
+    position_update_reason: str | None = None
+    remaining_uncertainty: list[str] = Field(default_factory=list)
+    unresolved_issue: str | None = None
+    question: TurnQuestion = Field(default_factory=TurnQuestion)
+    # ``used_evidence_id`` is a compatibility projection used by the frozen
+    # turn/source persistence seam.  Claim-level IDs remain authoritative for
+    # the new protocol and the validator requires both projections to agree
+    # when the top-level list is supplied.
+    used_evidence_id: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    unresolved_questions: list[str] = Field(default_factory=list)
+    unresolved_question_ids: list[str] = Field(default_factory=list)
+    change_from_opening: str | None = None
+    final_consensus: list[str] = Field(default_factory=list)
+    final_disagreements: list[MutualLearningDisagreementV1] = Field(default_factory=list)
+    final_recommendation: str | None = None
+
+    @classmethod
+    def from_provider(
+        cls,
+        value: MutualLearningTurnResultV1 | Mapping[str, object],
+    ) -> MutualLearningTurnResultV1:
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls.model_validate(value)
+        except Exception as exc:
+            raise TurnValidationError(
+                "The LLM returned an invalid mutual-learning turn object."
+            ) from exc
+
+    @property
+    def used_evidence_ids(self) -> tuple[str, ...]:
+        """Return the de-duplicated claim evidence projection in order."""
+
+        if self.used_evidence_id:
+            return tuple(dict.fromkeys(self.used_evidence_id))
+        values: list[str] = []
+        for claim in self.key_claims:
+            values.extend(claim.used_evidence_ids)
+        return tuple(dict.fromkeys(values))
+
+
+class MutualLearningPositionChangeV1(BaseModel):
+    """Public synthesis projection of one expert's opening-to-final change."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    participant_id: str = Field(min_length=1)
+    change: str = Field(min_length=1)
+
+
+class MutualLearningEvidenceConflictV1(BaseModel):
+    """Public synthesis projection for an evidence conflict."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    summary: str = Field(min_length=1)
+    claim_ids: list[str] = Field(default_factory=list)
+
+
+class MutualLearningSynthesisV1(BaseModel):
+    """Deterministic public synthesis derived only from final-ready turns."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    direct_answer: str = Field(min_length=1)
+    consensus: list[str] = Field(default_factory=list)
+    complementary_views: list[str] = Field(default_factory=list)
+    remaining_disagreements: list[MutualLearningDisagreementV1] = Field(default_factory=list)
+    position_changes: list[MutualLearningPositionChangeV1] = Field(default_factory=list)
+    evidence_conflicts: list[MutualLearningEvidenceConflictV1] = Field(default_factory=list)
+    remaining_uncertainty: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+
+
+MutualLearningTurnResult = MutualLearningTurnResultV1
+MutualLearningSynthesis = MutualLearningSynthesisV1
 
 
 _SAFE_FILENAME_RE = re.compile(r"^[^/\\\x00\x00-\x1f\x7f]+$")
@@ -285,6 +443,45 @@ class TurnPromptInput:
 
 
 @dataclass(frozen=True, slots=True)
+class MutualLearningPromptInput:
+    """Prompt boundary with a completed-round visibility fence.
+
+    This is intentionally a separate DTO from :class:`TurnPromptInput`: the
+    latter's lower-index prefix is part of the frozen legacy contract, while
+    mutual learning hashes and carries only prior-round public turns.
+    """
+
+    debate_id: str
+    topic: str
+    rule_set_id: str
+    phase: str
+    turn_plan: TurnPlan
+    participant: ParticipantContext
+    participants: tuple[ParticipantContext, ...]
+    agent_md: str
+    stance_mode: StanceMode
+    assigned_stance: Stance | None
+    teacher_note: str
+    current_position_summary: str
+    predecessors: tuple[FinalReadyTurn, ...]
+    predecessor_turn_ids: tuple[str, ...]
+    cutoff_turn_index: int
+    transcript_hash: str
+    receipts: tuple[SnapshotRetrievalReceipt, ...] = ()
+    pending_question: PendingQuestion | None = None
+
+    def __post_init__(self) -> None:
+        if self.rule_set_id != "ordered_multi_expert_mutual_learning_v1":
+            raise ValueError("mutual-learning prompts require their versioned RuleSet")
+        if self.participant.snapshot_id == "":
+            raise ValueError("participant snapshot is required")
+        if self.predecessor_turn_ids != tuple(item.turn_id for item in self.predecessors):
+            raise ValueError("predecessor_turn_ids must match visible prior rounds")
+        if any(item.round_no >= self.turn_plan.round_no for item in self.predecessors):
+            raise ValueError("same-round or future turn crossed the round barrier")
+
+
+@dataclass(frozen=True, slots=True)
 class FinalReadyTurn:
     """Validated immutable text/structure ready for the separate TTS stage."""
 
@@ -294,7 +491,7 @@ class FinalReadyTurn:
     round_no: int
     turn_index: int
     speech: str
-    structured: StructuredTurnResult
+    structured: StructuredTurnResult | MutualLearningTurnResultV1
     retrieval_status: RetrievalStatus
     grounding_mode: GroundingMode
     used_receipts: tuple[SnapshotRetrievalReceipt, ...]
@@ -307,8 +504,13 @@ class FinalReadyTurn:
     def __post_init__(self) -> None:
         if self.speech != self.structured.speech:
             raise ValueError("final-ready speech must match its structured result")
+        structured_evidence_ids = (
+            tuple(self.structured.used_evidence_id)
+            if isinstance(self.structured, StructuredTurnResult)
+            else self.structured.used_evidence_ids
+        )
         if tuple(receipt.resolved_evidence_id() for receipt in self.used_receipts) != tuple(
-            self.structured.used_evidence_id
+            structured_evidence_ids
         ):
             raise ValueError("final-ready used receipts must match structured evidence IDs")
         if self.retrieval_status == "no_match" and self.grounding_mode != "general_reasoning":
@@ -343,7 +545,7 @@ class FinalReadyTurn:
 class ValidatedTurn:
     """Validator output with server-derived retrieval/grounding fields."""
 
-    result: StructuredTurnResult
+    result: StructuredTurnResult | MutualLearningTurnResultV1
     retrieval_status: RetrievalStatus
     grounding_mode: GroundingMode
     used_receipts: tuple[SnapshotRetrievalReceipt, ...]
@@ -365,7 +567,14 @@ class GenerationContext:
 
     def __post_init__(self) -> None:
         ordered = tuple(sorted(self.predecessors, key=lambda item: item.turn_index))
-        if tuple(item.turn_index for item in ordered) != tuple(range(self.turn.turn_index)):
+        if getattr(self.turn, "barrier", "prefix") == "round":
+            # New mutual-learning plans may be built from a storage prefix
+            # containing already-finalized same-round rows.  The prompt
+            # adapter applies the actual barrier; future rows are never a
+            # valid input even to that adapter.
+            if any(item.round_no > self.turn.round_no for item in ordered):
+                raise ValueError("future predecessor is not visible")
+        elif tuple(item.turn_index for item in ordered) != tuple(range(self.turn.turn_index)):
             raise ValueError("invalid predecessor prefix")
 
     @property
@@ -379,7 +588,16 @@ class GenerationContext:
 
         if self.pending_question is not None:
             return self.pending_question
-        for predecessor in reversed(self.predecessors):
+        source_predecessors = self.predecessors
+        if getattr(self.turn, "barrier", "prefix") == "round":
+            from .mutual_learning_policy import pending_question_for_turn
+
+            return pending_question_for_turn(
+                self.predecessors,
+                target_participant_id=self.participant.participant_id,
+                current_round=self.turn.round_no,
+            )
+        for predecessor in reversed(source_predecessors):
             question = predecessor.structured.question
             if (
                 question.type == "agent"
@@ -406,10 +624,26 @@ def mapping_to_dict(value: object) -> Mapping[str, object]:
 
 __all__ = [
     "FinalReadyTurn",
+    "EngagementRelation",
+    "ClaimType",
+    "DisagreementCategory",
+    "EngagementV1",
+    "Engagement",
+    "KeyClaim",
+    "FinalDisagreementV1",
     "GenerationContext",
     "GenerationDiscarded",
     "GenerationFailed",
     "GroundingMode",
+    "MutualLearningDisagreementV1",
+    "MutualLearningEvidenceConflictV1",
+    "MutualLearningPositionChangeV1",
+    "MutualLearningSynthesisV1",
+    "MutualLearningTurnResultV1",
+    "MutualLearningTurnResult",
+    "MutualLearningSynthesis",
+    "MutualLearningPromptInput",
+    "MutualPositionUpdate",
     "ParticipantContext",
     "PendingQuestion",
     "PublicSource",

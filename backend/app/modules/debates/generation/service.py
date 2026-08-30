@@ -9,6 +9,9 @@ from typing import Protocol, cast
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 
 from .fencing import GenerationFence, GenerationFenceError, TurnClaim
+from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
+from .mutual_learning_prompts import make_mutual_learning_prompt_input
+from .mutual_learning_validator import MutualLearningValidator
 from .policy import RULE_SET_ID, SUPPORTED_RULE_SET_IDS
 from .prompts import make_turn_prompt_input
 from .retrieval import (
@@ -23,6 +26,8 @@ from .types import (
     GenerationDiscarded,
     GenerationFailed,
     GenerationProviderError,
+    MutualLearningPromptInput,
+    MutualLearningTurnResultV1,
     ParticipantContext,
     SnapshotRetrievalReceipt,
     StructuredTurnResult,
@@ -43,7 +48,9 @@ class Retriever(Protocol):
 
 
 class TurnLLM(Protocol):
-    def generate_turn(self, prompt: TurnPromptInput) -> StructuredTurnResult:
+    def generate_turn(
+        self, prompt: TurnPromptInput | MutualLearningPromptInput
+    ) -> StructuredTurnResult | MutualLearningTurnResultV1:
         """Generate a provider-neutral structured turn."""
 
 
@@ -90,7 +97,11 @@ class TurnGenerationService:
             raise ValueError("unsupported Mock retrieval policy")
         self.retriever = retriever
         self.llm = llm
-        self.validator = validator or TurnValidator()
+        self.validator = validator or (
+            MutualLearningValidator()
+            if rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+            else TurnValidator()
+        )
         self.fence = fence
         self.rule_set_id = rule_set_id
         self.mock_retrieval_policy_id = mock_retrieval_policy_id
@@ -101,6 +112,8 @@ class TurnGenerationService:
         *,
         claim: TurnClaim | None = None,
     ) -> GenerationResult:
+        if self.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID:
+            return self._generate_mutual_learning(context, claim=claim)
         attempts: list[GenerationAttempt] = []
         active_claim = claim
         for attempt in (1, 2):
@@ -189,6 +202,103 @@ class TurnGenerationService:
         # The loop always returns or raises; keep type checkers honest.
         raise GenerationFailed("Turn generation did not produce a result.")
 
+    def _generate_mutual_learning(
+        self,
+        context: GenerationContext,
+        *,
+        claim: TurnClaim | None,
+    ) -> GenerationResult:
+        """Run the same bounded retry seam with a round-barrier prompt."""
+
+        attempts: list[GenerationAttempt] = []
+        active_claim = claim
+        for attempt in (1, 2):
+            attempt_record = GenerationAttempt(attempt=attempt)
+            try:
+                subqueries = build_turn_subqueries(context)
+                if self.mock_retrieval_policy_id is None:
+                    retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
+                elif isinstance(self.retriever, SnapshotRetriever):
+                    retrieval = self.retriever.retrieve(
+                        context.participant.snapshot_id,
+                        subqueries,
+                        policy_id=self.mock_retrieval_policy_id,
+                        topic_anchor=context.topic,
+                    )
+                else:
+                    raise RAGRetrievalError(
+                        "The Mock lexical policy requires the snapshot retriever.",
+                        technical=False,
+                    )
+                receipts = self._receipts(retrieval)
+                attempt_record = replace(attempt_record, retrieval_count=len(receipts))
+                prompt = make_mutual_learning_prompt_input(context, receipts)
+                if self.fence is not None:
+                    active_claim = self._claim_for_attempt(
+                        context,
+                        attempt,
+                        active_claim,
+                        transcript_hash=prompt.transcript_hash,
+                        predecessor_turn_ids=prompt.predecessor_turn_ids,
+                    )
+                attempt_record = replace(attempt_record, provider_called=True)
+                raw = self.llm.generate_turn(prompt)
+                validated = self._validate_mutual_with_optional_trim(
+                    raw,
+                    attempt=attempt,
+                    context=context,
+                    receipts=receipts,
+                    predecessors=prompt.predecessors,
+                )
+                result = final_ready_turn(
+                    validated,
+                    turn_id=context.turn.turn_id,
+                    participant_id=context.participant.participant_id,
+                    snapshot_id=context.participant.snapshot_id,
+                    round_no=context.turn.round_no,
+                    turn_index=context.turn.turn_index,
+                    predecessor_turn_ids=prompt.predecessor_turn_ids,
+                    cutoff_turn_index=prompt.cutoff_turn_index,
+                    transcript_hash=prompt.transcript_hash,
+                    attempt=attempt,
+                )
+                if self.fence is not None:
+                    if active_claim is None or not self.fence.complete(
+                        active_claim,
+                        stage="generation",
+                        attempt=attempt,
+                        predecessor_turn_ids=prompt.predecessor_turn_ids,
+                        transcript_hash=prompt.transcript_hash,
+                    ):
+                        raise GenerationDiscarded(
+                            "The turn generation result arrived after its fence changed."
+                        )
+                attempts.append(attempt_record)
+                return GenerationResult(result, tuple(attempts))
+            except GenerationDiscarded:
+                raise
+            except (
+                RAGRetrievalError,
+                GenerationProviderError,
+                TurnValidationError,
+                ValueError,
+            ) as exc:
+                attempts.append(
+                    replace(
+                        attempt_record,
+                        failure_code=getattr(exc, "code", "turn_generation_failed"),
+                    )
+                )
+                if self.fence is not None and active_claim is not None:
+                    self.fence.release(active_claim)
+                    active_claim = None
+                if attempt == 2:
+                    raise GenerationFailed(
+                        "Turn generation failed after the shared two-attempt repair budget.",
+                        attempt=attempt,
+                    ) from exc
+        raise GenerationFailed("Turn generation did not produce a result.")
+
     def _claim_for_attempt(
         self,
         context: GenerationContext,
@@ -196,6 +306,7 @@ class TurnGenerationService:
         existing: TurnClaim | None,
         *,
         transcript_hash: str,
+        predecessor_turn_ids: Sequence[str] | None = None,
     ) -> TurnClaim:
         if existing is not None:
             # A claim from attempt one may only be reused for the same attempt;
@@ -213,7 +324,11 @@ class TurnGenerationService:
             turn_index=context.turn.turn_index,
             stage="generation",
             attempt=attempt,
-            predecessor_turn_ids=tuple(item.turn_id for item in context.predecessors),
+            predecessor_turn_ids=tuple(
+                predecessor_turn_ids
+                if predecessor_turn_ids is not None
+                else (item.turn_id for item in context.predecessors)
+            ),
             # The prompt hash is computed after retrieval; the fence still
             # checks the exact predecessor IDs and the service binds the hash
             # before the provider is called.
@@ -222,6 +337,42 @@ class TurnGenerationService:
         if claimed is None:
             raise GenerationDiscarded("The turn is outside the current preparation window.")
         return claimed
+
+    def _validate_mutual_with_optional_trim(
+        self,
+        raw: object,
+        *,
+        attempt: int,
+        context: GenerationContext,
+        receipts: Sequence[SnapshotRetrievalReceipt],
+        predecessors: Sequence[FinalReadyTurn],
+    ) -> ValidatedTurn:
+        validator = self.validator
+        if not isinstance(validator, MutualLearningValidator):
+            raise TurnValidationError("The mutual-learning validator is not configured.")
+        try:
+            return validator.validate(
+                raw,  # type: ignore[arg-type]
+                plan=context.turn,
+                participant=context.participant,
+                participants=context.participants,
+                receipts=receipts,
+                predecessors=predecessors,
+                pending_question=context.effective_pending_question,
+            )
+        except TurnValidationError:
+            if attempt != 2:
+                raise
+            parsed = MutualLearningTurnResultV1.from_provider(raw)  # type: ignore[arg-type]
+            return validator.validate_after_sentence_trim(
+                parsed,
+                plan=context.turn,
+                participant=context.participant,
+                participants=context.participants,
+                receipts=receipts,
+                predecessors=predecessors,
+                pending_question=context.effective_pending_question,
+            )
 
     @staticmethod
     def _receipts(value: object) -> tuple[SnapshotRetrievalReceipt, ...]:
@@ -243,8 +394,11 @@ class TurnGenerationService:
         context: GenerationContext,
         receipts: Sequence[SnapshotRetrievalReceipt],
     ) -> ValidatedTurn:
+        validator = self.validator
+        if not isinstance(validator, TurnValidator):
+            raise TurnValidationError("The legacy validator is not configured.")
         try:
-            return self.validator.validate(
+            return validator.validate(
                 raw,  # type: ignore[arg-type]
                 plan=context.turn,
                 participant=context.participant,
@@ -260,7 +414,7 @@ class TurnGenerationService:
             from .types import StructuredTurnResult
 
             parsed = StructuredTurnResult.from_provider(raw)  # type: ignore[arg-type]
-            return self.validator.validate_after_sentence_trim(
+            return validator.validate_after_sentence_trim(
                 parsed,
                 plan=context.turn,
                 participant=context.participant,
@@ -313,10 +467,11 @@ class PositionLedger:
             raise GenerationDiscarded("Position publication participant does not match the turn.")
         before = self.summaries.get(participant.participant_id, "")
         after = turn.structured.position_summary
-        if participant.stance_mode == "open" and turn.structured.new_stance is not None:
+        new_stance = getattr(turn.structured, "new_stance", None)
+        if participant.stance_mode == "open" and new_stance is not None:
             raise TurnValidationError("An open participant cannot publish an enum stance.")
-        if turn.structured.new_stance is not None:
-            self.stances[participant.participant_id] = turn.structured.new_stance
+        if new_stance is not None:
+            self.stances[participant.participant_id] = new_stance
         self.summaries[participant.participant_id] = after
         record = PositionHistoryRecord(
             participant_id=participant.participant_id,

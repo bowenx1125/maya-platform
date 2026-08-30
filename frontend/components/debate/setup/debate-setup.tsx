@@ -164,6 +164,15 @@ export function TeacherDebateList({
 }
 
 type StanceValue = "support" | "oppose" | "neutral";
+type DebateRuleSetId =
+  | "ordered_multi_agent_rounds_demo_v1"
+  | "ordered_multi_agent_rounds_demo_v2"
+  | "ordered_multi_expert_mutual_learning_v1";
+type MutualRoundCount = 2 | 3 | 4 | 5;
+type SetupDraftPayload = Omit<DebateDraftRequest, "round_count" | "rule_set_id"> & {
+  round_count: MutualRoundCount;
+  rule_set_id: DebateRuleSetId;
+};
 type ParticipantDraft = {
   mode: "assigned" | "open";
   stance: StanceValue | null;
@@ -203,6 +212,10 @@ export function TeacherDebateCreate({
     Record<string, ParticipantDraft>
   >({});
   const [topic, setTopic] = useState("");
+  const [ruleSetId, setRuleSetId] = useState<DebateRuleSetId>(
+    "ordered_multi_agent_rounds_demo_v2",
+  );
+  const [roundCount, setRoundCount] = useState<MutualRoundCount>(2);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -298,7 +311,7 @@ export function TeacherDebateCreate({
       setFormError(copy(t, "debateCreateUnavailable"));
       return;
     }
-    const payload: DebateDraftRequest = {
+    const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
       participants: selectedIds.map((agentId) => {
         const draft = participantDrafts[agentId] ?? defaultParticipant();
@@ -309,7 +322,8 @@ export function TeacherDebateCreate({
           teacher_note: draft.note,
         };
       }),
-      round_count: 2,
+      round_count: ruleSetId === "ordered_multi_expert_mutual_learning_v1" ? roundCount : 2,
+      rule_set_id: ruleSetId,
       total_duration_seconds: null,
       turn_duration_seconds: null,
     };
@@ -333,7 +347,7 @@ export function TeacherDebateCreate({
       }
       const created = await effectiveController.create(
         courseId,
-        payload,
+        payload as DebateDraftRequest,
         createMutation.current.handle,
       );
       if (!created?.id) throw new Error(copy(t, "debateCreateUnavailable"));
@@ -554,10 +568,65 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        <SectionCard title={copy(t, "debateFixedRules")}>
+        <SectionCard
+          title={
+            ruleSetId === "ordered_multi_expert_mutual_learning_v1"
+              ? copy(t, "debateRuleSet")
+              : copy(t, "debateFixedRules")
+          }
+        >
           <div className={styles.fixedRule}>
-            <strong>{copy(t, "debateFixedRulesLede")}</strong>
-            <span>{copy(t, "debateFlow")}</span>
+            <label className="stack-form">
+              <span>{copy(t, "debateRuleSet")}</span>
+              <select
+                aria-label={copy(t, "debateRuleSet")}
+                disabled={busy}
+                onChange={(event) => {
+                  const next = event.target.value as DebateRuleSetId;
+                  setRuleSetId(next);
+                  if (next !== "ordered_multi_expert_mutual_learning_v1") {
+                    setRoundCount(2);
+                  }
+                }}
+                value={ruleSetId}
+              >
+                <option value="ordered_multi_agent_rounds_demo_v2">
+                  {copy(t, "debateLegacyRuleSet")}
+                </option>
+                <option value="ordered_multi_expert_mutual_learning_v1">
+                  {copy(t, "debateMutualLearningRuleSet")}
+                </option>
+              </select>
+            </label>
+            {ruleSetId === "ordered_multi_expert_mutual_learning_v1" ? (
+              <label className="stack-form">
+                <span>{copy(t, "debateRoundCount")}</span>
+                <select
+                  aria-label={copy(t, "debateRoundCount")}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setRoundCount(Number(event.target.value) as MutualRoundCount)
+                  }
+                  value={roundCount}
+                >
+                  {[2, 3, 4, 5].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <strong>
+              {ruleSetId === "ordered_multi_expert_mutual_learning_v1"
+                ? copy(t, "debateMutualLearningRules")
+                : copy(t, "debateFixedRulesLede")}
+            </strong>
+            <span>
+              {ruleSetId === "ordered_multi_expert_mutual_learning_v1"
+                ? `${copy(t, "debateRoundCount")}: ${roundCount}`
+                : copy(t, "debateFlow")}
+            </span>
           </div>
           {formError ? (
             <div className="form-error" role="alert">

@@ -25,7 +25,11 @@ import {
   type AvatarState,
 } from "../../avatar";
 import styles from "./debate-stage.module.css";
-import { resolvePlaybackStageLabels } from "./labels";
+import {
+  phaseLabel,
+  resolveDebateRoundPhase,
+  resolvePlaybackStageLabels,
+} from "./labels";
 import {
   connectionIssueFromCloseCode,
   consumeEventSequence,
@@ -51,6 +55,27 @@ import type {
 } from "./types";
 
 type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
+
+function visibleRoundPhase(
+  turn: VisiblePlaybackTurn | null,
+  detail: DebateDetail,
+): ReturnType<typeof resolveDebateRoundPhase> | null {
+  if (!turn) return null;
+  const explicit = (turn as VisiblePlaybackTurn & { phase?: unknown }).phase;
+  if (
+    explicit === "opening" ||
+    explicit === "exchange" ||
+    explicit === "final_integration"
+  ) {
+    return explicit;
+  }
+  const roundCount = (detail as DebateDetail & { round_count?: unknown })
+    .round_count;
+  if (typeof roundCount !== "number" || !Number.isInteger(roundCount)) {
+    return null;
+  }
+  return resolveDebateRoundPhase(turn.round_no, turn.round_no === roundCount);
+}
 
 const TERMINAL_PLAYBACK: readonly DebatePlaybackState["status"][] = [
   "completed",
@@ -250,6 +275,11 @@ function normalisePublicTurns(value: unknown): VisiblePlaybackTurn[] {
         turn_index: integer(item.turn_index, 0),
         speech: item.speech,
         sources: normaliseSources(item.sources),
+        ...(item.phase === "opening" ||
+        item.phase === "exchange" ||
+        item.phase === "final_integration"
+          ? { phase: item.phase }
+          : {}),
       },
     ];
   });
@@ -2707,6 +2737,7 @@ export function DebateStage({
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
       : null;
+  const activeRoundPhase = visibleRoundPhase(activeVisibleTurn, detailState);
   const replayAudioUnavailable =
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
@@ -2884,6 +2915,9 @@ export function DebateStage({
                 </div>
                 <span className={styles.roundMark}>
                   {labels.round} {activeVisibleTurn.round_no}
+                  {activeRoundPhase
+                    ? ` · ${phaseLabel(activeRoundPhase, labels)}`
+                    : ""}
                 </span>
               </div>
               <p className={styles.speechText}>{activeVisibleTurn.speech}</p>
@@ -2964,6 +2998,9 @@ export function DebateStage({
                       </span>
                       <span>
                         {labels.round} {turn.round_no}
+                        {visibleRoundPhase(turn, detailState)
+                          ? ` · ${phaseLabel(visibleRoundPhase(turn, detailState)!, labels)}`
+                          : ""}
                       </span>
                     </div>
                     <p>{turn.speech}</p>

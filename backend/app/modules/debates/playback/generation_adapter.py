@@ -27,6 +27,10 @@ from app.modules.debates.generation import (
     TurnPolicy,
     compute_transcript_hash,
 )
+from app.modules.debates.generation.mutual_learning_policy import (
+    MUTUAL_LEARNING_RULE_SET_ID,
+)
+from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
@@ -120,10 +124,21 @@ class SqlTurnPreparer:
             raise ValueError("turn participant is unavailable")
         expected_fence = generation_fence(db, debate, current)
         persisted_rule_set_id = str(debate.rule_set_id)
+        is_mutual = persisted_rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+        round_count = self._round_count(debate) if is_mutual else 2
         policy = TurnPolicy(rule_set_id=persisted_rule_set_id)
-        plans = policy.plan_with_ids(participants, [row.id for row in turn_rows])
+        plans = policy.plan_with_ids(
+            participants,
+            [row.id for row in turn_rows],
+            round_count=round_count,
+        )
         plan = plans[current.turn_index]
-        predecessors = tuple(self._final_ready(db, row) for row in turn_rows[: current.turn_index])
+        predecessor_rows = (
+            [row for row in turn_rows if int(row.round_no) < int(current.round_no)]
+            if is_mutual
+            else turn_rows[: current.turn_index]
+        )
+        predecessors = tuple(self._final_ready(db, row) for row in predecessor_rows)
         context = GenerationContext(
             debate_id=debate_id,
             topic=str(debate.topic),
@@ -210,6 +225,17 @@ class SqlTurnPreparer:
         )
 
     @staticmethod
+    def _round_count(debate: Any) -> int:
+        try:
+            snapshot = json.loads(str(debate.rule_snapshot_json))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("mutual-learning rule snapshot is invalid") from exc
+        count = snapshot.get("round_count") if isinstance(snapshot, dict) else None
+        if not isinstance(count, int) or isinstance(count, bool) or not 2 <= count <= 5:
+            raise ValueError("mutual-learning round count is invalid")
+        return count
+
+    @staticmethod
     def generation_fence(
         db: Session,
         debate: Any,
@@ -287,7 +313,7 @@ class SqlTurnPreparer:
         cls,
         db: Session,
         row: DebateTurn,
-        structured: StructuredTurnResult,
+        structured: StructuredTurnResult | MutualLearningTurnResultV1,
     ) -> tuple[SnapshotRetrievalReceipt, ...] | None:
         raw = getattr(row, "retrieval_receipts_json", None)
         if raw is None:
@@ -299,7 +325,11 @@ class SqlTurnPreparer:
         if not isinstance(payload, list):
             raise ValueError("persisted retrieval receipts are not a list")
         receipts = tuple(cls._receipt_from_payload(item) for item in payload)
-        expected_ids = tuple(structured.used_evidence_id)
+        expected_ids = (
+            tuple(structured.used_evidence_id)
+            if isinstance(structured, StructuredTurnResult)
+            else structured.used_evidence_ids
+        )
         actual_ids = tuple(item.resolved_evidence_id() for item in receipts)
         if actual_ids != expected_ids:
             raise ValueError("persisted receipts do not match used evidence IDs")
@@ -326,7 +356,11 @@ class SqlTurnPreparer:
             structured_value = json.loads(row.structured_json)
         except (TypeError, ValueError) as exc:
             raise ValueError("a predecessor structured result is invalid JSON") from exc
-        structured = StructuredTurnResult.model_validate(structured_value)
+        structured: StructuredTurnResult | MutualLearningTurnResultV1
+        if isinstance(structured_value, dict) and "key_claims" in structured_value:
+            structured = MutualLearningTurnResultV1.model_validate(structured_value)
+        else:
+            structured = StructuredTurnResult.model_validate(structured_value)
         persisted = cls._persisted_receipts(db, row, structured)
         if persisted is None:
             raise ValueError("a final-ready predecessor has no exact receipt payload")
@@ -391,27 +425,67 @@ def generation_fence(db: Session, debate: Any, turn: Any) -> PreparedGenerationF
         raise ValueError("planned turn is unavailable")
     if any(row.turn_index != index for index, row in enumerate(rows)):
         raise ValueError("persisted turn plan indexes are not contiguous")
-    expected_ids = tuple(str(row.id) for row in rows[: current.turn_index])
+    is_mutual = str(getattr(debate, "rule_set_id", "")) == MUTUAL_LEARNING_RULE_SET_ID
+    if is_mutual:
+        round_count = SqlTurnPreparer._round_count(debate)
+        if int(current.round_no) > round_count:
+            raise ValueError("turn round exceeds the frozen mutual-learning plan")
+    expected_rows = (
+        [row for row in rows if int(row.round_no) < int(current.round_no)]
+        if is_mutual
+        else rows[: current.turn_index]
+    )
+    expected_ids = tuple(str(row.id) for row in expected_rows)
     if _decode_predecessor_ids(current) != expected_ids:
         raise ValueError("persisted turn predecessor prefix is not exact")
-    predecessors = tuple(
-        SqlTurnPreparer._final_ready(db, row) for row in rows[: current.turn_index]
-    )
+    predecessors = tuple(SqlTurnPreparer._final_ready(db, row) for row in expected_rows)
     for index, predecessor in enumerate(predecessors):
-        expected_predecessors = tuple(item.turn_id for item in predecessors[:index])
+        if is_mutual:
+            expected_predecessors = tuple(
+                item.turn_id for item in predecessors if item.round_no < predecessor.round_no
+            )
+        else:
+            expected_predecessors = tuple(item.turn_id for item in predecessors[:index])
         if predecessor.predecessor_turn_ids != expected_predecessors:
             raise ValueError("a predecessor has a stale predecessor prefix")
-        if predecessor.cutoff_turn_index != index - 1:
+        expected_cutoff = (
+            max(
+                (item.turn_index for item in predecessors if item.round_no < predecessor.round_no),
+                default=-1,
+            )
+            if is_mutual
+            else index - 1
+        )
+        if predecessor.cutoff_turn_index != expected_cutoff:
             raise ValueError("a predecessor has a stale cutoff index")
-        expected_predecessor_hash = compute_transcript_hash(predecessors[:index])
+        if is_mutual:
+            from app.modules.debates.generation.mutual_learning_prompts import (
+                compute_mutual_transcript_hash,
+            )
+
+            visible = tuple(item for item in predecessors if item.round_no < predecessor.round_no)
+            expected_predecessor_hash = compute_mutual_transcript_hash(visible)
+        else:
+            expected_predecessor_hash = compute_transcript_hash(predecessors[:index])
         if predecessor.transcript_hash != expected_predecessor_hash:
             raise ValueError("a predecessor has a stale transcript hash")
-    transcript_hash = compute_transcript_hash(predecessors)
+    if is_mutual:
+        from app.modules.debates.generation.mutual_learning_prompts import (
+            compute_mutual_transcript_hash,
+        )
+
+        transcript_hash = compute_mutual_transcript_hash(predecessors)
+    else:
+        transcript_hash = compute_transcript_hash(predecessors)
     stored_hash = getattr(current, "transcript_hash", None)
     if stored_hash is not None and str(stored_hash) != transcript_hash:
         raise ValueError("persisted turn transcript hash does not match its prefix")
     stored_cutoff = getattr(current, "cutoff_turn_index", None)
-    expected_cutoff = current.turn_index - 1
+    expected_cutoff = (
+        max((int(row.turn_index) for row in expected_rows), default=-1)
+        if is_mutual
+        else current.turn_index - 1
+    )
     if stored_cutoff is not None and int(stored_cutoff) != expected_cutoff:
         raise ValueError("persisted turn cutoff does not match its prefix")
     return PreparedGenerationFence(

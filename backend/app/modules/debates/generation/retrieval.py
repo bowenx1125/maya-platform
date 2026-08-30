@@ -341,6 +341,46 @@ def build_turn_subqueries(
 
     position = context.participant.effective_position_summary or "the current position"
     topic = context.topic.strip()
+    # New mutual-learning plans use their explicit phase and round barrier.
+    # Keep this branch ahead of the legacy round-number vocabulary so adding
+    # exchange rounds never changes old v1/v2 retrieval semantics.
+    if getattr(context.turn, "barrier", "prefix") == "round":
+        if context.turn.phase == "opening":
+            return (
+                TurnSubquery(
+                    "viewpoint",
+                    (
+                        f"{topic}\nState this participant's independent viewpoint "
+                        "and core reasons.\n"
+                        f"Current position: {position}"
+                    ),
+                ),
+            )
+        question = pending_question or context.effective_pending_question
+        mutual_queries: list[TurnSubquery] = []
+        if question is not None:
+            mutual_queries.append(
+                TurnSubquery(
+                    "pending_question",
+                    f"{topic}\nAnswer this specific question from another participant: "
+                    f"{question.text}",
+                )
+            )
+        claim = _first_other_claim(context)
+        mutual_queries.append(
+            TurnSubquery(
+                "rebuttal",
+                f"{topic}\nEngage or accurately refine this earlier-round public claim: {claim}",
+            )
+        )
+        mutual_queries.append(
+            TurnSubquery(
+                "updated_position",
+                f"{topic}\nFind evidence that supports or qualifies the updated position: "
+                f"{position}",
+            )
+        )
+        return tuple(mutual_queries[:MAX_SUBQUERIES])
     if context.turn.round_no == 1:
         return (
             TurnSubquery(

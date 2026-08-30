@@ -12,6 +12,7 @@ from .types import (
     GenerationContext,
     ParticipantContext,
     SnapshotRetrievalReceipt,
+    StructuredTurnResult,
     TurnPromptInput,
     TurnValidationError,
 )
@@ -58,6 +59,8 @@ def _hash(value: object) -> str:
 
 def _result_payload(turn: FinalReadyTurn) -> dict[str, object]:
     result = turn.structured
+    if not isinstance(result, StructuredTurnResult):
+        raise TurnValidationError("A mutual-learning result cannot use the legacy transcript hash.")
     return {
         "turn_id": turn.turn_id,
         "participant_id": turn.participant_id,
@@ -103,6 +106,8 @@ def _safe_predecessor_payload(turn: FinalReadyTurn) -> dict[str, object]:
     """Return only public discussion fields for another Agent's context."""
 
     result = turn.structured
+    if not isinstance(result, StructuredTurnResult):
+        raise TurnValidationError("A mutual-learning result cannot use the legacy prompt payload.")
     return {
         "turn_id": turn.turn_id,
         "participant_id": turn.participant_id,
@@ -224,6 +229,13 @@ def make_turn_prompt_input(
 ) -> TurnPromptInput:
     """Create a prompt input only when the full final-ready prefix is present."""
 
+    if rule_set_id == "ordered_multi_expert_mutual_learning_v1":
+        # Keep the historical function as a discoverable entry point while
+        # routing the new RuleSet to its separate round-barrier DTO.
+        from .mutual_learning_prompts import make_mutual_learning_prompt_input
+
+        return make_mutual_learning_prompt_input(context, receipts)  # type: ignore[return-value]
+
     predecessors = tuple(sorted(context.predecessors, key=lambda item: item.turn_index))
     expected_indexes = tuple(item.turn_index for item in predecessors)
     expected_prefix = tuple(range(context.turn.turn_index))
@@ -322,6 +334,11 @@ def _prompt_payload(prompt: TurnPromptInput) -> dict[str, object]:
 
 def build_turn_prompt(prompt: TurnPromptInput) -> str:
     """Render a deterministic canonical prompt for Mock and future providers."""
+
+    if prompt.rule_set_id == "ordered_multi_expert_mutual_learning_v1":
+        from .mutual_learning_prompts import build_mutual_learning_prompt
+
+        return build_mutual_learning_prompt(prompt)  # type: ignore[arg-type]
 
     # Repeat the immutable rule block as a clearly delimited preamble before
     # any student-authored ``AGENT.md`` value.  It remains in the canonical

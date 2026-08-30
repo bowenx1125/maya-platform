@@ -43,7 +43,7 @@ from app.core.models import (
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.schemas import (
-    RULE_SET_ID,
+    RULE_SET_ID_MUTUAL_LEARNING,
     DebateDetail,
     DebateDraftRequest,
     DebateSummary,
@@ -84,7 +84,8 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
 
     if playback.status != "waiting_next" or playback.mode != "live" or not playback.current_turn_id:
         return False
-    if db.scalar(select(Debate.status).where(Debate.id == debate_id)) != "running":
+    debate = db.get(Debate, debate_id)
+    if debate is None or debate.status != "running":
         return False
     turns = list(
         db.scalars(
@@ -106,17 +107,34 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
         return False
     if not successor.audio_file_id:
         return False
-    if successor.transcript_hash is None or successor.cutoff_turn_index != successor.turn_index - 1:
+    if successor.transcript_hash is None:
         return False
     try:
         predecessor_ids = json.loads(successor.predecessor_turn_ids_json)
     except (TypeError, ValueError):
         return False
-    expected_ids = [row.id for row in turns if row.turn_index < successor.turn_index]
+    is_mutual = str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING
+    if is_mutual:
+        expected_ids = [
+            row.id for row in turns if int(row.round_no) < int(successor.round_no)
+        ]
+        visible_predecessors = [
+            row for row in turns if int(row.round_no) < int(successor.round_no)
+        ]
+    else:
+        expected_ids = [row.id for row in turns if row.turn_index < successor.turn_index]
+        visible_predecessors = [row for row in turns if row.turn_index < successor.turn_index]
+    expected_cutoff = (
+        max((int(row.turn_index) for row in visible_predecessors), default=-1)
+        if is_mutual
+        else successor.turn_index - 1
+    )
+    if successor.cutoff_turn_index != expected_cutoff:
+        return False
     if predecessor_ids != expected_ids:
         return False
     if any(
-        row.publication_status != "public" for row in turns if row.turn_index < successor.turn_index
+        row.publication_status != "public" for row in visible_predecessors
     ):
         return False
     return (
@@ -133,6 +151,21 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
 def _canonical_hash(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _round_count_from_snapshot(debate: Debate) -> int:
+    """Read the frozen configured count without changing legacy rows."""
+
+    if str(debate.rule_set_id) != RULE_SET_ID_MUTUAL_LEARNING:
+        return 2
+    try:
+        payload = json.loads(str(debate.rule_snapshot_json))
+    except (TypeError, ValueError) as exc:
+        raise invalid_state("The mutual-learning rule snapshot is invalid.") from exc
+    count = payload.get("round_count") if isinstance(payload, dict) else None
+    if not isinstance(count, int) or isinstance(count, bool) or not 2 <= count <= 5:
+        raise invalid_state("The mutual-learning round count is invalid.")
+    return count
 
 
 def _settings(db: Session, settings: Settings | None) -> Settings:
@@ -459,7 +492,9 @@ def _participant_row(
 def _ensure_payload(payload: DebateDraftRequest) -> None:
     try:
         build_turn_plan(
-            [str(item.agent_id) for item in payload.participants], round_count=payload.round_count
+            [str(item.agent_id) for item in payload.participants],
+            round_count=payload.round_count,
+            rule_set_id=payload.rule_set_id,
         )
     except RuleViolation as exc:
         raise validation_failure(exc.message, code=exc.code) from exc
@@ -698,6 +733,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         for row in participants
     ]
     turn_dtos: list[DebateTurnDTO] = []
+    synthesis_inputs: list[dict[str, Any]] = []
     for row in turn_rows:
         # TurnSource is imported lazily to keep this service's core imports
         # concise and to avoid a circular type-only dependency.
@@ -706,12 +742,34 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         source_rows = db.scalars(
             select(TurnSource).where(TurnSource.turn_id == row.id).order_by(TurnSource.rank)
         ).all()
+        mutual_result = None
+        phase = None
+        if str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING and row.structured_json:
+            from app.modules.debates.generation.round_phase import phase_for_round
+            from app.modules.debates.generation.types import MutualLearningTurnResultV1
+
+            try:
+                mutual_result = MutualLearningTurnResultV1.model_validate(
+                    json.loads(row.structured_json)
+                )
+                phase = phase_for_round(row.round_no, _round_count_from_snapshot(debate)).value
+                synthesis_inputs.append(
+                    {
+                        "participant_id": row.participant_id,
+                        "round_no": row.round_no,
+                        "publication_status": row.publication_status,
+                        "structured": mutual_result,
+                    }
+                )
+            except (TypeError, ValueError) as exc:
+                raise invalid_state("A mutual-learning turn has invalid structured data.") from exc
         turn_dtos.append(
             DebateTurnDTO.model_validate(
                 {
                     "id": _as_uuid(row.id),
                     "participant_id": _as_uuid(row.participant_id),
                     "round_no": row.round_no,
+                    "phase": phase,
                     "turn_index": row.turn_index,
                     "speech": row.speech or "",
                     "retrieval_status": row.retrieval_status or "no_match",
@@ -723,9 +781,22 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                         )
                         for source in source_rows
                     ],
+                    "mutual_learning": mutual_result,
                 }
             )
         )
+    synthesis = None
+    if str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING:
+        round_count = _round_count_from_snapshot(debate)
+        final_inputs = [
+            item for item in synthesis_inputs if item["round_no"] == round_count
+        ]
+        if len(final_inputs) == len(participants):
+            from app.modules.debates.generation.mutual_learning_synthesis import (
+                build_mutual_learning_synthesis,
+            )
+
+            synthesis = build_mutual_learning_synthesis(final_inputs, topic=debate.topic)
     return DebateDetail.model_validate(
         {
             "id": _as_uuid(debate.id),
@@ -736,12 +807,14 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "revision": debate.revision,
             "last_sequence": debate.last_sequence,
             "rule_set_id": debate.rule_set_id,
+            "round_count": _round_count_from_snapshot(debate),
             "participants": participant_dtos,
             "public_turns": turn_dtos,
             "playback": playback_dto,
             "interaction_status": "closed",
             "insight_status": "not_started",
             "report_status": "not_started",
+            "mutual_learning_synthesis": synthesis,
         }
     )
 
@@ -794,8 +867,11 @@ def create_debate_draft(
         id=str(uuid4()),
         course_id=course_id,
         topic=topic,
-        rule_set_id=RULE_SET_ID,
-        rule_snapshot_json=canonical_rule_snapshot_json(),
+        rule_set_id=payload.rule_set_id,
+        rule_snapshot_json=canonical_rule_snapshot_json(
+            rule_set_id=payload.rule_set_id,
+            round_count=payload.round_count,
+        ),
         status="draft",
         revision=0,
         last_sequence=0,
@@ -912,6 +988,11 @@ def update_debate_draft(
         )
         .values(
             topic=topic,
+            rule_set_id=payload.rule_set_id,
+            rule_snapshot_json=canonical_rule_snapshot_json(
+                rule_set_id=payload.rule_set_id,
+                round_count=payload.round_count,
+            ),
             revision=Debate.revision + 1,
             updated_at=timestamp,
         )
@@ -984,7 +1065,11 @@ def commit_start_plan(
         .order_by(DebateParticipant.order_index)
     ).all()
     try:
-        plan = build_turn_plan([row.id for row in participants])
+        plan = build_turn_plan(
+            [row.id for row in participants],
+            round_count=_round_count_from_snapshot(debate),
+            rule_set_id=str(debate.rule_set_id),
+        )
     except RuleViolation as exc:
         raise validation_failure(exc.message, code=exc.code) from exc
     if db.scalar(select(DebateTurn.id).where(DebateTurn.debate_id == debate.id)) is not None:
@@ -1009,9 +1094,10 @@ def commit_start_plan(
                 publication_status="unpublished",
                 preparation_stage="generation",
                 predecessor_turn_ids_json=json.dumps(
-                    turn_ids[: entry.turn_index], separators=(",", ":")
+                    [turn_ids[index] for index in entry.predecessor_turn_indexes],
+                    separators=(",", ":"),
                 ),
-                cutoff_turn_index=entry.turn_index - 1,
+                cutoff_turn_index=max(entry.predecessor_turn_indexes, default=-1),
                 attempt=1,
                 created_at=timestamp,
                 updated_at=timestamp,

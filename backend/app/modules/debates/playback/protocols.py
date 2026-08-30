@@ -119,6 +119,8 @@ class MemoryDebate:
     id: str = field(default_factory=lambda: str(uuid4()))
     course_id: str = field(default_factory=lambda: str(uuid4()))
     topic: str = ""
+    rule_set_id: str = "ordered_multi_agent_rounds_demo_v1"
+    round_count: int = 2
     status: str = "draft"
     revision: int = 0
     cancellation_generation: int = 0
@@ -272,15 +274,34 @@ class MemoryPlaybackRepository:
         del db
         participants = self.participants(None, debate)
         if not debate.turns:
-            for round_no in (1, 2):
-                for participant in participants:
+            if debate.rule_set_id == "ordered_multi_expert_mutual_learning_v1":
+                from app.modules.debates.generation.mutual_learning_policy import (
+                    MutualLearningPolicy,
+                )
+
+                plan = MutualLearningPolicy().plan(
+                    [participant.id for participant in participants],
+                    round_count=debate.round_count,
+                )
+                for entry in plan:
                     debate.turns.append(
                         MemoryTurn(
-                            participant_id=participant.id,
-                            round_no=round_no,
-                            turn_index=len(debate.turns),
+                            participant_id=entry.participant_id,
+                            round_no=entry.round_no,
+                            turn_index=entry.turn_index,
+                            predecessor_turn_ids=entry.predecessor_turn_ids,
                         )
                     )
+            else:
+                for round_no in (1, 2):
+                    for participant in participants:
+                        debate.turns.append(
+                            MemoryTurn(
+                                participant_id=participant.id,
+                                round_no=round_no,
+                                turn_index=len(debate.turns),
+                            )
+                        )
         return self.turns(None, debate)
 
     def playback_state(self, db: Any, debate: MemoryDebate) -> Any:

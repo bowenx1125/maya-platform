@@ -1,6 +1,8 @@
 export { DebateStage } from "./debate-stage";
 export {
   defaultPlaybackStageLabels,
+  phaseLabel,
+  resolveDebateRoundPhase,
   resolvePlaybackStageLabels,
 } from "./labels";
 export {
@@ -18,6 +20,7 @@ export type {
   AvatarVisualState,
   AdvancePlaybackRequest,
   DebatePlaybackApi,
+  DebateRoundPhase,
   DebateStageProps,
   DebateStartRequest,
   PlaybackAction,

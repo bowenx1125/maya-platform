@@ -9,6 +9,7 @@ import type { AvatarConfig, AvatarExpression, AvatarState } from "../../avatar";
 export type PlaybackStatus = DebatePlaybackState["status"];
 export type PlaybackMode = DebatePlaybackState["mode"];
 export type PlaybackAction = "start" | "resume" | "next" | "replay";
+export type DebateRoundPhase = "opening" | "exchange" | "final_integration";
 
 export type PlaybackConnectionIssue =
   | "network"
@@ -78,6 +79,9 @@ export type PlaybackStageLabels = {
   phaseInProgress?: string;
   phaseWaiting?: string;
   phaseFinished?: string;
+  phaseOpening?: string;
+  phaseExchange?: string;
+  phaseFinalIntegration?: string;
   next?: string;
   waitingForAudio?: string;
   connectionWaiting?: string;
@@ -110,7 +114,9 @@ export type AvatarVisualState = {
 export type VisiblePlaybackTurn = Pick<
   DebateTurn,
   "id" | "participant_id" | "round_no" | "turn_index" | "speech" | "sources"
->;
+> & {
+  phase?: DebateRoundPhase;
+};
 
 export type PlaybackEventType =
   | "snapshot"

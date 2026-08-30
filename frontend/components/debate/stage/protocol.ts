@@ -422,6 +422,11 @@ export function visibleTurnFromPlaybackStarted(
     turn_index: turnIndex,
     speech: payload.speech,
     sources: sourceList(payload.sources),
+    ...(payload.phase === "opening" ||
+    payload.phase === "exchange" ||
+    payload.phase === "final_integration"
+      ? { phase: payload.phase }
+      : {}),
   };
 }
 

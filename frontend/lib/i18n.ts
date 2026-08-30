@@ -125,6 +125,15 @@ const enMessages = {
     "Two rounds · 80–200 English words per turn · questions count toward the limit.",
   debateFlow:
     "Round 1 A→B→C→D→E · Round 2 A→B→C→D→E · the final turn asks the class a reflection question.",
+  debateRuleSet: "Protocol",
+  debateLegacyRuleSet: "Demo two-round",
+  debateMutualLearningRuleSet: "Multi-round mutual learning",
+  debateRoundCount: "Rounds",
+  debateMutualLearningRules:
+    "Opening → exchange → final integration · 80–200 English words per turn.",
+  debatePhaseOpening: "Opening",
+  debatePhaseExchange: "Exchange",
+  debatePhaseFinalIntegration: "Final integration",
   debateStance: "Stance mode",
   debateAssigned: "Assigned stance",
   debateOpen: "Open explanation",
@@ -816,6 +825,15 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "固定两轮 · 每次 80—200 个英文单词 · 问题文本计入长度。",
   debateFlow:
     "第一轮 A→B→C→D→E · 第二轮 A→B→C→D→E · 最后一位向全班提出反思问题。",
+  debateRuleSet: "协议",
+  debateLegacyRuleSet: "Demo 两轮",
+  debateMutualLearningRuleSet: "多轮专家互鉴",
+  debateRoundCount: "轮数",
+  debateMutualLearningRules:
+    "Opening → exchange → final integration · 每次 80—200 个英文单词。",
+  debatePhaseOpening: "Opening（开场）",
+  debatePhaseExchange: "Exchange（交流）",
+  debatePhaseFinalIntegration: "Final integration（最终整合）",
   debateStance: "立场模式",
   debateAssigned: "教师指定立场",
   debateOpen: "开放阐述",

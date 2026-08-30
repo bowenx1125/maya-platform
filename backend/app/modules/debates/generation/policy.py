@@ -9,10 +9,12 @@ from .types import ParticipantContext
 
 RULE_SET_ID_V1 = "ordered_multi_agent_rounds_demo_v1"
 RULE_SET_ID_V2 = "ordered_multi_agent_rounds_demo_v2"
+RULE_SET_ID_MUTUAL_LEARNING = "ordered_multi_expert_mutual_learning_v1"
 # Generation callers stay v1-compatible unless the persisted Debate row is
 # passed explicitly.  New draft creation uses v2 in the setup module.
 RULE_SET_ID = RULE_SET_ID_V1
-SUPPORTED_RULE_SET_IDS = frozenset({RULE_SET_ID_V1, RULE_SET_ID_V2})
+SUPPORTED_LEGACY_RULE_SET_IDS = frozenset({RULE_SET_ID_V1, RULE_SET_ID_V2})
+SUPPORTED_RULE_SET_IDS = frozenset({*SUPPORTED_LEGACY_RULE_SET_IDS, RULE_SET_ID_MUTUAL_LEARNING})
 ROUND_COUNT = 2
 MIN_PARTICIPANTS = 2
 MAX_PARTICIPANTS = 5
@@ -47,9 +49,15 @@ class TurnPlan:
     next_participant_id: str | None
     is_final: bool
     predecessor_ids: tuple[str, ...] = ()
+    # Legacy plans expose a lower turn-index prefix.  Mutual-learning plans
+    # set this marker and expose only turns from completed earlier rounds.
+    barrier: str = "prefix"
+    is_final_round: bool = False
 
     @property
     def predecessor_turn_ids(self) -> tuple[str, ...]:
+        if self.barrier == "round":
+            return self.predecessor_ids
         return self.predecessor_ids or tuple(f"turn-{index}" for index in range(self.turn_index))
 
     @property
@@ -87,6 +95,10 @@ class TurnPolicy:
         *,
         round_count: int = ROUND_COUNT,
     ) -> tuple[TurnPlan, ...]:
+        if self.rule_set_id == RULE_SET_ID_MUTUAL_LEARNING:
+            from .mutual_learning_policy import MutualLearningPolicy
+
+            return MutualLearningPolicy().plan(participants, round_count=round_count)
         normalized = self._normalize_participants(participants)
         if round_count != ROUND_COUNT:
             raise TurnPolicyError(
@@ -139,6 +151,13 @@ class TurnPolicy:
         round_count: int = ROUND_COUNT,
     ) -> tuple[TurnPlan, ...]:
         """Plan turns and replace stable placeholders with persisted IDs."""
+
+        if self.rule_set_id == RULE_SET_ID_MUTUAL_LEARNING:
+            from .mutual_learning_policy import MutualLearningPolicy
+
+            return MutualLearningPolicy().plan_with_ids(
+                participants, turn_ids, round_count=round_count
+            )
 
         plans = self.plan(participants, round_count=round_count)
         if len(plans) != len(turn_ids) or any(not value for value in turn_ids):
@@ -197,9 +216,12 @@ __all__ = [
     "RULE_SET_ID",
     "RULE_SET_ID_V1",
     "RULE_SET_ID_V2",
+    "RULE_SET_ID_MUTUAL_LEARNING",
     "SLOTS",
     "TurnPlan",
     "TurnPolicy",
     "TurnPolicyError",
+    "SUPPORTED_LEGACY_RULE_SET_IDS",
+    "SUPPORTED_RULE_SET_IDS",
     "expected_prefix",
 ]

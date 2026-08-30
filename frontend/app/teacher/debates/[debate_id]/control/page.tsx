@@ -94,8 +94,18 @@ function finishBlockedCopy(
 }
 
 function hasCompletePublicPlan(detail: DebateDetail): boolean {
+  const configuredRoundCount = (detail as DebateDetail & {
+    round_count?: unknown;
+  }).round_count;
+  const roundCount =
+    typeof configuredRoundCount === "number" &&
+    Number.isInteger(configuredRoundCount) &&
+    configuredRoundCount >= 2 &&
+    configuredRoundCount <= 5
+      ? configuredRoundCount
+      : 2;
   return (
-    detail.public_turns.length === detail.participants.length * 2 &&
+    detail.public_turns.length === detail.participants.length * roundCount &&
     detail.participants.length >= 2 &&
     detail.playback.status === "completed"
   );
@@ -137,6 +147,9 @@ export default function TeacherDebateControlPage() {
       phaseInProgress: locale === "zh" ? "进行中" : "In progress",
       phaseWaiting: locale === "zh" ? "等待中" : "Waiting",
       phaseFinished: locale === "zh" ? "已结束" : "Finished",
+      phaseOpening: t("debatePhaseOpening"),
+      phaseExchange: t("debatePhaseExchange"),
+      phaseFinalIntegration: t("debatePhaseFinalIntegration"),
       waitingForAudio: t("debateWaitingForAudio"),
       connectionReady: t("debateConnectionReady"),
       connectionReconnecting: t("debateConnectionReconnecting"),

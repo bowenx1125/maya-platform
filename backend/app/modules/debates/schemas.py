@@ -14,12 +14,24 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.agents.schemas import AvatarConfig
+from app.modules.debates.generation.types import (
+    MutualLearningSynthesisV1,
+    MutualLearningTurnResultV1,
+)
 
 Stance = Literal["support", "oppose", "neutral"]
 StanceMode = Literal["assigned", "open"]
 Slot = Literal["A", "B", "C", "D", "E"]
 RULE_SET_ID_V1: Literal["ordered_multi_agent_rounds_demo_v1"] = "ordered_multi_agent_rounds_demo_v1"
 RULE_SET_ID_V2: Literal["ordered_multi_agent_rounds_demo_v2"] = "ordered_multi_agent_rounds_demo_v2"
+RULE_SET_ID_MUTUAL_LEARNING: Literal["ordered_multi_expert_mutual_learning_v1"] = (
+    "ordered_multi_expert_mutual_learning_v1"
+)
+RuleSetId = Literal[
+    "ordered_multi_agent_rounds_demo_v1",
+    "ordered_multi_agent_rounds_demo_v2",
+    "ordered_multi_expert_mutual_learning_v1",
+]
 RULE_SET_ID: Literal["ordered_multi_agent_rounds_demo_v2"] = RULE_SET_ID_V2
 MOCK_RETRIEVAL_POLICY_ID: Literal["mock_lexical_anchor_v2"] = "mock_lexical_anchor_v2"
 
@@ -55,7 +67,8 @@ class DebateDraftRequest(_ClosedModel):
         ),
     )
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
-    round_count: Literal[2]
+    round_count: int = Field(ge=2, le=5)
+    rule_set_id: RuleSetId = RULE_SET_ID
     total_duration_seconds: None = None
     turn_duration_seconds: None = None
 
@@ -66,6 +79,8 @@ class DebateDraftRequest(_ClosedModel):
         ids = [item.agent_id for item in self.participants]
         if len(set(ids)) != len(ids):
             raise ValueError("participants must be unique")
+        if self.rule_set_id in {RULE_SET_ID_V1, RULE_SET_ID_V2} and self.round_count != 2:
+            raise ValueError("legacy Demo RuleSets require exactly two rounds")
         return self
 
 
@@ -171,7 +186,8 @@ class PlaybackState(_ClosedModel):
 class DebateTurn(_ClosedModel):
     id: UUID
     participant_id: UUID
-    round_no: int = Field(ge=1, le=2)
+    round_no: int = Field(ge=1)
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] | None = None
     turn_index: int = Field(ge=0)
     speech: str
     retrieval_status: Literal["matched", "no_match"]
@@ -179,6 +195,7 @@ class DebateTurn(_ClosedModel):
     sources: list[RetrievalSource]
     translated_text: str | None = None
     playback_resource: DebatePlaybackResource | None = None
+    mutual_learning: MutualLearningTurnResultV1 | None = None
 
 
 class Transcript(_ClosedModel):
@@ -190,13 +207,15 @@ class Transcript(_ClosedModel):
 class DebateDetail(DebateSummary):
     revision: int = Field(ge=0)
     last_sequence: int = Field(ge=0)
-    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"]
+    rule_set_id: RuleSetId
+    round_count: int = Field(ge=2, le=5)
     participants: list[DebateParticipant]
     public_turns: list[DebateTurn]
     playback: PlaybackState
     interaction_status: Literal["closed", "open", "finalized"]
     insight_status: Literal["not_started", "generating", "ready", "failed"]
     report_status: Literal["not_started", "generating", "ready", "failed"]
+    mutual_learning_synthesis: MutualLearningSynthesisV1 | None = None
 
 
 class TurnPlanEntry(_ClosedModel):
@@ -205,21 +224,21 @@ class TurnPlanEntry(_ClosedModel):
     participant_id: UUID
     slot: Slot
     order_index: int = Field(ge=0, le=4)
-    round_no: Literal[1, 2]
+    round_no: int = Field(ge=1)
     turn_index: int = Field(ge=0)
     predecessor_turn_indexes: tuple[int, ...] = ()
     question_type: Literal["agent", "audience_reflection", "none"] = "none"
     question_target_participant_id: UUID | None = None
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] = "opening"
+    is_final_round: bool = False
 
 
 class DebateRuleSnapshot(_ClosedModel):
     """Versioned immutable rule data stored on each Debate."""
 
-    rule_set_id: Literal[
-        "ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"
-    ] = "ordered_multi_agent_rounds_demo_v2"
+    rule_set_id: RuleSetId = "ordered_multi_agent_rounds_demo_v2"
     retrieval_policy_id: Literal["mock_lexical_anchor_v2"] | None = MOCK_RETRIEVAL_POLICY_ID
-    round_count: Literal[2] = 2
+    round_count: int = Field(default=2, ge=2, le=5)
     min_participants: Literal[2] = 2
     max_participants: Literal[5] = 5
     min_words: Literal[80] = 80
@@ -247,6 +266,10 @@ class DebateRuleSnapshot(_ClosedModel):
             and self.retrieval_policy_id != MOCK_RETRIEVAL_POLICY_ID
         ):
             raise ValueError("the v2 rule snapshot requires mock_lexical_anchor_v2")
+        if self.rule_set_id in {RULE_SET_ID_V1, RULE_SET_ID_V2} and self.round_count != 2:
+            raise ValueError("legacy rule snapshots require exactly two rounds")
+        if self.rule_set_id == RULE_SET_ID_MUTUAL_LEARNING and self.round_count < 2:
+            raise ValueError("mutual-learning snapshots require at least two rounds")
         return self
 
 
@@ -270,6 +293,8 @@ __all__ = [
     "RULE_SET_ID",
     "RULE_SET_ID_V1",
     "RULE_SET_ID_V2",
+    "RULE_SET_ID_MUTUAL_LEARNING",
+    "RuleSetId",
     "MOCK_RETRIEVAL_POLICY_ID",
     "Transcript",
     "TurnPlanEntry",

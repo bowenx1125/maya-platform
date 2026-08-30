@@ -625,6 +625,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "expected_current_turn_id": expected_current_turn_id,
             "successor_turn_id": successor_turn_id,
             "teacher_user_id": teacher_user_id,
+            "mutual_rule_set_id": "ordered_multi_expert_mutual_learning_v1",
         }
         try:
             # Do not issue a SELECT (or any other statement) before this
@@ -659,11 +660,19 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND NOT EXISTS (SELECT 1 FROM debate_turns AS prefix "
                     "WHERE prefix.debate_id=ps.debate_id "
                     "AND prefix.turn_index < current_turn.turn_index "
+                    "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR prefix.round_no < current_turn.round_no) "
                     "AND prefix.publication_status <> 'public') "
                     "AND (SELECT COUNT(*) FROM debate_turns AS prefix_count "
                     "WHERE prefix_count.debate_id=ps.debate_id "
-                    "AND prefix_count.turn_index < current_turn.turn_index) "
-                    "= current_turn.turn_index "
+                    "AND prefix_count.turn_index < CASE "
+                    "WHEN d.rule_set_id=:mutual_rule_set_id THEN successor.turn_index "
+                    "ELSE current_turn.turn_index END "
+                    "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR prefix_count.round_no < current_turn.round_no)) "
+                    "= CASE WHEN d.rule_set_id=:mutual_rule_set_id "
+                    "THEN json_array_length(successor.predecessor_turn_ids_json) "
+                    "ELSE current_turn.turn_index END "
                     "AND NOT EXISTS (SELECT 1 FROM debate_turns AS duplicate "
                     "WHERE duplicate.debate_id=ps.debate_id "
                     "AND duplicate.turn_index=current_turn.turn_index + 1 "
@@ -679,13 +688,20 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "WHERE sf.id=successor.audio_file_id AND sf.state='active') "
                     "AND successor.transcript_hash IS NOT NULL "
                     "AND trim(successor.transcript_hash) <> '' "
-                    "AND successor.cutoff_turn_index=successor.turn_index - 1 "
+                    "AND successor.cutoff_turn_index=CASE "
+                    "WHEN d.rule_set_id=:mutual_rule_set_id THEN COALESCE(("
+                    "SELECT MAX(prior.turn_index) FROM debate_turns AS prior "
+                    "WHERE prior.debate_id=ps.debate_id "
+                    "AND prior.round_no < successor.round_no), -1) "
+                    "ELSE successor.turn_index - 1 END "
                     "AND json_valid(successor.predecessor_turn_ids_json) "
                     "AND successor.predecessor_turn_ids_json = ("
                     "SELECT json_group_array(prefix_ids.id) FROM ("
                     "SELECT id FROM debate_turns "
                     "WHERE debate_id=ps.debate_id "
                     "AND turn_index < successor.turn_index "
+                    "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR round_no < successor.round_no) "
                     "ORDER BY turn_index, id"
                     ") AS prefix_ids) "
                     "AND (successor.actual_tts_voice_kind IN "
@@ -2069,6 +2085,17 @@ class SqlPlaybackRepository(PlaybackRepository):
             participant_updates,
         )
         influencing_turn_id = structured.get("rebuttal_target_turn_id")
+        if influencing_turn_id is None and isinstance(structured.get("engagements"), list):
+            first_engagement = next(
+                (
+                    item
+                    for item in structured["engagements"]
+                    if isinstance(item, dict) and item.get("target_turn_id")
+                ),
+                None,
+            )
+            if isinstance(first_engagement, dict):
+                influencing_turn_id = first_engagement.get("target_turn_id")
         if influencing_turn_id is not None:
             same_debate = db.execute(
                 text("SELECT 1 FROM debate_turns WHERE id=:turn_id AND debate_id=:debate_id"),
@@ -2080,8 +2107,29 @@ class SqlPlaybackRepository(PlaybackRepository):
             if same_debate is None:
                 raise RuntimeError("position influence crossed the debate boundary")
         evidence_ids = structured.get("used_evidence_id", [])
+        if not evidence_ids and isinstance(structured.get("key_claims"), list):
+            evidence_ids = list(
+                dict.fromkeys(
+                    evidence_id
+                    for claim in structured["key_claims"]
+                    if isinstance(claim, dict)
+                    for evidence_id in claim.get("used_evidence_ids", [])
+                    if isinstance(evidence_id, str) and evidence_id
+                )
+            )
         if not isinstance(evidence_ids, list):
             evidence_ids = []
+        update_type = str(structured.get("position_update", "unchanged"))
+        # PositionHistory predates mutual-learning's more descriptive enum.
+        # Preserve the exact new value in structured_json while writing the
+        # closest compatible audit projection into its frozen legacy column.
+        update_type = {
+            "clarified": "refined",
+            "extended": "refined",
+            "qualified": "partial_concession",
+            "partially_revised": "partial_concession",
+            "substantially_revised": "reframed",
+        }.get(update_type, update_type)
         db.execute(
             text(
                 "INSERT INTO position_history "
@@ -2096,7 +2144,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "turn_id": str(turn.id),
                 "before_summary": str(participant["current_position_summary"] or ""),
                 "after_summary": after_summary,
-                "update_type": str(structured.get("position_update", "unchanged")),
+                "update_type": update_type,
                 "reason": str(structured.get("position_update_reason") or ""),
                 "influencing_turn_id": (
                     str(influencing_turn_id) if influencing_turn_id is not None else None

@@ -47,7 +47,9 @@ class RetrievalSourceDTO(ClosedModel):
 class PublicTurnDTO(ClosedModel):
     id: UUID
     participant_id: UUID
-    round_no: int = Field(ge=1, le=2)
+    round_no: int = Field(ge=1)
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] | None = None
+    round_count: int | None = Field(default=None, ge=2, le=5)
     turn_index: int = Field(ge=0)
     speech: str = Field(min_length=1)
     retrieval_status: Literal["matched", "no_match"]
@@ -78,7 +80,9 @@ class DebatePlaybackResourceDTO(ClosedModel):
 class PlaybackStartedPayload(ClosedModel):
     turn_id: UUID
     slot: Literal["A", "B", "C", "D", "E"] | None = None
-    round_no: int | None = Field(default=None, ge=1, le=2)
+    round_no: int | None = Field(default=None, ge=1)
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] | None = None
+    round_count: int | None = Field(default=None, ge=2, le=5)
     speech: str = Field(min_length=1)
     sources: list[RetrievalSourceDTO]
     playback_url: str = Field(
@@ -121,7 +125,12 @@ class ReplayPayload(ClosedModel):
 
 
 class DebateStartedPayload(ClosedModel):
-    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"]
+    rule_set_id: Literal[
+        "ordered_multi_agent_rounds_demo_v1",
+        "ordered_multi_agent_rounds_demo_v2",
+        "ordered_multi_expert_mutual_learning_v1",
+    ]
+    round_count: int | None = Field(default=None, ge=2, le=5)
     participants: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
     participant_slots: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
 
@@ -134,21 +143,27 @@ class ParticipantSlotDTO(ClosedModel):
 
 
 class RoundStartedPayload(ClosedModel):
-    round_no: int = Field(ge=1, le=2)
+    round_no: int = Field(ge=1)
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] | None = None
+    round_count: int | None = Field(default=None, ge=2, le=5)
     turn_count: int | None = Field(default=None, ge=1)
 
 
 class TurnPreparingPayload(ClosedModel):
     turn_id: UUID
     slot: Literal["A", "B", "C", "D", "E"]
-    round_no: int = Field(ge=1, le=2)
+    round_no: int = Field(ge=1)
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] | None = None
+    round_count: int | None = Field(default=None, ge=2, le=5)
     stage: Literal["rag", "llm", "tts"] | None = None
 
 
 class TurnReadyPayload(ClosedModel):
     turn_id: UUID
     slot: Literal["A", "B", "C", "D", "E"]
-    round_no: int | None = Field(default=None, ge=1, le=2)
+    round_no: int | None = Field(default=None, ge=1)
+    phase: Literal["opening", "exchange", "final_integration", "rebuttal"] | None = None
+    round_count: int | None = Field(default=None, ge=2, le=5)
     audio_ready: Literal[True] = True
     retrieval_status: Literal["matched", "no_match"]
     grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"] | None = None

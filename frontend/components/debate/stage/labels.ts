@@ -1,4 +1,4 @@
-import type { PlaybackStageLabels } from "./types";
+import type { DebateRoundPhase, PlaybackStageLabels } from "./types";
 
 /**
  * M12 keeps its copy injectable so the shared locale table does not become a
@@ -32,6 +32,9 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   phaseInProgress: "In progress",
   phaseWaiting: "Waiting",
   phaseFinished: "Finished",
+  phaseOpening: "Opening",
+  phaseExchange: "Exchange",
+  phaseFinalIntegration: "Final integration",
   next: "Next",
   waitingForAudio: "Waiting for the server to prepare audio…",
   connectionWaiting: "Waiting for the server to restore playback.",
@@ -59,4 +62,26 @@ export function resolvePlaybackStageLabels(
   labels?: PlaybackStageLabels,
 ): Required<PlaybackStageLabels> {
   return { ...defaultPlaybackStageLabels, ...labels };
+}
+
+/** Resolve a mutual-learning label from the explicit final-round marker. */
+export function resolveDebateRoundPhase(
+  roundNo: number,
+  isFinalRound: boolean,
+): DebateRoundPhase {
+  if (!Number.isInteger(roundNo) || roundNo < 1) {
+    throw new Error("round_no must be a positive integer");
+  }
+  if (roundNo === 1) return "opening";
+  return isFinalRound ? "final_integration" : "exchange";
+}
+
+export function phaseLabel(
+  phase: DebateRoundPhase,
+  labels?: PlaybackStageLabels,
+): string {
+  const resolved = resolvePlaybackStageLabels(labels);
+  if (phase === "opening") return resolved.phaseOpening;
+  if (phase === "exchange") return resolved.phaseExchange;
+  return resolved.phaseFinalIntegration;
 }

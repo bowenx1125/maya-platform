@@ -20,6 +20,8 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
+from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
+from app.modules.debates.generation.round_phase import phase_for_round
 from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
 from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError
 
@@ -766,7 +768,13 @@ class PlaybackService:
         return all(self._validated_turn_audio(db, debate, turn) is not None for turn in candidates)
 
     @classmethod
-    def _turn_fence_ready(cls, turns: list[Any], turn: Any) -> bool:
+    def _turn_fence_ready(
+        cls,
+        turns: list[Any],
+        turn: Any,
+        *,
+        rule_set_id: str | None = None,
+    ) -> bool:
         """Check the persisted M11 prefix fence when the row carries one.
 
         MemoryPlaybackRepository intentionally models only the playback
@@ -811,18 +819,42 @@ class PlaybackService:
             except (TypeError, ValueError):
                 return False
         ordered = [candidate for _index, candidate in sorted(indexed, key=lambda item: item[0])]
-        expected = [
-            str(candidate.id)
-            for candidate in ordered
-            if int(cls._get(candidate, "turn_index", default=-1) or -1) < turn_index
-        ]
+        is_mutual = rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+        try:
+            current_round = int(cls._get(turn, "round_no", default=1) or 1)
+        except (TypeError, ValueError):
+            return False
+        if is_mutual:
+            expected_rows = [
+                candidate
+                for candidate in ordered
+                if int(cls._get(candidate, "round_no", default=1) or 1) < current_round
+            ]
+        else:
+            expected_rows = [
+                candidate
+                for candidate in ordered
+                if int(cls._get(candidate, "turn_index", default=-1) or -1) < turn_index
+            ]
+        expected = [str(candidate.id) for candidate in expected_rows]
         if [str(item) for item in raw_predecessors] != expected:
             return False
         cutoff = cls._get(turn, "cutoff_turn_index", default=None)
         if cutoff is None:
             return False
         try:
-            if int(cutoff) != turn_index - 1:
+            expected_cutoff = (
+                max(
+                    (
+                        int(cls._get(candidate, "turn_index", default=-1) or -1)
+                        for candidate in expected_rows
+                    ),
+                    default=-1,
+                )
+                if is_mutual
+                else turn_index - 1
+            )
+            if int(cutoff) != expected_cutoff:
                 return False
         except (TypeError, ValueError):
             return False
@@ -871,9 +903,14 @@ class PlaybackService:
             return False
         if self._turn_public(successor):
             return False
-        if not self._turn_ready(successor) or not self._turn_fence_ready(turns, successor):
+        rule_set_id = str(self._get(debate, "rule_set_id", default=""))
+        if not self._turn_ready(successor) or not self._turn_fence_ready(
+            turns, successor, rule_set_id=rule_set_id
+        ):
             return False
-        if not self._has_public_predecessor_prefix(turns, successor):
+        if not self._has_public_predecessor_prefix(
+            turns, successor, rule_set_id=rule_set_id
+        ):
             return False
         if self._validated_turn_audio(db, debate, successor) is None:
             return False
@@ -975,7 +1012,13 @@ class PlaybackService:
         return self._replay_audio_ready(db, debate, successor)
 
     @classmethod
-    def _has_public_predecessor_prefix(cls, turns: list[Any], turn: Any) -> bool:
+    def _has_public_predecessor_prefix(
+        cls,
+        turns: list[Any],
+        turn: Any,
+        *,
+        rule_set_id: str | None = None,
+    ) -> bool:
         """Return whether every planned predecessor is already public.
 
         A final-ready successor may be prepared in the background, but it must
@@ -991,15 +1034,30 @@ class PlaybackService:
             return False
         if current_index < 0:
             return False
+        is_mutual = rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+        try:
+            current_round = int(cls._get(turn, "round_no", default=1) or 1)
+        except (TypeError, ValueError):
+            return False
         predecessors: list[Any] = []
         for candidate in turns:
             try:
                 candidate_index = int(cls._get(candidate, "turn_index", default=-1))
             except (TypeError, ValueError):
                 return False
-            if candidate_index < current_index:
+            try:
+                candidate_round = int(cls._get(candidate, "round_no", default=1) or 1)
+            except (TypeError, ValueError):
+                return False
+            if (
+                candidate_round < current_round
+                if is_mutual
+                else candidate_index < current_index
+            ):
                 predecessors.append(candidate)
         predecessors.sort(key=lambda candidate: int(cls._get(candidate, "turn_index", default=-1)))
+        if is_mutual:
+            return all(cls._turn_public(candidate) for candidate in predecessors)
         indices = [int(cls._get(candidate, "turn_index", default=-1)) for candidate in predecessors]
         if indices != list(range(current_index)):
             return False
@@ -1012,6 +1070,8 @@ class PlaybackService:
         turn: Any,
         turns: list[Any],
         action: Literal["start", "resume", "next", "replay"],
+        *,
+        rule_set_id: str | None = None,
     ) -> None:
         """Fail closed when the browser action does not match the item context.
 
@@ -1042,7 +1102,7 @@ class PlaybackService:
                 raise conflict(
                     "invalid_state", "Next action does not match the current unpublished item."
                 )
-            if not cls._has_public_predecessor_prefix(turns, turn):
+            if not cls._has_public_predecessor_prefix(turns, turn, rule_set_id=rule_set_id):
                 raise conflict(
                     "invalid_state",
                     "The live turn cannot be published before its public predecessor prefix.",
@@ -1057,7 +1117,7 @@ class PlaybackService:
                 raise conflict("invalid_state", "A public live turn can only be resumed.")
         elif not public:
             raise conflict("invalid_state", "An unpublished live turn can only be started.")
-        if not cls._has_public_predecessor_prefix(turns, turn):
+        if not cls._has_public_predecessor_prefix(turns, turn, rule_set_id=rule_set_id):
             raise conflict(
                 "invalid_state",
                 "The live turn cannot be published before its public predecessor prefix.",
@@ -1100,6 +1160,50 @@ class PlaybackService:
     @staticmethod
     def _round(turn: Any) -> int:
         return int(PlaybackService._get(turn, "round_no", "round", default=1) or 1)
+
+    @staticmethod
+    def _mutual_phase_payload(debate: Any, turn: Any) -> dict[str, Any]:
+        """Return versioned phase metadata without changing legacy events."""
+
+        if (
+            str(PlaybackService._get(debate, "rule_set_id", default=""))
+            != MUTUAL_LEARNING_RULE_SET_ID
+        ):
+            return {}
+        round_count = PlaybackService._get(debate, "round_count", default=None)
+        if round_count is None:
+            try:
+                snapshot = json.loads(
+                    str(PlaybackService._get(debate, "rule_snapshot_json", default="{}"))
+                )
+                round_count = snapshot.get("round_count") if isinstance(snapshot, dict) else None
+            except (TypeError, ValueError):
+                round_count = None
+        if not isinstance(round_count, int) or not 2 <= round_count <= 5:
+            return {}
+        try:
+            phase = phase_for_round(PlaybackService._round(turn), round_count).value
+        except ValueError:
+            return {}
+        return {"phase": phase, "round_count": round_count}
+
+    @staticmethod
+    def _mutual_round_count(debate: Any) -> int | None:
+        if (
+            str(PlaybackService._get(debate, "rule_set_id", default=""))
+            != MUTUAL_LEARNING_RULE_SET_ID
+        ):
+            return None
+        value = PlaybackService._get(debate, "round_count", default=None)
+        if value is None:
+            try:
+                snapshot = json.loads(
+                    str(PlaybackService._get(debate, "rule_snapshot_json", default="{}"))
+                )
+                value = snapshot.get("round_count") if isinstance(snapshot, dict) else None
+            except (TypeError, ValueError):
+                value = None
+        return value if isinstance(value, int) and 2 <= value <= 5 else None
 
     def _current_turn(self, db: Any, debate: Any, state: PlaybackRuntime) -> Any:
         if state.current_turn_id is None:
@@ -1601,6 +1705,7 @@ class PlaybackService:
                             "slot": slot,
                             "round_no": round_no,
                             "stage": "llm",
+                            **self._mutual_phase_payload(debate, turn),
                         },
                     )
                 )
@@ -1712,6 +1817,7 @@ class PlaybackService:
                                 "retrieval_status": prepared.retrieval_status,
                                 "grounding_mode": prepared.grounding_mode,
                                 "audio_duration_ms": audio.duration_ms,
+                                **self._mutual_phase_payload(fresh_debate, fresh_turn),
                             },
                         )
                     )
@@ -2334,6 +2440,20 @@ class PlaybackService:
                                     default="ordered_multi_agent_rounds_demo_v1",
                                 )
                             ),
+                            **(
+                                {
+                                    "round_count": self._mutual_round_count(debate),
+                                }
+                                if str(
+                                    self._get(
+                                        debate,
+                                        "rule_set_id",
+                                        default="",
+                                    )
+                                )
+                                == MUTUAL_LEARNING_RULE_SET_ID
+                                else {}
+                            ),
                             "participants": participant_payload,
                         },
                     )
@@ -2345,6 +2465,7 @@ class PlaybackService:
                         "round.started",
                         {
                             "round_no": self._round(first),
+                            **self._mutual_phase_payload(debate, first),
                             "turn_count": len(
                                 [item for item in turns if self._round(item) == self._round(first)]
                             ),
@@ -2560,7 +2681,9 @@ class PlaybackService:
                 raise invalid_state("The current turn is not ready for playback.")
             turns = self._turns(db, debate)
             if not self._turn_public(current) or not self._has_public_predecessor_prefix(
-                turns, current
+                turns,
+                current,
+                rule_set_id=str(self._get(debate, "rule_set_id", default="")),
             ):
                 raise conflict(
                     "invalid_state",
@@ -2892,7 +3015,9 @@ class PlaybackService:
                 if state.mode != "live":
                     raise invalid_state("Playback is not in live mode.")
                 if not self._turn_public(current) or not self._has_public_predecessor_prefix(
-                    turns, current
+                    turns,
+                    current,
+                    rule_set_id=str(self._get(debate, "rule_set_id", default="")),
                 ):
                     raise conflict(
                         "invalid_state",
@@ -3657,7 +3782,13 @@ class PlaybackService:
                 raise not_found()
             turn = self._current_turn(db, debate, state)
             turns = self._turns(db, debate)
-            self._validate_playback_action(state, turn, turns, action)
+            self._validate_playback_action(
+                state,
+                turn,
+                turns,
+                action,
+                rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+            )
             if not self._turn_ready(turn):
                 raise not_found()
             metadata = self._validated_turn_audio(db, debate, turn)
@@ -3864,7 +3995,13 @@ class PlaybackService:
                 raise conflict("invalid_state", "The playback acknowledgement is stale.")
             turn = self._current_turn(db, debate, state)
             turns = self._turns(db, debate)
-            self._validate_playback_action(state, turn, turns, action)
+            self._validate_playback_action(
+                state,
+                turn,
+                turns,
+                action,
+                rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+            )
             ticket = self._find_ticket(
                 session_hash=session_hash,
                 epoch=epoch,
@@ -3914,6 +4051,7 @@ class PlaybackService:
                     "round_no": self._round(turn),
                     "speech": str(self._get(turn, "speech", "original_text", default="")),
                     "sources": self._sources(turn),
+                    **self._mutual_phase_payload(debate, turn),
                     "playback_url": f"/api/v1/debates/{debate_id}/audio/{turn_id}",
                     "avatar_states": self._avatar_states(participants, turn),
                     "cursor_ms": 0,
@@ -3991,7 +4129,9 @@ class PlaybackService:
             current = self._current_turn(db, debate, state)
             if state.mode == "live":
                 if not self._turn_public(current) or not self._has_public_predecessor_prefix(
-                    turns, current
+                    turns,
+                    current,
+                    rule_set_id=str(self._get(debate, "rule_set_id", default="")),
                 ):
                     raise conflict(
                         "invalid_state",
@@ -4228,6 +4368,7 @@ class PlaybackService:
                     "id": str(turn.id),
                     "participant_id": str(turn.participant_id),
                     "round_no": self._round(turn),
+                    **self._mutual_phase_payload(debate, turn),
                     "turn_index": int(self._get(turn, "turn_index", default=0) or 0),
                     "speech": speech,
                     "retrieval_status": str(
