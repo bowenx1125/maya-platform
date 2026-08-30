@@ -165,11 +165,7 @@ def _owner_rows(
     agent = db.get(Agent, version.agent_id)
     if agent is None:
         raise _product_error("embedding publication agent was not found", "owner_not_found")
-    if (
-        group.course_id != course.id
-        or agent.group_id != group.id
-        or version.agent_id != agent.id
-    ):
+    if group.course_id != course.id or agent.group_id != group.id or version.agent_id != agent.id:
         raise _product_error("embedding publication owner does not match", "owner_mismatch")
     if expected_revision is not None and version.revision != expected_revision:
         raise _product_error("embedding publication revision is stale", "revision_stale")
@@ -245,9 +241,7 @@ def _enabled_documents(
             )
         )
     if sum(len(document.text) for document in documents) > MAX_RAG_CHARS:
-        raise _product_error(
-            "enabled documents exceed the publication limit", "rag_over_limit"
-        )
+        raise _product_error("enabled documents exceed the publication limit", "rag_over_limit")
     return tuple(documents)
 
 
@@ -357,9 +351,11 @@ def _policy_row(
 ) -> Any | None:
     table = ProviderPolicySnapshot.__table__
     with _engine_for(database).connect() as connection:
-        return connection.execute(
-            select(table).where(table.c.policy_hash == policy_hash)
-        ).mappings().first()
+        return (
+            connection.execute(select(table).where(table.c.policy_hash == policy_hash))
+            .mappings()
+            .first()
+        )
 
 
 def _manifest_row(
@@ -368,9 +364,11 @@ def _manifest_row(
 ) -> Any | None:
     table = ProviderExportManifest.__table__
     with _engine_for(database).connect() as connection:
-        return connection.execute(
-            select(table).where(table.c.manifest_hash == manifest_hash)
-        ).mappings().first()
+        return (
+            connection.execute(select(table).where(table.c.manifest_hash == manifest_hash))
+            .mappings()
+            .first()
+        )
 
 
 def _confirmation_row(
@@ -379,9 +377,11 @@ def _confirmation_row(
 ) -> Any | None:
     table = ProviderExportConfirmation.__table__
     with _engine_for(database).connect() as connection:
-        return connection.execute(
-            select(table).where(table.c.manifest_hash == manifest_hash)
-        ).mappings().first()
+        return (
+            connection.execute(select(table).where(table.c.manifest_hash == manifest_hash))
+            .mappings()
+            .first()
+        )
 
 
 def _assert_manifest_row_owner(
@@ -567,8 +567,10 @@ def _validate_policy_endpoint(policy: ProviderPolicySnapshotV1) -> None:
     host = (parsed.hostname or "").lower()
     suffix = ".cn-beijing.maas.aliyuncs.com"
     workspace = host[: -len(suffix)] if host.endswith(suffix) else ""
-    allowed = bool(workspace) and "." not in workspace and all(
-        char.isascii() and (char.isalnum() or char == "-") for char in workspace
+    allowed = (
+        bool(workspace)
+        and "." not in workspace
+        and all(char.isascii() and (char.isalnum() or char == "-") for char in workspace)
     )
     if (
         parsed.scheme.lower() != "https"
@@ -761,64 +763,57 @@ def _run_confirmed(
     # a partial/malformed set remains a terminal recovery item for the worker.
     raw_operations = control.repository.operations(scope_id=selected_build.build_id)
     existing_operations = tuple(
-        operation
-        for raw in raw_operations
-        if (operation := control.get(raw.id)) is not None
+        operation for raw in raw_operations if (operation := control.get(raw.id)) is not None
     )
     try:
         existing_stages = stage_store.values(build_id=selected_build.build_id)
     except Exception:
         existing_stages = None
-    accepted_operations = tuple(
-        operation for operation in existing_operations if operation.state == "accepted"
-    )
-    if accepted_operations or existing_stages:
+    if existing_operations or existing_stages:
         plan = plan_embedding_batches(
             selected_build,
             price_cny_per_million=price_cny_per_million,
             cost_cap_cny=cost_cap_cny,
         )
+        expected_costs = {
+            batch.batch_index: (batch.total_tokens * float(str(price_cny_per_million)) / 1_000_000)
+            for batch in plan.batches
+        }
+        normalized_operations: list[EmbeddingOperationV1] = []
+        for operation in existing_operations:
+            expected_cost = expected_costs.get(operation.batch_index)
+            if expected_cost is not None and abs(operation.max_cost_cny - expected_cost) > (
+                5e-7 + 1e-12
+            ):
+                raise _product_error(
+                    "accepted embedding budget changed",
+                    "embedding_budget_drift",
+                )
+            normalized_operations.append(
+                replace(
+                    operation,
+                    max_cost_cny=(
+                        expected_cost if expected_cost is not None else operation.max_cost_cny
+                    ),
+                )
+            )
+        accepted_operations = tuple(
+            operation for operation in normalized_operations if operation.state == "accepted"
+        )
         if len(accepted_operations) == len(plan.batches):
-            expected_costs = {
-                batch.batch_index: (
-                    batch.total_tokens * float(str(price_cny_per_million)) / 1_000_000
-                )
-                for batch in plan.batches
-            }
-            # The existing provider ledger stores CNY cost at six decimal
-            # places.  Keep the durable operation ID/state/hash untouched,
-            # while comparing its in-memory projection to the preflight value
-            # before the runtime's no-provider recovery validation.
-            resume_values: list[EmbeddingOperationV1] = []
-            for operation in accepted_operations:
-                expected_cost = expected_costs.get(operation.batch_index)
-                if expected_cost is not None and abs(operation.max_cost_cny - expected_cost) > (
-                    5e-7 + 1e-12
-                ):
-                    raise _product_error(
-                        "accepted embedding budget changed",
-                        "embedding_budget_drift",
-                    )
-                resume_values.append(
-                    replace(
-                        operation,
-                        max_cost_cny=(
-                            expected_cost
-                            if expected_cost is not None
-                            else operation.max_cost_cny
-                        ),
-                    )
-                )
-            resume_operations = tuple(resume_values)
             return runtime.resume_from_stages(
                 selected_build,
-                operations=resume_operations,
+                operations=accepted_operations,
                 stages=existing_stages,
                 scope_id=selected_build.build_id,
             )
-        raise _product_error(
-            "accepted embedding stages require explicit recovery",
-            "partial_embedding_recovery_required",
+        return runtime.continue_from_stages(
+            selected_build,
+            operations=tuple(normalized_operations),
+            stages=existing_stages,
+            scope_id=selected_build.build_id,
+            current_build=selected_build,
+            current_build_verifier=current_verifier,
         )
 
     return runtime.run(

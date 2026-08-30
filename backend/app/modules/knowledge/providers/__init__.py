@@ -21,6 +21,7 @@ from .adapters import (
     HttpxEmbeddingTransport,
     OpenAICompatibleEmbeddingAdapter,
 )
+from .continuation import continue_from_stages, continue_snapshot_embedding
 from .embedding import (
     EmbeddingDimensionError,
     EmbeddingModelError,
@@ -330,6 +331,8 @@ __all__ = [
     "build_embedding_plan",
     "count_tokens",
     "count_tokens_conservatively",
+    "continue_from_stages",
+    "continue_snapshot_embedding",
     "execute_embedding_batch",
     "execute_embedding_snapshot",
     "execute_snapshot_embedding",

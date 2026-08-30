@@ -530,7 +530,7 @@ def test_complete_accepted_stages_resume_without_provider_call(tmp_path: Path) -
     fixture.database.dispose()
 
 
-def test_partial_accepted_stages_fail_closed_without_resending(tmp_path: Path) -> None:
+def test_partial_accepted_stages_continue_only_not_sent_batches(tmp_path: Path) -> None:
     source = "\n\n".join(f"# Section {index}\n\n" + "x " * 600 for index in range(11)).encode()
     fixture = _make_fixture(tmp_path, source=source)
     build = _build(fixture)
@@ -545,7 +545,7 @@ def test_partial_accepted_stages_fail_closed_without_resending(tmp_path: Path) -
     )
     stages = SqlAlchemyEmbeddingStageStore(fixture.database)
     plan = plan_embedding_batches(build)
-    assert len(plan.batches) > 1
+    assert len(plan.batches) == 2
     batch = plan.batches[0]
     operation = control.create_prepared(
         _reservation_request(
@@ -577,23 +577,40 @@ def test_partial_accepted_stages_fail_closed_without_resending(tmp_path: Path) -
             response_hash=_response_hash(value),
         )
     )
+    for missing_batch in plan.batches[1:]:
+        missing = control.create_prepared(
+            _reservation_request(
+                missing_batch,
+                scope_id=build.build_id,
+                attempt_no=1,
+                provider_operation="embedding",
+                price_cny_per_million=0.5,
+            )
+        )
+        control.reserve(missing)
+        control.mark_sending(missing.id)
+        control.mark_not_sent(missing.id)
     provider = _CountingRealProvider()
 
-    with pytest.raises(ProductPublicationError) as raised:
-        run_confirmed_real_embedding_publication(
-            fixture.database,
-            data_root=fixture.data_root,
-            course_id=fixture.course_id,
-            group_id=fixture.group_id,
-            agent_version_id=fixture.agent_version_id,
-            policy=policy,
-            manifest=manifest,
-            confirmation=confirmation,
-            build=build,
-            provider=provider,
-        )
-    assert raised.value.code == "partial_embedding_recovery_required"
-    assert provider.call_count == 0
+    result = run_confirmed_real_embedding_publication(
+        fixture.database,
+        data_root=fixture.data_root,
+        course_id=fixture.course_id,
+        group_id=fixture.group_id,
+        agent_version_id=fixture.agent_version_id,
+        policy=policy,
+        manifest=manifest,
+        confirmation=confirmation,
+        build=build,
+        provider=provider,
+    )
+    assert result.status == "succeeded"
+    assert provider.call_count == 1
+    operations = ProviderRepository(fixture.database).operations(scope_id=build.build_id)
+    assert len(operations) == 3
+    assert all(
+        operation.state == "succeeded" for operation in operations if operation.state != "not_sent"
+    )
     fixture.database.dispose()
 
 

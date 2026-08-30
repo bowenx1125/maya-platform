@@ -341,7 +341,15 @@ def _resolve_operations(
             if not isinstance(value, EmbeddingOperationV1):
                 continue
             current = getter(value.id)
-            if isinstance(current, EmbeddingOperationV1) and _same_request_identity(value, current):
+            if (
+                isinstance(current, EmbeddingOperationV1)
+                and _same_request_identity(value, current)
+                and (
+                    current.state == value.state
+                    or value.state in {"accepted", "not_sent"}
+                    and current.state in {"acceptance_unknown", "succeeded", "failed", "abandoned"}
+                )
+            ):
                 output[index] = current
     return tuple(output)
 
