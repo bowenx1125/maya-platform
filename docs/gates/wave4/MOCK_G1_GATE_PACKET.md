@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `SOL G2 CHANGES_REQUIRED_3 / THIRD P1 REPAIR ACTIVE / REAL CALLS 0`
+Status: `THIRD P1 REPAIRS LOCAL PASS / SOL G2 REAUDIT READY_3 / REAL CALLS 0`
 
 ## Scope
 
@@ -157,3 +157,19 @@ The next projection must cover meaningful head/middle/tail content without class
 hash/code leakage and must emit natural source-neutral meta wording for every current
 validator source pattern. All six dimensions require pairwise actual ProviderPrompt
 causality tests plus strict three-phase, 80–190-word, non-empty exact-trace acceptance.
+
+## Third repair evidence
+
+- Long values now retain bounded head/middle/tail authored words. Six dimensions ×
+  three phases prove that middle-only legal differences change the actual strict Mock
+  speech/structured result while evidence identity/order, rules and schema stay fixed.
+- The Persona projector reuses EvidenceTrace's public source-attribution predicate.
+  Six dimensions × all current attribution, written/Arabic quantity, URL, filename and
+  source patterns produce a natural source-neutral meta sentence; strict three-phase
+  generation remains final-ready with 80–190 words and non-empty exact trace.
+- Integrated local evidence is backend `671/671`, frontend `204/204`, Ruff/mypy,
+  ESLint/TypeScript/Prettier/Next build, OpenAPI/generated-client/strict route,
+  WebSocket, document/repository boundaries and zero real Provider calls.
+
+An exact clean repair SHA still requires read-only `PASS / P0=0 / P1=0` before any
+real Provider implementation Gate starts.

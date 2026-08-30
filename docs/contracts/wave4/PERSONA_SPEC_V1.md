@@ -1,6 +1,6 @@
 # PersonaSpecV1
 
-Status: `FROZEN / THIRD P1 REPAIR ACTIVE / LOCAL G1.5 PASS / REAL CALLS 0`
+Status: `FROZEN / THIRD P1 REPAIRED / LOCAL G1.5 PASS / SOL G2 REAUDIT READY`
 
 ## Teaching contract
 
@@ -169,3 +169,11 @@ Persona before retrieval or any Mock/real Provider call, regardless of RuleSet. 
 migration-era incomplete run with an unconfirmed participant fails with
 `persona_confirmation_required` and the authorized version IDs; Provider call count is
 zero. Stop and completed historical read/download/Replay remain unchanged.
+
+Long teaching dimensions project meaningful head, middle and tail authored words so a
+middle-only difference remains visible without hashes or internal codes. Before any
+authored phrase enters Mock speech, the projection applies the same public
+source-attribution predicate as EvidenceTrace validation. Attribution, written/Arabic
+quantity, URL, filename and source-shaped values become a natural
+"student-authored perspective" meta sentence rather than a factual claim. Six
+dimensions × three phases have pairwise-causality and source-pattern strict tests.
