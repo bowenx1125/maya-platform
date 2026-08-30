@@ -25,7 +25,10 @@ def recover_embedding_provider_startup(
     stages = SqlAlchemyEmbeddingStageStore(database)
     recovered: list[ProviderOperationV1] = []
     for operation in repository.operations():
-        if operation.provider_operation != "embedding" or operation.state not in {
+        if operation.provider_operation not in {
+            "embedding",
+            "embedding_query",
+        } or operation.state not in {
             "reserved",
             "sending",
             "accepted",
@@ -54,7 +57,10 @@ def recover_embedding_provider_startup(
         if (
             stage is not None
             and operation.staged_response_hash == stage.response_hash
-            and operation.scope_id == stage.build_id
+            and (
+                operation.provider_operation == "embedding_query"
+                or operation.scope_id == stage.build_id
+            )
             and operation.build_manifest_hash == stage.build_manifest_hash
             and operation.model_key == stage.model_key
         ):

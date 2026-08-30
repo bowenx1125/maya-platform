@@ -98,8 +98,9 @@ class SqlAlchemyEmbeddingStageStore:
                     return existing
                 if (
                     operation["state"] != "sending"
-                    or operation["provider_operation"] != "embedding"
-                    or operation["scope_id"] != value.build_id
+                    or operation["provider_operation"] not in {"embedding", "embedding_query"}
+                    or operation["provider_operation"] == "embedding"
+                    and operation["scope_id"] != value.build_id
                     or operation["build_manifest_hash"] != value.build_manifest_hash
                     or operation["model_key"] != value.model_key
                 ):
