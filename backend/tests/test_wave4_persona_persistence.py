@@ -240,8 +240,10 @@ def test_0009_columns_are_nullable_for_legacy_and_constraints_are_reversible(
     assert all(
         columns[name]["nullable"]
         for name in columns
-        if name.startswith("persona_") or name == "raw_agent_md_hash"
+        if (name.startswith("persona_") and name != "persona_required")
+        or name == "raw_agent_md_hash"
     )
+    assert columns["persona_required"]["nullable"] is False
     with database.engine.connect() as connection:
         trigger_names = {
             row[0]
