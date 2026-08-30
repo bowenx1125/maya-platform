@@ -113,6 +113,13 @@ from .snapshot_build import (
     SnapshotPublishCandidateV1,
     prepare_snapshot_build,
 )
+from .sql_runtime import (
+    EMBEDDING_MAX_COST_CNY,
+    EMBEDDING_MAX_REQUESTS,
+    EMBEDDING_MAX_TOTAL_TOKENS,
+    EMBEDDING_PROVIDER_OPERATION,
+    SqlAlchemyEmbeddingControlAdapter,
+)
 from .tokenizer import (
     CONSERVATIVE_TOKENIZER_ID,
     ConservativeUtf8Tokenizer,
@@ -165,6 +172,10 @@ __all__ = [
     "EmbeddingValidationError",
     "FIXED_EMBEDDING_DIMENSION",
     "FIXED_EMBEDDING_MODEL",
+    "EMBEDDING_MAX_COST_CNY",
+    "EMBEDDING_MAX_REQUESTS",
+    "EMBEDDING_MAX_TOTAL_TOKENS",
+    "EMBEDDING_PROVIDER_OPERATION",
     "InMemoryEmbeddingLedger",
     "InMemoryEmbeddingStageStore",
     "InMemorySnapshotPublicationStore",
@@ -202,6 +213,7 @@ __all__ = [
     "SnapshotPublicationPort",
     "SnapshotPublicationReceiptV1",
     "SnapshotPublisherPort",
+    "SqlAlchemyEmbeddingControlAdapter",
     "TokenizerError",
     "Utf8ByteTokenizer",
     "ValidatedEmbeddingBatchV1",
