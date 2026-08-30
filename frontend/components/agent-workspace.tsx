@@ -29,6 +29,11 @@ import {
 } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
+import {
+  PersonaPreview,
+  type PersonaPreviewDiagnostic,
+  type PersonaPreviewSpec,
+} from "./persona";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -41,6 +46,16 @@ import {
 
 type AgentDetailWithMetadata = AgentDetail & {
   metadata_revision?: number;
+};
+
+type PersonaVersionFields = {
+  persona_spec_json?: unknown;
+  persona_spec?: unknown;
+  previous_persona_spec_json?: unknown;
+  persona_diagnostics?: readonly PersonaPreviewDiagnostic[];
+  persona_diagnostics_json?: unknown;
+  persona_confirmation_revision?: number | null;
+  student_confirmed_at?: string | null;
 };
 
 type AgentMetadataApi = PlatformApi & {
@@ -596,6 +611,22 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   // represented by `error`; keep these bindings initialized for its callback.
   const currentVersion = version as AgentVersion;
   const currentAgent = agent as AgentDetail;
+  const personaVersion = (currentVersion ?? {}) as AgentVersion &
+    PersonaVersionFields;
+  const structuredPersona =
+    localDirty || !version
+      ? null
+      : parsePersonaSpec(
+          personaVersion.persona_spec_json ?? personaVersion.persona_spec,
+        );
+  const previousPersona = version
+    ? parsePersonaSpec(personaVersion.previous_persona_spec_json)
+    : null;
+  const personaConfirmed = Boolean(
+    !localDirty &&
+    personaVersion.persona_confirmation_revision != null &&
+    personaVersion.student_confirmed_at,
+  );
 
   if (loading) return <LoadingCard />;
   // Keep the loaded workbench mounted for mutation errors so local AGENT.md,
@@ -942,6 +973,16 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               </button>
             </div>
           </SectionCard>
+          <PersonaPreview
+            rawAgentMd={agentMd}
+            spec={structuredPersona}
+            previousSpec={previousPersona}
+            diagnostics={
+              personaVersion.persona_diagnostics ??
+              parsePersonaDiagnostics(personaVersion.persona_diagnostics_json)
+            }
+            confirmed={personaConfirmed}
+          />
           {avatarConfig ? (
             <SectionCard
               title={t("avatarDesign")}
@@ -1486,4 +1527,95 @@ function downloadText(content: string, filename: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function parsePersonaSpec(value: unknown): PersonaPreviewSpec | null {
+  const candidate =
+    typeof value === "string"
+      ? parseJson(value)
+      : value && typeof value === "object"
+        ? value
+        : null;
+  if (!candidate || typeof candidate !== "object") return null;
+  const record = candidate as Record<string, unknown>;
+  const identity = record.identity;
+  const style = record.speaking_style;
+  if (!isRecord(identity) || !isRecord(style)) return null;
+  if (
+    typeof identity.name !== "string" ||
+    typeof identity.role !== "string" ||
+    typeof identity.historical_or_cultural_context !== "string" ||
+    typeof style.tone !== "string" ||
+    typeof style.argument_pattern !== "string" ||
+    typeof style.concession_style !== "string" ||
+    typeof style.question_style !== "string" ||
+    typeof record.initial_position !== "string" ||
+    !isStringArray(record.cultural_lens) ||
+    !isStringArray(record.core_values) ||
+    !isStringArray(record.debate_strategy) ||
+    !isStringArray(record.boundaries)
+  )
+    return null;
+  return {
+    schema_version:
+      typeof record.schema_version === "string"
+        ? record.schema_version
+        : undefined,
+    identity: {
+      name: identity.name,
+      role: identity.role,
+      historical_or_cultural_context: identity.historical_or_cultural_context,
+    },
+    cultural_lens: record.cultural_lens,
+    core_values: record.core_values,
+    initial_position: record.initial_position,
+    speaking_style: {
+      tone: style.tone,
+      argument_pattern: style.argument_pattern,
+      concession_style: style.concession_style,
+      question_style: style.question_style,
+    },
+    debate_strategy: record.debate_strategy,
+    boundaries: record.boundaries,
+    source_agent_md_hash:
+      typeof record.source_agent_md_hash === "string"
+        ? record.source_agent_md_hash
+        : undefined,
+    compiler_version:
+      typeof record.compiler_version === "string"
+        ? record.compiler_version
+        : undefined,
+  };
+}
+
+function parseJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parsePersonaDiagnostics(value: unknown): PersonaPreviewDiagnostic[] {
+  const candidate =
+    typeof value === "string"
+      ? parseJson(value)
+      : Array.isArray(value)
+        ? value
+        : [];
+  if (!Array.isArray(candidate)) return [];
+  return candidate.filter(
+    (item): item is PersonaPreviewDiagnostic =>
+      isRecord(item) && typeof item.message === "string",
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }

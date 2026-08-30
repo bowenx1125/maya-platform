@@ -1,1 +1,45 @@
-"""Wave 1A Agent/version domain."""
+"""Agent/version domain and Wave 4 deterministic Persona boundaries."""
+
+from app.modules.agents.persona import (
+    PersonaCompileError,
+    PersonaCompiler,
+    PersonaCompileResult,
+    PersonaDiagnostic,
+    PersonaIdentity,
+    PersonaProviderIdentityError,
+    PersonaProviderViewV1,
+    PersonaSpeakingStyle,
+    PersonaSpec,
+    PersonaSpecV1,
+    ProviderPersonaView,
+    compile_persona,
+    compile_persona_or_raise,
+    diagnostics_json,
+    hash_agent_md,
+    hash_persona_spec,
+    persona_spec_hash,
+    provider_view,
+    raw_agent_md_hash,
+)
+
+__all__ = [
+    "PersonaCompileError",
+    "PersonaCompileResult",
+    "PersonaCompiler",
+    "PersonaDiagnostic",
+    "PersonaIdentity",
+    "PersonaProviderIdentityError",
+    "PersonaSpec",
+    "PersonaProviderViewV1",
+    "PersonaSpeakingStyle",
+    "PersonaSpecV1",
+    "ProviderPersonaView",
+    "compile_persona",
+    "compile_persona_or_raise",
+    "diagnostics_json",
+    "hash_agent_md",
+    "hash_persona_spec",
+    "persona_spec_hash",
+    "provider_view",
+    "raw_agent_md_hash",
+]

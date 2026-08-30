@@ -5,23 +5,39 @@ export type Locale = "en" | "zh";
  * Keep one frozen English value so changing the interface locale can never
  * write a translated outline into the Agent's authoritative prompt.
  */
-export const AGENT_OUTLINE = `# Identity
-Who are you and what cultural or social perspective do you represent?
+export const AGENT_OUTLINE = `# Agent name
 
-# Background
-What background should shape your interpretation of the topic?
+## Identity
 
-# Position
-What is your current position on the debate topic? What trade-offs do you recognize?
+- Role: Describe the cultural or social role this Agent represents.
+- Historical or cultural context: Describe the context that should shape interpretation.
 
-# Speaking Style
-How should you speak: formal, analytical, concise, rhetorical, cautious, etc.?
+## Cultural lens
 
-# Debate Strategy
-How should you respond to opponents, use evidence, concede valid points, and distinguish fact from opinion?
+- Describe the lens this Agent uses to understand the topic.
 
-# Boundaries
-What should you avoid claiming or doing?`;
+## Core values
+
+- Name one value that should guide this Agent's judgment.
+
+## Initial position
+
+Describe the Agent's starting position and the trade-offs it recognizes.
+
+## Speaking style
+
+- Tone: Describe the desired tone.
+- Argument pattern: Describe how the Agent builds an argument.
+- Concession style: Describe how the Agent acknowledges reasonable concerns.
+- Question style: Describe how the Agent asks questions.
+
+## Debate strategy
+
+- Describe how the Agent responds to other views and uses its evidence.
+
+## Boundaries
+
+- State a claim or action this Agent must avoid.`;
 
 /**
  * All platform-owned copy lives in one typed dictionary.  The language
