@@ -4,12 +4,14 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_SOL_PENDING / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / W4_MOCK_G1_5_PASS / W4_G2_CHANGES_REQUIRED / REAL_PROVIDER_CALLS_0`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
 formal content, Embedding/provider ports and durable provider-control foundations.
-It has not passed independent G2 code audit and has made no real Provider request.
+Independent G2 audit of `2af97df` returned `CHANGES_REQUIRED` with
+`P0=0 / P1=5 / P2=0`. The P1 repair loop is active; no real Provider Gate is unlocked
+and no real Provider request has been made.
 
 ## Source and remote
 
@@ -64,7 +66,8 @@ No real Provider was called.
   new-mutual-Debate eligibility while legacy Debate history remains compatible.
 - Claim-level Evidence Trace with server IDs, exact UTF-16 speech spans, honest
   no-match/general-reasoning teaching UI and immutable Replay/history projection.
-- Canonical two-message PromptRequestV1 with complete predecessor speech, one Persona
+- Canonical two-message PromptRequestV1 with the complete RuleSet-visible speech set
+  (all earlier-round public/final-ready speech for mutual learning), one Persona
   provider view, deduplicated evidence, bounded retry and hard pre-send budgets.
 - Immutable SnapshotBuild/embedding adapter ports plus server-only policy, export,
   atomic budget and acceptance-unknown ledgers. Real selectors remain fail-closed.
@@ -101,7 +104,9 @@ code`, not the full historical monolith.
   intermediate validation is local plus Sol High, with one final integrated PR/CI.
 - New Agent versions keep raw `AGENT.md` and add an extraction-only Persona confirmed
   by a current group member before publication. The compiler cannot improve or invent.
-- Every debate turn continues to receive the complete text of all previous turns.
+- Context visibility is RuleSet-versioned. Mutual learning receives every
+  public/final-ready earlier-round speech in full and exactly once while preserving a
+  strict same-round barrier; legacy RuleSets retain their historical predecessor set.
 - Evidence Trace records claim provenance; it is not a truth-verification claim.
 - There is no numeric Token-reduction KPI and no teacher/operator cost-display task.
 - Local, private GitHub, implementation, real Provider and potentially billed work are
@@ -120,8 +125,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Freeze the current integrated Mock candidate and run independent Sol High G2 audit.
-The local G1.5 evidence is backend `528`, frontend `31 files / 203 tests`, mypy/Ruff,
+Close the five P1 findings from the independent Sol High G2 audit of `2af97df`, rerun
+the complete local suite and submit the exact repair SHA for a fresh read-only audit.
+The pre-audit local G1.5 evidence is backend `528`, frontend `31 files / 203 tests`, mypy/Ruff,
 ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, WebSocket `35/18`,
 repository/secret boundary, formal-content acceptance and migrations 0001–0011. After
 P0/P1 closure, continue real Embedding publication, fixed structured LLM and TTS Gates.

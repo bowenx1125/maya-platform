@@ -57,10 +57,13 @@ requires historical evidence.
 - Knowledge: RAG accepts Markdown only. A draft explicitly enables group documents;
   publishing freezes source bytes, chunks, vector metadata and source lineage.
 - Debate: 2–5 current published Agents receive slots A–E in teacher click order.
-  There are exactly two rounds. The rules engine, not the model, chooses the order.
-- Context: every debate turn continues to receive the complete text of all preceding
-  turns. Wave 4 may remove duplicate serialization and reuse stable retrieval on a
-  structural retry, but it must not replace earlier speeches with summaries.
+  Legacy RuleSets retain exactly two rounds; the versioned mutual-learning RuleSet
+  supports 2–5 rounds. The rules engine, not the model, chooses the order.
+- Context: visibility is RuleSet-versioned. A mutual-learning turn receives the
+  complete text of every public/final-ready turn from earlier rounds, exactly once,
+  and never receives a same-round turn. Legacy RuleSets retain their frozen
+  lower-turn-index behavior. Wave 4 may remove duplicate serialization and reuse
+  stable retrieval on a structural retry, but it must not summarize visible speech.
 - Evidence: only server-selected receipts actually used by a validated turn may be
   public sources. `no_match` uses general reasoning with no source.
 - Playback: the ordinary teacher surface is Start / Next / Replay. Pause/resume is a
@@ -81,8 +84,10 @@ requires historical evidence.
   not invent, improve or silently discard persona content.
 - Claim-level Evidence Trace is provenance, not automatic fact verification. The
   server derives speech spans and binds claims to immutable `TurnSource` rows.
-- Prompt work keeps the complete predecessor transcript. It removes known duplicate
-  persona/rules and reuses valid frozen retrieval receipts for structure-only retry.
+- Prompt work keeps the complete RuleSet-visible transcript: all earlier-round speech
+  for mutual learning and the frozen legacy predecessor set for legacy RuleSets. It
+  removes known duplicate persona/rules and reuses valid frozen retrieval receipts for
+  structure-only retry.
 - A numeric Token-reduction KPI and a teacher/operator cost-display feature are not
   Wave 4 tasks.
 - Real Provider work remains separated by Gate. A valid key, voice enrollment,

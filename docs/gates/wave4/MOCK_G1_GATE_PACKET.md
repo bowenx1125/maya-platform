@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `LOCAL G1.5 PASS / INDEPENDENT SOL G2 PENDING / REAL CALLS 0`
+Status: `LOCAL G1.5 PASS / SOL G2 CHANGES_REQUIRED / P1 REPAIR ACTIVE / REAL CALLS 0`
 
 ## Scope
 
@@ -63,3 +63,20 @@ least:
 
 Any P0/P1 blocks the corresponding later real Provider Gate. A worker cannot sign its
 own implementation.
+
+## First G2 result
+
+Sol High audited exact clean SHA
+`2af97dfb8ad13e3e57f0df738aa62efb6b0bd78c` read-only and returned
+`CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`:
+
+1. broad transcript wording conflicted with the new RuleSet's same-round barrier;
+2. a new raw AgentVersion could bypass Persona compile/confirmation;
+3. the strict Mock product path could silently publish an empty EvidenceTrace;
+4. Replay could silently coerce damaged persisted EvidenceTrace to an empty list;
+5. Persona teaching differences were not wired through the actual Debate Mock/UI.
+
+All five are blocking repair items. The transcript decision is now explicit: the new
+RuleSet receives every earlier-round public/final-ready speech in full and exactly
+once, while same-round turns remain invisible. The repair SHA requires a fresh Sol
+audit; this packet must not be relabeled G2 PASS from the original candidate.

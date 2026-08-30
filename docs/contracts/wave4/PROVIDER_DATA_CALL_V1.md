@@ -77,7 +77,7 @@ and legal release Gate.
 | ------------------------------------ | -------------: | -------------: | ------------------: | -------------------------------------- |
 | topic and platform rules             |            yes |     query only |                  no | no user identity                       |
 | confirmed structured current Persona |            yes |             no |                  no | raw `AGENT.md` never sent              |
-| complete predecessor speech          |            yes |             no | current speech only | public debate text only                |
+| complete RuleSet-visible prior speech |            yes |             no | current speech only | mutual learning excludes same round    |
 | current evidence excerpt/query       |            yes |            yes |                  no | only confirmed exportable snapshot     |
 | opaque evidence/query/turn IDs       |            yes |             no |                  no | supplier cannot resolve local identity |
 | source filename/absolute path        |             no |             no |                  no | server resolves display metadata       |

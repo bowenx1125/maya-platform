@@ -17,10 +17,13 @@
 6. Never create or commit a real `.env`, credentials, student audio, runtime data,
    databases, generated media, logs or private reference code. Use `.env.example` and
    isolated test/Mock inputs.
-7. Every turn continues to receive the complete text of all predecessor turns. Do not
-   replace history with summaries. Prompt work may remove duplicate serialization and
-   reuse stable retrieval on a structure-only retry only when the active contract says
-   so.
+7. Context visibility is RuleSet-versioned. For
+   `ordered_multi_expert_mutual_learning_v1`, every turn receives the complete text of
+   every public/final-ready turn from earlier rounds, exactly once, and never receives
+   a same-round turn. Legacy RuleSets retain their frozen lower-turn-index behavior.
+   Do not replace visible history with summaries. Prompt work may remove duplicate
+   serialization and reuse stable retrieval on a structure-only retry only when the
+   active contract says so.
 8. Run the assigned local deterministic checks before reporting completion. Debug and
    retest within the Gate until its criteria pass; never weaken a test or contract to
    make it green. Intermediate Wave 4 branches stay local. GitHub CI runs once on the

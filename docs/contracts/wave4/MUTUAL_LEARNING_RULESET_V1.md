@@ -1,6 +1,6 @@
 # Ordered Multi-Expert Mutual Learning V1
 
-Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 PENDING`
+Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 P1 REPAIR`
 
 RuleSet ID: `ordered_multi_expert_mutual_learning_v1`
 
@@ -39,6 +39,9 @@ A–E order remains the deterministic generation/playback order, but does not ch
 barrier. For this RuleSet, the persisted context IDs and transcript hash cover exactly
 the prior-round visible set, not the full lower turn-index prefix used by legacy
 RuleSets. Legacy fence semantics remain byte/behavior compatible behind their IDs.
+The earlier general decision to retain complete previous speech means every speech in
+this RuleSet-visible prior-round set, not a same-round leak; this versioned barrier is
+the controlling contract.
 
 ## Phase requirements
 

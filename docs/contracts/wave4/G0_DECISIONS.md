@@ -25,8 +25,9 @@ Status: `FROZEN CANDIDATE`
 10. **When may attempt 2 retrieve again?** Only after retrieval technical failure
     before any LLM request. Structural repair reuses the frozen receipt set.
 11. **What is sent externally?** The exact allowlist in ProviderDataCallV1: structured
-    current Persona, topic/rules, complete predecessor speeches, current queries and
-    evidence excerpts, opaque IDs and current TTS speech where applicable. The teacher
+    current Persona, topic/rules, complete RuleSet-visible prior speeches (all earlier
+    rounds for mutual learning, never same-round), current queries and evidence
+    excerpts, opaque IDs and current TTS speech where applicable. The teacher
     sees the supplier, Beijing region, purpose, storage fact and no-training basis
     before confirming the exact export manifest.
 12. **Are student names, nicknames, audio or identity sent?** No. Voice enrollment is

@@ -1,6 +1,6 @@
 # PromptBudgetV1 and PromptRequestV1
 
-Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 PENDING`
+Status: `FROZEN / IMPLEMENTED CANDIDATE / LOCAL G1.5 PASS / SOL G2 P1 REPAIR`
 
 ## Logical request
 
@@ -15,16 +15,20 @@ copy of the prose rules. `prompt_request_v1` contains:
 - debate/turn/rule/phase identifiers and server-owned schedule fields;
 - topic and assigned stance;
 - one `persona_provider_view_v1`; raw `AGENT.md` is absent;
-- the complete exact speech of every predecessor turn, in turn-index order, exactly
-  once each, plus necessary public structured fields and transcript hash;
+- for `ordered_multi_expert_mutual_learning_v1`, the complete exact speech of every
+  public/final-ready turn from an earlier round, in turn-index order, exactly once
+  each, plus necessary public structured fields and transcript hash;
 - the pending question once;
 - a query catalog and a deduplicated evidence catalog. Each evidence excerpt appears
   once and queries refer to evidence IDs;
 - the closed StructuredTurnResult + EvidenceTrace output schema identifier.
 
 Other Agents' Persona, snapshot ID, teacher-only notes, user identity and private
-drafts are absent. Complete predecessor speech may not be summarized, truncated,
-replaced by `turn_summary` or fetched through an unversioned provider-side state.
+drafts are absent. Same-round and future turns are absent even when a lower-index
+same-round turn is already final-ready. Visible earlier-round speech may not be
+summarized, truncated, replaced by `turn_summary` or fetched through an unversioned
+provider-side state. Legacy RuleSets retain their frozen lower-turn-index context
+semantics behind their existing IDs.
 
 ## Hard limits
 
