@@ -3,6 +3,20 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 
 const root = process.cwd();
+
+function exactCasePathExists(absolute) {
+  const relativePath = relative(root, absolute);
+  if (!relativePath || relativePath === ".") return true;
+  if (relativePath === ".." || relativePath.startsWith(`..${sep}`))
+    return false;
+  let cursor = root;
+  for (const segment of relativePath.split(sep)) {
+    if (!readdirSync(cursor).includes(segment)) return false;
+    cursor = resolve(cursor, segment);
+  }
+  return true;
+}
+
 const required = [
   "PROJECT.md",
   "PROJECT_STATUS.md",
@@ -18,7 +32,8 @@ const required = [
 
 const failures = [];
 for (const relative of required) {
-  if (!existsSync(resolve(root, relative)))
+  const absolute = resolve(root, relative);
+  if (!existsSync(absolute) || !exactCasePathExists(absolute))
     failures.push(`missing required file: ${relative}`);
 }
 const projectCaseVariants = readdirSync(root).filter(
@@ -33,19 +48,6 @@ if (
   );
 }
 
-function exactCasePathExists(absolute) {
-  const relativePath = relative(root, absolute);
-  if (!relativePath || relativePath === ".") return true;
-  if (relativePath === ".." || relativePath.startsWith(`..${sep}`))
-    return false;
-  let cursor = root;
-  for (const segment of relativePath.split(sep)) {
-    if (!readdirSync(cursor).includes(segment)) return false;
-    cursor = resolve(cursor, segment);
-  }
-  return true;
-}
-
 if (!exactCasePathExists(resolve(root, "PROJECT.md"))) {
   failures.push("exact-case PROJECT.md self-test failed");
 }
@@ -55,6 +57,23 @@ if (exactCasePathExists(resolve(root, "Project.md"))) {
 if (exactCasePathExists(resolve(root, "docs/ADR/README.md"))) {
   failures.push("case-variant nested path negative self-test failed");
 }
+if (exactCasePathExists(resolve(root, "docs/requirements/Original.md"))) {
+  failures.push("case-variant requirements path negative self-test failed");
+}
+if (
+  exactCasePathExists(
+    resolve(root, "docs/archive/project_monolith_2026-08-30.md"),
+  )
+) {
+  failures.push("case-variant archive path negative self-test failed");
+}
+if (
+  exactCasePathExists(
+    resolve(root, "docs/archive/PROJECT_MONOLITH_2026-08-30.SHA256"),
+  )
+) {
+  failures.push("case-variant checksum path negative self-test failed");
+}
 
 const limits = new Map([
   ["PROJECT.md", 20_000],
@@ -62,7 +81,11 @@ const limits = new Map([
 ]);
 for (const [relative, maximum] of limits) {
   const absolute = resolve(root, relative);
-  if (existsSync(absolute) && lstatSync(absolute).size > maximum) {
+  if (
+    existsSync(absolute) &&
+    exactCasePathExists(absolute) &&
+    lstatSync(absolute).size > maximum
+  ) {
     failures.push(`${relative} exceeds ${maximum} bytes`);
   }
 }
@@ -96,7 +119,7 @@ const forbiddenActiveText = [
 const markdownLink = /\[[^\]]*\]\(([^)]+)\)/g;
 for (const relative of activeMarkdown) {
   const absolute = resolve(root, relative);
-  if (!existsSync(absolute)) {
+  if (!existsSync(absolute) || !exactCasePathExists(absolute)) {
     failures.push(`active document missing: ${relative}`);
     continue;
   }
@@ -125,7 +148,9 @@ const archiveRelative = "docs/archive/PROJECT_MONOLITH_2026-08-30.md";
 const checksumRelative = "docs/archive/PROJECT_MONOLITH_2026-08-30.sha256";
 if (
   existsSync(resolve(root, archiveRelative)) &&
-  existsSync(resolve(root, checksumRelative))
+  exactCasePathExists(resolve(root, archiveRelative)) &&
+  existsSync(resolve(root, checksumRelative)) &&
+  exactCasePathExists(resolve(root, checksumRelative))
 ) {
   const bytes = readFileSync(resolve(root, archiveRelative));
   const actual = createHash("sha256").update(bytes).digest("hex");
