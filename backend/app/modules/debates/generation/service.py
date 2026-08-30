@@ -13,6 +13,17 @@ from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from .mutual_learning_prompts import make_mutual_learning_prompt_input
 from .mutual_learning_validator import MutualLearningValidator
 from .policy import RULE_SET_ID, SUPPORTED_RULE_SET_IDS
+from .prompt_attempt import (
+    PromptAcceptanceState,
+    PromptAttemptPolicy,
+    PromptFailureKind,
+)
+from .prompt_budget import ConservativeUtf8TokenCounter, PromptBudgetError
+from .prompt_request import (
+    PromptRequestError,
+    ProviderPromptV1,
+    build_provider_prompt_from_mutual_input,
+)
 from .prompts import make_turn_prompt_input
 from .retrieval import (
     RAGRetrievalError,
@@ -49,7 +60,7 @@ class Retriever(Protocol):
 
 class TurnLLM(Protocol):
     def generate_turn(
-        self, prompt: TurnPromptInput | MutualLearningPromptInput
+        self, prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1
     ) -> StructuredTurnResult | MutualLearningTurnResultV1:
         """Generate a provider-neutral structured turn."""
 
@@ -113,6 +124,8 @@ class TurnGenerationService:
         claim: TurnClaim | None = None,
     ) -> GenerationResult:
         if self.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID:
+            if context.participant.persona is not None:
+                return self._generate_mutual_learning_strict(context, claim=claim)
             return self._generate_mutual_learning(context, claim=claim)
         attempts: list[GenerationAttempt] = []
         active_claim = claim
@@ -201,6 +214,285 @@ class TurnGenerationService:
                     ) from exc
         # The loop always returns or raises; keep type checkers honest.
         raise GenerationFailed("Turn generation did not produce a result.")
+
+    def _generate_mutual_learning_strict(
+        self,
+        context: GenerationContext,
+        *,
+        claim: TurnClaim | None,
+    ) -> GenerationResult:
+        """Use PromptRequestV1 when a confirmed structured Persona is present.
+
+        Retrieval and the public predecessor fence are built once.  A second
+        provider call can only reuse those exact values: validation repair adds
+        pointer-only feedback and a proven pre-acceptance transport failure
+        resends the same frozen request.  Legacy test contexts without a
+        structured Persona continue through the historical RuleSet adapter.
+        """
+
+        attempts: list[GenerationAttempt] = []
+        active_claim = claim
+        first_attempt = GenerationAttempt(attempt=1)
+        try:
+            subqueries = build_turn_subqueries(context)
+            if self.mock_retrieval_policy_id is None:
+                retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
+            elif isinstance(self.retriever, SnapshotRetriever):
+                retrieval = self.retriever.retrieve(
+                    context.participant.snapshot_id,
+                    subqueries,
+                    policy_id=self.mock_retrieval_policy_id,
+                    topic_anchor=context.topic,
+                )
+            else:
+                raise RAGRetrievalError(
+                    "The Mock lexical policy requires the snapshot retriever.",
+                    technical=False,
+                )
+            receipts = self._receipts(retrieval)
+            first_attempt = replace(first_attempt, retrieval_count=len(receipts))
+            mutual_input = make_mutual_learning_prompt_input(context, receipts)
+            provider_prompt = build_provider_prompt_from_mutual_input(
+                mutual_input,
+                persona=context.participant.persona,  # type: ignore[arg-type]
+                persona_spec_hash_value=context.participant.persona_spec_hash,
+            )
+            if self.fence is not None:
+                active_claim = self._claim_for_attempt(
+                    context,
+                    1,
+                    active_claim,
+                    transcript_hash=mutual_input.transcript_hash,
+                    predecessor_turn_ids=mutual_input.predecessor_turn_ids,
+                )
+        except (RAGRetrievalError, PromptBudgetError, PromptRequestError, ValueError) as exc:
+            attempts.append(
+                replace(first_attempt, failure_code=getattr(exc, "code", "turn_generation_failed"))
+            )
+            if self.fence is not None and active_claim is not None:
+                self.fence.release(active_claim)
+            raise GenerationFailed(
+                "Turn generation failed before the provider request.", attempt=1
+            ) from exc
+
+        for attempt in (1, 2):
+            attempt_record = first_attempt if attempt == 1 else GenerationAttempt(
+                attempt=attempt,
+                retrieval_count=len(receipts),
+            )
+            try:
+                attempt_record = replace(attempt_record, provider_called=True)
+                raw = self.llm.generate_turn(provider_prompt)
+                validated = self._validate_mutual_strict(
+                    raw,
+                    context=context,
+                    receipts=receipts,
+                    predecessors=mutual_input.predecessors,
+                )
+                result = final_ready_turn(
+                    validated,
+                    turn_id=context.turn.turn_id,
+                    participant_id=context.participant.participant_id,
+                    snapshot_id=context.participant.snapshot_id,
+                    round_no=context.turn.round_no,
+                    turn_index=context.turn.turn_index,
+                    predecessor_turn_ids=mutual_input.predecessor_turn_ids,
+                    cutoff_turn_index=mutual_input.cutoff_turn_index,
+                    transcript_hash=mutual_input.transcript_hash,
+                    attempt=attempt,
+                )
+                if self.fence is not None:
+                    if active_claim is None or not self.fence.complete(
+                        active_claim,
+                        stage="generation",
+                        attempt=attempt,
+                        predecessor_turn_ids=mutual_input.predecessor_turn_ids,
+                        transcript_hash=mutual_input.transcript_hash,
+                    ):
+                        raise GenerationDiscarded(
+                            "The turn generation result arrived after its fence changed."
+                        )
+                attempts.append(attempt_record)
+                return GenerationResult(result, tuple(attempts))
+            except GenerationDiscarded:
+                raise
+            except TurnValidationError as exc:
+                attempts.append(
+                    replace(
+                        attempt_record,
+                        failure_code=getattr(exc, "code", "turn_generation_failed"),
+                    )
+                )
+                if attempt == 2:
+                    if self.fence is not None and active_claim is not None:
+                        self.fence.release(active_claim)
+                        active_claim = None
+                    raise GenerationFailed(
+                        "Turn generation failed after the frozen structure-repair attempt.",
+                        attempt=attempt,
+                    ) from exc
+                try:
+                    # ``repair_feedback`` is the only permitted difference;
+                    # the helper never receives a retriever and reuses the
+                    # exact receipts/transcript/persona/rule values.
+                    from .prompt_attempt import repair_prompt_request
+
+                    repaired_request = repair_prompt_request(
+                        provider_prompt.request,
+                        safe_error_code=getattr(exc, "code", "output_schema_invalid"),
+                        json_pointers=("/",),
+                    )
+                    provider_prompt = self._provider_prompt_with_request(
+                        provider_prompt,
+                        repaired_request,
+                    )
+                    if self.fence is not None:
+                        active_claim = self._claim_for_attempt(
+                            context,
+                            2,
+                            active_claim,
+                            transcript_hash=mutual_input.transcript_hash,
+                            predecessor_turn_ids=mutual_input.predecessor_turn_ids,
+                        )
+                except (PromptRequestError, PromptBudgetError, ValueError) as repair_exc:
+                    if self.fence is not None and active_claim is not None:
+                        self.fence.release(active_claim)
+                    raise GenerationFailed(
+                        "Turn generation structure repair could not be prepared.", attempt=2
+                    ) from repair_exc
+            except (
+                GenerationProviderError,
+                PromptBudgetError,
+                PromptRequestError,
+                ValueError,
+            ) as exc:
+                attempts.append(
+                    replace(
+                        attempt_record,
+                        failure_code=getattr(exc, "code", "turn_generation_failed"),
+                    )
+                )
+                if (
+                    getattr(exc, "failure_kind", None) == "structure_invalid"
+                    and getattr(exc, "acceptance_state", None)
+                    == PromptAcceptanceState.ACCEPTED
+                ):
+                    if attempt == 2:
+                        if self.fence is not None and active_claim is not None:
+                            self.fence.release(active_claim)
+                            active_claim = None
+                        raise GenerationFailed(
+                            "Turn generation failed after the frozen structure-repair attempt.",
+                            attempt=attempt,
+                        ) from exc
+                    try:
+                        from .prompt_attempt import repair_prompt_request
+
+                        repaired_request = repair_prompt_request(
+                            provider_prompt.request,
+                            safe_error_code="output_schema_invalid",
+                            json_pointers=("/",),
+                        )
+                        provider_prompt = self._provider_prompt_with_request(
+                            provider_prompt,
+                            repaired_request,
+                        )
+                        if self.fence is not None:
+                            active_claim = self._claim_for_attempt(
+                                context,
+                                2,
+                                active_claim,
+                                transcript_hash=mutual_input.transcript_hash,
+                                predecessor_turn_ids=mutual_input.predecessor_turn_ids,
+                            )
+                        continue
+                    except (PromptRequestError, PromptBudgetError, ValueError) as repair_exc:
+                        if self.fence is not None and active_claim is not None:
+                            self.fence.release(active_claim)
+                        raise GenerationFailed(
+                            "Turn generation structure repair could not be prepared.", attempt=2
+                        ) from repair_exc
+                if self.fence is not None and active_claim is not None:
+                    self.fence.release(active_claim)
+                    active_claim = None
+                acceptance = getattr(exc, "acceptance_state", PromptAcceptanceState.UNKNOWN)
+                failure = (
+                    PromptFailureKind.TRANSPORT_NOT_SENT
+                    if acceptance == PromptAcceptanceState.NOT_SENT
+                    else PromptFailureKind.TRANSPORT_UNKNOWN
+                )
+                decision = PromptAttemptPolicy().decide(
+                    attempt_no=attempt,
+                    failure=failure,
+                    acceptance=acceptance,
+                )
+                if not decision.retry:
+                    raise GenerationFailed(
+                        "Turn generation failed without a safe retry.", attempt=attempt
+                    ) from exc
+                # A proven not-sent retry uses the same provider prompt and
+                # frozen retrieval set.  Re-claim the unchanged fence.
+                if self.fence is not None:
+                    active_claim = self._claim_for_attempt(
+                        context,
+                        2,
+                        active_claim,
+                        transcript_hash=mutual_input.transcript_hash,
+                        predecessor_turn_ids=mutual_input.predecessor_turn_ids,
+                    )
+                continue
+        raise GenerationFailed("Turn generation did not produce a result.", attempt=2)
+
+    def _validate_mutual_strict(
+        self,
+        raw: object,
+        *,
+        context: GenerationContext,
+        receipts: Sequence[SnapshotRetrievalReceipt],
+        predecessors: Sequence[FinalReadyTurn],
+    ) -> ValidatedTurn:
+        validator = self.validator
+        if not isinstance(validator, MutualLearningValidator):
+            raise TurnValidationError("The mutual-learning validator is not configured.")
+        return validator.validate(
+            raw,  # type: ignore[arg-type]
+            plan=context.turn,
+            participant=context.participant,
+            participants=context.participants,
+            receipts=receipts,
+            predecessors=predecessors,
+            pending_question=context.effective_pending_question,
+        )
+
+    @staticmethod
+    def _provider_prompt_with_request(
+        previous: ProviderPromptV1,
+        request: object,
+    ) -> ProviderPromptV1:
+        from .prompt_budget import preflight_prompt_budget
+        from .prompt_request import PromptMessageV1, PromptRequestV1
+
+        if not isinstance(request, PromptRequestV1):
+            raise PromptRequestError("the repaired prompt request is invalid")
+        user = request.canonical_json()
+        system = previous.system_message
+        budget = preflight_prompt_budget(
+            (system.content, user),
+            request_bytes=len(user.encode("utf-8")),
+            requested_output_tokens=previous.budget.requested_output_tokens,
+            # The pure ProviderPrompt value intentionally does not retain a
+            # callable tokenizer.  Strict service calls currently use the
+            # conservative fallback; a custom adapter must rebuild through
+            # ``build_provider_prompt`` with its same pinned port.
+            token_counter=ConservativeUtf8TokenCounter(),
+        )
+        return ProviderPromptV1(
+            request=request,
+            messages=(system, PromptMessageV1(role="user", content=user)),
+            budget=budget,
+            request_hash=request.request_hash,
+            system_rules_hash=previous.system_rules_hash,
+        )
 
     def _generate_mutual_learning(
         self,

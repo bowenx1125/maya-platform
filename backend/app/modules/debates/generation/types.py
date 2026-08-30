@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
+
 if TYPE_CHECKING:
     from .policy import TurnPlan
 
@@ -375,6 +377,11 @@ class ParticipantContext:
     initial_position_summary: str = ""
     current_position_summary: str = ""
     teacher_note: str = ""
+    # New W4-PROMPT callers provide the confirmed structured Persona here.
+    # Legacy contexts may leave it unset; the legacy RuleSet path never reads
+    # this field and therefore keeps its historical raw-input semantics.
+    persona: PersonaSpecV1 | PersonaProviderViewV1 | None = None
+    persona_spec_hash: str | None = None
 
     def __post_init__(self) -> None:
         if self.stance_mode == "assigned" and self.initial_stance is None:

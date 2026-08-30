@@ -30,6 +30,7 @@ from app.modules.debates.generation import (
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
+from app.modules.debates.generation.prompt_request import confirmed_persona_provider_view
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
@@ -258,6 +259,16 @@ class SqlTurnPreparer:
             raise ValueError("frozen AgentVersion is unavailable")
         if str(version.knowledge_snapshot_id or "") != str(row.knowledge_snapshot_id):
             raise ValueError("frozen AgentVersion snapshot does not match participant")
+        persona = None
+        persona_hash = getattr(version, "persona_spec_hash", None)
+        persona_json = getattr(version, "persona_spec_json", None)
+        if persona_json is not None or persona_hash is not None:
+            if not isinstance(persona_json, str) or not isinstance(persona_hash, str):
+                raise ValueError("frozen Persona fields are incomplete")
+            persona, persona_hash = confirmed_persona_provider_view(
+                persona_json,
+                expected_persona_spec_hash=persona_hash,
+            )
         return ParticipantContext(
             participant_id=row.id,
             agent_id=row.agent_id,
@@ -272,6 +283,8 @@ class SqlTurnPreparer:
             initial_position_summary=row.initial_position_summary,
             current_position_summary=row.current_position_summary,
             teacher_note=row.teacher_note,
+            persona=persona,
+            persona_spec_hash=persona_hash,
         )
 
     @staticmethod

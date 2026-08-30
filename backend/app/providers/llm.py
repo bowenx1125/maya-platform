@@ -13,12 +13,14 @@ import hashlib
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Literal, Protocol, cast
 
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.mutual_learning_prompts import (
     build_mutual_learning_prompt,
 )
+from app.modules.debates.generation.prompt_request import ProviderPromptV1
 from app.modules.debates.generation.prompts import build_turn_prompt, prompt_hash
 from app.modules.debates.generation.types import (
     EngagementV1,
@@ -35,9 +37,23 @@ from app.modules.debates.generation.types import (
 class LLMProviderError(GenerationProviderError):
     """A provider failure safe to pass through turn retry handling."""
 
+    def __init__(
+        self,
+        message: str = "mock provider failure",
+        *,
+        acceptance_state: str = "unknown",
+    ) -> None:
+        super().__init__(message)
+        self.acceptance_state = acceptance_state
+        self.failure_kind = "transport_unknown"
+
 
 class LLMStructuredOutputError(LLMProviderError):
     """A provider returned malformed JSON/shape instead of the closed DTO."""
+
+    def __init__(self, message: str = "provider structured output invalid") -> None:
+        super().__init__(message, acceptance_state="accepted")
+        self.failure_kind = "structure_invalid"
 
 
 FailureKind = Literal[
@@ -56,7 +72,7 @@ class LLMProvider(Protocol):
     """The only text generation operation owned by M11."""
 
     def generate_turn(
-        self, prompt: TurnPromptInput | MutualLearningPromptInput
+        self, prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1
     ) -> StructuredTurnResult | MutualLearningTurnResultV1:
         """Generate one closed structured turn from a frozen prompt."""
 
@@ -68,6 +84,31 @@ class MockLLMCall:
     prompt_hash: str
     receipt_hash: str
     turn_id: str
+    messages: tuple[tuple[str, str], ...] = ()
+
+
+def _legacy_turn_prompt(
+    prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+) -> TurnPromptInput:
+    if not isinstance(prompt, TurnPromptInput):
+        raise TypeError("the legacy Mock renderer requires a TurnPromptInput")
+    return prompt
+
+
+def _prompt_phase(
+    prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+) -> str:
+    if isinstance(prompt, ProviderPromptV1):
+        return prompt.request.phase
+    return prompt.turn_plan.phase
+
+
+def _prompt_next_participant_id(
+    prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+) -> str | None:
+    if isinstance(prompt, ProviderPromptV1):
+        return prompt.request.next_participant_id
+    return prompt.turn_plan.next_participant_id
 
 
 @dataclass
@@ -96,64 +137,82 @@ class MockLLMProvider:
         self._failures.append(kind)
 
     def generate_turn(
-        self, prompt: TurnPromptInput | MutualLearningPromptInput
+        self, prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1
     ) -> StructuredTurnResult | MutualLearningTurnResultV1:
         self.calls += 1
-        is_mutual = getattr(prompt, "rule_set_id", None) == MUTUAL_LEARNING_RULE_SET_ID
-        rendered = (
-            build_mutual_learning_prompt(prompt)  # type: ignore[arg-type]
-            if is_mutual
-            else build_turn_prompt(cast(TurnPromptInput, prompt))
-        )
+        messages: tuple[tuple[str, str], ...] = ()
+        if isinstance(prompt, ProviderPromptV1):
+            request = prompt.request
+            is_mutual = request.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+            messages = tuple((message.role, message.content) for message in prompt.messages)
+            rendered = "\x1e".join(content for _role, content in messages)
+            receipt_hash = request.receipt_hash
+            turn_id = request.turn_id
+        else:
+            is_mutual = prompt.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+            rendered = (
+                build_mutual_learning_prompt(prompt)  # type: ignore[arg-type]
+                if is_mutual
+                else build_turn_prompt(_legacy_turn_prompt(prompt))
+            )
+            receipt_hash = hashlib.sha256(
+                "\x1f".join(receipt.resolved_evidence_id() for receipt in prompt.receipts).encode()
+            ).hexdigest()
+            turn_id = prompt.turn_plan.turn_id
         digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
-        receipt_hash = hashlib.sha256(
-            "\x1f".join(receipt.resolved_evidence_id() for receipt in prompt.receipts).encode()
-        ).hexdigest()
         self.call_log.append(
             MockLLMCall(
-                prompt_hash=digest, receipt_hash=receipt_hash, turn_id=prompt.turn_plan.turn_id
+                prompt_hash=digest,
+                receipt_hash=receipt_hash,
+                turn_id=turn_id,
+                messages=messages,
             )
         )
         failure = self._failures.popleft() if self._failures else None
         if failure in {"technical"}:
-            raise LLMProviderError("mock technical provider failure")
+            raise LLMProviderError(
+                "mock technical provider failure", acceptance_state="not_sent"
+            )
         if failure in {"json", "shape"}:
             raise LLMStructuredOutputError("mock malformed structured output")
         if failure in {"word", "long"}:
             long_result: StructuredTurnResult | MutualLearningTurnResultV1 = (
-                self._valid_mutual_result(prompt)  # type: ignore[arg-type]
+                self._mutual_result(prompt)
                 if is_mutual
-                else self._valid_result(prompt)  # type: ignore[arg-type]
+                else self._valid_result(_legacy_turn_prompt(prompt))
             )
             return long_result.model_copy(update={"speech": " ".join(["word"] * 201) + "."})
         if failure == "short":
             short_result: StructuredTurnResult | MutualLearningTurnResultV1 = (
-                self._valid_mutual_result(prompt)  # type: ignore[arg-type]
+                self._mutual_result(prompt)
                 if is_mutual
-                else self._valid_result(prompt)  # type: ignore[arg-type]
+                else self._valid_result(_legacy_turn_prompt(prompt))
             )
             return short_result.model_copy(update={"speech": " ".join(["word"] * 79) + "."})
         if failure == "rule":
             if is_mutual:
-                result = self._valid_mutual_result(prompt)  # type: ignore[arg-type]
-                if getattr(prompt.turn_plan, "phase", "") == "opening":
+                result = self._mutual_result(prompt)
+                phase = _prompt_phase(prompt)
+                next_participant_id = _prompt_next_participant_id(prompt)
+                if phase == "opening":
                     return result.model_copy(
                         update={
                             "question": TurnQuestion(
                                 type="agent",
-                                target_participant_id=prompt.turn_plan.next_participant_id,
+                                target_participant_id=next_participant_id,
                                 text="What do you think?",
                             )
                         }
                     )
                 return result.model_copy(update={"engagements": []})
-            legacy_result = self._valid_result(cast(TurnPromptInput, prompt))
-            if prompt.turn_plan.round_no == 1:
+            legacy_prompt = _legacy_turn_prompt(prompt)
+            legacy_result = self._valid_result(legacy_prompt)
+            if legacy_prompt.turn_plan.round_no == 1:
                 return legacy_result.model_copy(
                     update={
                         "question": TurnQuestion(
                             type="agent",
-                            target_participant_id=prompt.turn_plan.next_participant_id,
+                            target_participant_id=legacy_prompt.turn_plan.next_participant_id,
                             text="What do you think?",
                         )
                     }
@@ -161,7 +220,7 @@ class MockLLMProvider:
             return legacy_result.model_copy(update={"rebuttal_target_turn_id": None})
         if failure == "matched_but_unused":
             if is_mutual:
-                mutual_result = self._valid_mutual_result(prompt)  # type: ignore[arg-type]
+                mutual_result = self._mutual_result(prompt)
                 return mutual_result.model_copy(
                     update={
                         "used_evidence_id": [],
@@ -171,15 +230,60 @@ class MockLLMProvider:
                         ],
                     }
                 )
-            legacy_result = self._valid_result(cast(TurnPromptInput, prompt))
+            legacy_result = self._valid_result(_legacy_turn_prompt(prompt))
             return legacy_result.model_copy(update={"used_evidence_id": []})
         if failure is not None:
             raise LLMProviderError("unknown mock failure injection")
         return (
-            self._valid_mutual_result(prompt)  # type: ignore[arg-type]
+            self._mutual_result(prompt)
             if is_mutual
-            else self._valid_result(prompt)  # type: ignore[arg-type]
+            else self._valid_result(_legacy_turn_prompt(prompt))
         )
+
+    def _mutual_result(
+        self,
+        prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+    ) -> MutualLearningTurnResultV1:
+        if isinstance(prompt, ProviderPromptV1):
+            request = prompt.request
+            compatibility = SimpleNamespace(
+                participant=SimpleNamespace(
+                    agent_name=request.persona_provider_view.identity.name,
+                    participant_id=request.participant_id,
+                ),
+                phase=request.phase,
+                receipts=tuple(
+                    SimpleNamespace(
+                        text=evidence.excerpt,
+                        resolved_evidence_id=lambda evidence_id=evidence.evidence_id: evidence_id,
+                    )
+                    for evidence in request.evidence_catalog
+                ),
+                predecessors=tuple(
+                    SimpleNamespace(
+                        turn_id=predecessor.turn_id,
+                        participant_id=predecessor.participant_id,
+                        structured=SimpleNamespace(key_claims=predecessor.key_claims),
+                    )
+                    for predecessor in request.predecessors
+                ),
+                pending_question=(
+                    SimpleNamespace(
+                        question_id=request.pending_question.question_id,
+                        text=request.pending_question.text,
+                    )
+                    if request.pending_question is not None
+                    else None
+                ),
+                turn_plan=SimpleNamespace(
+                    turn_id=request.turn_id,
+                    next_participant_id=request.next_participant_id,
+                ),
+            )
+            return self._valid_mutual_result(cast(MutualLearningPromptInput, compatibility))
+        if isinstance(prompt, TurnPromptInput):
+            raise TypeError("the mutual Mock renderer requires a mutual-learning prompt")
+        return self._valid_mutual_result(prompt)
 
     def _valid_mutual_result(self, prompt: MutualLearningPromptInput) -> MutualLearningTurnResultV1:
         """Emit a deterministic valid object for every resolved phase."""
