@@ -7,7 +7,12 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentDetail, AgentVersion, KnowledgeDocument } from "../lib/api";
+import {
+  PlatformApiError,
+  type AgentDetail,
+  type AgentVersion,
+  type KnowledgeDocument,
+} from "../lib/api";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 const router = vi.hoisted(() => ({ push: vi.fn() }));
@@ -183,6 +188,43 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("exposes only the exact teacher disclosure link for a blocked real publish", async () => {
+    const manifestHash = "b".repeat(64);
+    const api = {
+      version: vi.fn().mockResolvedValue(draftVersion()),
+      agent: vi.fn().mockResolvedValue(createdAgent()),
+      knowledge: vi.fn().mockResolvedValue([]),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        document_count: 0,
+        total_char_count: 0,
+        index_status: "ready",
+        combined_markdown: "",
+      }),
+      publish: vi.fn().mockRejectedValue(
+        new PlatformApiError(409, "Teacher confirmation required.", {
+          code: "provider_confirmation_required",
+          message: "Teacher confirmation required.",
+          details: { manifest_hash: manifestHash },
+        }),
+      ),
+    };
+    useSessionMock.mockReturnValue({ api });
+
+    render(<AgentWorkbench versionId="version-id" />);
+    await screen.findByRole("button", { name: "Publish version" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
+
+    const link = await screen.findByRole("link", {
+      name: "Open exact provider disclosure",
+    });
+    expect(link.getAttribute("href")).toBe(
+      `/teacher/provider-disclosures/${manifestHash}`,
+    );
+    expect(link.textContent).not.toMatch(/qwen|workspace|https?:\/\//i);
   });
 
   it("replays safe delete through the action-specific retry path", async () => {
