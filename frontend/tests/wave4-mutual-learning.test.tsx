@@ -1,10 +1,17 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { DebateDetail, DebateCreateController } from "../components/debate/setup/debate-setup";
-import {
-  TeacherDebateCreate,
+import type {
+  DebateDetail,
+  DebateCreateController,
 } from "../components/debate/setup/debate-setup";
+import { TeacherDebateCreate } from "../components/debate/setup/debate-setup";
 import {
   phaseLabel,
   resolveDebateRoundPhase,
@@ -49,11 +56,16 @@ function candidate(id: string, name: string): PublishedAgentSummary {
   } as PublishedAgentSummary;
 }
 
-function setupController(create: ReturnType<typeof vi.fn>): DebateCreateController {
+function setupController(
+  create: ReturnType<typeof vi.fn>,
+): DebateCreateController {
   return {
     loadCandidates: vi
       .fn()
-      .mockResolvedValue([candidate("bowen", "Bowen"), candidate("kaikai", "KaiKai")]),
+      .mockResolvedValue([
+        candidate("bowen", "Bowen"),
+        candidate("kaikai", "KaiKai"),
+      ]),
     create: create as unknown as DebateCreateController["create"],
   };
 }
@@ -72,28 +84,33 @@ function renderCreate(create = vi.fn().mockResolvedValue(createdDebate())) {
 }
 
 describe("Wave 4 mutual-learning setup and phase view helpers", () => {
-  it.each([2, 3, 5])("sends the mutual RuleSet with %s rounds", async (roundCount) => {
-    const create = vi.fn().mockResolvedValue(createdDebate());
-    renderCreate(create);
-    await screen.findByRole("button", { name: /Bowen/ });
-    fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
-    fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
-    fireEvent.change(screen.getByLabelText("Topic (English)"), {
-      target: { value: "Should classrooms compare cultural perspectives?" },
-    });
-    fireEvent.change(screen.getByLabelText("Protocol"), {
-      target: { value: mutualRuleSet },
-    });
-    fireEvent.change(screen.getByLabelText("Rounds"), {
-      target: { value: String(roundCount) },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create debate draft" }));
-    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    expect(create.mock.calls[0]?.[1]).toMatchObject({
-      rule_set_id: mutualRuleSet,
-      round_count: roundCount,
-    });
-  });
+  it.each([2, 3, 5])(
+    "sends the mutual RuleSet with %s rounds",
+    async (roundCount) => {
+      const create = vi.fn().mockResolvedValue(createdDebate());
+      renderCreate(create);
+      await screen.findByRole("button", { name: /Bowen/ });
+      fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
+      fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+      fireEvent.change(screen.getByLabelText("Topic (English)"), {
+        target: { value: "Should classrooms compare cultural perspectives?" },
+      });
+      fireEvent.change(screen.getByLabelText("Protocol"), {
+        target: { value: mutualRuleSet },
+      });
+      fireEvent.change(screen.getByLabelText("Rounds"), {
+        target: { value: String(roundCount) },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create debate draft" }),
+      );
+      await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      expect(create.mock.calls[0]?.[1]).toMatchObject({
+        rule_set_id: mutualRuleSet,
+        round_count: roundCount,
+      });
+    },
+  );
 
   it("keeps the legacy setup default at two rounds", async () => {
     const create = renderCreate();
@@ -103,7 +120,9 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     fireEvent.change(screen.getByLabelText("Topic (English)"), {
       target: { value: "Should classrooms compare cultural perspectives?" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create debate draft" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create debate draft" }),
+    );
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[1]).toMatchObject({
       rule_set_id: "ordered_multi_agent_rounds_demo_v2",

@@ -169,7 +169,10 @@ type DebateRuleSetId =
   | "ordered_multi_agent_rounds_demo_v2"
   | "ordered_multi_expert_mutual_learning_v1";
 type MutualRoundCount = 2 | 3 | 4 | 5;
-type SetupDraftPayload = Omit<DebateDraftRequest, "round_count" | "rule_set_id"> & {
+type SetupDraftPayload = Omit<
+  DebateDraftRequest,
+  "round_count" | "rule_set_id"
+> & {
   round_count: MutualRoundCount;
   rule_set_id: DebateRuleSetId;
 };
@@ -322,7 +325,10 @@ export function TeacherDebateCreate({
           teacher_note: draft.note,
         };
       }),
-      round_count: ruleSetId === "ordered_multi_expert_mutual_learning_v1" ? roundCount : 2,
+      round_count:
+        ruleSetId === "ordered_multi_expert_mutual_learning_v1"
+          ? roundCount
+          : 2,
       rule_set_id: ruleSetId,
       total_duration_seconds: null,
       turn_duration_seconds: null,
@@ -605,7 +611,9 @@ export function TeacherDebateCreate({
                   aria-label={copy(t, "debateRoundCount")}
                   disabled={busy}
                   onChange={(event) =>
-                    setRoundCount(Number(event.target.value) as MutualRoundCount)
+                    setRoundCount(
+                      Number(event.target.value) as MutualRoundCount,
+                    )
                   }
                   value={roundCount}
                 >

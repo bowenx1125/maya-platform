@@ -94,9 +94,11 @@ function finishBlockedCopy(
 }
 
 function hasCompletePublicPlan(detail: DebateDetail): boolean {
-  const configuredRoundCount = (detail as DebateDetail & {
-    round_count?: unknown;
-  }).round_count;
+  const configuredRoundCount = (
+    detail as DebateDetail & {
+      round_count?: unknown;
+    }
+  ).round_count;
   const roundCount =
     typeof configuredRoundCount === "number" &&
     Number.isInteger(configuredRoundCount) &&

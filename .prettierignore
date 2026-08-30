@@ -10,3 +10,4 @@ docs/archive/**
 docs/worklog/**
 docs/requirements/original.md
 docs/contracts/baseline-pre-code/**
+manual-tests/formal-tiktok-rag/**
