@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `SOL G2 CHANGES_REQUIRED_4 / EFFECTIVE PROJECTION REPAIR ACTIVE / REAL CALLS 0`
+Status: `PERSONA MOCK PASS / SOL G2 FINAL AUDIT READY / REAL CALLS 0`
 
 ## Scope
 
@@ -187,9 +187,22 @@ returned `CHANGES_REQUIRED / P0=0 / P1=2 / P2=0`:
 
 The combined promise that every arbitrary free-text difference must generate unique
 speech, every turn remains at most 190 words and no hash/code may enter classroom text
-is not implementable. The correction is a closed, deterministic and student-visible
-effective Mock behavior projection. Meaningfully different projection dimensions must
-change actual Mock behavior; raw edits that normalize to the same effective behavior
-must be shown honestly as unchanged in preview/comparison. Safe attribution/evidence,
-quantity, link, document and source categories remain human-readable and never become
-receipt claims.
+is not implementable and was never the user's intended Persona acceptance boundary.
+
+## User-frozen Persona Mock PASS
+
+The user stopped further optimization and froze Persona Mock as PASS because current
+evidence proves all required conditions:
+
+1. stable deterministic `AGENT.md -> PersonaSpecV1`;
+2. six student-visible core dimensions;
+3. mandatory student confirmation;
+4. correct confirmation freeze/hash/version/compiler binding;
+5. no unconfirmed Persona in any new Debate/Provider path;
+6. clearly different Persona projections produce clearly different actual Mock behavior;
+7. no fabricated Evidence and no raw/private Persona leakage.
+
+Arbitrary word-level differences that normalize to the same bounded Mock projection
+are not a Gate failure. The existing source-neutral renderer remains required so
+Persona text cannot masquerade as receipt-backed facts. The final G2 audit must apply
+these seven frozen criteria and must not reintroduce the superseded uniqueness KPI.

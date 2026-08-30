@@ -1,6 +1,6 @@
 # PersonaSpecV1
 
-Status: `FROZEN / EFFECTIVE MOCK PROJECTION REPAIR ACTIVE / REAL CALLS 0`
+Status: `FROZEN / PERSONA MOCK GATE PASS / REAL CALLS 0`
 
 ## Teaching contract
 
@@ -177,3 +177,21 @@ source-attribution predicate as EvidenceTrace validation. Attribution, written/A
 quantity, URL, filename and source-shaped values become a natural
 "student-authored perspective" meta sentence rather than a factual claim. Six
 dimensions × three phases have pairwise-causality and source-pattern strict tests.
+
+## Frozen Persona Mock Gate
+
+The user froze this Gate as PASS when all seven conditions hold:
+
+1. `AGENT.md -> PersonaSpecV1` is deterministic and stable;
+2. the six core teaching dimensions are visible to the student;
+3. the student must confirm the compiled Persona;
+4. confirmation freezes the correct raw/spec hashes, version and compiler binding;
+5. an unconfirmed Persona cannot enter any new Debate or Provider path;
+6. clearly different Persona projections produce clearly different actual Mock behavior;
+7. Persona cannot fabricate Evidence or leak raw/private text.
+
+The current implementation and local acceptance matrix satisfy all seven. The Gate
+does not promise that every arbitrary word-level edit inside a bounded free-text field
+must produce a unique speech. If two edits have the same effective Mock projection,
+that is not a Gate failure. Further uniqueness/sampling optimization is explicitly out
+of scope after this PASS.
