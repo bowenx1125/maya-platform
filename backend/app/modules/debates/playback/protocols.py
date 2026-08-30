@@ -442,7 +442,12 @@ class MemoryPlaybackRepository:
         if debate is None:
             return None
         state = self.playback_state(None, debate)
-        if debate.status != "running" or state.control_version != expected_control_version:
+        if (
+            debate.status != "running"
+            or state.status != "waiting_next"
+            or state.mode != "live"
+            or state.control_version != expected_control_version
+        ):
             return None
         if (
             expected_current_turn_id is not None
@@ -458,7 +463,9 @@ class MemoryPlaybackRepository:
             debate.status = "debate_finished"
             state.status = "completed"
         else:
-            debate.status = "stopped"
+            # Product-level early Finish is finished, while stopped playback
+            # keeps every complete-plan downstream gate closed.
+            debate.status = "debate_finished"
             debate.cancellation_generation += 1
             self.mark_jobs_interrupted(None, debate, "debate_finished_partial")
             state.status = "stopped"

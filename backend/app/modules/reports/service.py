@@ -31,6 +31,7 @@ from app.core.errors import (
 )
 from app.core.models import CourseMember, IdempotencyRecord, Job, KnowledgeChunk
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, TurnSource
+from app.modules.debates.playback.eligibility import has_complete_finished_playback
 
 from .models import (
     BarrageInsightAssignment,
@@ -127,10 +128,13 @@ def _require_teacher(db: Session, actor_user_id: str, debate_id: str) -> Debate:
         raise not_found()
     if role != "teacher":
         raise forbidden()
-    # Partial Finish uses the existing stopped status.  Preserve its rows for
-    # audit while making all report/history reads and generation commands
-    # unavailable, so Maya cannot consume an incomplete debate.
-    if debate.status == "stopped":
+    # Partial Finish is product-level ``debate_finished`` but its playback is
+    # terminal stopped. Require the complete public two-round plan for every
+    # report/history read and generation command.
+    if debate.status == "stopped" or (
+        debate.status in {"debate_finished", "completed"}
+        and not has_complete_finished_playback(db, debate_id)
+    ):
         raise not_found()
     return debate
 

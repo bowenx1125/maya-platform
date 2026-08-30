@@ -7,7 +7,12 @@ from dataclasses import dataclass, replace
 
 from .types import ParticipantContext
 
-RULE_SET_ID = "ordered_multi_agent_rounds_demo_v1"
+RULE_SET_ID_V1 = "ordered_multi_agent_rounds_demo_v1"
+RULE_SET_ID_V2 = "ordered_multi_agent_rounds_demo_v2"
+# Generation callers stay v1-compatible unless the persisted Debate row is
+# passed explicitly.  New draft creation uses v2 in the setup module.
+RULE_SET_ID = RULE_SET_ID_V1
+SUPPORTED_RULE_SET_IDS = frozenset({RULE_SET_ID_V1, RULE_SET_ID_V2})
 ROUND_COUNT = 2
 MIN_PARTICIPANTS = 2
 MAX_PARTICIPANTS = 5
@@ -68,6 +73,13 @@ class TurnPolicy:
 
     rule_set_id = RULE_SET_ID
     round_count = ROUND_COUNT
+
+    def __init__(self, *, rule_set_id: str = RULE_SET_ID) -> None:
+        if rule_set_id not in SUPPORTED_RULE_SET_IDS:
+            raise TurnPolicyError(
+                "The Debate rule set is unavailable.", code="rule_set_unavailable"
+            )
+        self.rule_set_id = rule_set_id
 
     def plan(
         self,
@@ -183,6 +195,8 @@ __all__ = [
     "MIN_PARTICIPANTS",
     "ROUND_COUNT",
     "RULE_SET_ID",
+    "RULE_SET_ID_V1",
+    "RULE_SET_ID_V2",
     "SLOTS",
     "TurnPlan",
     "TurnPolicy",

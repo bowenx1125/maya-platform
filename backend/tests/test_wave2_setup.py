@@ -334,6 +334,13 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     created = response.json()
     debate_id = created["id"]
     assert created["revision"] == 0
+    assert created["rule_set_id"] == "ordered_multi_agent_rounds_demo_v2"
+    with database.session() as db:
+        persisted = db.get(Debate, debate_id)
+        assert persisted is not None
+        persisted_rule = json.loads(persisted.rule_snapshot_json)
+        assert persisted_rule["rule_set_id"] == "ordered_multi_agent_rounds_demo_v2"
+        assert persisted_rule["retrieval_policy_id"] == "mock_lexical_anchor_v2"
     assert [item["slot"] for item in created["participants"]] == ["A", "B"]
     assert [item["agent_id"] for item in created["participants"]] == [bowen_id, kaikai_id]
     assert [item["agent_version_id"] for item in created["participants"]] == [

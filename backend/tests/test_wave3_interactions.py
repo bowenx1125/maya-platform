@@ -416,13 +416,15 @@ def func_count(column: Any) -> Any:
 
 def test_public_routes_never_create_or_use_user_idempotency(interaction_app: Any) -> None:
     _app, database, client = interaction_app
+    canonical_origin = _app.state.settings.classroom_public_base_url
+    assert canonical_origin is not None
     debate_id, participant_ids = _seed_finished_debate(database)
     session_data, csrf = login(client)
     assert session_data["user"]["id"] == TEACHER_ID
     response = client.post(
         f"/api/v1/debates/{debate_id}/interaction/open",
         headers={
-            "Origin": "http://testserver",
+            "Origin": canonical_origin,
             "X-CSRF-Token": csrf,
             "Idempotency-Key": "m13-route-open-0001",
         },
@@ -639,6 +641,8 @@ def test_submit_close_writer_race_freezes_exact_winner(interaction_app: Any) -> 
 
 def test_teacher_routes_reject_students_and_cross_course_teachers(interaction_app: Any) -> None:
     app, database, client = interaction_app
+    canonical_origin = app.state.settings.classroom_public_base_url
+    assert canonical_origin is not None
     debate_id, _participant_ids = _seed_finished_debate(database)
     _session, student_csrf = login(client, "student-bowen-1")
 
@@ -647,7 +651,7 @@ def test_teacher_routes_reject_students_and_cross_course_teachers(interaction_ap
     open_response = client.post(
         f"/api/v1/debates/{debate_id}/interaction/open",
         headers={
-            "Origin": "http://testserver",
+            "Origin": canonical_origin,
             "X-CSRF-Token": student_csrf,
             "Idempotency-Key": "m13-student-open-denied",
         },

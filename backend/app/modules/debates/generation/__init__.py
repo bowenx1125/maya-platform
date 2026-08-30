@@ -7,7 +7,14 @@ from .fencing import (
     TurnClaim,
     can_claim_turn,
 )
-from .policy import RULE_SET_ID, TurnPlan, TurnPolicy, TurnPolicyError
+from .policy import (
+    RULE_SET_ID,
+    RULE_SET_ID_V1,
+    RULE_SET_ID_V2,
+    TurnPlan,
+    TurnPolicy,
+    TurnPolicyError,
+)
 from .prompts import (
     PLATFORM_PRIORITY_RULES,
     build_turn_prompt,
@@ -69,6 +76,8 @@ __all__ = [
     "PreparationCap",
     "PublicSource",
     "RULE_SET_ID",
+    "RULE_SET_ID_V1",
+    "RULE_SET_ID_V2",
     "RAGRetrievalError",
     "RetrievalResult",
     "SelectedEvidence",

@@ -4,9 +4,13 @@ Gate ID: `g0-2026-08-29.3-wave3`
 
 Manual-feedback delta: `g0-2026-08-30.1-wave3-manual-feedback-delta`
 
-Status: `BASE WAVE 3 HIGH-RISK NARROW G2 PASS 2026-08-29 / MANUAL-FEEDBACK DELTA G1.5 + MAIN RUNTIME CANDIDATE PASS 2026-08-30 / READY_FOR_DELTA_G2 / FULL G2-G3 PENDING`
+Final disconnect/RAG delta: `g0-2026-08-30.2-wave3-disconnect-rag-final-delta`
 
-Modules: `M13 classroom interaction`, `M14 barrage insight + Maya report`, `M15 history + on-demand translation`
+Pre-Wave-4 UX/state delta: `g0-2026-08-30.3-wave3-pre-wave4-ux-state-delta`
+
+Status: `WAVE_3_G3_PASS / PRE-WAVE-4 UX-STATE DELTA G2 PASS P0=0 P1=0 / MAIN G3 PASS / READY_FOR_WAVE_4 / WAVE_4 NOT STARTED / REAL PROVIDERS DEFERRED`
+
+Modules: `M11 Mock-only retrieval honesty delta`, `M12 classroom playback/control`, `M13 classroom interaction`, `M14 barrage insight + Maya report`, `M15 history + on-demand translation`
 
 This packet freezes the Mock-only Wave 3 implementation contract. It starts from the audited Wave 0–2 and pre-Wave-3 baseline, preserves all existing Agent/RAG/Debate/Playback behavior, and completes the post-debate classroom loop. No implementation worker may approve its own Gate.
 
@@ -20,7 +24,7 @@ Wave 3 remains local/private Demo scope. Every Provider selector stays `mock`.
 
 ## 2. Explicitly out of scope
 
-- no Mock RAG relevance repair; that work belongs to the user's other window;
+- no broad retrieval rewrite or real-Embedding relevance claim; the only authorized relevance delta is the versioned Mock-only lexical topic anchor in section 3.2;
 - no real LLM, Embedding, TTS, Voice, Translation or paid call;
 - no Provider selector UI, supplier field, model ID, external ID or API key in browser DTOs;
 - no Wave 4, G4/G5 real-service claim, LAN load acceptance, public/cloud deployment or public repository change;
@@ -43,12 +47,42 @@ Wave 3 remains local/private Demo scope. Every Provider selector stays `mock`.
 10. Replay never calls interaction, insight, report or translation generation and never mutates their state.
 11. All WebSocket events commit after the authoritative database transaction and use the existing Debate sequence/watermark/gap recovery. A WebSocket never owns a socket-lifetime SQLAlchemy Session.
 12. Existing finished Debate/Turn/Source/Playback/audio rows remain immutable. Wave 3 creates derived records only.
-13. The classroom socket makes one automatic initial connection only. A later close, error or sequence gap leaves the rendered authoritative snapshot intact in stable `disconnected`; only one explicit teacher Reconnect click performs one snapshot refresh and one socket attempt. No timer or background refresh retries.
+13. The classroom socket makes one automatic initial connection only. A recoverable network close/error or sequence gap leaves the rendered authoritative snapshot intact; only one explicit teacher Reconnect click performs one snapshot refresh, one socket attempt and at most one controller acquire. No timer or background refresh retries. Terminal state, controller supersession, expired login and origin mismatch are not network loss and never expose a Reconnect action.
 14. `Pause` is a recoverable live-playback command: it persists `PlaybackState.status=paused`, keeps the Debate `running`, preserves generated/public turns and does not cancel future generation. `Continue` revalidates the same turn/audio/CAS and returns to `ready`; it is distinct from terminal `stopped`.
 15. Finish is independent of Pause. A complete final-ready/public turn catalog finishes normally as `debate_finished`; an incomplete catalog becomes partial, represented by the existing terminal `stopped` status while retaining immutable generated turns. Partial completion cannot expose interaction, report, history, translation or Replay.
 16. Teacher navigation order is `Back to debate list → Finish debate → Classroom interaction & report`. Interaction, report, public speeches/history and test translation live on the dedicated teacher page; the playback page owns only classroom playback controls.
 17. The translation surface has one language action. It generates missing exact-hash Mock translations only when needed, then toggles the public speech display between authoritative English and available Chinese test text. It never renders the same Chinese translation twice or feeds it into Replay/RAG/TTS/debate/report input.
 18. Before Replay clears the visible public prefix, the page captures one immutable turn catalog containing speech and source rows. Every `replay.started` resolves from that catalog; a missing catalog entry fails closed instead of showing an empty speech card.
+
+### 3.1 Final disconnect-cause delta
+
+- Transport state and disconnect/control cause are separate frontend values. A generic `disconnected` boolean/string cannot be the presentation contract.
+- `playback.status in {stopped, completed}` or `controller.revoked(reason=debate_terminal)` clears media/controller authority but shows the authoritative Debate/Playback terminal status. It never renders a Disconnected/Reconnect pill or overlay. A completed Debate may obtain a fresh controller epoch for retained Replay without opening a new socket or describing that controller transition as a reconnect.
+- `controller.revoked(reason=superseded)` means another teacher page acquired authority. The stale page retains its authoritative transcript/sources, stops audio, does not auto-acquire again and displays `Another teacher page has taken control / 另一个教师页面已取得控制权`. It has no Reconnect action.
+- WebSocket close `4401` means the login/session is no longer valid and displays `Login expired. Please sign in again / 登录已失效，请重新登录`. It has no Reconnect action.
+- WebSocket close `4403` is reserved for an Origin mismatch and displays `The classroom address does not match the server configuration / 课堂访问地址与服务器配置不一致`. It has no Reconnect action. Missing server settings/database use a server-error close path, not 4403.
+- Abnormal network close/error displays `Connection lost / 连接已断开` and one manual Reconnect action. A sequence/watermark gap displays a distinct state-resynchronization message but uses the same one-click, one-refresh, one-socket-attempt recovery budget.
+- `onerror` cannot overwrite a later, more precise close code or private `controller.revoked` reason. Intentional unmount/terminal socket cleanup cannot be reclassified as network loss.
+- The dedicated interaction/report page reuses the 4401/4403/network classification. It never adds automatic retry.
+- Close reason messages are UI-only and contain no token, session value, configured private origin, supplier field or server path.
+
+### 3.2 Versioned Mock RAG honesty delta
+
+- New Debate drafts use rule set `ordered_multi_agent_rounds_demo_v2`; existing v1 rows, snapshots and generated turns remain immutable and readable. No migration rewrites existing `rule_set_id` or `rule_snapshot_json`.
+- `mock_lexical_anchor_v2` runs only when the configured Embedding adapter is the deterministic Mock. Real Embedding/Vector adapters and Provider contracts are unchanged.
+- Each retrieval attempt retains an authoritative topic anchor separate from typed round-one/round-two subquery text. Generic predecessor claims/questions cannot replace or bypass the topic anchor.
+- Topic and candidate chunk text are normalized with the frozen Latin-token routine and a frozen stop-word set. If the topic has at least two meaningful tokens, a candidate needs at least two topic-token overlaps; if it has exactly one meaningful token, that token must overlap. Candidates failing the gate cannot become strict or relaxed receipts.
+- Passing candidates still use the existing deterministic strict→relaxed score thresholds, ranking, receipt identity and six-receipt cap. This policy may create a bounded Mock false negative; it must not create a known unrelated false positive.
+- The rule snapshot records the retrieval policy version. Student draft test-chat Mock retrieval uses the same current v2 topic-anchor policy; published KnowledgeSnapshot bytes and vector rows are never rebuilt.
+- Deterministic acceptance is: TikTok topic→TikTok evidence matched; TikTok topic→mineral notes no_match; intimate-relationship topic→relationship evidence matched; hiking topic→TikTok/relationship evidence no_match; round-two generic predecessor text cannot turn an unrelated snapshot into matched.
+
+### 3.3 Final delta Gate sequence and stop conditions
+
+1. G1 implementation is split into mutually exclusive frontend connection, backend close-code and Mock RAG/rule-contract ownership. No implementation worker signs G2.
+2. G1.5 runs targeted counterexamples, all backend/frontend tests, formatting/lint/type/build, OpenAPI/generated-client/WS/route checks, migrations 0001-0007, Docker and repository-secret boundaries. No real Provider call is allowed.
+3. An independent reviewer audits pause/resume single-event behavior, SQL CAS/restart, partial downstream denial, Replay catalog, controller revocation/takeover, close-reason display and Mock RAG v2/v1 immutability. P0/P1 must be zero; in-scope P2 is fixed, while any product/provider-scope P2 requires explicit acceptance.
+4. After G2 PASS, the main window is explicitly authorized by the user to perform G3 with real browser/runtime evidence: network restart/manual reconnect, two-page supersession, 4401, 4403, Pause/Continue, full/partial Finish, interaction/report, translation, Replay and controlled RAG contrast.
+5. Only G2 PASS plus main-window G3 PASS permits `WAVE_3_G3_PASS / READY_TO_DISCUSS_WAVE_4`. Any automatic reconnect, stale-controller command acceptance/reacquire loop, duplicate resumed event, partial downstream access, Replay content loss, unrelated Mock RAG match, real-provider call or core-contract conflict stops the Gate.
 
 ## 4. M13 — Classroom interaction
 
@@ -336,4 +370,66 @@ The 2026-08-30 delta is not covered by the earlier narrow G2 signature. It reach
 - after user-authorized cleanup, a missing-data-root rebuild reached 0007 with `7 users / 1 course / 2 groups / 0 agents / 0 debates / 0 derived Wave 3 rows`, foreign-key check empty and teacher password login successful; containers were then stopped and the regenerated `data/` was deleted again;
 - `.env` and `backend/config/demo-accounts/accounts.private.md` remain mode 0600. Runtime databases, all 14 historical debates, published Agent/RAG data, generated audio, backups, duplicate handoff materials, legacy account YAML and private voice inputs were permanently deleted.
 
-This evidence is main-owned G1.5/runtime acceptance, not an independent G2 signature. The final resumed-event change and the complete delta remain `READY_FOR_DELTA_G2`; an implementer must not self-sign Full Wave 3 G2/G3.
+### 15.2 Final disconnect/RAG delta G2 and G3 (2026-08-30)
+
+- Independent read-only G2 passed with `P0=0 / P1=0 / P2=1 accepted`. The accepted P2 is bounded Mock-only false-negative risk; any known unrelated `matched` result remains a blocker.
+- Backend full regression passed `401/401`; frontend passed `28 files / 182 tests`. Ruff check, scoped Ruff format, mypy, ESLint, TypeScript, Prettier, Next production build, generated contracts, OpenAPI 69-operation responses, WS `30/18`, route `13` negatives, repository boundary, bootstrap safety and 0001-0007 migration probes passed.
+- G3 reproduced a v2 false positive where relationship prose supplied `require` and a citation URL slug supplied `rules`. HTTP(S) destinations are now removed before Mock v2 tokenization; the exact relationship snapshot retested `no_match`, while explicit AI-school recommendation evidence remains `matched`. v1 and non-Mock Provider paths are unchanged.
+- Real-browser G3 passed: network restart with no background retry and one manual Reconnect; persisted Pause and Continue; two-page `superseded` revocation; accurate 4401/HTTP-401 login-expired and 4403 Origin-mismatch copy; full natural completion; partial Finish downstream blocking; anonymous vote and raw barrage; finalized insight and 609-word report; one-batch Chinese/English display toggle; and four-step retained speech/source Replay.
+- Stopped/completed terminal pages retain the transcript without a disconnect overlay or Reconnect. HTTP 403 remains a normal retryable permission/network failure and is not mislabeled as 4403.
+- No real Provider or billed call occurred. After evidence capture, containers were stopped and both `data/` and `backend/data/` were permanently deleted; only ignored mode-0600 `.env` and `backend/config/demo-accounts/accounts.private.md` remain as private runtime inputs.
+
+G2 and G3 therefore both pass. Wave 3 is signed `WAVE_3_G3_PASS / READY_TO_DISCUSS_WAVE_4`; this does not start Wave 4 or approve real LLM/Embedding/TTS, formal content, classroom load or public deployment.
+
+## 16. Pre-Wave-4 UX/state delta (2026-08-30)
+
+The user's later manual review supersedes the ready-to-discuss status without invalidating the completed `.2` evidence. This delta must pass before Wave 4 can start.
+
+### 16.1 Current-language-only controls
+
+- Every visible button and navigation link in teacher playback, interaction/report/history/translation and audience interaction renders only the active locale. Literal bilingual controls such as `English / 中文` or `Raw barrages / 原始弹幕` are forbidden.
+- Accessible names follow the same locale; they must not retain a hidden bilingual hybrid that makes screen-reader and selector behavior diverge from the visible control.
+- The control-page navigation text is `Back to debate list` in English and its Chinese equivalent in Chinese. It must not say `Back to debate`.
+- Static explanatory copy may remain translated through the locale catalog, but one rendered view never concatenates both languages.
+
+### 16.2 Simple classroom phase and actions
+
+- The ordinary teacher control surface removes Pause/Continue. Backend pause/resume protocol may remain as an internal recovery primitive but is not a standard product control.
+- No new duplicate Debate database status is introduced. The UI derives one classroom phase from authoritative state: `ready` for an unstarted draft, `in_progress` for preparing/ready/playing and an in-flight command, `waiting` for live `waiting_next`, and `finished` for a teacher-finished or naturally completed terminal Debate. Connection health remains a separate line above the phase.
+- Start is available only before the first live turn. Next and Finish are enabled only in `waiting`, after controller authority is confirmed. During `in_progress` both are fail-closed in UI and handler code.
+- Leaving the control page while `waiting` does not change server state. Returning later restores the same public transcript, current turn and `waiting` phase.
+- Explicit Finish while waiting may end an incomplete turn plan. The Debate is presented as finished, but the playback remains terminal and every interaction/report/translation/Replay gate continues to require the complete public two-round plan. Abnormal generation failure remains distinct from teacher Finish.
+
+### 16.3 Replay is retained playback, not regeneration
+
+- Starting Replay never clears or replaces the authoritative published transcript. All saved speeches and sources remain visible while a current replay cursor highlights the turn being played.
+- Replay reads only the immutable turn catalog and retained current-course audio. It makes zero RAG, LLM, Embedding, translation or TTS generation calls.
+- Each replayed turn ends in persistent `replay + waiting_next`; Next advances the saved catalog immediately. The final replay turn restores terminal `finished` presentation with the full transcript still visible.
+- After each completed replay cycle, the same open teacher page automatically performs exactly one fresh controller acquire for a possible later Replay. This is controller renewal, not network reconnection: no timer, snapshot loop, WebSocket reconnect or automatic recovery from a real network failure is permitted.
+- A completed page loaded fresh does not acquire a controller in the background. Its Replay button remains available when retained audio is current; the teacher's single Replay click performs exactly one on-demand controller acquire on the existing socket, then one replay command. Duplicate clicks are fenced.
+
+### 16.4 Localhost/LAN Origin behavior
+
+- In private `DEMO_MODE`, the configured `CLASSROOM_PUBLIC_BASE_URL` origin remains canonical for QR/public links, but same-machine loopback gateway origins `http://localhost:<gateway-port>` and `http://127.0.0.1:<gateway-port>` are also accepted by the shared authenticated REST same-origin check and teacher WebSockets.
+- This exception is limited to loopback HTTP origins in Demo mode and must use the same gateway port. Non-loopback mismatches, HTTPS downgrade/mismatch, malformed origins and all production/non-Demo cases retain close code 4403.
+- 4401/session-expired, REST CSRF/authentication, superseded and true network classification remain unchanged. Real network failures still require a manual single Reconnect.
+
+### 16.5 Gate and workflow
+
+- Three Luna Max workers own mutually exclusive implementation lines: locale-only controls; playback phase/Finish/Replay; and Origin validation. They do not self-sign.
+- Main updates shared contracts, reviews every diff, runs full G1.5, then performs independent G2 with `P0=0/P1=0` and a fresh real-browser G3.
+- G3 must cover both locales, navigation wording, leave/re-enter waiting, Finish disabled in progress, early/full Finish downstream boundaries, retained four-turn Replay with repeated cycle readiness, localhost and LAN teacher control, and true network manual-only Reconnect.
+- Any mixed-language interactive control, cleared replay transcript, generation call during Replay, automatic network retry, downstream access after incomplete Finish, or non-loopback Origin acceptance stops the Gate.
+
+### 16.6 G2 and main-window G3 evidence
+
+- Main-window code audit found and closed all in-scope P0/P1 findings: arbitrary Host/Origin trust, incomplete-plan downstream leakage, missing waiting/live SQL Finish CAS, same-event Next→Finish, terminal controller noise, Replay phase/Finish contradictions, and completed-page Replay disabled after refresh. Final delta result is `G2 PASS / P0=0 / P1=0`.
+- Backend passed `433/433`; frontend passed `28 files / 193 tests`. Ruff format/check, mypy (`109 source files`), ESLint, TypeScript, Prettier, Next production build and `git diff --check` passed.
+- Contract and migration checks passed: Redocly/generated OpenAPI, 69-operation response surface, generated WebSocket schema/fixtures, events `30/18`, commands `6/7`, private results `5/6`, route comparator `13` negatives, deterministic Latin tables, repository/secret boundary, bootstrap safety, and 0001–0007 migration probes with foreign-key checks empty.
+- Real-browser G3 passed both English and Chinese locale-only controls, `Back to debate list`, draft `Ready`, live `In progress → Waiting`, waiting persistence across navigation, Finish disabled while in progress, early Finish with one retained turn and no downstream link, and natural completion with four retained turns.
+- A real backend restart left the page at `Connection lost` for multiple seconds with no background retry; one manual Reconnect restored the same `Waiting` turn and transcript. Stopped/completed pages showed no Reconnect, invalid-state alert, or controller-waiting noise.
+- Two complete Replay cycles used the retained four-turn transcript and sources, required teacher Next between turns, made no regeneration call, and returned to terminal with Replay available. The second cycle started from a freshly loaded LAN teacher page through one on-demand same-socket controller acquire; Replay playing showed `In progress`, Replay waiting showed `Waiting`, and no Finish control was rendered.
+- The configured LAN origin remained the QR/public origin. Authenticated teacher REST and WebSocket control succeeded from both `localhost:8080` and the configured LAN gateway. The strict negative origin matrix retained 4403 for wrong port/protocol, malformed origins, other private hosts and non-Demo use.
+- The completed classroom flow accepted one anonymous vote and one named raw barrage, froze the interaction, generated one ready Mock insight and a 611-word report, and completed a `5/5` Mock translation batch. No real Provider or billed call occurred.
+
+G2 and G3 both pass. Wave 3 is signed `WAVE_3_G3_PASS / READY_FOR_WAVE_4`. This permits planning the Wave 4 G0 contract only; Wave 4, real LLM/Embedding/TTS, formal TikTok content acceptance, 30–60 participant load, licensing/privacy and public deployment remain unstarted or separately gated.

@@ -1925,7 +1925,14 @@ components:
             revision: { type: integer, minimum: 0 }
             last_sequence: { type: integer, minimum: 0 }
             rule_set_id:
-              { type: string, const: ordered_multi_agent_rounds_demo_v1 }
+              {
+                type: string,
+                enum:
+                  [
+                    ordered_multi_agent_rounds_demo_v1,
+                    ordered_multi_agent_rounds_demo_v2,
+                  ],
+              }
             participants:
               type: array
               items: { $ref: "#/components/schemas/DebateParticipant" }

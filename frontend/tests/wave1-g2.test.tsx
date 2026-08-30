@@ -89,6 +89,11 @@ describe("G2 session and draft recovery paths", () => {
       </SessionProvider>,
     );
     await waitFor(() =>
+      expect(screen.getByTestId("session-probe").textContent).toBe(
+        "Student|csrf-student",
+      ),
+    );
+    await waitFor(() =>
       expect(screen.getByRole("button", { name: /Teacher/ })).toBeTruthy(),
     );
     fireEvent.click(screen.getByRole("button", { name: /Teacher/ }));

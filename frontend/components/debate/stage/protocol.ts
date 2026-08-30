@@ -8,11 +8,23 @@ import {
 } from "../../avatar";
 import type {
   AvatarVisualState,
+  PlaybackConnectionIssue,
   PlaybackEvent,
   PlaybackEventType,
   PrivatePlaybackMessage,
   VisiblePlaybackTurn,
 } from "./types";
+
+export function connectionIssueFromCloseCode(
+  code: number,
+): Extract<
+  PlaybackConnectionIssue,
+  "network" | "session_expired" | "origin_mismatch"
+> {
+  if (code === 4401) return "session_expired";
+  if (code === 4403) return "origin_mismatch";
+  return "network";
+}
 
 const PLAYBACK_EVENT_TYPES: readonly PlaybackEventType[] = [
   "snapshot",

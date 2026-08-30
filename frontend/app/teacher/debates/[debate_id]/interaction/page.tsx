@@ -61,18 +61,18 @@ export default function TeacherDebateInteractionPage() {
           <>
             <PageIntro
               eyebrow={t("debates")}
-              title="Classroom interaction & report / 课堂互动与报告"
-              description="Interaction, public speeches, Maya report and test translation live on this teacher page."
+              title={t("wave3Title")}
+              description={t("wave3Description")}
               action={
                 <div className="button-row">
                   <Link
                     className="secondary-action"
                     href={`/teacher/debates/${debateId}/control`}
                   >
-                    Back to playback / 返回播放控制
+                    {t("wave3BackToPlayback")}
                   </Link>
                   <Link className="secondary-action" href="/teacher/debates">
-                    {t("debateBack")}
+                    {t("debateBackToList")}
                   </Link>
                 </div>
               }

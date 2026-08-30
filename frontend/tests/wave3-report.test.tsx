@@ -87,7 +87,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       await screen.findByText("Turn the debate into a shared learning record"),
     ).toBeTruthy();
     expect(screen.getByText("Shared concern")).toBeTruthy();
-    expect(screen.getByLabelText("Maya report").textContent).toContain(
+    expect(screen.getByLabelText("Current report").textContent).toContain(
       "Civilization Mutual Learning Report",
     );
   });

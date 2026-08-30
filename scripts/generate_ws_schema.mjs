@@ -264,7 +264,10 @@ const payloads = {
       {
         rule_set_id: {
           type: "string",
-          const: "ordered_multi_agent_rounds_demo_v1",
+          enum: [
+            "ordered_multi_agent_rounds_demo_v1",
+            "ordered_multi_agent_rounds_demo_v2",
+          ],
         },
         participants: arrayOf(participantSlot, 2),
         participant_slots: arrayOf(participantSlot, 2),

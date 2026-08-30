@@ -901,7 +901,8 @@ class SqlPlaybackRepository(PlaybackRepository):
         anything less is a partial finish.  Partial completion keeps all
         immutable turn rows but bumps the cancellation generation and
         interrupts pending work, preventing late workers from publishing into
-        a downstream-ineligible Debate.
+        a downstream-ineligible Debate. The Debate itself is marked
+        ``debate_finished`` while its playback is terminal ``stopped``.
         """
 
         if self.session_factory is None:
@@ -922,6 +923,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "FROM playback_states ps JOIN debates d ON d.id=ps.debate_id "
                         "WHERE ps.debate_id=:debate_id "
                         "AND ps.control_version=:expected_control_version "
+                        "AND ps.status='waiting_next' "
+                        "AND ps.mode='live' "
                         "AND d.status='running' AND :teacher_user_id IS NOT NULL "
                         "AND EXISTS (SELECT 1 FROM course_members cm "
                         "WHERE cm.course_id=d.course_id "
@@ -982,7 +985,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             else:
                 changed = claim_session.execute(
                     text(
-                        "UPDATE debates SET status='stopped', cancellation_generation="
+                        "UPDATE debates SET status='debate_finished', cancellation_generation="
                         "cancellation_generation+1, finished_at=:finished_at, "
                         "updated_at=:updated_at WHERE id=:debate_id AND status='running'"
                     ),

@@ -9,6 +9,7 @@ import {
 import { create } from "qrcode";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { LocaleProvider } from "../components/locale";
 import {
   AudienceInteractionForm,
   QrCode,
@@ -73,11 +74,11 @@ describe("M13 teacher interaction panel", () => {
       />,
     );
 
-    expect(screen.getByRole("img", { name: /Scan to join/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /^Scan to join:/ })).toBeTruthy();
     expect(screen.getByText("66.7%")).toBeTruthy();
     expect(screen.getByText("Learner")).toBeTruthy();
-    const rawHeading = screen.getByText("Raw barrages / 原始弹幕");
-    const voteHeading = screen.getByText("Live vote / 实时投票");
+    const rawHeading = screen.getByText("Raw barrages");
+    const voteHeading = screen.getByText("Live vote");
     expect(
       rawHeading.compareDocumentPosition(voteHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -104,7 +105,7 @@ describe("M13 teacher interaction panel", () => {
       />,
     );
     fireEvent.click(
-      screen.getByRole("button", { name: /Open classroom interaction/ }),
+      screen.getByRole("button", { name: "Open classroom interaction" }),
     );
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: /End collection/ })).toBeNull();
@@ -116,7 +117,7 @@ describe("M13 teacher interaction panel", () => {
       .size;
     render(<QrCode value={value} />);
 
-    const svg = screen.getByRole("img", { name: /Scan to join/ });
+    const svg = screen.getByRole("img", { name: /^Scan to join:/ });
     expect(svg.getAttribute("viewBox")).toBe(
       `0 0 ${moduleCount + 8} ${moduleCount + 8}`,
     );
@@ -154,7 +155,7 @@ describe("M13 teacher interaction panel", () => {
         participants={participants}
       />,
     );
-    const feed = screen.getByLabelText("Raw classroom barrages");
+    const feed = screen.getByLabelText("Raw barrages");
     Object.defineProperty(feed, "scrollHeight", {
       configurable: true,
       value: 500,
@@ -210,11 +211,34 @@ describe("M13 anonymous audience form", () => {
       name: "Should classrooms use anonymous questions?",
     });
 
-    expect(screen.queryByText("Vote / 投票")).toBeNull();
-    expect(screen.queryByText("Barrage / 弹幕")).toBeNull();
+    expect(screen.queryByText("Vote")).toBeNull();
+    expect(screen.queryByText("Barrage")).toBeNull();
     expect(
       screen.getByText(/Enter a nickname to unlock both areas/),
     ).toBeTruthy();
+  });
+
+  it("renders audience controls in the active locale without bilingual labels", async () => {
+    const api = audienceApi();
+    render(
+      <LocaleProvider initialLocale="zh">
+        <AudienceInteractionForm accessToken="token" api={api} />
+      </LocaleProvider>,
+    );
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+
+    fireEvent.change(screen.getByLabelText("弹幕昵称"), {
+      target: { value: "同学" },
+    });
+    expect(screen.getByLabelText("弹幕昵称")).toBeTruthy();
+    expect(screen.getByText("投票")).toBeTruthy();
+    expect(screen.getByText("弹幕")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "提交匿名投票" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "发送弹幕" })).toBeTruthy();
+    expect(screen.queryByText("Vote / 投票")).toBeNull();
+    expect(screen.queryByText("Barrage / 弹幕")).toBeNull();
   });
 
   it("keeps vote and barrage submissions independent", async () => {
@@ -224,7 +248,7 @@ describe("M13 anonymous audience form", () => {
       name: "Should classrooms use anonymous questions?",
     });
 
-    const nickname = screen.getByLabelText("Nickname for barrages / 弹幕昵称");
+    const nickname = screen.getByLabelText("Nickname for barrages");
     fireEvent.change(nickname, { target: { value: "Class 1" } });
     const voteButton = screen.getByRole("button", {
       name: /Submit anonymous vote/,
@@ -236,11 +260,14 @@ describe("M13 anonymous audience form", () => {
     fireEvent.click(voteButton);
     await waitFor(() => expect(api.submitVote).toHaveBeenCalledTimes(1));
     expect((barrageButton as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Submitted / 已提交")).toBeTruthy();
+    expect(screen.getByText("Submitted")).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText(/Share a thought/), {
-      target: { value: "A useful question" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("Share a thought or question"),
+      {
+        target: { value: "A useful question" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: /Send barrage/ }));
     await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(1));
     expect(api.submitBarrage).toHaveBeenCalledWith(
@@ -252,10 +279,10 @@ describe("M13 anonymous audience form", () => {
     );
     expect(
       screen.getByRole("heading", {
-        name: "Submitted successfully / 提交成功",
+        name: "Submitted successfully",
       }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 
   it("reuses valid UUID submission identities after an ambiguous failure", async () => {
@@ -267,12 +294,9 @@ describe("M13 anonymous audience form", () => {
     await screen.findByRole("heading", {
       name: "Should classrooms use anonymous questions?",
     });
-    fireEvent.change(
-      screen.getByLabelText("Nickname for barrages / 弹幕昵称"),
-      {
-        target: { value: "Retry learner" },
-      },
-    );
+    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+      target: { value: "Retry learner" },
+    });
 
     const voteButton = screen.getByRole("button", {
       name: /Submit anonymous vote/,
@@ -288,5 +312,35 @@ describe("M13 anonymous audience form", () => {
     expect(firstPayload?.client_submission_id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+  });
+
+  it("renders one locale at a time for teacher interaction controls", () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <TeacherInteractionPanel
+          debateId="debate-1"
+          interaction={openInteraction}
+          participants={participants}
+        />
+      </LocaleProvider>,
+    );
+    expect(screen.getByText("Raw barrages")).toBeTruthy();
+    expect(screen.queryByText("原始弹幕")).toBeNull();
+    expect(screen.queryByText(/Raw barrages\s*\/\s*原始弹幕/)).toBeNull();
+
+    cleanup();
+    render(
+      <LocaleProvider initialLocale="zh">
+        <TeacherInteractionPanel
+          debateId="debate-1"
+          interaction={openInteraction}
+          participants={participants}
+        />
+      </LocaleProvider>,
+    );
+    expect(screen.getByText("原始弹幕")).toBeTruthy();
+    expect(screen.queryByText("Raw barrages")).toBeNull();
+    expect(screen.queryByText(/Raw barrages\s*\/\s*原始弹幕/)).toBeNull();
+    expect(screen.getByRole("img", { name: /^扫码加入:/ })).toBeTruthy();
   });
 });

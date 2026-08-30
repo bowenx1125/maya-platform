@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncGenerator, Iterator
 from typing import Annotated, Any, cast
 from uuid import UUID, uuid4
@@ -22,6 +23,7 @@ from starlette.websockets import WebSocketState
 
 from app.core.config import Settings
 from app.core.errors import Error, PlatformError, forbidden, not_found
+from app.core.origin import origin_allowed, origin_tuple
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext, get_auth_context, session_hash
 from app.modules.debates.schemas import (
@@ -38,6 +40,7 @@ from app.modules.translations.service import attach_translated_text
 from app.providers.factory import tts_provider
 
 from .audio import AudioStore
+from .eligibility import has_complete_finished_playback
 from .events import DebateEventHub, private_result_to_wire
 from .schemas import (
     ControllerAcquireCommand,
@@ -52,6 +55,13 @@ from .service import PlaybackService
 from .sql_repository import SqlEventStore, SqlPlaybackRepository
 
 router = APIRouter(tags=["Debates"])
+LOGGER = logging.getLogger(__name__)
+
+
+def _origin_tuple(value: str | None) -> tuple[str, str, int | None] | None:
+    """Keep the playback module's parsing seam backed by the shared helper."""
+
+    return origin_tuple(value)
 
 
 def get_playback_service(request: Request) -> PlaybackService:
@@ -319,11 +329,15 @@ async def transcript_route(
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
 ) -> Transcript:
-    # A partial Finish is represented by the legacy ``stopped`` Debate status.
-    # Its immutable turns remain stored for audit/recovery, but the public
-    # history/transcript surface is intentionally unavailable.
+    # A partial Finish has product status ``debate_finished`` but terminal
+    # stopped playback.  Require the complete immutable plan as well as the
+    # normal terminal state so partial history cannot leak through this route.
     debate = service._get_debate(db, str(debate_id))
-    if str(getattr(debate, "status", "")) == "stopped":
+    debate_status = str(getattr(debate, "status", ""))
+    if debate_status == "stopped" or (
+        debate_status in {"debate_finished", "completed"}
+        and not has_complete_finished_playback(db, str(debate_id))
+    ):
         raise not_found()
     snapshot, _ = await service.snapshot(db, str(debate_id), context)
     return Transcript.model_validate(
@@ -339,36 +353,23 @@ async def transcript_route(
     )
 
 
-def _origin_tuple(value: str | None) -> tuple[str, str, int | None] | None:
-    if not value:
-        return None
-    from urllib.parse import urlsplit
-
-    try:
-        parsed = urlsplit(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            return None
-        return parsed.scheme.lower(), parsed.hostname.lower(), parsed.port
-    except ValueError:
-        return None
-
-
 def _websocket_origin_allowed(websocket: WebSocket, settings: Settings) -> bool:
-    origin = _origin_tuple(websocket.headers.get("origin"))
-    if origin is None:
-        return False
     # The classroom URL is the configured gateway origin.  Do not derive an
     # allow-list from the Host header: a crafted Host/Origin pair must not
     # turn an arbitrary reverse-proxy origin into a trusted WebSocket.
     configured = getattr(settings, "gateway_origin", None) or settings.classroom_public_base_url
     if configured:
-        return origin == _origin_tuple(configured.rstrip("/"))
+        return origin_allowed(websocket.headers.get("origin"), settings)
     # Tests intentionally leave the deployment origin unset; in that narrow
     # case accept only the exact origin represented by the test gateway.
     if not bool(getattr(settings, "is_test", False)):
         return False
     gateway_scheme = "https" if websocket.url.scheme == "wss" else "http"
-    return origin == _origin_tuple(f"{gateway_scheme}://{websocket.url.netloc}")
+    return origin_allowed(
+        websocket.headers.get("origin"),
+        settings,
+        request_origin=f"{gateway_scheme}://{websocket.url.netloc}",
+    )
 
 
 @contextlib.contextmanager
@@ -395,7 +396,9 @@ def _websocket_session(database: Any, settings: Settings) -> Iterator[Session]:
         db.close()
 
 
-async def _close_ws(websocket: WebSocket, code: int = 4403) -> None:
+async def _close_ws(websocket: WebSocket, code: int) -> None:
+    """Close with a classification-only code and no configuration details."""
+
     if websocket.application_state != WebSocketState.DISCONNECTED:
         await websocket.close(code=code)
 
@@ -430,17 +433,29 @@ async def debate_events_route(
     app = websocket.app
     settings = getattr(app.state, "settings", None)
     database = getattr(app.state, "database", None)
-    if (
-        not isinstance(settings, Settings)
-        or database is None
-        or not _websocket_origin_allowed(websocket, settings)
-    ):
-        await _close_ws(websocket)
+    # ASGI turns a pre-accept ``websocket.close`` into an HTTP 403 handshake
+    # rejection, so a real browser cannot observe our private 4401/4403/1011
+    # classification.  Upgrade once before validation, send no application
+    # data, then close immediately on failure with an empty reason.
+    await websocket.accept()
+    if not isinstance(settings, Settings) or database is None:
+        await _close_ws(websocket, 1011)
+        return
+    if not _websocket_origin_allowed(websocket, settings):
+        await _close_ws(websocket, 4403)
         return
     raw_token = websocket.cookies.get("maya_session")
-    service = get_playback_service(websocket)  # type: ignore[arg-type]
-    with _websocket_session(database, settings) as handshake_db:
-        context = get_auth_context(handshake_db, settings, raw_token)
+    try:
+        service = get_playback_service(websocket)  # type: ignore[arg-type]
+        with _websocket_session(database, settings) as handshake_db:
+            context = get_auth_context(handshake_db, settings, raw_token)
+    except Exception:
+        # Settings/database/service failures are server faults.  They must not
+        # masquerade as an Origin mismatch, and the close frame must not echo
+        # a private URL, database path, key, or token.
+        LOGGER.error("WebSocket handshake failed before authorization.")
+        await _close_ws(websocket, 1011)
+        return
     if context is None:
         await _close_ws(websocket, 4401)
         return
@@ -462,7 +477,6 @@ async def debate_events_route(
     event_task: asyncio.Task[Any] | None = None
     receive_task: asyncio.Task[Any] | None = None
     try:
-        await websocket.accept()
         event_task = asyncio.create_task(stream.__anext__())
         while True:
             receive_task = asyncio.create_task(websocket.receive_json())

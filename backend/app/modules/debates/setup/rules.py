@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 from app.modules.debates.schemas import (
+    RULE_SET_ID,
+    RULE_SET_ID_V1,
+    RULE_SET_ID_V2,
     DebateRuleSnapshot,
     Slot,
     TurnPlanEntry,
@@ -99,17 +103,36 @@ def build_turn_plan(
 plan_turns = build_turn_plan
 
 
-def rule_snapshot() -> DebateRuleSnapshot:
+def rule_snapshot(
+    *,
+    rule_set_id: Literal[
+        "ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"
+    ] = RULE_SET_ID,
+) -> DebateRuleSnapshot:
     """Return a fresh immutable copy of the frozen Demo rule values."""
 
-    return DebateRuleSnapshot()
+    if rule_set_id == RULE_SET_ID_V1:
+        return DebateRuleSnapshot(rule_set_id=RULE_SET_ID_V1, retrieval_policy_id=None)
+    if rule_set_id == RULE_SET_ID_V2:
+        return DebateRuleSnapshot()
+    raise RuleViolation("rule_set_unavailable", "The Debate rule set is unavailable.")
 
 
-def canonical_rule_snapshot_json() -> str:
+def canonical_rule_snapshot_json(
+    *,
+    rule_set_id: Literal[
+        "ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"
+    ] = RULE_SET_ID,
+) -> str:
     """Serialize the rule snapshot deterministically for a Debate row."""
 
+    payload = rule_snapshot(rule_set_id=rule_set_id).model_dump(mode="json")
+    if rule_set_id == RULE_SET_ID_V1:
+        # Preserve the byte-shape of the historical v1 canonical snapshot;
+        # the retrieval policy field did not exist when those rows were made.
+        payload.pop("retrieval_policy_id", None)
     return json.dumps(
-        rule_snapshot().model_dump(mode="json"),
+        payload,
         sort_keys=True,
         separators=(",", ":"),
     )

@@ -1,8 +1,8 @@
 """Focused PW3-D playback invariants.
 
 The broad Wave 2 suite retains historical controls for regression evidence;
-these tests pin the pre-Wave 3 public semantics: whole replay is teacher-paced,
-never generates, and is cleared only after its final retained turn or reset.
+these tests pin the retained-catalog semantics: whole replay is teacher-paced,
+never generates, and leaves the authoritative public transcript intact.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from app.modules.debates.playback.protocols import (
     MemoryTurn,
     PreparedTurn,
 )
-from app.modules.debates.playback.service import PlaybackService
+from app.modules.debates.playback.service import PlaybackRuntime, PlaybackService
 from app.modules.debates.playback.task_manager import TaskManager
 
 
@@ -86,6 +86,8 @@ async def _replay_fixture(
             )
         )
     repository.add_debate(debate)
+    debate.playback.status = "completed"
+    debate.playback.mode = "live"
     repository.course_audio[debate.course_id] = debate.id
     service = PlaybackService(
         repository,
@@ -183,6 +185,85 @@ async def test_whole_replay_waits_for_next_and_never_prepares_successor(
     # No provider/preparation task is created by replay Next itself.
     assert service.task_manager.active_keys == ()
     await service.event_hub.unsubscribe(debate.id, events)
+
+
+@pytest.mark.asyncio
+async def test_replay_snapshot_keeps_the_full_authoritative_transcript(
+    tmp_path: Path,
+) -> None:
+    service, _repository, debate, first_id, _second_id = await _replay_fixture(tmp_path)
+    epoch, control_version = await _start_replay(service, debate, first_id)
+    await service.ended_ack(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=control_version,
+        epoch=epoch,
+        session_hash="session",
+        turn_id=first_id,
+    )
+
+    payload, _sequence = await service.snapshot(None, debate.id)
+
+    # Replay is a retained catalog cursor, not a destructive rewrite of the
+    # public transcript. Both saved turns remain visible while the first item
+    # waits for the teacher's explicit Next.
+    assert [item["turn_index"] for item in payload["public_turns"]] == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_finish_is_rejected_until_live_playback_waits_for_next(
+    tmp_path: Path,
+) -> None:
+    service, repository, debate, first_id, _second_id = await _replay_fixture(tmp_path)
+    debate.status = "running"
+    state = repository.playback_state(None, debate)
+    state.status = "playing"
+    state.mode = "live"
+    state.current_turn_id = first_id
+    state.control_version = 2
+
+    with pytest.raises(PlatformError) as raised:
+        await service.finish(
+            None,
+            debate.id,
+            expected_control_version=2,
+            expected_current_turn_id=first_id,
+        )
+
+    assert raised.value.code == "invalid_state"
+    assert debate.status == "running"
+
+
+@pytest.mark.asyncio
+async def test_early_finish_is_product_finished_but_playback_stopped(
+    tmp_path: Path,
+) -> None:
+    service, repository, debate, first_id, second_id = await _replay_fixture(tmp_path)
+    debate.status = "running"
+    debate.finished_at = None  # type: ignore[attr-defined]
+    debate.updated_at = None  # type: ignore[attr-defined]
+    debate.turns[1].generation_status = "pending"
+    debate.turns[1].publication_status = "unpublished"
+    state: PlaybackRuntime = repository.playback_state(None, debate)
+    state.status = "waiting_next"
+    state.mode = "live"
+    state.current_turn_id = first_id
+    state.control_version = 2
+
+    result = await service.finish(
+        None,
+        debate.id,
+        expected_control_version=2,
+        expected_current_turn_id=first_id,
+    )
+
+    assert result.status == "stopped"
+    assert debate.status == "debate_finished"
+    assert debate.finished_at is not None  # type: ignore[attr-defined]
+    assert debate.updated_at is not None  # type: ignore[attr-defined]
+    assert debate.turns[0].id == first_id
+    assert debate.turns[1].id == second_id
 
 
 @pytest.mark.asyncio

@@ -32,6 +32,7 @@ from app.core.errors import (
 )
 from app.core.models import IdempotencyRecord
 from app.modules.auth.service import AuthContext
+from app.modules.debates.playback.eligibility import has_complete_finished_playback
 from app.modules.knowledge.services import (
     abandon_idempotency,
     claim_idempotency,
@@ -159,7 +160,10 @@ def _require_teacher(db: Session, actor_user_id: str, debate_id: str) -> str:
         raise not_found()
     if role != "teacher":
         raise forbidden()
-    if debate_status == "stopped":
+    if debate_status == "stopped" or (
+        debate_status in {"debate_finished", "completed"}
+        and not has_complete_finished_playback(db, debate_id)
+    ):
         raise not_found()
     return course_id
 

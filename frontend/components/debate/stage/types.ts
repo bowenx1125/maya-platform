@@ -10,6 +10,28 @@ export type PlaybackStatus = DebatePlaybackState["status"];
 export type PlaybackMode = DebatePlaybackState["mode"];
 export type PlaybackAction = "start" | "resume" | "next" | "replay";
 
+export type PlaybackConnectionIssue =
+  | "network"
+  | "sequence_gap"
+  | "session_expired"
+  | "origin_mismatch"
+  | "superseded"
+  | "terminal";
+
+export type PlaybackConnectionState =
+  "connecting" | "connected" | "reconnecting" | "disconnected";
+
+export type ClassroomPhase =
+  "ready" | "in_progress" | "waiting" | "finished" | "stopped" | "failed";
+
+export type PlaybackAuthorityState = {
+  connection: PlaybackConnectionState;
+  connectionIssue: PlaybackConnectionIssue | null;
+  controllerReady: boolean;
+  /** True while a stage-owned Start/Next/Replay command is awaiting REST. */
+  commandBusy?: boolean;
+};
+
 /**
  * Keep the classroom component on the platform API boundary.  In particular,
  * this type does not expose a provider, model, or supplier voice identifier to
@@ -52,12 +74,20 @@ export type PlaybackStageLabels = {
   statusPlaying?: string;
   statusPaused?: string;
   waitingNext?: string;
+  phaseReady?: string;
+  phaseInProgress?: string;
+  phaseWaiting?: string;
+  phaseFinished?: string;
   next?: string;
   waitingForAudio?: string;
   connectionWaiting?: string;
   connectionReady?: string;
   connectionReconnecting?: string;
   connectionDisconnected?: string;
+  connectionSequenceGap?: string;
+  connectionSessionExpired?: string;
+  connectionOriginMismatch?: string;
+  connectionSuperseded?: string;
   connectionError?: string;
   controllerWaiting?: string;
   controlBusy?: string;
@@ -176,6 +206,8 @@ export type DebateStageProps = {
   api: DebatePlaybackApi;
   /** Called after a REST command or snapshot changes the page's authoritative DTO. */
   onDetailChange?: (detail: DebateDetail) => void;
+  /** Exposes the minimum authority state required by controls outside the Stage. */
+  onAuthorityChange?: (authority: PlaybackAuthorityState) => void;
   /** Re-read the authoritative HTTP snapshot before a reconnect. */
   refreshSnapshot?: () => Promise<DebateDetail>;
   socketFactory?: PlaybackSocketFactory;
@@ -195,5 +227,7 @@ export type DebateStageProps = {
   expectedCurrentAudioDebateId?: string | null;
   /** Keep the page's local current-audio pointer in sync after a successful start. */
   onCurrentAudioDebateIdChange?: (debateId: string) => void;
+  /** A parent-owned command (for example header Finish) is in flight. */
+  actionInFlight?: boolean;
   className?: string;
 };

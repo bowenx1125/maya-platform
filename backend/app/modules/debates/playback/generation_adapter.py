@@ -29,6 +29,7 @@ from app.modules.debates.generation import (
 )
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
+from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.vector import MockVectorStore, StoredVectorRow
 from app.providers.llm import LLMProvider, llm_provider
 
@@ -118,7 +119,8 @@ class SqlTurnPreparer:
         if participant is None:
             raise ValueError("turn participant is unavailable")
         expected_fence = generation_fence(db, debate, current)
-        policy = TurnPolicy()
+        persisted_rule_set_id = str(debate.rule_set_id)
+        policy = TurnPolicy(rule_set_id=persisted_rule_set_id)
         plans = policy.plan_with_ids(participants, [row.id for row in turn_rows])
         plan = plans[current.turn_index]
         predecessors = tuple(self._final_ready(db, row) for row in turn_rows[: current.turn_index])
@@ -133,6 +135,13 @@ class SqlTurnPreparer:
         generator = TurnGenerationService(
             SnapshotRetriever(SqlSnapshotSearch(db)),
             self.llm,
+            rule_set_id=persisted_rule_set_id,
+            mock_retrieval_policy_id=(
+                MOCK_LEXICAL_ANCHOR_POLICY_ID
+                if getattr(self.settings, "embedding_provider", "mock") == "mock"
+                and persisted_rule_set_id == "ordered_multi_agent_rounds_demo_v2"
+                else None
+            ),
         )
         generated = generator.generate(context)
         final = generated.final_ready

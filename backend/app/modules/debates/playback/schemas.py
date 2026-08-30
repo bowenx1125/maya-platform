@@ -121,7 +121,7 @@ class ReplayPayload(ClosedModel):
 
 
 class DebateStartedPayload(ClosedModel):
-    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1"]
+    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"]
     participants: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
     participant_slots: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale } from "../locale";
+import { statusLabel } from "../../lib/i18n";
 import type { TranslationBatch, TranslationItemSummary } from "./types";
 import styles from "./translation.module.css";
 
@@ -44,7 +45,7 @@ export function TranslationBatchList({
               {batch.id.slice(0, 8)}
             </h3>
             <span className={`${styles.status} ${statusClass(batch.status)}`}>
-              {batch.status}
+              {statusLabel(batch.status, locale)}
             </span>
           </div>
           <p className={styles.summary}>
@@ -65,7 +66,10 @@ export function TranslationBatchList({
           {batch.items.some((item) => item.status === "failed") ? (
             <ul
               className={styles.itemList}
-              aria-label="Translation item errors / 翻译项错误"
+              aria-label={label(locale, {
+                en: "Translation item errors",
+                zh: "翻译项错误",
+              })}
             >
               {batch.items
                 .filter((item) => item.status === "failed")
@@ -77,7 +81,7 @@ export function TranslationBatchList({
                     <div className={styles.itemHeader}>
                       <strong>{itemLabel(locale, item)}</strong>
                       <span className={`${styles.status} ${styles.failed}`}>
-                        failed
+                        {statusLabel("failed", locale)}
                       </span>
                     </div>
                     {item.safe_error_code ? (

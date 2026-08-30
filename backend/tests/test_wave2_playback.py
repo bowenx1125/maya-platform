@@ -70,6 +70,7 @@ from app.providers.tts import MockTTSProvider
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
+from starlette.websockets import WebSocketDisconnect
 
 from tests.conftest import login
 
@@ -1344,15 +1345,23 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
     app_factory: Any,
     topic: str,
 ) -> None:
-    app, database, _settings = app_factory()
+    app, database, settings = app_factory()
+    settings.classroom_public_base_url = "http://testserver"
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
             group_id=GROUP_BOWEN_ID,
             name="Bowen",
             evidence=(
-                "TikTok recommendation algorithm transparency, privacy, user choice, "
-                "national security, safeguards, and accountable independent review."
+                (
+                    "TikTok recommendation algorithm transparency, privacy, user choice, "
+                    "national security, safeguards, and accountable independent review."
+                )
+                if topic == TOPIC
+                else (
+                    "Māori and Café perspectives can shape platform policy through "
+                    "transparent safeguards and accountable review."
+                )
             ),
         )
         kaikai_id = _insert_published_agent(
@@ -1504,7 +1513,23 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                         "turn_id": turn_id,
                     }
                 )
-                completed = _receive_until(socket, "event_type", "playback.completed")
+                if turn_number == 3:
+                    completed = None
+                    terminal_revoked = None
+                    for _index in range(16):
+                        message = socket.receive_json()
+                        if message.get("event_type") == "playback.completed":
+                            completed = message
+                        elif message.get("message_type") == "controller.revoked":
+                            terminal_revoked = message
+                        if completed is not None and terminal_revoked is not None:
+                            break
+                    assert completed is not None
+                    assert terminal_revoked is not None
+                    assert terminal_revoked["controller_epoch"] == epoch
+                    assert terminal_revoked["reason"] == "debate_terminal"
+                else:
+                    completed = _receive_until(socket, "event_type", "playback.completed")
                 assert completed["payload"]["turn_id"] == turn_id
                 control_version = completed["payload"]["control_version"]
                 if turn_number < 3:
@@ -1565,6 +1590,21 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
 
             assert llm.call_count == 4
             assert tts.synthesize_calls == 4
+            replay_acquire_id = str(uuid4())
+            socket.send_json(
+                {
+                    "command_id": replay_acquire_id,
+                    "command_type": "playback.controller.acquire",
+                    "command_version": 1,
+                    "debate_id": debate_id,
+                    "expected_control_version": control_version,
+                }
+            )
+            replay_controller = _receive_until(socket, "message_type", "controller.acquired")
+            assert replay_controller["command_id"] == replay_acquire_id
+            assert replay_controller["controller_epoch"] != epoch
+            epoch = replay_controller["controller_epoch"]
+            control_version = replay_controller["control_version"]
             replay = client.post(
                 f"/api/v1/debates/{debate_id}/replay",
                 headers=_headers(csrf),
@@ -1658,7 +1698,8 @@ def test_websocket_sessions_release_small_sqlite_pool_for_http_requests(
 ) -> None:
     """Multiple observation tabs must not pin the file-SQLite QueuePool."""
 
-    app, database, _settings = app_factory()
+    app, database, settings = app_factory()
+    settings.classroom_public_base_url = "http://testserver"
     pool = cast(Any, database.engine.pool)
     # Keep the regression deterministic and fast if the route accidentally
     # holds a connection for the lifetime of a socket.  The production
@@ -1888,6 +1929,12 @@ async def test_controller_ticket_pause_resume_and_current_only_audio(tmp_path: P
     assert str(advanced.current_turn_id) == first_turn_id
     assert advanced.status == "waiting_next"
     assert advanced.next_turn_ready is True
+    waiting_state = service._state(None, debate)
+    assert waiting_state.controller_epoch == epoch
+    assert waiting_state.controller_session_hash == "session-hash"
+    assert waiting_state.controller_connection_id == "teacher-tab"
+    assert service._controller_sessions[debate.id] == "session-hash"
+    assert service.take_revocation(epoch) is None
     next_state = await service.next(
         None,
         debate.id,
@@ -2204,15 +2251,25 @@ async def test_final_live_end_is_completed_and_not_waiting_next(tmp_path: Path) 
         connection_id="final-tab",
     )
     epoch = str(controller.controller_epoch)
-    await service.media_prepare(
+    media_command_id = str(uuid4())
+    prepared, _private = await service.media_prepare(
         None,
         debate.id,
-        command_id=str(uuid4()),
+        command_id=media_command_id,
         expected_control_version=controller.control_version,
         epoch=epoch,
         session_hash="final-session",
         turn_id=first_turn.id,
         action="start",
+    )
+    assert (debate.id, media_command_id) in service._media_command_results
+    debate_scoped_token, _binding = service.ticket_store.issue(
+        session_hash="final-session",
+        controller_epoch=epoch,
+        debate_id=debate.id,
+        turn_id=str(uuid4()),
+        action="start",
+        control_version=controller.control_version,
     )
     playing = await service.started_ack(
         None,
@@ -2237,10 +2294,64 @@ async def test_final_live_end_is_completed_and_not_waiting_next(tmp_path: Path) 
     assert completed.next_turn_ready is False
     assert str(completed.current_turn_id) == first_turn.id
     assert debate.status == "debate_finished"
+    state = service._state(None, debate)
+    assert state.controller_epoch is None
+    assert state.controller_session_hash is None
+    assert state.controller_connection_id is None
+    assert state.pending_action is None
+    assert state.pending_ticket_hash is None
+    assert state.pending_media_command_id is None
+    assert state.audio_duration_ms == 0
+    assert debate.id not in service._controller_sessions
+    assert not any(key[0] == debate.id for key in service._media_command_results)
+    assert service.ticket_store.get(prepared.token) is None
+    assert service.ticket_store.get(debate_scoped_token) is None
+    revoked = service.take_revocation(epoch)
+    assert revoked is not None
+    assert revoked["reason"] == "debate_terminal"
     assert not any(
         event.event_type == "playback.waiting_next"
         for event in service.event_hub.store.events_after(debate.id, 0)
     )
+
+    with pytest.raises(PlatformError) as stale_before_reacquire:
+        await service.media_prepare(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=completed.control_version,
+            epoch=epoch,
+            session_hash="final-session",
+            turn_id=first_turn.id,
+            action="start",
+        )
+    assert stale_before_reacquire.value.code == "stale_control_version"
+
+    fresh = await service.controller_acquire(
+        None,
+        debate.id,
+        command_id=str(uuid4()),
+        expected_control_version=completed.control_version,
+        session_hash="replay-session",
+        connection_id="replay-tab",
+    )
+    assert str(fresh.controller_epoch) != epoch
+    assert state.controller_epoch == str(fresh.controller_epoch)
+    assert state.controller_session_hash == "replay-session"
+    assert state.controller_connection_id == "replay-tab"
+
+    with pytest.raises(PlatformError) as stale_after_reacquire:
+        await service.media_prepare(
+            None,
+            debate.id,
+            command_id=str(uuid4()),
+            expected_control_version=fresh.control_version,
+            epoch=epoch,
+            session_hash="final-session",
+            turn_id=first_turn.id,
+            action="start",
+        )
+    assert stale_after_reacquire.value.code == "stale_control_version"
     await tasks.close()
 
 
@@ -2571,7 +2682,10 @@ async def test_replay_is_closed_over_the_full_debate_status_matrix(
         audio_relative_path="retained.wav",
     )
     debate.turns = [turn]
-    repository.playback_state(None, debate).current_turn_id = turn.id
+    replay_state = repository.playback_state(None, debate)
+    replay_state.status = "completed"
+    replay_state.mode = "live"
+    replay_state.current_turn_id = None
     tasks = TaskManager()
     # This matrix isolates the status gate; retained-byte checks are covered
     # by the dedicated replay/audio tests below.
@@ -2731,7 +2845,8 @@ def test_websocket_terminal_controller_acquire_is_private_stable_rejection(
     app_factory: Any,
     status: str,
 ) -> None:
-    app, database, _settings = app_factory()
+    app, database, settings = app_factory()
+    settings.classroom_public_base_url = "http://testserver"
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
@@ -3086,6 +3201,141 @@ def test_websocket_origin_requires_the_exact_configured_gateway(app_factory: Any
     assert not _websocket_origin_allowed(websocket(None), settings)
 
 
+def _assert_websocket_handshake_close(
+    client: TestClient,
+    *,
+    origin: str,
+    expected_code: int,
+) -> None:
+    upgraded = False
+    with pytest.raises(WebSocketDisconnect) as raised:
+        with client.websocket_connect(
+            f"/api/v1/debates/{uuid4()}/events",
+            headers={"origin": origin},
+        ) as socket:
+            upgraded = True
+            # The route accepts the ASGI upgrade before it sends a private
+            # close code, otherwise Uvicorn/Caddy collapse every reason into
+            # an HTTP 403.  Read once so TestClient observes that close frame.
+            socket.receive_json()
+    assert upgraded, "the application must upgrade before sending a private close code"
+    assert raised.value.code == expected_code
+    assert raised.value.reason == ""
+
+
+def test_websocket_origin_mismatch_closes_4403_without_configuration_leak(
+    app_factory: Any,
+) -> None:
+    app, _database, settings = app_factory()
+    configured_origin = "http://classroom.example:8080"
+    settings.classroom_public_base_url = configured_origin
+
+    with TestClient(app) as client:
+        _assert_websocket_handshake_close(
+            client,
+            origin="http://other.example:8080",
+            expected_code=4403,
+        )
+
+
+@pytest.mark.parametrize("raw_token", [None, "forged-session-token"], ids=["missing", "invalid"])
+def test_websocket_missing_or_invalid_session_closes_4401(
+    app_factory: Any,
+    raw_token: str | None,
+) -> None:
+    app, _database, settings = app_factory()
+    configured_origin = "http://classroom.example:8080"
+    settings.classroom_public_base_url = configured_origin
+
+    with TestClient(app) as client:
+        if raw_token is not None:
+            client.cookies.set("maya_session", raw_token)
+        _assert_websocket_handshake_close(
+            client,
+            origin=configured_origin,
+            expected_code=4401,
+        )
+
+
+@pytest.mark.parametrize("missing_state", ["settings", "database"])
+def test_websocket_internal_handshake_unavailable_closes_1011(
+    app_factory: Any,
+    missing_state: str,
+) -> None:
+    app, _database, _settings = app_factory()
+
+    with TestClient(app) as client:
+        setattr(app.state, missing_state, None)
+        _assert_websocket_handshake_close(
+            client,
+            origin="http://testserver",
+            expected_code=1011,
+        )
+
+
+def test_websocket_exact_configured_origin_delivers_authorized_snapshot(
+    app_factory: Any,
+) -> None:
+    app, database, settings = app_factory()
+    configured_origin = "http://testserver"
+    settings.classroom_public_base_url = configured_origin
+
+    with TestClient(app) as client:
+        bowen_id = _insert_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="Bowen",
+            evidence="TikTok recommendation transparency and user choice.",
+        )
+        kaikai_id = _insert_published_agent(
+            database,
+            group_id=GROUP_KAIKAI_ID,
+            name="KaiKai",
+            evidence="Quartz orchid mineral lattice basalt geometry.",
+        )
+        _session, csrf = login(client)
+        created = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=_headers(csrf, **{"Idempotency-Key": "wave2-ws-origin-create-0001"}),
+            json={
+                "topic": TOPIC,
+                "participants": [
+                    {
+                        "agent_id": bowen_id,
+                        "stance_mode": "assigned",
+                        "assigned_stance": "support",
+                    },
+                    {
+                        "agent_id": kaikai_id,
+                        "stance_mode": "assigned",
+                        "assigned_stance": "oppose",
+                    },
+                ],
+                "round_count": 2,
+            },
+        )
+        assert created.status_code == 201, created.text
+        debate_id = created.json()["id"]
+        started = client.post(
+            f"/api/v1/debates/{debate_id}/start",
+            headers=_headers(csrf, **{"Idempotency-Key": "wave2-ws-origin-start-0001"}),
+            json={
+                "expected_revision": 0,
+                "expected_current_audio_debate_id": None,
+                "confirm_previous_audio_cleanup": False,
+            },
+        )
+        assert started.status_code == 200, started.text
+        _wait_for_ready(client, debate_id)
+
+        with client.websocket_connect(
+            f"/api/v1/debates/{debate_id}/events",
+            headers={"origin": configured_origin},
+        ) as socket:
+            snapshot = _receive_until(socket, "event_type", "snapshot")
+            assert snapshot["payload"]["debate_status"] == "running"
+
+
 @pytest.mark.asyncio
 async def test_if_range_returns_range_only_for_matching_current_bytes(tmp_path: Path) -> None:
     course_id, debate_id, turn_id = (str(uuid4()) for _ in range(3))
@@ -3179,6 +3429,10 @@ async def test_full_replay_uses_retained_audio_without_provider_calls(tmp_path: 
         for index in range(4)
     ]
     debate.turns = turns
+    replay_state = repository.playback_state(None, debate)
+    replay_state.status = "completed"
+    replay_state.mode = "live"
+    replay_state.current_turn_id = None
     tts = MockTTSProvider()
     store = AudioStore(tmp_path, tts_provider=tts)
     for _turn_index, turn in enumerate(turns):

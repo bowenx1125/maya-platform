@@ -112,6 +112,9 @@ export function ReportPanel({
             generating: "Maya 正在整理辩论与匿名课堂洞察。",
             failed: "这次报告生成失败；既有成功修订仍会保留。",
             translated: "中文测试表示由翻译模块按需生成。",
+            included: "已纳入",
+            filtered: "已筛除",
+            words: "词",
           }
         : {
             eyebrow: "Maya · Civilization Mutual Learning",
@@ -136,6 +139,9 @@ export function ReportPanel({
               "This report attempt failed; earlier successful revisions remain available.",
             translated:
               "A Chinese test representation is generated on demand by the translation module.",
+            included: "included",
+            filtered: "filtered",
+            words: "words",
           },
     [locale],
   );
@@ -255,8 +261,8 @@ export function ReportPanel({
             {reportStatusLabel(locale, insight?.status ?? "not_started")}
           </strong>
           <small>
-            {insight?.included_count ?? 0} included ·{" "}
-            {insight?.filtered_count ?? 0} filtered
+            {insight?.included_count ?? 0} {copy.included} ·{" "}
+            {insight?.filtered_count ?? 0} {copy.filtered}
           </small>
         </div>
         <div className={styles.statusCard}>
@@ -312,7 +318,7 @@ export function ReportPanel({
           ) : null}
         </div>
         {displayed?.status === "ready" ? (
-          <pre className={styles.markdown} aria-label="Maya report">
+          <pre className={styles.markdown} aria-label={copy.report}>
             {displayed.english_markdown}
           </pre>
         ) : displayed?.status === "failed" ? (
@@ -340,7 +346,9 @@ export function ReportPanel({
                 <span>{revisionTitle(locale, revision.revision_no)}</span>
                 <span className={styles.revisionStatus}>
                   {reportStatusLabel(locale, revision.status)}
-                  {revision.word_count ? ` · ${revision.word_count} words` : ""}
+                  {revision.word_count
+                    ? ` · ${revision.word_count} ${copy.words}`
+                    : ""}
                 </span>
                 <button
                   type="button"

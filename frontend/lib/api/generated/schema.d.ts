@@ -1273,8 +1273,8 @@ export interface components {
         DebateDetail: components["schemas"]["DebateSummary"] & {
             revision: number;
             last_sequence: number;
-            /** @constant */
-            rule_set_id: "ordered_multi_agent_rounds_demo_v1";
+            /** @enum {string} */
+            rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2";
             participants: components["schemas"]["DebateParticipant"][];
             public_turns: components["schemas"]["DebateTurn"][];
             playback: components["schemas"]["PlaybackState"];

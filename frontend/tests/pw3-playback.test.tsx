@@ -225,6 +225,188 @@ afterEach(() => {
 });
 
 describe("PW3-D three-control playback", () => {
+  it("shows a draft as ready to start rather than in progress", () => {
+    const initial = detail(
+      "draft",
+      {
+        status: "preparing",
+        mode: "live",
+        current_turn_id: null,
+      },
+      [],
+    );
+    render(
+      <DebateStage
+        api={apiFor(initial, initial.playback)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => new TestSocket()}
+      />,
+    );
+
+    expect(
+      document.querySelector('[data-classroom-phase="ready"]'),
+    ).toBeTruthy();
+    expect(screen.getByText("Ready to start")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start debate" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+  });
+
+  it("does not acquire or show reconnect state after an early-finished reload", async () => {
+    const initial = detail(
+      "debate_finished",
+      {
+        status: "stopped",
+        mode: "live",
+        current_turn_id: null,
+      },
+      [turns()[0]!],
+    );
+    const socket = new TestSocket();
+    render(
+      <DebateStage
+        api={apiFor(initial, initial.playback)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(0);
+    expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(
+      screen.queryByText("Waiting for the teacher controller…"),
+    ).toBeNull();
+    expect(screen.queryByText("Connection lost")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  });
+
+  it("does not acquire or show controller-wait state after a full-finished reload", async () => {
+    const initial = detail("completed");
+    const socket = new TestSocket();
+    render(
+      <DebateStage
+        api={apiFor(initial, initial.playback)}
+        debateId={debateId}
+        detail={initial}
+        currentAudioDebateId={debateId}
+        socketFactory={() => socket}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(0);
+    expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
+    expect(screen.getByText("Debate complete")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Replay whole debate" }),
+    ).toHaveProperty("disabled", false);
+    expect(
+      screen.queryByText("Waiting for the teacher controller…"),
+    ).toBeNull();
+    expect(screen.queryByText("Connection lost")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  });
+
+  it("acquires once on demand before replaying a finished debate", async () => {
+    const initial = detail("completed");
+    const replayReady: DebatePlaybackState = {
+      ...initial.playback,
+      status: "ready",
+      mode: "replay",
+      current_turn_id: firstTurnId,
+      control_version: 1,
+      next_turn_ready: false,
+    };
+    const socket = new TestSocket();
+    const api = apiFor(initial, replayReady);
+    render(
+      <DebateStage
+        api={api}
+        debateId={debateId}
+        detail={initial}
+        currentAudioDebateId={debateId}
+        socketFactory={() => socket}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+
+    const replay = screen.getByRole("button", {
+      name: "Replay whole debate",
+    });
+    expect(replay).toHaveProperty("disabled", false);
+    fireEvent.click(replay);
+    // A same-event-loop second click cannot enqueue another acquire or replay.
+    fireEvent.click(replay);
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(1),
+    );
+    expect(api.replayDebate).not.toHaveBeenCalled();
+
+    socket.emit("message", acquired(0));
+    await waitFor(() => expect(api.replayDebate).toHaveBeenCalledTimes(1));
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(1);
+    expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(speech("Second")).length).toBeGreaterThan(0);
+  });
+
+  it("derives an active replay turn as in progress over a finished debate", () => {
+    const initial = detail("completed", {
+      status: "playing",
+      mode: "replay",
+      current_turn_id: firstTurnId,
+      control_version: 1,
+    });
+    render(
+      <DebateStage
+        api={apiFor(initial, initial.playback)}
+        debateId={debateId}
+        detail={initial}
+        currentAudioDebateId={debateId}
+        socketFactory={() => new TestSocket()}
+      />,
+    );
+
+    expect(
+      document.querySelector('[data-classroom-phase="in_progress"]'),
+    ).toBeTruthy();
+    expect(screen.getByText("In progress")).toBeTruthy();
+    expect(
+      document.querySelector('[data-motion-state="speaking"]'),
+    ).toBeTruthy();
+  });
+
   it("renders exactly Start, Next and Replay Whole Debate", () => {
     const initial = detail("completed");
     render(
@@ -240,7 +422,7 @@ describe("PW3-D three-control playback", () => {
 
     expect(screen.getAllByRole("button")).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Start debate" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Next / 下一步" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toBeTruthy();
@@ -294,7 +476,7 @@ describe("PW3-D three-control playback", () => {
         next_turn_ready: true,
       }),
     );
-    const next = screen.getByRole("button", { name: "Next / 下一步" });
+    const next = screen.getByRole("button", { name: "Next" });
     await waitFor(() =>
       expect((next as HTMLButtonElement).disabled).toBe(false),
     );
@@ -314,6 +496,169 @@ describe("PW3-D three-control playback", () => {
       expect(prepare[0]?.turn_id).toBe(secondTurnId);
       expect(prepare[0]?.playback_action).toBe("replay");
     });
+  });
+
+  it("retains the transcript and renews the controller once after replay", async () => {
+    const initial = detail("completed");
+    const replayReady: DebatePlaybackState = {
+      ...initial.playback,
+      status: "ready",
+      mode: "replay",
+      current_turn_id: firstTurnId,
+      control_version: 1,
+      next_turn_ready: false,
+    };
+    const final = detail("completed");
+    const refreshSnapshot = vi.fn().mockResolvedValue(final);
+    const socket = new TestSocket();
+    const api = apiFor(initial, replayReady);
+    render(
+      <DebateStage
+        api={api}
+        debateId={debateId}
+        detail={initial}
+        currentAudioDebateId={debateId}
+        refreshSnapshot={refreshSnapshot}
+        socketFactory={() => socket}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    socket.emit("message", acquired(0));
+    const replay = screen.getByRole("button", {
+      name: "Replay whole debate",
+    });
+    await waitFor(() => expect(replay).toHaveProperty("disabled", false));
+
+    fireEvent.click(replay);
+    await waitFor(() => expect(api.replayDebate).toHaveBeenCalled());
+    // A replay cursor must not replace the immutable public transcript.
+    expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(speech("Second")).length).toBeGreaterThan(0);
+
+    socket.emit(
+      "message",
+      envelope("replay.started", 1, {
+        scope: "all",
+        turn_id: firstTurnId,
+        control_version: 1,
+      }),
+    );
+    socket.emit("message", {
+      ...acquired(1),
+      message_id: "91000000-0000-4000-8000-000000000002",
+      message_type: "controller.revoked",
+      controller_epoch: epoch,
+      reason: "debate_terminal",
+    });
+    socket.emit(
+      "message",
+      envelope("replay.completed", 2, {
+        scope: "all",
+        turn_id: firstTurnId,
+        control_version: 2,
+      }),
+    );
+
+    await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const acquires = socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        );
+      expect(acquires).toHaveLength(1);
+    });
+
+    // The renewed controller must make a second replay cycle available on
+    // the same socket. A second terminal cycle gets exactly one more acquire
+    // and never invokes socket.close or a background refresh loop.
+    socket.emit("message", acquired(2));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Replay whole debate" }),
+      ).toHaveProperty("disabled", false),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replay whole debate" }),
+    );
+    await waitFor(() => expect(api.replayDebate).toHaveBeenCalledTimes(2));
+    socket.emit(
+      "message",
+      envelope("replay.started", 3, {
+        scope: "all",
+        turn_id: firstTurnId,
+        control_version: 1,
+      }),
+    );
+    socket.emit("message", {
+      ...acquired(2),
+      message_id: "91000000-0000-4000-8000-000000000003",
+      message_type: "controller.revoked",
+      controller_epoch: epoch,
+      reason: "debate_terminal",
+    });
+    socket.emit(
+      "message",
+      envelope("replay.completed", 4, {
+        scope: "all",
+        turn_id: firstTurnId,
+        control_version: 2,
+      }),
+    );
+    await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      const acquires = socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        );
+      expect(acquires).toHaveLength(2);
+    });
+    expect(socket.closed).not.toHaveBeenCalled();
+  });
+
+  it("renders early Finish as finished while playback remains terminal", async () => {
+    const initial = detail(
+      "running",
+      {
+        status: "waiting_next",
+        mode: "live",
+        current_turn_id: firstTurnId,
+        control_version: 4,
+        next_turn_ready: false,
+      },
+      [turns()[0]!],
+    );
+    const socket = new TestSocket();
+    render(
+      <DebateStage
+        api={apiFor(initial, initial.playback)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    socket.emit("message", acquired(4));
+    socket.emit(
+      "message",
+      envelope("debate.stopped", 1, {
+        final_states: { debate: "debate_finished" },
+        downstream_outcome: "stopped",
+        safe_error_code: "debate_finished_partial",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-classroom-phase="finished"]'),
+      ).toBeTruthy(),
+    );
+    expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Debate stopped")).toBeNull();
   });
 
   it("restores the complete transcript only after final replay completion", async () => {
@@ -361,6 +706,7 @@ describe("PW3-D three-control playback", () => {
     await waitFor(() =>
       expect(screen.getByText(speech("Second"))).toBeTruthy(),
     );
+    expect(screen.getByText("Debate complete")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toBeTruthy();

@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Sequence
 
-from .policy import TurnPlan
+from .policy import RULE_SET_ID, SUPPORTED_RULE_SET_IDS, TurnPlan
 from .types import (
     FinalReadyTurn,
     GenerationContext,
@@ -219,6 +219,8 @@ def _plan_payload(plan: TurnPlan) -> dict[str, object]:
 def make_turn_prompt_input(
     context: GenerationContext,
     receipts: Sequence[SnapshotRetrievalReceipt] = (),
+    *,
+    rule_set_id: str = RULE_SET_ID,
 ) -> TurnPromptInput:
     """Create a prompt input only when the full final-ready prefix is present."""
 
@@ -245,10 +247,12 @@ def make_turn_prompt_input(
         if receipt.snapshot_id != context.participant.snapshot_id:
             raise TurnValidationError("A receipt belongs to a different participant snapshot.")
     transcript_hash = compute_transcript_hash(predecessors)
+    if rule_set_id not in SUPPORTED_RULE_SET_IDS:
+        raise TurnValidationError("The Debate rule set is unavailable.")
     return TurnPromptInput(
         debate_id=context.debate_id,
         topic=context.topic,
-        rule_set_id="ordered_multi_agent_rounds_demo_v1",
+        rule_set_id=rule_set_id,
         phase=context.turn.phase,
         turn_plan=context.turn,
         participant=context.participant,

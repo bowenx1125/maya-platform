@@ -31,6 +31,7 @@ from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
+from tests.conftest import login
 from tests.test_wave2_playback import (
     COURSE_ID,
     GROUP_BOWEN_ID,
@@ -57,6 +58,31 @@ def _seed_one_turn(app_factory: Any) -> tuple[Database, Any, str, str]:
             agent_id=agent_id,
         )
     return database, settings, debate_id, turn_id
+
+
+def test_transcript_route_rejects_early_finished_incomplete_plan(app_factory: Any) -> None:
+    app, database, _settings = app_factory()
+    with TestClient(app) as client:
+        agent_id = _insert_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="PW3 transcript partial",
+            evidence="A retained classroom transcript fixture.",
+        )
+        debate_id, _turn_id, _file_id, _path = _insert_sql_retained_debate(
+            database,
+            agent_id=agent_id,
+        )
+        login(client)
+        response = client.get(f"/api/v1/debates/{debate_id}/transcript")
+        downstream = [
+            client.get(f"/api/v1/debates/{debate_id}/interaction"),
+            client.get(f"/api/v1/debates/{debate_id}/report"),
+            client.get(f"/api/v1/debates/{debate_id}/translations"),
+        ]
+
+    assert response.status_code == 404
+    assert [item.status_code for item in downstream] == [404, 404, 404]
 
 
 def _add_live_successor(database: Database, debate_id: str, first_turn_id: str) -> str:
@@ -176,6 +202,25 @@ def _set_live_playing(database: Database, debate_id: str, turn_id: str) -> None:
         )
 
 
+def _set_live_waiting(database: Database, debate_id: str, turn_id: str) -> None:
+    with database.session() as db:
+        db.execute(
+            text("UPDATE debates SET status='running', finished_at=NULL WHERE id=:debate_id"),
+            {"debate_id": debate_id},
+        )
+        db.execute(
+            text(
+                "UPDATE playback_states SET status='waiting_next', mode='live', "
+                "current_turn_id=:turn_id, cursor_ms=321, control_version=7, "
+                "controller_epoch=NULL, controller_owner_connection=NULL, "
+                "pending_action=NULL, pending_ticket_hash=NULL, "
+                "pending_media_command_id=NULL, audio_duration_ms=0 "
+                "WHERE debate_id=:debate_id"
+            ),
+            {"debate_id": debate_id, "turn_id": turn_id},
+        )
+
+
 @pytest.mark.asyncio
 async def test_sql_pause_survives_restart_and_continue_revalidates_audio(
     app_factory: Any,
@@ -239,7 +284,7 @@ async def test_sql_full_finish_is_normal_and_retains_generated_turn(
     app_factory: Any,
 ) -> None:
     database, settings, debate_id, turn_id = _seed_one_turn(app_factory)
-    _set_live_playing(database, debate_id, turn_id)
+    _set_live_waiting(database, debate_id, turn_id)
     context = SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID))
     tasks = TaskManager()
     service = PlaybackService(
@@ -309,6 +354,34 @@ def test_sql_pause_and_finish_race_has_one_fresh_writer_winner(app_factory: Any)
         database.dispose()
 
 
+def test_sql_finish_claim_requires_live_waiting_gate(app_factory: Any) -> None:
+    database, _settings, debate_id, turn_id = _seed_one_turn(app_factory)
+    _set_live_playing(database, debate_id, turn_id)
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    try:
+        assert (
+            repository.claim_finish_playback(
+                debate_id=debate_id,
+                expected_control_version=7,
+                expected_current_turn_id=turn_id,
+                teacher_user_id=TEACHER_ID,
+            )
+            is None
+        )
+        with database.session() as db:
+            row = db.execute(
+                text(
+                    "SELECT d.status,ps.status,ps.mode,ps.control_version "
+                    "FROM debates d JOIN playback_states ps ON ps.debate_id=d.id "
+                    "WHERE d.id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            ).one()
+        assert row == ("running", "playing", "live", 7)
+    finally:
+        database.dispose()
+
+
 @pytest.mark.asyncio
 async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surface(
     app_factory: Any,
@@ -340,7 +413,7 @@ async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surf
         assert partial.status == "stopped"
         with database.session() as db:
             debate = db.get(Debate, debate_id)
-            assert debate is not None and debate.status == "stopped"
+            assert debate is not None and debate.status == "debate_finished"
             assert db.scalar(select(Job.state).where(Job.turn_id == successor_id)) == "interrupted"
             assert (
                 len(

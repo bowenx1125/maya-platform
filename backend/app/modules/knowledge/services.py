@@ -80,6 +80,10 @@ from app.modules.knowledge.markdown import (
     normalize_markdown,
     query_embedding,
 )
+from app.modules.knowledge.mock_lexical import (
+    MOCK_LEXICAL_ANCHOR_POLICY_ID,
+    MockLexicalAnchorV2,
+)
 from app.modules.knowledge.schemas import JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 
@@ -998,7 +1002,22 @@ def job_dto(job: Job) -> JobStatus:
     )
 
 
-def retrieval_response(db: Session, version: AgentVersion, message: str) -> TestChatResponse:
+def retrieval_response(
+    db: Session,
+    version: AgentVersion,
+    message: str,
+    *,
+    mock_retrieval_policy_id: str = MOCK_LEXICAL_ANCHOR_POLICY_ID,
+) -> TestChatResponse:
+    """Run the non-persistent draft test against the current Mock policy.
+
+    The student message is the authoritative topic anchor for this draft-only
+    surface.  Published snapshot bytes and chunk vectors are read as-is.
+    """
+
+    if mock_retrieval_policy_id != MOCK_LEXICAL_ANCHOR_POLICY_ID:
+        raise ValueError("unsupported Mock retrieval policy")
+    lexical_anchor = MockLexicalAnchorV2.from_topic(message)
     docs = _enabled_documents(db, version.id)
     relations = {
         relation.document_id: relation
@@ -1033,7 +1052,7 @@ def retrieval_response(db: Session, version: AgentVersion, message: str) -> Test
             score = sum(a * b for a, b in zip(query_values, values, strict=True))
             ranked.append((score, order, chunk.chunk_index, chunk.id, chunk, document))
     ranked.sort(key=lambda item: (-item[0], item[1], item[2], item[3]))
-    top = ranked[:6]
+    top = [item for item in ranked if lexical_anchor.accepts(item[4].chunk_text)][:6]
     selected = [item for item in top if item[0] >= 0.20]
     if not selected:
         selected = [item for item in top if item[0] >= 0.08]

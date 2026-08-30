@@ -27,6 +27,7 @@ import {
 import styles from "./debate-stage.module.css";
 import { resolvePlaybackStageLabels } from "./labels";
 import {
+  connectionIssueFromCloseCode,
   consumeEventSequence,
   debateSocketUrl,
   deriveAvatarStates,
@@ -38,22 +39,63 @@ import {
 } from "./protocol";
 import type {
   AvatarVisualState,
+  ClassroomPhase,
   DebateStageProps,
   PlaybackAction,
+  PlaybackConnectionIssue,
+  PlaybackConnectionState,
   PlaybackEvent,
   PlaybackSocket,
   PrivatePlaybackMessage,
   VisiblePlaybackTurn,
 } from "./types";
 
-type ConnectionState =
-  "connecting" | "connected" | "reconnecting" | "disconnected";
 type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
 
 const TERMINAL_PLAYBACK: readonly DebatePlaybackState["status"][] = [
   "completed",
   "stopped",
 ];
+
+function isTerminalConnectionContext(
+  detail: Pick<DebateDetail, "status" | "playback">,
+): boolean {
+  return (
+    detail.status === "stopped" ||
+    detail.status === "completed" ||
+    (detail.playback.mode !== "replay" &&
+      TERMINAL_PLAYBACK.includes(detail.playback.status))
+  );
+}
+
+function isProductTerminalDetail(
+  detail: Pick<DebateDetail, "status" | "playback">,
+): boolean {
+  if (detail.status === "failed" || detail.status === "stopped") return true;
+  if (detail.status === "debate_finished" || detail.status === "completed") {
+    // A retained Replay remains an active controller surface even though its
+    // source Debate is finished. Its ordinary live terminal view does not.
+    return detail.playback.mode !== "replay";
+  }
+  return (
+    detail.playback.mode === "live" &&
+    TERMINAL_PLAYBACK.includes(detail.playback.status)
+  );
+}
+
+function isReplayableTerminalSource(
+  detail: Pick<DebateDetail, "status" | "playback" | "public_turns">,
+  audioPointer: string | null | undefined,
+  debateId: string,
+): boolean {
+  return (
+    audioPointer === debateId &&
+    detail.public_turns.length > 0 &&
+    (detail.status === "debate_finished" || detail.status === "completed") &&
+    detail.playback.mode === "live" &&
+    detail.playback.status === "completed"
+  );
+}
 function makeId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
     return globalThis.crypto.randomUUID();
@@ -321,6 +363,10 @@ function errorText(cause: unknown, fallback: string): string {
   return fallback;
 }
 
+function isAuthenticationExpiredError(cause: unknown): boolean {
+  return isRecord(cause) && cause.status === 401;
+}
+
 function mediaErrorCode(
   audio: HTMLAudioElement,
 ): "not_supported" | "decode_error" | "network_error" | "aborted" | "unknown" {
@@ -355,24 +401,42 @@ function socketMessageData(event: Event): unknown {
   }
 }
 
-function statusCopy(
+/**
+ * Classroom phase is a product state, not a transport-health state.  Keep the
+ * two projections independent so a connected page can still be waiting, and
+ * a finished page never looks disconnected just because its controller was
+ * intentionally released.
+ */
+function deriveClassroomPhase(
   detailStatus: DebateDetail["status"],
   playbackStatus: DebatePlaybackState["status"],
-  labels: ReturnType<typeof resolvePlaybackStageLabels>,
-): string {
-  if (playbackStatus === "waiting_next") return labels.waitingNext;
-  if (playbackStatus === "preparing") return labels.statusPreparing;
-  if (playbackStatus === "ready") return labels.statusReady;
-  if (playbackStatus === "playing") return labels.statusPlaying;
-  if (playbackStatus === "paused") return labels.statusPaused;
+  playbackMode: DebatePlaybackState["mode"],
+  actionInFlight: boolean,
+): ClassroomPhase {
+  if (detailStatus === "draft") return "ready";
+  if (detailStatus === "failed") return "failed";
+  if (detailStatus === "stopped") return "stopped";
+  // Replay is an active playback surface over a finished source Debate. Its
+  // source status must not mask the current replay phase while a turn is
+  // being prepared/played or waiting for the teacher to advance it.
+  if (playbackMode === "replay") {
+    if (!actionInFlight && playbackStatus === "waiting_next") {
+      return "waiting";
+    }
+    if (playbackStatus === "stopped") return "stopped";
+    return "in_progress";
+  }
   if (detailStatus === "debate_finished" || detailStatus === "completed") {
-    return labels.debateComplete;
+    return "finished";
   }
-  if (detailStatus === "stopped" || playbackStatus === "stopped") {
-    return labels.debateStopped;
+  if (
+    !actionInFlight &&
+    playbackStatus === "waiting_next" &&
+    (playbackMode === "live" || playbackMode === "replay")
+  ) {
+    return "waiting";
   }
-  if (detailStatus === "failed") return labels.debateFailed;
-  return labels.debateComplete;
+  return "in_progress";
 }
 
 export function DebateStage({
@@ -380,6 +444,7 @@ export function DebateStage({
   detail,
   api,
   onDetailChange,
+  onAuthorityChange,
   refreshSnapshot,
   socketFactory,
   socketUrl,
@@ -388,6 +453,7 @@ export function DebateStage({
   currentAudioDebateId,
   expectedCurrentAudioDebateId,
   onCurrentAudioDebateIdChange,
+  actionInFlight = false,
   className,
 }: DebateStageProps) {
   const labels = useMemo(
@@ -407,7 +473,10 @@ export function DebateStage({
   const [avatarEventStates, setAvatarEventStates] = useState<
     AvatarVisualState[]
   >([]);
-  const [connection, setConnection] = useState<ConnectionState>("connecting");
+  const [connection, setConnection] =
+    useState<PlaybackConnectionState>("connecting");
+  const [connectionIssue, setConnectionIssueState] =
+    useState<PlaybackConnectionIssue | null>(null);
   const [lastSequence, setLastSequence] = useState(detail.last_sequence);
   const [controllerReady, setControllerReady] = useState(false);
   const [activeParticipantId, setActiveParticipantId] = useState<string | null>(
@@ -432,8 +501,21 @@ export function DebateStage({
   const controllerEpochRef = useRef<string | null>(null);
   const controllerReadyRef = useRef(false);
   const acquirePendingRef = useRef(false);
+  const controllerAcquireBlockedRef = useRef(false);
+  const terminalReplayAcquirePendingRef = useRef(false);
+  const connectionIssueRef = useRef<PlaybackConnectionIssue | null>(null);
+  const authoritySnapshotRef = useRef({
+    connection: "connecting" as PlaybackConnectionState,
+    connectionIssue: null as PlaybackConnectionIssue | null,
+    controllerReady: false,
+    commandBusy: false,
+  });
   const controlVersionRef = useRef(playback.control_version);
   const pendingActionRef = useRef<PlaybackAction>("start");
+  const pendingReplayAcquireRef = useRef<{
+    resolve: () => void;
+    reject: (cause?: unknown) => void;
+  } | null>(null);
   const prepareKeyRef = useRef<string | null>(null);
   const preparedMediaKeyRef = useRef<string | null>(null);
   const playbackGenerationRef = useRef(0);
@@ -447,7 +529,6 @@ export function DebateStage({
   const cursorMsRef = useRef(playback.cursor_ms);
   const mountedRef = useRef(false);
   const closingRef = useRef(false);
-  const reconnectTimerRef = useRef<number | null>(null);
   const replayCatalogRef = useRef<Map<string, VisiblePlaybackTurn>>(
     new Map(
       normalisePublicTurns(detail.public_turns).map((turn) => [
@@ -480,9 +561,6 @@ export function DebateStage({
   });
   const controlRequestRef = useRef<number | null>(null);
   const nextControlRequestRef = useRef(0);
-  const connectRef = useRef<((refresh: boolean) => Promise<void>) | undefined>(
-    undefined,
-  );
   const startIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
@@ -558,10 +636,48 @@ export function DebateStage({
     [],
   );
 
-  const markControllerReady = useCallback((value: boolean) => {
-    controllerReadyRef.current = value;
-    setControllerReady(value);
+  const publishAuthority = useCallback(
+    (patch: Partial<typeof authoritySnapshotRef.current>) => {
+      const next = { ...authoritySnapshotRef.current, ...patch };
+      authoritySnapshotRef.current = next;
+      onAuthorityChange?.(next);
+    },
+    [onAuthorityChange],
+  );
+
+  const settlePendingReplayAcquire = useCallback((cause?: unknown) => {
+    const pending = pendingReplayAcquireRef.current;
+    if (!pending) return;
+    pendingReplayAcquireRef.current = null;
+    if (cause === undefined) pending.resolve();
+    else pending.reject(cause);
   }, []);
+
+  const markConnection = useCallback(
+    (value: PlaybackConnectionState) => {
+      setConnection(value);
+      publishAuthority({ connection: value });
+    },
+    [publishAuthority],
+  );
+
+  const markControllerReady = useCallback(
+    (value: boolean) => {
+      controllerReadyRef.current = value;
+      setControllerReady(value);
+      publishAuthority({ controllerReady: value });
+    },
+    [publishAuthority],
+  );
+
+  const markConnectionIssue = useCallback(
+    (value: PlaybackConnectionIssue | null) => {
+      connectionIssueRef.current = value;
+      setConnectionIssueState(value);
+      publishAuthority({ connectionIssue: value });
+    },
+    [publishAuthority],
+  );
 
   useEffect(() => {
     labelsRef.current = labels;
@@ -650,63 +766,100 @@ export function DebateStage({
         socket.send(JSON.stringify(command));
         return true;
       } catch {
-        setConnection("disconnected");
+        markConnection("disconnected");
+        markConnectionIssue("network");
         return false;
       }
     },
-    [],
+    [markConnection, markConnectionIssue],
   );
 
-  const sendControllerAcquire = useCallback(() => {
-    const debateStatus = detailRef.current.status;
-    if (
-      readOnly ||
-      debateStatus === "draft" ||
-      debateStatus === "failed" ||
-      debateStatus === "stopped" ||
-      controllerReadyRef.current ||
-      acquirePendingRef.current
-    )
-      return;
-    acquirePendingRef.current = true;
-    const sent = sendCommand({
-      command_id: makeId(),
-      command_type: "playback.controller.acquire",
-      command_version: 1,
-      debate_id: debateId,
-      expected_control_version: controlVersionRef.current,
-    });
-    if (!sent) acquirePendingRef.current = false;
-  }, [debateId, readOnly, sendCommand]);
-
-  const scheduleControllerAcquire = useCallback(() => {
-    const generation = playbackGenerationRef.current;
-    const socketGeneration = socketGenerationRef.current;
-    const connectAttempt = connectAttemptRef.current;
-    window.setTimeout(() => {
+  const sendControllerAcquire = useCallback(
+    (allowTerminal = false): boolean => {
+      const debateStatus = detailRef.current.status;
       if (
-        !mountedRef.current ||
-        generation !== playbackGenerationRef.current ||
-        socketGeneration !== socketGenerationRef.current ||
-        connectAttempt !== connectAttemptRef.current
+        readOnly ||
+        debateStatus === "draft" ||
+        (!allowTerminal && isProductTerminalDetail(detailRef.current)) ||
+        controllerAcquireBlockedRef.current ||
+        controllerReadyRef.current ||
+        acquirePendingRef.current
       )
-        return;
-      sendControllerAcquire();
-    }, 0);
-  }, [sendControllerAcquire]);
+        return false;
+      acquirePendingRef.current = true;
+      const sent = sendCommand({
+        command_id: makeId(),
+        command_type: "playback.controller.acquire",
+        command_version: 1,
+        debate_id: debateId,
+        expected_control_version: controlVersionRef.current,
+      });
+      if (!sent) acquirePendingRef.current = false;
+      return sent;
+    },
+    [debateId, readOnly, sendCommand],
+  );
+
+  const scheduleControllerAcquire = useCallback(
+    (allowTerminal = false) => {
+      const generation = playbackGenerationRef.current;
+      const socketGeneration = socketGenerationRef.current;
+      const connectAttempt = connectAttemptRef.current;
+      window.setTimeout(() => {
+        if (
+          !mountedRef.current ||
+          generation !== playbackGenerationRef.current ||
+          socketGeneration !== socketGenerationRef.current ||
+          connectAttempt !== connectAttemptRef.current
+        )
+          return;
+        sendControllerAcquire(allowTerminal);
+      }, 0);
+    },
+    [sendControllerAcquire],
+  );
+
+  const acquireReplayControllerAfterTerminal = useCallback(() => {
+    if (!terminalReplayAcquirePendingRef.current || !socketRef.current) return;
+    const current = detailRef.current;
+    if (
+      (current.status !== "debate_finished" &&
+        current.status !== "completed") ||
+      current.playback.mode !== "live" ||
+      current.playback.status !== "completed"
+    ) {
+      return;
+    }
+    terminalReplayAcquirePendingRef.current = false;
+    controllerEpochRef.current = null;
+    acquirePendingRef.current = false;
+    markControllerReady(false);
+    controllerAcquireBlockedRef.current = false;
+    markConnection("connected");
+    markConnectionIssue(null);
+    scheduleControllerAcquire(true);
+  }, [
+    markConnection,
+    markConnectionIssue,
+    markControllerReady,
+    scheduleControllerAcquire,
+  ]);
 
   const requestReconnect = useCallback(() => {
     if (!mountedRef.current || closingRef.current) return;
     connectAttemptRef.current += 1;
     pauseAudio(false);
-    // A sequence gap/socket failure is surfaced as a stable disconnected
-    // state.  Reconnect is now an explicit teacher action; there is no timer
-    // or background snapshot refresh that can change the page behind them.
-    setConnection("disconnected");
+    // A sequence gap/state-consistency failure is surfaced separately from a
+    // network close. Recovery is an explicit teacher action; there is no timer
+    // or background reconnect that can change the page behind them.
+    markConnection("disconnected");
+    markConnectionIssue("sequence_gap");
     markControllerReady(false);
+    settlePendingReplayAcquire(new Error("Replay controller unavailable."));
     acquirePendingRef.current = false;
+    terminalReplayAcquirePendingRef.current = false;
     controllerEpochRef.current = null;
-    setFailure(labelsRef.current.connectionError);
+    setFailure(null);
     recoveryFenceRef.current.active = false;
     recoveryFenceRef.current.refreshInFlight = false;
     socketGenerationRef.current += 1;
@@ -717,7 +870,13 @@ export function DebateStage({
     } catch {
       // The close callback will still schedule recovery for normal sockets.
     }
-  }, [markControllerReady, pauseAudio]);
+  }, [
+    markConnection,
+    markConnectionIssue,
+    markControllerReady,
+    pauseAudio,
+    settlePendingReplayAcquire,
+  ]);
 
   const applyPlayback = useCallback(
     (
@@ -855,6 +1014,7 @@ export function DebateStage({
       switch (message.message_type) {
         case "controller.acquired":
           if (
+            controllerAcquireBlockedRef.current ||
             !message.controller_epoch ||
             message.control_version === undefined
           )
@@ -876,6 +1036,7 @@ export function DebateStage({
           if (playbackRef.current.status === "ready") {
             scheduleMediaPrepare();
           }
+          settlePendingReplayAcquire();
           return;
         case "media.prepared": {
           if (
@@ -957,7 +1118,7 @@ export function DebateStage({
           );
           return;
         }
-        case "controller.revoked":
+        case "controller.revoked": {
           if (
             !message.controller_epoch ||
             message.controller_epoch !== controllerEpochRef.current
@@ -967,26 +1128,49 @@ export function DebateStage({
           controllerEpochRef.current = null;
           acquirePendingRef.current = false;
           markControllerReady(false);
+          settlePendingReplayAcquire(new Error("Replay controller revoked."));
           pauseAudio(true);
-          setVisible(null);
           setAvatars([]);
-          setActiveParticipant(null);
+          const revocationIssue: PlaybackConnectionIssue =
+            message.reason === "superseded"
+              ? "superseded"
+              : message.reason === "session_revoked"
+                ? "session_expired"
+                : message.reason === "start_next" ||
+                    message.reason === "debate_terminal"
+                  ? "terminal"
+                  : "network";
+          controllerAcquireBlockedRef.current = revocationIssue !== "network";
+          terminalReplayAcquirePendingRef.current =
+            message.reason === "debate_terminal";
+          if (revocationIssue === "terminal") {
+            setVisible(null);
+            setActiveParticipant(null);
+          }
           if (message.reason === "start_next") {
             applyPlayback(
               { status: "completed", mode: "live", current_turn_id: null },
               detailRef.current.status,
             );
           }
-          setConnection("disconnected");
-          setFailure(
-            message.reason === "start_next"
-              ? null
-              : labelsRef.current.connectionReconnecting,
+          markConnection(
+            message.reason === "debate_terminal" ? "connected" : "disconnected",
           );
+          markConnectionIssue(revocationIssue);
+          setFailure(null);
+          if (message.reason === "debate_terminal") {
+            acquireReplayControllerAfterTerminal();
+          }
           return;
+        }
         case "command.rejected":
         case "command.duplicate":
           acquirePendingRef.current = false;
+          if (message.message_type === "command.rejected") {
+            settlePendingReplayAcquire(
+              new Error(message.code ?? labelsRef.current.connectionError),
+            );
+          }
           if (message.current_control_version !== undefined) {
             controlVersionRef.current = message.current_control_version;
           }
@@ -1000,12 +1184,16 @@ export function DebateStage({
           ) {
             controllerEpochRef.current = null;
             acquirePendingRef.current = false;
+            terminalReplayAcquirePendingRef.current = false;
             markControllerReady(false);
             pauseAudio(true);
             setVisible(null);
             setAvatars([]);
             setActiveParticipant(null);
-            setConnection("disconnected");
+            markConnection("disconnected");
+            controllerAcquireBlockedRef.current = true;
+            markConnectionIssue("session_expired");
+            setFailure(null);
             try {
               socketRef.current?.close(4401, "session revoked");
             } catch {
@@ -1017,12 +1205,16 @@ export function DebateStage({
     },
     [
       applyPlayback,
+      acquireReplayControllerAfterTerminal,
       debateId,
+      markConnection,
+      markConnectionIssue,
       markControllerReady,
       pauseAudio,
       scheduleMediaPrepare,
       sendCommand,
       sendPlayFailure,
+      settlePendingReplayAcquire,
       setActiveParticipant,
       setAvatars,
       setVisible,
@@ -1101,7 +1293,11 @@ export function DebateStage({
       } else if (nextPlayback.status === "paused") {
         pauseAudio(false);
       }
-      if (!readOnly && nextStatus !== "draft") {
+      if (
+        !readOnly &&
+        nextStatus !== "draft" &&
+        !isProductTerminalDetail({ status: nextStatus, playback: nextPlayback })
+      ) {
         scheduleControllerAcquire();
       }
       setFailure(null);
@@ -1545,7 +1741,7 @@ export function DebateStage({
               ),
               next_turn_ready: payload.next_turn_ready === true,
             },
-            "running",
+            eventMode === "replay" ? detailRef.current.status : "running",
           );
           break;
         }
@@ -1596,7 +1792,9 @@ export function DebateStage({
                 playbackRef.current.playback_rate,
               ),
             },
-            "running",
+            playbackRef.current.mode === "replay"
+              ? detailRef.current.status
+              : "running",
           );
           setFailure(null);
           break;
@@ -1761,6 +1959,10 @@ export function DebateStage({
           setVisible(null);
           setAvatars([]);
           setActiveParticipant(null);
+          // The terminal replay event is followed by one same-socket
+          // controller renewal. Set the intent before the async snapshot so
+          // either event order converges on exactly one acquire.
+          terminalReplayAcquirePendingRef.current = true;
           if (!refreshSnapshot) {
             // Observation-only/test integrations may not provide an HTTP
             // reader. The final replay event is still terminal locally.
@@ -1776,12 +1978,14 @@ export function DebateStage({
                 ),
               ),
             });
+            acquireReplayControllerAfterTerminal();
             break;
           }
           void refreshSnapshot()
             .then((next) => {
               if (!mountedRef.current || !next) return;
               commitDetail(next);
+              acquireReplayControllerAfterTerminal();
             })
             .catch((cause: unknown) => {
               if (!mountedRef.current) return;
@@ -1805,23 +2009,34 @@ export function DebateStage({
           setActiveParticipant(null);
           controllerEpochRef.current = null;
           acquirePendingRef.current = false;
+          terminalReplayAcquirePendingRef.current = false;
+          controllerAcquireBlockedRef.current = true;
           markControllerReady(false);
           applyPlayback({ status: "stopped", current_turn_id: null }, "failed");
           setFailure(labelsRef.current.debateFailed);
           break;
-        case "debate.stopped":
+        case "debate.stopped": {
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
           setActiveParticipant(null);
           controllerEpochRef.current = null;
           acquirePendingRef.current = false;
+          terminalReplayAcquirePendingRef.current = false;
+          controllerAcquireBlockedRef.current = true;
           markControllerReady(false);
+          const terminalStates = isRecord(payload.final_states)
+            ? payload.final_states
+            : null;
+          const isTeacherFinishedPartial =
+            payload.safe_error_code === "debate_finished_partial" &&
+            terminalStates?.debate === "debate_finished";
           applyPlayback(
             { status: "stopped", current_turn_id: null },
-            "stopped",
+            isTeacherFinishedPartial ? "debate_finished" : "stopped",
           );
           break;
+        }
         case "error":
           setFailure(labelsRef.current.retryReason);
           if (payload.recoverable === true) {
@@ -1831,6 +2046,7 @@ export function DebateStage({
         default:
           break;
       }
+      acquireReplayControllerAfterTerminal();
       const nextDetail = {
         ...detailRef.current,
         last_sequence: decision.nextSequence,
@@ -1841,6 +2057,7 @@ export function DebateStage({
     },
     [
       applyPlayback,
+      acquireReplayControllerAfterTerminal,
       commitDetail,
       handleSnapshot,
       markControllerReady,
@@ -1884,9 +2101,13 @@ export function DebateStage({
         socketGenerationRef.current === socketGeneration;
       const onOpen = () => {
         if (!isCurrentSocket()) return;
-        setConnection("connected");
+        if (controllerAcquireBlockedRef.current) return;
+        markConnection("connected");
+        markConnectionIssue(null);
         setFailure(null);
-        if (!readOnly) sendControllerAcquire();
+        if (!readOnly && !isProductTerminalDetail(detailRef.current)) {
+          sendControllerAcquire();
+        }
       };
       const onMessage = (event: Event) => {
         if (!isCurrentSocket()) return;
@@ -1894,30 +2115,54 @@ export function DebateStage({
       };
       const onError = () => {
         if (!isCurrentSocket()) return;
-        setConnection("disconnected");
-        setFailure(labelsRef.current.connectionError);
+        // Browsers dispatch `error` before `close`. Wait for the close code so
+        // 4401/4403 or an earlier private revocation cannot be overwritten by
+        // a generic network label.
       };
       const onClose = (event?: Event) => {
         if (!mountedRef.current || closingRef.current || !isCurrentSocket())
           return;
         const closeCode =
           event && "code" in event ? Number((event as CloseEvent).code) : 0;
-        if (closeCode === 4401 || closeCode === 4403) {
-          setConnection("disconnected");
-          acquirePendingRef.current = false;
-          markControllerReady(false);
-          controllerEpochRef.current = null;
-          pauseAudio(true);
-          setVisible(null);
-          setAvatars([]);
-          setActiveParticipant(null);
-          return;
+        const existingIssue = connectionIssueRef.current;
+        const closeIssue = connectionIssueFromCloseCode(closeCode);
+        const replayAcquirePending = pendingReplayAcquireRef.current !== null;
+        const preciseIssue =
+          existingIssue === "superseded" ||
+          existingIssue === "terminal" ||
+          existingIssue === "session_expired" ||
+          existingIssue === "origin_mismatch"
+            ? existingIssue
+            : closeIssue === "session_expired" ||
+                closeIssue === "origin_mismatch"
+              ? closeIssue
+              : isTerminalConnectionContext(detailRef.current) &&
+                  !replayAcquirePending
+                ? "terminal"
+                : closeIssue;
+        connectAttemptRef.current += 1;
+        socketGenerationRef.current += 1;
+        socketRef.current = null;
+        markConnection("disconnected");
+        if (replayAcquirePending && preciseIssue === "network") {
+          setControlError(labelsRef.current.connectionDisconnected);
         }
-        setConnection("disconnected");
+        settlePendingReplayAcquire(new Error("Replay controller unavailable."));
         acquirePendingRef.current = false;
+        terminalReplayAcquirePendingRef.current = false;
         markControllerReady(false);
         controllerEpochRef.current = null;
-        pauseAudio(false);
+        controllerAcquireBlockedRef.current =
+          preciseIssue === "superseded" ||
+          preciseIssue === "terminal" ||
+          preciseIssue === "session_expired" ||
+          preciseIssue === "origin_mismatch";
+        markConnectionIssue(preciseIssue);
+        setFailure(null);
+        pauseAudio(preciseIssue !== "network");
+        if (preciseIssue !== "network") {
+          setAvatars([]);
+        }
       };
       if (socket.addEventListener) {
         socket.addEventListener("open", onOpen);
@@ -1945,13 +2190,14 @@ export function DebateStage({
     },
     [
       handleSocketMessage,
+      markConnection,
+      markConnectionIssue,
       markControllerReady,
       pauseAudio,
       readOnly,
       sendControllerAcquire,
-      setActiveParticipant,
+      settlePendingReplayAcquire,
       setAvatars,
-      setVisible,
     ],
   );
 
@@ -1977,7 +2223,32 @@ export function DebateStage({
         } catch (cause) {
           // A failed manual attempt must not discard the current page or
           // trigger another refresh/retry in the background.
-          setConnection("disconnected");
+          markConnection("disconnected");
+          if (isAuthenticationExpiredError(cause)) {
+            controllerAcquireBlockedRef.current = true;
+            terminalReplayAcquirePendingRef.current = false;
+            acquirePendingRef.current = false;
+            controllerEpochRef.current = null;
+            markControllerReady(false);
+            markConnectionIssue("session_expired");
+            pauseAudio(true);
+            setFailure(null);
+            setReconnectBusy(false);
+            socketGenerationRef.current += 1;
+            const staleSocket = socketRef.current;
+            socketRef.current = null;
+            try {
+              staleSocket?.close(4401, "session expired");
+            } catch {
+              // HTTP 401 is already authoritative; socket cleanup is local.
+            }
+            return;
+          }
+          markConnectionIssue(
+            connectionIssueRef.current === "sequence_gap"
+              ? "sequence_gap"
+              : "network",
+          );
           setFailure(errorText(cause, labelsRef.current.connectionError));
           setReconnectBusy(false);
           return;
@@ -1999,10 +2270,11 @@ export function DebateStage({
           ? socketFactory(url)
           : (new WebSocket(url) as unknown as PlaybackSocket);
         socketRef.current = socket;
-        setConnection("connecting");
+        markConnection("connecting");
         installSocket(socket, socketGeneration);
       } catch (cause) {
-        setConnection("disconnected");
+        markConnection("disconnected");
+        markConnectionIssue("network");
         setFailure(errorText(cause, labelsRef.current.connectionError));
       } finally {
         if (refresh) setReconnectBusy(false);
@@ -2012,6 +2284,10 @@ export function DebateStage({
       commitDetail,
       debateId,
       installSocket,
+      markConnection,
+      markConnectionIssue,
+      markControllerReady,
+      pauseAudio,
       refreshSnapshot,
       socketFactory,
       socketUrl,
@@ -2025,19 +2301,27 @@ export function DebateStage({
       closingRef.current ||
       reconnectBusy ||
       connection === "connected" ||
-      connection === "connecting"
+      connection === "connecting" ||
+      (connectionIssue !== "network" && connectionIssue !== "sequence_gap")
     ) {
       return;
     }
     setReconnectBusy(true);
-    setConnection("reconnecting");
+    markConnection("reconnecting");
     void connect(true).catch((cause: unknown) => {
       if (!mountedRef.current || closingRef.current) return;
-      setConnection("disconnected");
+      markConnection("disconnected");
       setFailure(errorText(cause, labelsRef.current.connectionError));
       setReconnectBusy(false);
     });
-  }, [connect, connection, readOnly, reconnectBusy]);
+  }, [
+    connect,
+    connection,
+    connectionIssue,
+    markConnection,
+    readOnly,
+    reconnectBusy,
+  ]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (
@@ -2068,18 +2352,14 @@ export function DebateStage({
   useEffect(() => {
     mountedRef.current = true;
     closingRef.current = false;
-    connectRef.current = connect;
     const timer = window.setTimeout(() => void connect(false), 0);
     return () => {
       window.clearTimeout(timer);
       mountedRef.current = false;
       closingRef.current = true;
+      settlePendingReplayAcquire(new Error("Replay controller unavailable."));
       connectAttemptRef.current += 1;
       socketGenerationRef.current += 1;
-      if (reconnectTimerRef.current !== null) {
-        window.clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
       socketCleanupRef.current?.();
       socketCleanupRef.current = null;
       try {
@@ -2090,7 +2370,7 @@ export function DebateStage({
       socketRef.current = null;
       pauseAudio(true);
     };
-  }, [connect, pauseAudio]);
+  }, [connect, pauseAudio, settlePendingReplayAcquire]);
 
   const onAudioEnded = useCallback(() => {
     if (readOnly || !startedAckRef.current) return;
@@ -2129,9 +2409,14 @@ export function DebateStage({
     async (action: ControlAction) => {
       if (readOnly || busyAction !== null || controlRequestRef.current !== null)
         return;
+      const replayableTerminalSource = isReplayableTerminalSource(
+        detailRef.current,
+        audioPointer,
+        debateId,
+      );
       if (
         action === "replay" &&
-        (!controllerReadyRef.current ||
+        ((!controllerReadyRef.current && !replayableTerminalSource) ||
           acquirePendingRef.current ||
           audioPointer !== debateId)
       ) {
@@ -2171,13 +2456,17 @@ export function DebateStage({
       controlRequestRef.current = requestToken;
       const requestGeneration = playbackGenerationRef.current;
       const requestTurnId = playbackRef.current.current_turn_id;
-      const requestControlVersion = playbackRef.current.control_version;
+      let requestControlVersion = playbackRef.current.control_version;
       const isCurrentRequest = () =>
         controlRequestRef.current === requestToken &&
         playbackGenerationRef.current === requestGeneration &&
         playbackRef.current.current_turn_id === requestTurnId &&
         controlVersionRef.current === requestControlVersion;
       setBusyAction(action);
+      // Publish commandBusy synchronously with the local guard. The header
+      // Finish handler reads the same authority ref, so a same-event-loop
+      // Next/Finish bypass cannot issue a second REST mutation.
+      publishAuthority({ commandBusy: true });
       setControlError(null);
       setFailure(null);
       try {
@@ -2252,16 +2541,30 @@ export function DebateStage({
         }
         if (action === "replay") {
           pendingActionRef.current = "replay";
+          if (!controllerReadyRef.current) {
+            const acquireResult = new Promise<void>((resolve, reject) => {
+              pendingReplayAcquireRef.current = { resolve, reject };
+            });
+            if (!sendControllerAcquire(true)) {
+              settlePendingReplayAcquire(
+                new Error(labelsRef.current.connectionError),
+              );
+            }
+            try {
+              await acquireResult;
+            } catch {
+              return;
+            }
+            requestControlVersion = playbackRef.current.control_version;
+          }
           const next = await api.replayDebate(
             debateId,
-            current.control_version,
+            playbackRef.current.control_version,
           );
           if (!isCurrentRequest()) return;
-          setVisible(null);
-          // Whole replay deliberately rebuilds the visible classroom prefix
-          // from replay.started events. Do not leave the historical full
-          // transcript on screen while the first retained item is loading.
-          updatePublicTurns([]);
+          // Replay is retained playback.  Keep the authoritative transcript
+          // and sources visible while the immutable catalog advances; the
+          // replay.started event moves only the current-turn highlight.
           applyPlayback(next);
           scheduleMediaPrepare();
           return;
@@ -2313,6 +2616,7 @@ export function DebateStage({
         if (controlRequestRef.current === requestToken) {
           controlRequestRef.current = null;
           setBusyAction(null);
+          publishAuthority({ commandBusy: false });
         }
       }
     },
@@ -2328,11 +2632,13 @@ export function DebateStage({
       readOnly,
       scheduleControllerAcquire,
       scheduleMediaPrepare,
+      sendControllerAcquire,
+      settlePendingReplayAcquire,
       setActiveParticipant,
       setAvatars,
       setVisible,
-      updatePublicTurns,
       pauseAudio,
+      publishAuthority,
     ],
   );
 
@@ -2377,35 +2683,26 @@ export function DebateStage({
     detailState.status === "failed" ||
     detailState.status === "stopped" ||
     (playback.mode !== "replay" && TERMINAL_PLAYBACK.includes(playback.status));
+  const replayableTerminalSource = isReplayableTerminalSource(
+    detailState,
+    audioPointer,
+    debateId,
+  );
   const canReplay =
     !readOnly &&
     audioPointer === debateId &&
-    controllerReady &&
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&
     playback.mode === "live" &&
-    playback.status === "completed";
+    playback.status === "completed" &&
+    (controllerReady || replayableTerminalSource);
   const canAdvance =
     playback.status === "waiting_next" &&
     playback.next_turn_ready &&
     controllerReady &&
     busyAction === null &&
     (playback.mode === "live" || playback.mode === "replay");
-  const canPause =
-    !readOnly &&
-    playback.mode === "live" &&
-    playback.status === "playing" &&
-    playback.current_turn_id !== null &&
-    controllerReady &&
-    busyAction === null;
-  const canResume =
-    !readOnly &&
-    playback.mode === "live" &&
-    playback.status === "paused" &&
-    playback.current_turn_id !== null &&
-    controllerReady &&
-    busyAction === null;
   const activeVisibleTurn =
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
@@ -2415,15 +2712,70 @@ export function DebateStage({
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&
     audioPointer !== debateId;
-  const visibleStatus = statusCopy(detailState.status, playback.status, labels);
+  const phase = deriveClassroomPhase(
+    detailState.status,
+    playback.status,
+    playback.mode,
+    busyAction !== null || actionInFlight,
+  );
+  const visibleStatus =
+    phase === "ready"
+      ? labels.phaseReady
+      : phase === "in_progress"
+        ? labels.phaseInProgress
+        : phase === "waiting"
+          ? labels.phaseWaiting
+          : phase === "finished"
+            ? labels.phaseFinished
+            : phase === "failed"
+              ? labels.debateFailed
+              : labels.debateStopped;
+  const terminalConnectionContext = isTerminalConnectionContext({
+    ...detailState,
+    playback,
+  });
+  const suppressConnectionUi =
+    connectionIssue === "terminal" ||
+    (terminalConnectionContext &&
+      (connectionIssue === null ||
+        connectionIssue === "network" ||
+        connectionIssue === "sequence_gap"));
+  const connectionIssueCopy =
+    connectionIssue === "superseded"
+      ? labels.connectionSuperseded
+      : connectionIssue === "session_expired"
+        ? labels.connectionSessionExpired
+        : connectionIssue === "origin_mismatch"
+          ? labels.connectionOriginMismatch
+          : connectionIssue === "sequence_gap"
+            ? labels.connectionSequenceGap
+            : connectionIssue === "network"
+              ? labels.connectionDisconnected
+              : null;
+  const connectionCopy =
+    connectionIssueCopy ??
+    (connection === "connected"
+      ? labels.connectionReady
+      : connection === "disconnected"
+        ? labels.connectionDisconnected
+        : labels.connectionReconnecting);
+  const canReconnectConnection =
+    !readOnly &&
+    connection === "disconnected" &&
+    (connectionIssue === "network" || connectionIssue === "sequence_gap");
+  const showConnectionPill =
+    !suppressConnectionUi &&
+    (connectionIssue === null || connectionIssue === "network");
 
   return (
     <section
       className={`${styles.stage}${className ? ` ${className}` : ""}`}
       data-connection={connection}
+      data-connection-reason={connectionIssue ?? "none"}
       data-last-sequence={lastSequence}
       data-playback-mode={playback.mode}
       data-playback-status={playback.status}
+      data-classroom-phase={phase}
       aria-label={labels.stageTitle}
     >
       <div className={styles.stageHeader}>
@@ -2433,31 +2785,31 @@ export function DebateStage({
           <p>{labels.stageDescription}</p>
         </div>
         <div className={styles.statusCluster}>
-          <span
-            className={styles.connectionPill}
-            data-state={connection}
-            role="status"
-          >
-            {connection === "connected"
-              ? labels.connectionReady
-              : connection === "connecting"
-                ? labels.connectionReconnecting
-                : connection === "reconnecting"
-                  ? labels.connectionReconnecting
-                  : labels.connectionDisconnected}
+          {showConnectionPill ? (
+            <span
+              className={styles.connectionPill}
+              data-state={connection}
+              role="status"
+            >
+              {connectionCopy}
+            </span>
+          ) : null}
+          <span className={styles.playbackStatus} data-phase={phase}>
+            {visibleStatus}
           </span>
-          <span className={styles.playbackStatus}>{visibleStatus}</span>
         </div>
       </div>
 
-      {connection !== "connected" ? (
+      {!suppressConnectionUi && connection !== "connected" ? (
         <div className={styles.connectionOverlay} role="status">
           <span className={styles.overlayDot} aria-hidden="true" />
-          {connection === "disconnected"
-            ? labels.connectionDisconnected
-            : labels.connectionReconnecting}
-          <small>{labels.connectionWaiting}</small>
-          {!readOnly && connection === "disconnected" ? (
+          {connectionCopy}
+          {connectionIssue === null ||
+          connectionIssue === "network" ||
+          connectionIssue === "sequence_gap" ? (
+            <small>{labels.connectionWaiting}</small>
+          ) : null}
+          {canReconnectConnection ? (
             <button
               className={styles.reconnectButton}
               type="button"
@@ -2559,7 +2911,9 @@ export function DebateStage({
                   ? labels.debateFailed
                   : detailState.status === "stopped"
                     ? labels.debateStopped
-                    : labels.debateComplete
+                    : playback.status === "completed"
+                      ? labels.debateComplete
+                      : labels.phaseFinished
                 : playback.status === "waiting_next"
                   ? labels.waitingNext
                   : playback.status === "ready" ||
@@ -2644,20 +2998,6 @@ export function DebateStage({
             >
               {labels.next}
             </button>
-            {playback.status === "playing" || playback.status === "paused" ? (
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={playback.status === "paused" ? !canResume : !canPause}
-                onClick={() =>
-                  void runControl(
-                    playback.status === "paused" ? "resume" : "pause",
-                  )
-                }
-              >
-                {playback.status === "paused" ? labels.resume : labels.pause}
-              </button>
-            ) : null}
             <button
               className="secondary-action"
               type="button"
@@ -2672,7 +3012,15 @@ export function DebateStage({
               {labels.controlBusy}
             </p>
           ) : null}
-          {!controllerReady && detailState.status !== "draft" ? (
+          {!controllerReady &&
+          detailState.status !== "draft" &&
+          detailState.status !== "stopped" &&
+          detailState.status !== "failed" &&
+          !isProductTerminalDetail(detailState) &&
+          connectionIssue !== "superseded" &&
+          connectionIssue !== "terminal" &&
+          connectionIssue !== "session_expired" &&
+          connectionIssue !== "origin_mismatch" ? (
             <p className={styles.controllerMessage} role="status">
               {labels.controllerWaiting}
             </p>

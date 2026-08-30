@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiErrorMessage } from "../../lib/api";
+import { LanguageSwitcher, useLocale } from "../locale";
 import type { AudienceInteractionApi } from "./types";
 import styles from "./interaction.module.css";
 
@@ -86,6 +87,7 @@ export function AudienceInteractionForm({
   accessToken,
   api = browserAudienceApi,
 }: AudienceInteractionFormProps) {
+  const { t } = useLocale();
   const [form, setForm] = useState<Awaited<
     ReturnType<AudienceInteractionApi["getForm"]>
   > | null>(null);
@@ -136,22 +138,19 @@ export function AudienceInteractionForm({
   if (loading) {
     return (
       <main className={styles.audiencePage}>
-        <p role="status">Loading classroom… / 正在加载课堂…</p>
+        <LanguageSwitcher />
+        <p role="status">{t("audienceLoading")}</p>
       </main>
     );
   }
   if (loadError || !form) {
     return (
       <main className={styles.audiencePage}>
+        <LanguageSwitcher />
         <section className={styles.audienceCard} role="alert">
-          <span className={styles.eyebrow}>Maya classroom</span>
-          <h1>Collection unavailable / 互动不可用</h1>
-          <p>
-            {apiErrorMessage(
-              loadError,
-              "This classroom link is invalid or has ended.",
-            )}
-          </p>
+          <span className={styles.eyebrow}>{t("appName")}</span>
+          <h1>{t("audienceUnavailable")}</h1>
+          <p>{apiErrorMessage(loadError, t("audienceUnavailableHint"))}</p>
         </section>
       </main>
     );
@@ -163,13 +162,12 @@ export function AudienceInteractionForm({
   if (bothSucceeded) {
     return (
       <main className={styles.audiencePage}>
+        <LanguageSwitcher />
         <section className={styles.audienceCard}>
-          <span className={styles.eyebrow}>Maya classroom</span>
-          <h1>Submitted successfully / 提交成功</h1>
+          <span className={styles.eyebrow}>{t("appName")}</span>
+          <h1>{t("audienceSubmitted")}</h1>
           <p className={styles.success} role="status">
-            Your anonymous vote and barrage were received. Refresh the page only
-            if you need a new classroom submission. /
-            匿名投票和弹幕均已收到；只有刷新页面后才可重新参与。
+            {t("audienceSubmittedHint")}
           </p>
         </section>
       </main>
@@ -215,21 +213,18 @@ export function AudienceInteractionForm({
 
   return (
     <main className={styles.audiencePage}>
+      <LanguageSwitcher />
       <section className={styles.audienceCard}>
-        <span className={styles.eyebrow}>
-          Maya classroom · anonymous audience
-        </span>
+        <span className={styles.eyebrow}>{t("audienceEyebrow")}</span>
         <h1>{form.topic}</h1>
-        <p className={styles.audienceLede}>
-          Join the discussion without an account. / 无需账号即可参与课堂。
-        </p>
+        <p className={styles.audienceLede}>{t("audienceLede")}</p>
 
         <label className={styles.field}>
-          <span>Nickname for barrages / 弹幕昵称</span>
+          <span>{t("audienceNickname")}</span>
           <input
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
-            placeholder="Your display name / 你的昵称"
+            placeholder={t("audienceNicknamePlaceholder")}
             autoComplete="nickname"
             disabled={barragePayload !== null}
           />
@@ -239,14 +234,12 @@ export function AudienceInteractionForm({
           <div className={styles.audienceSections}>
             <section className={styles.audienceSection}>
               <div className={styles.sectionHeading}>
-                <span>Vote / 投票</span>
+                <span>{t("audienceVote")}</span>
                 {voteState === "success" ? (
-                  <strong>Submitted / 已提交</strong>
+                  <strong>{t("audienceVoteSubmitted")}</strong>
                 ) : null}
               </div>
-              <p>
-                Which perspective helped you think further? / 哪个观点最启发你？
-              </p>
+              <p>{t("audienceVoteQuestion")}</p>
               <div className={styles.participantChoices}>
                 {form.participants.map((participant) => (
                   <label
@@ -282,8 +275,8 @@ export function AudienceInteractionForm({
                 onClick={() => void submitVote()}
               >
                 {voteState === "busy"
-                  ? "Submitting…"
-                  : "Submit anonymous vote / 提交匿名投票"}
+                  ? t("audienceSubmitting")
+                  : t("audienceVoteSubmit")}
               </button>
               {voteError ? (
                 <p className={styles.error}>{apiErrorMessage(voteError)}</p>
@@ -292,19 +285,17 @@ export function AudienceInteractionForm({
 
             <section className={styles.audienceSection}>
               <div className={styles.sectionHeading}>
-                <span>Barrage / 弹幕</span>
+                <span>{t("audienceBarrage")}</span>
                 {barrageState === "success" ? (
-                  <strong>Submitted / 已提交</strong>
+                  <strong>{t("audienceBarrageSubmitted")}</strong>
                 ) : null}
               </div>
-              <p>
-                Your raw message appears on the teacher screen. /
-                原文会显示在教师大屏。
-              </p>
+              <p>{t("audienceBarrageHint")}</p>
               <textarea
+                aria-label={t("audienceBarrage")}
                 value={barrageText}
                 onChange={(event) => setBarrageText(event.target.value)}
-                placeholder="Share a thought or question / 分享想法或问题"
+                placeholder={t("audienceBarragePlaceholder")}
                 rows={5}
                 disabled={
                   !canInteract ||
@@ -321,8 +312,8 @@ export function AudienceInteractionForm({
                 onClick={() => void submitBarrage()}
               >
                 {barrageState === "busy"
-                  ? "Sending…"
-                  : "Send barrage / 发送弹幕"}
+                  ? t("audienceSending")
+                  : t("audienceBarrageSend")}
               </button>
               {barrageError ? (
                 <p className={styles.error}>{apiErrorMessage(barrageError)}</p>
@@ -332,9 +323,7 @@ export function AudienceInteractionForm({
         ) : null}
 
         {!canInteract ? (
-          <p className={styles.helper}>
-            Enter a nickname to unlock both areas. / 输入昵称后即可参与。
-          </p>
+          <p className={styles.helper}>{t("audienceEnterNickname")}</p>
         ) : null}
       </section>
     </main>

@@ -6,7 +6,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Protocol, cast
 
+from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
+
 from .fencing import GenerationFence, GenerationFenceError, TurnClaim
+from .policy import RULE_SET_ID, SUPPORTED_RULE_SET_IDS
 from .prompts import make_turn_prompt_input
 from .retrieval import (
     RAGRetrievalError,
@@ -78,11 +81,19 @@ class TurnGenerationService:
         *,
         validator: TurnValidator | None = None,
         fence: GenerationFence | None = None,
+        rule_set_id: str = RULE_SET_ID,
+        mock_retrieval_policy_id: str | None = None,
     ) -> None:
+        if rule_set_id not in SUPPORTED_RULE_SET_IDS:
+            raise ValueError("unsupported Debate rule set")
+        if mock_retrieval_policy_id not in {None, MOCK_LEXICAL_ANCHOR_POLICY_ID}:
+            raise ValueError("unsupported Mock retrieval policy")
         self.retriever = retriever
         self.llm = llm
         self.validator = validator or TurnValidator()
         self.fence = fence
+        self.rule_set_id = rule_set_id
+        self.mock_retrieval_policy_id = mock_retrieval_policy_id
 
     def generate(
         self,
@@ -96,10 +107,23 @@ class TurnGenerationService:
             attempt_record = GenerationAttempt(attempt=attempt)
             try:
                 subqueries = build_turn_subqueries(context)
-                retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
+                if self.mock_retrieval_policy_id is None:
+                    retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
+                elif isinstance(self.retriever, SnapshotRetriever):
+                    retrieval = self.retriever.retrieve(
+                        context.participant.snapshot_id,
+                        subqueries,
+                        policy_id=self.mock_retrieval_policy_id,
+                        topic_anchor=context.topic,
+                    )
+                else:
+                    raise RAGRetrievalError(
+                        "The Mock lexical policy requires the snapshot retriever.",
+                        technical=False,
+                    )
                 receipts = self._receipts(retrieval)
                 attempt_record = replace(attempt_record, retrieval_count=len(receipts))
-                prompt = make_turn_prompt_input(context, receipts)
+                prompt = make_turn_prompt_input(context, receipts, rule_set_id=self.rule_set_id)
                 if self.fence is not None:
                     active_claim = self._claim_for_attempt(
                         context,

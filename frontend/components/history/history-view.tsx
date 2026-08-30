@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { statusLabel } from "../../lib/i18n";
 import { useLocale } from "../locale";
 import type {
   HistoryInteraction,
@@ -27,8 +28,11 @@ function statusClass(status: string): string {
 }
 
 function Status({ status }: { status: string }) {
+  const { locale } = useLocale();
   return (
-    <span className={`${styles.status} ${statusClass(status)}`}>{status}</span>
+    <span className={`${styles.status} ${statusClass(status)}`}>
+      {statusLabel(status, locale)}
+    </span>
   );
 }
 
@@ -100,7 +104,13 @@ export function TranscriptHistory({
                 </span>
               ) : null}
               {turn.sources.length > 0 ? (
-                <ul className={styles.sources} aria-label="Sources / 来源">
+                <ul
+                  className={styles.sources}
+                  aria-label={label(locale, {
+                    en: "Sources",
+                    zh: "来源",
+                  })}
+                >
                   {turn.sources.map((source) => (
                     <li
                       className={styles.source}

@@ -43,6 +43,7 @@ from app.core.models import (
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.schemas import (
+    RULE_SET_ID,
     DebateDetail,
     DebateDraftRequest,
     DebateSummary,
@@ -793,7 +794,7 @@ def create_debate_draft(
         id=str(uuid4()),
         course_id=course_id,
         topic=topic,
-        rule_set_id="ordered_multi_agent_rounds_demo_v1",
+        rule_set_id=RULE_SET_ID,
         rule_snapshot_json=canonical_rule_snapshot_json(),
         status="draft",
         revision=0,

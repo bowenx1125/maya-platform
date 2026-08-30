@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { statusLabel } from "../../lib/i18n";
+import { useLocale } from "../locale";
 import { QrCode } from "./qr-code";
 import type { TeacherInteractionPanelProps } from "./types";
 import styles from "./interaction.module.css";
@@ -15,6 +17,7 @@ export function TeacherInteractionPanel({
   onOpen,
   onClose,
 }: TeacherInteractionPanelProps) {
+  const { locale, t } = useLocale();
   const participantById = new Map(
     participants.map((participant) => [participant.id, participant]),
   );
@@ -24,10 +27,10 @@ export function TeacherInteractionPanel({
   );
   const title =
     interaction.status === "closed"
-      ? "Classroom interaction / 课堂互动"
+      ? t("interactionTitleClosed")
       : interaction.status === "open"
-        ? "Live classroom interaction / 课堂互动进行中"
-        : "Interaction finalized / 互动已结束";
+        ? t("interactionTitleOpen")
+        : t("interactionTitleFinalized");
 
   return (
     <section
@@ -37,12 +40,12 @@ export function TeacherInteractionPanel({
     >
       <div className={styles.panelHeader}>
         <div>
-          <span className={styles.eyebrow}>M13 · anonymous audience</span>
+          <span className={styles.eyebrow}>{t("interactionEyebrow")}</span>
           <h2>{title}</h2>
-          <p>Votes and barrages are independent. / 投票与弹幕相互独立。</p>
+          <p>{t("interactionBoundary")}</p>
         </div>
         <span className={styles.status} data-status={interaction.status}>
-          {interaction.status}
+          {statusLabel(interaction.status, locale)}
         </span>
       </div>
 
@@ -60,14 +63,9 @@ export function TeacherInteractionPanel({
             disabled={busy}
             onClick={onOpen}
           >
-            {busy
-              ? "Opening… / 正在打开…"
-              : "Open classroom interaction / 打开互动"}
+            {busy ? t("interactionOpening") : t("interactionOpen")}
           </button>
-          <p className={styles.helper}>
-            Available only after every debate turn is public and playback is
-            complete. / 仅在全部发言公开且播放完成后可用。
-          </p>
+          <p className={styles.helper}>{t("interactionAvailability")}</p>
         </div>
       ) : null}
 
@@ -77,7 +75,7 @@ export function TeacherInteractionPanel({
             {interaction.public_url ? (
               <QrCode
                 value={interaction.public_url}
-                label="Scan to join / 扫码加入"
+                label={t("interactionScan")}
               />
             ) : null}
             <button
@@ -86,9 +84,7 @@ export function TeacherInteractionPanel({
               disabled={busy}
               onClick={onClose}
             >
-              {busy
-                ? "Closing… / 正在结束…"
-                : "End collection & prepare report / 结束收集并生成报告"}
+              {busy ? t("interactionClosing") : t("interactionClose")}
             </button>
           </div>
           <BarrageFeed barrages={interaction.barrages} />
@@ -109,8 +105,7 @@ export function TeacherInteractionPanel({
           />
           <BarrageFeed barrages={interaction.barrages} />
           <p className={styles.finalizedNote}>
-            The input snapshot is immutable; insight/report generation may now
-            continue. / 输入快照已冻结，洞察和报告可以继续生成。
+            {t("interactionFinalizedNote")}
           </p>
         </div>
       ) : null}
@@ -127,10 +122,11 @@ function InteractionTotals({
   totalVotes: number;
   participantById: Map<string, { name: string; slot: string }>;
 }) {
+  const { t } = useLocale();
   return (
     <div className={styles.totals}>
       <div className={styles.sectionHeading}>
-        <span>Live vote / 实时投票</span>
+        <span>{t("interactionLiveVote")}</span>
         <strong>{totalVotes}</strong>
       </div>
       <div className={styles.voteList}>
@@ -162,6 +158,7 @@ function BarrageFeed({
 }: {
   barrages: TeacherInteractionPanelProps["interaction"]["barrages"];
 }) {
+  const { locale, t } = useLocale();
   const feedRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
 
@@ -184,14 +181,14 @@ function BarrageFeed({
   return (
     <div className={styles.barragePanel}>
       <div className={styles.sectionHeading}>
-        <span>Raw barrages / 原始弹幕</span>
+        <span>{t("interactionRawBarrages")}</span>
         <strong>{barrages.length}</strong>
       </div>
       <div
         ref={feedRef}
         className={styles.barrageFeed}
         aria-live="polite"
-        aria-label="Raw classroom barrages"
+        aria-label={t("interactionRawBarrages")}
         tabIndex={0}
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
@@ -199,7 +196,7 @@ function BarrageFeed({
         onBlur={() => setPaused(false)}
       >
         {barrages.length === 0 ? (
-          <p className={styles.empty}>No messages yet. / 暂无弹幕。</p>
+          <p className={styles.empty}>{t("interactionNoMessages")}</p>
         ) : (
           barrages.map((barrage) => (
             <article className={styles.barrage} key={barrage.id}>

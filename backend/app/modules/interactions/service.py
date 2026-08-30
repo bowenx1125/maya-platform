@@ -41,6 +41,7 @@ from app.modules.debates.models import (
     DebateTurn,
     PlaybackState,
 )
+from app.modules.debates.playback.eligibility import has_complete_finished_playback
 
 from .models import (
     BarrageMessage,
@@ -241,7 +242,13 @@ def _window_token(settings: Settings, token: str) -> ClassroomToken:
     return parsed
 
 
-def _require_teacher(session: Session, actor_user_id: str, debate_id: str) -> Debate:
+def _require_teacher(
+    session: Session,
+    actor_user_id: str,
+    debate_id: str,
+    *,
+    require_complete_finished: bool = False,
+) -> Debate:
     debate = session.get(Debate, debate_id)
     if debate is None:
         raise not_found()
@@ -256,11 +263,14 @@ def _require_teacher(session: Session, actor_user_id: str, debate_id: str) -> De
         raise not_found()
     if role != "teacher":
         raise forbidden()
-    # ``stopped`` is also the persisted marker for a partial Finish.  Keep
-    # the immutable turn rows for audit, but fail closed for every classroom
-    # interaction read/write so a partial run cannot enter the downstream
-    # pipeline.
-    if debate.status == "stopped":
+    # A partial Finish is product-level ``debate_finished`` but playback
+    # remains stopped. Read projections opt into the complete public two-round
+    # plan gate; the open mutation keeps its own invalid_state response.
+    if debate.status == "stopped" or (
+        require_complete_finished
+        and debate.status in {"debate_finished", "completed"}
+        and not has_complete_finished_playback(session, debate_id)
+    ):
         raise not_found()
     return debate
 
@@ -759,7 +769,12 @@ class InteractionService:
         self, *, actor_user_id: str, debate_id: str
     ) -> TeacherInteractionProjection:
         with self.session_factory() as session:
-            _require_teacher(session, actor_user_id, debate_id)
+            _require_teacher(
+                session,
+                actor_user_id,
+                debate_id,
+                require_complete_finished=True,
+            )
             window = _window_for_debate(session, debate_id)
             return _teacher_projection(session, self.settings, window)
 

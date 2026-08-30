@@ -13,6 +13,7 @@ import type {
   PlaybackSocket,
 } from "../components/debate/stage";
 import type { DebateDetail, DebatePlaybackState } from "../lib/api";
+import { PlatformApiError } from "../lib/api";
 import {
   DebateStage,
   consumeEventSequence,
@@ -36,6 +37,7 @@ vi.mock("../components/avatar/avatar-preview", () => ({
 const debateId = "20000000-0000-4000-8000-000000000001";
 const turnId = "40000000-0000-4000-8000-000000000001";
 const nextTurnId = "40000000-0000-4000-8000-000000000002";
+const finalTurnId = "40000000-0000-4000-8000-000000000004";
 const participantAId = "30000000-0000-4000-8000-000000000001";
 const participantBId = "30000000-0000-4000-8000-000000000002";
 const epoch = "50000000-0000-4000-8000-000000000001";
@@ -147,7 +149,17 @@ class TestSocket implements PlaybackSocket {
     const event =
       type === "message"
         ? new MessageEvent(type, { data: JSON.stringify(value) })
-        : new Event(type);
+        : type === "close"
+          ? ({
+              type,
+              code:
+                typeof value === "number"
+                  ? value
+                  : typeof value === "object" && value && "code" in value
+                    ? Number(value.code)
+                    : 0,
+            } as unknown as Event)
+          : new Event(type);
     this.listeners.get(type)?.forEach((listener) => listener(event));
   }
 
@@ -232,6 +244,32 @@ function snapshotPayload(
     },
     latest_sequence: 0,
   };
+}
+
+function finalLiveDetail(): DebateDetail {
+  const turns = [
+    [turnId, participantAId, 1, 0],
+    [nextTurnId, participantBId, 1, 1],
+    ["40000000-0000-4000-8000-000000000003", participantAId, 2, 2],
+    [finalTurnId, participantBId, 2, 3],
+  ].map(([id, participantId, roundNo, turnIndex]) => ({
+    id: String(id),
+    participant_id: String(participantId),
+    round_no: Number(roundNo),
+    turn_index: Number(turnIndex),
+    speech: `Published speech ${Number(turnIndex) + 1}.`,
+    retrieval_status: "matched" as const,
+    grounding_mode: "mixed" as const,
+    sources: [],
+  }));
+  const initial = detail({ public_turns: turns });
+  initial.playback = {
+    ...initial.playback,
+    status: "playing",
+    mode: "live",
+    current_turn_id: finalTurnId,
+  };
+  return initial;
 }
 
 afterEach(() => {
@@ -490,9 +528,10 @@ describe("Wave 2 M12 playback stage", () => {
       }),
     );
     expect(screen.getAllByText("The first public speech.")).not.toHaveLength(0);
-    expect(
-      screen.getByRole("button", { name: "Next / 下一步" }),
-    ).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Next" })).toHaveProperty(
+      "disabled",
+      true,
+    );
 
     socket.emit(
       "message",
@@ -505,12 +544,10 @@ describe("Wave 2 M12 playback stage", () => {
     );
     await waitFor(() =>
       expect(
-        screen
-          .getByRole("button", { name: "Next / 下一步" })
-          .hasAttribute("disabled"),
+        screen.getByRole("button", { name: "Next" }).hasAttribute("disabled"),
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Next / 下一步" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(api.advanceDebatePlayback).toHaveBeenCalledWith(debateId, {
         expected_control_version: 3,
@@ -578,7 +615,347 @@ describe("Wave 2 M12 playback stage", () => {
     ).toBe(true);
   });
 
-  it("waits for controller acquisition before dispatching whole replay", async () => {
+  it("hides connection chrome for an authoritative terminal revocation", async () => {
+    const initial = detail();
+    const socket = new TestSocket();
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000021",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      control_version: 0,
+    });
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000022",
+      message_type: "controller.revoked",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      reason: "debate_terminal",
+    });
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-connection-reason="terminal"]'),
+      ).toBeTruthy(),
+    );
+    expect(container.querySelector("[data-state]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+    expect(screen.queryByText("Connection lost")).toBeNull();
+    socket.emit("message", envelope("debate.stopped", 1, {}));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(1);
+  });
+
+  it("acquires one Replay controller when completion precedes debate_terminal revocation", async () => {
+    const initial = finalLiveDetail();
+    const socket = new TestSocket();
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(1),
+    );
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000025",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      control_version: 0,
+    });
+    socket.emit(
+      "message",
+      envelope("playback.completed", 1, {
+        turn_id: finalTurnId,
+        control_version: 0,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-playback-status="completed"]'),
+      ).toBeTruthy(),
+    );
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000026",
+      message_type: "controller.revoked",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      reason: "debate_terminal",
+    });
+
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(2),
+    );
+    expect(
+      container.querySelector('[data-connection="connected"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-connection-reason="none"]'),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+  });
+
+  it("waits for authoritative completion when debate_terminal revocation wins the race", async () => {
+    const initial = finalLiveDetail();
+    const socket = new TestSocket();
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(1),
+    );
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000027",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      control_version: 0,
+    });
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000028",
+      message_type: "controller.revoked",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      reason: "debate_terminal",
+    });
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-connection-reason="terminal"]'),
+      ).toBeTruthy(),
+    );
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(1);
+
+    socket.emit(
+      "message",
+      envelope("playback.completed", 1, {
+        turn_id: finalTurnId,
+        control_version: 0,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(2),
+    );
+    expect(
+      container.querySelector('[data-connection="connected"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-connection-reason="none"]'),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+  });
+
+  it("shows superseded without reconnecting or reacquiring control", async () => {
+    const retainedSpeech = "This published speech and its source stay visible.";
+    const initial = detail({
+      public_turns: [
+        {
+          id: turnId,
+          participant_id: participantAId,
+          round_no: 1,
+          turn_index: 0,
+          speech: retainedSpeech,
+          retrieval_status: "matched",
+          grounding_mode: "mixed",
+          sources: [{ source_filename: "retained-source.md" }],
+        },
+      ],
+    });
+    initial.playback = {
+      ...initial.playback,
+      status: "playing",
+      current_turn_id: turnId,
+    };
+    const socket = new TestSocket();
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000023",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      control_version: 0,
+    });
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(1),
+    );
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000024",
+      message_type: "controller.revoked",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      reason: "superseded",
+    });
+    socket.emit("message", {
+      ...envelope("snapshot", 1, {
+        ...snapshotPayload(initial.playback),
+        latest_sequence: 1,
+        public_turns: initial.public_turns,
+      }),
+    });
+
+    expect(
+      await screen.findAllByText(/Another teacher page has taken control/),
+    ).not.toHaveLength(0);
+    expect(screen.getAllByText(retainedSpeech)).not.toHaveLength(0);
+    expect(screen.getByText("retained-source.md")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      socket
+        .commands()
+        .filter(
+          (command) => command.command_type === "playback.controller.acquire",
+        ),
+    ).toHaveLength(1);
+    expect(
+      container.querySelector('[data-connection-reason="superseded"]'),
+    ).toBeTruthy();
+  });
+
+  it("maps 4401 and 4403 exactly, lets close win after error, and offers no reconnect", async () => {
+    const initial = detail({ status: "completed" });
+    const firstSocket = new TestSocket();
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => firstSocket}
+      />,
+    );
+
+    await waitFor(() => expect(firstSocket.hasListeners("open")).toBe(true));
+    firstSocket.emit("error");
+    firstSocket.emit("close", 4401);
+    expect(
+      await screen.findAllByText(
+        /Your login has expired\. Please sign in again/,
+      ),
+    ).not.toHaveLength(0);
+    expect(
+      container.querySelector('[data-connection-reason="session_expired"]'),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+
+    cleanup();
+    const secondSocket = new TestSocket();
+    const secondRender = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => secondSocket}
+      />,
+    );
+    await waitFor(() => expect(secondSocket.hasListeners("open")).toBe(true));
+    secondSocket.emit("error");
+    secondSocket.emit("close", 4403);
+    expect(
+      await screen.findAllByText(/classroom address does not match/),
+    ).not.toHaveLength(0);
+    expect(
+      secondRender.container.querySelector(
+        '[data-connection-reason="origin_mismatch"]',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+  });
+
+  it("does not auto acquire but replays on demand after a finished reload", async () => {
     const initial = detail({
       status: "completed",
       public_turns: [
@@ -612,7 +989,7 @@ describe("Wave 2 M12 playback stage", () => {
     const socket = new TestSocket();
     const api = fakeApi(initial);
     api.replayDebate = vi.fn().mockResolvedValue(replayState);
-    render(
+    const { container } = render(
       <DebateStage
         api={api}
         debateId={debateId}
@@ -622,13 +999,33 @@ describe("Wave 2 M12 playback stage", () => {
       />,
     );
 
+    expect(container.querySelector("[data-state]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
     socket.emit("open");
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(0),
+    );
     const replayButton = screen.getByRole("button", {
       name: "Replay whole debate",
     });
-    expect((replayButton as HTMLButtonElement).disabled).toBe(true);
+    expect((replayButton as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(replayButton);
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(1),
+    );
     expect(api.replayDebate).not.toHaveBeenCalled();
 
     socket.emit("message", {
@@ -641,10 +1038,6 @@ describe("Wave 2 M12 playback stage", () => {
       controller_epoch: epoch,
       control_version: 0,
     });
-    await waitFor(() =>
-      expect((replayButton as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(replayButton);
     await waitFor(() =>
       expect(api.replayDebate).toHaveBeenCalledWith(debateId, 0),
     );
@@ -1018,10 +1411,21 @@ describe("Wave 2 M12 playback stage", () => {
     firstSocket.emit("close");
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(refreshSnapshot).not.toHaveBeenCalled();
+    expect(socketFactory).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("Connection lost")).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: /Reconnect/ }));
     await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(secondSocket.hasListeners("open")).toBe(true));
     secondSocket.emit("open");
+    await waitFor(() =>
+      expect(
+        secondSocket
+          .commands()
+          .filter(
+            (command) => command.command_type === "playback.controller.acquire",
+          ),
+      ).toHaveLength(1),
+    );
     secondSocket.emit("message", {
       message_id: "91000000-0000-4000-8000-000000000041",
       message_type: "controller.acquired",
@@ -1037,7 +1441,7 @@ describe("Wave 2 M12 playback stage", () => {
         .commands()
         .filter((command) => command.command_type === "playback.media.prepare"),
     ).toHaveLength(0);
-    const nextButton = screen.getByRole("button", { name: "Next / 下一步" });
+    const nextButton = screen.getByRole("button", { name: "Next" });
     await waitFor(() => expect(nextButton).toHaveProperty("disabled", false));
     fireEvent.click(nextButton);
     await waitFor(() =>
@@ -1059,6 +1463,94 @@ describe("Wave 2 M12 playback stage", () => {
         .commands()
         .filter((command) => command.command_type === "playback.media.prepare"),
     ).toHaveLength(1);
+  });
+
+  it("maps a manual reconnect HTTP 401 to session expired without opening another socket", async () => {
+    const initial = detail();
+    const socket = new TestSocket();
+    const socketFactory = vi.fn(() => socket);
+    const refreshSnapshot = vi
+      .fn()
+      .mockRejectedValue(
+        new PlatformApiError(401, "Authentication is required."),
+      );
+    const authorities: Array<{
+      connectionIssue: string | null;
+      controllerReady: boolean;
+    }> = [];
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        refreshSnapshot={refreshSnapshot}
+        socketFactory={socketFactory}
+        onAuthorityChange={(authority) => authorities.push(authority)}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    socket.emit("message", {
+      message_id: "91000000-0000-4000-8000-000000000042",
+      message_type: "controller.acquired",
+      result_version: 1,
+      debate_id: debateId,
+      occurred_at: "2026-08-27T00:00:00Z",
+      controller_epoch: epoch,
+      control_version: 0,
+    });
+    socket.emit("close");
+    fireEvent.click(await screen.findByRole("button", { name: /Reconnect/ }));
+
+    expect(
+      await screen.findAllByText(
+        /Your login has expired\. Please sign in again/,
+      ),
+    ).not.toHaveLength(0);
+    expect(refreshSnapshot).toHaveBeenCalledTimes(1);
+    expect(socketFactory).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
+    expect(screen.queryByText("Authentication is required.")).toBeNull();
+    expect(
+      container.querySelector('[data-connection-reason="session_expired"]'),
+    ).toBeTruthy();
+    expect(authorities.at(-1)).toMatchObject({
+      connectionIssue: "session_expired",
+      controllerReady: false,
+    });
+  });
+
+  it("does not misclassify a reconnect HTTP 403 as an origin mismatch", async () => {
+    const initial = detail();
+    const socket = new TestSocket();
+    const refreshSnapshot = vi
+      .fn()
+      .mockRejectedValue(new PlatformApiError(403, "Access is forbidden."));
+    const { container } = render(
+      <DebateStage
+        api={fakeApi(initial)}
+        debateId={debateId}
+        detail={initial}
+        refreshSnapshot={refreshSnapshot}
+        socketFactory={() => socket}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    socket.emit("open");
+    socket.emit("close");
+    fireEvent.click(await screen.findByRole("button", { name: /Reconnect/ }));
+
+    await screen.findByText("Access is forbidden.");
+    expect(
+      container.querySelector('[data-connection-reason="network"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-connection-reason="origin_mismatch"]'),
+    ).toBeNull();
+    expect(screen.queryByText(/classroom address does not match/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Reconnect/ })).toBeTruthy();
   });
 
   it("keeps one socket when static locale labels change", async () => {
@@ -1285,12 +1777,7 @@ describe("Wave 2 M12 playback stage", () => {
     socket.emit("open");
     expect(
       screen.getAllByRole("button").map((button) => button.textContent),
-    ).toEqual([
-      "Start debate",
-      "Next / 下一步",
-      "Pause / 暂停",
-      "Replay whole debate",
-    ]);
+    ).toEqual(["Start debate", "Next", "Replay whole debate"]);
     socket.emit(
       "message",
       envelope("playback.started", 2, {
@@ -1306,6 +1793,10 @@ describe("Wave 2 M12 playback stage", () => {
     expect(
       document.querySelector('[data-connection="disconnected"]'),
     ).toBeTruthy();
+    expect(
+      screen.getAllByText(/Classroom state needs to be resynchronized/),
+    ).not.toHaveLength(0);
+    expect(screen.queryByText("Connection lost")).toBeNull();
     expect(screen.getByRole("button", { name: /Reconnect/ })).toBeTruthy();
   });
 
@@ -1410,9 +1901,10 @@ describe("Wave 2 M12 playback stage", () => {
         .commands()
         .filter((command) => command.command_type === "playback.media.prepare"),
     ).toHaveLength(1);
-    expect(
-      screen.getByRole("button", { name: "Next / 下一步" }),
-    ).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Next" })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 
   it("enables bilingual Next only for live ready waiting state and locks while busy", async () => {
@@ -1442,7 +1934,7 @@ describe("Wave 2 M12 playback stage", () => {
     );
 
     const nextButton = screen.getByRole("button", {
-      name: "Next / 下一步",
+      name: "Next",
     }) as HTMLButtonElement;
     expect(nextButton.disabled).toBe(true);
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));

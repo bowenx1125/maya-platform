@@ -2327,7 +2327,13 @@ class PlaybackService:
                         debate_id,
                         "debate.started",
                         {
-                            "rule_set_id": "ordered_multi_agent_rounds_demo_v1",
+                            "rule_set_id": str(
+                                self._get(
+                                    debate,
+                                    "rule_set_id",
+                                    default="ordered_multi_agent_rounds_demo_v1",
+                                )
+                            ),
                             "participants": participant_payload,
                         },
                     )
@@ -2632,11 +2638,11 @@ class PlaybackService:
         """Finish a Debate as full or partial under one teacher CAS.
 
         A full finish requires every planned turn to be final-ready and
-        already public.  A partial finish is intentionally represented by the
-        existing ``stopped`` Debate status so older list/detail contracts stay
-        stable; immutable generated/public turns remain in the database but
-        all downstream interaction/report/history/replay routes can fail
-        closed on that status.
+        already public. An explicit early Finish is represented by the
+        product-level ``debate_finished`` status while playback remains
+        terminal ``stopped``; immutable generated/public turns remain in the
+        database and downstream routes must still enforce the complete-plan
+        gate.
         """
 
         record: Any | None = None
@@ -2675,6 +2681,10 @@ class PlaybackService:
                 )
             if str(self._get(debate, "status", default="")) != "running":
                 raise invalid_state("Only a running debate can be finished.")
+            if state.status != "waiting_next" or state.mode != "live":
+                raise invalid_state(
+                    "A debate can be finished only while waiting for the teacher's next command."
+                )
 
             turns = self._turns(db, debate)
             total = len(turns)
@@ -2713,7 +2723,15 @@ class PlaybackService:
             else:
                 partial = not is_full
                 if partial:
-                    debate.status = "stopped"
+                    # A teacher's explicit early Finish is a product-level
+                    # finished state, while playback remains terminal/stopped
+                    # so all downstream complete-plan gates stay closed.
+                    debate.status = "debate_finished"
+                    timestamp = datetime.now(UTC)
+                    if hasattr(debate, "finished_at"):
+                        debate.finished_at = timestamp
+                    if hasattr(debate, "updated_at"):
+                        debate.updated_at = timestamp
                     debate.cancellation_generation = (
                         int(self._get(debate, "cancellation_generation", default=0) or 0) + 1
                     )
@@ -2754,7 +2772,7 @@ class PlaybackService:
                     "debate.stopped",
                     {
                         "final_states": {
-                            "debate": "stopped",
+                            "debate": "debate_finished",
                             "playback": self._state_dto(state, db, debate).model_dump(mode="json"),
                             "interaction": "closed",
                             "insight": "not_started",
@@ -3364,6 +3382,12 @@ class PlaybackService:
                 raise invalid_state("Replay is available only after the debate finishes.")
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
+            # Product-level ``debate_finished`` also represents an early
+            # Finish. Its playback is terminal ``stopped`` and is not a
+            # replayable complete plan; only the normal completed/live state
+            # can enter the retained Replay catalog.
+            if state.status != "completed" or state.mode != "live":
+                raise invalid_state("Replay is available only after playback completes.")
             strict_retention = not isinstance(self.repository, MemoryPlaybackRepository) or (
                 self.audio_store is not None
             )
@@ -4074,6 +4098,16 @@ class PlaybackService:
                 else:
                     self._set_nonplaying(state, "completed", cursor)
                     debate.status = "debate_finished"
+                    # Natural live completion is a terminal controller
+                    # boundary, just like final replay completion and an
+                    # explicit Finish.  Capture the old epoch before clearing
+                    # every durable/process-local owner so the committed
+                    # completion can notify and fence that tab afterwards.
+                    completed_epoch = state.controller_epoch
+                    state.controller_epoch = None
+                    state.controller_session_hash = None
+                    state.controller_connection_id = None
+                    self._controller_sessions.pop(debate_id, None)
                     self.repository.save_debate(db, debate)
                     self._save(db, debate, state)
                     payload = {
@@ -4180,26 +4214,11 @@ class PlaybackService:
         self._assert_teacher(db, debate, context)
         state = self._state(db, debate)
         turns = self._turns(db, debate)
-        replay_visible_ids: set[str] | None = None
-        if state.mode == "replay" and state.replay_scope == "all":
-            replay_queue, queue_valid = self._replay_queue(db, debate, state)
-            try:
-                replay_index = int(state.replay_index) if state.replay_index is not None else -1
-            except (TypeError, ValueError):
-                replay_index = -1
-            if queue_valid and 0 <= replay_index < len(replay_queue):
-                replay_visible_ids = {str(item.id) for item in replay_queue[: replay_index + 1]}
-            else:
-                # An inconsistent replay state must never expose the complete
-                # history while the replay cursor is unresolved.
-                replay_visible_ids = set()
         public_turns = []
         for turn in sorted(
             turns, key=lambda item: int(self._get(item, "turn_index", default=0) or 0)
         ):
             if not self._turn_public(turn):
-                continue
-            if replay_visible_ids is not None and str(turn.id) not in replay_visible_ids:
                 continue
             speech = self._get(turn, "speech", "original_text", default="")
             if not isinstance(speech, str) or not speech:

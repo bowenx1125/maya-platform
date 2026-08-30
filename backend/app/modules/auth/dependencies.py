@@ -5,7 +5,6 @@ from __future__ import annotations
 import hmac
 from collections.abc import Generator
 from dataclasses import dataclass
-from urllib.parse import urlsplit
 
 from fastapi import Depends, Request, Security
 from fastapi.security import APIKeyCookie
@@ -16,6 +15,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import csrf_failed, forbidden, not_found, unauthenticated
 from app.core.models import CourseMember, GroupMember
+from app.core.origin import origin_allowed, origin_tuple
 from app.modules.auth.service import AuthContext, get_auth_context
 
 session_cookie = APIKeyCookie(
@@ -66,27 +66,13 @@ def require_auth(
 
 
 def _origin(value: str) -> tuple[str, str, int | None] | None:
-    parsed = urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        return None
-    port = parsed.port
-    return parsed.scheme.lower(), parsed.hostname.lower(), port
+    return origin_tuple(value)
 
 
 def require_same_origin(request: Request, settings: Settings) -> None:
     origin_header = request.headers.get("origin")
-    if not origin_header:
-        raise csrf_failed()
-    origin = _origin(origin_header)
-    if origin is None:
-        raise csrf_failed()
-
-    expected_values = [f"{request.url.scheme}://{request.url.netloc}"]
-    if settings.classroom_public_base_url:
-        expected_values.append(settings.classroom_public_base_url)
-    expected = {_origin(value.rstrip("/")) for value in expected_values}
-    expected.discard(None)
-    if origin not in expected:
+    request_origin = f"{request.url.scheme}://{request.url.netloc}"
+    if not origin_allowed(origin_header, settings, request_origin=request_origin):
         raise csrf_failed()
 
 

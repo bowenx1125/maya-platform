@@ -20,6 +20,8 @@ import { HistoryView, type HistoryReport } from "../history";
 import { TeacherInteractionPanel } from "../interaction";
 import { ReportPanel } from "../report";
 import { TranslationPanel } from "../translation";
+import { useLocale } from "../locale";
+import { connectionIssueFromCloseCode } from "../debate/stage/protocol";
 
 import styles from "./teacher-wave3.module.css";
 
@@ -34,7 +36,10 @@ function websocketUrl(debateId: string): string {
   return `${protocol}//${window.location.host}/api/v1/debates/${encodeURIComponent(debateId)}/events`;
 }
 
+type Wave3ConnectionIssue = ReturnType<typeof connectionIssueFromCloseCode>;
+
 export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
+  const { t } = useLocale();
   const [interaction, setInteraction] = useState<TeacherInteraction | null>(
     null,
   );
@@ -49,6 +54,8 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
   const [connection, setConnection] = useState<
     "connecting" | "connected" | "disconnected"
   >("connecting");
+  const [connectionIssue, setConnectionIssue] =
+    useState<Wave3ConnectionIssue | null>(null);
   const [reconnectBusy, setReconnectBusy] = useState(false);
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const openKey = useRef<IdempotencyHandle | null>(null);
@@ -121,10 +128,18 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
     const connect = () => {
       if (disposed) return;
       setConnection("connecting");
-      socket = new WebSocket(websocketUrl(debateId));
+      try {
+        socket = new WebSocket(websocketUrl(debateId));
+      } catch {
+        setConnectionIssue("network");
+        setConnection("disconnected");
+        setReconnectBusy(false);
+        return;
+      }
       socket.onopen = () => {
         if (!disposed) {
           setConnection("connected");
+          setConnectionIssue(null);
           setReconnectBusy(false);
         }
       };
@@ -146,14 +161,16 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
           // The closed backend schema remains authoritative; malformed frames are ignored.
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (!disposed) {
+          setConnectionIssue(connectionIssueFromCloseCode(event.code));
           setConnection("disconnected");
           setReconnectBusy(false);
         }
       };
       socket.onerror = () => {
-        if (!disposed) setConnection("disconnected");
+        // The following close event carries the authoritative 4401/4403 or
+        // network code. Do not replace it with a generic error here.
       };
     };
     connect();
@@ -164,7 +181,12 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
   }, [connectionAttempt, debateId, load, downstreamAllowed]);
 
   const reconnect = useCallback(() => {
-    if (!downstreamAllowed || reconnectBusy || connection !== "disconnected")
+    if (
+      !downstreamAllowed ||
+      reconnectBusy ||
+      connection !== "disconnected" ||
+      connectionIssue !== "network"
+    )
       return;
     setReconnectBusy(true);
     // A manual retry reloads once; failures leave all already-rendered Wave 3
@@ -175,7 +197,7 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
       .finally(() => {
         setReconnectBusy(false);
       });
-  }, [connection, downstreamAllowed, load, reconnectBusy]);
+  }, [connection, connectionIssue, downstreamAllowed, load, reconnectBusy]);
 
   async function mutate(
     handleRef: { current: IdempotencyHandle | null },
@@ -210,24 +232,32 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
       className={styles.root}
       data-wave3-loading={loading ? "true" : "false"}
       data-wave3-connection={downstreamAllowed ? connection : "disabled"}
+      data-wave3-connection-reason={
+        downstreamAllowed ? (connectionIssue ?? "none") : "disabled"
+      }
     >
       {!downstreamAllowed ? (
-        <p role="status">
-          Partial or unfinished debates keep generated turns for audit, but
-          classroom interaction, reports, history and replay are unavailable.
-        </p>
+        <p role="status">{t("wave3DownstreamUnavailable")}</p>
       ) : (
         <>
           {connection === "disconnected" ? (
             <div role="status">
-              <span>Wave 3 connection disconnected.</span>{" "}
-              <button
-                type="button"
-                onClick={reconnect}
-                disabled={reconnectBusy}
-              >
-                {reconnectBusy ? "Reconnecting…" : "Reconnect / 重新连接"}
-              </button>
+              <span>
+                {connectionIssue === "session_expired"
+                  ? t("debateConnectionSessionExpired")
+                  : connectionIssue === "origin_mismatch"
+                    ? t("debateConnectionOriginMismatch")
+                    : t("wave3ConnectionNetwork")}
+              </span>{" "}
+              {connectionIssue === "network" ? (
+                <button
+                  type="button"
+                  onClick={reconnect}
+                  disabled={reconnectBusy}
+                >
+                  {reconnectBusy ? t("wave3Reconnecting") : t("wave3Reconnect")}
+                </button>
+              ) : null}
             </div>
           ) : null}
           {interaction ? (

@@ -174,6 +174,15 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
     assert chat.json()["retrieval_status"] == "matched"
     assert chat.json()["sources"][0]["source_filename"] == "lesson.md"
 
+    unrelated_chat = client.post(
+        f"/api/v1/agent-versions/{version_id}/chat",
+        headers=_headers(csrf),
+        json={"message": "TikTok recommendation algorithm"},
+    )
+    assert unrelated_chat.status_code == 200
+    assert unrelated_chat.json()["retrieval_status"] == "no_match"
+    assert unrelated_chat.json()["sources"] == []
+
     publish = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "publish-wave1-agent-001"}),

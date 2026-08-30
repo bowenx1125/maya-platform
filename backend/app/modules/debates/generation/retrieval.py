@@ -8,6 +8,11 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
+from app.modules.knowledge.mock_lexical import (
+    MOCK_LEXICAL_ANCHOR_POLICY_ID,
+    MockLexicalAnchorV2,
+)
+
 from .types import (
     GenerationContext,
     PendingQuestion,
@@ -18,6 +23,7 @@ STRICT_THRESHOLD = 0.20
 RELAXED_THRESHOLD = 0.08
 MAX_SUBQUERIES = 3
 TOP_K = 6
+MOCK_LEXICAL_CANDIDATE_LIMIT = 256
 SUBQUERY_KINDS = {"viewpoint", "pending_question", "rebuttal", "updated_position", "context"}
 
 
@@ -57,6 +63,8 @@ class RetrievalResult:
     subqueries: tuple[TurnSubquery, ...]
     strict_calls: int
     relaxed_calls: int
+    policy_id: str | None = None
+    topic_anchor_hash: str | None = None
 
     @property
     def matched(self) -> bool:
@@ -199,18 +207,37 @@ class SnapshotRetriever:
         self,
         snapshot_id: str,
         subqueries: Sequence[TurnSubquery | str],
+        *,
+        policy_id: str | None = None,
+        topic_anchor: str | None = None,
     ) -> RetrievalResult:
         if not snapshot_id:
             raise RAGRetrievalError(
                 "A turn must provide its participant snapshot.", technical=False
             )
         typed = _normalise_subqueries(subqueries)
+        lexical_anchor: MockLexicalAnchorV2 | None = None
+        topic_anchor_hash: str | None = None
+        candidate_limit = self.top_k
+        if policy_id is not None:
+            if policy_id != MOCK_LEXICAL_ANCHOR_POLICY_ID:
+                raise RAGRetrievalError(
+                    "The Mock retrieval policy is not supported.", technical=False
+                )
+            if not isinstance(topic_anchor, str) or not topic_anchor.strip():
+                raise RAGRetrievalError(
+                    "The Mock lexical policy requires an authoritative topic anchor.",
+                    technical=False,
+                )
+            lexical_anchor = MockLexicalAnchorV2.from_topic(topic_anchor)
+            topic_anchor_hash = hashlib.sha256(topic_anchor.strip().encode("utf-8")).hexdigest()
+            candidate_limit = MOCK_LEXICAL_CANDIDATE_LIMIT
         merged: dict[tuple[str, str], SnapshotRetrievalReceipt] = {}
         strict_calls = 0
         relaxed_calls = 0
         for subquery in typed:
             strict_calls += 1
-            raw = _invoke_search(self.search, snapshot_id, subquery.text, self.top_k)
+            raw = _invoke_search(self.search, snapshot_id, subquery.text, candidate_limit)
             for item in raw:
                 candidate_snapshot = _value(item, "snapshot_id")
                 if candidate_snapshot is not None and candidate_snapshot != snapshot_id:
@@ -219,11 +246,13 @@ class SnapshotRetriever:
                     )
             parsed = [_candidate_tuple(item) for item in raw]
             parsed.sort(key=lambda item: (-item[2], item[3], item[4], item[0]))
+            if lexical_anchor is not None:
+                parsed = [item for item in parsed if lexical_anchor.accepts(item[5])]
             strict_matches = [item for item in parsed if item[2] >= self.strict_threshold]
             threshold_key: Literal["strict", "relaxed"] = "strict"
             if not strict_matches:
                 relaxed_calls += 1
-                raw = _invoke_search(self.search, snapshot_id, subquery.text, self.top_k)
+                raw = _invoke_search(self.search, snapshot_id, subquery.text, candidate_limit)
                 for item in raw:
                     candidate_snapshot = _value(item, "snapshot_id")
                     if candidate_snapshot is not None and candidate_snapshot != snapshot_id:
@@ -232,6 +261,8 @@ class SnapshotRetriever:
                         )
                 parsed = [_candidate_tuple(item) for item in raw]
                 parsed.sort(key=lambda item: (-item[2], item[3], item[4], item[0]))
+                if lexical_anchor is not None:
+                    parsed = [item for item in parsed if lexical_anchor.accepts(item[5])]
                 strict_matches = [item for item in parsed if item[2] >= self.relaxed_threshold]
                 threshold_key = "relaxed"
             for rank, (chunk_id, filename, score, _doc_order, _chunk_index, text) in enumerate(
@@ -262,6 +293,8 @@ class SnapshotRetriever:
             subqueries=typed,
             strict_calls=strict_calls,
             relaxed_calls=relaxed_calls,
+            policy_id=policy_id,
+            topic_anchor_hash=topic_anchor_hash,
         )
 
     @staticmethod
@@ -346,6 +379,7 @@ def build_turn_subqueries(
 
 __all__ = [
     "MAX_SUBQUERIES",
+    "MOCK_LEXICAL_CANDIDATE_LIMIT",
     "RELAXED_THRESHOLD",
     "RAGRetrievalError",
     "RetrievalResult",

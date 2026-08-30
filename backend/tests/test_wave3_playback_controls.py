@@ -68,6 +68,7 @@ async def test_pause_resume_is_recoverable_and_defers_resumed_event_until_playin
 async def test_full_finish_keeps_turns_and_enters_normal_finished_flow() -> None:
     repository = MemoryPlaybackRepository()
     debate = _running_debate(repository, complete=True)
+    debate.playback.status = "waiting_next"
     service = PlaybackService(repository)
 
     result = await service.finish(None, debate.id, expected_control_version=0)
@@ -79,15 +80,16 @@ async def test_full_finish_keeps_turns_and_enters_normal_finished_flow() -> None
 
 
 @pytest.mark.asyncio
-async def test_partial_finish_marks_stopped_without_deleting_generated_turns() -> None:
+async def test_early_finish_marks_debate_finished_but_stops_playback() -> None:
     repository = MemoryPlaybackRepository()
     debate = _running_debate(repository, complete=False)
+    debate.playback.status = "waiting_next"
     service = PlaybackService(repository)
 
     result = await service.finish(None, debate.id, expected_control_version=0)
 
     assert result.status == "stopped"
-    assert debate.status == "stopped"
+    assert debate.status == "debate_finished"
     assert debate.cancellation_generation == 1
     assert len(debate.turns) == 2
     assert repository.jobs_interrupted == [(debate.id, "debate_finished_partial")]

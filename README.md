@@ -14,17 +14,20 @@ The current private Demo provides:
 - `frontend`: Next.js student, teacher and classroom interfaces using the frozen V2 visual language;
 - `backend`: FastAPI image boundary with Python 3.12, FFmpeg, and a real readiness probe.
 
-The local manual-check candidate includes Demo quick login, Agent/version workflows,
+The Wave 3 Mock Demo includes Demo quick login, Agent/version workflows,
 Markdown RAG and immutable snapshots, teacher inspection, 3D avatar previews,
 two-round Mock debate generation, teacher-paced classroom playback, anonymous
 QR interaction, named raw barrages, anonymous voting, Mock Maya reports,
-read-only history, and on-demand Mock Chinese test representation. The base
-Wave 3 high-risk boundaries passed a narrow independent Sol review. The current
-manual-feedback delta adds manual Reconnect, recoverable Pause/Continue,
-full/partial Finish, a dedicated classroom-interaction page, single-view
-translation and retained-catalog Replay. Full Wave 3 G3, real
-LLM/Embedding/TTS acceptance and Wave 4 remain out of scope until their gates
-are explicitly accepted.
+read-only history, and on-demand Mock Chinese test representation. Wave 3 now
+has independent G2 approval (`P0=0 / P1=0`) and main-window real-browser G3
+approval. Its final delta adds cause-specific disconnect handling, manual-only
+Reconnect, locale-only controls, the simple `ready / in progress / waiting /
+finished` classroom phase, waiting-only Finish, a dedicated
+classroom-interaction page, single-view translation, retained-catalog Replay
+with on-demand controller acquisition, and a versioned Mock lexical RAG guard.
+Pause/Continue are no longer ordinary teacher controls. Wave 4 has not started; real
+LLM/Embedding/TTS, formal content quality, classroom load and public deployment
+still require separate gates.
 
 The frontend follows the Wave 0 frozen dependency set: TypeScript `5.9.3`, ESLint `9.39.1`, Next.js `16.3.3`, React `19.2.8`, Vitest `4.1.11`, Vite `8.2.2`, jsdom `29.0.1`, and the pinned type/test tooling listed in the gate packet. ESLint 9 is the approved compatibility override because ESLint 10 currently crashes inside the Next.js 16.3.3 transitive parser/plugin before linting source files; the lint command still covers TypeScript and TSX with the full Next ruleset. TypeScript 5.9.3 is required by openapi-typescript 7.13.0, and jsdom 29.0.1 matches the frozen Node 24.14 runtime.
 
@@ -43,9 +46,10 @@ The frontend follows the Wave 0 frozen dependency set: TypeScript `5.9.3`, ESLin
 4. For ordinary single-computer work, open `http://localhost:8080`. For QR,
    phone, or live WebSocket classroom checks, set `CLASSROOM_PUBLIC_BASE_URL`
    in the ignored `.env` to this Mac's current private-LAN origin, rebuild or
-   restart the stack, and open the teacher page through that same origin (for
-   example `http://192.168.x.x:8080`). Do not mix localhost and the LAN origin
-   during one classroom run.
+   restart the stack. The QR keeps using that LAN origin. In private Demo mode,
+   the teacher page may use either the configured LAN address or same-port
+   `localhost` / `127.0.0.1`; other origin, protocol, and port mismatches remain
+   rejected.
 
 Use `docker compose up -d --build` instead when application code, dependencies,
 Dockerfiles or build-time settings changed.

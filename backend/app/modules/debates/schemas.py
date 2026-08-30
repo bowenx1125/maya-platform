@@ -18,7 +18,10 @@ from app.modules.agents.schemas import AvatarConfig
 Stance = Literal["support", "oppose", "neutral"]
 StanceMode = Literal["assigned", "open"]
 Slot = Literal["A", "B", "C", "D", "E"]
-RULE_SET_ID = "ordered_multi_agent_rounds_demo_v1"
+RULE_SET_ID_V1: Literal["ordered_multi_agent_rounds_demo_v1"] = "ordered_multi_agent_rounds_demo_v1"
+RULE_SET_ID_V2: Literal["ordered_multi_agent_rounds_demo_v2"] = "ordered_multi_agent_rounds_demo_v2"
+RULE_SET_ID: Literal["ordered_multi_agent_rounds_demo_v2"] = RULE_SET_ID_V2
+MOCK_RETRIEVAL_POLICY_ID: Literal["mock_lexical_anchor_v2"] = "mock_lexical_anchor_v2"
 
 
 class _ClosedModel(BaseModel):
@@ -187,7 +190,7 @@ class Transcript(_ClosedModel):
 class DebateDetail(DebateSummary):
     revision: int = Field(ge=0)
     last_sequence: int = Field(ge=0)
-    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1"]
+    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"]
     participants: list[DebateParticipant]
     public_turns: list[DebateTurn]
     playback: PlaybackState
@@ -212,9 +215,10 @@ class TurnPlanEntry(_ClosedModel):
 class DebateRuleSnapshot(_ClosedModel):
     """Versioned immutable rule data stored on each Debate."""
 
-    rule_set_id: Literal["ordered_multi_agent_rounds_demo_v1"] = (
-        "ordered_multi_agent_rounds_demo_v1"
-    )
+    rule_set_id: Literal[
+        "ordered_multi_agent_rounds_demo_v1", "ordered_multi_agent_rounds_demo_v2"
+    ] = "ordered_multi_agent_rounds_demo_v2"
+    retrieval_policy_id: Literal["mock_lexical_anchor_v2"] | None = MOCK_RETRIEVAL_POLICY_ID
     round_count: Literal[2] = 2
     min_participants: Literal[2] = 2
     max_participants: Literal[5] = 5
@@ -222,6 +226,28 @@ class DebateRuleSnapshot(_ClosedModel):
     max_words: Literal[200] = 200
     target_min_words: Literal[160] = 160
     target_max_words: Literal[185] = 185
+
+    @model_validator(mode="before")
+    @classmethod
+    def restore_legacy_retrieval_default(cls, value: object) -> object:
+        """Read exact v1 snapshots that predate the retrieval-policy field."""
+
+        if isinstance(value, dict) and value.get("rule_set_id") == RULE_SET_ID_V1:
+            updated = dict(value)
+            updated.setdefault("retrieval_policy_id", None)
+            return updated
+        return value
+
+    @model_validator(mode="after")
+    def validate_versioned_retrieval_policy(self) -> DebateRuleSnapshot:
+        if self.rule_set_id == RULE_SET_ID_V1 and self.retrieval_policy_id is not None:
+            raise ValueError("the v1 rule snapshot cannot carry a v2 retrieval policy")
+        if (
+            self.rule_set_id == RULE_SET_ID_V2
+            and self.retrieval_policy_id != MOCK_RETRIEVAL_POLICY_ID
+        ):
+            raise ValueError("the v2 rule snapshot requires mock_lexical_anchor_v2")
+        return self
 
 
 __all__ = [
@@ -242,6 +268,9 @@ __all__ = [
     "FinishDebateRequest",
     "RetrievalSource",
     "RULE_SET_ID",
+    "RULE_SET_ID_V1",
+    "RULE_SET_ID_V2",
+    "MOCK_RETRIEVAL_POLICY_ID",
     "Transcript",
     "TurnPlanEntry",
 ]

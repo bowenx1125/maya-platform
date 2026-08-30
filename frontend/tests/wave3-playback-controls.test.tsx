@@ -279,29 +279,19 @@ describe("Wave 3 playback controls", () => {
     expect(screen.getAllByText(`${turnA}.md`).length).toBeGreaterThan(0);
   });
 
-  it("uses Pause/Continue controls without changing Debate status", async () => {
+  it("keeps Pause/Continue primitives out of the ordinary control surface", async () => {
     const initial = detail("running", {
       status: "playing",
       current_turn_id: turnA,
       control_version: 2,
     });
     const socket = new Socket();
-    const paused = {
-      ...initial.playback,
-      status: "paused" as const,
-      control_version: 3,
-    };
-    const resumed = {
-      ...initial.playback,
-      status: "ready" as const,
-      control_version: 4,
-    };
     const api = {
       startDebate: vi.fn(),
       advanceDebatePlayback: vi.fn(),
       replayDebate: vi.fn(),
-      pauseDebate: vi.fn().mockResolvedValue(paused),
-      resumeDebate: vi.fn().mockResolvedValue(resumed),
+      pauseDebate: vi.fn(),
+      resumeDebate: vi.fn(),
     };
     render(
       <DebateStage
@@ -314,39 +304,9 @@ describe("Wave 3 playback controls", () => {
     await waitFor(() => expect(socket).toBeTruthy());
     socket.emit("open");
     socket.emit("message", acquired(2));
-    const pause = screen.getByRole("button", { name: /Pause/ });
-    await waitFor(() => expect(pause).toHaveProperty("disabled", false));
-    fireEvent.click(pause);
-    await waitFor(() =>
-      expect(api.pauseDebate).toHaveBeenCalledWith(
-        debateId,
-        { expected_control_version: 2 },
-        expect.any(Object),
-      ),
-    );
-    const cont = await screen.findByRole("button", { name: /Continue/ });
-    expect(cont).toHaveProperty("disabled", false);
-    fireEvent.click(cont);
-    await waitFor(() => expect(api.resumeDebate).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(
-        document.querySelector('[data-playback-status="ready"]'),
-      ).toBeTruthy(),
-    );
-    socket.emit(
-      "message",
-      envelope("playback.resumed", 1, {
-        turn_id: turnA,
-        cursor_ms: 0,
-        control_version: 4,
-        playback_rate: 1,
-      }),
-    );
-    await waitFor(() =>
-      expect(
-        document.querySelector('[data-playback-status="playing"]'),
-      ).toBeTruthy(),
-    );
-    expect(screen.getByRole("button", { name: /Pause/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+    expect(api.pauseDebate).not.toHaveBeenCalled();
+    expect(api.resumeDebate).not.toHaveBeenCalled();
   });
 });
