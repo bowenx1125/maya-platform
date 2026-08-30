@@ -188,6 +188,9 @@ class ProviderRepository:
         *,
         policy_snapshot_id: str,
         manifest_id: str | None = None,
+        course_id: str | None = None,
+        group_id: str | None = None,
+        agent_version_id: str | None = None,
     ) -> str:
         manifest.validate()
         policy_table = _POLICY_TABLE
@@ -219,6 +222,9 @@ class ProviderRepository:
             "contains_private_audio": manifest.contains_private_audio,
             "contains_teacher_note": manifest.contains_teacher_note,
             "manifest_hash": manifest.manifest_hash,
+            "course_id": course_id,
+            "group_id": group_id,
+            "agent_version_id": agent_version_id,
             "created_at": self._now(),
         }
         try:

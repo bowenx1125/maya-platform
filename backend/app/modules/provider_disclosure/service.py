@@ -19,7 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.models import (
+    Agent,
+    AgentVersion,
     CourseMember,
+    Group,
     ProviderExportConfirmation,
     ProviderExportManifest,
     ProviderPolicySnapshot,
@@ -138,6 +141,9 @@ class ProviderDisclosureStore(Protocol):
     def is_teacher(self, user_id: str) -> bool:
         """Return whether the account is a current teacher."""
 
+    def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
+        """Return whether the account teaches the exact manifest owner course."""
+
 
 def _blocked(code: str = "provider_preflight_blocked") -> ProviderDisclosureError:
     return ProviderDisclosureError(
@@ -188,8 +194,8 @@ class ProviderDisclosureService:
         policy_ref: str | None = None,
         manifest_ref: str | None = None,
     ) -> ProviderDataCallDisclosureResponseV1:
-        self._assert_teacher(actor_user_id)
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
+        self._assert_teacher(actor_user_id, manifest.manifest_hash)
         return self._response(policy, manifest)
 
     def confirm(
@@ -200,8 +206,8 @@ class ProviderDisclosureService:
         policy_ref: str | None = None,
         manifest_ref: str | None = None,
     ) -> ProviderDataCallDisclosureResponseV1:
-        self._assert_teacher(actor_user_id)
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
+        self._assert_teacher(actor_user_id, manifest.manifest_hash)
         revision = self._revision(manifest)
         if request.policy_hash != policy.policy_hash:
             raise _stale("The provider policy changed; review the current disclosure again.")
@@ -281,8 +287,8 @@ class ProviderDisclosureService:
     ) -> ProviderPreflightV1:
         """Validate a confirmed operation without invoking a transport."""
 
-        self._assert_teacher(actor_user_id)
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
+        self._assert_teacher(actor_user_id, manifest.manifest_hash)
         revision = self._revision(manifest)
         try:
             confirmation = self.store.get_export_confirmation(manifest.manifest_hash)
@@ -311,13 +317,20 @@ class ProviderDisclosureService:
                 raise _stale() from exc
             raise _blocked() from exc
 
-    def _assert_teacher(self, actor_user_id: str) -> None:
+    def _assert_teacher(self, actor_user_id: str, manifest_hash: str) -> None:
         if not isinstance(actor_user_id, str) or not actor_user_id.strip():
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
         authorizer = self.teacher_authorizer
         if authorizer is None:
-            authorizer = getattr(self.store, "is_teacher", None)
-        if not callable(authorizer) or not bool(authorizer(actor_user_id)):
+            manifest_authorizer = getattr(self.store, "is_teacher_for_manifest", None)
+            allowed = (
+                bool(manifest_authorizer(actor_user_id, manifest_hash))
+                if callable(manifest_authorizer)
+                else False
+            )
+        else:
+            allowed = bool(authorizer(actor_user_id))
+        if not allowed:
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
 
     def _load(
@@ -501,6 +514,9 @@ class InMemoryProviderDisclosureStore:
     def is_teacher(self, user_id: str) -> bool:
         return user_id in self.teacher_ids
 
+    def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
+        return user_id in self.teacher_ids and manifest_hash == self.manifest.manifest_hash
+
     def replace_current(
         self,
         policy: ProviderPolicySnapshotV1,
@@ -517,8 +533,8 @@ class InMemoryProviderDisclosureStore:
 class SqlAlchemyProviderDisclosureStore:
     """Adapter over the existing provider-control ORM tables.
 
-    It deliberately adds no model or migration.  Confirmation writes stay in
-    the request Session so the caller's normal transaction commits the CAS.
+    Confirmation writes stay in the request Session so the caller's normal
+    transaction commits the CAS.
     """
 
     def __init__(self, db: Session) -> None:
@@ -637,6 +653,35 @@ class SqlAlchemyProviderDisclosureStore:
         return (
             self.db.scalar(
                 select(CourseMember.user_id).where(
+                    CourseMember.user_id == user_id,
+                    CourseMember.role == "teacher",
+                )
+            )
+            is not None
+        )
+
+    def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
+        return (
+            self.db.scalar(
+                select(ProviderExportManifest.id)
+                .join(
+                    AgentVersion,
+                    AgentVersion.id == ProviderExportManifest.agent_version_id,
+                )
+                .join(Agent, Agent.id == AgentVersion.agent_id)
+                .join(Group, Group.id == Agent.group_id)
+                .join(
+                    CourseMember,
+                    CourseMember.course_id == ProviderExportManifest.course_id,
+                )
+                .where(
+                    ProviderExportManifest.manifest_hash == manifest_hash,
+                    ProviderExportManifest.course_id.is_not(None),
+                    ProviderExportManifest.group_id.is_not(None),
+                    ProviderExportManifest.agent_version_id.is_not(None),
+                    ProviderExportManifest.group_id == Agent.group_id,
+                    ProviderExportManifest.group_id == Group.id,
+                    ProviderExportManifest.course_id == Group.course_id,
                     CourseMember.user_id == user_id,
                     CourseMember.role == "teacher",
                 )

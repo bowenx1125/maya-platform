@@ -1182,6 +1182,33 @@ class ProviderExportManifest(Base):
     contains_private_audio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     contains_teacher_note: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    course_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "courses.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_manifests_course",
+        ),
+        nullable=True,
+    )
+    group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "groups.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_manifests_group",
+        ),
+        nullable=True,
+    )
+    agent_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "agent_versions.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_manifests_agent_version",
+        ),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     policy: Mapped[ProviderPolicySnapshot] = relationship()
@@ -1195,6 +1222,9 @@ class ProviderExportManifest(Base):
         ),
         Index("ix_provider_export_manifests_scope", "scope_id", "provider_operation"),
         Index("ix_provider_export_manifests_policy", "policy_snapshot_id"),
+        Index("ix_provider_export_manifests_course", "course_id"),
+        Index("ix_provider_export_manifests_group", "group_id"),
+        Index("ix_provider_export_manifests_agent_version", "agent_version_id"),
     )
 
 

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from app.core.db import Database
 from app.core.errors import PlatformError, error_body, unauthenticated
+from app.core.models import Course, CourseMember, User
 from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
 from app.modules.provider_disclosure import (
     InMemoryProviderDisclosureStore,
@@ -27,9 +29,12 @@ from app.providers.control import (
     ProviderPolicySnapshotV1,
 )
 from app.providers.control_repository import ProviderRepository
+from app.seed import COURSE_ID, GROUP_BOWEN_ID, TEACHER_ID
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+
+from tests.conftest import login
 
 
 def _digest(value: str) -> str:
@@ -325,6 +330,81 @@ def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
     finally:
         reloaded_session.close()
         database.dispose()
+
+
+def test_sql_manifest_authorization_is_bound_to_exact_owner_course(
+    client: TestClient,
+) -> None:
+    app = client.app
+    database = app.state.database
+    _student, csrf = login(client, "student-bowen-1")
+    created = client.post(
+        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        headers={
+            "Origin": "http://testserver",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": "provider-owner-agent-0001",
+        },
+        json={"name": "Owner-bound Agent", "description": ""},
+    )
+    assert created.status_code == 201, created.text
+    version_id = created.json()["versions"][0]["id"]
+
+    policy = _policy(snapshot_revision=7)
+    manifest = _manifest(policy, scope_id="owned-build")
+    repository = ProviderRepository(database)
+    policy_id = repository.save_policy_snapshot(policy)
+    repository.save_export_manifest(
+        manifest,
+        policy_snapshot_id=policy_id,
+        course_id=COURSE_ID,
+        group_id=GROUP_BOWEN_ID,
+        agent_version_id=version_id,
+    )
+
+    other_teacher_id = "6655f62c-1a95-4ed8-a344-12e3f34e3c71"
+    other_course_id = "4a74392f-a2e5-45ec-b222-9475ce08bfd2"
+    with database.session() as db:
+        now = datetime.now(UTC)
+        db.add(
+            User(
+                id=other_teacher_id,
+                username="other-course-teacher",
+                display_name="Other Course Teacher",
+                status="active",
+                created_at=now,
+            )
+        )
+        db.add(
+            Course(
+                id=other_course_id,
+                code="other-course",
+                name="Other Course",
+                current_audio_debate_id=None,
+                created_at=now,
+            )
+        )
+        db.flush()
+        db.add(
+            CourseMember(
+                course_id=other_course_id,
+                user_id=other_teacher_id,
+                role="teacher",
+                created_at=now,
+            )
+        )
+
+    with database.session() as db:
+        service = ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
+        assert service.disclose(TEACHER_ID, manifest_ref=manifest.manifest_hash).manifest_hash == (
+            manifest.manifest_hash
+        )
+        with pytest.raises(ProviderDisclosureError) as wrong_course:
+            service.disclose(other_teacher_id, manifest_ref=manifest.manifest_hash)
+        assert wrong_course.value.code == "forbidden"
+        with pytest.raises(ProviderDisclosureError) as student:
+            service.disclose(str(_student["user"]["id"]), manifest_ref=manifest.manifest_hash)
+        assert student.value.code == "forbidden"
 
 
 def _route_app(service: ProviderDisclosureService) -> FastAPI:
