@@ -1,6 +1,6 @@
 # FormalContentV1
 
-Status: `ACCEPTANCE CONTRACT / CONTENT NOT YET FROZEN`
+Status: `CONTENT V1 FROZEN / MOCK ACCEPTANCE PASS / REAL EMBEDDING NOT STARTED`
 
 W4-CONTENT is Mock-only and precedes real embedding. It creates the actual TikTok
 teaching corpus; W4-G0 does not pretend that placeholder or historical fixture text is
@@ -25,3 +25,22 @@ Acceptance requires source-link review, claim/source spot checks, relevant/no-ma
 Mock retrieval, two contrasting Persona Mock turns over the same evidence and a
 main-window teaching review. Content remains editable until that Gate signs its hashes;
 real embedding cannot run earlier.
+
+## Frozen content evidence
+
+The accepted packet is [`../../../manual-tests/formal-tiktok-rag/`](../../../manual-tests/formal-tiktok-rag/).
+
+- corpus SHA-256: `7fab29d2bddc241ea2021284f2766e6e6cecb705b9a56ff041838c1fe606c24a`;
+- source-manifest SHA-256: `9193e384a0c29bf51274055b4cd3a6273fc6276ad14113db4b8398a335648ce5`;
+- 14 claim markers map to 7 primary/authoritative sources;
+- relevant fixture: matched; adjacent and unrelated fixtures: no-match with no source;
+- two contrasting Persona fixtures use the same receipt while changing only their
+  declared teaching priorities;
+- checksum, JSON, secret/PII pattern, actual Mock lexical/vector and pytest acceptance:
+  PASS;
+- main-window teaching review: PASS, with first-party TikTok pages retained as labeled
+  platform statements rather than independent audits;
+- Provider/model calls: `0`.
+
+Any content or manifest edit invalidates this status and requires new hashes and the
+same acceptance sequence before a new real SnapshotBuild.
