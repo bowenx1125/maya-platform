@@ -47,6 +47,8 @@ from app.modules.knowledge.providers.product_publication import (
     require_exact_confirmation,
     run_confirmed_real_embedding_publication,
 )
+from app.modules.knowledge.providers.query_embedding import persisted_snapshot_identity
+from app.modules.knowledge.providers.query_manifest import ensure_real_query_export_manifest
 from app.modules.knowledge.providers.runtime import (
     AcceptedEmbeddingStageV1,
     _reservation_request,
@@ -812,6 +814,30 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
         assert snapshot.embedding_region == REAL_EMBEDDING_REGION
         assert snapshot.embedding_dimension == REAL_EMBEDDING_DIMENSION
         assert snapshot.embedding_policy_version == REAL_EMBEDDING_POLICY_VERSION
+        version = db.get(AgentVersion, version_id)
+        group = db.get(Group, BOWEN_GROUP_ID)
+        assert version is not None and version.persona_spec_hash
+        assert group is not None
+        query_plan = ensure_real_query_export_manifest(
+            database,
+            db=db,
+            scope_id="route-debate-scope",
+            turn_id="route-turn-1",
+            course_id=group.course_id,
+            group_id=group.id,
+            agent_version_id=version.id,
+            snapshot_id=snapshot.id,
+            identity=persisted_snapshot_identity(snapshot),
+            transcript_hash="b" * 64,
+            persona_spec_hash=version.persona_spec_hash,
+            subqueries=(("viewpoint", "  accountable recommendation governance  "),),
+            policy=policy,
+        )
+        assert query_plan.query_texts == ("accountable recommendation governance",)
+        assert query_plan.manifest.provider_operation == "embedding_query"
+        assert tuple(field.field_class for field in query_plan.manifest.fields) == (
+            "current_evidence_excerpt",
+        )
     operations = ProviderRepository(database).operations()
     assert operations and all(operation.state == "succeeded" for operation in operations)
 
