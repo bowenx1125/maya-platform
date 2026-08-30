@@ -595,12 +595,12 @@ def test_llm_selector_is_callable_but_fail_closed_for_real_or_unknown() -> None:
         ("translation_provider", "deepl"),
     ),
 )
-def test_wave2_startup_allows_only_real_tts_with_mock_companions(
+def test_startup_allows_only_one_reviewed_real_slice_with_mock_companions(
     field: str,
     selector: str,
 ) -> None:
     values: dict[str, object] = {field: selector}
-    if field == "tts_provider":
+    if field in {"tts_provider", "embedding_provider"}:
         values.update(
             {
                 "dashscope_api_key": "fixture-key",

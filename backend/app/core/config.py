@@ -205,12 +205,12 @@ class Settings(BaseSettings):
             prepare_catalog(self)
 
     def validate_provider_configuration(self) -> None:
-        """Allow Mock everywhere, or the explicitly gated real TTS slice.
+        """Allow Mock everywhere, or one explicitly gated real-provider slice.
 
         The real-service startup composition is deliberately asymmetric:
-        DashScope may be selected for TTS only, while LLM, Embedding, Voice
-        and optional Translation remain Mock/disabled.  This keeps a typo or
-        accidental second real provider fail-closed at the same boundary.
+        DashScope may be selected for Embedding-only or TTS-only while all
+        companions remain Mock/disabled.  LLM and Voice stay closed until
+        their later Gates.  Two simultaneous real selectors fail at startup.
         """
 
         selectors = (
@@ -228,7 +228,6 @@ class Settings(BaseSettings):
             name
             for name, value in (
                 ("LLM_PROVIDER", self.llm_provider),
-                ("EMBEDDING_PROVIDER", self.embedding_provider),
                 ("VOICE_PROVIDER", self.voice_provider),
             )
             if value != "mock"
@@ -237,16 +236,21 @@ class Settings(BaseSettings):
             non_mock.append("TRANSLATION_PROVIDER")
         if non_mock:
             raise RuntimeError(
-                "runtime provider gate permits only TTS DashScope with Mock companions: "
-                + ", ".join(non_mock)
+                "runtime provider gate permits only one reviewed DashScope slice with "
+                "Mock companions: " + ", ".join(non_mock)
             )
-        if self.tts_provider == "dashscope":
+        real_slices = sum(
+            value == "dashscope" for value in (self.embedding_provider, self.tts_provider)
+        )
+        if real_slices > 1:
+            raise RuntimeError("runtime provider gate permits only one reviewed DashScope slice")
+        if self.embedding_provider == "dashscope" or self.tts_provider == "dashscope":
             if not self.dashscope_api_key or not self.dashscope_api_key.strip():
-                raise RuntimeError("DASHSCOPE_API_KEY is required for real TTS")
+                raise RuntimeError("DASHSCOPE_API_KEY is required for real Provider work")
             if not self.dashscope_workspace_id or not self.dashscope_workspace_id.strip():
-                raise RuntimeError("DASHSCOPE_WORKSPACE_ID is required for real TTS")
+                raise RuntimeError("DASHSCOPE_WORKSPACE_ID is required for real Provider work")
             if self.dashscope_region != "cn-beijing":
-                raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real TTS")
+                raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
 
     @property
     def secret_bytes(self) -> bytes:

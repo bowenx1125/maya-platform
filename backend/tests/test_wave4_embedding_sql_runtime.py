@@ -5,17 +5,29 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
+from uuid import uuid4
 
 import pytest
 from app.core.db import Database
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    AgentVersionDocument,
+    KnowledgeDocument,
+    KnowledgeSnapshot,
+)
 from app.modules.knowledge.providers import (
     InMemorySnapshotPublicationStore,
     MockEmbeddingProvider,
     SnapshotBuildV1,
     SnapshotEmbeddingRuntime,
     SqlAlchemyEmbeddingControlAdapter,
+    SqlAlchemySnapshotPublicationStore,
     prepare_snapshot_build,
 )
+from app.modules.knowledge.providers.snapshot_build import SnapshotBuildInputDocument
+from app.modules.knowledge.services import document_file_content
 from app.providers.control import (
     FIXED_MODELS,
     ExportFieldV1,
@@ -24,6 +36,13 @@ from app.providers.control import (
     confirm_export_manifest,
 )
 from app.providers.control_repository import PolicyExportStale, ProviderRepository
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from tests.conftest import login
+from tests.persona_fixtures import confirmed_persona_fields
+from tests.test_wave1_agents_knowledge import BOWEN_GROUP_ID, _confirm_persona, _headers
 
 
 def _digest(value: str) -> str:
@@ -68,16 +87,17 @@ def _prepare_control(
     database: Database,
     *,
     confirmed: bool,
+    build: SnapshotBuildV1 | None = None,
 ) -> tuple[SqlAlchemyEmbeddingControlAdapter, ProviderRepository, SnapshotBuildV1]:
-    build = _build()
+    selected_build = build or _build()
     policy = _policy()
     manifest = ExportManifestV1(
-        scope_id=build.build_id,
+        scope_id=selected_build.build_id,
         provider_operation="embedding",
         model_key=FIXED_MODELS["embedding"],
         policy_hash=policy.policy_hash,
-        build_manifest_hash=build.manifest_hash,
-        persona_spec_hash=build.persona_spec_hash,
+        build_manifest_hash=selected_build.manifest_hash,
+        persona_spec_hash=selected_build.persona_spec_hash,
         fields=(
             ExportFieldV1("current_evidence_excerpt", _digest("chunks")),
             ExportFieldV1("opaque_local_id", _digest("chunk-ids")),
@@ -106,7 +126,7 @@ def _prepare_control(
             build_manifest_hash=manifest.build_manifest_hash,
         ),
         repository,
-        build,
+        selected_build,
     )
 
 
@@ -154,3 +174,110 @@ def test_unconfirmed_sql_manifest_fails_before_fake_provider_call(tmp_path: Path
         runtime.run(build, scope_id=build.build_id, current_build=build)
     assert provider.call_count == 0
     database.dispose()
+
+
+def test_sql_publisher_commits_real_vector_snapshot_and_operation_success_atomically(
+    client: TestClient,
+) -> None:
+    app = cast(FastAPI, client.app)
+    database = app.state.database
+    settings = app.state.settings
+    assert isinstance(database, Database)
+    _user, csrf = login(client, "student-bowen-1")
+    created = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        headers=_headers(csrf, **{"Idempotency-Key": "embed-sql-publish-agent-001"}),
+        json={"name": "Embedding Publisher", "description": "Runtime publication fixture"},
+    )
+    assert created.status_code == 201, created.text
+    agent = created.json()
+    version_id = agent["versions"][0]["id"]
+    raw = confirmed_persona_fields("Embedding Publisher", datetime.now(UTC))["agent_md"]
+    updated = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 0,
+            "agent_md": raw,
+            "avatar_config": agent["versions"][0]["avatar_config"],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    uploaded = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "embed-sql-publish-doc-001"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        files={
+            "file": (
+                "lesson.md",
+                b"# Formal lesson\n\nRecommendation governance needs accountable evidence.",
+                "text/markdown",
+            )
+        },
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    _confirm_persona(client, csrf, version_id, expected_revision=2)
+
+    data_root = settings.resolved_data_root
+    with database.session() as db:
+        version = db.get(AgentVersion, version_id)
+        assert version is not None and version.persona_spec_hash
+        agent_row = db.get(Agent, version.agent_id)
+        assert agent_row is not None
+        documents = list(
+            db.scalars(
+                select(KnowledgeDocument)
+                .join(
+                    AgentVersionDocument,
+                    AgentVersionDocument.document_id == KnowledgeDocument.id,
+                )
+                .where(
+                    AgentVersionDocument.agent_version_id == version.id,
+                    AgentVersionDocument.enabled.is_(True),
+                )
+                .order_by(AgentVersionDocument.order_index)
+            ).all()
+        )
+        build = prepare_snapshot_build(
+            agent_version_id=version.id,
+            knowledge_snapshot_id=str(uuid4()),
+            draft_revision=version.revision,
+            persona_spec_hash=version.persona_spec_hash,
+            documents=tuple(
+                SnapshotBuildInputDocument.from_bytes(
+                    document_id=document.id,
+                    source_filename=document.source_filename,
+                    source_bytes=document_file_content(data_root, document),
+                    order_index=index,
+                )
+                for index, document in enumerate(documents)
+            ),
+        )
+        control, repository, _ = _prepare_control(database, confirmed=True, build=build)
+        provider = MockEmbeddingProvider()
+        publisher = SqlAlchemySnapshotPublicationStore(
+            db,
+            data_root=data_root,
+            version=version,
+            agent=agent_row,
+            expected_revision=version.revision,
+        )
+        result = SnapshotEmbeddingRuntime(
+            control=control,
+            provider=provider,
+            publisher=publisher,
+            provider_operation="embedding",
+        ).run(build, scope_id=build.build_id, current_build=build)
+        assert result.status == "succeeded"
+        assert result.snapshot_id == build.knowledge_snapshot_id
+
+    with database.session() as db:
+        published = db.get(AgentVersion, version_id)
+        assert published is not None and published.state == "published"
+        assert published.knowledge_snapshot_id == build.knowledge_snapshot_id
+        snapshot = db.get(KnowledgeSnapshot, build.knowledge_snapshot_id)
+        assert snapshot is not None and snapshot.embedding_key == "text-embedding-v4"
+        assert snapshot.chunks
+        assert all(chunk.embedding_dimension == 256 for chunk in snapshot.chunks)
+    operations = repository.operations(scope_id=build.build_id)
+    assert operations and all(operation.state == "succeeded" for operation in operations)

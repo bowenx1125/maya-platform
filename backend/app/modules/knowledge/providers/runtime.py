@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from threading import RLock
 from typing import Literal, Protocol
@@ -260,7 +260,12 @@ class SnapshotPublicationReceiptV1:
 class SnapshotPublicationPort(Protocol):
     """Main-window seam for atomic immutable Snapshot/vector publication."""
 
-    def publish_atomic(self, candidate: SnapshotPublishCandidateV1) -> object:
+    def publish_atomic(
+        self,
+        candidate: SnapshotPublishCandidateV1,
+        *,
+        operation_ids: tuple[str, ...] = (),
+    ) -> object:
         """Persist the candidate without overwriting an existing snapshot."""
 
 
@@ -271,7 +276,13 @@ class InMemorySnapshotPublicationStore:
     _values: dict[str, SnapshotPublishCandidateV1] = field(default_factory=dict, init=False)
     _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
-    def publish_atomic(self, candidate: SnapshotPublishCandidateV1) -> SnapshotPublicationReceiptV1:
+    def publish_atomic(
+        self,
+        candidate: SnapshotPublishCandidateV1,
+        *,
+        operation_ids: tuple[str, ...] = (),
+    ) -> SnapshotPublicationReceiptV1:
+        del operation_ids
         with self._lock:
             if candidate.knowledge_snapshot_id in self._values:
                 raise SnapshotPublicationError("snapshot already exists")
@@ -797,7 +808,12 @@ class SnapshotEmbeddingRuntime:
                 dimension=plan.dimension,
                 existing_snapshot_ids=resolved_existing_snapshot_ids,
             )
-            publication = _publish_candidate(self.publisher, candidate)
+            operation_ids = tuple(operation.id for operation in operations)
+            publication = _publish_candidate(
+                self.publisher,
+                candidate,
+                operation_ids=operation_ids,
+            )
         except Exception as error:
             code = _safe_code(getattr(error, "code", None), default="snapshot_publication_failed")
             for index, operation in enumerate(operations):
@@ -830,8 +846,11 @@ class SnapshotEmbeddingRuntime:
             )
 
         try:
-            for index, operation in enumerate(operations):
-                operations[index] = self.control.mark_succeeded(operation.id)
+            if bool(getattr(self.publisher, "atomic_operation_success", False)):
+                operations = [replace(operation, state="succeeded") for operation in operations]
+            else:
+                for index, operation in enumerate(operations):
+                    operations[index] = self.control.mark_succeeded(operation.id)
         except Exception:
             code = "embedding_success_commit_failed"
             return _run_result(
@@ -1053,6 +1072,8 @@ def _assert_fixed_build(build: SnapshotBuildV1) -> None:
 def _publish_candidate(
     publisher: SnapshotPublicationPort,
     candidate: SnapshotPublishCandidateV1,
+    *,
+    operation_ids: tuple[str, ...],
 ) -> object:
     method = getattr(publisher, "publish_atomic", None)
     if not callable(method):
@@ -1060,6 +1081,8 @@ def _publish_candidate(
     if not callable(method):
         raise SnapshotPublicationError("snapshot publication port is unavailable")
     try:
+        if bool(getattr(publisher, "atomic_operation_success", False)):
+            return method(candidate, operation_ids=operation_ids)
         return method(candidate)
     except SnapshotEmbeddingRuntimeError:
         raise

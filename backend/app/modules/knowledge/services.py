@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import struct
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -44,6 +45,8 @@ from app.core.models import (
     KnowledgeDocument,
     KnowledgeDocumentChunk,
     KnowledgeSnapshot,
+    ProviderOperation,
+    ProviderReservation,
     SnapshotDocument,
     StoredFile,
 )
@@ -93,6 +96,7 @@ from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
 )
+from app.modules.knowledge.providers.snapshot_build import SnapshotPublishCandidateV1
 from app.modules.knowledge.schemas import JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 
@@ -1158,6 +1162,8 @@ def create_snapshot(
     expected_revision: int | None = None,
     idempotency_record_id: str | None = None,
     claim_token: str | None = None,
+    embedding_candidate: SnapshotPublishCandidateV1 | None = None,
+    provider_operation_ids: tuple[str, ...] = (),
 ) -> KnowledgeSnapshot:
     expected = version.revision if expected_revision is None else expected_revision
     blockers_list = blockers(db, version, agent)
@@ -1165,6 +1171,24 @@ def create_snapshot(
         raise publish_blockers(blockers_list)
     selected = _enabled_documents(db, version.id)
     captured_current_pointer = agent.current_published_version_id
+    vector_by_chunk: dict[str, tuple[float, ...]] = {}
+    if embedding_candidate is not None:
+        build = embedding_candidate.build
+        if (
+            embedding_candidate.agent_version_id != version.id
+            or build.draft_revision != expected
+            or build.persona_spec_hash != str(version.persona_spec_hash or "")
+            or not is_persona_confirmed(version)
+            or not provider_operation_ids
+        ):
+            raise invalid_state("The confirmed embedding build no longer matches this draft.")
+        if len(embedding_candidate.vectors) != len(build.chunks):
+            raise invalid_state("The embedding build vector set is incomplete.")
+        vector_by_chunk = dict(
+            zip(embedding_candidate.chunk_ids, embedding_candidate.vectors, strict=True)
+        )
+    else:
+        build = None
 
     # Capture all mutable inputs and chunk payloads before staging.  Every
     # item is revalidated after the file promotion and again in the final DB
@@ -1192,13 +1216,57 @@ def create_snapshot(
             raise PlatformError(
                 "provider_unavailable", "The service is temporarily unavailable.", 503
             ) from None
-        chunks = list(
-            db.scalars(
-                select(KnowledgeDocumentChunk)
-                .where(KnowledgeDocumentChunk.document_id == document.id)
-                .order_by(KnowledgeDocumentChunk.chunk_index)
-            ).all()
-        )
+        if build is None:
+            chunks = list(
+                db.scalars(
+                    select(KnowledgeDocumentChunk)
+                    .where(KnowledgeDocumentChunk.document_id == document.id)
+                    .order_by(KnowledgeDocumentChunk.chunk_index)
+                ).all()
+            )
+            captured_chunks = [
+                (
+                    str(uuid4()),
+                    chunk.chunk_index,
+                    chunk.chunk_text,
+                    chunk.start_offset,
+                    chunk.end_offset,
+                    chunk.embedding_blob,
+                    chunk.embedding_dimension,
+                    chunk.embedding_key,
+                )
+                for chunk in chunks
+            ]
+        else:
+            assert embedding_candidate is not None
+            if order >= len(build.documents):
+                raise invalid_state("The embedding build document order changed.")
+            build_document = build.documents[order]
+            if (
+                build_document.document_id != document.id
+                or build_document.source_filename != document.source_filename
+                or build_document.order_index != order
+                or build_document.normalized_text != normalized
+                or build_document.source_sha256 != source_sha
+            ):
+                raise invalid_state("A source document changed after embedding confirmation.")
+            captured_chunks = []
+            for chunk in build_document.chunks:
+                vector = vector_by_chunk.get(chunk.chunk_id)
+                if vector is None:
+                    raise invalid_state("The embedding build vector set is incomplete.")
+                captured_chunks.append(
+                    (
+                        chunk.chunk_id,
+                        chunk.chunk_index,
+                        chunk.text,
+                        chunk.start_offset,
+                        chunk.end_offset,
+                        struct.pack(f"<{len(vector)}f", *vector),
+                        embedding_candidate.dimension,
+                        embedding_candidate.model_key,
+                    )
+                )
         captured.append(
             {
                 "document": document,
@@ -1209,18 +1277,7 @@ def create_snapshot(
                 "content_hash": document.content_hash,
                 "snapshot_document_id": str(uuid4()),
                 "frozen_file_id": str(uuid4()),
-                "chunks": [
-                    (
-                        chunk.chunk_index,
-                        chunk.chunk_text,
-                        chunk.start_offset,
-                        chunk.end_offset,
-                        chunk.embedding_blob,
-                        chunk.embedding_dimension,
-                        chunk.embedding_key,
-                    )
-                    for chunk in chunks
-                ],
+                "chunks": captured_chunks,
                 "order": order,
             }
         )
@@ -1230,7 +1287,11 @@ def create_snapshot(
     combined_bytes = combined.encode("utf-8")
     combined_sha = hashlib.sha256(combined_bytes).hexdigest()
     timestamp = now_utc()
-    snapshot_id = str(uuid4())
+    snapshot_id = (
+        embedding_candidate.knowledge_snapshot_id
+        if embedding_candidate is not None
+        else str(uuid4())
+    )
     operation_id = str(uuid4())
     staging_relative = f"tmp/publish/{operation_id}"
     target_relative = f"snapshots/{snapshot_id}"
@@ -1417,8 +1478,21 @@ def create_snapshot(
             stored_file_id=snapshot_file_id,
             content_hash=combined_sha,
             total_char_count=sum(item["document"].char_count for item in captured),
-            embedding_key=EMBEDDING_KEY,
-            chunking_json=json.dumps({"token_target": 600, "token_hard": 800, "overlap": 100}),
+            embedding_key=(
+                embedding_candidate.model_key if embedding_candidate is not None else EMBEDDING_KEY
+            ),
+            chunking_json=(
+                json.dumps(
+                    {
+                        "version": embedding_candidate.build.chunking_version,
+                        "dimension": embedding_candidate.dimension,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                if embedding_candidate is not None
+                else json.dumps({"token_target": 600, "token_hard": 800, "overlap": 100})
+            ),
             created_at=timestamp,
         )
         db.add(snapshot)
@@ -1471,6 +1545,7 @@ def create_snapshot(
                 )
             )
             for (
+                chunk_id,
                 chunk_index,
                 chunk_text,
                 start_offset,
@@ -1481,7 +1556,7 @@ def create_snapshot(
             ) in item["chunks"]:
                 db.add(
                     KnowledgeChunk(
-                        id=str(uuid4()),
+                        id=chunk_id,
                         snapshot_id=snapshot.id,
                         snapshot_document_id=item["snapshot_document_id"],
                         document_id=item["document"].id,
@@ -1494,6 +1569,33 @@ def create_snapshot(
                         embedding_key=embedding_key,
                     )
                 )
+        if embedding_candidate is not None:
+            for provider_operation_id in provider_operation_ids:
+                operation_changed = db.execute(
+                    update(ProviderOperation)
+                    .where(
+                        ProviderOperation.id == provider_operation_id,
+                        ProviderOperation.scope_id == embedding_candidate.build.build_id,
+                        ProviderOperation.provider_operation == "embedding",
+                        ProviderOperation.build_manifest_hash
+                        == embedding_candidate.build_manifest_hash,
+                        ProviderOperation.model_key == embedding_candidate.model_key,
+                        ProviderOperation.state == "accepted",
+                    )
+                    .values(state="succeeded", updated_at=timestamp)
+                )
+                if getattr(operation_changed, "rowcount", 0) != 1:
+                    raise invalid_state("The embedding operation success fence changed.")
+                reservation_changed = db.execute(
+                    update(ProviderReservation)
+                    .where(
+                        ProviderReservation.operation_id == provider_operation_id,
+                        ProviderReservation.state == "accepted",
+                    )
+                    .values(state="succeeded", updated_at=timestamp)
+                )
+                if getattr(reservation_changed, "rowcount", 0) != 1:
+                    raise invalid_state("The embedding reservation success fence changed.")
         previous = None
         if final_agent.current_published_version_id:
             previous = db.scalar(

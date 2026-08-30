@@ -8,7 +8,9 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.main import create_app
 from app.modules.debates.playback import router as playback_router
+from app.modules.knowledge.providers import DashScopeEmbeddingAdapter
 from app.providers.dashscope import DashScopeTTSProvider
+from app.providers.factory import embedding_provider
 from app.providers.tts import MockTTSProvider
 
 
@@ -64,6 +66,26 @@ def test_tts_dashscope_only_is_allowed_and_one_factory_instance_is_shared(
         database.dispose()
 
 
+def test_embedding_dashscope_only_is_allowed_without_network(tmp_path: Path) -> None:
+    settings = _settings(
+        tmp_path,
+        embedding_provider="dashscope",
+        dashscope_api_key="fixture-key",
+        dashscope_workspace_id="workspace123",
+        dashscope_region="cn-beijing",
+    )
+    settings.validate_provider_configuration()
+
+    class NoCallTransport:
+        def post(self, *args: object, **kwargs: object) -> object:
+            del args, kwargs
+            raise AssertionError("selector construction performed network I/O")
+
+    selected = embedding_provider(settings, transport=NoCallTransport())  # type: ignore[arg-type]
+    assert isinstance(selected, DashScopeEmbeddingAdapter)
+    assert selected.config.region == "cn-beijing"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -93,7 +115,6 @@ def test_tts_dashscope_requires_beijing_credentials(
     ("field", "value"),
     [
         ("llm_provider", "dashscope"),
-        ("embedding_provider", "dashscope"),
         ("voice_provider", "dashscope"),
         ("translation_provider", "deepl"),
     ],

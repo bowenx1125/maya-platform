@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from typing import Protocol
 from urllib.parse import urlsplit
 
+import httpx
+
 from .embedding import ValidatedEmbeddingBatchV1, validate_embedding_batch_response
 from .packing import (
     MAX_BATCH_ITEMS,
@@ -41,6 +43,42 @@ class EmbeddingTransport(Protocol):
         timeout: float,
     ) -> object:
         """Return a transport response or raise a classified transport error."""
+
+
+class HttpxEmbeddingTransport:
+    """Single-attempt HTTP transport with explicit acceptance classification."""
+
+    def __init__(self, client: httpx.Client | None = None) -> None:
+        self.client = client
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        json: Mapping[str, object],
+        timeout: float,
+    ) -> object:
+        try:
+            if self.client is not None:
+                return self.client.post(
+                    url,
+                    headers=dict(headers),
+                    json=dict(json),
+                    timeout=timeout,
+                    follow_redirects=False,
+                )
+            with httpx.Client(follow_redirects=False) as client:
+                return client.post(
+                    url,
+                    headers=dict(headers),
+                    json=dict(json),
+                    timeout=timeout,
+                )
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            raise EmbeddingTransportNotSent() from exc
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            raise EmbeddingAcceptanceUnknown() from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,6 +333,7 @@ __all__ = [
     "EmbeddingTransport",
     "EmbeddingTransportNotSent",
     "EmbeddingTransportResponse",
+    "HttpxEmbeddingTransport",
     "OpenAICompatibleEmbeddingAdapter",
     "OpenAIEmbeddingAdapter",
 ]

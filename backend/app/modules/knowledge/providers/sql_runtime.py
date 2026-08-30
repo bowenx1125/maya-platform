@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from typing import cast
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.core.db import Database
+from app.core.models import Agent, AgentVersion, KnowledgeSnapshot
 from app.providers.control import (
     ProviderOperationV1,
     ProviderReservationRequestV1,
@@ -25,7 +29,7 @@ from .operations import (
     OperationState,
     ReservationRequestV1,
 )
-from .snapshot_build import FIXED_EMBEDDING_MODEL
+from .snapshot_build import FIXED_EMBEDDING_MODEL, SnapshotPublishCandidateV1
 
 EMBEDDING_PROVIDER_OPERATION = "embedding"
 EMBEDDING_MAX_REQUESTS = 20
@@ -196,10 +200,60 @@ class SqlAlchemyEmbeddingControlAdapter:
         return _operation(value) if value is not None else None
 
 
+class SqlAlchemySnapshotPublicationStore:
+    """Publish real vectors and provider success in one product transaction."""
+
+    atomic_operation_success = True
+
+    def __init__(
+        self,
+        db: Session,
+        *,
+        data_root: object,
+        version: AgentVersion,
+        agent: Agent,
+        expected_revision: int,
+        idempotency_record_id: str | None = None,
+        claim_token: str | None = None,
+    ) -> None:
+        self.db = db
+        self.data_root = data_root
+        self.version = version
+        self.agent = agent
+        self.expected_revision = expected_revision
+        self.idempotency_record_id = idempotency_record_id
+        self.claim_token = claim_token
+
+    @property
+    def existing_snapshot_ids(self) -> tuple[str, ...]:
+        return tuple(self.db.scalars(select(KnowledgeSnapshot.id)).all())
+
+    def publish_atomic(
+        self,
+        candidate: SnapshotPublishCandidateV1,
+        *,
+        operation_ids: tuple[str, ...] = (),
+    ) -> object:
+        from app.modules.knowledge.services import create_snapshot
+
+        return create_snapshot(
+            self.db,
+            self.data_root,
+            self.version,
+            self.agent,
+            expected_revision=self.expected_revision,
+            idempotency_record_id=self.idempotency_record_id,
+            claim_token=self.claim_token,
+            embedding_candidate=candidate,
+            provider_operation_ids=operation_ids,
+        )
+
+
 __all__ = [
     "EMBEDDING_MAX_COST_CNY",
     "EMBEDDING_MAX_REQUESTS",
     "EMBEDDING_MAX_TOTAL_TOKENS",
     "EMBEDDING_PROVIDER_OPERATION",
     "SqlAlchemyEmbeddingControlAdapter",
+    "SqlAlchemySnapshotPublicationStore",
 ]

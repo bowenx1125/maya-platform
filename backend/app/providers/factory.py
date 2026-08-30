@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 from app.core.config import Settings
+from app.modules.knowledge.providers import (
+    DashScopeEmbeddingAdapter,
+    DashScopeEmbeddingConfig,
+    EmbeddingProvider,
+    EmbeddingTransport,
+    HttpxEmbeddingTransport,
+    MockEmbeddingProvider,
+)
 from app.providers.dashscope import (
     DashScopeConfig,
     DashScopeTTSProvider,
@@ -52,3 +60,30 @@ def llm_provider(settings: Settings) -> LLMProvider:
     """
 
     return select_llm_provider(settings)
+
+
+def embedding_provider(
+    settings: Settings,
+    *,
+    transport: EmbeddingTransport | None = None,
+) -> EmbeddingProvider:
+    """Return the fixed embedding adapter without performing a request."""
+
+    if settings.embedding_provider == "mock":
+        return MockEmbeddingProvider()
+    if settings.embedding_provider != "dashscope":
+        raise RuntimeError("embedding provider is not supported")
+    if (
+        not settings.dashscope_api_key
+        or not settings.dashscope_workspace_id
+        or settings.dashscope_region != "cn-beijing"
+    ):
+        raise RuntimeError("DashScope embedding provider is not configured")
+    return DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(
+            api_key=settings.dashscope_api_key,
+            workspace_id=settings.dashscope_workspace_id,
+            region=settings.dashscope_region,
+        ),
+        transport or HttpxEmbeddingTransport(),
+    )

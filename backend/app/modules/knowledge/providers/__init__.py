@@ -17,6 +17,7 @@ from .adapters import (
     EmbeddingTransport,
     EmbeddingTransportNotSent,
     EmbeddingTransportResponse,
+    HttpxEmbeddingTransport,
     OpenAICompatibleEmbeddingAdapter,
 )
 from .embedding import (
@@ -119,6 +120,7 @@ from .sql_runtime import (
     EMBEDDING_MAX_TOTAL_TOKENS,
     EMBEDDING_PROVIDER_OPERATION,
     SqlAlchemyEmbeddingControlAdapter,
+    SqlAlchemySnapshotPublicationStore,
 )
 from .tokenizer import (
     CONSERVATIVE_TOKENIZER_ID,
@@ -177,6 +179,7 @@ __all__ = [
     "EMBEDDING_MAX_TOTAL_TOKENS",
     "EMBEDDING_PROVIDER_OPERATION",
     "InMemoryEmbeddingLedger",
+    "HttpxEmbeddingTransport",
     "InMemoryEmbeddingStageStore",
     "InMemorySnapshotPublicationStore",
     "InMemorySnapshotPublisher",
@@ -214,6 +217,7 @@ __all__ = [
     "SnapshotPublicationReceiptV1",
     "SnapshotPublisherPort",
     "SqlAlchemyEmbeddingControlAdapter",
+    "SqlAlchemySnapshotPublicationStore",
     "TokenizerError",
     "Utf8ByteTokenizer",
     "ValidatedEmbeddingBatchV1",
