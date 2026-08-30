@@ -1,0 +1,118 @@
+"""Standalone teacher routes for ProviderDataCallV1 disclosure."""
+
+from __future__ import annotations
+
+from typing import cast
+
+from fastapi import APIRouter, Depends, Request
+
+from app.core.errors import Error, PlatformError, conflict, forbidden, invalid_state, not_found
+from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
+from app.modules.auth.service import AuthContext
+
+from .schemas import (
+    ProviderDataCallConfirmationRequestV1,
+    ProviderDataCallDisclosureResponseV1,
+)
+from .service import ProviderDisclosureError, ProviderDisclosureService
+
+router = APIRouter(prefix="/provider/data-call", tags=["Provider"])
+
+
+def get_provider_disclosure_service(request: Request) -> ProviderDisclosureService:
+    """Resolve the app-provided service without composing a provider here."""
+
+    service = getattr(request.app.state, "provider_disclosure_service", None)
+    if service is None or any(
+        not callable(getattr(service, method, None)) for method in ("disclose", "confirm")
+    ):
+        raise invalid_state("Provider disclosure is not configured.")
+    return cast(ProviderDisclosureService, service)
+
+
+def _raise_domain_error(error: ProviderDisclosureError) -> None:
+    if error.code == "not_found":
+        raise not_found()
+    if error.code == "forbidden":
+        raise forbidden()
+    if error.code in {"provider_preflight_stale", "provider_confirmation_conflict"}:
+        raise conflict("provider_preflight_stale", "Provider disclosure confirmation is stale.")
+    if error.code == "provider_confirmation_required":
+        raise conflict(
+            "provider_confirmation_required",
+            "Confirm the exact provider disclosure before any external request.",
+        )
+    raise PlatformError(
+        error.code if error.code.startswith("provider_") else "provider_preflight_blocked",
+        "Provider preflight is unavailable until every account and privacy control is verified.",
+        422,
+    )
+
+
+def _disclose(
+    service: ProviderDisclosureService,
+    context: AuthContext,
+) -> ProviderDataCallDisclosureResponseV1:
+    try:
+        return service.disclose(str(context.user.id))
+    except ProviderDisclosureError as error:
+        _raise_domain_error(error)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+@router.get(
+    "/disclosure",
+    response_model=ProviderDataCallDisclosureResponseV1,
+    operation_id="getProviderDataCallDisclosure",
+    responses={
+        401: {"model": Error, "description": "Authentication is required."},
+        403: {"model": Error, "description": "Teacher authorization is required."},
+        404: {"model": Error, "description": "Provider disclosure is unavailable."},
+        409: {"model": Error, "description": "Provider disclosure is stale."},
+        422: {"model": Error, "description": "Provider preflight is blocked."},
+    },
+)
+def provider_data_call_disclosure(
+    context: AuthContext = Depends(require_auth),
+    service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
+) -> ProviderDataCallDisclosureResponseV1:
+    return _disclose(service, context)
+
+
+@router.post(
+    "/disclosure/confirm",
+    response_model=ProviderDataCallDisclosureResponseV1,
+    operation_id="confirmProviderDataCallDisclosure",
+    responses={
+        401: {"model": Error, "description": "Authentication is required."},
+        403: {"model": Error, "description": "Teacher authorization is required."},
+        404: {"model": Error, "description": "Provider disclosure is unavailable."},
+        409: {"model": Error, "description": "Provider disclosure confirmation is stale."},
+        422: {"model": Error, "description": "Provider preflight is blocked."},
+    },
+)
+def confirm_provider_data_call_disclosure(
+    payload: ProviderDataCallConfirmationRequestV1,
+    context: AuthContext = Depends(require_authenticated_mutation),
+    service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
+) -> ProviderDataCallDisclosureResponseV1:
+    try:
+        return service.confirm(payload, actor_user_id=str(context.user.id))
+    except ProviderDisclosureError as error:
+        _raise_domain_error(error)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+# A small explicit factory lets the main window mount this router under its
+# existing ``/api/v1`` prefix without importing provider-control internals.
+def provider_disclosure_router() -> APIRouter:
+    return router
+
+
+__all__ = [
+    "get_provider_disclosure_service",
+    "provider_data_call_disclosure",
+    "confirm_provider_data_call_disclosure",
+    "provider_disclosure_router",
+    "router",
+]

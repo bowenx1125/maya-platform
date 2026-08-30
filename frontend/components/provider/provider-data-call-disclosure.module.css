@@ -1,0 +1,140 @@
+.card {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+}
+
+.header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.header h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.header p,
+.error,
+.hint,
+.field dd {
+  color: var(--muted, #6d746f);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.header p {
+  margin: 0.3rem 0 0;
+}
+
+.status {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.6rem;
+  text-transform: uppercase;
+}
+
+.confirmed {
+  background: rgba(64, 152, 116, 0.12);
+  border-color: rgba(64, 152, 116, 0.35);
+  color: var(--accent-strong, #216d52);
+}
+
+.pending {
+  background: rgba(187, 129, 45, 0.12);
+  border-color: rgba(187, 129, 45, 0.35);
+  color: var(--warning-strong, #875918);
+}
+
+.fields {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: 0;
+}
+
+.field {
+  background: var(--surface-subtle, rgba(0, 0, 0, 0.025));
+  border-radius: 0.7rem;
+  padding: 0.75rem;
+}
+
+.field dt {
+  color: var(--muted, #6d746f);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.field dd {
+  color: var(--ink, #23302b);
+  margin: 0.3rem 0 0;
+}
+
+.field ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.field li {
+  color: var(--ink, #23302b);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.actionRow {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.85rem;
+}
+
+.hint {
+  margin: 0;
+}
+
+.error {
+  color: var(--danger-strong, #8a2f2a);
+  margin: 0;
+}
+
+.retry,
+.confirm {
+  border: 0;
+  border-radius: 0.65rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.9rem;
+}
+
+.retry {
+  background: var(--surface-subtle, rgba(0, 0, 0, 0.04));
+  color: var(--ink, #23302b);
+}
+
+.confirm {
+  background: var(--accent, #4f8171);
+  color: white;
+}
+
+.confirm:disabled,
+.retry:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
