@@ -1,10 +1,10 @@
 # Maya Platform Current Status
 
-Last updated: 2026-08-30 (Asia/Shanghai)
+Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / READY_FOR_W4_EMBED_G1 / REAL_PROVIDER_CALLS_0`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G1_5_CANDIDATE / REAL_PROVIDER_CALLS_0`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -105,8 +105,12 @@ No real Provider was called.
 - Real TTS attempts 1–3 failed; attempt 3 ended `tts_audio_invalid` and remains
   `FAILED-DEFERRED` until the Wave 4 TTS Gate fixes endpoint/language/diagnostic
   contracts before another request.
-- Real LLM and Translation remain unavailable. The reviewed real Embedding transport
-  port exists but has no runtime selector/publication wiring and has made zero calls.
+- Real LLM and Translation remain unavailable. The Embedding candidate now has a fixed
+  runtime selector, no-redirect single-attempt transport, exact teacher disclosure and
+  confirmation CAS, durable policy/export/budget ledgers, and an atomic SQL Snapshot
+  publication seam exercised only through injected fake transport. It has made zero
+  external calls. Product publish orchestration, durable accepted-vector recovery and
+  real query-vector retrieval are not yet complete, so real Embedding is not signed.
 - Later real calls are authorized in principle by the user but still require the exact
   policy/export/budget Gate and must fail closed if the account plan or controls cannot
   be verified.
@@ -141,12 +145,12 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Implement the W4-EMBED runtime selector/publication path and exact teacher export
-confirmation through fake transport, then obtain independent Sol audit before any real
-request. The signed Mock candidate evidence is backend `671/671`, frontend `31 files /
-204 tests`, mypy/Ruff,
-ESLint/TypeScript/Prettier/Next build, OpenAPI `71` operations, strict FastAPI route
+Freeze the current W4-EMBED G1.5 candidate and obtain an independent Sol High read-only
+audit before any real request. The candidate extends the signed Mock evidence with
+backend `711/711`, frontend `32 files / 206 tests`, mypy/Ruff,
+ESLint/TypeScript/Prettier/Next build, OpenAPI `73` operations, strict FastAPI route
 comparison, WebSocket `35/18`, repository/secret boundary, formal-content acceptance
-and migrations 0001–0012. After P0/P1 closure, continue real Embedding publication,
-fixed structured LLM and TTS Gates. GitHub CI remains deferred to the final integrated
-Wave 4 PR.
+and migrations 0001–0012. The audit must classify the still-missing durable accepted
+stage, product publication orchestration and real query-vector retrieval before a real
+Embedding Gate can pass. After P0/P1 closure, continue fixed structured LLM and TTS
+Gates. GitHub CI remains deferred to the final integrated Wave 4 PR.

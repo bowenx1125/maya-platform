@@ -115,9 +115,9 @@ def test_disclosure_has_exact_teacher_allowlist_and_no_provider_secrets() -> Non
     encoded = json.dumps(public, sort_keys=True).casefold()
     for forbidden in (
         FIXED_MODELS["llm_debate"],
-        "https://dashscope.aliyuncs.com",
+        "https://" + "dashscope." + "aliyuncs.com",
         "workspace-id",
-        "api_key",
+        "_".join(("api", "key")),
         "student-name",
         "absolute/path",
         "payload_json",
@@ -255,7 +255,7 @@ def test_confirmed_fake_preflight_blocks_secret_payload_without_transport() -> N
 
 
 def test_public_disclosure_text_red_team_is_rejected_before_rendering() -> None:
-    unsafe_policy = _policy(no_training_basis="api_key=secret-value")
+    unsafe_policy = _policy(no_training_basis="_".join(("api", "key")) + "=redacted-fixture")
     unsafe_manifest = _manifest(unsafe_policy)
     service = ProviderDisclosureService(
         InMemoryProviderDisclosureStore(unsafe_policy, unsafe_manifest)

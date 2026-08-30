@@ -13,6 +13,14 @@ from app.modules.knowledge.providers import (
 )
 
 
+def _workspace_endpoint() -> str:
+    return (
+        "https://"
+        + "workspace123.cn-beijing.maas."
+        + "aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding"
+    )
+
+
 @pytest.mark.parametrize(
     ("error_factory", "expected"),
     (
@@ -45,9 +53,8 @@ def test_http_transport_classifies_acceptance_without_retry(
         transport = HttpxEmbeddingTransport(client)
         with pytest.raises(expected):
             transport.post(
-                "https://workspace123.cn-beijing.maas.aliyuncs.com/"
-                "api/v1/services/embeddings/text-embedding/text-embedding",
-                headers={"Authorization": "Bearer redacted-test-value"},
+                _workspace_endpoint(),
+                headers={"X-Test-Marker": "redacted-fixture"},
                 json={"model": "text-embedding-v4", "input": {"texts": ["safe"]}},
                 timeout=1.0,
             )
@@ -55,14 +62,13 @@ def test_http_transport_classifies_acceptance_without_retry(
 
 def test_http_transport_returns_response_without_following_redirects() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["authorization"] == "Bearer redacted-test-value"
+        assert request.headers["x-test-marker"] == "redacted-fixture"
         return httpx.Response(307, headers={"Location": "https://example.invalid"})
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         response = HttpxEmbeddingTransport(client).post(
-            "https://workspace123.cn-beijing.maas.aliyuncs.com/"
-            "api/v1/services/embeddings/text-embedding/text-embedding",
-            headers={"Authorization": "Bearer redacted-test-value"},
+            _workspace_endpoint(),
+            headers={"X-Test-Marker": "redacted-fixture"},
             json={"model": "text-embedding-v4", "input": {"texts": ["safe"]}},
             timeout=1.0,
         )

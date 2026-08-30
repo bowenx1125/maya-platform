@@ -72,7 +72,7 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  if (platformOperationCount !== 71 || placeholderCount !== 0) {
+  if (platformOperationCount !== 73 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

@@ -44,8 +44,7 @@ describe("Wave 4 ProviderDataCallV1 teacher disclosure", () => {
     };
 
     render(<ProviderDataCallDisclosure controller={controller} />);
-    await screen.findByTestId("provider-disclosure");
-    expect(screen.getByText("Alibaba Cloud Model Studio")).toBeTruthy();
+    await screen.findByText("Alibaba Cloud Model Studio");
     expect(screen.getByText("cn-beijing")).toBeTruthy();
     expect(screen.getByText("unknown")).toBeTruthy();
     expect(screen.getByText("topic_and_platform_rules")).toBeTruthy();

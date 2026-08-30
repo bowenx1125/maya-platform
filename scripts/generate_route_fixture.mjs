@@ -86,6 +86,8 @@ const implemented = new Set([
   "downloadCurrentReport",
   "listTranslationBatches",
   "translateCurrentPublishedContent",
+  "getProviderDataCallDisclosure",
+  "confirmProviderDataCallDisclosure",
 ]);
 const methods = new Set([
   "get",
