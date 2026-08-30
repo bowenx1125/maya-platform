@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,7 +28,12 @@ from app.core.models import (
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
 from app.modules.knowledge.files import write_atomic
 from app.modules.knowledge.markdown import normalize_markdown
-from app.modules.knowledge.providers.adapters import DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH
+from app.modules.knowledge.providers.adapters import (
+    DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH,
+    DashScopeEmbeddingAdapter,
+    DashScopeEmbeddingConfig,
+    EmbeddingTransportResponse,
+)
 from app.modules.knowledge.providers.embedding import ValidatedEmbeddingBatchV1
 from app.modules.knowledge.providers.packing import (
     EmbeddingBatchV1,
@@ -63,9 +70,13 @@ from app.providers.control import (
     sha256_hex,
 )
 from app.providers.control_repository import ProviderRepository
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import Table, func, select, update
 
+from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
+from tests.test_wave1_agents_knowledge import BOWEN_GROUP_ID, _confirm_persona, _headers
 
 
 @dataclass(frozen=True)
@@ -222,6 +233,36 @@ class _CountingRealProvider:
         )
 
 
+class _CaptureTransport:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def post(
+        self,
+        _url: str,
+        *,
+        headers: Mapping[str, str],
+        json: Mapping[str, object],
+        timeout: float,
+    ) -> EmbeddingTransportResponse:
+        del headers, timeout
+        self.calls.append(dict(json))
+        nested = json.get("input")
+        assert isinstance(nested, dict)
+        texts = nested.get("texts")
+        assert isinstance(texts, list)
+        return EmbeddingTransportResponse(
+            200,
+            {
+                "model": REAL_EMBEDDING_MODEL,
+                "data": [
+                    {"index": index, "embedding": [0.0] * REAL_EMBEDDING_DIMENSION}
+                    for index, _text in enumerate(texts)
+                ],
+            },
+        )
+
+
 def _build(fixture: _OwnerFixture) -> SnapshotBuildV1:
     with fixture.database.session() as session:
         return prepare_real_snapshot_build(
@@ -250,11 +291,15 @@ def _confirm(
         policy=policy,
     )
     with fixture.database.engine.connect() as connection:
-        row = connection.execute(
-            select(ProviderExportManifest.__table__).where(
-                ProviderExportManifest.__table__.c.manifest_hash == manifest.manifest_hash
+        row = (
+            connection.execute(
+                select(ProviderExportManifest.__table__).where(
+                    ProviderExportManifest.__table__.c.manifest_hash == manifest.manifest_hash
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
     confirmation = confirm_export_manifest(
         manifest,
         policy,
@@ -279,9 +324,10 @@ def test_real_build_is_deterministic_and_has_closed_identity(tmp_path: Path) -> 
         "dimension": 1024,
         "policy_version": "w4-embed-v1",
     }
-    assert first.documents[0].source_sha256 == hashlib.sha256(
-        b"# Lesson\n\nA bounded lesson."
-    ).hexdigest()
+    assert (
+        first.documents[0].source_sha256
+        == hashlib.sha256(b"# Lesson\n\nA bounded lesson.").hexdigest()
+    )
     fixture.database.dispose()
 
 
@@ -315,11 +361,15 @@ def test_manifest_is_exact_owner_bound_and_idempotent(tmp_path: Path) -> None:
     assert first.fields[0].value_sha256 == _ordered_hash([chunk.text for chunk in build.chunks])
     assert first.fields[1].value_sha256 == _ordered_hash([chunk.chunk_id for chunk in build.chunks])
     with fixture.database.engine.connect() as connection:
-        row = connection.execute(
-            select(ProviderExportManifest.__table__).where(
-                ProviderExportManifest.__table__.c.manifest_hash == first.manifest_hash
+        row = (
+            connection.execute(
+                select(ProviderExportManifest.__table__).where(
+                    ProviderExportManifest.__table__.c.manifest_hash == first.manifest_hash
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         assert row["course_id"] == fixture.course_id
         assert row["group_id"] == fixture.group_id
         assert row["agent_version_id"] == fixture.agent_version_id
@@ -447,10 +497,7 @@ def test_complete_accepted_stages_resume_without_provider_call(tmp_path: Path) -
             build_manifest_hash=batch.build_manifest_hash,
             batch_index=batch.batch_index,
             chunk_ids=batch.chunk_ids,
-            vectors=tuple(
-                tuple(0.0 for _ in range(REAL_EMBEDDING_DIMENSION))
-                for _ in batch.items
-            ),
+            vectors=tuple(tuple(0.0 for _ in range(REAL_EMBEDDING_DIMENSION)) for _ in batch.items),
             model_key=REAL_EMBEDDING_MODEL,
             dimension=REAL_EMBEDDING_DIMENSION,
             embedding_provider=REAL_EMBEDDING_PROVIDER,
@@ -484,10 +531,7 @@ def test_complete_accepted_stages_resume_without_provider_call(tmp_path: Path) -
 
 
 def test_partial_accepted_stages_fail_closed_without_resending(tmp_path: Path) -> None:
-    source = "\n\n".join(
-        f"# Section {index}\n\n" + "x " * 600
-        for index in range(11)
-    ).encode()
+    source = "\n\n".join(f"# Section {index}\n\n" + "x " * 600 for index in range(11)).encode()
     fixture = _make_fixture(tmp_path, source=source)
     build = _build(fixture)
     policy = _policy()
@@ -519,9 +563,7 @@ def test_partial_accepted_stages_fail_closed_without_resending(tmp_path: Path) -
         build_manifest_hash=batch.build_manifest_hash,
         batch_index=batch.batch_index,
         chunk_ids=batch.chunk_ids,
-        vectors=tuple(
-            tuple(0.0 for _ in range(REAL_EMBEDDING_DIMENSION)) for _ in batch.items
-        ),
+        vectors=tuple(tuple(0.0 for _ in range(REAL_EMBEDDING_DIMENSION)) for _ in batch.items),
         model_key=REAL_EMBEDDING_MODEL,
         dimension=REAL_EMBEDDING_DIMENSION,
         embedding_provider=REAL_EMBEDDING_PROVIDER,
@@ -603,15 +645,18 @@ def test_confirmation_checks_persisted_exact_pair(tmp_path: Path) -> None:
     build = _build(fixture)
     policy = _policy()
     manifest, confirmation = _confirm(fixture, build, policy)
-    assert require_exact_confirmation(
-        fixture.database,
-        manifest,
-        policy,
-        confirmation=confirmation,
-        course_id=fixture.course_id,
-        group_id=fixture.group_id,
-        agent_version_id=fixture.agent_version_id,
-    ) == confirmation
+    assert (
+        require_exact_confirmation(
+            fixture.database,
+            manifest,
+            policy,
+            confirmation=confirmation,
+            course_id=fixture.course_id,
+            group_id=fixture.group_id,
+            agent_version_id=fixture.agent_version_id,
+        )
+        == confirmation
+    )
     stale = ExportConfirmationV1(
         manifest_hash=manifest.manifest_hash,
         policy_hash=policy.policy_hash,
@@ -622,6 +667,136 @@ def test_confirmation_checks_persisted_exact_pair(tmp_path: Path) -> None:
         require_exact_confirmation(fixture.database, manifest, policy, confirmation=stale)
     assert raised.value.code == "provider_confirmation_stale"
     fixture.database.dispose()
+
+
+def test_student_publish_route_requires_exact_teacher_confirmation_then_publishes_1024(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = cast(FastAPI, client.app)
+    database = cast(Database, app.state.database)
+    settings = app.state.settings
+    _student, csrf = login(client, "student-bowen-1")
+    created = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        headers=_headers(csrf, **{"Idempotency-Key": "real-route-agent-create-001"}),
+        json={"name": "Real Route Agent", "description": "Exact confirmation fixture"},
+    )
+    assert created.status_code == 201, created.text
+    agent = created.json()
+    version_id = agent["versions"][0]["id"]
+    raw = confirmed_persona_fields("Real Route Agent", datetime.now(UTC))["agent_md"]
+    updated = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(csrf),
+        json={
+            "expected_revision": 0,
+            "agent_md": raw,
+            "avatar_config": agent["versions"][0]["avatar_config"],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    uploaded = client.post(
+        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "real-route-doc-upload-001"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        files={
+            "file": (
+                "lesson.md",
+                b"# Formal lesson\n\nEvidence-aware recommendations need accountable governance.",
+                "text/markdown",
+            )
+        },
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    _confirm_persona(client, csrf, version_id, expected_revision=2)
+
+    config = DashScopeEmbeddingConfig(
+        api_key="fixture-secret-never-enters-payload",
+        workspace_id="fixture",
+    )
+    policy = _policy(endpoint=config.resolved_endpoint)
+    ProviderRepository(database).save_policy_snapshot(
+        policy,
+        snapshot_id="real-route-policy",
+    )
+    settings.embedding_provider = "dashscope"
+    settings.dashscope_api_key = "fixture-secret-never-enters-payload"
+    settings.dashscope_workspace_id = "fixture"
+    settings.dashscope_region = "cn-beijing"
+    settings.provider_policy_hash = policy.policy_hash
+    transport = _CaptureTransport()
+    adapter = DashScopeEmbeddingAdapter(config, transport)
+    agents_router_module = importlib.import_module("app.modules.agents.router")
+    monkeypatch.setattr(
+        agents_router_module,
+        "select_embedding_provider",
+        lambda _settings: adapter,
+    )
+    publish_headers = _headers(
+        csrf,
+        **{"Idempotency-Key": "real-route-publish-version-001"},
+    )
+    first = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=publish_headers,
+        json={"expected_revision": 2},
+    )
+    assert first.status_code == 409, first.text
+    first_body = first.json()
+    assert first_body["code"] == "provider_confirmation_required"
+    manifest_hash = first_body["details"]["manifest_hash"]
+    assert isinstance(manifest_hash, str) and len(manifest_hash) == 64
+    assert transport.calls == []
+
+    _teacher, teacher_csrf = login(client, "teacher-demo")
+    disclosure = client.get(
+        "/api/v1/provider/data-call/disclosure",
+        params={"manifest_hash": manifest_hash},
+    )
+    assert disclosure.status_code == 200, disclosure.text
+    disclosed = disclosure.json()
+    assert disclosed["manifest_hash"] == manifest_hash
+    confirmed = client.post(
+        "/api/v1/provider/data-call/disclosure/confirm",
+        headers=_headers(teacher_csrf),
+        json={
+            "policy_hash": policy.policy_hash,
+            "manifest_hash": manifest_hash,
+            "expected_revision": disclosed["confirmation_revision"],
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    _student, retry_csrf = login(client, "student-bowen-1")
+    published = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=_headers(
+            retry_csrf,
+            **{"Idempotency-Key": "real-route-publish-version-001"},
+        ),
+        json={"expected_revision": 2},
+    )
+    assert published.status_code == 200, published.text
+    assert len(transport.calls) == 1
+    payload = transport.calls[0]
+    assert payload["model"] == REAL_EMBEDDING_MODEL
+    assert payload["parameters"] == {"dimension": 1024}
+    assert "api_key" not in payload and "workspace_id" not in payload
+    public_body = json.dumps(published.json(), ensure_ascii=False).casefold()
+    assert "dashscope" not in public_body
+    assert REAL_EMBEDDING_MODEL not in public_body
+
+    with database.session() as db:
+        snapshot = db.scalar(select(KnowledgeSnapshot).where(KnowledgeSnapshot.id.is_not(None)))
+        assert snapshot is not None
+        assert snapshot.embedding_provider == REAL_EMBEDDING_PROVIDER
+        assert snapshot.embedding_key == REAL_EMBEDDING_MODEL
+        assert snapshot.embedding_region == REAL_EMBEDDING_REGION
+        assert snapshot.embedding_dimension == REAL_EMBEDDING_DIMENSION
+        assert snapshot.embedding_policy_version == REAL_EMBEDDING_POLICY_VERSION
+    operations = ProviderRepository(database).operations()
+    assert operations and all(operation.state == "succeeded" for operation in operations)
 
 
 def _ordered_hash(values: list[str]) -> str:

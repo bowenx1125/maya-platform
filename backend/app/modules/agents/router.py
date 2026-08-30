@@ -74,6 +74,13 @@ from app.modules.avatars import (
 from app.modules.knowledge.files import content_disposition, frozen_download_filename
 from app.modules.knowledge.markdown import MAX_RAG_CHARS, MarkdownInputError, normalize_markdown
 from app.modules.knowledge.multipart import integer_field, parse_upload
+from app.modules.knowledge.providers.product_publication import (
+    ProductPublicationError,
+    ensure_real_embedding_export_manifest,
+    prepare_real_snapshot_build,
+    require_exact_confirmation,
+    run_confirmed_real_embedding_publication,
+)
 from app.modules.knowledge.services import (
     _enabled_documents,
     abandon_claim,
@@ -84,6 +91,7 @@ from app.modules.knowledge.services import (
     create_snapshot,
     finish_idempotency,
     parse_json_payload_hash,
+    renew_idempotency_lease,
     retrieval_response,
     saga_checkpoint,
     scoped_group_role,
@@ -94,6 +102,8 @@ from app.modules.knowledge.services import (
     visible_student_version,
     visible_version,
 )
+from app.providers.control_repository import ProviderRepository
+from app.providers.factory import embedding_provider as select_embedding_provider
 
 router = APIRouter(tags=["Agents"])
 
@@ -352,6 +362,133 @@ def _recover_publish_guard(db: Session, guard_id: str | None) -> None:
         db.commit()
     else:
         db.rollback()
+
+
+def _raise_embedding_publication_error(
+    error: ProductPublicationError,
+    *,
+    manifest_hash: str | None = None,
+) -> NoReturn:
+    """Expose only stable product-safe real-publication failures."""
+
+    if error.code == "provider_confirmation_required" and manifest_hash is not None:
+        raise conflict(
+            "provider_confirmation_required",
+            "The course teacher must confirm the exact provider disclosure.",
+            {"manifest_hash": manifest_hash},
+        ) from error
+    if error.code == "persona_confirmation_required":
+        raise validation_failure(
+            "The Persona must be compiled and confirmed before publication.",
+            {"publish_blockers": ["persona_confirmation_required"]},
+            code="persona_confirmation_required",
+        ) from error
+    if error.code == "version_immutable":
+        raise version_immutable() from error
+    if error.code == "rag_over_limit":
+        raise rag_over_limit() from error
+    if error.code in {
+        "manifest_drift",
+        "manifest_owner_drift",
+        "partial_embedding_recovery_required",
+        "provider_confirmation_stale",
+        "revision_stale",
+        "snapshot_build_drift",
+    }:
+        raise conflict(
+            error.code,
+            "The real Embedding publication inputs changed; prepare and confirm them again.",
+        ) from error
+    raise PlatformError(
+        "provider_preflight_blocked",
+        "Real Embedding is unavailable until every policy and account control is verified.",
+        503,
+    ) from error
+
+
+def _publish_real_embedding_snapshot(
+    db: Session,
+    settings: Settings,
+    *,
+    version: AgentVersion,
+    agent: Agent,
+    expected_revision: int,
+    record: IdempotencyRecord,
+) -> None:
+    policy_hash = settings.provider_policy_hash
+    if policy_hash is None:
+        raise PlatformError(
+            "provider_preflight_blocked",
+            "Real Embedding is unavailable until every policy and account control is verified.",
+            503,
+        )
+    group = db.get(Group, agent.group_id)
+    if group is None:
+        raise not_found()
+    repository = ProviderRepository(db)
+    policy = repository.get_policy_snapshot(policy_hash)
+    if policy is None or policy.policy_hash != policy_hash:
+        raise PlatformError(
+            "provider_preflight_blocked",
+            "Real Embedding is unavailable until every policy and account control is verified.",
+            503,
+        )
+    manifest_hash: str | None = None
+    try:
+        build = prepare_real_snapshot_build(
+            db,
+            settings.resolved_data_root,
+            course_id=group.course_id,
+            group_id=group.id,
+            agent_version_id=version.id,
+            expected_revision=expected_revision,
+        )
+        manifest = ensure_real_embedding_export_manifest(
+            db,
+            build,
+            course_id=group.course_id,
+            group_id=group.id,
+            agent_version_id=version.id,
+            policy=policy,
+        )
+        manifest_hash = manifest.manifest_hash
+        confirmation = require_exact_confirmation(
+            db,
+            manifest,
+            policy,
+            course_id=group.course_id,
+            group_id=group.id,
+            agent_version_id=version.id,
+        )
+        renew_idempotency_lease(db, record, lease_seconds=900)
+        selected_provider = select_embedding_provider(settings)
+        result = run_confirmed_real_embedding_publication(
+            db,
+            data_root=settings.resolved_data_root,
+            course_id=group.course_id,
+            group_id=group.id,
+            agent_version_id=version.id,
+            policy=policy,
+            manifest=manifest,
+            confirmation=confirmation,
+            build=build,
+            provider=selected_provider,
+            expected_revision=expected_revision,
+            idempotency_record_id=record.id,
+            claim_token=record.claim_token,
+        )
+    except ProductPublicationError as error:
+        _raise_embedding_publication_error(error, manifest_hash=manifest_hash)
+    if result.status != "succeeded":
+        code = result.safe_error_code or "provider_unavailable"
+        if code not in {
+            "acceptance_unknown",
+            "provider_not_sent",
+            "embedding_response_invalid",
+            "snapshot_build_drift",
+        }:
+            code = "provider_unavailable"
+        raise PlatformError(code, "The real Embedding publication did not complete.", 503)
 
 
 @router.get(
@@ -1074,15 +1211,29 @@ def publish_agent_version(
                 {"publish_blockers": [persona_blocker]},
                 code=persona_blocker,
             )
-        create_snapshot(
-            db,
-            settings.resolved_data_root,
-            version,
-            agent,
-            expected_revision=payload.expected_revision,
-            idempotency_record_id=record.id,
-            claim_token=record.claim_token,
-        )
+        if settings.embedding_provider == "mock":
+            create_snapshot(
+                db,
+                settings.resolved_data_root,
+                version,
+                agent,
+                expected_revision=payload.expected_revision,
+                idempotency_record_id=record.id,
+                claim_token=record.claim_token,
+            )
+        elif settings.embedding_provider == "dashscope":
+            _publish_real_embedding_snapshot(
+                db,
+                settings,
+                version=version,
+                agent=agent,
+                expected_revision=payload.expected_revision,
+                record=record,
+            )
+        else:  # pragma: no cover - Settings validates the closed selector.
+            raise PlatformError(
+                "provider_unavailable", "The service is temporarily unavailable.", 503
+            )
         # ``create_snapshot`` owns the heavy staging/finalization transaction
         # and intentionally rolls back before its final re-check.  The guard
         # survives that boundary, so mark it committed in the same transaction
