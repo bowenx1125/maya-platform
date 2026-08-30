@@ -51,6 +51,7 @@ _WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*")
 _SAFE_GENERATION_CODES = {
     "turn_generation_failed",
     "provider_unavailable",
+    "persona_confirmation_required",
     "debate_stopped",
     "audio_invalid",
 }
