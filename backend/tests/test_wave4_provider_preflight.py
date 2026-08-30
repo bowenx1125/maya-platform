@@ -77,7 +77,9 @@ def _manifest(
     )
 
 
-def _service(*, policy: ProviderPolicySnapshotV1 | None = None) -> tuple[
+def _service(
+    *, policy: ProviderPolicySnapshotV1 | None = None
+) -> tuple[
     ProviderDisclosureService,
     InMemoryProviderDisclosureStore,
     ProviderPolicySnapshotV1,
@@ -194,12 +196,15 @@ def test_confirmation_is_durably_visible_to_a_new_service_instance() -> None:
     service.confirm(request, actor_user_id="teacher")
 
     reloaded = ProviderDisclosureService(store)
-    assert reloaded.preflight(
-        actor_user_id="teacher",
-        provider_operation="llm_debate",
-        model_key=FIXED_MODELS["llm_debate"],
-        scope_id=manifest.scope_id,
-    ).export_manifest_hash == manifest.manifest_hash
+    assert (
+        reloaded.preflight(
+            actor_user_id="teacher",
+            provider_operation="llm_debate",
+            model_key=FIXED_MODELS["llm_debate"],
+            scope_id=manifest.scope_id,
+        ).export_manifest_hash
+        == manifest.manifest_hash
+    )
 
 
 def test_missing_manifest_is_not_found_and_preflight_never_calls_transport() -> None:
@@ -308,12 +313,15 @@ def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
             SqlAlchemyProviderDisclosureStore(reloaded_session),
             teacher_authorizer=lambda user_id: user_id == "teacher",
         )
-        assert reloaded.preflight(
-            actor_user_id="teacher",
-            provider_operation="llm_debate",
-            model_key=FIXED_MODELS["llm_debate"],
-            scope_id=manifest.scope_id,
-        ).export_manifest_hash == manifest.manifest_hash
+        assert (
+            reloaded.preflight(
+                actor_user_id="teacher",
+                provider_operation="llm_debate",
+                model_key=FIXED_MODELS["llm_debate"],
+                scope_id=manifest.scope_id,
+            ).export_manifest_hash
+            == manifest.manifest_hash
+        )
     finally:
         reloaded_session.close()
         database.dispose()
@@ -340,14 +348,20 @@ def test_router_enforces_auth_and_teacher_boundary() -> None:
 
     app.dependency_overrides[require_auth] = missing_auth
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.get("/provider/data-call/disclosure")
+        response = client.get(
+            "/provider/data-call/disclosure",
+            params={"manifest_hash": manifest.manifest_hash},
+        )
     assert response.status_code == 401
 
     app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
         user=SimpleNamespace(id="student")
     )
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.get("/provider/data-call/disclosure")
+        response = client.get(
+            "/provider/data-call/disclosure",
+            params={"manifest_hash": manifest.manifest_hash},
+        )
     assert response.status_code == 403
 
     app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
@@ -357,7 +371,10 @@ def test_router_enforces_auth_and_teacher_boundary() -> None:
         user=SimpleNamespace(id="teacher")
     )
     with TestClient(app) as client:
-        disclosed = client.get("/provider/data-call/disclosure")
+        disclosed = client.get(
+            "/provider/data-call/disclosure",
+            params={"manifest_hash": manifest.manifest_hash},
+        )
         assert disclosed.status_code == 200
         assert disclosed.json()["disclosure"]["supplier_display_name"] == (
             "Alibaba Cloud Model Studio"

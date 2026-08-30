@@ -99,7 +99,11 @@ export function ProviderDataCallDisclosure({
         <p className={styles.error} role="alert">
           The provider disclosure could not be loaded.
         </p>
-        <button className={styles.retry} type="button" onClick={() => void load()}>
+        <button
+          className={styles.retry}
+          type="button"
+          onClick={() => void load()}
+        >
           Try again
         </button>
       </section>

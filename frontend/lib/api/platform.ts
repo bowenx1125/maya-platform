@@ -64,6 +64,10 @@ export type ConfirmPersonaRequest = {
   persona_spec_hash: string;
   compiler_version: string;
 };
+export type ProviderDataCallDisclosureResponse =
+  components["schemas"]["ProviderDataCallDisclosureResponseV1"];
+export type ProviderDataCallConfirmationRequest =
+  components["schemas"]["ProviderDataCallConfirmationRequestV1"];
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
@@ -611,6 +615,25 @@ export class PlatformApi {
   ): Promise<AgentVersion> {
     return this.postJson<AgentVersion>(
       `agent-versions/${versionId}/persona/confirm`,
+      body,
+    );
+  }
+
+  async getProviderDataCallDisclosure(
+    manifestHash: string,
+  ): Promise<ProviderDataCallDisclosureResponse> {
+    return unwrap(
+      await this.client.GET("/provider/data-call/disclosure", {
+        params: { query: { manifest_hash: manifestHash } },
+      }),
+    );
+  }
+
+  async confirmProviderDataCallDisclosure(
+    body: ProviderDataCallConfirmationRequest,
+  ): Promise<ProviderDataCallDisclosureResponse> {
+    return this.postJson<ProviderDataCallDisclosureResponse>(
+      "provider/data-call/disclosure/confirm",
       body,
     );
   }

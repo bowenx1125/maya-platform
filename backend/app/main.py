@@ -8,11 +8,12 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import Settings, get_settings
@@ -26,6 +27,7 @@ from app.core.errors import (
 )
 from app.core.models import Course
 from app.modules.agents.router import router as agents_router
+from app.modules.auth.dependencies import get_db
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
@@ -44,6 +46,16 @@ from app.modules.interactions.service import InteractionService
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.org.router import router as org_router
+from app.modules.provider_disclosure.router import (
+    get_provider_disclosure_service,
+)
+from app.modules.provider_disclosure.router import (
+    router as provider_disclosure_router,
+)
+from app.modules.provider_disclosure.service import (
+    ProviderDisclosureService,
+    SqlAlchemyProviderDisclosureStore,
+)
 from app.modules.reports.router import router as reports_router
 from app.modules.reports.service import ReportInsightEnqueuer, recover_report_jobs
 from app.modules.reports.task_manager import ReportTaskManager
@@ -178,6 +190,13 @@ def create_app(
         # internally consistent without changing global process settings.
         app.dependency_overrides[get_settings] = lambda: runtime_settings
 
+    def request_provider_disclosure_service(
+        db: Session = Depends(get_db),
+    ) -> ProviderDisclosureService:
+        return ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
+
+    app.dependency_overrides[get_provider_disclosure_service] = request_provider_disclosure_service
+
     app.add_exception_handler(PlatformError, platform_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_handler)  # type: ignore[arg-type]
 
@@ -266,6 +285,7 @@ def create_app(
     app.include_router(interaction_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
     app.include_router(translations_router, prefix="/api/v1")
+    app.include_router(provider_disclosure_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
@@ -275,9 +295,10 @@ def create_app(
             version=app.version,
             routes=app.routes,
             description=(
-                "Demo v0.1 platform contract. Provider names, model names, "
-                "external voice IDs, API keys, absolute storage paths, and "
-                "prepared turn text are never public fields."
+                "Demo v0.1 platform contract. Supplier identity appears only in the "
+                "teacher-only ProviderDataCallV1 disclosure. Model names, external "
+                "resource IDs, API keys, absolute storage paths, and prepared turn "
+                "text are never public fields."
             ),
         )
 

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -18,8 +24,10 @@ const initial: ProviderDataCallDisclosureResponse = {
       "confirmed_structured_persona",
       "public_predecessor_speech",
     ],
-    storage_fact: "The supplier stores call data as required by applicable law.",
-    no_training_basis: "Pay-as-you-go API terms; no training use is asserted beyond them.",
+    storage_fact:
+      "The supplier stores call data as required by applicable law.",
+    no_training_basis:
+      "Pay-as-you-go API terms; no training use is asserted beyond them.",
     retention_setting: "unknown",
   },
   policy_hash: "a".repeat(64),
@@ -41,7 +49,9 @@ describe("Wave 4 ProviderDataCallV1 teacher disclosure", () => {
     expect(screen.getByText("cn-beijing")).toBeTruthy();
     expect(screen.getByText("unknown")).toBeTruthy();
     expect(screen.getByText("topic_and_platform_rules")).toBeTruthy();
-    expect(screen.queryByText(/qwen|https?:\/\/|workspace|api[_-]?key/i)).toBeNull();
+    expect(
+      screen.queryByText(/qwen|https?:\/\/|workspace|api[_-]?key/i),
+    ).toBeNull();
     expect(screen.queryByText(initial.policy_hash)).toBeNull();
     expect(screen.queryByText(initial.manifest_hash)).toBeNull();
 

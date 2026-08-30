@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.core.errors import Error, PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
@@ -52,9 +52,10 @@ def _raise_domain_error(error: ProviderDisclosureError) -> None:
 def _disclose(
     service: ProviderDisclosureService,
     context: AuthContext,
+    manifest_hash: str,
 ) -> ProviderDataCallDisclosureResponseV1:
     try:
-        return service.disclose(str(context.user.id))
+        return service.disclose(str(context.user.id), manifest_ref=manifest_hash)
     except ProviderDisclosureError as error:
         _raise_domain_error(error)
     raise AssertionError("unreachable")  # pragma: no cover
@@ -73,10 +74,11 @@ def _disclose(
     },
 )
 def provider_data_call_disclosure(
+    manifest_hash: str = Query(..., pattern=r"^[0-9a-f]{64}$"),
     context: AuthContext = Depends(require_auth),
     service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
 ) -> ProviderDataCallDisclosureResponseV1:
-    return _disclose(service, context)
+    return _disclose(service, context, manifest_hash)
 
 
 @router.post(
@@ -97,7 +99,11 @@ def confirm_provider_data_call_disclosure(
     service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
 ) -> ProviderDataCallDisclosureResponseV1:
     try:
-        return service.confirm(payload, actor_user_id=str(context.user.id))
+        return service.confirm(
+            payload,
+            actor_user_id=str(context.user.id),
+            manifest_ref=payload.manifest_hash,
+        )
     except ProviderDisclosureError as error:
         _raise_domain_error(error)
     raise AssertionError("unreachable")  # pragma: no cover

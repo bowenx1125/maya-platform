@@ -1044,6 +1044,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider/data-call/disclosure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getProviderDataCallDisclosure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/disclosure/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmProviderDataCallDisclosure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1059,6 +1091,27 @@ export interface components {
                 [key: string]: unknown;
             };
             request_id: components["schemas"]["Uuid"];
+        };
+        ProviderDataCallConfirmationRequestV1: {
+            policy_hash: string;
+            manifest_hash: string;
+            expected_revision: number;
+        };
+        ProviderDataCallDisclosureV1: {
+            supplier_display_name: string;
+            /** @constant */
+            region: "cn-beijing";
+            purpose: string;
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "current_tts_speech")[];
+            storage_fact: string;
+            no_training_basis: string;
+            retention_setting: string;
+        };
+        ProviderDataCallDisclosureResponseV1: {
+            disclosure: components["schemas"]["ProviderDataCallDisclosureV1"];
+            policy_hash: string;
+            manifest_hash: string;
+            confirmation_revision: number;
         };
         LoginRequest: {
             username: string;
@@ -3733,6 +3786,60 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    getProviderDataCallDisclosure: {
+        parameters: {
+            query: {
+                manifest_hash: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallDisclosureResponseV1"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    confirmProviderDataCallDisclosure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderDataCallConfirmationRequestV1"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallDisclosureResponseV1"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
 }
