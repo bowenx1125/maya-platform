@@ -606,6 +606,7 @@ def test_startup_allows_only_one_reviewed_real_slice_with_mock_companions(
                 "dashscope_api_key": "fixture-key",
                 "dashscope_workspace_id": "workspace123",
                 "dashscope_region": "cn-beijing",
+                "provider_policy_hash": "a" * 64,
             }
         )
         settings = Settings(maya_env="test", **values)  # type: ignore[arg-type]
