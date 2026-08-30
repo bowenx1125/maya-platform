@@ -1481,15 +1481,23 @@ def create_snapshot(
             embedding_key=(
                 embedding_candidate.model_key if embedding_candidate is not None else EMBEDDING_KEY
             ),
-            embedding_provider=("dashscope" if embedding_candidate is not None else "mock"),
-            embedding_region=("cn-beijing" if embedding_candidate is not None else "local"),
+            embedding_provider=(
+                embedding_candidate.embedding_provider
+                if embedding_candidate is not None
+                else "mock"
+            ),
+            embedding_region=(
+                embedding_candidate.embedding_region if embedding_candidate is not None else "local"
+            ),
             embedding_dimension=(
                 embedding_candidate.dimension
                 if embedding_candidate is not None
                 else EMBEDDING_DIMENSION
             ),
             embedding_policy_version=(
-                "w4-embed-v1" if embedding_candidate is not None else "w4-mock-v1"
+                embedding_candidate.policy_version
+                if embedding_candidate is not None
+                else "w4-mock-v1"
             ),
             chunking_json=(
                 json.dumps(
