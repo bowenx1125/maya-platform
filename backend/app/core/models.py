@@ -24,7 +24,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 
 class Base(DeclarativeBase):
@@ -417,6 +417,22 @@ class KnowledgeSnapshot(Base):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     total_char_count: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding_key: Mapped[str] = mapped_column("embedding_model_key", String(80), nullable=False)
+    # Wave 4 makes the embedding identity explicit on the existing immutable
+    # snapshot row.  The server defaults keep isolated pre-migration test
+    # databases and legacy Mock writers safe; the 0013 migration backfills
+    # historical rows and installs the closed identity check.
+    embedding_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="mock", server_default="mock"
+    )
+    embedding_region: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="local", server_default="local"
+    )
+    embedding_dimension: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=256, server_default="256"
+    )
+    embedding_policy_version: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="w4-mock-v1", server_default="w4-mock-v1"
+    )
     chunking_json: Mapped[str] = mapped_column("chunking_config_json", Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -438,6 +454,19 @@ class KnowledgeSnapshot(Base):
             "total_char_count >= 1 AND total_char_count <= 100000",
             name="ck_knowledge_snapshots_total_chars",
         ),
+        CheckConstraint(
+            "(embedding_provider = 'mock' "
+            "AND embedding_model_key = 'mock-sha256-v1' "
+            "AND embedding_region = 'local' "
+            "AND embedding_dimension = 256 "
+            "AND embedding_policy_version = 'w4-mock-v1') "
+            "OR (embedding_provider = 'dashscope' "
+            "AND embedding_model_key = 'text-embedding-v4' "
+            "AND embedding_region = 'cn-beijing' "
+            "AND embedding_dimension = 1024 "
+            "AND embedding_policy_version = 'w4-embed-v1')",
+            name="ck_knowledge_snapshots_embedding_identity",
+        ),
         UniqueConstraint("agent_version_id", name="uq_knowledge_snapshots_agent_version"),
     )
 
@@ -456,6 +485,72 @@ class KnowledgeSnapshot(Base):
     @embedding_model_key.setter
     def embedding_model_key(self, value: str) -> None:
         self.embedding_key = value
+
+    @validates("embedding_key")
+    def _normalize_legacy_mock_key(self, _key: str, value: str) -> str:
+        """Map the pre-Wave-4 short Mock spelling to the frozen identity key."""
+
+        return "mock-sha256-v1" if value == "mock" else value
+
+    @property
+    def embedding_model(self) -> str:
+        """Short identity alias for the existing model-key column."""
+
+        return self.embedding_key
+
+    @embedding_model.setter
+    def embedding_model(self, value: str) -> None:
+        self.embedding_key = value
+
+    @property
+    def model(self) -> str:
+        """Short identity alias for the existing model-key column."""
+
+        return self.embedding_key
+
+    @model.setter
+    def model(self, value: str) -> None:
+        self.embedding_key = value
+
+    @property
+    def provider(self) -> str:
+        """Compatibility alias for identity-oriented callers."""
+
+        return self.embedding_provider
+
+    @provider.setter
+    def provider(self, value: str) -> None:
+        self.embedding_provider = value
+
+    @property
+    def region(self) -> str:
+        """Compatibility alias for identity-oriented callers."""
+
+        return self.embedding_region
+
+    @region.setter
+    def region(self, value: str) -> None:
+        self.embedding_region = value
+
+    @property
+    def dimension(self) -> int:
+        """Compatibility alias for identity-oriented callers."""
+
+        return self.embedding_dimension
+
+    @dimension.setter
+    def dimension(self, value: int) -> None:
+        self.embedding_dimension = value
+
+    @property
+    def policy_version(self) -> str:
+        """Compatibility alias for identity-oriented callers."""
+
+        return self.embedding_policy_version
+
+    @policy_version.setter
+    def policy_version(self, value: str) -> None:
+        self.embedding_policy_version = value
 
     @property
     def chunking_config_json(self) -> str:
@@ -1207,6 +1302,11 @@ class ProviderOperation(Base):
     reservations: Mapped[list[ProviderReservation]] = relationship(
         back_populates="operation", cascade="all, delete-orphan"
     )
+    accepted_embedding_stage: Mapped[EmbeddingAcceptedStage | None] = relationship(
+        back_populates="operation",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -1231,6 +1331,102 @@ class ProviderOperation(Base):
         Index("ix_provider_operations_scope_state", "scope_id", "state"),
         Index("ix_provider_operations_state", "state"),
     )
+
+
+class EmbeddingAcceptedStage(Base):
+    """Sanitized accepted embedding metadata retained for local recovery.
+
+    The stage intentionally stores hashes and local opaque identities only.  A
+    provider response envelope, credential, endpoint and workspace never have
+    a column in this table.
+    """
+
+    __tablename__ = "embedding_accepted_stages"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("provider_operations.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    build_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    build_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    batch_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    response_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    operation: Mapped[ProviderOperation] = relationship(back_populates="accepted_embedding_stage")
+    vectors: Mapped[list[EmbeddingAcceptedVector]] = relationship(
+        back_populates="stage",
+        cascade="all, delete-orphan",
+        order_by="EmbeddingAcceptedVector.item_index",
+    )
+
+    __table_args__ = (
+        CheckConstraint("batch_index >= 0", name="ck_embedding_accepted_stages_batch_index"),
+        CheckConstraint("dimension > 0", name="ck_embedding_accepted_stages_dimension"),
+        CheckConstraint(
+            "length(build_manifest_hash) = 64",
+            name="ck_embedding_accepted_stages_build_hash",
+        ),
+        CheckConstraint(
+            "length(response_hash) = 64",
+            name="ck_embedding_accepted_stages_response_hash",
+        ),
+        CheckConstraint("length(build_id) > 0", name="ck_embedding_accepted_stages_build_id"),
+        CheckConstraint("length(model_key) > 0", name="ck_embedding_accepted_stages_model"),
+        CheckConstraint(
+            "length(policy_version) > 0", name="ck_embedding_accepted_stages_policy_version"
+        ),
+        Index("ix_embedding_accepted_stages_build", "build_id", "batch_index"),
+    )
+
+
+class EmbeddingAcceptedVector(Base):
+    """One ordered, validated vector in an accepted embedding stage.
+
+    ``chunk_id`` is the opaque frozen SnapshotBuild identity.  Publication
+    later verifies it against the newly-created KnowledgeChunk row, so staging
+    can happen before that row exists.
+    """
+
+    __tablename__ = "embedding_accepted_vectors"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("embedding_accepted_stages.operation_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    item_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chunk_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+    )
+    embedding_blob: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    stage: Mapped[EmbeddingAcceptedStage] = relationship(back_populates="vectors")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "operation_id",
+            "chunk_id",
+            name="uq_embedding_accepted_vectors_chunk",
+        ),
+        CheckConstraint("item_index >= 0", name="ck_embedding_accepted_vectors_item_index"),
+        CheckConstraint(
+            "length(embedding_blob) > 0",
+            name="ck_embedding_accepted_vectors_blob",
+        ),
+        Index("ix_embedding_accepted_vectors_chunk", "chunk_id"),
+    )
+
+
+# Runtime-facing names used by the pure embedding stage port.  These are
+# aliases for the single durable ORM rows, not additional tables/models.
+AcceptedEmbeddingStage = EmbeddingAcceptedStage
+AcceptedEmbeddingVector = EmbeddingAcceptedVector
 
 
 class ProviderReservation(Base):
