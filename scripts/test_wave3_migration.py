@@ -242,8 +242,10 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="maya-wave3-migration-") as temporary:
         root = Path(temporary)
         fresh = root / "fresh.sqlite3"
-        alembic(fresh, "upgrade", "head")
-        alembic(fresh, "upgrade", "head")
+        # This historical probe owns 0007 specifically. Wave 4 head is tested
+        # separately by test_wave4_migration.py.
+        alembic(fresh, "upgrade", REVISION_0007)
+        alembic(fresh, "upgrade", REVISION_0007)
         assert_head_and_fks(fresh, REVISION_0007)
 
         populated = root / "populated.sqlite3"

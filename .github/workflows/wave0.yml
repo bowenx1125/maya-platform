@@ -103,6 +103,11 @@ jobs:
           test -f frontend/tests/wave3-interaction.test.tsx
           test -f frontend/tests/wave3-report.test.tsx
           test -f frontend/tests/wave3-history-translation.test.tsx
+
+      - name: Assert Wave 4 inputs
+        run: |
+          test -f backend/migrations/versions/0008_wave4_mutual_learning_rounds.py
+          test -f scripts/test_wave4_migration.py
           test -f frontend/tests/wave3-playback-controls.test.tsx
 
       - name: Assert portable project authority
@@ -207,6 +212,9 @@ jobs:
 
       - name: Populated Wave 3 migration preservation evidence
         run: uv run --directory backend python ../scripts/test_wave3_migration.py
+
+      - name: Populated Wave 4 migration preservation evidence
+        run: uv run --directory backend python ../scripts/test_wave4_migration.py
 
       - name: Export Wave 3 FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
