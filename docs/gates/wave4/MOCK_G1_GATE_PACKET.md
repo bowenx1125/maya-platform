@@ -1,6 +1,6 @@
 # Wave 4 Mock-First G1.5 Gate Packet
 
-Status: `SECOND P1 REPAIRS LOCAL PASS / SOL G2 REAUDIT READY_2 / REAL CALLS 0`
+Status: `SOL G2 CHANGES_REQUIRED_3 / THIRD P1 REPAIR ACTIVE / REAL CALLS 0`
 
 ## Scope
 
@@ -140,3 +140,20 @@ regression and another exact-SHA read-only audit.
 
 A new exact clean SHA must receive read-only `PASS / P0=0 / P1=0` before any real
 Provider implementation Gate starts.
+
+## Third G2 result
+
+Sol High audited exact clean SHA
+`cd2c5b58c84137a9809a14d252ff80e485ed8b13`. It verified the previous two repairs and
+all first-round fixes, then returned `CHANGES_REQUIRED / P0=0 / P1=2 / P2=0`:
+
+1. the bounded long-field projection kept only head/tail words, so two legal Persona
+   dimensions differing only in the middle could produce identical actual Mock output;
+2. legal short Persona values shaped like source attribution, written quantities,
+   URLs/files or digits could enter speech and correctly trigger the EvidenceTrace
+   direct-evidence validator, permanently failing a confirmed Persona's turn.
+
+The next projection must cover meaningful head/middle/tail content without classroom
+hash/code leakage and must emit natural source-neutral meta wording for every current
+validator source pattern. All six dimensions require pairwise actual ProviderPrompt
+causality tests plus strict three-phase, 80–190-word, non-empty exact-trace acceptance.
