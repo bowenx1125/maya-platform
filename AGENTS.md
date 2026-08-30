@@ -12,8 +12,12 @@
 4. Do not copy any source fragment from reference repositories. References are
    read-only inputs for interaction, architecture and test ideas. Implement from Maya
    contracts.
-5. Keep the frontend provider-neutral. Supplier names, model IDs, external resource
-   IDs, API keys, supplier URLs and private paths may not enter browser-facing DTOs.
+5. Keep ordinary frontend DTOs provider-neutral. The dedicated teacher-only
+   ProviderDataCallV1 disclosure DTO may expose only the supplier display name, region,
+   purpose, outbound field classes, storage fact, no-training basis and retention
+   setting required for informed confirmation. Model IDs, supplier endpoints/URLs,
+   external resource IDs, API keys, raw ledgers and private paths may not enter any
+   browser-facing DTO.
 6. Never create or commit a real `.env`, credentials, student audio, runtime data,
    databases, generated media, logs or private reference code. Use `.env.example` and
    isolated test/Mock inputs.
