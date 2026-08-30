@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import cast
+from typing import NoReturn, cast
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
@@ -35,11 +35,26 @@ from app.core.models import (
     IdempotencyRecord,
     KnowledgeSnapshot,
 )
+from app.modules.agents.persona import (
+    raw_agent_md_hash,
+)
+from app.modules.agents.persona_repository import SqlAlchemyPersonaStore
+from app.modules.agents.persona_service import (
+    PersonaConfirmationRequest as PersonaConfirmationDomainRequest,
+)
+from app.modules.agents.persona_service import (
+    PersonaDomainError,
+    PersonaService,
+    persona_publication_blocker,
+)
 from app.modules.agents.schemas import (
     AgentCreateRequest,
     AgentDetail,
     AgentSummary,
+    CompilePersonaRequest,
+    ConfirmPersonaRequest,
     ExpectedRevisionRequest,
+    PersonaCompileResponse,
     PublishedAgentSummary,
     TestChatRequest,
     TestChatResponse,
@@ -101,6 +116,26 @@ _AGENT_MD_UPLOAD_BODY = {
 
 def _time() -> datetime:
     return datetime.now(UTC)
+
+
+def _raise_persona_domain_error(error: PersonaDomainError) -> NoReturn:
+    """Map the pure Persona port error to Maya's stable error envelope."""
+
+    if error.code == "stale_revision":
+        current = error.details.get("current_revision")
+        raise stale_revision(int(current) if isinstance(current, int) else None)
+    if error.code == "version_immutable":
+        raise version_immutable()
+    if error.code == "forbidden":
+        raise forbidden(error.message)
+    if error.code in {
+        "persona_confirmation_required",
+        "persona_integrity_mismatch",
+        "persona_compile_required",
+        "persona_compile_failed",
+    }:
+        raise validation_failure(error.message, error.details, code=error.code)
+    raise invalid_state(error.message)
 
 
 def _summary_with_metadata(
@@ -410,6 +445,7 @@ def create_agent(
         state="draft",
         revision=0,
         agent_md="",
+        raw_agent_md_hash=raw_agent_md_hash(""),
         avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
         created_at=timestamp,
         updated_at=timestamp,
@@ -663,6 +699,14 @@ def create_next_agent_version(
         state="draft",
         revision=0,
         agent_md=current.agent_md,
+        raw_agent_md_hash=raw_agent_md_hash(current.agent_md),
+        persona_spec_json=None,
+        persona_spec_hash=None,
+        persona_compiler_version=None,
+        persona_diagnostics_json=None,
+        persona_confirmation_revision=None,
+        student_confirmed_at=None,
+        persona_confirming_user_id=None,
         avatar_config_json=current.avatar_config_json,
         voice_profile_id=current.voice_profile_id,
         knowledge_snapshot_id=None,
@@ -711,6 +755,86 @@ def get_agent_version(
     return version_dto(db, scoped.version, scoped.agent)
 
 
+@router.post(
+    "/agent-versions/{version_id}/persona/compile",
+    response_model=PersonaCompileResponse,
+    operation_id="compileAgentPersona",
+    responses={
+        200: {"model": PersonaCompileResponse, "description": "Deterministic Persona preview."},
+        404: {"model": Error, "description": "Version not found."},
+        409: {"model": Error, "description": "Revision or immutability conflict."},
+    },
+)
+def compile_agent_persona(
+    version_id: UUID,
+    payload: CompilePersonaRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> PersonaCompileResponse:
+    scoped = visible_student_version(db, context, str(version_id))
+    if scoped.version.state != "draft":
+        raise version_immutable()
+    store = SqlAlchemyPersonaStore(db)
+    service = PersonaService(store)
+    try:
+        result = service.compile_draft(str(version_id), expected_revision=payload.expected_revision)
+    except PersonaDomainError as error:
+        _raise_persona_domain_error(error)
+    state = store.get_persona_version(str(version_id))
+    if state is None:  # pragma: no cover - compile CAS already loaded the row
+        raise not_found()
+    return PersonaCompileResponse(
+        version_id=version_id,
+        revision=state.revision,
+        compiled=result.compiled,
+        raw_agent_md_hash=result.source_agent_md_hash,
+        persona_spec=result.spec,
+        persona_spec_hash=result.persona_spec_hash,
+        compiler_version=result.compiler_version,
+        diagnostics=list(result.diagnostics),
+        persona_confirmed=False,
+    )
+
+
+@router.post(
+    "/agent-versions/{version_id}/persona/confirm",
+    response_model=AgentVersionDTO,
+    operation_id="confirmAgentPersona",
+    responses={
+        200: {"model": AgentVersionDTO, "description": "Persona confirmed for the exact draft."},
+        403: {"model": Error, "description": "A current group member is required."},
+        404: {"model": Error, "description": "Version not found."},
+        409: {"model": Error, "description": "Revision conflict."},
+        422: {"model": Error, "description": "Persona confirmation required."},
+    },
+)
+def confirm_agent_persona(
+    version_id: UUID,
+    payload: ConfirmPersonaRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> AgentVersionDTO:
+    visible = visible_student_version(db, context, str(version_id))
+    if visible.version.state != "draft":
+        raise version_immutable()
+    request = PersonaConfirmationDomainRequest(
+        version_id=str(version_id),
+        expected_revision=payload.expected_revision,
+        raw_agent_md_hash=payload.raw_agent_md_hash,
+        persona_spec_hash=payload.persona_spec_hash,
+        compiler_version=payload.compiler_version,
+    )
+    service = PersonaService(SqlAlchemyPersonaStore(db))
+    try:
+        service.confirm(request, confirming_user_id=context.user.id)
+    except PersonaDomainError as error:
+        _raise_persona_domain_error(error)
+    refreshed = visible_student_version(db, context, str(version_id))
+    return version_dto(db, refreshed.version, refreshed.agent)
+
+
 @router.patch(
     "/agent-versions/{version_id}",
     response_model=AgentVersionDTO,
@@ -738,9 +862,29 @@ def update_agent_draft(
     values: dict[str, object] = {
         "revision": AgentVersion.revision + 1,
         "updated_at": _time(),
+        # Any intervening draft edit makes a prior student confirmation stale,
+        # even when the edit only changes avatar/voice metadata.
+        "persona_confirmation_revision": None,
+        "student_confirmed_at": None,
+        "persona_confirming_user_id": None,
     }
+    raw_changed = False
     if "agent_md" in payload.model_fields_set:
-        values["agent_md"] = payload.agent_md.replace("\r\n", "\n").replace("\r", "\n")
+        normalized_agent_md = payload.agent_md.replace("\r\n", "\n").replace("\r", "\n")
+        raw_changed = normalized_agent_md != scoped.version.agent_md
+        values["agent_md"] = normalized_agent_md
+        values["raw_agent_md_hash"] = raw_agent_md_hash(normalized_agent_md)
+        if raw_changed:
+            # A changed raw source cannot keep an old structured extraction or
+            # its diagnostics as active state.
+            values.update(
+                {
+                    "persona_spec_json": None,
+                    "persona_spec_hash": None,
+                    "persona_compiler_version": None,
+                    "persona_diagnostics_json": None,
+                }
+            )
     if payload.avatar_config is not None:
         try:
             avatar = validate_avatar_config(payload.avatar_config)
@@ -818,6 +962,14 @@ async def upload_agent_md(
         )
         .values(
             agent_md=document.normalized,
+            raw_agent_md_hash=raw_agent_md_hash(document.normalized),
+            persona_spec_json=None,
+            persona_spec_hash=None,
+            persona_compiler_version=None,
+            persona_diagnostics_json=None,
+            persona_confirmation_revision=None,
+            student_confirmed_at=None,
+            persona_confirming_user_id=None,
             revision=AgentVersion.revision + 1,
             updated_at=_time(),
         )
@@ -913,6 +1065,13 @@ def publish_agent_version(
             payload.expected_revision,
             record,
         )
+        persona_blocker = persona_publication_blocker(version)
+        if persona_blocker is not None:
+            raise validation_failure(
+                "The Persona must be compiled and confirmed before publication.",
+                {"publish_blockers": [persona_blocker]},
+                code=persona_blocker,
+            )
         create_snapshot(
             db,
             settings.resolved_data_root,

@@ -23,6 +23,7 @@ from app.modules.agents.persona import (
     PersonaSpecV1,
     canonical_json,
     compile_persona,
+    looks_like_persona_template,
     persona_spec_hash,
     raw_agent_md_hash,
 )
@@ -286,6 +287,23 @@ def publication_eligibility(
     return PersonaEligibility(eligible=False, code=PERSONA_CONFIRMATION_REQUIRED)
 
 
+def persona_publication_blocker(
+    version: PersonaVersionState | Mapping[str, object] | object,
+) -> str | None:
+    """Return the Persona-specific publish blocker, if a Persona is in scope."""
+
+    state = _as_mapping(version)
+    raw = state.get("agent_md")
+    if not isinstance(raw, str) or not raw.strip() or is_persona_confirmed(version):
+        return None
+    diagnostics = state.get("persona_diagnostics_json") or state.get("persona_diagnostics")
+    if diagnostics:
+        return PERSONA_COMPILE_FAILED
+    if looks_like_persona_template(raw):
+        return PERSONA_CONFIRMATION_REQUIRED
+    return None
+
+
 def legacy_persona_version_ids(
     versions: Iterable[PersonaVersionState | Mapping[str, object] | object],
 ) -> tuple[str, ...]:
@@ -347,6 +365,8 @@ def _as_mapping(value: PersonaVersionState | Mapping[str, object] | object) -> M
         "confirming_user_id",
         "persona_confirming_user_id",
         "persona_confirmed_by_user_id",
+        "persona_diagnostics_json",
+        "persona_diagnostics",
         "revision",
     )
     return {name: getattr(value, name, None) for name in names}
@@ -376,5 +396,6 @@ __all__ = [
     "is_persona_confirmed",
     "legacy_persona_version_ids",
     "publication_eligibility",
+    "persona_publication_blocker",
     "require_debate_personas",
 ]

@@ -221,6 +221,19 @@ class AgentVersion(Base):
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     agent_md: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Wave 4 Persona is nullable for immutable legacy rows.  ``agent_md`` is
+    # still the only raw authored source; these columns hold only its hash and
+    # the extraction/confirmation result.
+    raw_agent_md_hash: Mapped[str | None] = mapped_column(String(71), nullable=True)
+    persona_spec_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    persona_spec_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    persona_compiler_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    persona_diagnostics_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    persona_confirmation_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    student_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    persona_confirming_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     avatar_config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     voice_profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     knowledge_snapshot_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -238,6 +251,24 @@ class AgentVersion(Base):
     __table_args__ = (
         CheckConstraint("version_seq >= 0", name="ck_agent_versions_seq_nonnegative"),
         CheckConstraint("revision >= 0", name="ck_agent_versions_revision_nonnegative"),
+        CheckConstraint(
+            "((persona_spec_json IS NULL AND persona_spec_hash IS NULL "
+            "AND persona_compiler_version IS NULL) OR "
+            "(persona_spec_json IS NOT NULL AND persona_spec_hash IS NOT NULL "
+            "AND persona_compiler_version IS NOT NULL))",
+            name="ck_agent_versions_persona_compilation_fields",
+        ),
+        CheckConstraint(
+            "((persona_confirmation_revision IS NULL AND student_confirmed_at IS NULL "
+            "AND persona_confirming_user_id IS NULL) OR "
+            "(persona_confirmation_revision IS NOT NULL AND student_confirmed_at IS NOT NULL "
+            "AND persona_confirming_user_id IS NOT NULL))",
+            name="ck_agent_versions_persona_confirmation_fields",
+        ),
+        CheckConstraint(
+            "persona_confirmation_revision IS NULL OR persona_confirmation_revision = revision",
+            name="ck_agent_versions_persona_confirmation_revision",
+        ),
         CheckConstraint(
             "state IN ('draft', 'published', 'superseded')", name="ck_agent_versions_state"
         ),

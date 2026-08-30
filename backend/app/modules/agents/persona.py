@@ -485,6 +485,20 @@ def compile_persona_or_raise(
     return result.spec
 
 
+def looks_like_persona_template(source: str | bytes) -> bool:
+    """Identify an authored document using the PersonaSpecV1 section vocabulary.
+
+    This is only a compatibility/readability probe for older drafts.  It never
+    accepts or compiles a document; callers must still run ``compile_persona``.
+    """
+
+    try:
+        normalized = normalize_agent_md(source)
+    except (TypeError, UnicodeDecodeError):
+        return False
+    return "## Identity" in normalized
+
+
 def _parse_sections(
     lines: Sequence[_Line],
 ) -> tuple[dict[str, list[_Line]], list[PersonaDiagnostic]]:
@@ -927,6 +941,7 @@ __all__ = [
     "diagnostics_json",
     "hash_agent_md",
     "hash_persona_spec",
+    "looks_like_persona_template",
     "normalize_agent_md",
     "persona_spec_hash",
     "provider_view",

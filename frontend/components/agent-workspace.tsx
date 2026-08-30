@@ -16,6 +16,8 @@ import {
   type AvatarTemplate,
   type KnowledgeDocument,
   type KnowledgeSnapshot,
+  type PersonaCompileResponse,
+  type ConfirmPersonaRequest,
   type RagPreview,
   type TestChatResponse,
   type VoiceProfile,
@@ -52,10 +54,26 @@ type PersonaVersionFields = {
   persona_spec_json?: unknown;
   persona_spec?: unknown;
   previous_persona_spec_json?: unknown;
+  previous_persona_spec?: unknown;
   persona_diagnostics?: readonly PersonaPreviewDiagnostic[];
   persona_diagnostics_json?: unknown;
+  raw_agent_md_hash?: string | null;
+  persona_spec_hash?: string | null;
+  persona_compiler_version?: string | null;
   persona_confirmation_revision?: number | null;
   student_confirmed_at?: string | null;
+  persona_confirmed?: boolean;
+};
+
+type PersonaApi = PlatformApi & {
+  compilePersona: (
+    versionId: string,
+    expectedRevision: number,
+  ) => Promise<PersonaCompileResponse>;
+  confirmPersona: (
+    versionId: string,
+    body: ConfirmPersonaRequest,
+  ) => Promise<AgentVersion>;
 };
 
 type AgentMetadataApi = PlatformApi & {
@@ -611,6 +629,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   // represented by `error`; keep these bindings initialized for its callback.
   const currentVersion = version as AgentVersion;
   const currentAgent = agent as AgentDetail;
+  const personaApi = api as PersonaApi;
   const personaVersion = (currentVersion ?? {}) as AgentVersion &
     PersonaVersionFields;
   const structuredPersona =
@@ -620,12 +639,30 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           personaVersion.persona_spec_json ?? personaVersion.persona_spec,
         );
   const previousPersona = version
-    ? parsePersonaSpec(personaVersion.previous_persona_spec_json)
+    ? parsePersonaSpec(
+        personaVersion.previous_persona_spec_json ??
+          personaVersion.previous_persona_spec ??
+          parsePersonaVersionSpec(
+            agent?.versions
+              ?.filter((candidate) => candidate.state !== "draft")
+              .slice()
+              .sort((left, right) =>
+                right.version_label.localeCompare(
+                  left.version_label,
+                  undefined,
+                  {
+                    numeric: true,
+                  },
+                ),
+              )[0],
+          ),
+      )
     : null;
   const personaConfirmed = Boolean(
     !localDirty &&
-    personaVersion.persona_confirmation_revision != null &&
-    personaVersion.student_confirmed_at,
+    (personaVersion.persona_confirmed ??
+      (personaVersion.persona_confirmation_revision != null &&
+        personaVersion.student_confirmed_at)),
   );
 
   if (loading) return <LoadingCard />;
@@ -668,6 +705,71 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       setAvatarConfig(next.avatar_config);
       setVoiceProfileId(next.voice_profile_id ?? null);
       setNotice("draftSavedNotice");
+    } catch (cause) {
+      if (isConflict(cause)) setConflict(true);
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function compilePersonaDraft() {
+    if (!personaApi.compilePersona) return;
+    abandonUploadIntent();
+    abandonPublishIntent();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setConflict(false);
+    try {
+      const result = await personaApi.compilePersona(
+        currentVersion.id,
+        currentVersion.revision,
+      );
+      setVersion((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          raw_agent_md_hash: result.raw_agent_md_hash,
+          persona_spec: result.persona_spec,
+          persona_spec_hash: result.persona_spec_hash,
+          persona_compiler_version: result.compiler_version,
+          persona_diagnostics: result.diagnostics,
+          persona_confirmation_revision: null,
+          student_confirmed_at: null,
+          persona_confirmed: false,
+        } as AgentVersion;
+      });
+    } catch (cause) {
+      if (isConflict(cause)) setConflict(true);
+      setError(cause);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmPersonaDraft() {
+    if (
+      !personaApi.confirmPersona ||
+      !personaVersion.raw_agent_md_hash ||
+      !personaVersion.persona_spec_hash
+    )
+      return;
+    abandonUploadIntent();
+    abandonPublishIntent();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setConflict(false);
+    try {
+      const next = await personaApi.confirmPersona(currentVersion.id, {
+        expected_revision: currentVersion.revision,
+        raw_agent_md_hash: personaVersion.raw_agent_md_hash,
+        persona_spec_hash: personaVersion.persona_spec_hash,
+        compiler_version:
+          personaVersion.persona_compiler_version ?? "persona_template_v1",
+      });
+      setVersion(next);
     } catch (cause) {
       if (isConflict(cause)) setConflict(true);
       setError(cause);
@@ -978,10 +1080,16 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             spec={structuredPersona}
             previousSpec={previousPersona}
             diagnostics={
-              personaVersion.persona_diagnostics ??
-              parsePersonaDiagnostics(personaVersion.persona_diagnostics_json)
+              localDirty
+                ? []
+                : (personaVersion.persona_diagnostics ??
+                  parsePersonaDiagnostics(
+                    personaVersion.persona_diagnostics_json,
+                  ))
             }
             confirmed={personaConfirmed}
+            onCompile={() => void compilePersonaDraft()}
+            onConfirm={() => void confirmPersonaDraft()}
           />
           {avatarConfig ? (
             <SectionCard
@@ -1586,6 +1694,13 @@ function parsePersonaSpec(value: unknown): PersonaPreviewSpec | null {
         ? record.compiler_version
         : undefined,
   };
+}
+
+function parsePersonaVersionSpec(value: unknown): PersonaPreviewSpec | null {
+  if (isRecord(value)) {
+    return parsePersonaSpec(value.persona_spec ?? value.persona_spec_json);
+  }
+  return null;
 }
 
 function parseJson(value: string): unknown {

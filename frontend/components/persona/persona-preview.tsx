@@ -106,6 +106,7 @@ export function PersonaPreview({
   previousSpec,
   diagnostics = [],
   confirmed = false,
+  onCompile,
   onConfirm,
 }: {
   rawAgentMd: string;
@@ -113,6 +114,7 @@ export function PersonaPreview({
   previousSpec?: PersonaPreviewSpec | null;
   diagnostics?: readonly PersonaPreviewDiagnostic[];
   confirmed?: boolean;
+  onCompile?: () => void;
   onConfirm?: () => void;
 }) {
   const diff = diffPersonaSpec(previousSpec, spec);
@@ -142,6 +144,14 @@ export function PersonaPreview({
               onClick={onConfirm}
             >
               Confirm Persona
+            </button>
+          ) : onCompile && !spec ? (
+            <button
+              className="primary-action compact-action"
+              type="button"
+              onClick={onCompile}
+            >
+              Compile Persona
             </button>
           ) : null}
         </div>

@@ -47,6 +47,15 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.modules.agents.persona import (
+    PERSONA_COMPILER_VERSION,
+    PersonaDiagnostic,
+    PersonaSpecV1,
+)
+from app.modules.agents.persona_service import (
+    is_persona_confirmed,
+    persona_publication_blocker,
+)
 from app.modules.agents.schemas import (
     AgentDetail,
     AgentSummary,
@@ -805,6 +814,9 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
         validate_avatar_config(json.loads(version.avatar_config_json))
     except Exception:
         result.append("avatar_missing")
+    persona_blocker = persona_publication_blocker(version)
+    if persona_blocker is not None:
+        result.append(persona_blocker)
     return result
 
 
@@ -823,6 +835,26 @@ def version_dto(
         agent.group_id,
         settings or db.info.get("maya_settings") or get_settings(),
     )
+    persona_spec: PersonaSpecV1 | None = None
+    if version.persona_spec_json:
+        try:
+            persona_spec = PersonaSpecV1.model_validate(json.loads(version.persona_spec_json))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            # A malformed stored Persona is not exposed as a partially trusted
+            # browser DTO; publication/confirmation eligibility remains false.
+            persona_spec = None
+    persona_diagnostics: list[PersonaDiagnostic] = []
+    if version.persona_diagnostics_json:
+        try:
+            raw_diagnostics = json.loads(version.persona_diagnostics_json)
+            if isinstance(raw_diagnostics, list):
+                persona_diagnostics = [
+                    PersonaDiagnostic.model_validate(item)
+                    for item in raw_diagnostics
+                    if isinstance(item, dict)
+                ]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            persona_diagnostics = []
     return AgentVersionDTO(
         id=UUID(version.id),
         agent_id=UUID(version.agent_id),
@@ -830,6 +862,18 @@ def version_dto(
         state=cast(Literal["draft", "published", "superseded"], version.state),
         revision=version.revision,
         agent_md=version.agent_md,
+        raw_agent_md_hash=version.raw_agent_md_hash,
+        persona_spec=persona_spec,
+        persona_spec_hash=version.persona_spec_hash,
+        persona_compiler_version=(
+            PERSONA_COMPILER_VERSION
+            if version.persona_compiler_version == PERSONA_COMPILER_VERSION
+            else None
+        ),
+        persona_diagnostics=persona_diagnostics,
+        persona_confirmation_revision=version.persona_confirmation_revision,
+        student_confirmed_at=version.student_confirmed_at,
+        persona_confirmed=is_persona_confirmed(version),
         avatar_config=_avatar(version.avatar_config_json),
         voice_profile_id=UUID(version.voice_profile_id) if version.voice_profile_id else None,
         effective_voice_profile_id=(

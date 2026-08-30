@@ -8,6 +8,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.modules.agents.persona import (
+    PERSONA_COMPILER_VERSION,
+    PersonaDiagnostic,
+    PersonaSpecV1,
+)
 from app.modules.knowledge.schemas import KnowledgeDocument
 
 
@@ -38,6 +43,14 @@ class AgentVersion(BaseModel):
     state: Literal["draft", "published", "superseded"]
     revision: int = Field(ge=0)
     agent_md: str = Field(default="", max_length=12000)
+    raw_agent_md_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    persona_spec: PersonaSpecV1 | None = None
+    persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    persona_compiler_version: Literal["persona_template_v1"] | None = None
+    persona_diagnostics: list[PersonaDiagnostic] = Field(default_factory=list)
+    persona_confirmation_revision: int | None = Field(default=None, ge=0)
+    student_confirmed_at: datetime | None = None
+    persona_confirmed: bool = False
     avatar_config: AvatarConfig
     voice_profile_id: UUID | None = None
     effective_voice_profile_id: UUID | None = None
@@ -45,6 +58,29 @@ class AgentVersion(BaseModel):
     knowledge_snapshot_id: UUID | None = None
     enabled_documents: list[KnowledgeDocument] = Field(default_factory=list)
     publish_blockers: list[str] = Field(default_factory=list)
+
+
+class CompilePersonaRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+
+
+class ConfirmPersonaRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    raw_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    persona_spec_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+
+
+class PersonaCompileResponse(BaseModel):
+    version_id: UUID
+    revision: int = Field(ge=0)
+    compiled: bool
+    raw_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    persona_spec: PersonaSpecV1 | None = None
+    persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+    diagnostics: list[PersonaDiagnostic] = Field(default_factory=list)
+    persona_confirmed: bool = False
 
 
 class KnowledgeDocumentMutation(BaseModel):

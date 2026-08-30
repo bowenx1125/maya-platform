@@ -21,6 +21,49 @@ export type KnowledgeDocumentMutation = {
 };
 export type RagPreview = components["schemas"]["RagPreview"];
 export type TestChatResponse = components["schemas"]["TestChatResponse"];
+export type PersonaPreviewSpec = {
+  schema_version?: string;
+  identity: {
+    name: string;
+    role: string;
+    historical_or_cultural_context: string;
+  };
+  cultural_lens: readonly string[];
+  core_values: readonly string[];
+  initial_position: string;
+  speaking_style: {
+    tone: string;
+    argument_pattern: string;
+    concession_style: string;
+    question_style: string;
+  };
+  debate_strategy: readonly string[];
+  boundaries: readonly string[];
+  source_agent_md_hash?: string;
+  compiler_version?: string;
+};
+export type PersonaCompileResponse = {
+  version_id: string;
+  revision: number;
+  compiled: boolean;
+  raw_agent_md_hash: string;
+  persona_spec: PersonaPreviewSpec | null;
+  persona_spec_hash: string | null;
+  compiler_version: string;
+  diagnostics: Array<{
+    code?: string;
+    message: string;
+    line?: number | null;
+    field?: string | null;
+  }>;
+  persona_confirmed: boolean;
+};
+export type ConfirmPersonaRequest = {
+  expected_revision: number;
+  raw_agent_md_hash: string;
+  persona_spec_hash: string;
+  compiler_version: string;
+};
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
@@ -299,6 +342,38 @@ export class PlatformApi {
     return payload as T;
   }
 
+  private async postJson<T>(path: string, body: unknown): Promise<T> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const raw = await response.text();
+    let payload: unknown;
+    try {
+      payload = raw ? JSON.parse(raw) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    if (!response.ok) {
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    return payload as T;
+  }
+
   async login(username: string, password: string): Promise<AuthSession> {
     const result = await this.client.POST("/auth/login", {
       body: { username, password },
@@ -518,6 +593,26 @@ export class PlatformApi {
       body,
     });
     return unwrap(result);
+  }
+
+  async compilePersona(
+    versionId: string,
+    expectedRevision: number,
+  ): Promise<PersonaCompileResponse> {
+    return this.postJson<PersonaCompileResponse>(
+      `agent-versions/${versionId}/persona/compile`,
+      { expected_revision: expectedRevision },
+    );
+  }
+
+  async confirmPersona(
+    versionId: string,
+    body: ConfirmPersonaRequest,
+  ): Promise<AgentVersion> {
+    return this.postJson<AgentVersion>(
+      `agent-versions/${versionId}/persona/confirm`,
+      body,
+    );
   }
 
   async setDocuments(
