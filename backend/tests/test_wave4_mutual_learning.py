@@ -248,12 +248,14 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
             group_id=GROUP_BOWEN_ID,
             name="Barrier A",
             evidence="Unrelated mineral carving notes do not answer this classroom topic.",
+            confirmed_persona=True,
         )
         second_agent = _insert_sql_published_agent(
             database,
             group_id=GROUP_KAIKAI_ID,
             name="Barrier B",
             evidence="Another unrelated geological passage for a separate snapshot.",
+            confirmed_persona=True,
         )
         _session, csrf = login(client)
         response = client.post(
@@ -343,12 +345,14 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
             group_id=GROUP_BOWEN_ID,
             name=f"Projection A {round_count}",
             evidence="A snapshot passage for the projection test.",
+            confirmed_persona=True,
         )
         second_agent = _insert_sql_published_agent(
             database,
             group_id=GROUP_KAIKAI_ID,
             name=f"Projection B {round_count}",
             evidence="A second snapshot passage for the projection test.",
+            confirmed_persona=True,
         )
         _session, csrf = login(client)
         response = client.post(
@@ -371,6 +375,64 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
         detail = client.get(f"/api/v1/debates/{payload['id']}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["round_count"] == round_count
+
+
+def test_new_mutual_debate_requires_confirmed_persona_but_legacy_rule_stays_compatible(
+    app_factory: object,
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from tests.conftest import login
+    from tests.test_wave3_mock_rag_delta import (
+        COURSE_ID,
+        GROUP_BOWEN_ID,
+        GROUP_KAIKAI_ID,
+        _headers,
+        _insert_sql_published_agent,
+    )
+
+    app, database, _settings = app_factory()  # type: ignore[operator]
+    with TestClient(app) as client:
+        first = _insert_sql_published_agent(
+            database,
+            group_id=GROUP_BOWEN_ID,
+            name="Legacy Persona A",
+            evidence="A legacy immutable snapshot.",
+        )
+        second = _insert_sql_published_agent(
+            database,
+            group_id=GROUP_KAIKAI_ID,
+            name="Legacy Persona B",
+            evidence="A second legacy immutable snapshot.",
+        )
+        _session, csrf = login(client)
+        payload = {
+            "topic": "How should communities discuss fairness in technology?",
+            "participants": [
+                {"agent_id": first, "stance_mode": "open"},
+                {"agent_id": second, "stance_mode": "open"},
+            ],
+            "rule_set_id": RULE_SET,
+            "round_count": 2,
+        }
+        rejected = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=_headers(csrf, **{"Idempotency-Key": "wave4-persona-required"}),
+            json=payload,
+        )
+        assert rejected.status_code == 422
+        assert rejected.json()["code"] == "persona_confirmation_required"
+
+        legacy = client.post(
+            f"/api/v1/courses/{COURSE_ID}/debates",
+            headers=_headers(csrf, **{"Idempotency-Key": "wave4-persona-legacy-ok"}),
+            json={
+                **payload,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+            },
+        )
+        assert legacy.status_code == 201, legacy.text
+        assert legacy.json()["rule_set_id"] == "ordered_multi_agent_rounds_demo_v2"
 
 
 def _opening_result(turn_id: str, evidence_ids: Sequence[str] = ()) -> MutualLearningTurnResultV1:

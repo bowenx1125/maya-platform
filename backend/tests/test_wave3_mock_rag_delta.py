@@ -19,6 +19,7 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.modules.agents.persona import compile_persona
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
 from app.modules.debates.generation import (
     GenerationContext,
@@ -67,6 +68,7 @@ def _insert_sql_published_agent(
     group_id: str,
     name: str,
     evidence: str,
+    confirmed_persona: bool = False,
 ) -> str:
     now = datetime.now(UTC)
     agent_id, version_id, snapshot_id, document_id, file_id, snapshot_document_id = (
@@ -122,6 +124,37 @@ def _insert_sql_published_agent(
             )
         )
         db.flush()
+        agent_md = f"# Identity\n{name} offers a careful classroom viewpoint."
+        persona_fields: dict[str, object] = {}
+        if confirmed_persona:
+            agent_md = (
+                f"# {name}\n\n"
+                "## Identity\n\n"
+                "- Role: Classroom technology ethics expert\n"
+                "- Historical or cultural context: A fictional cross-cultural classroom.\n\n"
+                "## Cultural lens\n\n- Community accountability\n\n"
+                "## Core values\n\n- Fairness\n- Transparency\n\n"
+                "## Initial position\n\nPrefer evidence-aware proportional safeguards.\n\n"
+                "## Speaking style\n\n"
+                "- Tone: Careful and respectful\n"
+                "- Argument pattern: State a claim, examine evidence, then qualify it\n"
+                "- Concession style: Acknowledge a sound point before refining it\n"
+                "- Question style: Ask one focused and answerable question\n\n"
+                "## Debate strategy\n\n- Compare trade-offs without manufacturing conflict\n\n"
+                "## Boundaries\n\n- Never invent evidence outside the assigned snapshot\n"
+            )
+            compiled = compile_persona(agent_md, expected_name=name)
+            assert compiled.compiled and compiled.canonical_json and compiled.persona_spec_hash
+            persona_fields = {
+                "raw_agent_md_hash": compiled.source_agent_md_hash,
+                "persona_spec_json": compiled.canonical_json,
+                "persona_spec_hash": compiled.persona_spec_hash,
+                "persona_compiler_version": compiled.compiler_version,
+                "persona_diagnostics_json": "[]",
+                "persona_confirmation_revision": 1,
+                "student_confirmed_at": now,
+                "persona_confirming_user_id": "wave4-test-student",
+            }
         db.add(
             AgentVersion(
                 id=version_id,
@@ -129,13 +162,14 @@ def _insert_sql_published_agent(
                 version_seq=0,
                 state="published",
                 revision=1,
-                agent_md=f"# Identity\n{name} offers a careful classroom viewpoint.",
+                agent_md=agent_md,
                 avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
                 voice_profile_id=None,
                 knowledge_snapshot_id=snapshot_id,
                 published_at=now,
                 created_at=now,
                 updated_at=now,
+                **persona_fields,
             )
         )
         db.flush()

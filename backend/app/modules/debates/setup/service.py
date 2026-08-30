@@ -40,6 +40,7 @@ from app.core.models import (
     StoredFile,
     VoiceProfile,
 )
+from app.modules.agents.persona_service import is_persona_confirmed
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.schemas import (
@@ -397,6 +398,14 @@ def _fence_resolved_agent_chain(
             AgentVersion.avatar_config_json == version.avatar_config_json,
             AgentVersion.voice_profile_id == version.voice_profile_id,
             AgentVersion.published_at == version.published_at,
+            AgentVersion.raw_agent_md_hash == version.raw_agent_md_hash,
+            AgentVersion.persona_spec_json == version.persona_spec_json,
+            AgentVersion.persona_spec_hash == version.persona_spec_hash,
+            AgentVersion.persona_compiler_version == version.persona_compiler_version,
+            AgentVersion.persona_confirmation_revision
+            == version.persona_confirmation_revision,
+            AgentVersion.student_confirmed_at == version.student_confirmed_at,
+            AgentVersion.persona_confirming_user_id == version.persona_confirming_user_id,
         )
         .values(updated_at=AgentVersion.updated_at)
     )
@@ -450,6 +459,14 @@ def _participant_row(
         agent_id=str(item.agent_id),
         settings=settings,
     )
+    if (
+        str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING
+        and not is_persona_confirmed(version)
+    ):
+        raise validation_failure(
+            "Every selected Agent version must have a confirmed Persona.",
+            code="persona_confirmation_required",
+        )
     # Revalidate the complete captured relationship immediately before the
     # frozen row is returned to the caller's final write transaction.
     _fence_resolved_agent_chain(
