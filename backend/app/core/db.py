@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0009_persona_structured_fields"
+ALEMBIC_HEAD = "0010_provider_control_ledger"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

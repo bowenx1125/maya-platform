@@ -19,6 +19,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -990,6 +991,280 @@ class VoicePreview(Base):
         ),
         Index("ix_voice_previews_profile_state", "profile_id", "state"),
         Index("ix_voice_previews_expiry", "expires_at"),
+    )
+
+
+class ProviderPolicySnapshot(Base):
+    """Server-only, immutable supplier policy evidence for ProviderDataCallV1."""
+
+    __tablename__ = "provider_policy_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    policy_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    supplier: Mapped[str] = mapped_column(String(160), nullable=False)
+    region: Mapped[str] = mapped_column(String(32), nullable=False)
+    account_product: Mapped[str] = mapped_column(String(64), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(500), nullable=False)
+    privacy_notice_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    privacy_notice_retrieved_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    privacy_notice_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    service_terms_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    service_terms_retrieved_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    service_terms_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    faq_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    faq_retrieved_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    faq_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    no_training_basis: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_response_logging_disabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    inference_log_backflow_disabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    optional_content_logging_disabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    service_improvement_disabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    storage_disclosed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    retention_setting: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    snapshot_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_id", "snapshot_revision", name="uq_provider_policy_snapshots_revision"
+        ),
+        CheckConstraint(
+            "contract_version = 'ProviderDataCallV1'",
+            name="ck_provider_policy_snapshots_contract",
+        ),
+        CheckConstraint("region = 'cn-beijing'", name="ck_provider_policy_snapshots_region"),
+        CheckConstraint(
+            "account_product IN ('payg_api', 'pay-as-you-go api', 'pay-as-you-go API', "
+            "'token_plan_team', 'Token Plan Team')",
+            name="ck_provider_policy_snapshots_account_product",
+        ),
+        CheckConstraint(
+            "prompt_response_logging_disabled = 1 "
+            "AND inference_log_backflow_disabled = 1 "
+            "AND optional_content_logging_disabled = 1 "
+            "AND service_improvement_disabled = 1",
+            name="ck_provider_policy_snapshots_controls",
+        ),
+        CheckConstraint("storage_disclosed = 1", name="ck_provider_policy_snapshots_storage"),
+        CheckConstraint("snapshot_revision >= 1", name="ck_provider_policy_snapshots_revision"),
+        Index("ix_provider_policy_snapshots_policy", "policy_id", "snapshot_revision"),
+    )
+
+
+class ProviderExportManifest(Base):
+    """Server-only allowlist of fields approved for one provider operation."""
+
+    __tablename__ = "provider_export_manifests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    policy_snapshot_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "provider_policy_snapshots.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_manifests_policy",
+        ),
+        nullable=False,
+    )
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    model_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    build_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    persona_spec_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fields_json: Mapped[str] = mapped_column(Text, nullable=False)
+    operation_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    contains_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    contains_identity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    contains_private_audio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    contains_teacher_note: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    policy: Mapped[ProviderPolicySnapshot] = relationship()
+
+    __table_args__ = (
+        CheckConstraint("operation_revision >= 1", name="ck_provider_export_manifests_revision"),
+        CheckConstraint(
+            "contains_secret = 0 AND contains_identity = 0 "
+            "AND contains_private_audio = 0 AND contains_teacher_note = 0",
+            name="ck_provider_export_manifests_no_forbidden_data",
+        ),
+        Index("ix_provider_export_manifests_scope", "scope_id", "provider_operation"),
+        Index("ix_provider_export_manifests_policy", "policy_snapshot_id"),
+    )
+
+
+class ProviderExportConfirmation(Base):
+    """Immutable confirmation binding one exact export and policy hash."""
+
+    __tablename__ = "provider_export_confirmations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    manifest_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "provider_export_manifests.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_confirmations_manifest",
+        ),
+        nullable=False,
+        unique=True,
+    )
+    policy_snapshot_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "provider_policy_snapshots.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_confirmations_policy",
+        ),
+        nullable=False,
+    )
+    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmed_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmation_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    manifest: Mapped[ProviderExportManifest] = relationship()
+    policy: Mapped[ProviderPolicySnapshot] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "confirmation_revision >= 1", name="ck_provider_export_confirmations_revision"
+        ),
+        Index("ix_provider_export_confirmations_policy", "policy_snapshot_id"),
+    )
+
+
+class ProviderScopeBudget(Base):
+    """Atomic request/token/cost allowance for one server-owned scope."""
+
+    __tablename__ = "provider_scope_budgets"
+
+    scope_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    allocated_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    allocated_total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    allocated_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("max_requests >= 0", name="ck_provider_scope_budgets_max_requests"),
+        CheckConstraint("max_total_tokens >= 0", name="ck_provider_scope_budgets_max_tokens"),
+        CheckConstraint("max_cost_cny >= 0", name="ck_provider_scope_budgets_max_cost"),
+        CheckConstraint(
+            "allocated_requests >= 0 AND allocated_requests <= max_requests",
+            name="ck_provider_scope_budgets_allocated_requests",
+        ),
+        CheckConstraint(
+            "allocated_total_tokens >= 0 AND allocated_total_tokens <= max_total_tokens",
+            name="ck_provider_scope_budgets_allocated_tokens",
+        ),
+        CheckConstraint(
+            "allocated_cost_cny >= 0 AND allocated_cost_cny <= max_cost_cny",
+            name="ck_provider_scope_budgets_allocated_cost",
+        ),
+    )
+
+
+class ProviderOperation(Base):
+    """Generic server-side ProviderDataCallV1 operation metadata."""
+
+    __tablename__ = "provider_operations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    logical_item_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    export_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    build_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    model_key: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="prepared")
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    charged_request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    staged_response_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    reservations: Mapped[list[ProviderReservation]] = relationship(
+        back_populates="operation", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_id",
+            "provider_operation",
+            "logical_item_id",
+            "attempt_no",
+            name="uq_provider_operations_attempt",
+        ),
+        CheckConstraint("attempt_no >= 1", name="ck_provider_operations_attempt"),
+        CheckConstraint("max_tokens >= 0", name="ck_provider_operations_max_tokens"),
+        CheckConstraint("max_cost_cny >= 0", name="ck_provider_operations_max_cost"),
+        CheckConstraint(
+            "state IN ('prepared', 'reserved', 'sending', 'accepted', 'succeeded', "
+            "'not_sent', 'acceptance_unknown', 'failed', 'abandoned')",
+            name="ck_provider_operations_state",
+        ),
+        CheckConstraint(
+            "request_count >= 0 AND charged_request_count >= 0",
+            name="ck_provider_operations_counters",
+        ),
+        Index("ix_provider_operations_scope_state", "scope_id", "state"),
+        Index("ix_provider_operations_state", "state"),
+    )
+
+
+class ProviderReservation(Base):
+    """Durable pre-send allowance linked to exactly one operation attempt."""
+
+    __tablename__ = "provider_reservations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    operation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "provider_operations.id",
+            ondelete="CASCADE",
+            name="fk_provider_reservations_operation",
+        ),
+        nullable=False,
+        unique=True,
+    )
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    logical_item_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="prepared")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    operation: Mapped[ProviderOperation] = relationship(back_populates="reservations")
+
+    __table_args__ = (
+        CheckConstraint("attempt_no >= 1", name="ck_provider_reservations_attempt"),
+        CheckConstraint("max_tokens >= 0", name="ck_provider_reservations_max_tokens"),
+        CheckConstraint("max_cost_cny >= 0", name="ck_provider_reservations_max_cost"),
+        CheckConstraint(
+            "state IN ('prepared', 'reserved', 'sending', 'accepted', 'succeeded', "
+            "'not_sent', 'acceptance_unknown', 'failed', 'abandoned')",
+            name="ck_provider_reservations_state",
+        ),
+        Index("ix_provider_reservations_scope_state", "scope_id", "state"),
     )
 
 
