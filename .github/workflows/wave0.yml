@@ -105,11 +105,23 @@ jobs:
           test -f frontend/tests/wave3-history-translation.test.tsx
           test -f frontend/tests/wave3-playback-controls.test.tsx
 
+      - name: Assert portable project authority
+        run: |
+          test -f PROJECT.md
+          test -f PROJECT_STATUS.md
+          test -f ARCHITECTURE.md
+          test -f docs/gates/wave4/R0_GATE_PACKET.md
+          test -f docs/archive/PROJECT_MONOLITH_2026-08-30.sha256
+          test ! -e Project.md
+
       - name: Frozen JavaScript install
         run: pnpm install --frozen-lockfile
 
       - name: Repository formatting
         run: pnpm exec prettier --check .
+
+      - name: Project authority and document links
+        run: pnpm docs:check
 
       - name: Frozen parent OpenAPI and generated client checks
         run: |

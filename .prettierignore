@@ -6,3 +6,7 @@ contracts/fixtures/*.json
 frontend/lib/api/generated/schema.d.ts
 frontend/.next/**
 frontend/public/avatars/draco/**
+docs/archive/**
+docs/worklog/**
+docs/requirements/original.md
+docs/contracts/baseline-pre-code/**
