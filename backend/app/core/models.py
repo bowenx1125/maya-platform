@@ -1382,6 +1382,8 @@ class EmbeddingAcceptedStage(Base):
     build_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     batch_index: Mapped[int] = mapped_column(Integer, nullable=False)
     model_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    embedding_provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    embedding_region: Mapped[str] = mapped_column(String(40), nullable=False)
     dimension: Mapped[int] = mapped_column(Integer, nullable=False)
     policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
     response_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -1408,7 +1410,13 @@ class EmbeddingAcceptedStage(Base):
         CheckConstraint("length(build_id) > 0", name="ck_embedding_accepted_stages_build_id"),
         CheckConstraint("length(model_key) > 0", name="ck_embedding_accepted_stages_model"),
         CheckConstraint(
-            "length(policy_version) > 0", name="ck_embedding_accepted_stages_policy_version"
+            "(embedding_provider = 'mock' AND model_key = 'mock-sha256-v1' "
+            "AND embedding_region = 'local' AND dimension = 256 "
+            "AND policy_version = 'w4-mock-v1') OR "
+            "(embedding_provider = 'dashscope' AND model_key = 'text-embedding-v4' "
+            "AND embedding_region = 'cn-beijing' AND dimension = 1024 "
+            "AND policy_version = 'w4-embed-v1')",
+            name="ck_embedding_accepted_stages_identity",
         ),
         Index("ix_embedding_accepted_stages_build", "build_id", "batch_index"),
     )

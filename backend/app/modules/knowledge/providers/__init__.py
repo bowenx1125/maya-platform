@@ -145,6 +145,7 @@ from .sql_runtime import (
     SqlAlchemyEmbeddingControlAdapter,
     SqlAlchemySnapshotPublicationStore,
 )
+from .sql_stage import SqlAlchemyEmbeddingStageStore
 from .tokenizer import (
     CONSERVATIVE_TOKENIZER_ID,
     ConservativeUtf8Tokenizer,
@@ -261,6 +262,7 @@ __all__ = [
     "SnapshotPublicationReceiptV1",
     "SnapshotPublisherPort",
     "SqlAlchemyEmbeddingControlAdapter",
+    "SqlAlchemyEmbeddingStageStore",
     "SqlAlchemySnapshotPublicationStore",
     "TokenizerError",
     "Utf8ByteTokenizer",

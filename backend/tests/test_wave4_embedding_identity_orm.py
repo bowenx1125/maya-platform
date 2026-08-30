@@ -310,9 +310,7 @@ def test_0013_backfills_legacy_mock_without_changing_snapshot_or_vector_bytes(
     try:
         with database.engine.connect() as connection:
             before = connection.execute(
-                text(
-                    "SELECT id, embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"
-                ),
+                text("SELECT id, embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"),
                 fixture,
             ).one()
             before_snapshot_id = connection.execute(
@@ -352,19 +350,25 @@ def test_0013_backfills_legacy_mock_without_changing_snapshot_or_vector_bytes(
                 ),
                 fixture,
             ).one() == (None, None, None)
-            assert connection.execute(
-                text(
-                    "SELECT id FROM provider_export_confirmations "
-                    "WHERE id='confirmation-identity'"
-                )
-            ).scalar_one() == "confirmation-identity"
-            assert connection.execute(
-                text(
-                    "SELECT operation_id, build_id, batch_index FROM embedding_accepted_stages "
-                    "WHERE operation_id=:operation_id"
-                ),
-                fixture,
-            ).first() is None
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT id FROM provider_export_confirmations "
+                        "WHERE id='confirmation-identity'"
+                    )
+                ).scalar_one()
+                == "confirmation-identity"
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT operation_id, build_id, batch_index FROM embedding_accepted_stages "
+                        "WHERE operation_id=:operation_id"
+                    ),
+                    fixture,
+                ).first()
+                is None
+            )
     finally:
         database.dispose()
     assert before_snapshot_id == fixture["snapshot_id"]
@@ -433,9 +437,11 @@ def test_0013_stage_is_durable_ordered_and_database_bound(tmp_path: Path) -> Non
             connection.execute(
                 text(
                     "INSERT INTO embedding_accepted_stages "
-                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,dimension,"
-                    "policy_version,response_hash,created_at) VALUES (:operation_id,:build_id,"
-                    ":build_hash,0,'text-embedding-v4',1024,'w4-embed-v1',:response_hash,:now)"
+                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,"
+                    "embedding_provider,embedding_region,dimension,policy_version,response_hash,"
+                    "created_at) VALUES (:operation_id,:build_id,:build_hash,0,"
+                    "'text-embedding-v4','dashscope','cn-beijing',1024,'w4-embed-v1',"
+                    ":response_hash,:now)"
                 ),
                 {**values, "now": datetime.now(UTC)},
             )
@@ -518,12 +524,18 @@ def test_0013_downgrade_only_legacy_mock_is_lossless_and_reupgradeable(tmp_path:
     database = Database(_database_url(path))
     try:
         with database.engine.connect() as connection:
-            assert connection.execute(
-                text("SELECT id FROM knowledge_snapshots WHERE id=:snapshot_id"), fixture
-            ).scalar_one() == fixture["snapshot_id"]
-            assert connection.execute(
-                text("SELECT embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"), fixture
-            ).scalar_one() == b"legacy-vector"
+            assert (
+                connection.execute(
+                    text("SELECT id FROM knowledge_snapshots WHERE id=:snapshot_id"), fixture
+                ).scalar_one()
+                == fixture["snapshot_id"]
+            )
+            assert (
+                connection.execute(
+                    text("SELECT embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"), fixture
+                ).scalar_one()
+                == b"legacy-vector"
+            )
     finally:
         database.dispose()
     _upgrade(path)
@@ -561,9 +573,10 @@ def test_0013_real_identity_or_accepted_stage_refuses_lossy_downgrade(tmp_path: 
             connection.execute(
                 text(
                     "INSERT INTO embedding_accepted_stages "
-                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,dimension,"
-                    "policy_version,response_hash,created_at) VALUES (:operation_id,'build-stage',"
-                    ":hash,0,'text-embedding-v4',1024,'w4-embed-v1',:hash,:now)"
+                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,"
+                    "embedding_provider,embedding_region,dimension,policy_version,response_hash,"
+                    "created_at) VALUES (:operation_id,'build-stage',:hash,0,"
+                    "'text-embedding-v4','dashscope','cn-beijing',1024,'w4-embed-v1',:hash,:now)"
                 ),
                 {**stage_fixture, "hash": "d" * 64, "now": datetime.now(UTC)},
             )

@@ -23,7 +23,9 @@ from app.modules.knowledge.providers import (
     MockEmbeddingProvider,
     SnapshotBuildV1,
     SnapshotEmbeddingRuntime,
+    SnapshotEmbeddingRuntimeError,
     SqlAlchemyEmbeddingControlAdapter,
+    SqlAlchemyEmbeddingStageStore,
     SqlAlchemySnapshotPublicationStore,
     prepare_snapshot_build,
 )
@@ -155,6 +157,69 @@ def test_sql_control_adapter_runs_confirmed_fake_embedding_with_durable_budget(
     assert budget.max_requests == 20
     assert budget.max_total_tokens == 120_000
     assert budget.max_cost_cny == pytest.approx(0.10)
+    database.dispose()
+
+
+def test_sql_stage_store_commits_vectors_and_acceptance_before_publication(
+    tmp_path: Path,
+) -> None:
+    database = Database(f"sqlite:///{tmp_path}/embedding-stage.sqlite3")
+    database.initialize_schema()
+    control, repository, build = _prepare_control(database, confirmed=True)
+    provider = MockEmbeddingProvider()
+    stages = SqlAlchemyEmbeddingStageStore(database)
+    runtime = SnapshotEmbeddingRuntime(
+        control=control,
+        provider=provider,
+        publisher=InMemorySnapshotPublicationStore(),
+        stage_store=stages,
+        provider_operation="embedding",
+    )
+
+    result = runtime.run(build, scope_id=build.build_id, current_build=build)
+
+    assert result.status == "succeeded"
+    assert provider.call_count == len(result.plan.batches)
+    saved = stages.values(build_id=build.build_id)
+    assert len(saved) == len(result.plan.batches)
+    assert tuple(stage.batch_index for stage in saved) == tuple(range(len(result.plan.batches)))
+    assert all(stage.embedding_provider == "mock" for stage in saved)
+    assert all(stage.embedding_region == "local" for stage in saved)
+    assert all(stage.model_key == "mock-sha256-v1" for stage in saved)
+    assert all(stage.dimension == 256 for stage in saved)
+    assert all(stage.policy_version == "w4-mock-v1" for stage in saved)
+    operations = repository.operations(scope_id=build.build_id)
+    assert operations and all(operation.state == "succeeded" for operation in operations)
+    assert all(operation.staged_response_hash for operation in operations)
+    database.dispose()
+
+
+def test_sql_stage_store_rejects_corrupt_vector_without_silent_shape_repair(
+    tmp_path: Path,
+) -> None:
+    database = Database(f"sqlite:///{tmp_path}/embedding-stage-corrupt.sqlite3")
+    database.initialize_schema()
+    control, _repository, build = _prepare_control(database, confirmed=True)
+    stages = SqlAlchemyEmbeddingStageStore(database)
+    result = SnapshotEmbeddingRuntime(
+        control=control,
+        provider=MockEmbeddingProvider(),
+        publisher=InMemorySnapshotPublicationStore(),
+        stage_store=stages,
+        provider_operation="embedding",
+    ).run(build, scope_id=build.build_id, current_build=build)
+    operation_id = result.operations[0].id
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE embedding_accepted_vectors SET embedding_blob = X'0000' "
+            "WHERE operation_id = ? AND item_index = 0",
+            (operation_id,),
+        )
+
+    with pytest.raises(SnapshotEmbeddingRuntimeError) as raised:
+        stages.get(operation_id)
+
+    assert raised.value.code == "embedding_stage_invalid"
     database.dispose()
 
 

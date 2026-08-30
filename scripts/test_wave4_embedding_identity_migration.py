@@ -50,9 +50,7 @@ def _assert_legacy_content(path: Path, fixture: dict[str, str]) -> None:
             ):
                 raise AssertionError(f"legacy snapshot identity drifted: {snapshot}")
             chunk = connection.execute(
-                text(
-                    "SELECT id, embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"
-                ),
+                text("SELECT id, embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"),
                 fixture,
             ).one()
             if tuple(chunk) != (fixture["chunk_id"], b"legacy-vector"):
@@ -85,9 +83,10 @@ def _insert_stage(path: Path, fixture: dict[str, str]) -> None:
             connection.execute(
                 text(
                     "INSERT INTO embedding_accepted_stages "
-                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,dimension,"
-                    "policy_version,response_hash,created_at) VALUES (:operation_id,'build-001',"
-                    ":hash,0,'text-embedding-v4',1024,'w4-embed-v1',:hash,:now)"
+                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,"
+                    "embedding_provider,embedding_region,dimension,policy_version,response_hash,"
+                    "created_at) VALUES (:operation_id,'build-001',:hash,0,'text-embedding-v4',"
+                    "'dashscope','cn-beijing',1024,'w4-embed-v1',:hash,:now)"
                 ),
                 {**fixture, "hash": "d" * 64, "now": datetime.now(UTC)},
             )
@@ -122,10 +121,13 @@ def main() -> None:
         database = Database(_database_url(populated))
         try:
             with database.engine.connect() as connection:
-                if connection.execute(
-                    text("SELECT embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"),
-                    fixture,
-                ).scalar_one() != b"legacy-vector":
+                if (
+                    connection.execute(
+                        text("SELECT embedding_blob FROM knowledge_chunks WHERE id=:chunk_id"),
+                        fixture,
+                    ).scalar_one()
+                    != b"legacy-vector"
+                ):
                     raise AssertionError("lossless downgrade changed the legacy vector")
         finally:
             database.dispose()
@@ -150,7 +152,9 @@ def main() -> None:
             _downgrade(staged)
         except RuntimeError as error:
             if "accepted embedding stages" not in str(error):
-                raise AssertionError(f"stage downgrade refused for wrong reason: {error}") from error
+                raise AssertionError(
+                    f"stage downgrade refused for wrong reason: {error}"
+                ) from error
         else:
             raise AssertionError("accepted stage downgrade unexpectedly succeeded")
 

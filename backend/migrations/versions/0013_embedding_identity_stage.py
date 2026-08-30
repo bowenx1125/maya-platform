@@ -149,6 +149,8 @@ def _create_embedding_stage_tables() -> None:
         sa.Column("build_manifest_hash", sa.String(length=64), nullable=False),
         sa.Column("batch_index", sa.Integer(), nullable=False),
         sa.Column("model_key", sa.String(length=80), nullable=False),
+        sa.Column("embedding_provider", sa.String(length=40), nullable=False),
+        sa.Column("embedding_region", sa.String(length=40), nullable=False),
         sa.Column("dimension", sa.Integer(), nullable=False),
         sa.Column("policy_version", sa.String(length=80), nullable=False),
         sa.Column("response_hash", sa.String(length=64), nullable=False),
@@ -160,9 +162,7 @@ def _create_embedding_stage_tables() -> None:
             ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("operation_id"),
-        sa.CheckConstraint(
-            "batch_index >= 0", name="ck_embedding_accepted_stages_batch_index"
-        ),
+        sa.CheckConstraint("batch_index >= 0", name="ck_embedding_accepted_stages_batch_index"),
         sa.CheckConstraint("dimension > 0", name="ck_embedding_accepted_stages_dimension"),
         sa.CheckConstraint(
             "length(build_manifest_hash) = 64",
@@ -175,7 +175,13 @@ def _create_embedding_stage_tables() -> None:
         sa.CheckConstraint("length(build_id) > 0", name="ck_embedding_accepted_stages_build_id"),
         sa.CheckConstraint("length(model_key) > 0", name="ck_embedding_accepted_stages_model"),
         sa.CheckConstraint(
-            "length(policy_version) > 0", name="ck_embedding_accepted_stages_policy_version"
+            "(embedding_provider = 'mock' AND model_key = 'mock-sha256-v1' "
+            "AND embedding_region = 'local' AND dimension = 256 "
+            "AND policy_version = 'w4-mock-v1') OR "
+            "(embedding_provider = 'dashscope' AND model_key = 'text-embedding-v4' "
+            "AND embedding_region = 'cn-beijing' AND dimension = 1024 "
+            "AND policy_version = 'w4-embed-v1')",
+            name="ck_embedding_accepted_stages_identity",
         ),
     )
     op.create_index(
@@ -203,9 +209,7 @@ def _create_embedding_stage_tables() -> None:
             "chunk_id",
             name="uq_embedding_accepted_vectors_chunk",
         ),
-        sa.CheckConstraint(
-            "item_index >= 0", name="ck_embedding_accepted_vectors_item_index"
-        ),
+        sa.CheckConstraint("item_index >= 0", name="ck_embedding_accepted_vectors_item_index"),
         sa.CheckConstraint("length(embedding_blob) > 0", name="ck_embedding_accepted_vectors_blob"),
     )
     op.create_index(
@@ -331,20 +335,23 @@ def _has_non_mock_identity() -> bool:
 
 def _has_accepted_stages() -> bool:
     bind = op.get_bind()
-    return bind.execute(
-        sa.text("SELECT 1 FROM embedding_accepted_stages LIMIT 1")
-    ).first() is not None
+    return (
+        bind.execute(sa.text("SELECT 1 FROM embedding_accepted_stages LIMIT 1")).first() is not None
+    )
 
 
 def _has_manifest_owners() -> bool:
     bind = op.get_bind()
-    return bind.execute(
-        sa.text(
-            "SELECT 1 FROM provider_export_manifests WHERE "
-            "course_id IS NOT NULL OR group_id IS NOT NULL "
-            "OR agent_version_id IS NOT NULL LIMIT 1"
-        )
-    ).first() is not None
+    return (
+        bind.execute(
+            sa.text(
+                "SELECT 1 FROM provider_export_manifests WHERE "
+                "course_id IS NOT NULL OR group_id IS NOT NULL "
+                "OR agent_version_id IS NOT NULL LIMIT 1"
+            )
+        ).first()
+        is not None
+    )
 
 
 def downgrade() -> None:
@@ -355,9 +362,7 @@ def downgrade() -> None:
             "Cannot downgrade 0013 while a real or invalid embedding identity is retained."
         )
     if _has_accepted_stages():
-        raise RuntimeError(
-            "Cannot downgrade 0013 while accepted embedding stages are retained."
-        )
+        raise RuntimeError("Cannot downgrade 0013 while accepted embedding stages are retained.")
     if _has_manifest_owners():
         raise RuntimeError(
             "Cannot downgrade 0013 while ProviderExportManifest owner bindings are retained."
@@ -373,9 +378,7 @@ def downgrade() -> None:
             batch.drop_index("ix_provider_export_manifests_agent_version")
             batch.drop_index("ix_provider_export_manifests_group")
             batch.drop_index("ix_provider_export_manifests_course")
-            batch.drop_constraint(
-                "fk_provider_export_manifests_agent_version", type_="foreignkey"
-            )
+            batch.drop_constraint("fk_provider_export_manifests_agent_version", type_="foreignkey")
             batch.drop_constraint("fk_provider_export_manifests_group", type_="foreignkey")
             batch.drop_constraint("fk_provider_export_manifests_course", type_="foreignkey")
             batch.drop_column("agent_version_id")
