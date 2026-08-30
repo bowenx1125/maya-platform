@@ -8,4 +8,5 @@ or silent omission. A current group member previews and confirms it before publi
 Legacy versions remain readable with no Persona backfill.
 
 The closed schema, compiler behavior, unrecognized-content handling, revision/CAS and
-Mock acceptance are owned by W4-G0 and W4-PERSONA.
+Mock acceptance are frozen in
+[`../contracts/wave4/PERSONA_SPEC_V1.md`](../contracts/wave4/PERSONA_SPEC_V1.md).

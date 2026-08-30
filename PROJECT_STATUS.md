@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / READY_FOR_W4_G0 / WAVE_4_PRODUCT_CODE_NOT_STARTED`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_DRAFT / SOL_G0_S_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
 
 Wave 4 R0 is a documentation, repository and workflow Gate. It does not implement
 Persona, Evidence Trace, Prompt changes or a real Provider.
@@ -19,8 +19,11 @@ Persona, Evidence Trace, Prompt changes or a real Provider.
 - Canonical private repository: `bowenx1125/maya-platform`.
 - The old runtime-only remote main `2fd80784bd79c88261eb2319a961b5c659b9e687`
   is preserved as branch and tag `runtime-handoff-20260830`.
-- Remote `main` and `dev-main` both contain the complete source, tests, contracts and
-  CI at signed R0 integration SHA `5a681f324e6b1ec034af8f8c021ee58889e053fb`.
+- Canonical remote `main` is at signed R0 closure SHA
+  `48f6d7fda3aba988f705027669ba2db4c6358805`; deterministic CI run `33312476209`
+  passed on that exact SHA.
+- Transitional `dev-main` remains at the complete-source R0 integration SHA
+  `5a681f324e6b1ec034af8f8c021ee58889e053fb`; canonical work branches from `main`.
 - R0 Issue `#5` and PR `#6` record the Issue/worktree/owner/PR/audit trail.
 - Candidate `3c07fe1` passed two private CI runs and independent Sol High audit;
   evidence-only head `dc6f699` passed two more CI runs and Sol incremental audit. Both
@@ -105,7 +108,8 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Create a W4-G0 Issue and independent worktree. Freeze PersonaSpecV1,
-EvidenceTraceV1, complete-history Prompt request assembly, formal content, external
-Provider data/call limits and failure semantics. Obtain independent Sol High G0-S
-`PASS / P0=0 / P1=0` before any Wave 4 product implementation or real Provider call.
+Review Issue #8 and `docs/contracts/wave4/` in the independent G0 worktree. Run
+document/repository/deterministic checks, then obtain independent Sol High G0-S
+`PASS / P0=0 / P1=0` on the exact contract SHA. Any P0/P1 returns to the main window
+for repair. Product implementation and real Provider calls remain blocked until that
+contract Gate passes.

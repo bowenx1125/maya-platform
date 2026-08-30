@@ -18,6 +18,13 @@ Gate packets.
 
 ## Wave 4 contracts
 
-PersonaSpecV1, EvidenceTraceV1 and complete-history Prompt request assembly will be
-drafted here during W4-G0. They remain unimplemented until the active Wave 4 Gate Packet
-passes Sol High G0-S.
+The active W4-G0 contract set is under [`wave4/`](wave4/):
+
+- [`PERSONA_SPEC_V1.md`](wave4/PERSONA_SPEC_V1.md)
+- [`EVIDENCE_TRACE_V1.md`](wave4/EVIDENCE_TRACE_V1.md)
+- [`PROMPT_BUDGET_V1.md`](wave4/PROMPT_BUDGET_V1.md)
+- [`PROVIDER_DATA_CALL_V1.md`](wave4/PROVIDER_DATA_CALL_V1.md)
+- [`FORMAL_CONTENT_V1.md`](wave4/FORMAL_CONTENT_V1.md)
+- [`G0_DECISIONS.md`](wave4/G0_DECISIONS.md)
+
+They remain unimplemented until the active Wave 4 Gate Packet passes Sol High G0-S.

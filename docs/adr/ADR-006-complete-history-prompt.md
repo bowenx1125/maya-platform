@@ -6,3 +6,5 @@ Every turn continues to send the complete text of all preceding turns. Wave 4 re
 duplicate raw persona and duplicate provider-visible rule blocks. A structure-only
 repair reuses the exact successful retrieval result; only a retrieval technical failure
 may search again. There is no numeric Token-reduction KPI or cost-display product task.
+The request, retry and hard-limit rules are frozen in
+[`../contracts/wave4/PROMPT_BUDGET_V1.md`](../contracts/wave4/PROMPT_BUDGET_V1.md).

@@ -5,4 +5,6 @@ Status: `ACCEPTED / NOT IMPLEMENTED`
 Key generated claims will bind to immutable `TurnSource` rows or explicitly use general
 reasoning/no-match. The server validates exact claim text, derives speech spans and
 source locations, and rejects cross-snapshot or unused evidence. This is provenance and
-teaching explanation, not automatic factual verification.
+teaching explanation, not automatic factual verification. The closed record and
+support rules are frozen in
+[`../contracts/wave4/EVIDENCE_TRACE_V1.md`](../contracts/wave4/EVIDENCE_TRACE_V1.md).
