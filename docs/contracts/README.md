@@ -26,5 +26,6 @@ The active W4-G0 contract set is under [`wave4/`](wave4/):
 - [`PROVIDER_DATA_CALL_V1.md`](wave4/PROVIDER_DATA_CALL_V1.md)
 - [`FORMAL_CONTENT_V1.md`](wave4/FORMAL_CONTENT_V1.md)
 - [`G0_DECISIONS.md`](wave4/G0_DECISIONS.md)
+- [`MUTUAL_LEARNING_RULESET_V1.md`](wave4/MUTUAL_LEARNING_RULESET_V1.md)
 
 They remain unimplemented until the active Wave 4 Gate Packet passes Sol High G0-S.

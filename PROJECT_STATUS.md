@@ -4,7 +4,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_DRAFT / SOL_G0_S_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / MUTUAL_LEARNING_MIGRATION_AUTH_PENDING / WAVE_4_PRODUCT_CODE_NOT_STARTED`
 
 Wave 4 R0 is a documentation, repository and workflow Gate. It does not implement
 Persona, Evidence Trace, Prompt changes or a real Provider.
@@ -108,8 +108,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Review Issue #8 and `docs/contracts/wave4/` in the independent G0 worktree. Run
-document/repository/deterministic checks, then obtain independent Sol High G0-S
-`PASS / P0=0 / P1=0` on the exact contract SHA. Any P0/P1 returns to the main window
-for repair. Product implementation and real Provider calls remain blocked until that
-contract Gate passes.
+Review `docs/gates/wave4/MUTUAL_LEARNING_MIGRATION_PROPOSAL.md`. The current database
+constraint rejects round 3+, so the requested general RuleSet cannot be implemented
+honestly within a no-migration scope. Await explicit authorization for only migration
+0008 before dispatching Luna Max. Intermediate Wave 4 loops use local tests plus Sol
+audit; one GitHub CI is deferred to the final integrated Wave 4 candidate. Real
+Provider calls remain forbidden for this task.
