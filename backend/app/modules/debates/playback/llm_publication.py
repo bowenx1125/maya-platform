@@ -233,7 +233,8 @@ class SqlLLMPublication:
         recovery_row = (
             self.db.execute(
                 text(
-                    "SELECT input_hash, input_json, input_version, operation_id, turn_id, attempt_no "
+                    "SELECT input_hash, input_json, input_version, "
+                    "operation_id, turn_id, attempt_no "
                     "FROM llm_recovery_inputs "
                     "WHERE operation_id=:operation_id"
                 ),
