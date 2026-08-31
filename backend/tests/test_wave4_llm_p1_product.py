@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -303,7 +304,10 @@ def _install_fake_dashscope_product_path(
     settings: object,
     adapter: _FakeDashScopeAdapter,
 ) -> None:
-    policy = _disclosure_policy()
+    # Bind the fake's explicit workspace endpoint to the reviewed fixture
+    # policy. Production endpoint preflight must remain strict; this test
+    # fixture simply makes its local fake resource internally consistent.
+    policy = replace(_disclosure_policy(), endpoint=adapter.config.resolved_endpoint)
     repository = ProviderRepository(database, require_export_confirmation=False)
     policy_id = repository.save_policy_snapshot(policy, snapshot_id="product-policy")
     settings.provider_policy_hash = policy.policy_hash  # type: ignore[attr-defined]
