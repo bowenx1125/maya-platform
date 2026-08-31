@@ -51,6 +51,11 @@ class EmbeddingDimensionError(EmbeddingShapeError):
 
 EmbeddingResponseDialect = Literal["generic", "dashscope_native"]
 
+# A provider may explicitly return ``null`` for a model, which is different
+# from omitting the field.  Keep an identity sentinel while normalising the
+# native envelope so every explicitly declared value is checked.
+_MISSING_MODEL = object()
+
 
 class EmbeddingProvider(Protocol):
     """Provider port consumed by the reservation runner."""
@@ -157,7 +162,7 @@ def _normalise_response(
     *,
     expected_model: str,
     response_dialect: EmbeddingResponseDialect,
-) -> tuple[Mapping[str, object], bool]:
+) -> tuple[Mapping[str, object], bool, object, object]:
     payload = _mapping(response, field="embedding response")
     if response_dialect not in {"generic", "dashscope_native"}:
         raise EmbeddingResponseError(
@@ -174,15 +179,22 @@ def _normalise_response(
             if isinstance(raw_embeddings, list):
                 # The native successful response may omit model.  If it is
                 # present, it is still compared with the request model below.
-                model = payload.get("model", output.get("model"))
+                top_model = payload.get("model", _MISSING_MODEL)
+                nested_model = output.get("model", _MISSING_MODEL)
+                if top_model is not _MISSING_MODEL:
+                    model = top_model
+                elif nested_model is not _MISSING_MODEL:
+                    model = nested_model
+                else:
+                    model = None
                 normalized: dict[str, object] = {
                     "model": model,
                     "data": raw_embeddings,
                 }
                 if "build_manifest_hash" in payload:
                     normalized["build_manifest_hash"] = payload["build_manifest_hash"]
-                return normalized, True
-    return payload, False
+                return normalized, True, top_model, nested_model
+    return payload, False, payload.get("model", _MISSING_MODEL), _MISSING_MODEL
 
 
 def _index(value: object) -> int:
@@ -269,17 +281,30 @@ def validate_embedding_response(
             "embedding validation identity is not a closed resource",
             code="embedding_identity_mismatch",
         )
-    payload, native_envelope = _normalise_response(
+    payload, native_envelope, top_model, nested_model = _normalise_response(
         response,
         expected_model=expected_model,
         response_dialect=response_dialect,
     )
-    model = payload.get("model")
-    if model is not None and model != expected_model:
-        raise EmbeddingModelError(
-            "embedding model does not match the fixed model", code="embedding_model_mismatch"
-        )
-    if model is None and not native_envelope:
+    if native_envelope:
+        # DashScope's native envelope has appeared with either model field,
+        # or with both.  Missing fields are allowed by the official response
+        # shape, but every field that is present must match exactly.  Checking
+        # both independently prevents a correct top-level value from masking
+        # a conflicting nested value.
+        if (
+            top_model is not _MISSING_MODEL
+            and nested_model is not _MISSING_MODEL
+            and top_model != nested_model
+        ) or any(
+            model is not _MISSING_MODEL and model != expected_model
+            for model in (top_model, nested_model)
+        ):
+            raise EmbeddingModelError(
+                "embedding model does not match the fixed model",
+                code="embedding_model_mismatch",
+            )
+    elif top_model is _MISSING_MODEL or top_model != expected_model:
         raise EmbeddingModelError(
             "embedding model does not match the fixed model", code="embedding_model_mismatch"
         )
@@ -342,7 +367,7 @@ def validate_embedding_batch_response(
         expected_build_manifest_hash=batch.build_manifest_hash,
         response_dialect=response_dialect,
     )
-    payload, _native_envelope = _normalise_response(
+    payload, _native_envelope, _top_model, _nested_model = _normalise_response(
         response,
         expected_model=model,
         response_dialect=response_dialect,

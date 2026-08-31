@@ -280,6 +280,7 @@ def _native_dashscope_response(
     batch: EmbeddingBatchV1,
     *,
     model: str | None = None,
+    nested_model: str | None = None,
     vectors: list[list[float]] | None = None,
     text_indices: list[int] | None = None,
 ) -> dict[str, object]:
@@ -291,6 +292,8 @@ def _native_dashscope_response(
             for index, vector in zip(indices, values, strict=False)
         ]
     }
+    if nested_model is not None:
+        output["model"] = nested_model
     response: dict[str, object] = {
         "request_id": "request-fixture",
         "code": "",
@@ -328,6 +331,44 @@ def test_dashscope_native_explicit_wrong_model_is_rejected() -> None:
     with pytest.raises(EmbeddingModelError) as error:
         adapter.embed_batch(batch)
     assert error.value.code == "embedding_model_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("model", "nested_model", "accepted"),
+    (
+        (REAL_EMBEDDING_MODEL, "wrong-model", False),
+        ("wrong-model", REAL_EMBEDDING_MODEL, False),
+        (REAL_EMBEDDING_MODEL, REAL_EMBEDDING_MODEL, True),
+        (None, "wrong-model", False),
+        (None, REAL_EMBEDDING_MODEL, True),
+    ),
+    ids=(
+        "top-correct-nested-wrong",
+        "top-wrong-nested-correct",
+        "both-correct",
+        "nested-only-wrong",
+        "nested-only-correct",
+    ),
+)
+def test_dashscope_native_all_explicit_model_fields_must_match(
+    model: str | None,
+    nested_model: str | None,
+    accepted: bool,
+) -> None:
+    batch = _real_three_item_batch()
+    transport = _FakeTransport(
+        _native_dashscope_response(batch, model=model, nested_model=nested_model)
+    )
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"), transport
+    )
+
+    if accepted:
+        assert adapter.embed_batch(batch).count == 3
+    else:
+        with pytest.raises(EmbeddingModelError) as error:
+            adapter.embed_batch(batch)
+        assert error.value.code == "embedding_model_mismatch"
 
 
 def test_dashscope_native_data_envelope_without_model_is_rejected() -> None:
