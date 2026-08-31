@@ -49,17 +49,20 @@ fresh target/version and the exact fixture hash.
 
 ## Execute the complete bounded path
 
-Import separately reviewed, endpoint-bound Embedding, debate-LLM and Report
-policy files before enabling the corresponding real selectors. Keep all JSON files
-outside the repository and import them one command at a time. Before restarting
-the isolated Compose application, put the three policy hashes and Real-Core selector
-values in the ignored root `.env`.
+Import the two separately reviewed, endpoint-bound policy files for Embedding and
+the fixed Qwen/Beijing debate-LLM endpoint before enabling the corresponding real
+selectors. Keep both JSON files outside the repository and import them one command
+at a time. Before restarting the isolated Compose application, put the three policy
+hash bindings and Real-Core selector values in the ignored root `.env`.
 
 The reviewed Real-Core composition uses the following selector and policy names.
 Keep the legacy `PROVIDER_POLICY_HASH` empty so the Embedding, debate-LLM and
-Maya Report policies remain endpoint-bound independently. The price-card fields
-are the existing server-only accounting inputs and must be populated from the
-reviewed card before enabling a real LLM-backed selector.
+Maya Report bindings remain explicit. `REPORT_PROVIDER_POLICY_HASH` must equal the
+reviewed `LLM_PROVIDER_POLICY_HASH` for this Demo because both use the same fixed
+Qwen/Beijing endpoint policy snapshot; no third policy importer is needed. Report
+still has its own manifest, budget reservation and provider operation. The price-card
+fields are the existing server-only accounting inputs and must be populated from
+the reviewed card before enabling a real LLM-backed selector.
 
 ```dotenv
 LLM_PROVIDER=dashscope
