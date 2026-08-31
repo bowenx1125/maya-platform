@@ -16,6 +16,11 @@ The Demo principle is: complete interfaces, simple internals, and one demonstrab
 main flow. Mock evidence, real-provider evidence and human acceptance must always be
 reported separately.
 
+During Real-Core Demo work, every task is explicitly classified as `DEMO-BLOCKER` or
+`POST-DEMO-HARDENING`. Only work that directly affects the frozen Demo acceptance chain
+may block or consume implementation budget; deferred production work is recorded in
+[Wave 4.1 Post-Demo Hardening](docs/requirements/WAVE_4_1_POST_DEMO_HARDENING.md).
+
 ## 2. Authority order
 
 When two sources conflict, use this order:

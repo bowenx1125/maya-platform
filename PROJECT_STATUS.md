@@ -4,186 +4,133 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED / W4_LLM_A_G0_SOL_PASS / W4_LLM_A_G2_CHANGES_REQUIRED`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / LLM_RECOVERY_DEMO_GATE_PASS / REAL_CORE_DEMO_IN_PROGRESS`
 
-The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
-protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
-formal content, Embedding/provider ports and durable provider-control foundations.
-Mock G2 and subsequent Persona boundary audits closed every P0/P1. The user froze the
-Persona Mock Gate at seven concrete criteria: stable PersonaSpec, six visible teaching
-dimensions, required confirmation, correct freeze/hash/version, no unconfirmed
-Debate/Provider, visibly different behavior for clearly different projections, and no
-Evidence fabrication/raw private leakage. Exact SHA `48ff91f` received final Sol High
-`PASS / P0=0 / P1=0 / P2=0`; arbitrary-string uniqueness optimization stopped. That
-PASS unlocked W4-EMBED code and fake-transport acceptance, not a real request.
+The current target is the smallest repeatable Real-Core Demo, not production-wide
+Provider recovery. Every new task is classified before work starts:
 
-The W4-EMBED repair candidate now implements the frozen real 1024 identity end to end
-through injected fake transport: durable multi-batch publication and continuation,
-student publication orchestration, identity-matched query retrieval, exact per-turn
-teacher disclosure/confirmation and non-terminal explicit retry. Current deterministic
-evidence is backend `822`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typecheck/build,
-OpenAPI/generated/route/WS/repository boundaries and all populated Wave 1–4/0013
-migration probes.
+- `DEMO-BLOCKER`: directly required by the Real-Core acceptance chain;
+- `POST-DEMO-HARDENING`: recorded for Wave 4.1 and forbidden from blocking Demo V1.
 
-Sol High signed the fake-transport Embedding candidate at exact SHA `0c7c6e3` with
-`PASS / P0=0 / P1=0 / P2=0`. Its one permitted safe 1024 preflight returned HTTP 200
-but failed local validation as `embedding_model_mismatch`; it was not repeated. The
-documented native response-dialect repair and explicit-model conflict check are
-fake-tested and received incremental `EMBED_DELTA PASS / P0=0 / P1=0 / P2=0` at
-`af0bd19`. The truthful service status remains FAILED, the allowance is exhausted, and
-no vectors or PASS claim were retained.
+The Demo may combine Real Embedding and Real LLM with Mock TTS, Voice, Translation and
+Report. Product UI and delivery evidence must identify each component as Real or Mock.
 
-W4-LLM-A G0-S began `CHANGES_REQUIRED / P1=6`; wire/schema, atomic publication, budget,
-ownership, privacy and tokenizer contracts closed those findings. Re-audits closed
-finish/usage, sentinel, retry and 1,510-Token reservation semantics, then found one P1:
-repair feedback lacked a confirmed outbound class. The final candidate binds a finite
-server-authored code/JSON-Pointer grammar and policy hash to the confirmed manifest.
-Sol High returned `LLM_A_G0 PASS / P0=0 / P1=0 / P2=0` on exact SHA `4182d1a`.
-Issues #22–#24 now own ledger/migration, adapter/output and turn runtime/disclosure fake
-implementation. The PASS does not authorize a real LLM call.
+## Last signed module evidence
 
-Issues #22–#25 are now integrated locally. Migration `0014` isolates Provider budget
-buckets and persists exact Debate/Turn manifests plus immutable accepted LLM stages.
-The fixed adapter scans the exact two-message request before transport, binds the pinned
-tokenizer, price card, output schema and repair policy, stages accepted output before
-local mapping, and rejects legacy authority, identity leakage, budget drift and
-unauthorized retries with zero calls. The product runtime reuses the exact prepared
-operation after teacher confirmation, publishes Turn/Evidence/usage/success atomically,
-never retries acceptance-unknown work, and performs startup reconciliation without a
-network client. A teacher-only Debate page lists only turn ID, manifest hash, revision
-and confirmation state; Provider/model/endpoint/prompt/usage remain server-only.
+### Persona and Mock teaching chain
 
-Current local G1.5 evidence is backend `875`, frontend `35 files / 214 tests`, Ruff,
-mypy (`157` source files), lint, TypeScript, production build, migrations 0001–0014,
-frozen OpenAPI/generated client (`77` operations), WebSocket fixtures, document and
-repository/secret boundaries. The integrated LLM work made `0` real Provider calls and
-ran no GitHub CI. Final Sol audit of `9cb9709` returned
-`CHANGES_REQUIRED / P0=0 / P1=2 / P2=0`: production still needs atomic
-Turn/Evidence/usage/success and durable zero-network accepted-stage recovery. The repair
-loop is active; G2 is not signed.
+- Persona Mock Gate is frozen PASS at exact SHA `48ff91f`.
+- `AGENT.md -> PersonaSpecV1` is deterministic; all six teaching dimensions are visible.
+- Student confirmation freezes canonical JSON/hash/version. Unconfirmed Persona cannot
+  enter a new Debate or Provider request.
+- Distinct Persona projections produce explainable Mock behavior changes without raw
+  private-text leakage or fabricated Evidence.
+- Mutual learning supports 2–5 Agents and 2–5 rounds with opening/exchange/final phases,
+  same-round isolation, full earlier-round speech and claim-level Evidence Trace.
 
-## Source and remote
+### Embedding implementation
 
-- Full development baseline: `a235c296239ab621bac615b2c9c5089528507850`
-  (`feat: complete wave 3 pre-wave4 ux state gate`).
-- Local protection tag: `pre-wave4-a235c29`.
-- Verified complete bundle: `backups/pre-wave4-a235c29/maya-platform-a235c29.bundle`
-  outside the repository; SHA-256 starts `553b852a1f51`.
+- Fake-transport W4-EMBED G2 received Sol High PASS at exact SHA `0c7c6e3`.
+- The response-dialect delta received incremental Sol PASS at `af0bd19`.
+- Frozen real identity is `dashscope / text-embedding-v4 / cn-beijing / 1024 /
+  w4-embed-v1`.
+- Product code has exact teacher manifest/confirmation, 1024 request validation,
+  immutable Snapshot publication, restart-safe batch continuation and identity-matched
+  real query retrieval.
+- Real product E2E has not passed. The historical one-call 1024 preflight returned HTTP
+  200 but failed the then-current local response contract; it was not repeated.
+
+### LLM Recovery Demo Gate
+
+- Implementation audit source: clean SHA
+  `63b1e865e16e45912863e307be398abe285ec2eb`.
+- Equivalent main-window integration before this status update:
+  `debbf8ef3d0df2f20013e9bd44e48d3eb1c2ceb0`.
+- Sol High incremental result: `PASS / P0=0 / P1=0 / P2=0`.
+- Backend: `925 passed`; focused P1 product/recovery: `50 passed` in Sol audit.
+- Frontend: `35 files / 214 tests`; typecheck, lint and production build passed.
+- Ruff passed; mypy passed for `159` application files.
+- Provider policy fixture, real SQL/Playback rollback, restart continuation with LLM
+  call delta `0`, and non-zero cancellation generation `7` all passed.
+- Accepted stage + canonical recovery input persist before TTS. Final Turn, receipts,
+  Evidence, job, audio metadata and operation/reservation success share one SQL Session.
+  Publication failure rolls back SQL and removes audio.
+- No real LLM request and no GitHub CI were used for this Gate.
+
+This is `LLM Recovery Demo Gate = PASS`, not a claim of distributed or corruption-proof
+production recovery. Excluded work is in
+[Wave 4.1 Post-Demo Hardening](docs/requirements/WAVE_4_1_POST_DEMO_HARDENING.md).
+
+## Real-Core Demo completion state
+
+| Acceptance slice | Current result |
+| --- | --- |
+| New environment starts | Not yet re-accepted from an empty runtime root |
+| Real Embedding 1024 product E2E | Not complete |
+| Real LLM two-round product E2E | Not complete |
+| 2–3 confirmed Agents complete two rounds | Not complete with real core Providers |
+| Chinese real RAG hit and Evidence Receipt | Not complete |
+| Teacher export confirmation and budget enforcement | Fake-tested; not yet accepted in real E2E |
+| Accepted-after-restart avoids a second LLM charge | Fake product path PASS; real Demo scenario pending |
+| Browser create-to-Replay chain | Not complete for Real-Core candidate |
+| Demo package and Real/Mock disclosure | Not complete |
+
+## Real call ledger
+
+Calls made after the Real-Core Demo scope reset in this status: `0`.
+
+Known historical bounded evidence, which is not the Real-Core product E2E:
+
+- Embedding: one 256-dimension availability request passed; one formal 1024 request
+  returned HTTP 200 and failed the old local response contract.
+- LLM: one account-only structured availability request passed.
+- TTS: three failed attempts; no new TTS call is authorized by the Real-Core Demo.
+- Voice: one historical enrollment succeeded.
+
+The earlier preflight allowances remain exhausted and will not be repeated. The user's
+new authorization is for the exact confirmed, budgeted product E2E path, using a fixed
+Demo fixture and the minimum necessary calls. Any identity, policy, budget, confirmation,
+response or publication mismatch fails closed before another call.
+
+## Minimum remaining Demo blockers
+
+1. `DEMO-BLOCKER — REAL-EMBED-E2E`: fixed Chinese Markdown fixture through exact teacher
+   confirmation, one minimal 1024 Snapshot build, Chinese query retrieval and Evidence
+   Receipt verification.
+2. `DEMO-BLOCKER — REAL-LLM-E2E`: 2–3 confirmed Agents, their own RAG, PromptRequestV1,
+   fixed Qwen structured output and complete two-round Evidence Trace.
+3. `DEMO-BLOCKER — BROWSER-E2E`: empty-runtime student Agent/Persona/knowledge/publish,
+   teacher Debate/playback/finish, interaction/history/Replay.
+4. `DEMO-BLOCKER — DEMO-PACKAGE`: fixed Agent/RAG/topic assets, one startup entry,
+   reset and failure-recovery instructions, plus visible Real/Mock disclosure.
+5. One final integrated GitHub PR/CI on the exact locally accepted SHA.
+
+## Post-Demo Hardening
+
+The following cannot block Demo V1 and must not be started while Demo blockers remain:
+
+- recovery of every legacy schema and arbitrary corrupt ledger;
+- repeated/multi-process/distributed restart matrices;
+- administrator recovery consoles and a generic multi-Provider recovery framework;
+- public deployment, production classroom identity/security, 30–60-user load,
+  monitoring, backup/restore, DeepL, production TTS, licensing and data-governance work.
+
+See [Wave 4.1 Post-Demo Hardening](docs/requirements/WAVE_4_1_POST_DEMO_HARDENING.md).
+
+## Source, runtime and safety
+
 - Canonical private repository: `bowenx1125/maya-platform`.
-- Canonical remote `main` is at signed R0 closure SHA
-  `48f6d7fda3aba988f705027669ba2db4c6358805`; deterministic CI run `33312476209`
-  passed on that exact SHA.
-- R0 Issue `#5` and PR `#6` record the Issue/worktree/owner/PR/audit trail.
-
-## Signed Wave 3 evidence
-
-- Backend: `433/433` tests at the signed candidate.
-- Frontend: `28 files / 193 tests` at the signed candidate.
-- Ruff, mypy, ESLint, TypeScript, Prettier and Next production build passed.
-- OpenAPI generated client/response/route checks, WebSocket schemas, 0001–0007
-  migrations, repository/secret boundary and Docker builds passed.
-- Main-window browser G3 passed locale-only controls, waiting restoration, early/full
-  Finish boundaries, manual-only Reconnect, localhost/LAN teacher control, two
-  retained Replay cycles, anonymous interaction, Mock Maya report and Mock translation.
-
-## Implemented product scope
-
-- Demo authentication, quick login and one-course/two-group seed.
-- Student Agent/version workflow, Markdown knowledge, immutable RAG snapshots,
-  publishing, safe delete and teacher published-history inspection.
-- Local 3D avatar rendering and Mock/real-safe voice boundaries.
-- Versioned 2–5 Agent, 2–5 round mutual learning with opening/exchange/final phases,
-  same-round isolation, pending questions, preserved disagreement and synthesis.
-- Confirmed structured Persona with raw authorship retention, comparison UI and strict
-  new-mutual-Debate eligibility while legacy Debate history remains compatible.
-- Claim-level Evidence Trace with server IDs, exact UTF-16 speech spans, honest
-  no-match/general-reasoning teaching UI and immutable Replay/history projection.
-- Canonical two-message PromptRequestV1 with the complete RuleSet-visible speech set
-  (all earlier-round public/final-ready speech for mutual learning), one Persona
-  provider view, deduplicated evidence, bounded retry and hard pre-send budgets.
-- Immutable SnapshotBuild/embedding adapter ports plus server-only policy, export,
-  atomic budget and acceptance-unknown ledgers. Real selectors remain fail-closed.
-- Independent anonymous vote/barrage, anonymous insight, Mock Maya report,
-  history/download and on-demand Mock Chinese representation.
-
-## Runtime and private state
-
-- Docker containers are stopped.
-- `data/` and `backend/data/` are absent.
-- The next end-to-end acceptance must rebuild Agents, documents, snapshots and debates
-  from an empty runtime root; historical browser data is not reusable evidence.
-- Ignored `.env` and `backend/config/demo-accounts/accounts.private.md` are the only
-  retained private runtime inputs and are mode `0600`.
-
-## Provider state
-
-- Real voice enrollment historically succeeded once.
-- Real TTS attempts 1–3 failed; attempt 3 ended `tts_audio_invalid` and remains
-  `FAILED-DEFERRED` until the Wave 4 TTS Gate fixes endpoint/language/diagnostic
-  contracts before another request.
-- Formal LLM and Translation selectors remain Mock. The real LLM adapter/runtime is a
-  fake-transported G2 audit candidate and has made no real request; it is not a
-  real-service PASS. The Embedding candidate now has a fixed
-  runtime selector, no-redirect single-attempt transport, exact teacher disclosure and
-  confirmation CAS, durable policy/export/budget/stage ledgers, atomic SQL Snapshot
-  publication, restart-safe missing-batch continuation and identity-matched query
-  retrieval exercised through injected fake transport. Independent audit of exact clean
-  SHA `8be4833` returned
-  `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`: the candidate still used dimension 256,
-  accepted vectors were process-local, student publication did not enter the runtime,
-  query retrieval remained Mock 256, and the teacher confirmation UI/authorization was
-  not bound to the build's course. The current repair candidate claims closure of all
-  five findings; exact SHA `0c7c6e3` later received Sol High PASS after all incremental
-  repairs.
-- An independent account-only preflight used non-student fixtures for one 256-dimension
-  Embedding request and one structured LLM request. Both succeeded as basic API
-  availability evidence while Maya's formal selectors stayed Mock. They are not Gate
-  PASS evidence and must not be repeated. The formal real Embedding identity is now
-  frozen at `dashscope / text-embedding-v4 / cn-beijing / 1024 / w4-embed-v1`.
-- The one permitted 1024 preflight made exactly one three-text batch request. HTTP was
-  200, but local response parsing failed closed as `embedding_model_mismatch`, so the
-  only truthful status is `REAL EMBEDDING 1024 PREFLIGHT FAILED`. The call was not
-  repeated; no vectors, cosine or PASS claim were retained. The official response-shape
-  repair is fake-tested and awaiting incremental Sol review.
-- Later real calls are authorized in principle by the user but still require the exact
-  policy/export/budget Gate and must fail closed if the account plan or controls cannot
-  be verified.
-
-## Confirmed Wave 4 decisions
-
-- Repository-root `PROJECT.md` becomes the only portable authority entry.
-- Workers use `PROJECT_STATUS.md + Issue/Task Packet + named ADR/contracts + assigned
-code`, not the full historical monolith.
-- Every Wave 4 coding task uses an Issue, branch, independent worktree and owner;
-  intermediate validation is local plus Sol High, with one final integrated PR/CI.
-- New Agent versions keep raw `AGENT.md` and add an extraction-only Persona confirmed
-  by a current group member before publication. The compiler cannot improve or invent.
-- Context visibility is RuleSet-versioned. Mutual learning receives every
-  public/final-ready earlier-round speech in full and exactly once while preserving a
-  strict same-round barrier; legacy RuleSets retain their historical predecessor set.
-- Evidence Trace records claim provenance; it is not a truth-verification claim.
-- There is no numeric Token-reduction KPI and no teacher/operator cost-display task.
-- Local, private GitHub, implementation, real Provider and potentially billed work are
-  authorized, but implementation and calls still follow their Gate stop conditions.
-- Engineering uses a debug/test loop until the frozen criteria pass; tests and product
-  boundaries are not weakened.
-
-## Active risks
-
-1. The old continuity monolith contains superseded current-looking statements; it is
-   archived and must not be a default task input.
-2. Claim-level evidence proves lineage, not factual correctness.
-3. Real Provider policy/account/logging controls have not been verified against the
-   current private account. The single 1024 preflight allowance is exhausted, so no
-   further real Embedding call is permitted by the current Gate.
-4. TTS is still a hard blocker for complete real-service G5.
+- The last remote CI evidence remains the R0 run on `48f6d7f`; no intermediate Wave 4
+  branch has been pushed and GitHub CI remains deferred to the final integrated PR.
+- Docker is stopped. `data/` and `backend/data/` are absent. Real-Core browser evidence
+  must build new Agents, documents, snapshots and Debates from an empty runtime root.
+- Ignored `.env` and the private Demo account file remain mode `0600`; their contents,
+  credentials, raw Provider responses and student-private data must never be reported.
+- Real TTS, Voice, Translation and Report remain Mock for Demo V1.
 
 ## Next Gate
 
-Do not repeat the exhausted 1024 preflight. Add the 0015 accepted-stage recovery input,
-atomic SQL Turn/Evidence/usage/success publication and zero-network startup continuation;
-then rerun the full local matrix and exact-SHA Sol G2. After PASS, run the empty-runtime
-local G3 chain without a real LLM request.
-W4-EMBED remains unsigned because the real preflight and empty-runtime browser
-publication/query/retrieval/Evidence/restart chain have not passed. GitHub CI remains
-deferred to the final integrated Wave 4 PR.
+Execute `REAL-EMBED-E2E` only through the product path. It is a newly authorized formal
+Demo publication, not a repeat of the exhausted preflight. Use the fixed Chinese fixture,
+exact teacher manifest/confirmation, the smallest batch count and fail-closed call ledger.
+After it passes, proceed immediately to `REAL-LLM-E2E`, then browser E2E and Demo package.

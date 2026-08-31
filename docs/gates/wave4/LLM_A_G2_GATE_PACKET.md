@@ -1,6 +1,6 @@
 # W4-LLM-A G2 Gate Packet
 
-Status: `G2 SOL AUDIT CANDIDATE / REAL LLM CALLS 0 / CI DEFERRED`
+Status: `LLM RECOVERY DEMO GATE PASS / P0=0 / P1=0 / REAL LLM CALLS 0 / CI DEFERRED`
 
 Issues: `#22 ledger/migration`, `#23 adapter/output/privacy`, `#24 runtime/disclosure`,
 `#25 teacher turn approval page`.
@@ -9,7 +9,8 @@ Issues: `#22 ledger/migration`, `#23 adapter/output/privacy`, `#24 runtime/discl
 
 This candidate implements the frozen W4-LLM-A contract with fake transports only:
 
-- migration `0014_llm_runtime_budget_buckets` preserves 0001–0013 history, isolates
+- migrations `0014_llm_runtime_budget_buckets` and `0015_llm_recovery_input` preserve
+  existing history, isolate
   non-transferable budget buckets, binds manifests to Debate/Turn owners and persists
   immutable accepted LLM output/usage stages;
 - only `llm_debate_turn` can authorize a new call; legacy `llm_debate` remains readable
@@ -23,8 +24,9 @@ This candidate implements the frozen W4-LLM-A contract with fake transports only
   operation after confirmation, and atomically publishes Turn, Evidence Trace, usage and
   operation success;
 - startup recovery has no transport and touches only the LLM budget bucket;
-- authoritative course/member and Agent names are scanned before manifest persistence
-  and immediately before send;
+- authoritative course-member identity tokens are scanned before manifest persistence
+  and immediately before send; fictional/cultural Agent names remain an intentional
+  Persona field and are not misclassified as student identity;
 - the teacher page discovers exact turn manifests through Debate -> Course ownership
   using a compact DTO. Students, other-course users and missing Debates receive stable
   403/404 behavior without Provider details.
@@ -42,13 +44,28 @@ This candidate implements the frozen W4-LLM-A contract with fake transports only
 - structure failure stages safe metadata and may repair once without repeating retrieval;
 - old Debate, Replay, Mock Persona, Evidence Trace and Embedding behavior remain green.
 
+## Signed incremental evidence
+
+- implementation audit source:
+  `63b1e865e16e45912863e307be398abe285ec2eb` (clean);
+- equivalent main-window integration before the status-signing commit:
+  `debbf8ef3d0df2f20013e9bd44e48d3eb1c2ceb0`;
+- Sol High: `PASS / P0=0 / P1=0 / P2=0`;
+- real SQL/Playback publication failure rolls back Turn/source/file writes while the
+  operation and reservation remain accepted;
+- restart continuation completes with LLM call delta `0`;
+- non-zero cancellation generation `7` is bound through accepted recovery and final
+  publication;
+- legacy accepted output without a recovery input remains nonterminal and blocked;
+  wider legacy/corruption recovery is Post-Demo Hardening.
+
 ## Mechanical evidence
 
-- backend: `875` tests passed;
+- backend: `925` tests passed;
 - frontend: `35 files / 214 tests` passed;
-- Ruff and mypy (`157` application files) passed;
+- Ruff and mypy (`159` application files) passed;
 - ESLint, TypeScript and Next production build passed;
-- migrations 0001–0014, populated preservation and downgrade/re-upgrade probes passed;
+- migrations 0001–0015 and populated preservation probes passed;
 - frozen OpenAPI/generated client/response/route checks passed with `77` operations;
 - WebSocket schemas/fixtures, document authority, Docker Compose validation and
   repository/secret-boundary red-team probes passed;
@@ -56,8 +73,8 @@ This candidate implements the frozen W4-LLM-A contract with fake transports only
 
 ## Audit boundary
 
-Sol High must review the exact clean integration SHA, run adversarial zero-call,
-ownership, retry, stage/recovery, atomicity, usage/cost and privacy probes, and return
-`P0=0 / P1=0` before G2 can pass. This packet cannot approve its own implementation.
-No real LLM request is authorized or required for G2/G3; the historical availability
-preflight is non-repeatable.
+The frozen Real-Core audit boundary is satisfied. This PASS covers one accepted-stage
+restart without a repeated LLM call and one atomic SQL publication/rollback path. It
+does not certify distributed workers, arbitrary ledger repair, repeated restart matrices
+or a generic recovery framework; those are Wave 4.1 Post-Demo Hardening. No real LLM
+request or CI was used to sign this Gate.
