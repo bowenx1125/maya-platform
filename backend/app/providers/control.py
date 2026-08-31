@@ -61,8 +61,12 @@ REPAIR_FEEDBACK_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5a
 LLM_TURN_OUTPUT_SCHEMA_HASH = "1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c"
 LLM_RECOVERY_INPUT_VERSION = "llm_recovery_input_v1"
 LLM_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
-DEMO_ACCEPTANCE_PLAN_VERSION = "real_core_demo_7call_v2"
-DEMO_ACCEPTANCE_MAX_CALLS = 7
+DEMO_ACCEPTANCE_PLAN_VERSION: Literal["real_core_demo_v2"] = "real_core_demo_v2"
+# Seven calls is the expected count for the current 2-agent x 2-round fixture,
+# not a runtime invariant.  The eighth ordinal is a deliberately small safety
+# ceiling for a semantically necessary extra operation such as a fresh query.
+DEMO_ACCEPTANCE_EXPECTED_CALLS = 7
+DEMO_ACCEPTANCE_MAX_CALLS = 8
 # Descriptive aliases keep the bounded Demo contract discoverable to callers.
 REAL_CORE_DEMO_PLAN_VERSION = DEMO_ACCEPTANCE_PLAN_VERSION
 REAL_CORE_DEMO_CALL_LIMIT = DEMO_ACCEPTANCE_MAX_CALLS
@@ -183,7 +187,7 @@ def validate_budget_bucket(value: str) -> str:
 
 
 def validate_demo_acceptance_call_no(value: int) -> int:
-    """Validate one ordinal in the closed seven-call Demo plan."""
+    """Validate one ordinal against the bounded Demo authorization ceiling."""
 
     if isinstance(value, bool) or not isinstance(value, int):
         raise ProviderControlError(
@@ -192,7 +196,7 @@ def validate_demo_acceptance_call_no(value: int) -> int:
         )
     if value < 1 or value > DEMO_ACCEPTANCE_MAX_CALLS:
         raise ProviderControlError(
-            "Demo acceptance call ordinal is outside the frozen plan",
+            "Demo acceptance call ordinal exceeds the authorized budget ceiling",
             code="acceptance_call_invalid",
         )
     return value

@@ -120,7 +120,7 @@ def _create_run_table() -> None:
             ondelete="RESTRICT",
         ),
         sa.CheckConstraint(
-            "plan_version = 'real_core_demo_7call_v2'",
+            "plan_version = 'real_core_demo_v2'",
             name="ck_demo_acceptance_runs_plan_version",
         ),
         sa.CheckConstraint(
@@ -164,7 +164,7 @@ def _add_operation_binding() -> None:
             )
             batch.create_check_constraint(
                 "ck_provider_operations_call_no",
-                "call_no IS NULL OR (call_no >= 1 AND call_no <= 7)",
+                "call_no IS NULL OR (call_no >= 1 AND call_no <= 8)",
             )
             batch.create_unique_constraint(
                 "uq_provider_operations_acceptance_call",

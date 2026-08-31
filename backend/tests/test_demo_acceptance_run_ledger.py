@@ -140,10 +140,10 @@ def _create_run(database: Database, *, fixture_hash: str = FIXTURE_HASH) -> str:
         return str(result.id)
 
 
-def _provider_operation(database: Database, *, item: str) -> str:
+def _provider_operation(database: Database, *, item: str, purpose: str = "embedding") -> str:
     request = ProviderReservationRequestV1(
         scope_id=TARGET_VERSION_ID,
-        provider_operation="embedding",
+        provider_operation=purpose,
         logical_item_id=item,
         attempt_no=1,
         request_hash=HASH_A,
@@ -152,9 +152,9 @@ def _provider_operation(database: Database, *, item: str) -> str:
         policy_hash=HASH_A,
         export_manifest_hash=HASH_B,
     )
-    return ProviderRepository(database, require_export_confirmation=False).create_prepared(
-        request
-    ).id
+    return (
+        ProviderRepository(database, require_export_confirmation=False).create_prepared(request).id
+    )
 
 
 def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
@@ -319,12 +319,13 @@ def test_attach_calls_one_to_seven_is_atomic_and_summary_counts_charges(
             assert summary.call_count == 7
             assert summary.charged_request_count == 7
             assert [item.call_no for item in summary.calls] == list(range(1, 8))
+            assert all(item.purpose == "embedding" for item in summary.calls)
             assert summary.starting_charged_requests == 0
     finally:
         database.dispose()
 
 
-def test_attach_rejects_duplicate_eighth_cross_run_and_non_pre_send(
+def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
     tmp_path: Path,
 ) -> None:
     database = _database(tmp_path)
@@ -346,13 +347,26 @@ def test_attach_rejects_duplicate_eighth_cross_run_and_non_pre_send(
                     run_id=run_id,
                     request=DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=1),
                 )
+        eighth = _provider_operation(
+            database,
+            item="semantic-extra-query",
+            purpose="embedding_query",
+        )
+        with database.session() as session:
+            response = attach_acceptance_call(
+                session,
+                actor_user_id=TEACHER_ID,
+                run_id=run_id,
+                request=DemoAcceptanceCallRequest(operation_id=UUID(eighth), call_no=8),
+            )
+            assert response.calls[-1].call_no == 8
+            assert response.calls[-1].purpose == "embedding_query"
         with pytest.raises(ValidationError):
-            DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=8)
+            DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=9)
         with database.engine.begin() as connection:
             connection.execute(
                 text(
-                    "UPDATE provider_operations SET state='reserved',request_count=1 "
-                    "WHERE id=:id"
+                    "UPDATE provider_operations SET state='reserved',request_count=1 WHERE id=:id"
                 ),
                 {"id": second},
             )

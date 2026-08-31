@@ -1,8 +1,8 @@
 """Teacher-scoped service for the bounded Real-Core Demo run ledger.
 
 This module records only the local identities and counters needed to audit one
-fixed seven-call Demo.  It never selects a provider and never performs I/O to
-an external supplier.
+bounded Demo run.  It never selects a provider and never performs I/O to an
+external supplier.
 """
 
 from __future__ import annotations
@@ -300,6 +300,7 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
             DemoAcceptanceCall(
                 operation_id=operation_id,
                 call_no=call_no,
+                purpose=operation.provider_operation,
                 state=cast(ProviderOperationState, operation.state),
                 request_count=operation.request_count,
                 charged_request_count=operation.charged_request_count,
@@ -308,7 +309,7 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
     charged = sum(item.charged_request_count for item in calls)
     return DemoAcceptanceRunResponse(
         id=UUID(run.id),
-        plan_version="real_core_demo_7call_v2",
+        plan_version=DEMO_ACCEPTANCE_PLAN_VERSION,
         fixture_hash=run.fixture_hash,
         baseline_agent_id=UUID(run.baseline_agent_id),
         baseline_version_id=UUID(run.baseline_version_id),

@@ -1418,7 +1418,7 @@ class DemoAcceptanceRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "plan_version = 'real_core_demo_7call_v2'",
+            "plan_version = 'real_core_demo_v2'",
             name="ck_demo_acceptance_runs_plan_version",
         ),
         CheckConstraint(
@@ -1517,7 +1517,7 @@ class ProviderOperation(Base):
             name="ck_provider_operations_acceptance_call_pair",
         ),
         CheckConstraint(
-            "call_no IS NULL OR (call_no >= 1 AND call_no <= 7)",
+            "call_no IS NULL OR (call_no >= 1 AND call_no <= 8)",
             name="ck_provider_operations_call_no",
         ),
         UniqueConstraint(
