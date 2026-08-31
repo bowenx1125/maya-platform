@@ -121,6 +121,52 @@ def _prompt(*, topic: str = "How should a platform protect agency?") -> Any:
     )
 
 
+def _repaired_prompt(prompt: ProviderPromptV1) -> ProviderPromptV1:
+    repaired = prompt.request.model_copy(
+        update={
+            "repair_feedback": PromptRepairFeedbackV1(
+                safe_error_code="schema_invalid",
+                json_pointers=("/key_claims",),
+            )
+        }
+    )
+    return ProviderPromptV1(
+        request=repaired,
+        messages=(
+            prompt.system_message,
+            PromptMessageV1(role="user", content=repaired.canonical_json()),
+        ),
+        budget=preflight_prompt_budget(
+            (prompt.system_message.content, repaired.canonical_json()),
+            request_bytes=len(repaired.canonical_json().encode()),
+            token_counter=ConservativeUtf8TokenCounter(),
+        ),
+        request_hash=repaired.request_hash,
+        system_rules_hash=prompt.system_rules_hash,
+    )
+
+
+def _one_attempt_manifest() -> LLMOutboundManifestV1:
+    default = LLMOutboundManifestV1()
+    return LLMOutboundManifestV1(
+        field_classes=tuple(
+            field_class
+            for field_class in default.field_classes
+            if field_class != "server_authored_structure_repair_feedback"
+        ),
+        max_attempts=1,
+        repair_policy_version=None,
+        repair_policy_hash=None,
+    )
+
+
+def _tampered_manifest(**changes: object) -> LLMOutboundManifestV1:
+    manifest = LLMOutboundManifestV1()
+    for field_name, value in changes.items():
+        object.__setattr__(manifest, field_name, value)
+    return manifest
+
+
 def _output(*, speech: str = "A transparent policy protects agency.") -> dict[str, object]:
     return {
         "schema_version": "llm_turn_output_v1",
@@ -315,28 +361,7 @@ def test_transport_not_sent_is_retryable_but_unknown_is_not() -> None:
 
 def test_attempt_two_uses_closed_repair_feedback_without_failed_value() -> None:
     prompt = _prompt()
-    repaired = prompt.request.model_copy(
-        update={
-            "repair_feedback": PromptRepairFeedbackV1(
-                safe_error_code="schema_invalid",
-                json_pointers=("/key_claims",),
-            )
-        }
-    )
-    repaired_prompt = ProviderPromptV1(
-        request=repaired,
-        messages=(
-            prompt.system_message,
-            PromptMessageV1(role="user", content=repaired.canonical_json()),
-        ),
-        budget=preflight_prompt_budget(
-            (prompt.system_message.content, repaired.canonical_json()),
-            request_bytes=len(repaired.canonical_json().encode()),
-            token_counter=ConservativeUtf8TokenCounter(),
-        ),
-        request_hash=repaired.request_hash,
-        system_rules_hash=prompt.system_rules_hash,
-    )
+    repaired_prompt = _repaired_prompt(prompt)
     transport = _FakeTransport(_response(_output()))
     result = _adapter(transport).execute(repaired_prompt, attempt_no=2, retrieval_reused=True)
     assert result.succeeded
@@ -344,6 +369,70 @@ def test_attempt_two_uses_closed_repair_feedback_without_failed_value() -> None:
     user = json.loads(cast(str, cast(list[dict[str, object]], body["messages"])[1]["content"]))
     assert user["repair_feedback"] == {"code": "schema_invalid", "json_pointers": ["/key_claims"]}
     assert "fixture-secret" not in json.dumps(user)
+
+
+def test_attempt_two_without_feedback_is_buildable_for_proven_not_sent_retry() -> None:
+    transport = _FakeTransport(_response(_output()))
+    result = _adapter(transport).execute(_prompt(), attempt_no=2, retrieval_reused=True)
+    assert result.succeeded
+    assert result.request.attempt_no == 2
+    assert result.request.prompt.request.repair_feedback is None
+    assert len(transport.calls) == 1
+
+
+def test_attempt_two_exceeding_manifest_cap_is_zero_transport() -> None:
+    transport = _FakeTransport(_response(_output()))
+    with pytest.raises(LLMAdapterError) as error:
+        _adapter(transport).execute(
+            _repaired_prompt(_prompt()),
+            attempt_no=2,
+            outbound_manifest=_one_attempt_manifest(),
+        )
+    assert error.value.code == "llm_attempt_exceeds_manifest"
+    assert transport.calls == []
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected_code"),
+    (
+        ({"repair_policy_version": None}, "llm_repair_policy_missing"),
+        ({"repair_policy_hash": "0" * 64}, "llm_repair_policy_stale"),
+        (
+            {
+                "field_classes": tuple(
+                    field_class
+                    for field_class in LLMOutboundManifestV1().field_classes
+                    if field_class != "server_authored_structure_repair_feedback"
+                )
+            },
+            "llm_repair_field_missing",
+        ),
+    ),
+)
+def test_repair_feedback_requires_exact_frozen_manifest_contract(
+    changes: dict[str, object], expected_code: str
+) -> None:
+    transport = _FakeTransport(_response(_output()))
+    with pytest.raises(LLMAdapterError) as error:
+        _adapter(transport).execute(
+            _repaired_prompt(_prompt()),
+            attempt_no=2,
+            outbound_manifest=_tampered_manifest(**changes),
+        )
+    assert error.value.code == expected_code
+    assert transport.calls == []
+
+
+def test_repair_feedback_with_wrong_request_policy_hash_is_zero_transport() -> None:
+    transport = _FakeTransport(_response(_output()))
+    with pytest.raises(LLMAdapterError) as error:
+        _adapter(transport).execute(
+            _repaired_prompt(_prompt()),
+            attempt_no=2,
+            repair_policy_hash="0" * 64,
+        )
+    assert error.value.code == "llm_repair_policy_stale"
+    assert transport.calls == []
 
 
 def test_actual_message_privacy_scan_blocks_identity_and_unknown_fields() -> None:

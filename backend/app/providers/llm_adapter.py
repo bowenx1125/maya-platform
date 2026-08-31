@@ -56,6 +56,9 @@ from .llm_price_card import (
     LLMPriceCardV1,
 )
 from .llm_privacy import (
+    LLM_REPAIR_FEEDBACK_FIELD_CLASS,
+    LLM_REPAIR_FEEDBACK_POLICY_HASH,
+    LLM_REPAIR_FEEDBACK_POLICY_VERSION,
     LLMOutboundManifestV1,
     LLMOutboundPrivacyError,
     scan_llm_outbound_messages,
@@ -655,6 +658,56 @@ def _request_user_payload(prompt: ProviderPromptV1) -> dict[str, object]:
     return value
 
 
+def _validate_attempt_authorization(
+    manifest: LLMOutboundManifestV1,
+    *,
+    attempt_no: int,
+    has_repair_feedback: bool,
+    repair_policy_hash: str,
+) -> None:
+    """Enforce the manifest's closed attempt and repair contract pre-send.
+
+    ``LLMOutboundManifestV1`` validates these invariants at construction, but
+    manifests can also be reconstructed from durable rows or untrusted test
+    doubles.  The adapter repeats the checks at the last pure boundary so a
+    malformed/tampered manifest cannot authorize a network call.
+    """
+
+    if (
+        isinstance(manifest.max_attempts, bool)
+        or not isinstance(manifest.max_attempts, int)
+        or manifest.max_attempts not in {1, 2}
+        or not isinstance(manifest.field_classes, (tuple, list))
+    ):
+        raise LLMAdapterError(code="llm_manifest_invalid")
+    if attempt_no > manifest.max_attempts:
+        raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
+
+    if manifest.max_attempts == 2:
+        if manifest.repair_policy_version != LLM_REPAIR_FEEDBACK_POLICY_VERSION:
+            raise LLMAdapterError(code="llm_repair_policy_missing")
+        if manifest.repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+            raise LLMAdapterError(code="llm_repair_policy_stale")
+        if LLM_REPAIR_FEEDBACK_FIELD_CLASS not in manifest.field_classes:
+            raise LLMAdapterError(code="llm_repair_field_missing")
+        if repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+            raise LLMAdapterError(code="llm_repair_policy_stale")
+    elif (
+        manifest.repair_policy_version is not None
+        or manifest.repair_policy_hash is not None
+        or LLM_REPAIR_FEEDBACK_FIELD_CLASS in manifest.field_classes
+    ):
+        raise LLMAdapterError(code="llm_repair_policy_unexpected")
+
+    if has_repair_feedback:
+        if attempt_no <= 1:
+            raise LLMAdapterError(code="llm_repair_feedback_unexpected")
+        if not manifest.repair_feedback_allowed:
+            raise LLMAdapterError(code="llm_repair_feedback_not_allowed")
+        if repair_policy_hash != LLM_REPAIR_FEEDBACK_POLICY_HASH:
+            raise LLMAdapterError(code="llm_repair_policy_stale")
+
+
 def _make_result(
     request: LLMRequestV1,
     *,
@@ -906,14 +959,22 @@ class DashScopeLLMAdapter:
         manifest = outbound_manifest or self.outbound_manifest
         if not isinstance(manifest, LLMOutboundManifestV1) or not manifest.field_classes:
             raise LLMAdapterError(code="llm_manifest_required")
+        repair_feedback = prompt.request.repair_feedback
+        resolved_repair_hash = (
+            repair_policy_hash if repair_policy_hash is not None else self.config.repair_policy_hash
+        )
+        _validate_attempt_authorization(
+            manifest,
+            attempt_no=attempt_no,
+            has_repair_feedback=repair_feedback is not None,
+            repair_policy_hash=resolved_repair_hash,
+        )
         self._validate_tokenizer()
         self._validate_price_card()
         try:
             self.price_card.reservation_cost()
         except LLMPriceCardError as exc:
             raise LLMAdapterError(code=exc.code) from exc
-        if attempt_no == 1 and prompt.request.repair_feedback is not None:
-            raise LLMAdapterError(code="llm_repair_feedback_unexpected")
         # Attempt two is also the proven-not-sent transport retry.  In that
         # case the caller deliberately supplies the unchanged base request;
         # structure repair supplies the optional closed feedback field.
@@ -955,7 +1016,6 @@ class DashScopeLLMAdapter:
         resolved_policy_hash = _zero_or_hash(
             policy_hash if policy_hash is not None else self.config.policy_hash
         )
-        resolved_repair_hash = repair_policy_hash or self.config.repair_policy_hash
         body: dict[str, object] = {
             "model": LLM_MODEL_KEY,
             "messages": [
