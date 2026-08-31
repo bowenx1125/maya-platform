@@ -867,11 +867,11 @@ __all__ = [
 # error classes remain available while the fixed Wave 4 implementation stays
 # in small sibling modules.
 from app.providers.llm_adapter import (  # noqa: E402
-    LLMAcceptedCandidateV1,
     DashScopeLLMAdapter,
     DashScopeLLMConfig,
     DashScopeLLMProvider,
     FixedDashScopeLLMAdapter,
+    LLMAcceptedCandidateV1,
     LLMAdapter,
     LLMAdapterError,
     LLMRequest,

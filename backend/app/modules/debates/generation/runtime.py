@@ -569,6 +569,12 @@ class LLMTurnRuntime:
             LLMOutboundManifestV1 | None,
             outbound_manifest or getattr(self.adapter, "outbound_manifest", None),
         )
+        effective_repair_policy_hash = repair_policy_hash or (
+            effective_manifest.repair_policy_hash
+            if effective_manifest is not None
+            and effective_manifest.repair_policy_hash is not None
+            else ""
+        )
         self._require_adapter_preflight(manifest=effective_manifest)
         generation_fence = LLMGenerationFenceV1.from_value(fence, prompt.request)
         generation_fence_hash = _hash_record(generation_fence.as_record())
@@ -582,7 +588,7 @@ class LLMTurnRuntime:
             generation_fence=generation_fence_hash,
             policy_hash=policy_hash,
             export_manifest_hash=manifest_hash,
-            repair_policy_hash=repair_policy_hash,
+            repair_policy_hash=effective_repair_policy_hash,
             build_manifest_hash=build_manifest_hash,
             attempt_no=attempt_no,
             retrieval_reused=retrieval_reused,
@@ -654,7 +660,7 @@ class LLMTurnRuntime:
             receipts=tuple(receipts),
             queries=tuple(queries),
             build_manifest_hash=build_manifest_hash,
-            repair_policy_hash=repair_policy_hash,
+            repair_policy_hash=effective_repair_policy_hash,
             generation_fence_hash=generation_fence_hash,
             identity_tokens=tuple(identity_tokens),
             outbound_manifest=effective_manifest,
