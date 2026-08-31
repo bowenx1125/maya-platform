@@ -18,6 +18,7 @@ from app.core.models import (
     ProviderExportManifest,
     ProviderReservation,
 )
+from app.modules.agents.persona import compile_persona
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
@@ -134,11 +135,60 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
             evidence="A complementary classroom governance perspective.",
             confirmed_persona=True,
         )
+        raw_private_marker = "RAW_PRIVATE_PERSONA_MARKER"
+        initial_position = "文化知识分享必须保留上下文、来源与共同责任。"
+        raw_persona = f"""# Real Query A
+
+## Identity
+
+- Role: 文化知识学习引导者
+- Historical or cultural context: 私密原文标记 {raw_private_marker} 只用于查询边界测试。
+
+## Cultural lens
+
+- 跨代互惠
+- 语言与土地相连
+
+## Core values
+
+- 共同责任
+- 谦逊倾听
+
+## Initial position
+
+{initial_position}
+
+## Speaking style
+
+- Tone: 平静、尊重且清晰
+- Argument pattern: 先说明背景，再区分事实与价值
+- Concession style: 承认开放学习的好处，再说明保护意义的必要条件
+- Question style: 询问谁参与决定以及如何处理不确定性
+
+## Debate strategy
+
+- 连接语言、土地、记忆与共同责任
+
+## Boundaries
+
+- 不把一般推理说成来源支持的事实
+"""
+        compiled = compile_persona(raw_persona, expected_name="Real Query A")
+        assert compiled.compiled and compiled.canonical_json and compiled.persona_spec_hash
         with database.session() as db:
             agent = db.get(Agent, first_agent_id)
             assert agent is not None and agent.current_published_version_id
             version = db.get(AgentVersion, agent.current_published_version_id)
             assert version is not None and version.knowledge_snapshot_id
+            version.agent_md = raw_persona
+            version.raw_agent_md_hash = compiled.source_agent_md_hash
+            version.persona_spec_json = compiled.canonical_json
+            version.persona_spec_hash = compiled.persona_spec_hash
+            version.persona_compiler_version = compiled.compiler_version
+            version.persona_diagnostics_json = "[]"
+            version.persona_confirmation_revision = version.revision
+            version.student_confirmed_at = version.updated_at
+            version.persona_confirming_user_id = "wave4-test-student"
             snapshot = db.get(KnowledgeSnapshot, version.knowledge_snapshot_id)
             assert snapshot is not None
             snapshot.embedding_provider = REAL_EMBEDDING_PROVIDER
@@ -179,10 +229,23 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
         generation_module = importlib.import_module(
             "app.modules.debates.playback.generation_adapter"
         )
+        original_build_turn_subqueries = generation_module.build_turn_subqueries
+        observed_contexts: list[Any] = []
+
+        def capture_build_turn_subqueries(context: Any) -> Any:
+            queries = original_build_turn_subqueries(context)
+            observed_contexts.append(context)
+            return queries
+
         monkeypatch.setattr(
             generation_module,
             "select_embedding_provider",
             lambda _settings: adapter,
+        )
+        monkeypatch.setattr(
+            generation_module,
+            "build_turn_subqueries",
+            capture_build_turn_subqueries,
         )
 
         _teacher, csrf = login(client, "teacher-demo")
@@ -313,6 +376,23 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
         assert len(transport.calls) == 1
         assert transport.calls[0]["parameters"] == {"dimension": 1024}
         assert "api_key" not in transport.calls[0]
+        assert observed_contexts
+        projected = observed_contexts[0].participant
+        assert projected.persona is not None
+        assert projected.persona.initial_position == initial_position
+        assert projected.initial_position_summary == ""
+        assert projected.current_position_summary == ""
+        assert raw_private_marker in projected.agent_md
+        opening_queries = original_build_turn_subqueries(observed_contexts[0])
+        assert opening_queries[0].query_kind == "viewpoint"
+        assert initial_position in opening_queries[0].text
+        assert raw_private_marker not in opening_queries[0].text
+        nested = transport.calls[0]["input"]
+        assert isinstance(nested, dict)
+        query_texts = nested["texts"]
+        assert isinstance(query_texts, list) and len(query_texts) == 1
+        assert initial_position in query_texts[0]
+        assert raw_private_marker not in query_texts[0]
         operations = ProviderRepository(database).operations(scope_id=debate_id)
         query_operations = [
             operation

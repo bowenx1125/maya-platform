@@ -427,7 +427,13 @@ class ParticipantContext:
 
     @property
     def effective_position_summary(self) -> str:
-        return self.current_position_summary or self.initial_position_summary
+        if self.current_position_summary:
+            return self.current_position_summary
+        if self.initial_position_summary:
+            return self.initial_position_summary
+        if self.persona is not None:
+            return self.persona.initial_position
+        return ""
 
 
 @dataclass(frozen=True, slots=True)

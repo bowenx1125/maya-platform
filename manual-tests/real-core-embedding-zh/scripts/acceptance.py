@@ -72,7 +72,7 @@ class Fixture:
 def load_fixture() -> Fixture:
     if str(BACKEND) not in sys.path:
         sys.path.insert(0, str(BACKEND))
-    from app.modules.agents.persona import compile_persona
+    from app.modules.agents.persona import compile_persona, provider_view
     from app.modules.debates.generation import GenerationContext, MutualLearningPolicy
     from app.modules.debates.generation.retrieval import build_turn_subqueries
     from app.modules.debates.generation.types import ParticipantContext
@@ -151,8 +151,12 @@ def load_fixture() -> Fixture:
     require(len(chunks) == 1, "fixture_not_one_chunk")
     compiled = compile_persona(persona, expected_name="河流与种子守护者")
     require(
-        compiled.compiled and compiled.persona_spec_hash is not None, "persona_compile"
+        compiled.compiled
+        and compiled.spec is not None
+        and compiled.persona_spec_hash is not None,
+        "persona_compile",
     )
+    provider_persona = provider_view(compiled.spec)
 
     participants = (
         ParticipantContext(
@@ -162,7 +166,7 @@ def load_fixture() -> Fixture:
             "A",
             0,
             "s1",
-            initial_position_summary="分享文化知识必须保留共同责任并保护文化意义",
+            persona=provider_persona,
         ),
         ParticipantContext("p2", "a2", "Agent 2", "B", 1, "s2"),
     )

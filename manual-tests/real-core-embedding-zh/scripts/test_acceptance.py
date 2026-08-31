@@ -12,7 +12,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from acceptance import (
+from acceptance import (  # noqa: E402
     CHECKPOINT_FIELDS,
     AcceptanceError,
     TwoCallGate,
@@ -57,7 +57,7 @@ def test_fixture_is_one_chunk_and_opening_query_contains_chinese_position() -> N
     fixture = load_fixture()
     assert fixture.persona_hash
     assert "文化知识" in fixture.query_text
-    assert "共同责任" in fixture.query_text
+    assert "上下文" in fixture.query_text
     assert fixture.topic.startswith("How should")
 
 
