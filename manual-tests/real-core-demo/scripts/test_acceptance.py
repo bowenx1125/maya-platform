@@ -17,7 +17,6 @@ AcceptanceError = acceptance.AcceptanceError
 Api = acceptance.Api
 CHECKPOINT_FIELDS = acceptance.CHECKPOINT_FIELDS
 BASELINE_FIELDS = acceptance.BASELINE_FIELDS
-SevenCallGate = acceptance.SevenCallGate
 verify_turn_evidence = acceptance._verify_turn_evidence
 validated_baseline = acceptance._validated_baseline
 load_fixture = acceptance.load_fixture
@@ -28,9 +27,9 @@ write_checkpoint = acceptance.write_checkpoint
 
 def checkpoint(fixture_hash: str) -> dict[str, object]:
     values: dict[str, object] = {
-        "version": "real-core-demo-checkpoint-v3",
+        "version": acceptance.CHECKPOINT_VERSION,
         "state": "prepared",
-        "acceptance_run_id": "00000000-0000-4000-8000-000000000008",
+        "acceptance_run_id": None,
         "fixture_hash": fixture_hash,
         "dirty_agents": 1,
         "dirty_debates": 0,
@@ -46,6 +45,7 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
         "real_query_calls": 0,
         "llm_calls": 0,
         "completed_turns": [],
+        "bound_manifest_hashes": [],
         "next_call": "none",
     }
     for index, name in enumerate(
@@ -70,6 +70,7 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
                 "real_query_calls",
                 "llm_calls",
                 "completed_turns",
+                "bound_manifest_hashes",
                 "next_call",
             }
         ),
@@ -88,6 +89,35 @@ def test_fixture_is_one_chunk_and_query_is_chinese() -> None:
     assert "上下文" in fixture.query_text
     assert fixture.topic.startswith("How should")
     assert "课堂" in fixture.topic
+    assert fixture.manifest["call_cap"] == {
+        "snapshot": 1,
+        "real_query": 2,
+        "llm_turn": 4,
+        "report": 1,
+        "debate_stage": 7,
+        "expected_happy_path": 8,
+        "max_ceiling": 8,
+        "total": 8,
+    }
+
+
+def run_summary(checkpoint_value: dict[str, object], *, call_count: int = 0) -> dict[str, object]:
+    return {
+        "id": "00000000-0000-4000-8000-000000000008",
+        "plan_version": "real_core_demo_v2",
+        "fixture_hash": checkpoint_value["fixture_hash"],
+        "baseline_agent_id": checkpoint_value["baseline_agent_id"],
+        "baseline_version_id": checkpoint_value["baseline_version_id"],
+        "baseline_snapshot_id": checkpoint_value["baseline_snapshot_id"],
+        "target_agent_id": checkpoint_value["real_agent_id"],
+        "target_version_id": checkpoint_value["real_version_id"],
+        "debate_id": checkpoint_value["debate_id"],
+        "report_revision_id": None,
+        "state": "executing",
+        "starting_charged_requests": 0,
+        "call_count": call_count,
+        "charged_request_count": 0,
+    }
 
 
 def test_checkpoint_is_closed_and_private(tmp_path: Path) -> None:
@@ -159,6 +189,71 @@ def test_api_uses_exact_same_origin(
         api.close()
     assert [headers["Origin"] for headers in observed] == [origin, origin]
     assert observed[1]["X-CSRF-Token"] == "csrf-token"
+
+
+def test_api_attach_uses_manifest_hash_and_ordinal(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[dict[str, object]] = []
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return {"call_count": 1, "charged_request_count": 0}
+
+    class CapturingClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def request(self, _method: str, _path: str, **kwargs: object) -> Response:
+            observed.append(kwargs)
+            return Response()
+
+        @staticmethod
+        def close() -> None:
+            pass
+
+    monkeypatch.setattr("acceptance.httpx.Client", CapturingClient)
+    api = Api("http://127.0.0.1:18080")
+    try:
+        api.attach_acceptance_call(
+            "00000000-0000-4000-8000-000000000008",
+            manifest_hash="a" * 64,
+            call_no=1,
+        )
+    finally:
+        api.close()
+    assert observed[0]["json"] == {"manifest_hash": "a" * 64, "call_no": 1}
+    assert "operation_id" not in observed[0]["json"]
+
+
+def test_api_stops_on_acceptance_unknown_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Response:
+        status_code = 409
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return {"code": "llm_acceptance_unknown", "message": "safe"}
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        @staticmethod
+        def request(*_args: object, **_kwargs: object) -> Response:
+            return Response()
+
+        @staticmethod
+        def close() -> None:
+            pass
+
+    monkeypatch.setattr("acceptance.httpx.Client", Client)
+    api = Api("http://127.0.0.1:18080")
+    try:
+        with pytest.raises(AcceptanceError, match="acceptance_unknown"):
+            api.request("POST", "/continuation", expected={200})
+    finally:
+        api.close()
 
 
 def test_demo_baseline_requires_stable_usable_ids(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -295,10 +390,87 @@ def test_prepare_reuses_server_baseline_and_creates_only_target(
     assert result["baseline_agent_id"] == baseline["agent_id"]
     assert result["baseline_version_id"] == baseline["version_id"]
     assert result["baseline_snapshot_id"] == baseline["snapshot_id"]
-    assert result["acceptance_run_id"]
+    assert result["acceptance_run_id"] is None
+    assert result["bound_manifest_hashes"] == []
     assert result["snapshot_calls"] == result["real_query_calls"] == result["llm_calls"] == 0
     assert result["dirty_agents"] == 1
     assert result["dirty_debates"] == result["dirty_interactions"] == 0
+
+
+def test_attach_pending_call_binds_once_and_advances_bounded_summary(
+    tmp_path: Path,
+) -> None:
+    fixture = load_fixture()
+    value = checkpoint(fixture.fixture_hash)
+    value["state"] = "executing"
+    value["acceptance_run_id"] = "00000000-0000-4000-8000-000000000008"
+    manifest_hash = "a" * 64
+    captured: list[dict[str, object]] = []
+
+    class FakeApi:
+        def attach_acceptance_call(
+            self,
+            run_id: str,
+            *,
+            manifest_hash: str,
+            call_no: int,
+        ) -> dict[str, object]:
+            captured.append(
+                {"run_id": run_id, "manifest_hash": manifest_hash, "call_no": call_no}
+            )
+            result = run_summary(value, call_count=call_no)
+            result["charged_request_count"] = 0
+            return result
+
+    path = tmp_path / "checkpoint.json"
+    acceptance._attach_pending_call(
+        FakeApi(),
+        value,
+        path,
+        fixture,
+        manifest={"manifest_hash": manifest_hash, "confirmed": False},
+        kind="snapshot",
+    )
+    assert captured == [
+        {
+            "run_id": "00000000-0000-4000-8000-000000000008",
+            "manifest_hash": manifest_hash,
+            "call_no": 1,
+        }
+    ]
+    assert value["bound_manifest_hashes"] == [manifest_hash]
+    assert value["snapshot_calls"] == 1
+    with pytest.raises(AcceptanceError, match="acceptance_operation_duplicate"):
+        acceptance._attach_pending_call(
+            FakeApi(),
+            value,
+            path,
+            fixture,
+            manifest={"manifest_hash": manifest_hash, "confirmed": False},
+            kind="snapshot",
+        )
+
+
+def test_acceptance_run_creation_requires_fresh_zero_summary() -> None:
+    fixture = load_fixture()
+    value = checkpoint(fixture.fixture_hash)
+    value["state"] = "executing"
+    value["acceptance_run_id"] = None
+    summary = run_summary(value)
+    with pytest.raises(AcceptanceError, match="acceptance_run_starting_charged"):
+        acceptance._validated_acceptance_run(
+            {**summary, "starting_charged_requests": 1},
+            fixture=fixture,
+            checkpoint=value,
+            expected_call_count=0,
+        )
+    with pytest.raises(AcceptanceError, match="acceptance_run_call_count"):
+        acceptance._validated_acceptance_run(
+            {**summary, "call_count": 1},
+            fixture=fixture,
+            checkpoint=value,
+            expected_call_count=0,
+        )
 
 
 @pytest.mark.parametrize(
@@ -318,34 +490,6 @@ def test_prepare_reuses_server_baseline_and_creates_only_target(
 def test_api_rejects_base_url_outside_loopback_allowlist(base_url: str) -> None:
     with pytest.raises(AcceptanceError, match="base_url"):
         Api(base_url)
-
-
-def test_execute_is_gated_until_real_plan_is_frozen(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    fixture = load_fixture()
-    path = tmp_path / "checkpoint.json"
-    write_checkpoint(path, checkpoint(fixture.fixture_hash))
-    assert (
-        main(
-            [
-                "execute",
-                "--checkpoint",
-                str(path),
-                "--embedding-policy-hash",
-                "a" * 64,
-                "--llm-policy-hash",
-                "b" * 64,
-                "--confirm-seven-call-cap",
-            ]
-        )
-        == 2
-    )
-    assert json.loads(capsys.readouterr().err) == {
-        "status": "FAILED",
-        "safe_error_code": "real_plan_not_frozen",
-    }
 
 
 def test_turn_evidence_rejects_mismatched_source_lineage() -> None:

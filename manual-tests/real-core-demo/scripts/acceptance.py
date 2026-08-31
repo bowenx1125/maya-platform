@@ -1,9 +1,12 @@
 """Bounded Real-Core Demo acceptance driver.
 
-The active command is the provider-free full-Mock preparation boundary.  The
-superseded seven-call execute/verify implementation remains gated until the
-replacement Real plan is frozen, so this process currently makes no Provider
-request and records only opaque checkpoint metadata.
+The driver keeps the product's natural call semantics: one real Snapshot
+embedding, two real participant queries and four real debate-turn LLM calls.
+The accepted budget is eight calls so the later Report call has a reserved
+ordinal; the debate stage therefore ends at seven without treating seven as a
+terminal plan.  Each provider manifest is attached to a teacher-only
+acceptance run by its manifest hash before disclosure confirmation or the
+explicit preparation continuation.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 from uuid import uuid4
 
 import httpx
@@ -38,7 +41,10 @@ SECRET_RE = re.compile(
 )
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 BASE_URL_RE = re.compile(r"http://(?P<host>127\.0\.0\.1|localhost):(?P<port>[0-9]{1,5})/?")
-REAL_PLAN_FROZEN = False
+CHECKPOINT_VERSION = "real-core-demo-checkpoint-v4"
+DEBATE_STAGE_CALLS = 7
+EXPECTED_HAPPY_PATH_CALLS = 8
+MAX_ACCEPTANCE_CALLS = 8
 BASELINE_FIELDS = {
     "agent_id",
     "version_id",
@@ -48,6 +54,23 @@ BASELINE_FIELDS = {
     "immutable",
     "usable",
 }
+ACCEPTANCE_RUN_FIELDS = {
+    "id",
+    "plan_version",
+    "fixture_hash",
+    "baseline_agent_id",
+    "baseline_version_id",
+    "baseline_snapshot_id",
+    "target_agent_id",
+    "target_version_id",
+    "debate_id",
+    "report_revision_id",
+    "state",
+    "starting_charged_requests",
+    "call_count",
+    "charged_request_count",
+}
+ACCEPTANCE_RUN_STATES = {"prepared", "executing", "executed", "verified"}
 CHECKPOINT_FIELDS = {
     "version",
     "state",
@@ -71,6 +94,7 @@ CHECKPOINT_FIELDS = {
     "real_query_calls",
     "llm_calls",
     "completed_turns",
+    "bound_manifest_hashes",
     "next_call",
 }
 CHECKPOINT_STATES = {"prepared", "executing", "executed", "verified"}
@@ -147,7 +171,17 @@ def load_fixture() -> Fixture:
     require(manifest["language"] == "zh-CN", "manifest_language")
     require(manifest["expected_chunk_count"] == 1, "manifest_chunk_count")
     require(
-        manifest["call_cap"] == {"snapshot": 1, "real_query": 2, "llm_turn": 4, "total": 7},
+        manifest["call_cap"]
+        == {
+            "snapshot": 1,
+            "real_query": 2,
+            "llm_turn": 4,
+            "report": 1,
+            "debate_stage": DEBATE_STAGE_CALLS,
+            "expected_happy_path": EXPECTED_HAPPY_PATH_CALLS,
+            "max_ceiling": MAX_ACCEPTANCE_CALLS,
+            "total": EXPECTED_HAPPY_PATH_CALLS,
+        },
         "call_cap",
     )
     require(manifest["real_participant_slot"] == "B", "real_slot")
@@ -244,53 +278,6 @@ def load_fixture() -> Fixture:
     )
 
 
-@dataclass
-class SevenCallGate:
-    """Local fence for exactly one Snapshot, two queries and four LLM turns."""
-
-    snapshot_confirmed: bool = False
-    snapshot_calls: int = 0
-    query_confirmed: bool = False
-    real_query_calls: int = 0
-    llm_confirmed: bool = False
-    llm_calls: int = 0
-
-    def confirm_snapshot(self) -> None:
-        self.snapshot_confirmed = True
-
-    def call_snapshot(self) -> None:
-        require(self.snapshot_confirmed and self.snapshot_calls == 0, "snapshot_call_forbidden")
-        self.snapshot_calls = 1
-
-    def confirm_query(self) -> None:
-        require(self.snapshot_calls == 1, "query_confirmation_too_early")
-        self.query_confirmed = True
-
-    def call_query(self) -> None:
-        require(self.query_confirmed and self.real_query_calls < 2, "query_call_forbidden")
-        self.real_query_calls += 1
-
-    def confirm_llm(self) -> None:
-        require(self.snapshot_calls == 1, "llm_confirmation_too_early")
-        self.llm_confirmed = True
-
-    def call_llm(self) -> None:
-        require(self.llm_confirmed and self.llm_calls < 4, "llm_call_forbidden")
-        self.llm_calls += 1
-
-    def result(self) -> dict[str, int]:
-        require(
-            self.snapshot_calls == 1 and self.real_query_calls == 2 and self.llm_calls == 4,
-            "call_count_incomplete",
-        )
-        return {
-            "snapshot_calls": self.snapshot_calls,
-            "real_query_calls": self.real_query_calls,
-            "llm_calls": self.llm_calls,
-            "total_calls": self.snapshot_calls + self.real_query_calls + self.llm_calls,
-        }
-
-
 def _validated_origin(base_url: str) -> str:
     require(isinstance(base_url, str), "base_url")
     match = BASE_URL_RE.fullmatch(base_url)
@@ -347,12 +334,27 @@ class Api:
             )
         except httpx.HTTPError as exc:
             raise AcceptanceError("http_transport") from exc
-        require(response.status_code in expected, f"http_{response.status_code}")
         try:
             value = response.json()
         except (ValueError, json.JSONDecodeError) as exc:
             raise AcceptanceError("response_json") from exc
         require(isinstance(value, dict), "response_shape")
+        if response.status_code not in expected:
+            # Error envelopes are reduced to stable safe codes.  In
+            # particular, a provider acceptance uncertainty is terminal for
+            # this run and must never enter an automatic retry path.
+            provider_code = value.get("code")
+            if isinstance(provider_code, str):
+                if "acceptance_unknown" in provider_code:
+                    raise AcceptanceError("acceptance_unknown")
+                if provider_code in {
+                    "provider_failed",
+                    "provider_reservation_failed",
+                    "provider_response_failed",
+                    "report_provider_failed",
+                } or provider_code.endswith("_provider_failed"):
+                    raise AcceptanceError("provider_failed")
+            raise AcceptanceError(f"http_{response.status_code}")
         return response.status_code, value
 
     def login(self, username: str, password: str) -> Mapping[str, Any]:
@@ -387,9 +389,141 @@ class Api:
                     f"status_{field}")
         return value
 
+    def create_acceptance_run(
+        self,
+        *,
+        fixture_hash: str,
+        target_agent_id: str,
+        target_version_id: str,
+    ) -> Mapping[str, Any]:
+        """Create the fresh teacher-owned run immediately before real work."""
+
+        _status, value = self.request(
+            "POST",
+            "/api/v1/demo/acceptance-runs",
+            expected={201},
+            body={
+                "fixture_hash": fixture_hash,
+                "target_agent_id": target_agent_id,
+                "target_version_id": target_version_id,
+            },
+            key="real-core-demo-create-acceptance-run",
+        )
+        return value
+
+    def bind_acceptance_debate(self, run_id: str, debate_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "POST",
+            f"/api/v1/demo/acceptance-runs/{run_id}/debate",
+            expected={200},
+            body={"debate_id": debate_id},
+            key=f"real-core-demo-bind-debate-{debate_id}",
+        )
+        return value
+
+    def acceptance_summary(self, run_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "GET", f"/api/v1/demo/acceptance-runs/{run_id}/summary", expected={200}
+        )
+        return value
+
+    def attach_acceptance_call(
+        self,
+        run_id: str,
+        *,
+        manifest_hash: str,
+        call_no: int,
+    ) -> Mapping[str, Any]:
+        """Bind one exact pending manifest to the next bounded ordinal.
+
+        The pending DTO intentionally does not expose a Provider operation ID;
+        the server resolves the unique pre-send operation by this manifest
+        hash.  This call is made before disclosure confirmation and before the
+        explicit preparation continuation.
+        """
+
+        _status, value = self.request(
+            "POST",
+            f"/api/v1/demo/acceptance-runs/{run_id}/calls",
+            expected={200},
+            body={"manifest_hash": manifest_hash, "call_no": call_no},
+            key=f"real-core-demo-attach-call-{call_no:02d}",
+        )
+        return value
+
 
 def opaque(value: Any, code: str) -> str:
     require(isinstance(value, str) and UUID_RE.fullmatch(value) is not None, code)
+    return value
+
+
+def _validated_acceptance_run(
+    value: Mapping[str, Any],
+    *,
+    fixture: Fixture,
+    checkpoint: Mapping[str, Any],
+    expected_call_count: int | None = None,
+    expected_debate_id: str | None = None,
+) -> Mapping[str, Any]:
+    """Validate the safe run summary and its bounded counters."""
+
+    require(set(value) == ACCEPTANCE_RUN_FIELDS, "acceptance_run_shape")
+    run_id = opaque(value.get("id"), "acceptance_run_id")
+    recorded_run_id = checkpoint.get("acceptance_run_id")
+    if recorded_run_id is not None:
+        require(recorded_run_id == run_id, "acceptance_run_mismatch")
+    require(value.get("plan_version") == "real_core_demo_v2", "acceptance_run_plan")
+    require(value.get("fixture_hash") == fixture.fixture_hash, "acceptance_run_fixture")
+    for field in (
+        "baseline_agent_id",
+        "baseline_version_id",
+        "baseline_snapshot_id",
+        "target_agent_id",
+        "target_version_id",
+    ):
+        opaque(value.get(field), f"acceptance_run_{field}")
+    require(
+        (
+            value["baseline_agent_id"],
+            value["baseline_version_id"],
+            value["baseline_snapshot_id"],
+        )
+        == (
+            checkpoint["baseline_agent_id"],
+            checkpoint["baseline_version_id"],
+            checkpoint["baseline_snapshot_id"],
+        ),
+        "acceptance_run_baseline",
+    )
+    require(
+        (value["target_agent_id"], value["target_version_id"])
+        == (checkpoint["real_agent_id"], checkpoint["real_version_id"]),
+        "acceptance_run_target",
+    )
+    debate_id = value.get("debate_id")
+    require(
+        debate_id is None or UUID_RE.fullmatch(str(debate_id)) is not None,
+        "acceptance_run_debate",
+    )
+    report_revision_id = value.get("report_revision_id")
+    require(
+        report_revision_id is None or UUID_RE.fullmatch(str(report_revision_id)) is not None,
+        "acceptance_run_report",
+    )
+    require(value.get("state") in ACCEPTANCE_RUN_STATES, "acceptance_run_state")
+    require(value.get("starting_charged_requests") == 0, "acceptance_run_starting_charged")
+    for field in ("call_count", "charged_request_count"):
+        count = value.get(field)
+        require(isinstance(count, int) and not isinstance(count, bool) and count >= 0, field)
+    call_count = int(value["call_count"])
+    charged_count = int(value["charged_request_count"])
+    require(call_count <= MAX_ACCEPTANCE_CALLS, "acceptance_run_call_ceiling")
+    require(charged_count <= call_count, "acceptance_run_charge_count")
+    if expected_call_count is not None:
+        require(call_count == expected_call_count, "acceptance_run_call_count")
+    if expected_debate_id is not None:
+        require(debate_id == expected_debate_id, "acceptance_run_debate")
+    require(bool(run_id), "acceptance_run_id")
     return value
 
 
@@ -496,10 +630,16 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
         raise AcceptanceError("checkpoint_invalid") from exc
     require(mode == 0o600, "checkpoint_mode")
     require(isinstance(value, dict) and set(value) == CHECKPOINT_FIELDS, "checkpoint_invalid")
-    require(value["version"] == "real-core-demo-checkpoint-v3", "checkpoint_version")
+    require(value["version"] == CHECKPOINT_VERSION, "checkpoint_version")
     require(value["fixture_hash"] == fixture.fixture_hash, "checkpoint_fixture")
     require(value["state"] in CHECKPOINT_STATES, "checkpoint_state")
-    opaque(value["acceptance_run_id"], "checkpoint_acceptance_run_id")
+    require(
+        value["acceptance_run_id"] is None
+        or UUID_RE.fullmatch(str(value["acceptance_run_id"])) is not None,
+        "checkpoint_acceptance_run_id",
+    )
+    if value["state"] != "prepared":
+        require(value["acceptance_run_id"] is not None, "checkpoint_acceptance_run_id")
     for field in (
         "course_id",
         "group_id",
@@ -546,14 +686,33 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
         and all(UUID_RE.fullmatch(str(item)) is not None for item in value["completed_turns"]),
         "checkpoint_turns",
     )
-    require(value["next_call"] in {"none", "snapshot", "real_query", "llm"}, "checkpoint_next_call")
+    require(
+        isinstance(value["bound_manifest_hashes"], list), "checkpoint_bound_manifests"
+    )
+    require(
+        len(value["bound_manifest_hashes"]) <= MAX_ACCEPTANCE_CALLS,
+        "checkpoint_bound_manifests",
+    )
+    bound_hashes: list[str] = []
+    for item in value["bound_manifest_hashes"]:
+        require(HASH_RE.fullmatch(str(item)) is not None, "checkpoint_bound_manifest")
+        require(str(item) not in bound_hashes, "checkpoint_bound_manifest_duplicate")
+        bound_hashes.append(str(item))
+    require(
+        value["snapshot_calls"] + value["real_query_calls"] + value["llm_calls"]
+        == len(bound_hashes),
+        "checkpoint_call_counts",
+    )
+    require(
+        value["next_call"] in {"none", "snapshot", "real_query", "llm", "report"},
+        "checkpoint_next_call",
+    )
     return value
 
 
 def _base_checkpoint(
     fixture: Fixture,
     *,
-    acceptance_run_id: str,
     course_id: str,
     group_id: str,
     real_agent_id: str,
@@ -564,9 +723,9 @@ def _base_checkpoint(
     real_revision: int,
 ) -> dict[str, Any]:
     return {
-        "version": "real-core-demo-checkpoint-v3",
+        "version": CHECKPOINT_VERSION,
         "state": "prepared",
-        "acceptance_run_id": acceptance_run_id,
+        "acceptance_run_id": None,
         "fixture_hash": fixture.fixture_hash,
         "course_id": course_id,
         "group_id": group_id,
@@ -586,6 +745,7 @@ def _base_checkpoint(
         "real_query_calls": 0,
         "llm_calls": 0,
         "completed_turns": [],
+        "bound_manifest_hashes": [],
         "next_call": "none",
     }
 
@@ -640,7 +800,6 @@ def prepare(base_url: str, checkpoint_path: Path, student_password: str) -> Mapp
         )
         checkpoint = _base_checkpoint(
             fixture,
-            acceptance_run_id=str(uuid4()),
             course_id=course_id,
             group_id=group_id,
             real_agent_id=real_agent,
@@ -684,6 +843,10 @@ def _pending_item(
     if not candidates:
         return None
     item = candidates[0]
+    # Pending manifests deliberately do not disclose provider operation IDs.
+    # A driver must use the immutable manifest hash as the server-side lookup
+    # key when attaching the call to its acceptance run.
+    require("operation_id" not in item, "pending_operation_id_disclosed")
     require(isinstance(item.get("manifest_hash"), str), "pending_manifest")
     require(HASH_RE.fullmatch(str(item["manifest_hash"])) is not None, "pending_manifest")
     return item
@@ -702,6 +865,7 @@ def _confirm_manifest(
         expected={200},
         params={"manifest_hash": manifest_hash},
     )
+    require(disclosure.get("manifest_hash") == manifest_hash, "manifest_hash_mismatch")
     require(disclosure.get("policy_hash") == expected_policy_hash, "policy_hash_mismatch")
     _safe_json(disclosure, "disclosure")
     expected_revision = disclosure.get("confirmation_revision")
@@ -716,6 +880,79 @@ def _confirm_manifest(
             "expected_revision": expected_revision,
         },
     )
+
+
+def _attach_pending_call(
+    api: Api,
+    checkpoint: dict[str, Any],
+    checkpoint_path: Path,
+    fixture: Fixture,
+    *,
+    manifest: Mapping[str, Any],
+    kind: str,
+) -> Mapping[str, Any]:
+    """Attach one pending operation before confirmation or continuation.
+
+    ``manifest_hash`` is the only operation identity available to this
+    teacher-facing driver.  The run service resolves the unique prepared
+    operation and rejects a duplicate or non-sequential ordinal atomically.
+    """
+
+    run_id = checkpoint.get("acceptance_run_id")
+    require(isinstance(run_id, str), "acceptance_run_missing")
+    manifest_hash = manifest.get("manifest_hash")
+    require(isinstance(manifest_hash, str) and HASH_RE.fullmatch(manifest_hash), "pending_manifest")
+    bound_hashes = checkpoint.get("bound_manifest_hashes")
+    require(isinstance(bound_hashes, list), "checkpoint_bound_manifests")
+    require(manifest_hash not in bound_hashes, "acceptance_operation_duplicate")
+    call_no = len(bound_hashes) + 1
+    require(call_no <= MAX_ACCEPTANCE_CALLS, "acceptance_budget_exceeded")
+    expected_kind = {"snapshot", "real_query", "llm", "report"}
+    require(kind in expected_kind, "call_kind")
+    summary = api.attach_acceptance_call(
+        run_id,
+        manifest_hash=manifest_hash,
+        call_no=call_no,
+    )
+    _validated_acceptance_run(
+        summary,
+        fixture=fixture,
+        checkpoint=checkpoint,
+        expected_call_count=call_no,
+    )
+    require(summary["charged_request_count"] == 0, "acceptance_call_already_charged")
+    bound_hashes.append(manifest_hash)
+    if kind == "snapshot":
+        checkpoint["snapshot_calls"] = int(checkpoint["snapshot_calls"]) + 1
+    elif kind == "real_query":
+        checkpoint["real_query_calls"] = int(checkpoint["real_query_calls"]) + 1
+    elif kind == "llm":
+        checkpoint["llm_calls"] = int(checkpoint["llm_calls"]) + 1
+    checkpoint["next_call"] = kind
+    write_checkpoint(checkpoint_path, checkpoint)
+    return summary
+
+
+def _assert_charged_summary(
+    api: Api,
+    checkpoint: Mapping[str, Any],
+    fixture: Fixture,
+    *,
+    expected_call_count: int,
+) -> Mapping[str, Any]:
+    """Require the run summary to reflect all successful Provider charges."""
+
+    run_id = checkpoint.get("acceptance_run_id")
+    require(isinstance(run_id, str), "acceptance_run_missing")
+    summary = api.acceptance_summary(run_id)
+    _validated_acceptance_run(
+        summary,
+        fixture=fixture,
+        checkpoint=checkpoint,
+        expected_call_count=expected_call_count,
+    )
+    require(summary["charged_request_count"] == expected_call_count, "acceptance_charge_count")
+    return summary
 
 
 def _assert_checkpoint_baseline(api: Api, checkpoint: Mapping[str, Any]) -> None:
@@ -1037,27 +1274,24 @@ def _verify_turn_evidence(connection: Any, row: Any) -> None:
     require(traced_source_ids == set(source_by_id), "source_trace_set_mismatch")
 
 
-def _mark_provider_call(
-    checkpoint: dict[str, Any],
-    checkpoint_path: Path,
-    gate: SevenCallGate,
-    kind: str,
-) -> None:
-    """Advance the local count only after the product request has returned."""
+def report_acceptance_adapter(
+    *,
+    api: Api,
+    run_id: str,
+    debate_id: str,
+    call_no: int,
+) -> NoReturn:
+    """Reserved Report integration seam; the Report API is not frozen yet.
 
-    if kind == "snapshot":
-        gate.call_snapshot()
-        checkpoint["snapshot_calls"] = gate.snapshot_calls
-    elif kind == "real_query":
-        gate.call_query()
-        checkpoint["real_query_calls"] = gate.real_query_calls
-    elif kind == "llm":
-        gate.call_llm()
-        checkpoint["llm_calls"] = gate.llm_calls
-    else:  # pragma: no cover - closed driver call kinds
-        raise AcceptanceError("call_kind")
-    checkpoint["next_call"] = "none"
-    write_checkpoint(checkpoint_path, checkpoint)
+    The eventual adapter must create the Report request, obtain its pending
+    manifest, call ``attach_acceptance_call`` with ``call_no=8`` before
+    confirmation/send, and bind the resulting revision at
+    ``/{run_id}/report``.  Keeping this function unimplemented avoids guessing
+    an API contract owned by the Report service worker.
+    """
+
+    del api, run_id, debate_id, call_no
+    raise AcceptanceError("report_adapter_not_wired")
 
 
 def execute(
@@ -1068,9 +1302,7 @@ def execute(
     student_password: str,
     teacher_password: str,
 ) -> Mapping[str, Any]:
-    """Reject the superseded seven-call path until the Real plan is frozen."""
-
-    require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
+    """Execute the bounded Real-Core debate stage and park before Report."""
 
     require(HASH_RE.fullmatch(embedding_policy_hash) is not None, "embedding_policy_hash")
     require(HASH_RE.fullmatch(llm_policy_hash) is not None, "llm_policy_hash")
@@ -1083,11 +1315,9 @@ def execute(
         and checkpoint["llm_calls"] == 0,
         "checkpoint_call_counts",
     )
-    checkpoint["state"] = "executing"
-    checkpoint["next_call"] = "snapshot"
-    write_checkpoint(checkpoint_path, checkpoint)
+    require(checkpoint["acceptance_run_id"] is None, "checkpoint_run_already_bound")
+    require(checkpoint["bound_manifest_hashes"] == [], "checkpoint_call_counts")
     student, teacher = Api(base_url), Api(base_url)
-    gate = SevenCallGate()
     socket: PlaybackSocket | None = None
     try:
         student.login(
@@ -1095,6 +1325,21 @@ def execute(
         )
         teacher.login(os.environ.get("MAYA_TEACHER_USERNAME", "teacher-demo"), teacher_password)
         _assert_checkpoint_baseline(teacher, checkpoint)
+
+        # The run is created only now, against this fresh target/version and
+        # exact fixture hash.  ``prepare`` intentionally cannot fabricate or
+        # persist an acceptance-run identity.
+        run = teacher.create_acceptance_run(
+            fixture_hash=fixture.fixture_hash,
+            target_agent_id=str(checkpoint["real_agent_id"]),
+            target_version_id=str(checkpoint["real_version_id"]),
+        )
+        _validated_acceptance_run(run, fixture=fixture, checkpoint=checkpoint, expected_call_count=0)
+        acceptance_run_id = opaque(run.get("id"), "acceptance_run_id")
+        checkpoint["acceptance_run_id"] = acceptance_run_id
+        checkpoint["state"] = "executing"
+        checkpoint["next_call"] = "snapshot"
+        write_checkpoint(checkpoint_path, checkpoint)
         real_version_id = str(checkpoint["real_version_id"])
         publish_key = f"real-core-demo-real-publish-{real_version_id}"
 
@@ -1118,10 +1363,15 @@ def execute(
             isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict),
             "snapshot_manifest",
         )
+        _attach_pending_call(
+            teacher,
+            checkpoint,
+            checkpoint_path,
+            fixture,
+            manifest=items[0],
+            kind="snapshot",
+        )
         _confirm_manifest(teacher, items[0], expected_policy_hash=embedding_policy_hash)
-        gate.confirm_snapshot()
-        checkpoint["next_call"] = "snapshot"
-        write_checkpoint(checkpoint_path, checkpoint)
         _status, published = student.request(
             "POST",
             f"/api/v1/agent-versions/{real_version_id}/publish",
@@ -1129,10 +1379,10 @@ def execute(
             body={"expected_revision": int(checkpoint["real_revision"])},
             key=publish_key,
         )
-        _mark_provider_call(checkpoint, checkpoint_path, gate, "snapshot")
         snapshot_id = opaque(published.get("knowledge_snapshot_id"), "snapshot_id")
         checkpoint["snapshot_id"] = snapshot_id
         write_checkpoint(checkpoint_path, checkpoint)
+        _assert_charged_summary(teacher, checkpoint, fixture, expected_call_count=1)
 
         # The server-owned baseline is Mock and immutable; only target B's
         # published real Snapshot can consume real query calls.
@@ -1154,6 +1404,14 @@ def execute(
         debate_id = opaque(debate.get("id"), "debate_id")
         checkpoint["debate_id"] = debate_id
         write_checkpoint(checkpoint_path, checkpoint)
+        bound = teacher.bind_acceptance_debate(acceptance_run_id, debate_id)
+        _validated_acceptance_run(
+            bound,
+            fixture=fixture,
+            checkpoint=checkpoint,
+            expected_call_count=1,
+            expected_debate_id=debate_id,
+        )
         teacher.request(
             "POST",
             f"/api/v1/debates/{debate_id}/start",
@@ -1173,8 +1431,8 @@ def execute(
         epoch = socket.acquire(expected_control_version)
 
         for turn_index in range(4):
-            # The frozen mutual-learning order is A, B, A, B. Slot B is the
-            # sole real Snapshot participant, hence exactly two real queries.
+            # The mutual-learning order is A, B, A, B. Slot B is the sole real
+            # Snapshot participant, hence two independent real queries.
             if turn_index in {1, 3}:
                 detail = _debate_detail(teacher, debate_id)
                 turn_id = opaque(detail["playback"].get("current_turn_id"), "turn_id")
@@ -1186,23 +1444,30 @@ def execute(
                     f"/api/v1/provider/data-call/pending?scope_id={debate_id}",
                     current_turn_id=turn_id,
                 )
+                _attach_pending_call(
+                    teacher,
+                    checkpoint,
+                    checkpoint_path,
+                    fixture,
+                    manifest=query_item,
+                    kind="real_query",
+                )
                 _confirm_manifest(teacher, query_item, expected_policy_hash=embedding_policy_hash)
-                gate.confirm_query()
                 _retry_preparation(
                     teacher,
                     debate_id,
                     turn_id,
                     key=f"real-core-demo-query-retry-{turn_index + 1:02d}",
                 )
-                _mark_provider_call(checkpoint, checkpoint_path, gate, "real_query")
             else:
                 detail = _debate_detail(teacher, debate_id)
                 turn_id = opaque(detail["playback"].get("current_turn_id"), "turn_id")
                 checkpoint["current_turn_id"] = turn_id
                 write_checkpoint(checkpoint_path, checkpoint)
 
-            # Query success (or a Mock Snapshot) exposes the exact one-shot
-            # LLM manifest. Confirm it before retrying generation.
+            # Every turn in this reviewed composition uses the real LLM. Its
+            # exact one-shot manifest must be attached and confirmed before
+            # the explicit continuation; no automatic retry is performed.
             llm_item: Mapping[str, Any] | None = None
             deadline = time.monotonic() + 30.0
             while time.monotonic() < deadline:
@@ -1215,28 +1480,40 @@ def execute(
                     break
                 detail = _debate_detail(teacher, debate_id)
                 current_playback = detail["playback"]
+                if current_playback.get("status") in {"failed", "stopped"}:
+                    raise AcceptanceError("provider_failed")
                 if (
                     current_playback.get("status") == "ready"
                     and str(current_playback.get("current_turn_id")) == turn_id
                 ):
                     break
                 time.sleep(0.2)
-            if llm_item is not None:
-                _confirm_manifest(teacher, llm_item, expected_policy_hash=llm_policy_hash)
-                gate.confirm_llm()
-                checkpoint["next_call"] = "llm"
-                write_checkpoint(checkpoint_path, checkpoint)
-                _retry_preparation(
-                    teacher,
-                    debate_id,
-                    turn_id,
-                    key=f"real-core-demo-llm-retry-{turn_index + 1:02d}",
-                )
+            require(llm_item is not None, "llm_manifest_missing")
+            _attach_pending_call(
+                teacher,
+                checkpoint,
+                checkpoint_path,
+                fixture,
+                manifest=llm_item,
+                kind="llm",
+            )
+            _confirm_manifest(teacher, llm_item, expected_policy_hash=llm_policy_hash)
+            _retry_preparation(
+                teacher,
+                debate_id,
+                turn_id,
+                key=f"real-core-demo-llm-retry-{turn_index + 1:02d}",
+            )
             ready = _wait_turn_ready(teacher, debate_id)
             ready_playback = ready["playback"]
             ready_turn_id = opaque(ready_playback.get("current_turn_id"), "turn_id")
             require(ready_turn_id == turn_id, "turn_order")
-            _mark_provider_call(checkpoint, checkpoint_path, gate, "llm")
+            _assert_charged_summary(
+                teacher,
+                checkpoint,
+                fixture,
+                expected_call_count=len(checkpoint["bound_manifest_hashes"]),
+            )
 
             media_url = socket.prepare(
                 epoch=epoch,
@@ -1300,13 +1577,31 @@ def execute(
         )
         turns = transcript.get("turns")
         require(isinstance(turns, list) and len(turns) == 4, "turn_count")
+        require(
+            checkpoint["snapshot_calls"] == 1
+            and checkpoint["real_query_calls"] == 2
+            and checkpoint["llm_calls"] == 4
+            and len(checkpoint["bound_manifest_hashes"]) == DEBATE_STAGE_CALLS,
+            "debate_stage_call_counts",
+        )
+        _assert_charged_summary(
+            teacher,
+            checkpoint,
+            fixture,
+            expected_call_count=DEBATE_STAGE_CALLS,
+        )
         checkpoint["state"] = "executed"
-        checkpoint["next_call"] = "none"
+        checkpoint["next_call"] = "report"
         write_checkpoint(checkpoint_path, checkpoint)
         return {
-            "status": "REAL_CORE_DEMO_EXECUTED_PENDING_OFFLINE_VERIFY",
+            "status": "REAL_CORE_DEMO_DEBATE_STAGE_PASS_PENDING_REPORT",
             "fixture_hash": fixture.fixture_hash,
-            **gate.result(),
+            "snapshot_calls": checkpoint["snapshot_calls"],
+            "real_query_calls": checkpoint["real_query_calls"],
+            "llm_calls": checkpoint["llm_calls"],
+            "debate_stage_calls": DEBATE_STAGE_CALLS,
+            "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
+            "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
         }
     finally:
         if socket is not None:
@@ -1321,9 +1616,7 @@ def verify(
     embedding_policy_hash: str,
     llm_policy_hash: str,
 ) -> Mapping[str, Any]:
-    """Reject verification until the replacement Real plan is frozen."""
-
-    require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
+    """Verify the seven-call debate stage while Report remains unwired."""
 
     require(database_url.startswith("sqlite:"), "database_url")
     require(HASH_RE.fullmatch(embedding_policy_hash) is not None, "embedding_policy_hash")
@@ -1339,6 +1632,10 @@ def verify(
     require(checkpoint["snapshot_calls"] == 1, "checkpoint_snapshot_calls")
     require(checkpoint["real_query_calls"] == 2, "checkpoint_query_calls")
     require(checkpoint["llm_calls"] == 4, "checkpoint_llm_calls")
+    require(
+        len(checkpoint["bound_manifest_hashes"]) == DEBATE_STAGE_CALLS,
+        "checkpoint_debate_stage_calls",
+    )
     if str(BACKEND) not in sys.path:
         sys.path.insert(0, str(BACKEND))
     from app.core.db import Database
@@ -1539,12 +1836,14 @@ def verify(
     checkpoint["next_call"] = "none"
     write_checkpoint(checkpoint_path, checkpoint)
     return {
-        "status": "REAL_CORE_DEMO_E2E_PASS",
+        "status": "REAL_CORE_DEMO_DEBATE_STAGE_PASS_PENDING_REPORT",
         "fixture_hash": fixture.fixture_hash,
         "snapshot_calls": 1,
         "real_query_calls": 2,
         "llm_calls": 4,
-        "total_calls": 7,
+        "debate_stage_calls": DEBATE_STAGE_CALLS,
+        "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
+        "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
     }
 
 
@@ -1558,7 +1857,6 @@ def parser() -> argparse.ArgumentParser:
     execute_parser.add_argument("--checkpoint", type=Path, required=True)
     execute_parser.add_argument("--embedding-policy-hash", required=True)
     execute_parser.add_argument("--llm-policy-hash", required=True)
-    execute_parser.add_argument("--confirm-seven-call-cap", action="store_true", required=True)
     verify_parser = sub.add_parser("verify")
     verify_parser.add_argument("--checkpoint", type=Path, required=True)
     verify_parser.add_argument("--database-url", required=True)
@@ -1579,6 +1877,9 @@ def main(argv: list[str] | None = None) -> int:
                 "snapshot_calls": 0,
                 "real_query_calls": 0,
                 "llm_calls": 0,
+                "debate_stage_calls": 0,
+                "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
+                "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
                 "total_calls": 0,
             }
         else:
@@ -1588,14 +1889,12 @@ def main(argv: list[str] | None = None) -> int:
                 require(bool(student_password), "student_password_missing")
                 value = prepare(base_url, args.checkpoint, student_password)
             elif args.command == "execute":
-                require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
                 student_password = os.environ.get("MAYA_STUDENT_PASSWORD", "")
                 teacher_password = os.environ.get("MAYA_TEACHER_PASSWORD", "")
                 require(
-                    args.confirm_seven_call_cap
-                    and bool(student_password)
+                    bool(student_password)
                     and bool(teacher_password),
-                    "real_confirmation_missing",
+                    "provider_credentials_missing",
                 )
                 value = execute(
                     base_url,
@@ -1606,7 +1905,6 @@ def main(argv: list[str] | None = None) -> int:
                     teacher_password,
                 )
             else:
-                require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
                 value = verify(
                     args.database_url,
                     args.checkpoint,

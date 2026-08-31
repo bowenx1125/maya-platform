@@ -11,7 +11,11 @@
     "snapshot": 1,
     "real_query": 2,
     "llm_turn": 4,
-    "total": 7
+    "report": 1,
+    "debate_stage": 7,
+    "expected_happy_path": 8,
+    "max_ceiling": 8,
+    "total": 8
   },
   "snapshot_document_filename": "maya-real-core-demo.md",
   "real_participant_slot": "B"
