@@ -15,6 +15,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import cast
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ from sqlalchemy.sql import Executable
 
 from app.core.db import Database
 from app.core.models import (
+    LlmAcceptedStage,
     ProviderExportConfirmation,
     ProviderExportManifest,
     ProviderOperation,
@@ -34,11 +36,13 @@ from app.core.models import (
     ProviderScopeBudget,
 )
 from app.providers.control import (
+    EMBEDDING_SNAPSHOT_BUCKET,
     BudgetExceeded,
     DuplicateOperation,
     ExportConfirmationV1,
     ExportFieldV1,
     ExportManifestV1,
+    LLMAcceptedStageV1,
     OperationState,
     OperationStateError,
     ProviderOperationV1,
@@ -47,8 +51,10 @@ from app.providers.control import (
     ProviderReservationV1,
     ProviderScopeBudgetV1,
     ReservationState,
+    budget_bucket_for_operation,
     can_transition,
     startup_recovery_state,
+    validate_budget_bucket,
 )
 
 _POLICY_TABLE = cast(Table, ProviderPolicySnapshot.__table__)
@@ -57,6 +63,7 @@ _CONFIRMATION_TABLE = cast(Table, ProviderExportConfirmation.__table__)
 _BUDGET_TABLE = cast(Table, ProviderScopeBudget.__table__)
 _OPERATION_TABLE = cast(Table, ProviderOperation.__table__)
 _RESERVATION_TABLE = cast(Table, ProviderReservation.__table__)
+_LLM_STAGE_TABLE = cast(Table, LlmAcceptedStage.__table__)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -66,6 +73,10 @@ class ProviderRepositoryError(RuntimeError):
 
 class ScopeBudgetMissing(ProviderRepositoryError):
     """A scope has no explicitly frozen request/token/cost budget."""
+
+
+class ScopeBudgetAmbiguous(ProviderRepositoryError):
+    """A legacy scope maps to more than one closed budget bucket."""
 
 
 class PolicyExportStale(ProviderRepositoryError):
@@ -120,6 +131,12 @@ class ProviderRepository:
         with self.engine.connect() as connection:
             row = connection.execute(statement).mappings().first()
             return cast(Mapping[str, object] | None, row)
+
+    def _read_all(self, statement: Executable) -> list[Mapping[str, object]]:
+        with self.engine.connect() as connection:
+            return [
+                cast(Mapping[str, object], row) for row in connection.execute(statement).mappings()
+            ]
 
     @staticmethod
     def _now() -> datetime:
@@ -191,8 +208,25 @@ class ProviderRepository:
         course_id: str | None = None,
         group_id: str | None = None,
         agent_version_id: str | None = None,
+        debate_id: str | None = None,
+        turn_id: str | None = None,
     ) -> str:
-        manifest.validate()
+        manifest_debate_id, manifest_turn_id = _resolve_manifest_owners(
+            manifest,
+            debate_id=debate_id,
+            turn_id=turn_id,
+        )
+        persisted_manifest = replace(
+            manifest,
+            debate_id=manifest_debate_id,
+            turn_id=manifest_turn_id,
+        )
+        persisted_manifest.validate()
+        _validate_manifest_operation_owners(
+            persisted_manifest,
+            debate_id=manifest_debate_id,
+            turn_id=manifest_turn_id,
+        )
         policy_table = _POLICY_TABLE
         policy_row = self._read_one(
             select(policy_table).where(policy_table.c.id == policy_snapshot_id)
@@ -209,22 +243,29 @@ class ProviderRepository:
         values = {
             "id": row_id,
             "policy_snapshot_id": policy_snapshot_id,
-            "scope_id": manifest.scope_id,
-            "provider_operation": manifest.provider_operation,
-            "model_key": manifest.model_key,
-            "policy_hash": manifest.policy_hash,
-            "build_manifest_hash": manifest.build_manifest_hash,
-            "persona_spec_hash": manifest.persona_spec_hash,
+            "scope_id": persisted_manifest.scope_id,
+            "provider_operation": persisted_manifest.provider_operation,
+            "model_key": persisted_manifest.model_key,
+            "policy_hash": persisted_manifest.policy_hash,
+            "build_manifest_hash": persisted_manifest.build_manifest_hash,
+            "persona_spec_hash": persisted_manifest.persona_spec_hash,
             "fields_json": fields_json,
-            "operation_revision": manifest.operation_revision,
-            "contains_secret": manifest.contains_secret,
-            "contains_identity": manifest.contains_identity,
-            "contains_private_audio": manifest.contains_private_audio,
-            "contains_teacher_note": manifest.contains_teacher_note,
-            "manifest_hash": manifest.manifest_hash,
+            "operation_revision": persisted_manifest.operation_revision,
+            "contains_secret": persisted_manifest.contains_secret,
+            "contains_identity": persisted_manifest.contains_identity,
+            "contains_private_audio": persisted_manifest.contains_private_audio,
+            "contains_teacher_note": persisted_manifest.contains_teacher_note,
+            "manifest_hash": persisted_manifest.manifest_hash,
             "course_id": course_id,
             "group_id": group_id,
             "agent_version_id": agent_version_id,
+            "debate_id": manifest_debate_id,
+            "turn_id": manifest_turn_id,
+            "max_attempts": persisted_manifest.max_attempts,
+            "max_total_tokens": persisted_manifest.max_total_tokens,
+            "max_cost_cny": persisted_manifest.max_cost_cny,
+            "repair_policy_version": persisted_manifest.repair_policy_version,
+            "repair_policy_hash": persisted_manifest.repair_policy_hash,
             "created_at": self._now(),
         }
         try:
@@ -245,17 +286,32 @@ class ProviderRepository:
         course_id: str | None = None,
         group_id: str | None = None,
         agent_version_id: str | None = None,
+        debate_id: str | None = None,
+        turn_id: str | None = None,
     ) -> str:
         """Insert once or verify the exact immutable manifest and owner tuple."""
 
+        resolved_debate_id, resolved_turn_id = _resolve_manifest_owners(
+            manifest,
+            debate_id=debate_id,
+            turn_id=turn_id,
+        )
+        effective_manifest = replace(
+            manifest,
+            debate_id=resolved_debate_id,
+            turn_id=resolved_turn_id,
+        )
+
         try:
             return self.save_export_manifest(
-                manifest,
+                effective_manifest,
                 policy_snapshot_id=policy_snapshot_id,
                 manifest_id=manifest_id,
                 course_id=course_id,
                 group_id=group_id,
                 agent_version_id=agent_version_id,
+                debate_id=resolved_debate_id,
+                turn_id=resolved_turn_id,
             )
         except ProviderRepositoryError as error:
             row = self._read_one(
@@ -270,11 +326,13 @@ class ProviderRepository:
             except Exception as exc:
                 raise ProviderRepositoryError("provider export manifest is corrupt") from exc
             if (
-                persisted != manifest
+                persisted != effective_manifest
                 or str(row["policy_snapshot_id"]) != policy_snapshot_id
                 or _optional_string(row["course_id"]) != course_id
                 or _optional_string(row["group_id"]) != group_id
                 or _optional_string(row["agent_version_id"]) != agent_version_id
+                or _optional_string(row["debate_id"]) != resolved_debate_id
+                or _optional_string(row["turn_id"]) != resolved_turn_id
             ):
                 raise ProviderRepositoryError(
                     "provider export manifest already exists with different ownership"
@@ -349,6 +407,13 @@ class ProviderRepository:
                 manifest_table.c.provider_operation,
                 manifest_table.c.model_key,
                 manifest_table.c.build_manifest_hash,
+                manifest_table.c.debate_id,
+                manifest_table.c.turn_id,
+                manifest_table.c.max_attempts,
+                manifest_table.c.max_total_tokens,
+                manifest_table.c.max_cost_cny,
+                manifest_table.c.repair_policy_version,
+                manifest_table.c.repair_policy_hash,
                 manifest_table.c.policy_hash,
                 confirmation_table.c.manifest_hash.label("confirmed_manifest_hash"),
                 confirmation_table.c.policy_hash.label("confirmed_policy_hash"),
@@ -379,6 +444,16 @@ class ProviderRepository:
             and row["build_manifest_hash"] != request.build_manifest_hash
         ):
             raise PolicyExportStale("provider export build hash is stale")
+        if request.provider_operation == "llm_debate_turn":
+            if (
+                row["debate_id"] != request.scope_id
+                or row["turn_id"] != request.logical_item_id
+                or _as_int(row["max_attempts"] or 0) != 2
+                or row["repair_policy_version"] != "repair_feedback_v1"
+                or row["repair_policy_hash"]
+                != "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
+            ):
+                raise PolicyExportStale("LLM turn export owner or retry policy is stale")
 
     validate_hashes_current = assert_hashes_current
 
@@ -388,17 +463,43 @@ class ProviderRepository:
     def save_scope_budget(
         self,
         scope_id: str,
-        budget: ProviderScopeBudgetV1,
+        budget_or_bucket: ProviderScopeBudgetV1 | str | None = None,
+        budget: ProviderScopeBudgetV1 | None = None,
         *,
+        budget_bucket: str | None = None,
         replace_empty: bool = False,
     ) -> None:
         if not scope_id:
             raise ProviderRepositoryError("scope id is required")
+        if isinstance(budget_or_bucket, str):
+            if budget is None:
+                raise ProviderRepositoryError("scope budget value is required")
+            if budget_bucket is not None and budget_bucket != budget_or_bucket:
+                raise ProviderRepositoryError("scope budget bucket is specified twice")
+            selected_bucket = budget_or_bucket
+            selected_budget = budget
+        elif isinstance(budget_or_bucket, ProviderScopeBudgetV1):
+            if budget is not None:
+                raise ProviderRepositoryError("scope budget value is specified twice")
+            selected_budget = budget_or_bucket
+            selected_bucket = budget_bucket or selected_budget.budget_bucket
+        elif budget is not None:
+            selected_budget = budget
+            selected_bucket = budget_bucket or selected_budget.budget_bucket
+        else:
+            raise ProviderRepositoryError("scope budget value is required")
+        validate_budget_bucket(selected_bucket)
+        if (
+            selected_budget.budget_bucket != selected_bucket
+            and selected_budget.budget_bucket != EMBEDDING_SNAPSHOT_BUCKET
+        ):
+            raise ProviderRepositoryError("scope budget bucket does not match its value")
         budget_row = {
             "scope_id": scope_id,
-            "max_requests": budget.max_requests,
-            "max_total_tokens": budget.max_total_tokens,
-            "max_cost_cny": budget.max_cost_cny,
+            "budget_bucket": selected_bucket,
+            "max_requests": selected_budget.max_requests,
+            "max_total_tokens": selected_budget.max_total_tokens,
+            "max_cost_cny": selected_budget.max_cost_cny,
             "allocated_requests": 0,
             "allocated_total_tokens": 0,
             "allocated_cost_cny": 0,
@@ -408,7 +509,12 @@ class ProviderRepository:
         table = _BUDGET_TABLE
         with self._write_connection() as connection:
             existing = (
-                connection.execute(select(table).where(table.c.scope_id == scope_id))
+                connection.execute(
+                    select(table).where(
+                        table.c.scope_id == scope_id,
+                        table.c.budget_bucket == selected_bucket,
+                    )
+                )
                 .mappings()
                 .first()
             )
@@ -417,9 +523,9 @@ class ProviderRepository:
                 return
             if not replace_empty:
                 if (
-                    _as_int(existing["max_requests"]) != budget.max_requests
-                    or _as_int(existing["max_total_tokens"]) != budget.max_total_tokens
-                    or _as_float(existing["max_cost_cny"]) != float(budget.max_cost_cny)
+                    _as_int(existing["max_requests"]) != selected_budget.max_requests
+                    or _as_int(existing["max_total_tokens"]) != selected_budget.max_total_tokens
+                    or _as_float(existing["max_cost_cny"]) != float(selected_budget.max_cost_cny)
                 ):
                     raise ProviderRepositoryError("scope budget already has different caps")
                 return
@@ -431,26 +537,46 @@ class ProviderRepository:
                 raise ProviderRepositoryError("cannot replace a used scope budget")
             connection.execute(
                 update(table)
-                .where(table.c.scope_id == scope_id)
+                .where(
+                    table.c.scope_id == scope_id,
+                    table.c.budget_bucket == selected_bucket,
+                )
                 .values(
-                    max_requests=budget.max_requests,
-                    max_total_tokens=budget.max_total_tokens,
-                    max_cost_cny=budget.max_cost_cny,
+                    max_requests=selected_budget.max_requests,
+                    max_total_tokens=selected_budget.max_total_tokens,
+                    max_cost_cny=selected_budget.max_cost_cny,
                     updated_at=self._now(),
                 )
             )
 
     ensure_scope_budget = save_scope_budget
 
-    def get_scope_budget(self, scope_id: str) -> ProviderScopeBudgetV1 | None:
+    def get_scope_budget(
+        self,
+        scope_id: str,
+        budget_bucket: str | None = None,
+    ) -> ProviderScopeBudgetV1 | None:
         table = _BUDGET_TABLE
-        row = self._read_one(select(table).where(table.c.scope_id == scope_id))
-        if row is None:
+        if budget_bucket is not None:
+            validate_budget_bucket(budget_bucket)
+        rows = self._read_all(
+            select(table)
+            .where(
+                table.c.scope_id == scope_id,
+                *((table.c.budget_bucket == budget_bucket,) if budget_bucket else ()),
+            )
+            .order_by(table.c.budget_bucket)
+        )
+        if not rows:
             return None
+        if budget_bucket is None and len(rows) > 1:
+            raise ScopeBudgetAmbiguous("scope has more than one budget bucket")
+        row = rows[0]
         return ProviderScopeBudgetV1(
             max_requests=_as_int(row["max_requests"]),
             max_total_tokens=_as_int(row["max_total_tokens"]),
             max_cost_cny=_as_float(row["max_cost_cny"]),
+            budget_bucket=str(row["budget_bucket"]),
         )
 
     def create_prepared(self, request: ProviderReservationRequestV1) -> ProviderOperationV1:
@@ -539,7 +665,11 @@ class ProviderRepository:
                 raise OperationStateError("provider operation is not reservable")
             budget_row = (
                 connection.execute(
-                    select(budget_table).where(budget_table.c.scope_id == operation_row["scope_id"])
+                    select(budget_table).where(
+                        budget_table.c.scope_id == operation_row["scope_id"],
+                        budget_table.c.budget_bucket
+                        == budget_bucket_for_operation(str(operation_row["provider_operation"])),
+                    )
                 )
                 .mappings()
                 .first()
@@ -663,7 +793,11 @@ class ProviderRepository:
                 # Releasing is part of the same transaction as the state CAS.
                 connection.execute(
                     update(budget_table)
-                    .where(budget_table.c.scope_id == row["scope_id"])
+                    .where(
+                        budget_table.c.scope_id == row["scope_id"],
+                        budget_table.c.budget_bucket
+                        == budget_bucket_for_operation(str(row["provider_operation"])),
+                    )
                     .values(
                         allocated_requests=budget_table.c.allocated_requests - 1,
                         allocated_total_tokens=budget_table.c.allocated_total_tokens
@@ -706,8 +840,117 @@ class ProviderRepository:
             response_hash=response_hash,
         )
 
+    def stage_llm_accepted(self, stage: LLMAcceptedStageV1) -> LLMAcceptedStageV1:
+        """Persist one accepted LLM result and mark its operation accepted.
+
+        Insertion and the ``sending -> accepted`` CAS share one transaction so
+        a restart can never observe an accepted operation without its stage.
+        Local output validation happens after this method returns.
+        """
+
+        stage.__post_init__()
+        operation_table = _OPERATION_TABLE
+        stage_table = _LLM_STAGE_TABLE
+        reservation_table = _RESERVATION_TABLE
+        with self._write_connection() as connection:
+            operation_row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == stage.operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if operation_row is None:
+                raise ProviderRepositoryError("LLM accepted stage operation does not exist")
+            if (
+                operation_row["provider_operation"] != "llm_debate_turn"
+                or operation_row["logical_item_id"] != stage.turn_id
+                or _as_int(operation_row["attempt_no"]) != stage.attempt_no
+                or operation_row["request_hash"] != stage.request_hash
+                or operation_row["policy_hash"] != stage.policy_hash
+                or operation_row["export_manifest_hash"] != stage.export_manifest_hash
+                or operation_row["build_manifest_hash"] != stage.build_manifest_hash
+                or operation_row["model_key"] != stage.model_key
+            ):
+                raise ProviderRepositoryError("LLM accepted stage does not match operation")
+            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
+                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
+            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
+                str(operation_row["max_cost_cny"])
+            ):
+                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
+            existing_row = (
+                connection.execute(
+                    select(stage_table).where(stage_table.c.operation_id == stage.operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if existing_row is not None:
+                existing = _llm_stage_from_row(cast(Mapping[str, object], existing_row))
+                if not _stages_equal(existing, stage):
+                    raise ProviderRepositoryError("LLM accepted stage is immutable")
+                if operation_row["state"] not in {"accepted", "succeeded"}:
+                    raise ProviderRepositoryError("LLM accepted stage operation state is invalid")
+                return existing
+            if operation_row["state"] not in {"sending", "accepted"}:
+                raise ProviderRepositoryError("LLM accepted stage requires an accepted response")
+            if (
+                operation_row["state"] == "accepted"
+                and operation_row["staged_response_hash"] != stage.output_hash
+            ):
+                raise ProviderRepositoryError("LLM accepted stage response hash is stale")
+            now = self._now()
+            values = stage.as_record()
+            values["created_at"] = now
+            connection.execute(stage_table.insert().values(**values))
+            if operation_row["state"] == "sending":
+                changed = connection.execute(
+                    update(operation_table)
+                    .where(
+                        operation_table.c.id == stage.operation_id,
+                        operation_table.c.state == "sending",
+                    )
+                    .values(
+                        state="accepted",
+                        staged_response_hash=stage.output_hash,
+                        updated_at=now,
+                    )
+                )
+                if changed.rowcount != 1:
+                    raise OperationStateError("LLM accepted operation transition failed")
+                connection.execute(
+                    update(reservation_table)
+                    .where(
+                        reservation_table.c.operation_id == stage.operation_id,
+                        reservation_table.c.state == "sending",
+                    )
+                    .values(state="accepted", updated_at=now)
+                )
+        return stage
+
+    save_llm_accepted_stage = stage_llm_accepted
+    save_llm_stage = stage_llm_accepted
+    persist_llm_stage = stage_llm_accepted
+    persist_llm_accepted_stage = stage_llm_accepted
+    record_llm_accepted_stage = stage_llm_accepted
+    record_llm_usage = stage_llm_accepted
+
+    def get_llm_accepted_stage(self, operation_id: str) -> LLMAcceptedStageV1 | None:
+        row = self._read_one(
+            select(_LLM_STAGE_TABLE).where(_LLM_STAGE_TABLE.c.operation_id == operation_id)
+        )
+        return _llm_stage_from_row(row) if row is not None else None
+
+    get_accepted_llm_stage = get_llm_accepted_stage
+    get_llm_stage = get_llm_accepted_stage
+
     def mark_succeeded(self, operation_id: str) -> ProviderOperationV1:
         current = self.operation(operation_id)
+        if current.provider_operation == "llm_debate_turn":
+            stage = self.get_llm_accepted_stage(operation_id)
+            if stage is None:
+                raise ProviderRepositoryError("LLM operation has no accepted stage")
         return self.transition(
             operation_id,
             expected=current.state,
@@ -740,11 +983,21 @@ class ProviderRepository:
         staged_response_complete: bool | None = None,
     ) -> ProviderOperationV1:
         current = self.operation(operation_id)
-        complete = (
-            current.staged_response_hash is not None
-            if staged_response_complete is None
-            else staged_response_complete
-        )
+        if current.provider_operation == "llm_debate_turn":
+            complete = (
+                self._read_one(
+                    select(_LLM_STAGE_TABLE.c.operation_id).where(
+                        _LLM_STAGE_TABLE.c.operation_id == operation_id
+                    )
+                )
+                is not None
+            )
+        else:
+            complete = (
+                current.staged_response_hash is not None
+                if staged_response_complete is None
+                else staged_response_complete
+            )
         target = startup_recovery_state(current.state, staged_response_complete=complete)
         if target == current.state:
             return current
@@ -762,6 +1015,13 @@ class ProviderRepository:
                 select(table.c.id).where(table.c.state.in_(("reserved", "sending", "accepted")))
             ).all()
         return tuple(self.recover_one(str(row[0])) for row in rows)
+
+    def recover_llm_startup(self) -> tuple[ProviderOperationV1, ...]:
+        return tuple(
+            operation
+            for operation in self.recover_startup()
+            if operation.provider_operation == "llm_debate_turn"
+        )
 
     def operations(self, *, scope_id: str | None = None) -> tuple[ProviderOperationV1, ...]:
         table = _OPERATION_TABLE
@@ -796,6 +1056,41 @@ def _as_float(value: object) -> float:
 
 def _optional_string(value: object) -> str | None:
     return str(value) if value is not None else None
+
+
+def _resolve_manifest_owners(
+    manifest: ExportManifestV1,
+    *,
+    debate_id: str | None,
+    turn_id: str | None,
+) -> tuple[str | None, str | None]:
+    """Merge typed manifest owner fields with repository call-site bindings."""
+
+    resolved_debate_id = debate_id if debate_id is not None else manifest.debate_id
+    resolved_turn_id = turn_id if turn_id is not None else manifest.turn_id
+    if (resolved_debate_id is None) != (resolved_turn_id is None):
+        raise ProviderRepositoryError(
+            "Debate and Turn manifest owners must be both present or absent"
+        )
+    if manifest.debate_id is not None and manifest.debate_id != resolved_debate_id:
+        raise ProviderRepositoryError("provider export Debate owner changed")
+    if manifest.turn_id is not None and manifest.turn_id != resolved_turn_id:
+        raise ProviderRepositoryError("provider export Turn owner changed")
+    return resolved_debate_id, resolved_turn_id
+
+
+def _validate_manifest_operation_owners(
+    manifest: ExportManifestV1,
+    *,
+    debate_id: str | None,
+    turn_id: str | None,
+) -> None:
+    if manifest.provider_operation == "llm_debate_turn" and (debate_id is None or turn_id is None):
+        raise ProviderRepositoryError("LLM turn export requires Debate and Turn owners")
+    if manifest.provider_operation != "llm_debate_turn" and (
+        manifest.repair_policy_hash is not None or manifest.repair_policy_version is not None
+    ):
+        raise ProviderRepositoryError("repair policy is only valid for LLM turn exports")
 
 
 def _policy_from_row(row: Mapping[str, object]) -> ProviderPolicySnapshotV1:
@@ -847,6 +1142,13 @@ def _manifest_from_row(row: Mapping[str, object]) -> ExportManifestV1:
         contains_identity=bool(row["contains_identity"]),
         contains_private_audio=bool(row["contains_private_audio"]),
         contains_teacher_note=bool(row["contains_teacher_note"]),
+        debate_id=_optional_string(row.get("debate_id")),
+        turn_id=_optional_string(row.get("turn_id")),
+        max_attempts=_as_int(row.get("max_attempts", 1) or 1),
+        max_total_tokens=_as_int(row.get("max_total_tokens", 0) or 0),
+        max_cost_cny=_as_float(row.get("max_cost_cny", 0) or 0),
+        repair_policy_version=_optional_string(row.get("repair_policy_version")),
+        repair_policy_hash=_optional_string(row.get("repair_policy_hash")),
     )
 
 
@@ -900,6 +1202,53 @@ def _reservation_from_row(row: Mapping[str, object]) -> ProviderReservationV1:
     )
 
 
+def _llm_stage_from_row(row: Mapping[str, object]) -> LLMAcceptedStageV1:
+    return LLMAcceptedStageV1(
+        operation_id=str(row["operation_id"]),
+        turn_id=str(row["turn_id"]),
+        attempt_no=_as_int(row["attempt_no"]),
+        request_hash=str(row["request_hash"]),
+        prompt_hash=str(row["prompt_hash"]),
+        prompt_contract_version=str(row["prompt_contract_version"]),
+        schema_hash=str(row["schema_hash"]),
+        tokenizer_id=str(row["tokenizer_id"]),
+        tokenizer_hash=str(row["tokenizer_hash"]),
+        rule_set_hash=str(row["rule_set_hash"]),
+        persona_spec_hash=str(row["persona_spec_hash"]),
+        transcript_hash=str(row["transcript_hash"]),
+        receipt_hash=str(row["receipt_hash"]),
+        policy_hash=str(row["policy_hash"]),
+        export_manifest_hash=str(row["export_manifest_hash"]),
+        build_manifest_hash=str(row["build_manifest_hash"]),
+        repair_policy_hash=_optional_string(row["repair_policy_hash"]),
+        generation_fence=str(row["generation_fence"] or ""),
+        model_key=str(row["model_key"]),
+        output_json=str(row["output_json"]),
+        output_hash=str(row["output_hash"]),
+        prompt_tokens=_as_int(row["prompt_tokens"]),
+        cached_input_tokens=_as_int(row["cached_input_tokens"]),
+        completion_tokens=_as_int(row["completion_tokens"]),
+        total_tokens=_as_int(row["total_tokens"]),
+        price_card_version=str(row["price_card_version"]),
+        input_price_cny_per_million=Decimal(str(row["input_price_cny_per_million"])),
+        cached_input_price_cny_per_million=Decimal(str(row["cached_input_price_cny_per_million"])),
+        output_price_cny_per_million=Decimal(str(row["output_price_cny_per_million"])),
+        estimated_cost_cny=Decimal(str(row["estimated_cost_cny"])),
+        actual_cost_cny=(
+            Decimal(str(row["actual_cost_cny"])) if row["actual_cost_cny"] is not None else None
+        ),
+        retrieval_reused=bool(row["retrieval_reused"]),
+        safe_error_code=_optional_string(row["safe_error_code"]),
+        repair_policy_version=_optional_string(row["repair_policy_version"]),
+    )
+
+
+def _stages_equal(left: LLMAcceptedStageV1, right: LLMAcceptedStageV1) -> bool:
+    """Compare normalized records so SQLite Decimal values are deterministic."""
+
+    return left.as_record() == right.as_record()
+
+
 # Explicit integration aliases.
 ProviderOperationRepository = ProviderRepository
 ProviderOperationRepositoryPort = ProviderRepository
@@ -909,6 +1258,7 @@ ProviderControlRepository = ProviderRepository
 
 __all__ = [
     "PolicyExportStale",
+    "ScopeBudgetAmbiguous",
     "ProviderControlRepository",
     "ProviderOperationRepository",
     "ProviderOperationRepositoryPort",

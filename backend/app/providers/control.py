@@ -31,8 +31,46 @@ FIXED_MODELS: Mapping[str, str] = MappingProxyType(
         "embedding": "text-embedding-v4",
         "embedding_query": "text-embedding-v4",
         "llm_debate": "qwen3.7-plus-2026-05-26",
+        "llm_debate_turn": "qwen3.7-plus-2026-05-26",
         "tts": "qwen3-tts-vc-2026-01-22",
         "voice_enrollment": "qwen-voice-enrollment",
+    }
+)
+PROVIDER_BUDGET_BUCKETS = frozenset(
+    {
+        "embedding_snapshot",
+        "embedding_query",
+        "llm_debate_turn",
+        "llm_barrage_insight",
+        "llm_maya_report",
+        "tts_synthesis",
+        "voice_enrollment",
+    }
+)
+BUDGET_BUCKETS = PROVIDER_BUDGET_BUCKETS
+EMBEDDING_SNAPSHOT_BUCKET = "embedding_snapshot"
+EMBEDDING_QUERY_BUCKET = "embedding_query"
+LLM_DEBATE_TURN_BUCKET = "llm_debate_turn"
+LLM_BARRAGE_INSIGHT_BUCKET = "llm_barrage_insight"
+LLM_MAYA_REPORT_BUCKET = "llm_maya_report"
+TTS_SYNTHESIS_BUCKET = "tts_synthesis"
+VOICE_ENROLLMENT_BUCKET = "voice_enrollment"
+REPAIR_FEEDBACK_POLICY_VERSION = "repair_feedback_v1"
+REPAIR_FEEDBACK_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
+LLM_TURN_OUTPUT_SCHEMA_HASH = "1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c"
+_OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
+    {
+        # 0010/0013 used ``embedding`` for snapshot publication.  Keep this
+        # alias when reading old operations, while all new callers use the
+        # explicit bucket name.
+        "embedding": EMBEDDING_SNAPSHOT_BUCKET,
+        "embedding_snapshot": EMBEDDING_SNAPSHOT_BUCKET,
+        "embedding_query": EMBEDDING_QUERY_BUCKET,
+        "llm_debate_turn": LLM_DEBATE_TURN_BUCKET,
+        "llm_barrage_insight": LLM_BARRAGE_INSIGHT_BUCKET,
+        "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
+        "tts_synthesis": TTS_SYNTHESIS_BUCKET,
+        "voice_enrollment": VOICE_ENROLLMENT_BUCKET,
     }
 )
 ALLOWED_ACCOUNT_PRODUCTS = frozenset(
@@ -46,6 +84,26 @@ ALLOWED_ACCOUNT_PRODUCTS = frozenset(
 )
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_CODE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+
+
+def budget_bucket_for_operation(provider_operation: str) -> str:
+    """Resolve a provider operation to one closed, non-transferable bucket."""
+
+    try:
+        return _OPERATION_BUCKETS[provider_operation]
+    except KeyError as exc:
+        raise ProviderControlError(
+            "provider operation has no closed budget bucket",
+            code="budget_bucket_invalid",
+        ) from exc
+
+
+def validate_budget_bucket(value: str) -> str:
+    """Validate the persisted budget identity before any SQL operation."""
+
+    if value not in PROVIDER_BUDGET_BUCKETS:
+        raise ProviderControlError("budget bucket is not allowlisted", code="budget_bucket_invalid")
+    return value
 
 
 class ProviderControlError(ValueError):
@@ -269,6 +327,7 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "current_evidence_excerpt",
         "opaque_local_id",
         "current_tts_speech",
+        "server_authored_structure_repair_feedback",
     }
 )
 _FORBIDDEN_EXPORT_TERMS = frozenset(
@@ -333,6 +392,16 @@ class ExportManifestV1:
     contains_identity: bool = False
     contains_private_audio: bool = False
     contains_teacher_note: bool = False
+    # Debate/Turn are nullable for legacy Embedding/TTS manifests.  They are
+    # persisted as owner bindings, but remain out of the canonical payload for
+    # older manifests whose hashes predate Wave 4 owner columns.
+    debate_id: str | None = None
+    turn_id: str | None = None
+    max_attempts: int = 1
+    max_total_tokens: int = 0
+    max_cost_cny: float = 0.0
+    repair_policy_version: str | None = None
+    repair_policy_hash: str | None = None
 
     def __post_init__(self) -> None:
         _safe_identifier(self.scope_id, field_name="export scope")
@@ -343,6 +412,62 @@ class ExportManifestV1:
         _hash(self.persona_spec_hash, field_name="export PersonaSpec hash")
         if self.operation_revision < 1:
             raise ExportManifestError("export revision is invalid", code="export_revision_invalid")
+        if (self.debate_id is None) != (self.turn_id is None):
+            raise ExportManifestError(
+                "Debate and Turn manifest owners must be both present or absent",
+                code="export_owner_invalid",
+            )
+        for value, name in ((self.debate_id, "Debate owner"), (self.turn_id, "Turn owner")):
+            if value is not None:
+                _safe_identifier(value, field_name=name)
+        if self.max_attempts < 1 or self.max_attempts > 2:
+            raise ExportManifestError(
+                "export attempt cap is invalid", code="export_attempts_invalid"
+            )
+        if self.max_total_tokens < 0:
+            raise ExportManifestError("export token cap is invalid", code="export_tokens_invalid")
+        try:
+            max_cost = Decimal(str(self.max_cost_cny))
+        except (InvalidOperation, ValueError) as exc:
+            raise ExportManifestError(
+                "export cost cap is invalid", code="export_cost_invalid"
+            ) from exc
+        if not max_cost.is_finite() or max_cost < 0:
+            raise ExportManifestError("export cost cap is invalid", code="export_cost_invalid")
+        if (self.repair_policy_version is None) != (self.repair_policy_hash is None):
+            raise ExportManifestError(
+                "repair policy version/hash must be paired",
+                code="repair_policy_invalid",
+            )
+        if self.repair_policy_version is not None:
+            _safe_identifier(self.repair_policy_version, field_name="repair policy version")
+            _hash(self.repair_policy_hash or "", field_name="repair policy hash")
+        repair_fields = {
+            item.field_class
+            for item in self.fields
+            if item.field_class == "server_authored_structure_repair_feedback"
+        }
+        is_llm_turn = self.provider_operation == "llm_debate_turn"
+        if is_llm_turn:
+            if self.max_attempts != 2:
+                raise ExportManifestError(
+                    "LLM turn manifest must disclose two attempts",
+                    code="export_attempts_invalid",
+                )
+            if (
+                self.repair_policy_version != REPAIR_FEEDBACK_POLICY_VERSION
+                or self.repair_policy_hash != REPAIR_FEEDBACK_POLICY_HASH
+                or not repair_fields
+            ):
+                raise ExportManifestError(
+                    "LLM turn manifest must disclose repair feedback policy",
+                    code="repair_policy_invalid",
+                )
+        elif repair_fields or self.repair_policy_version is not None:
+            raise ExportManifestError(
+                "repair feedback policy is only valid for LLM turn manifests",
+                code="repair_policy_invalid",
+            )
         if (
             self.contains_secret
             or self.contains_identity
@@ -366,7 +491,7 @@ class ExportManifestV1:
             )
 
     def canonical_dict(self) -> dict[str, object]:
-        return {
+        value: dict[str, object] = {
             "version": PROVIDER_DATA_CALL_VERSION,
             "scope_id": self.scope_id,
             "provider_operation": self.provider_operation,
@@ -381,6 +506,25 @@ class ExportManifestV1:
             "contains_private_audio": self.contains_private_audio,
             "contains_teacher_note": self.contains_teacher_note,
         }
+        # Keep old 0010/0013 manifest hashes stable.  New LLM manifests bind
+        # the disclosed retry budget/policy in their canonical hash.
+        if (
+            self.max_attempts != 1
+            or self.max_total_tokens != 0
+            or self.max_cost_cny != 0
+            or self.repair_policy_version is not None
+            or self.repair_policy_hash is not None
+        ):
+            value.update(
+                {
+                    "max_attempts": self.max_attempts,
+                    "max_total_tokens": self.max_total_tokens,
+                    "max_cost_cny": str(Decimal(str(self.max_cost_cny))),
+                    "repair_policy_version": self.repair_policy_version,
+                    "repair_policy_hash": self.repair_policy_hash,
+                }
+            )
+        return value
 
     @property
     def manifest_hash(self) -> str:
@@ -572,6 +716,7 @@ class ProviderReservationRequestV1:
     build_manifest_hash: str = ""
     model_key: str = ""
     operation_id: str = ""
+    budget_bucket: str = ""
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -589,6 +734,18 @@ class ProviderReservationRequestV1:
             _hash(self.build_manifest_hash, field_name="build manifest hash")
         if self.model_key:
             _safe_identifier(self.model_key, field_name="model key")
+        inferred_bucket = budget_bucket_for_operation(self.provider_operation)
+        if self.budget_bucket:
+            validate_budget_bucket(self.budget_bucket)
+            if self.budget_bucket != inferred_bucket:
+                raise ProviderControlError(
+                    "provider operation and budget bucket do not match",
+                    code="budget_bucket_mismatch",
+                )
+        else:
+            # Keep construction compatible with pre-0014 callers while
+            # making the bucket explicit in every durable record.
+            object.__setattr__(self, "budget_bucket", inferred_bucket)
         try:
             amount = Decimal(str(self.max_cost_cny))
         except (InvalidOperation, ValueError) as exc:
@@ -618,6 +775,7 @@ class ProviderReservationRequestV1:
             "export_manifest_hash": self.export_manifest_hash,
             "build_manifest_hash": self.build_manifest_hash,
             "model_key": self.model_key,
+            "budget_bucket": self.budget_bucket,
         }
 
 
@@ -643,6 +801,10 @@ class ProviderOperationV1:
     charged_request_count: int = 0
     staged_response_hash: str | None = None
     safe_error_code: str | None = None
+
+    @property
+    def budget_bucket(self) -> str:
+        return budget_bucket_for_operation(self.provider_operation)
 
     @property
     def idempotency_key(self) -> tuple[str, str, str, int]:
@@ -673,6 +835,7 @@ class ProviderOperationV1:
             "charged_request_count": self.charged_request_count,
             "staged_response_hash": self.staged_response_hash,
             "safe_error_code": self.safe_error_code,
+            "budget_bucket": self.budget_bucket,
         }
 
 
@@ -690,6 +853,10 @@ class ProviderReservationV1:
     max_cost_cny: float
     state: ReservationState = "prepared"
 
+    @property
+    def budget_bucket(self) -> str:
+        return budget_bucket_for_operation(self.provider_operation)
+
     def as_record(self) -> dict[str, object]:
         return {
             "id": self.id,
@@ -701,6 +868,7 @@ class ProviderReservationV1:
             "max_tokens": self.max_tokens,
             "max_cost_cny": self.max_cost_cny,
             "state": self.state,
+            "budget_bucket": self.budget_bucket,
         }
 
 
@@ -711,16 +879,241 @@ class ProviderScopeBudgetV1:
     max_requests: int = 20
     max_total_tokens: int = 120_000
     max_cost_cny: float = 0.10
+    budget_bucket: str = EMBEDDING_SNAPSHOT_BUCKET
 
     def __post_init__(self) -> None:
         if self.max_requests < 1 or self.max_total_tokens < 0:
             raise ProviderControlError("scope budget counts are invalid")
+        validate_budget_bucket(self.budget_bucket)
         try:
             amount = Decimal(str(self.max_cost_cny))
         except (InvalidOperation, ValueError) as exc:
             raise ProviderControlError("scope budget cost is invalid") from exc
         if not amount.is_finite() or amount < 0:
             raise ProviderControlError("scope budget cost is invalid")
+
+
+def _validate_nonnegative_decimal(value: object, *, field_name: str) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ProviderControlError(f"{field_name} is invalid") from exc
+    if not amount.is_finite() or amount < 0:
+        raise ProviderControlError(f"{field_name} is invalid")
+    return amount
+
+
+@dataclass(frozen=True, slots=True)
+class LLMAcceptedStageV1:
+    """Sanitized immutable output/usage stage for one accepted LLM attempt.
+
+    The stage contains the provider's already-sanitized structured JSON only;
+    no response envelope, raw headers, supplier request ID or credential is
+    represented.  It is intentionally independent of SQLAlchemy so a worker
+    can validate it locally before opening the product publication transaction.
+    """
+
+    operation_id: str
+    turn_id: str
+    attempt_no: int
+    request_hash: str
+    prompt_hash: str
+    prompt_contract_version: str
+    schema_hash: str
+    tokenizer_id: str
+    tokenizer_hash: str
+    rule_set_hash: str
+    persona_spec_hash: str
+    transcript_hash: str
+    receipt_hash: str
+    policy_hash: str
+    export_manifest_hash: str
+    build_manifest_hash: str
+    model_key: str
+    output_json: str
+    output_hash: str
+    prompt_tokens: int = 0
+    cached_input_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    price_card_version: str = "price-card-v1"
+    input_price_cny_per_million: str | float | Decimal = 0
+    cached_input_price_cny_per_million: str | float | Decimal = 0
+    output_price_cny_per_million: str | float | Decimal = 0
+    estimated_cost_cny: str | float | Decimal = 0
+    actual_cost_cny: str | float | Decimal | None = None
+    retrieval_reused: bool = False
+    safe_error_code: str | None = None
+    repair_policy_version: str | None = None
+    repair_policy_hash: str | None = None
+    generation_fence: str = ""
+    # Provider/PromptBudget terminology aliases.  They are normalized to the
+    # canonical prompt/completion names before persistence.
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.input_tokens is not None:
+            if self.prompt_tokens not in {0, self.input_tokens}:
+                raise ProviderControlError("input token aliases disagree", code="llm_usage_invalid")
+            object.__setattr__(self, "prompt_tokens", self.input_tokens)
+        if self.output_tokens is not None:
+            if self.completion_tokens not in {0, self.output_tokens}:
+                raise ProviderControlError(
+                    "output token aliases disagree", code="llm_usage_invalid"
+                )
+            object.__setattr__(self, "completion_tokens", self.output_tokens)
+        if self.total_tokens == 0 and (self.prompt_tokens or self.completion_tokens):
+            object.__setattr__(
+                self,
+                "total_tokens",
+                self.prompt_tokens + self.completion_tokens,
+            )
+        object.__setattr__(self, "input_tokens", self.prompt_tokens)
+        object.__setattr__(self, "output_tokens", self.completion_tokens)
+        for value, name in (
+            (self.operation_id, "LLM stage operation id"),
+            (self.turn_id, "LLM stage turn id"),
+            (self.prompt_contract_version, "prompt contract version"),
+            (self.tokenizer_id, "tokenizer id"),
+            (self.model_key, "LLM model key"),
+            (self.price_card_version, "price card version"),
+        ):
+            _safe_identifier(value, field_name=name)
+        if self.attempt_no < 1 or self.attempt_no > 2:
+            raise ProviderControlError("LLM stage attempt is invalid", code="llm_stage_invalid")
+        for value, name in (
+            (self.request_hash, "LLM stage request hash"),
+            (self.prompt_hash, "LLM stage prompt hash"),
+            (self.schema_hash, "LLM stage schema hash"),
+            (self.tokenizer_hash, "LLM stage tokenizer hash"),
+            (self.rule_set_hash, "LLM stage rule hash"),
+            (self.persona_spec_hash, "LLM stage Persona hash"),
+            (self.transcript_hash, "LLM stage transcript hash"),
+            (self.receipt_hash, "LLM stage receipt hash"),
+            (self.policy_hash, "LLM stage policy hash"),
+            (self.export_manifest_hash, "LLM stage export hash"),
+            (self.build_manifest_hash, "LLM stage build hash"),
+            (self.output_hash, "LLM stage output hash"),
+        ):
+            _hash(value, field_name=name)
+        if self.repair_policy_hash is not None:
+            _hash(self.repair_policy_hash, field_name="LLM stage repair policy hash")
+        if self.repair_policy_version is not None:
+            _safe_identifier(
+                self.repair_policy_version, field_name="LLM stage repair policy version"
+            )
+        for token_value, name in (
+            (self.prompt_tokens, "prompt token count"),
+            (self.cached_input_tokens, "cached input token count"),
+            (self.completion_tokens, "completion token count"),
+            (self.total_tokens, "total token count"),
+        ):
+            if isinstance(token_value, bool) or not isinstance(token_value, int) or token_value < 0:
+                raise ProviderControlError(f"{name} is invalid", code="llm_usage_invalid")
+        if self.cached_input_tokens > self.prompt_tokens:
+            raise ProviderControlError(
+                "cached input exceeds prompt tokens", code="llm_usage_invalid"
+            )
+        if self.total_tokens != self.prompt_tokens + self.completion_tokens:
+            raise ProviderControlError("LLM usage total does not add up", code="llm_usage_invalid")
+        for price_value, name in (
+            (self.input_price_cny_per_million, "input price"),
+            (self.cached_input_price_cny_per_million, "cached input price"),
+            (self.output_price_cny_per_million, "output price"),
+            (self.estimated_cost_cny, "estimated cost"),
+        ):
+            _validate_nonnegative_decimal(price_value, field_name=name)
+        if self.actual_cost_cny is not None:
+            _validate_nonnegative_decimal(self.actual_cost_cny, field_name="actual cost")
+        try:
+            json_value = json.loads(self.output_json)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ProviderControlError(
+                "LLM stage output JSON is invalid", code="llm_stage_invalid"
+            ) from exc
+        if not isinstance(json_value, dict):
+            raise ProviderControlError(
+                "LLM stage output JSON must be an object", code="llm_stage_invalid"
+            )
+        if self.safe_error_code is not None and not _SAFE_CODE_RE.fullmatch(self.safe_error_code):
+            raise ProviderControlError("LLM stage safe error is invalid", code="llm_stage_invalid")
+
+    @property
+    def provider_output_json(self) -> str:
+        """Compatibility name used by adapter implementations."""
+
+        return self.output_json
+
+    def as_record(self) -> dict[str, object]:
+        """Return the immutable SQL/storage projection without provider data."""
+
+        return {
+            "operation_id": self.operation_id,
+            "turn_id": self.turn_id,
+            "attempt_no": self.attempt_no,
+            "request_hash": self.request_hash,
+            "prompt_hash": self.prompt_hash,
+            "prompt_contract_version": self.prompt_contract_version,
+            "schema_hash": self.schema_hash,
+            "tokenizer_id": self.tokenizer_id,
+            "tokenizer_hash": self.tokenizer_hash,
+            "rule_set_hash": self.rule_set_hash,
+            "persona_spec_hash": self.persona_spec_hash,
+            "transcript_hash": self.transcript_hash,
+            "receipt_hash": self.receipt_hash,
+            "policy_hash": self.policy_hash,
+            "export_manifest_hash": self.export_manifest_hash,
+            "build_manifest_hash": self.build_manifest_hash,
+            "repair_policy_hash": self.repair_policy_hash,
+            "generation_fence": self.generation_fence,
+            "model_key": self.model_key,
+            "output_json": self.output_json,
+            "output_hash": self.output_hash,
+            "prompt_tokens": self.prompt_tokens,
+            "cached_input_tokens": self.cached_input_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "price_card_version": self.price_card_version,
+            "input_price_cny_per_million": str(
+                _validate_nonnegative_decimal(
+                    self.input_price_cny_per_million, field_name="input price"
+                )
+            ),
+            "cached_input_price_cny_per_million": str(
+                _validate_nonnegative_decimal(
+                    self.cached_input_price_cny_per_million,
+                    field_name="cached input price",
+                )
+            ),
+            "output_price_cny_per_million": str(
+                _validate_nonnegative_decimal(
+                    self.output_price_cny_per_million, field_name="output price"
+                )
+            ),
+            "estimated_cost_cny": str(
+                _validate_nonnegative_decimal(self.estimated_cost_cny, field_name="estimated cost")
+            ),
+            "actual_cost_cny": (
+                str(_validate_nonnegative_decimal(self.actual_cost_cny, field_name="actual cost"))
+                if self.actual_cost_cny is not None
+                else None
+            ),
+            "retrieval_reused": self.retrieval_reused,
+            "safe_error_code": self.safe_error_code,
+            "repair_policy_version": self.repair_policy_version,
+        }
+
+
+LLMUsageLedgerV1 = LLMAcceptedStageV1
+LlmAcceptedStageV1 = LLMAcceptedStageV1
+LlmUsageLedgerV1 = LLMUsageLedgerV1
+LLMAcceptedStage = LLMAcceptedStageV1
+LLMUsageLedger = LLMUsageLedgerV1
+LLMUsageV1 = LLMAcceptedStageV1
+LlmAcceptedStage = LLMAcceptedStageV1
+LlmUsageLedger = LLMUsageLedgerV1
+LLMUsage = LLMAcceptedStageV1
 
 
 @dataclass(frozen=True, slots=True)
@@ -803,6 +1196,12 @@ class ProviderOperationRepository(Protocol):
     def mark_accepted(self, operation_id: str, *, response_hash: str) -> ProviderOperationV1:
         """Stage the sanitized accepted response before validation/publication."""
 
+    def stage_llm_accepted(self, stage: LLMAcceptedStageV1) -> LLMAcceptedStageV1:
+        """Persist one immutable accepted LLM stage before local validation."""
+
+    def get_llm_accepted_stage(self, operation_id: str) -> LLMAcceptedStageV1 | None:
+        """Read the immutable accepted LLM stage for local recovery."""
+
     def mark_succeeded(self, operation_id: str) -> ProviderOperationV1:
         """Commit the final success and usage ledger atomically in production."""
 
@@ -877,17 +1276,23 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         self,
         *,
         default_budget: ProviderScopeBudgetV1 | None = None,
-        scope_budgets: Mapping[str, ProviderScopeBudgetV1] | None = None,
+        scope_budgets: Mapping[object, ProviderScopeBudgetV1] | None = None,
     ) -> None:
         self.default_budget = default_budget or ProviderScopeBudgetV1()
         self._scope_budgets = dict(scope_budgets or {})
         self._operations: dict[str, ProviderOperationV1] = {}
         self._reservations: dict[str, ProviderReservationV1] = {}
+        self._llm_stages: dict[str, LLMAcceptedStageV1] = {}
         self._by_key: dict[tuple[str, str, str, int], str] = {}
         self._lock = RLock()
 
-    def _budget(self, scope_id: str) -> ProviderScopeBudgetV1:
-        return self._scope_budgets.get(scope_id, self.default_budget)
+    def _budget(self, scope_id: str, budget_bucket: str) -> ProviderScopeBudgetV1:
+        value = self._scope_budgets.get((scope_id, budget_bucket))
+        if value is None:
+            # Accept the pre-0014 string key only as an in-memory compatibility
+            # path.  Durable SQL always requires an explicit composite key.
+            value = self._scope_budgets.get(scope_id)
+        return value or self.default_budget
 
     def create_prepared(self, request: ProviderReservationRequestV1) -> ProviderOperationV1:
         with self._lock:
@@ -924,11 +1329,12 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             raise OperationStateError("provider operation does not exist")
         return operation
 
-    def _scope_totals(self, scope_id: str) -> tuple[int, int, float]:
+    def _scope_totals(self, scope_id: str, budget_bucket: str) -> tuple[int, int, float]:
         rows = [
             operation
             for operation in self._operations.values()
             if operation.scope_id == scope_id
+            and operation.budget_bucket == budget_bucket
             and (
                 operation.state in self._RESERVED_STATES
                 or operation.state == "failed"
@@ -948,8 +1354,8 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             current = self.operation(operation_id)
             if current.state != "prepared":
                 raise OperationStateError("provider operation is not reservable")
-            budget = self._budget(current.scope_id)
-            requests, tokens, cost = self._scope_totals(current.scope_id)
+            budget = self._budget(current.scope_id, current.budget_bucket)
+            requests, tokens, cost = self._scope_totals(current.scope_id, current.budget_bucket)
             if (
                 requests + 1 > budget.max_requests
                 or tokens + current.max_tokens > budget.max_total_tokens
@@ -1056,8 +1462,54 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             response_hash=response_hash,
         )
 
+    def stage_llm_accepted(self, stage: LLMAcceptedStageV1) -> LLMAcceptedStageV1:
+        """Persist an accepted LLM stage and advance the operation atomically."""
+
+        stage.__post_init__()
+        with self._lock:
+            operation = self.operation(stage.operation_id)
+            if operation.provider_operation != "llm_debate_turn":
+                raise OperationStateError("LLM stage operation type is invalid")
+            if (
+                operation.logical_item_id != stage.turn_id
+                or operation.attempt_no != stage.attempt_no
+                or operation.request_hash != stage.request_hash
+                or operation.policy_hash != stage.policy_hash
+                or operation.export_manifest_hash != stage.export_manifest_hash
+                or operation.model_key != stage.model_key
+            ):
+                raise OperationStateError("LLM accepted stage does not match operation")
+            if stage.completion_tokens > operation.max_tokens:
+                raise OperationStateError("LLM accepted stage exceeds reserved output tokens")
+            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
+                str(operation.max_cost_cny)
+            ):
+                raise OperationStateError("LLM accepted stage exceeds reserved cost")
+            existing = self._llm_stages.get(stage.operation_id)
+            if existing is not None:
+                if existing != stage:
+                    raise OperationStateError("LLM accepted stage is immutable")
+                return existing
+            if operation.state not in {"sending", "accepted"}:
+                raise OperationStateError("LLM accepted stage requires an accepted response")
+            self._llm_stages[stage.operation_id] = stage
+            if operation.state == "sending":
+                self.mark_accepted(operation.id, response_hash=stage.output_hash)
+            return stage
+
+    save_llm_accepted_stage = stage_llm_accepted
+
+    def get_llm_accepted_stage(self, operation_id: str) -> LLMAcceptedStageV1 | None:
+        with self._lock:
+            return self._llm_stages.get(operation_id)
+
     def mark_succeeded(self, operation_id: str) -> ProviderOperationV1:
         operation = self.operation(operation_id)
+        if (
+            operation.provider_operation == "llm_debate_turn"
+            and operation.id not in self._llm_stages
+        ):
+            raise OperationStateError("LLM operation has no accepted stage")
         return self.transition(operation_id, expected=operation.state, state="succeeded")
 
     def mark_failed(
@@ -1082,6 +1534,8 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         staged_response_complete: bool = False,
     ) -> ProviderOperationV1:
         operation = self.operation(operation_id)
+        if operation.provider_operation == "llm_debate_turn":
+            staged_response_complete = operation_id in self._llm_stages
         target = startup_recovery_state(
             operation.state,
             staged_response_complete=staged_response_complete,
@@ -1103,6 +1557,13 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
                 if operation.state in {"reserved", "sending", "accepted"}
             )
             return tuple(self.recover_one(operation_id) for operation_id in ids)
+
+    def recover_llm_startup(self) -> tuple[ProviderOperationV1, ...]:
+        return tuple(
+            operation
+            for operation in self.recover_startup()
+            if operation.provider_operation == "llm_debate_turn"
+        )
 
     def operations(self, *, scope_id: str | None = None) -> tuple[ProviderOperationV1, ...]:
         with self._lock:
@@ -1191,6 +1652,21 @@ ProviderOperationRepositoryPort = ProviderOperationRepository
 __all__ = [
     "ALLOWED_ACCOUNT_PRODUCTS",
     "AcceptanceUnknownResult",
+    "BUDGET_BUCKETS",
+    "EMBEDDING_QUERY_BUCKET",
+    "EMBEDDING_SNAPSHOT_BUCKET",
+    "LLM_BARRAGE_INSIGHT_BUCKET",
+    "LLM_DEBATE_TURN_BUCKET",
+    "LLM_MAYA_REPORT_BUCKET",
+    "LLM_TURN_OUTPUT_SCHEMA_HASH",
+    "LLMAcceptedStage",
+    "LLMAcceptedStageV1",
+    "LLMUsageLedger",
+    "LLMUsageLedgerV1",
+    "LLMUsageV1",
+    "LLMUsage",
+    "LlmAcceptedStage",
+    "LlmUsageLedger",
     "BudgetExceeded",
     "DuplicateOperation",
     "ExportConfirmationV1",
@@ -1229,7 +1705,13 @@ __all__ = [
     "ProviderReservationV1",
     "ProviderScopeBudgetV1",
     "ProviderSuccessResultV1",
+    "PROVIDER_BUDGET_BUCKETS",
+    "REPAIR_FEEDBACK_POLICY_HASH",
+    "REPAIR_FEEDBACK_POLICY_VERSION",
     "ReservationState",
+    "TTS_SYNTHESIS_BUCKET",
+    "VOICE_ENROLLMENT_BUCKET",
+    "budget_bucket_for_operation",
     "canonical_json_bytes",
     "can_transition",
     "confirm_export_manifest",
@@ -1238,6 +1720,7 @@ __all__ = [
     "sha256_hex",
     "startup_recovery_state",
     "validate_export_manifest",
+    "validate_budget_bucket",
     "validate_policy_snapshot",
     "validate_provider_preflight",
 ]

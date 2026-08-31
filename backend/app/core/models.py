@@ -1209,22 +1209,86 @@ class ProviderExportManifest(Base):
         ),
         nullable=True,
     )
+    debate_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "debates.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_manifests_debate",
+        ),
+        nullable=True,
+    )
+    turn_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "debate_turns.id",
+            ondelete="RESTRICT",
+            name="fk_provider_export_manifests_turn",
+        ),
+        nullable=True,
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    max_total_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    max_cost_cny: Mapped[float] = mapped_column(
+        Numeric(12, 6), nullable=False, default=0, server_default="0"
+    )
+    repair_policy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    repair_policy_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     policy: Mapped[ProviderPolicySnapshot] = relationship()
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["turn_id", "debate_id"],
+            ["debate_turns.id", "debate_turns.debate_id"],
+            name="fk_provider_export_manifests_turn_debate",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("operation_revision >= 1", name="ck_provider_export_manifests_revision"),
         CheckConstraint(
             "contains_secret = 0 AND contains_identity = 0 "
             "AND contains_private_audio = 0 AND contains_teacher_note = 0",
             name="ck_provider_export_manifests_no_forbidden_data",
         ),
+        CheckConstraint(
+            "(debate_id IS NULL AND turn_id IS NULL) OR "
+            "(debate_id IS NOT NULL AND turn_id IS NOT NULL)",
+            name="ck_provider_export_manifests_owner_pair",
+        ),
+        CheckConstraint(
+            "provider_operation <> 'llm_debate_turn' OR "
+            "(debate_id IS NOT NULL AND turn_id IS NOT NULL)",
+            name="ck_provider_export_manifests_llm_owner",
+        ),
+        CheckConstraint(
+            "provider_operation <> 'llm_debate_turn' OR "
+            "(max_attempts = 2 AND repair_policy_version = 'repair_feedback_v1' "
+            "AND repair_policy_hash = "
+            "'d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b')",
+            name="ck_provider_export_manifests_llm_retry_policy",
+        ),
+        CheckConstraint(
+            "max_attempts >= 1 AND max_attempts <= 2", name="ck_provider_export_manifests_attempts"
+        ),
+        CheckConstraint("max_total_tokens >= 0", name="ck_provider_export_manifests_tokens"),
+        CheckConstraint("max_cost_cny >= 0", name="ck_provider_export_manifests_cost"),
+        CheckConstraint(
+            "(repair_policy_version IS NULL AND repair_policy_hash IS NULL) OR "
+            "(repair_policy_version IS NOT NULL AND repair_policy_hash IS NOT NULL)",
+            name="ck_provider_export_manifests_repair_policy_pair",
+        ),
         Index("ix_provider_export_manifests_scope", "scope_id", "provider_operation"),
         Index("ix_provider_export_manifests_policy", "policy_snapshot_id"),
         Index("ix_provider_export_manifests_course", "course_id"),
         Index("ix_provider_export_manifests_group", "group_id"),
         Index("ix_provider_export_manifests_agent_version", "agent_version_id"),
+        Index("ix_provider_export_manifests_debate", "debate_id"),
+        Index("ix_provider_export_manifests_turn", "turn_id"),
     )
 
 
@@ -1276,6 +1340,7 @@ class ProviderScopeBudget(Base):
     __tablename__ = "provider_scope_budgets"
 
     scope_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    budget_bucket: Mapped[str] = mapped_column(String(40), primary_key=True)
     max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
     max_total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     max_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
@@ -1286,6 +1351,11 @@ class ProviderScopeBudget(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            "budget_bucket IN ('embedding_snapshot', 'embedding_query', 'llm_debate_turn', "
+            "'llm_barrage_insight', 'llm_maya_report', 'tts_synthesis', 'voice_enrollment')",
+            name="ck_provider_scope_budgets_bucket",
+        ),
         CheckConstraint("max_requests >= 0", name="ck_provider_scope_budgets_max_requests"),
         CheckConstraint("max_total_tokens >= 0", name="ck_provider_scope_budgets_max_tokens"),
         CheckConstraint("max_cost_cny >= 0", name="ck_provider_scope_budgets_max_cost"),
@@ -1333,6 +1403,11 @@ class ProviderOperation(Base):
         back_populates="operation", cascade="all, delete-orphan"
     )
     accepted_embedding_stage: Mapped[EmbeddingAcceptedStage | None] = relationship(
+        back_populates="operation",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    accepted_llm_stage: Mapped[LlmAcceptedStage | None] = relationship(
         back_populates="operation",
         uselist=False,
         cascade="all, delete-orphan",
@@ -1465,6 +1540,118 @@ class EmbeddingAcceptedVector(Base):
 # aliases for the single durable ORM rows, not additional tables/models.
 AcceptedEmbeddingStage = EmbeddingAcceptedStage
 AcceptedEmbeddingVector = EmbeddingAcceptedVector
+
+
+class LlmAcceptedStage(Base):
+    """Immutable sanitized accepted result and usage ledger for one LLM turn.
+
+    This table intentionally stores the provider's validated structured JSON,
+    hashes and accounting facts only.  Raw response envelopes, headers,
+    supplier IDs, credentials and outbound message text never enter durable
+    provider-control state.
+    """
+
+    __tablename__ = "llm_accepted_stages"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "provider_operations.id",
+            ondelete="RESTRICT",
+            name="fk_llm_accepted_stages_operation",
+        ),
+        primary_key=True,
+    )
+    turn_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("debate_turns.id", ondelete="RESTRICT", name="fk_llm_accepted_stages_turn"),
+        nullable=False,
+    )
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    tokenizer_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    tokenizer_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    rule_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    persona_spec_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    transcript_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    receipt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    export_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    build_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    repair_policy_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generation_fence: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    model_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    output_json: Mapped[str] = mapped_column(Text, nullable=False)
+    output_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    cached_input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_card_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    input_price_cny_per_million: Mapped[float] = mapped_column(Numeric(20, 9), nullable=False)
+    cached_input_price_cny_per_million: Mapped[float] = mapped_column(
+        Numeric(20, 9), nullable=False
+    )
+    output_price_cny_per_million: Mapped[float] = mapped_column(Numeric(20, 9), nullable=False)
+    estimated_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    actual_cost_cny: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    retrieval_reused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    repair_policy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    operation: Mapped[ProviderOperation] = relationship(back_populates="accepted_llm_stage")
+
+    __table_args__ = (
+        UniqueConstraint("turn_id", "attempt_no", name="uq_llm_accepted_stages_turn_attempt"),
+        CheckConstraint("attempt_no >= 1 AND attempt_no <= 2", name="ck_llm_stages_attempt"),
+        CheckConstraint(
+            "length(request_hash) = 64 AND length(schema_hash) = 64 "
+            "AND length(prompt_hash) = 64 "
+            "AND length(tokenizer_hash) = 64 AND length(rule_set_hash) = 64 "
+            "AND length(persona_spec_hash) = 64 AND length(transcript_hash) = 64 "
+            "AND length(receipt_hash) = 64 AND length(policy_hash) = 64 "
+            "AND length(export_manifest_hash) = 64 AND length(build_manifest_hash) = 64 "
+            "AND length(output_hash) = 64",
+            name="ck_llm_stages_hashes",
+        ),
+        CheckConstraint(
+            "repair_policy_hash IS NULL OR length(repair_policy_hash) = 64",
+            name="ck_llm_stages_repair_hash",
+        ),
+        CheckConstraint(
+            "(repair_policy_version IS NULL AND repair_policy_hash IS NULL) OR "
+            "(repair_policy_version IS NOT NULL AND repair_policy_hash IS NOT NULL)",
+            name="ck_llm_stages_repair_policy_pair",
+        ),
+        CheckConstraint(
+            "prompt_tokens >= 0 AND cached_input_tokens >= 0 AND completion_tokens >= 0 "
+            "AND total_tokens >= 0 AND cached_input_tokens <= prompt_tokens "
+            "AND total_tokens = prompt_tokens + completion_tokens",
+            name="ck_llm_stages_usage",
+        ),
+        CheckConstraint(
+            "input_price_cny_per_million >= 0 "
+            "AND cached_input_price_cny_per_million >= 0 "
+            "AND output_price_cny_per_million >= 0 "
+            "AND estimated_cost_cny >= 0 "
+            "AND (actual_cost_cny IS NULL OR actual_cost_cny >= 0)",
+            name="ck_llm_stages_costs",
+        ),
+        CheckConstraint("length(output_json) > 0", name="ck_llm_stages_output"),
+        Index("ix_llm_accepted_stages_turn", "turn_id", "attempt_no"),
+    )
+
+
+# Names used by the runtime adapter.  They intentionally resolve to the one
+# immutable row so a stage and its accepted usage facts cannot diverge.
+LLMAcceptedStage = LlmAcceptedStage
+LLMUsageLedger = LlmAcceptedStage
+LlmUsageLedger = LlmAcceptedStage
+LLMUsage = LlmAcceptedStage
 
 
 class ProviderReservation(Base):

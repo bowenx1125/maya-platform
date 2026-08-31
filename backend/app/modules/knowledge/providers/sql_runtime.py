@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.db import Database
 from app.core.models import Agent, AgentVersion, KnowledgeSnapshot
 from app.providers.control import (
+    EMBEDDING_SNAPSHOT_BUCKET,
     ProviderOperationV1,
     ProviderReservationRequestV1,
     ProviderReservationV1,
@@ -121,6 +122,7 @@ class SqlAlchemyEmbeddingControlAdapter:
                 max_requests=EMBEDDING_MAX_REQUESTS,
                 max_total_tokens=EMBEDDING_MAX_TOTAL_TOKENS,
                 max_cost_cny=EMBEDDING_MAX_COST_CNY,
+                budget_bucket=EMBEDDING_SNAPSHOT_BUCKET,
             ),
         )
         value = self.repository.create_prepared(

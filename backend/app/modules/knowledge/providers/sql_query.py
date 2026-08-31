@@ -43,6 +43,7 @@ from app.modules.knowledge.providers.runtime import (
 )
 from app.modules.knowledge.vector import REAL_EMBEDDING_IDENTITY, EmbeddingIdentityV1
 from app.providers.control import (
+    EMBEDDING_QUERY_BUCKET,
     ProviderOperationV1,
     ProviderReservationRequestV1,
     ProviderScopeBudgetV1,
@@ -453,6 +454,7 @@ class SqlAlchemyQueryControlAdapter(
                     max_requests=SQL_QUERY_MAX_REQUESTS,
                     max_total_tokens=SQL_QUERY_MAX_TOTAL_TOKENS,
                     max_cost_cny=SQL_QUERY_MAX_COST_CNY,
+                    budget_bucket=EMBEDDING_QUERY_BUCKET,
                 ),
             )
         except Exception as exc:
