@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-from app.providers.control import LLM_RECOVERY_INPUT_VERSION, LLMRecoveryInputV1
+from app.providers.control import LLMRecoveryInputV1
 from app.providers.llm_adapter import LLMAcceptedCandidateV1, LLMRequestV1
 
 from .mutual_learning_prompts import MUTUAL_LEARNING_PLATFORM_RULES
@@ -422,40 +422,7 @@ class LLMRecoveryService:
     def _recovery_input(value: object) -> LLMRecoveryInputV1:
         if isinstance(value, LLMRecoveryInputV1):
             return value
-        if isinstance(value, Mapping):
-            return LLMRecoveryService._recovery_input_from_canonical(value)
-        input_json = getattr(value, "input_json", None)
-        if isinstance(input_json, str):
-            return LLMRecoveryService._recovery_input_from_canonical(
-                {
-                    "operation_id": getattr(value, "operation_id", ""),
-                    "turn_id": getattr(value, "turn_id", ""),
-                    "attempt_no": getattr(value, "attempt_no", 0),
-                    "input_json": input_json,
-                    "input_hash": getattr(value, "input_hash", ""),
-                }
-            )
         raise LLMRuntimeError(code="llm_recovery_input_unavailable")
-
-    @staticmethod
-    def _recovery_input_from_canonical(value: Mapping[str, object]) -> LLMRecoveryInputV1:
-        raw = value.get("input_json")
-        if not isinstance(raw, str):
-            raise LLMRuntimeError(code="llm_recovery_input_unavailable")
-        input_hash = str(value.get("input_hash", ""))
-        if len(input_hash) != 64:
-            input_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-        try:
-            return LLMRecoveryInputV1(
-                operation_id=str(value.get("operation_id", "")),
-                turn_id=str(value.get("turn_id", "")),
-                attempt_no=_as_int(value.get("attempt_no", 0)),
-                input_version=LLM_RECOVERY_INPUT_VERSION,
-                input_json=raw,
-                input_hash=input_hash,
-            )
-        except Exception as exc:
-            raise LLMRuntimeError(code="llm_recovery_input_unavailable") from exc
 
     def _map_staged_result(
         self,
