@@ -817,6 +817,30 @@ def test_teacher_debate_manifest_listing_has_stable_auth_and_exact_dto() -> None
     assert forbidden.value.code == "forbidden"
 
 
+def test_teacher_can_open_exact_current_llm_manifest_disclosure() -> None:
+    policy = _disclosure_policy()
+    manifest = _llm_manifest(policy)
+    service = ProviderDisclosureService(
+        InMemoryProviderDisclosureStore(
+            policy,
+            manifest,
+            debate_id="debate-runtime",
+            debate_manifests=(manifest,),
+            turn_ids_by_manifest={manifest.manifest_hash: "turn-0"},
+        )
+    )
+
+    disclosure = service.disclose("teacher")
+
+    assert disclosure.manifest_hash == manifest.manifest_hash
+    assert disclosure.disclosure.purpose == (
+        "Generate the teacher-approved classroom debate speech."
+    )
+    encoded = json.dumps(disclosure.model_dump(mode="json"), sort_keys=True).casefold()
+    for forbidden in ("qwen3.7-plus", "endpoint", "workspace", "prompt", "usage"):
+        assert forbidden not in encoded
+
+
 def test_fixed_adapter_uses_send_stage_then_local_validate_without_second_transport() -> None:
     from tests.test_wave4_llm_adapter import _adapter, _FakeTransport, _output, _prompt, _response
 
