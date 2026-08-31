@@ -26,10 +26,24 @@ uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.p
   prepare --checkpoint /private/path/real-core-demo.json
 ```
 
-After restarting the isolated application with `LLM_PROVIDER=dashscope`,
-`EMBEDDING_PROVIDER=dashscope`, `TTS_PROVIDER=mock`, `VOICE_PROVIDER=mock`,
-`TRANSLATION_PROVIDER=mock` (or unset), and the two endpoint-bound policy
-hashes, execute once. The explicit flag is an operator confirmation of the
+Before restarting the isolated Compose application, put the dual-Real values
+in the ignored root `.env`. These names are passed to the backend service by
+`docker-compose.yml`; keep the legacy `PROVIDER_POLICY_HASH` empty for this
+dual-Real path because the two endpoint-bound hashes must remain separate:
+
+```dotenv
+LLM_PROVIDER=dashscope
+EMBEDDING_PROVIDER=dashscope
+TTS_PROVIDER=mock
+VOICE_PROVIDER=mock
+TRANSLATION_PROVIDER=mock
+EMBEDDING_PROVIDER_POLICY_HASH=<embedding-policy-sha256>
+LLM_PROVIDER_POLICY_HASH=<llm-policy-sha256>
+PROVIDER_POLICY_HASH=
+```
+
+Then restart the isolated application with `docker compose up -d --build` and
+execute once. The explicit flag is an operator confirmation of the
 seven-request cap; the teacher confirmations for every exact manifest still
 occur through the product API:
 

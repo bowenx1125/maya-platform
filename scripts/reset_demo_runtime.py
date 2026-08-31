@@ -8,9 +8,9 @@ before invoking this script; the next backend startup recreates the baseline.
 from __future__ import annotations
 
 import argparse
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-import shutil
 
 
 def product_root(value: str | None) -> Path:
@@ -21,12 +21,34 @@ def product_root(value: str | None) -> Path:
 
 
 def runtime_directory(root: Path, value: str | None) -> Path:
-    candidate = (Path(value) if value else root / "data").resolve()
-    if candidate == root or candidate == root.parent or candidate.name != "data":
-        raise SystemExit("runtime directory must be an exact product data directory")
-    if candidate.is_symlink():
+    supplied = Path(value) if value else root / "data"
+    if not supplied.is_absolute():
+        supplied = root / supplied
+    expected = (root / "data").resolve()
+    candidate = supplied.resolve()
+    if candidate != expected:
+        raise SystemExit("runtime directory must resolve to the product data directory")
+    if _contains_symlink(supplied, root):
         raise SystemExit("refusing to reset a symlinked runtime directory")
     return candidate
+
+
+def _contains_symlink(path: Path, stop: Path) -> bool:
+    """Reject a symlink at any component of the requested runtime path."""
+
+    current = path
+    while True:
+        if current.is_symlink():
+            return True
+        # ``/var`` is a symlink on macOS. Stop once the requested path has
+        # reached the already-resolved product root so harmless system aliases
+        # are not mistaken for a caller-provided runtime symlink.
+        if current.resolve() == stop:
+            return False
+        parent = current.parent
+        if parent == current:
+            return False
+        current = parent
 
 
 def quarantine_runtime(root: Path, runtime: Path) -> Path | None:
