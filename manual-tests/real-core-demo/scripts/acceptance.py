@@ -5,8 +5,10 @@ embedding, two real participant queries and four real debate-turn LLM calls.
 The accepted budget is eight calls so the later Report call has a reserved
 ordinal; the debate stage therefore ends at seven without treating seven as a
 terminal plan.  Each provider manifest is attached to a teacher-only
-acceptance run by its manifest hash before disclosure confirmation or the
-explicit preparation continuation.
+acceptance run by its manifest hash before the provider continuation. Debate
+manifests are attached before disclosure confirmation; the Report manifest is
+confirmed first and then attached before the Report continuation, as required by
+the Report service contract.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -45,6 +47,16 @@ CHECKPOINT_VERSION = "real-core-demo-checkpoint-v4"
 DEBATE_STAGE_CALLS = 7
 EXPECTED_HAPPY_PATH_CALLS = 8
 MAX_ACCEPTANCE_CALLS = 8
+REPORT_READY_WORDS = range(600, 901)
+REPORT_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['\u2019\-][A-Za-z0-9]+)*")
+REPORT_CITATION_RE = re.compile(
+    r"\[evidence:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+    r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\]"
+)
+REPORT_UNSAFE_RE = re.compile(
+    r"\b(?:winner|winners|won|winning|vote\s+for\s+me|please\s+vote|nickname)\b",
+    re.IGNORECASE,
+)
 BASELINE_FIELDS = {
     "agent_id",
     "version_id",
@@ -89,10 +101,12 @@ CHECKPOINT_FIELDS = {
     "dirty_interactions",
     "snapshot_id",
     "debate_id",
+    "report_revision_id",
     "current_turn_id",
     "snapshot_calls",
     "real_query_calls",
     "llm_calls",
+    "report_calls",
     "completed_turns",
     "bound_manifest_hashes",
     "next_call",
@@ -316,7 +330,8 @@ class Api:
         files: Mapping[str, tuple[str, bytes, str]] | None = None,
         key: str | None = None,
         params: Mapping[str, str] | None = None,
-    ) -> tuple[int, Mapping[str, Any]]:
+        allow_list: bool = False,
+    ) -> tuple[int, Any]:
         headers: dict[str, str] = {"Origin": self.origin}
         if self.csrf:
             headers["X-CSRF-Token"] = self.csrf
@@ -338,12 +353,15 @@ class Api:
             value = response.json()
         except (ValueError, json.JSONDecodeError) as exc:
             raise AcceptanceError("response_json") from exc
-        require(isinstance(value, dict), "response_shape")
+        require(
+            isinstance(value, dict) or (allow_list and isinstance(value, list)),
+            "response_shape",
+        )
         if response.status_code not in expected:
             # Error envelopes are reduced to stable safe codes.  In
             # particular, a provider acceptance uncertainty is terminal for
             # this run and must never enter an automatic retry path.
-            provider_code = value.get("code")
+            provider_code = value.get("code") if isinstance(value, dict) else None
             if isinstance(provider_code, str):
                 if "acceptance_unknown" in provider_code:
                     raise AcceptanceError("acceptance_unknown")
@@ -421,6 +439,16 @@ class Api:
         )
         return value
 
+    def bind_acceptance_report(self, run_id: str, report_revision_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "POST",
+            f"/api/v1/demo/acceptance-runs/{run_id}/report",
+            expected={200},
+            body={"report_revision_id": report_revision_id},
+            key=f"real-core-demo-bind-report-{report_revision_id}",
+        )
+        return value
+
     def acceptance_summary(self, run_id: str) -> Mapping[str, Any]:
         _status, value = self.request(
             "GET", f"/api/v1/demo/acceptance-runs/{run_id}/summary", expected={200}
@@ -448,6 +476,74 @@ class Api:
             expected={200},
             body={"manifest_hash": manifest_hash, "call_no": call_no},
             key=f"real-core-demo-attach-call-{call_no:02d}",
+        )
+        return value
+
+    def open_interaction(self, debate_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "POST",
+            f"/api/v1/debates/{debate_id}/interaction/open",
+            expected={200},
+            key=f"real-core-demo-open-interaction-{debate_id}",
+        )
+        return value
+
+    def close_interaction(self, debate_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "POST",
+            f"/api/v1/debates/{debate_id}/interaction/close",
+            expected={202},
+            key=f"real-core-demo-close-interaction-{debate_id}",
+        )
+        return value
+
+    def pending_report_manifests(self, debate_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "GET",
+            f"/api/v1/provider/data-call/pending/reports/{debate_id}",
+            expected={200},
+        )
+        return value
+
+    def report_revisions(self, debate_id: str) -> list[Mapping[str, Any]]:
+        _status, value = self.request(
+            "GET",
+            f"/api/v1/debates/{debate_id}/report/revisions",
+            expected={200},
+            allow_list=True,
+        )
+        require(isinstance(value, list), "report_revisions_shape")
+        require(all(isinstance(item, dict) for item in value), "report_revision_shape")
+        return value
+
+    def continue_report(
+        self,
+        debate_id: str,
+        revision_id: str,
+        *,
+        manifest_hash: str,
+        call_no: int,
+    ) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "POST",
+            f"/api/v1/debates/{debate_id}/report/revisions/{revision_id}/continue",
+            expected={202},
+            body={"manifest_hash": manifest_hash, "call_no": call_no},
+            key=f"real-core-demo-report-continue-{revision_id}",
+        )
+        return value
+
+    def report_revision(self, debate_id: str, revision_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "GET",
+            f"/api/v1/debates/{debate_id}/report/revisions/{revision_id}",
+            expected={200},
+        )
+        return value
+
+    def transcript(self, debate_id: str) -> Mapping[str, Any]:
+        _status, value = self.request(
+            "GET", f"/api/v1/debates/{debate_id}/transcript", expected={200}
         )
         return value
 
@@ -510,6 +606,12 @@ def _validated_acceptance_run(
         report_revision_id is None or UUID_RE.fullmatch(str(report_revision_id)) is not None,
         "acceptance_run_report",
     )
+    recorded_report_revision = checkpoint.get("report_revision_id")
+    if recorded_report_revision is not None:
+        require(
+            report_revision_id == recorded_report_revision,
+            "acceptance_run_report_mismatch",
+        )
     require(value.get("state") in ACCEPTANCE_RUN_STATES, "acceptance_run_state")
     require(value.get("starting_charged_requests") == 0, "acceptance_run_starting_charged")
     for field in ("call_count", "charged_request_count"):
@@ -664,6 +766,11 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
             f"checkpoint_{field}",
         )
     require(
+        value["report_revision_id"] is None
+        or UUID_RE.fullmatch(str(value["report_revision_id"])) is not None,
+        "checkpoint_report_revision_id",
+    )
+    require(
         isinstance(value["real_revision"], int) and value["real_revision"] >= 0,
         "checkpoint_revision",
     )
@@ -679,7 +786,7 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
         == (1, 0, 0),
         "checkpoint_dirty_counts",
     )
-    for field in ("snapshot_calls", "real_query_calls", "llm_calls"):
+    for field in ("snapshot_calls", "real_query_calls", "llm_calls", "report_calls"):
         require(isinstance(value[field], int) and value[field] >= 0, f"checkpoint_{field}")
     require(
         isinstance(value["completed_turns"], list)
@@ -699,7 +806,10 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
         require(str(item) not in bound_hashes, "checkpoint_bound_manifest_duplicate")
         bound_hashes.append(str(item))
     require(
-        value["snapshot_calls"] + value["real_query_calls"] + value["llm_calls"]
+        value["snapshot_calls"]
+        + value["real_query_calls"]
+        + value["llm_calls"]
+        + value["report_calls"]
         == len(bound_hashes),
         "checkpoint_call_counts",
     )
@@ -740,10 +850,12 @@ def _base_checkpoint(
         "dirty_interactions": 0,
         "snapshot_id": None,
         "debate_id": None,
+        "report_revision_id": None,
         "current_turn_id": None,
         "snapshot_calls": 0,
         "real_query_calls": 0,
         "llm_calls": 0,
+        "report_calls": 0,
         "completed_turns": [],
         "bound_manifest_hashes": [],
         "next_call": "none",
@@ -928,6 +1040,8 @@ def _attach_pending_call(
         checkpoint["real_query_calls"] = int(checkpoint["real_query_calls"]) + 1
     elif kind == "llm":
         checkpoint["llm_calls"] = int(checkpoint["llm_calls"]) + 1
+    elif kind == "report":
+        checkpoint["report_calls"] = int(checkpoint["report_calls"]) + 1
     checkpoint["next_call"] = kind
     write_checkpoint(checkpoint_path, checkpoint)
     return summary
@@ -1274,24 +1388,207 @@ def _verify_turn_evidence(connection: Any, row: Any) -> None:
     require(traced_source_ids == set(source_by_id), "source_trace_set_mismatch")
 
 
+def _report_failure_code(value: Mapping[str, Any]) -> str | None:
+    status = value.get("status")
+    if status != "failed":
+        return None
+    safe_error_code = value.get("safe_error_code")
+    if isinstance(safe_error_code, str) and "acceptance_unknown" in safe_error_code:
+        return "acceptance_unknown"
+    return "provider_failed"
+
+
+def _wait_report_pending(
+    api: Api,
+    debate_id: str,
+    *,
+    timeout_seconds: float = 90.0,
+) -> Mapping[str, Any]:
+    """Wait until Mock insight has produced one paused Real Report revision."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        revisions = api.report_revisions(debate_id)
+        for revision in revisions:
+            failure = _report_failure_code(revision)
+            if failure is not None:
+                raise AcceptanceError(failure)
+        pending = api.pending_report_manifests(debate_id)
+        items = pending.get("items")
+        require(isinstance(items, list), "report_pending_shape")
+        if len(items) > 1:
+            raise AcceptanceError("report_manifest_ambiguous")
+        if len(items) == 1:
+            item = items[0]
+            require(isinstance(item, dict), "report_pending_shape")
+            require("operation_id" not in item, "report_operation_id_disclosed")
+            require(set(item) == {
+                "report_revision_id",
+                "manifest_hash",
+                "confirmation_revision",
+                "confirmed",
+            }, "report_pending_shape")
+            revision_id = item.get("report_revision_id")
+            manifest_hash = item.get("manifest_hash")
+            require(
+                isinstance(revision_id, str) and UUID_RE.fullmatch(revision_id) is not None,
+                "report_revision_id",
+            )
+            require(
+                isinstance(manifest_hash, str) and HASH_RE.fullmatch(manifest_hash) is not None,
+                "report_manifest_hash",
+            )
+            require(item.get("confirmed") is False, "report_manifest_confirmed")
+            matching = [
+                revision
+                for revision in revisions
+                if revision.get("id") == revision_id and revision.get("status") == "generating"
+            ]
+            if len(matching) == 1:
+                return item
+        time.sleep(0.2)
+    raise AcceptanceError("report_manifest_timeout")
+
+
+def _verify_ready_report(
+    value: Mapping[str, Any],
+    *,
+    revision_id: str,
+) -> Mapping[str, Any]:
+    """Validate the safe report DTO without printing its Markdown body."""
+
+    require(value.get("id") == revision_id, "report_revision_id")
+    require(value.get("status") == "ready", "report_not_ready")
+    word_count = value.get("word_count")
+    require(
+        isinstance(word_count, int)
+        and not isinstance(word_count, bool)
+        and word_count in REPORT_READY_WORDS,
+        "report_word_count",
+    )
+    markdown = value.get("english_markdown")
+    require(isinstance(markdown, str) and markdown.strip(), "report_markdown_missing")
+    require(CJK_RE.search(markdown) is None, "report_not_english")
+    require(re.search(r"[A-Za-z]", markdown) is not None, "report_not_english")
+    require(REPORT_UNSAFE_RE.search(markdown) is None, "report_unsafe_term")
+    countable_markdown = REPORT_CITATION_RE.sub("", markdown)
+    require(
+        len(REPORT_WORD_RE.findall(countable_markdown)) == word_count,
+        "report_word_count_mismatch",
+    )
+    return value
+
+
+def _read_history_replay_views(api: Api, debate_id: str, revision_id: str) -> None:
+    """Read public history/replay projections; these routes must not charge."""
+
+    detail = _debate_detail(api, debate_id)
+    require(isinstance(detail.get("playback"), dict), "replay_view_shape")
+    transcript = api.transcript(debate_id)
+    turns = transcript.get("turns")
+    require(isinstance(turns, list) and len(turns) == 4, "history_turn_count")
+    revision = api.report_revision(debate_id, revision_id)
+    require(revision.get("id") == revision_id, "history_report_revision")
+
+
 def report_acceptance_adapter(
     *,
     api: Api,
-    run_id: str,
-    debate_id: str,
-    call_no: int,
-) -> NoReturn:
-    """Reserved Report integration seam; the Report API is not frozen yet.
+    checkpoint: dict[str, Any],
+    checkpoint_path: Path,
+    fixture: Fixture,
+    report_policy_hash: str,
+) -> Mapping[str, Any]:
+    """Run the one-shot Real Report call as acceptance ordinal eight."""
 
-    The eventual adapter must create the Report request, obtain its pending
-    manifest, call ``attach_acceptance_call`` with ``call_no=8`` before
-    confirmation/send, and bind the resulting revision at
-    ``/{run_id}/report``.  Keeping this function unimplemented avoids guessing
-    an API contract owned by the Report service worker.
-    """
+    run_id = checkpoint.get("acceptance_run_id")
+    debate_id = checkpoint.get("debate_id")
+    require(isinstance(run_id, str), "acceptance_run_missing")
+    require(isinstance(debate_id, str), "acceptance_debate_missing")
+    require(HASH_RE.fullmatch(report_policy_hash) is not None, "report_policy_hash")
+    require(checkpoint["report_calls"] == 0, "report_call_already_bound")
+    require(len(checkpoint["bound_manifest_hashes"]) == DEBATE_STAGE_CALLS, "report_call_order")
 
-    del api, run_id, debate_id, call_no
-    raise AcceptanceError("report_adapter_not_wired")
+    opened = api.open_interaction(debate_id)
+    require(opened.get("status") == "open", "interaction_not_open")
+    closed = api.close_interaction(debate_id)
+    require(closed.get("status") == "finalized", "interaction_not_finalized")
+
+    _assert_charged_summary(
+        api,
+        checkpoint,
+        fixture,
+        expected_call_count=DEBATE_STAGE_CALLS,
+    )
+    pending = _wait_report_pending(api, debate_id)
+    revision_id = opaque(pending.get("report_revision_id"), "report_revision_id")
+    checkpoint["report_revision_id"] = revision_id
+    checkpoint["next_call"] = "report"
+    write_checkpoint(checkpoint_path, checkpoint)
+    _read_history_replay_views(api, debate_id, revision_id)
+    _assert_charged_summary(
+        api,
+        checkpoint,
+        fixture,
+        expected_call_count=DEBATE_STAGE_CALLS,
+    )
+
+    # Preserve the exact disclosure CAS before associating the revision with
+    # the run.  No report text or provider response is logged.
+    _confirm_manifest(api, pending, expected_policy_hash=report_policy_hash)
+    bound_report = api.bind_acceptance_report(run_id, revision_id)
+    _validated_acceptance_run(
+        bound_report,
+        fixture=fixture,
+        checkpoint=checkpoint,
+        expected_call_count=DEBATE_STAGE_CALLS,
+        expected_debate_id=debate_id,
+    )
+    _attach_pending_call(
+        api,
+        checkpoint,
+        checkpoint_path,
+        fixture,
+        manifest=pending,
+        kind="report",
+    )
+    continued = api.continue_report(
+        debate_id,
+        revision_id,
+        manifest_hash=str(pending["manifest_hash"]),
+        call_no=EXPECTED_HAPPY_PATH_CALLS,
+    )
+    failure = _report_failure_code(continued)
+    if failure is not None:
+        raise AcceptanceError(failure)
+
+    deadline = time.monotonic() + 90.0
+    ready: Mapping[str, Any] | None = None
+    while time.monotonic() < deadline:
+        current = api.report_revision(debate_id, revision_id)
+        failure = _report_failure_code(current)
+        if failure is not None:
+            raise AcceptanceError(failure)
+        if current.get("status") == "ready":
+            ready = _verify_ready_report(current, revision_id=revision_id)
+            break
+        if current.get("status") not in {"generating"}:
+            raise AcceptanceError("report_not_ready")
+        time.sleep(0.2)
+    require(ready is not None, "report_ready_timeout")
+    _read_history_replay_views(api, debate_id, revision_id)
+    _assert_charged_summary(
+        api,
+        checkpoint,
+        fixture,
+        expected_call_count=EXPECTED_HAPPY_PATH_CALLS,
+    )
+    return {
+        "status": "REAL_CORE_DEMO_REPORT_PASS",
+        "report_revision_id": revision_id,
+        "report_word_count": ready["word_count"],
+        "report_calls": checkpoint["report_calls"],
+    }
 
 
 def execute(
@@ -1299,6 +1596,7 @@ def execute(
     checkpoint_path: Path,
     embedding_policy_hash: str,
     llm_policy_hash: str,
+    report_policy_hash: str,
     student_password: str,
     teacher_password: str,
 ) -> Mapping[str, Any]:
@@ -1306,6 +1604,7 @@ def execute(
 
     require(HASH_RE.fullmatch(embedding_policy_hash) is not None, "embedding_policy_hash")
     require(HASH_RE.fullmatch(llm_policy_hash) is not None, "llm_policy_hash")
+    require(HASH_RE.fullmatch(report_policy_hash) is not None, "report_policy_hash")
     fixture = load_fixture()
     checkpoint = dict(read_checkpoint(checkpoint_path, fixture))
     require(checkpoint["state"] == "prepared", "checkpoint_already_consumed")
@@ -1570,11 +1869,7 @@ def execute(
             },
             key="real-core-demo-finish-0001",
         )
-        _status, transcript = teacher.request(
-            "GET",
-            f"/api/v1/debates/{debate_id}/transcript",
-            expected={200},
-        )
+        transcript = teacher.transcript(debate_id)
         turns = transcript.get("turns")
         require(isinstance(turns, list) and len(turns) == 4, "turn_count")
         require(
@@ -1590,11 +1885,18 @@ def execute(
             fixture,
             expected_call_count=DEBATE_STAGE_CALLS,
         )
+        report_result = report_acceptance_adapter(
+            api=teacher,
+            checkpoint=checkpoint,
+            checkpoint_path=checkpoint_path,
+            fixture=fixture,
+            report_policy_hash=report_policy_hash,
+        )
         checkpoint["state"] = "executed"
-        checkpoint["next_call"] = "report"
+        checkpoint["next_call"] = "none"
         write_checkpoint(checkpoint_path, checkpoint)
         return {
-            "status": "REAL_CORE_DEMO_DEBATE_STAGE_PASS_PENDING_REPORT",
+            **report_result,
             "fixture_hash": fixture.fixture_hash,
             "snapshot_calls": checkpoint["snapshot_calls"],
             "real_query_calls": checkpoint["real_query_calls"],
@@ -1602,6 +1904,7 @@ def execute(
             "debate_stage_calls": DEBATE_STAGE_CALLS,
             "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
             "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
+            "total_calls": len(checkpoint["bound_manifest_hashes"]),
         }
     finally:
         if socket is not None:
@@ -1615,16 +1918,23 @@ def verify(
     checkpoint_path: Path,
     embedding_policy_hash: str,
     llm_policy_hash: str,
+    report_policy_hash: str,
 ) -> Mapping[str, Any]:
-    """Verify the seven-call debate stage while Report remains unwired."""
+    """Verify the complete eight-call Real-Core Demo happy path."""
 
     require(database_url.startswith("sqlite:"), "database_url")
     require(HASH_RE.fullmatch(embedding_policy_hash) is not None, "embedding_policy_hash")
     require(HASH_RE.fullmatch(llm_policy_hash) is not None, "llm_policy_hash")
+    require(HASH_RE.fullmatch(report_policy_hash) is not None, "report_policy_hash")
     fixture = load_fixture()
     checkpoint = dict(read_checkpoint(checkpoint_path, fixture))
     require(checkpoint["state"] == "executed", "checkpoint_not_executed")
-    require(checkpoint["snapshot_id"] and checkpoint["debate_id"], "checkpoint_ids")
+    require(
+        checkpoint["snapshot_id"]
+        and checkpoint["debate_id"]
+        and checkpoint["report_revision_id"],
+        "checkpoint_ids",
+    )
     require(
         checkpoint["snapshot_id"] != checkpoint["baseline_snapshot_id"],
         "snapshot_baseline_collision",
@@ -1632,9 +1942,10 @@ def verify(
     require(checkpoint["snapshot_calls"] == 1, "checkpoint_snapshot_calls")
     require(checkpoint["real_query_calls"] == 2, "checkpoint_query_calls")
     require(checkpoint["llm_calls"] == 4, "checkpoint_llm_calls")
+    require(checkpoint["report_calls"] == 1, "checkpoint_report_calls")
     require(
-        len(checkpoint["bound_manifest_hashes"]) == DEBATE_STAGE_CALLS,
-        "checkpoint_debate_stage_calls",
+        len(checkpoint["bound_manifest_hashes"]) == EXPECTED_HAPPY_PATH_CALLS,
+        "checkpoint_total_calls",
     )
     if str(BACKEND) not in sys.path:
         sys.path.insert(0, str(BACKEND))
@@ -1830,20 +2141,64 @@ def verify(
                 },
             ).scalar_one()
             require(int(source) >= 2, "turn_source_binding")
+            report_row = connection.execute(
+                text(
+                    "SELECT id,status,word_count,english_markdown "
+                    "FROM civilization_report_revisions WHERE id=:revision_id "
+                    "AND debate_id=:debate_id"
+                ),
+                {
+                    "revision_id": checkpoint["report_revision_id"],
+                    "debate_id": checkpoint["debate_id"],
+                },
+            ).mappings().one_or_none()
+            require(report_row is not None, "report_revision_missing")
+            _verify_ready_report(report_row, revision_id=str(checkpoint["report_revision_id"]))
+            report_operation = connection.execute(
+                text(
+                    "SELECT state,request_count,charged_request_count,attempt_no "
+                    "FROM provider_operations WHERE scope_id=:debate_id "
+                    "AND provider_operation='llm_maya_report' "
+                    "AND logical_item_id=:revision_id"
+                ),
+                {
+                    "debate_id": checkpoint["debate_id"],
+                    "revision_id": checkpoint["report_revision_id"],
+                },
+            ).all()
+            require(report_operation == [("succeeded", 1, 1, 1)], "report_ledger_count")
+            report_policy = connection.execute(
+                text(
+                    "SELECT policy_hash FROM provider_export_manifests "
+                    "WHERE debate_id=:debate_id AND provider_operation='llm_maya_report'"
+                ),
+                {"debate_id": checkpoint["debate_id"]},
+            ).all()
+            require(report_policy == [(report_policy_hash,)], "report_policy_binding")
+            run_counts = connection.execute(
+                text(
+                    "SELECT COUNT(*),COALESCE(SUM(charged_request_count),0) "
+                    "FROM provider_operations WHERE acceptance_run_id=:run_id"
+                ),
+                {"run_id": checkpoint["acceptance_run_id"]},
+            ).one()
+            require(tuple(map(int, run_counts)) == (EXPECTED_HAPPY_PATH_CALLS, EXPECTED_HAPPY_PATH_CALLS), "run_charge_count")
     finally:
         database.dispose()
     checkpoint["state"] = "verified"
     checkpoint["next_call"] = "none"
     write_checkpoint(checkpoint_path, checkpoint)
     return {
-        "status": "REAL_CORE_DEMO_DEBATE_STAGE_PASS_PENDING_REPORT",
+        "status": "REAL_CORE_DEMO_E2E_PASS",
         "fixture_hash": fixture.fixture_hash,
         "snapshot_calls": 1,
         "real_query_calls": 2,
         "llm_calls": 4,
+        "report_calls": 1,
         "debate_stage_calls": DEBATE_STAGE_CALLS,
         "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
         "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
+        "total_calls": EXPECTED_HAPPY_PATH_CALLS,
     }
 
 
@@ -1857,11 +2212,13 @@ def parser() -> argparse.ArgumentParser:
     execute_parser.add_argument("--checkpoint", type=Path, required=True)
     execute_parser.add_argument("--embedding-policy-hash", required=True)
     execute_parser.add_argument("--llm-policy-hash", required=True)
+    execute_parser.add_argument("--report-policy-hash", required=True)
     verify_parser = sub.add_parser("verify")
     verify_parser.add_argument("--checkpoint", type=Path, required=True)
     verify_parser.add_argument("--database-url", required=True)
     verify_parser.add_argument("--embedding-policy-hash", required=True)
     verify_parser.add_argument("--llm-policy-hash", required=True)
+    verify_parser.add_argument("--report-policy-hash", required=True)
     return result
 
 
@@ -1901,6 +2258,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.checkpoint,
                     args.embedding_policy_hash,
                     args.llm_policy_hash,
+                    args.report_policy_hash,
                     student_password,
                     teacher_password,
                 )
@@ -1910,6 +2268,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.checkpoint,
                     args.embedding_policy_hash,
                     args.llm_policy_hash,
+                    args.report_policy_hash,
                 )
         print(json.dumps(value, sort_keys=True, separators=(",", ":")))
         return 0

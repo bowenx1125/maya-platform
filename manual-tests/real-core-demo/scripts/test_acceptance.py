@@ -40,10 +40,12 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
         "baseline_snapshot_id": "00000000-0000-4000-8000-000000000003",
         "snapshot_id": None,
         "debate_id": None,
+        "report_revision_id": None,
         "current_turn_id": None,
         "snapshot_calls": 0,
         "real_query_calls": 0,
         "llm_calls": 0,
+        "report_calls": 0,
         "completed_turns": [],
         "bound_manifest_hashes": [],
         "next_call": "none",
@@ -66,9 +68,11 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
                 "snapshot_id",
                 "debate_id",
                 "current_turn_id",
+                "report_revision_id",
                 "snapshot_calls",
                 "real_query_calls",
                 "llm_calls",
+                "report_calls",
                 "completed_turns",
                 "bound_manifest_hashes",
                 "next_call",
@@ -471,6 +475,152 @@ def test_acceptance_run_creation_requires_fresh_zero_summary() -> None:
             checkpoint=value,
             expected_call_count=0,
         )
+
+
+def test_report_adapter_binds_call_eight_after_disclosure_and_report_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = load_fixture()
+    value = checkpoint(fixture.fixture_hash)
+    value.update(
+        {
+            "state": "executed",
+            "acceptance_run_id": "00000000-0000-4000-8000-000000000008",
+            "debate_id": "00000000-0000-4000-8000-000000000009",
+            "bound_manifest_hashes": [f"{index:064x}" for index in range(1, 8)],
+            "snapshot_calls": 1,
+            "real_query_calls": 2,
+            "llm_calls": 4,
+        }
+    )
+    revision_id = "00000000-0000-4000-8000-000000000010"
+    manifest_hash = "f" * 64
+    report_markdown = " ".join(["report"] * 600)
+    ready_report = {
+        "id": revision_id,
+        "status": "ready",
+        "word_count": 600,
+        "english_markdown": report_markdown,
+    }
+    events: list[str] = []
+
+    class FakeApi:
+        def open_interaction(self, _debate_id: str) -> dict[str, object]:
+            events.append("open")
+            return {"status": "open"}
+
+        def close_interaction(self, _debate_id: str) -> dict[str, object]:
+            events.append("close")
+            return {"status": "finalized"}
+
+        def bind_acceptance_report(
+            self, _run_id: str, _revision_id: str
+        ) -> dict[str, object]:
+            events.append("bind-report")
+            result = run_summary(value, call_count=7)
+            result["report_revision_id"] = revision_id
+            return result
+
+        def continue_report(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+            events.append("continue")
+            return ready_report
+
+        def report_revision(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+            events.append("ready")
+            return ready_report
+
+    def fake_attach(
+        _api: object,
+        checkpoint_value: dict[str, object],
+        checkpoint_path: Path,
+        _fixture: object,
+        *,
+        manifest: dict[str, object],
+        kind: str,
+    ) -> dict[str, object]:
+        assert kind == "report"
+        assert manifest["manifest_hash"] == manifest_hash
+        events.append("attach")
+        checkpoint_value["bound_manifest_hashes"].append(manifest_hash)
+        checkpoint_value["report_calls"] = 1
+        checkpoint_value["next_call"] = "report"
+        write_checkpoint(checkpoint_path, checkpoint_value)
+        result = run_summary(checkpoint_value, call_count=8)
+        result["report_revision_id"] = revision_id
+        return result
+
+    monkeypatch.setattr(
+        "acceptance._wait_report_pending",
+        lambda *_args, **_kwargs: {
+            "report_revision_id": revision_id,
+            "manifest_hash": manifest_hash,
+            "confirmation_revision": 1,
+            "confirmed": False,
+        },
+    )
+    monkeypatch.setattr(
+        "acceptance._confirm_manifest",
+        lambda *_args, **_kwargs: events.append("confirm"),
+    )
+    monkeypatch.setattr("acceptance._attach_pending_call", fake_attach)
+    monkeypatch.setattr(
+        "acceptance._assert_charged_summary",
+        lambda *_args, **_kwargs: events.append("summary"),
+    )
+    monkeypatch.setattr(
+        "acceptance._read_history_replay_views",
+        lambda *_args, **_kwargs: events.append("readonly"),
+    )
+    path = tmp_path / "checkpoint.json"
+    result = acceptance.report_acceptance_adapter(
+        api=FakeApi(),
+        checkpoint=value,
+        checkpoint_path=path,
+        fixture=fixture,
+        report_policy_hash="a" * 64,
+    )
+    assert result == {
+        "status": "REAL_CORE_DEMO_REPORT_PASS",
+        "report_revision_id": revision_id,
+        "report_word_count": 600,
+        "report_calls": 1,
+    }
+    assert events == [
+        "open",
+        "close",
+        "summary",
+        "readonly",
+        "summary",
+        "confirm",
+        "bind-report",
+        "attach",
+        "continue",
+        "ready",
+        "readonly",
+        "summary",
+    ]
+    assert value["bound_manifest_hashes"][-1] == manifest_hash
+
+
+@pytest.mark.parametrize(
+    ("markdown", "code"), [("word " * 600, "ok"), ("word " * 600 + "winner", "unsafe")]
+)
+def test_ready_report_projection_is_english_and_winner_safe(markdown: str, code: str) -> None:
+    value = {
+        "id": "00000000-0000-4000-8000-000000000010",
+        "status": "ready",
+        "word_count": 600 if code == "ok" else 601,
+        "english_markdown": markdown.strip(),
+    }
+    if code == "ok":
+        assert acceptance._verify_ready_report(
+            value, revision_id="00000000-0000-4000-8000-000000000010"
+        ) == value
+    else:
+        with pytest.raises(AcceptanceError, match="report_unsafe_term"):
+            acceptance._verify_ready_report(
+                value, revision_id="00000000-0000-4000-8000-000000000010"
+            )
 
 
 @pytest.mark.parametrize(
