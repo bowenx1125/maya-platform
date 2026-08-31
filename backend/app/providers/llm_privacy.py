@@ -146,6 +146,32 @@ _PATH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UUID-shaped values are allowed only where the PromptRequest contract carries
+# an opaque server-local reference.  A UUID in topic/speech/Persona/evidence
+# text remains a private-data violation.  List item paths are handled by
+# ``_path_allows_uuid`` below.
+_UUID_ID_KEYS = frozenset(
+    {
+        "debate_id",
+        "turn_id",
+        "participant_id",
+        "next_participant_id",
+        "claim_id",
+        "target_turn_id",
+        "target_claim_id",
+        "question_id",
+        "source_turn_id",
+        "source_participant_id",
+        "target_participant_id",
+        "query_id",
+        "evidence_id",
+        "query_ids",
+        "evidence_ids",
+        "used_evidence_ids",
+        "answered_question_ids",
+    }
+)
+
 # The user message is PromptRequestV1's canonical object.  These keys are
 # explicit rather than inferred, preventing a future provider-facing field
 # from silently crossing the privacy boundary.
@@ -351,6 +377,7 @@ def _scan_text(
     *,
     identity_tokens: Sequence[str],
     workspace_id: str | None,
+    allow_uuid: bool = False,
 ) -> None:
     folded = text.casefold()
     if workspace_id and workspace_id.casefold() in folded:
@@ -359,7 +386,7 @@ def _scan_text(
         if isinstance(token, str) and token.strip() and token.casefold() in folded:
             _reject()
     if (
-        _UUID_RE.search(text)
+        (not allow_uuid and _UUID_RE.search(text))
         or _EMAIL_RE.search(text)
         or _PHONE_RE.search(text)
         or _BEARER_RE.search(text)
@@ -375,6 +402,60 @@ def _scan_text(
         _reject()
 
 
+def _path_allows_uuid(path: tuple[str, ...]) -> bool:
+    if not path:
+        return False
+    if path[-1] in _UUID_ID_KEYS:
+        return True
+    return len(path) > 1 and path[-2] in _UUID_ID_KEYS and path[-1].isdigit()
+
+
+def _scan_value(
+    value: object,
+    *,
+    path: tuple[str, ...],
+    identity_tokens: Sequence[str],
+    workspace_id: str | None,
+) -> None:
+    if isinstance(value, str):
+        _scan_text(
+            value,
+            identity_tokens=identity_tokens,
+            workspace_id=workspace_id,
+            allow_uuid=_path_allows_uuid(path),
+        )
+    elif isinstance(value, Mapping):
+        for key, nested in value.items():
+            if isinstance(key, str):
+                _scan_value(
+                    nested,
+                    path=path + (key,),
+                    identity_tokens=identity_tokens,
+                    workspace_id=workspace_id,
+                )
+    elif isinstance(value, (list, tuple)):
+        for index, nested in enumerate(value):
+            _scan_value(
+                nested,
+                path=path + (str(index),),
+                identity_tokens=identity_tokens,
+                workspace_id=workspace_id,
+            )
+
+
+class _DuplicateKeyError(ValueError):
+    pass
+
+
+def _no_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateKeyError()
+        result[key] = value
+    return result
+
+
 def scan_llm_outbound_messages(
     messages: Sequence[object],
     *,
@@ -388,15 +469,25 @@ def scan_llm_outbound_messages(
     tokens = tuple(
         str(token) for token in identity_tokens if isinstance(token, str) and token.strip()
     )
-    for _role, content in parts:
-        _scan_text(content, identity_tokens=tokens, workspace_id=workspace_id)
+    # The system message is ordinary provider prose: UUIDs there are never
+    # opaque local references.  The user message is scanned by parsed field
+    # path below so UUID-shaped catalog IDs can remain opaque and allowed.
+    _scan_text(parts[0][1], identity_tokens=tokens, workspace_id=workspace_id)
     try:
         decoded = json.loads(
-            parts[1][1], parse_constant=lambda _value: (_ for _ in ()).throw(ValueError())
+            parts[1][1],
+            object_pairs_hook=_no_duplicate_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
         )
     except (TypeError, ValueError, json.JSONDecodeError):
         _reject(code="llm_outbound_json_invalid")
     _validate_request_key_tree(decoded)
+    _scan_value(
+        decoded,
+        path=(),
+        identity_tokens=tokens,
+        workspace_id=workspace_id,
+    )
     classes = tuple(dict.fromkeys(str(value) for value in field_classes))
     if any(value not in LLM_ALLOWED_OUTBOUND_FIELD_CLASSES for value in classes):
         _reject(code="llm_manifest_field_forbidden")

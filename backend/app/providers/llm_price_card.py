@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Final, cast
 
@@ -116,6 +117,30 @@ class LLMPriceCardV1:
     @property
     def source_hash(self) -> str:
         return self.source_content_sha256
+
+    @property
+    def reviewed(self) -> bool:
+        """Whether this card can authorize a real provider request."""
+
+        if not self.retrieved_at.strip() or set(self.source_content_sha256) == {"0"}:
+            return False
+        try:
+            timestamp = datetime.fromisoformat(self.retrieved_at.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        return (
+            timestamp.tzinfo is not None
+            and self.input_rate > 0
+            and self.output_rate > 0
+            and self.cached_input_rate >= 0
+        )
+
+    def assert_reviewed(self) -> None:
+        if not self.reviewed:
+            raise LLMPriceCardError(
+                "a reviewed non-zero price card is required for a real request",
+                code="llm_price_card_unreviewed",
+            )
 
     def canonical_dict(self) -> dict[str, str]:
         return {

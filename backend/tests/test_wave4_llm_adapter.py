@@ -30,13 +30,19 @@ from app.providers.llm_adapter import (
     LLM_TURN_OUTPUT_SCHEMA_HASH,
     DashScopeLLMAdapter,
     DashScopeLLMConfig,
+    LLMAcceptedCandidateV1,
+    LLMAdapterError,
 )
 from app.providers.llm_price_card import (
     LLMPriceCardV1,
     actual_cost,
     reservation_cost,
 )
-from app.providers.llm_privacy import LLMOutboundPrivacyError, scan_llm_outbound_messages
+from app.providers.llm_privacy import (
+    LLMOutboundManifestV1,
+    LLMOutboundPrivacyError,
+    scan_llm_outbound_messages,
+)
 from app.providers.llm_tokenizer import PinnedLLMTokenizer
 from app.providers.llm_transport import (
     HttpxLLMTransport,
@@ -171,7 +177,11 @@ class _ResponseTransport:
 
 
 def _response(
-    output: object, *, finish_reason: str = "stop", usage: object | None = None
+    output: object,
+    *,
+    finish_reason: str = "stop",
+    usage: object | None = None,
+    raw_content: str | None = None,
 ) -> dict[str, object]:
     return {
         "object": "chat.completion",
@@ -179,7 +189,10 @@ def _response(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": json.dumps(output)},
+                "message": {
+                    "role": "assistant",
+                    "content": raw_content if raw_content is not None else json.dumps(output),
+                },
                 "finish_reason": finish_reason,
             }
         ],
@@ -192,7 +205,15 @@ def _adapter(transport: object, *, identity_tokens: tuple[str, ...] = ()) -> Das
         DashScopeLLMConfig(api_key="fixture-secret", workspace_id="workspace123"),
         transport,  # type: ignore[arg-type]
         tokenizer=PinnedLLMTokenizer("supplier-tokenizer-v1", "a" * 64, lambda value: len(value)),
+        price_card=LLMPriceCardV1(
+            input_price_per_million="0.5",
+            cached_input_price_per_million="0.1",
+            output_price_per_million="1.0",
+            retrieved_at="2026-08-31T00:00:00Z",
+            source_content_sha256="b" * 64,
+        ),
         identity_tokens=identity_tokens,
+        outbound_manifest=LLMOutboundManifestV1(),
     )
 
 
@@ -337,6 +358,164 @@ def test_actual_message_privacy_scan_blocks_identity_and_unknown_fields() -> Non
         scan_llm_outbound_messages(prompt.messages, identity_tokens=("River Keeper",))
     assert identity_error.value.code == "llm_outbound_data_forbidden"
     assert "River Keeper" not in str(identity_error.value)
+
+
+def test_path_aware_privacy_allows_opaque_uuid_id_paths_but_not_text() -> None:
+    prompt = _prompt()
+    value = json.loads(prompt.user_message.content)
+    uuid = "12345678-1234-4234-8234-123456789abc"
+    value["debate_id"] = uuid
+    value["turn_id"] = uuid
+    value["participant_id"] = uuid
+    messages = (
+        prompt.system_message,
+        PromptMessageV1(role="user", content=json.dumps(value, separators=(",", ":"))),
+    )
+    scan_llm_outbound_messages(messages)
+
+    value["topic"] = f"Topic mentioning {uuid}"
+    messages = (
+        prompt.system_message,
+        PromptMessageV1(role="user", content=json.dumps(value, separators=(",", ":"))),
+    )
+    with pytest.raises(LLMOutboundPrivacyError):
+        scan_llm_outbound_messages(messages)
+
+    value = json.loads(prompt.user_message.content)
+    value["topic"] = "A normal topic"
+    value["persona_provider_view"]["identity"]["role"] = uuid
+    messages = (
+        prompt.system_message,
+        PromptMessageV1(role="user", content=json.dumps(value, separators=(",", ":"))),
+    )
+    with pytest.raises(LLMOutboundPrivacyError):
+        scan_llm_outbound_messages(messages)
+
+    with pytest.raises(LLMOutboundPrivacyError):
+        scan_llm_outbound_messages(
+            (PromptMessageV1(role="system", content=uuid), prompt.user_message)
+        )
+
+
+def test_unreviewed_tokenizer_manifest_or_price_card_is_zero_call() -> None:
+    class Fake:
+        calls = 0
+
+        def post(self, url: str, **kwargs: object) -> object:
+            del url, kwargs
+            self.calls += 1
+            return _response(_output())
+
+    fake = Fake()
+    adapter = DashScopeLLMAdapter(
+        DashScopeLLMConfig(workspace_id="workspace123"),
+        fake,
+        tokenizer=type(
+            "Unreviewed",
+            (),
+            {
+                "tokenizer_id": "fake",
+                "asset_hash": "x",
+                "count_tokens": lambda self, value: len(value),
+            },
+        )(),
+        price_card=LLMPriceCardV1(
+            input_price_per_million="0.5",
+            cached_input_price_per_million="0.1",
+            output_price_per_million="1",
+            retrieved_at="2026-08-31T00:00:00Z",
+            source_content_sha256="b" * 64,
+        ),
+        outbound_manifest=LLMOutboundManifestV1(),
+    )
+    with pytest.raises(LLMAdapterError):
+        adapter.execute(_prompt())
+    assert fake.calls == 0
+
+    fake = Fake()
+    adapter = DashScopeLLMAdapter(
+        DashScopeLLMConfig(workspace_id="workspace123"),
+        fake,
+        tokenizer=PinnedLLMTokenizer("fake", "c" * 64, lambda value: len(value)),
+        price_card=LLMPriceCardV1(
+            input_price_per_million="0.5",
+            cached_input_price_per_million="0.1",
+            output_price_per_million="1",
+            retrieved_at="2026-08-31T00:00:00Z",
+            source_content_sha256="b" * 64,
+        ),
+    )
+    with pytest.raises(LLMAdapterError):
+        adapter.execute(_prompt(), outbound_manifest=None)
+    assert fake.calls == 0
+
+    fake = Fake()
+    adapter = DashScopeLLMAdapter(
+        DashScopeLLMConfig(workspace_id="workspace123"),
+        fake,
+        tokenizer=PinnedLLMTokenizer("fake", "c" * 64, lambda value: len(value)),
+        outbound_manifest=LLMOutboundManifestV1(),
+    )
+    with pytest.raises(LLMAdapterError):
+        adapter.execute(_prompt())
+    assert fake.calls == 0
+
+
+def test_accepted_stage_is_returned_before_local_reference_mapping_failure() -> None:
+    invalid = _output()
+    claims = cast(list[dict[str, object]], invalid["key_claims"])
+    claims[0]["used_evidence_refs"] = [0]
+    fake = _FakeTransport(_response(invalid))
+    staged: list[LLMAcceptedCandidateV1] = []
+    result = _adapter(fake).execute(
+        _prompt(),
+        stage_callback=lambda candidate: staged.append(candidate),
+    )
+    assert len(staged) == 1
+    candidate = staged[0]
+    assert candidate.schema_valid is True
+    assert candidate.provider_output_json
+    assert candidate.stage_hash == candidate.output_hash
+    assert result.status == "failed"
+    assert result.safe_error_code == "reference_invalid"
+    assert result.accepted_candidate is candidate
+    assert result.accepted_stage_json == candidate.stage_json
+    assert result.provider_output_json == candidate.provider_output_json
+
+
+def test_invalid_content_stage_has_only_safe_diagnostic_and_can_replay_locally() -> None:
+    fake = _FakeTransport(
+        _response(
+            {},
+            raw_content="not-json",
+        )
+    )
+    result = _adapter(fake).execute(_prompt())
+    candidate = result.accepted_candidate
+    assert candidate is not None
+    assert candidate.provider_output is None
+    assert candidate.content_hash
+    assert "not-json" not in candidate.stage_json
+    replayed = type(candidate).from_staged_json(
+        result.request,
+        candidate.stage_json,
+        stage_hash=candidate.stage_hash,
+    )
+    assert replayed.safe_error_code == "json_invalid"
+    assert result.status == "failed"
+    assert fake.calls
+
+
+def test_valid_staged_candidate_can_be_validated_without_network() -> None:
+    fake = _FakeTransport(_response(_output()))
+    adapter = _adapter(fake)
+    result = adapter.execute(_prompt())
+    candidate = result.accepted_candidate
+    assert candidate is not None and candidate.schema_valid
+    before = len(fake.calls)
+    mapped = adapter.validate_accepted(candidate)
+    assert mapped.result.speech == "A transparent policy protects agency."
+    assert len(fake.calls) == before
 
 
 def test_price_card_rounds_up_and_reserves_supplier_tolerance() -> None:

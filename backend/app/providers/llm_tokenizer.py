@@ -10,6 +10,7 @@ real request.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, cast, runtime_checkable
@@ -135,7 +136,16 @@ def tokenizer_authorized(tokenizer: object) -> bool:
     identifier = getattr(tokenizer, "tokenizer_id", "")
     if identifier == LLM_TOKENIZER_FALLBACK_ID:
         return False
-    return bool(getattr(tokenizer, "authorized", True))
+    # Authorization is an explicit reviewed-provider decision.  A missing
+    # marker is false; injected fakes must opt in rather than silently using
+    # the conservative or an unreviewed tokenizer.
+    return getattr(tokenizer, "authorized", False) is True
+
+
+def tokenizer_asset_hash_valid(value: object) -> bool:
+    """Return whether an asset identity is exactly lowercase SHA-256 hex."""
+
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 __all__ = [
@@ -152,4 +162,5 @@ __all__ = [
     "Utf8ByteLLMTokenizer",
     "count_llm_tokens",
     "tokenizer_authorized",
+    "tokenizer_asset_hash_valid",
 ]
