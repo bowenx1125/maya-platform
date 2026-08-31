@@ -102,6 +102,24 @@ def _query_manifest(
     )
 
 
+def _embedding_manifest(
+    policy: ProviderPolicySnapshotV1,
+    *,
+    scope_id: str = "publication-build-scope",
+    operation_revision: int = 1,
+) -> ExportManifestV1:
+    return ExportManifestV1(
+        scope_id=scope_id,
+        provider_operation="embedding",
+        model_key=FIXED_MODELS["embedding"],
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=_digest(scope_id + "-build"),
+        persona_spec_hash=_digest(scope_id + "-persona"),
+        fields=(ExportFieldV1("current_evidence_excerpt", _digest(scope_id + "-text")),),
+        operation_revision=operation_revision,
+    )
+
+
 def _service(
     *, policy: ProviderPolicySnapshotV1 | None = None
 ) -> tuple[
@@ -206,6 +224,7 @@ def test_query_manifest_discovery_is_exact_and_teacher_course_bound() -> None:
             expected_revision=3,
         ),
         actor_user_id="teacher",
+        manifest_ref=manifest.manifest_hash,
     )
     confirmed = service.list_embedding_query_manifests("teacher", scope_id=manifest.scope_id)
     assert confirmed.items[0].confirmed is True
@@ -217,6 +236,88 @@ def test_query_manifest_discovery_is_exact_and_teacher_course_bound() -> None:
     with pytest.raises(ProviderDisclosureError) as missing:
         service.list_embedding_query_manifests("teacher", scope_id="other-scope")
     assert missing.value.code == "forbidden"
+
+
+def test_publication_manifest_discovery_does_not_require_provider_operation() -> None:
+    policy = _policy()
+    agent_version_id = "agent-version-publication-1"
+    publication = _embedding_manifest(policy, operation_revision=4)
+    store = InMemoryProviderDisclosureStore(
+        policy,
+        _manifest(policy),
+        agent_version_id=agent_version_id,
+        publication_manifests=(publication,),
+    )
+    service = ProviderDisclosureService(store)
+
+    pending = service.list_embedding_manifests_for_agent_version(
+        "teacher",
+        agent_version_id=agent_version_id,
+    )
+    assert pending.model_dump(mode="json") == {
+        "agent_version_id": agent_version_id,
+        "items": [
+            {
+                "manifest_hash": publication.manifest_hash,
+                "confirmation_revision": 4,
+                "confirmed": False,
+            }
+        ],
+    }
+    # The compact publication DTO must not accidentally grow the query-turn
+    # field or any server-side policy/provider/ledger fields.
+    assert set(pending.items[0].model_dump(mode="json")) == {
+        "manifest_hash",
+        "confirmation_revision",
+        "confirmed",
+    }
+    assert not hasattr(pending.items[0], "turn_id")
+    encoded = json.dumps(pending.model_dump(mode="json"), sort_keys=True).casefold()
+    for forbidden in (
+        FIXED_MODELS["embedding"],
+        "endpoint",
+        "policy_hash",
+        "provider_operation",
+        "provider_operations",
+        "course_id",
+        "agent_version_id",
+    ):
+        if forbidden == "agent_version_id":
+            # The response envelope intentionally carries the requested opaque
+            # version id; no internal owner field is nested in each item.
+            continue
+        assert forbidden.casefold() not in encoded
+
+    # Confirmation is optional at discovery time and does not change the
+    # manifest's immutable revision.
+    service.confirm(
+        ProviderDataCallConfirmationRequestV1(
+            policy_hash=policy.policy_hash,
+            manifest_hash=publication.manifest_hash,
+            expected_revision=4,
+        ),
+        actor_user_id="teacher",
+        manifest_ref=publication.manifest_hash,
+    )
+    confirmed = service.list_embedding_manifests_for_agent_version(
+        "teacher",
+        agent_version_id=agent_version_id,
+    )
+    assert confirmed.items[0].confirmed is True
+    assert confirmed.items[0].confirmation_revision == 4
+
+    with pytest.raises(ProviderDisclosureError) as student:
+        service.list_embedding_manifests_for_agent_version(
+            "student",
+            agent_version_id=agent_version_id,
+        )
+    assert student.value.code == "forbidden"
+    with pytest.raises(ProviderDisclosureError) as missing:
+        service.list_embedding_manifests_for_agent_version(
+            "teacher",
+            agent_version_id="missing-agent-version",
+        )
+    assert missing.value.code == "not_found"
 
 
 @pytest.mark.parametrize(
@@ -577,6 +678,117 @@ def test_sql_query_manifest_listing_is_owner_bound_and_returns_safe_summary(
         assert student.value.code == "forbidden"
 
 
+def test_sql_publication_manifest_listing_is_version_and_course_bound_without_operation(
+    client: TestClient,
+) -> None:
+    app = client.app
+    database = app.state.database
+    _student, csrf = login(client, "student-bowen-1")
+    created = client.post(
+        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        headers={
+            "Origin": "http://testserver",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": "provider-publication-list-agent-0001",
+        },
+        json={"name": "Publication list Agent", "description": ""},
+    )
+    assert created.status_code == 201, created.text
+    version_id = created.json()["versions"][0]["id"]
+
+    second = client.post(
+        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        headers={
+            "Origin": "http://testserver",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": "provider-publication-list-agent-0002",
+        },
+        json={"name": "Publication list Agent 2", "description": ""},
+    )
+    assert second.status_code == 201, second.text
+    other_version_id = second.json()["versions"][0]["id"]
+
+    policy = _policy(snapshot_revision=12)
+    first_manifest = _embedding_manifest(
+        policy,
+        scope_id="publication-list-first",
+        operation_revision=7,
+    )
+    other_manifest = _embedding_manifest(
+        policy,
+        scope_id="publication-list-other",
+        operation_revision=8,
+    )
+    query_manifest = _query_manifest(policy, scope_id="publication-list-query")
+    repository = ProviderRepository(database)
+    policy_id = repository.save_policy_snapshot(policy)
+    repository.save_export_manifest(
+        first_manifest,
+        policy_snapshot_id=policy_id,
+        course_id=COURSE_ID,
+        group_id=GROUP_BOWEN_ID,
+        agent_version_id=version_id,
+    )
+    repository.save_export_manifest(
+        other_manifest,
+        policy_snapshot_id=policy_id,
+        course_id=COURSE_ID,
+        group_id=GROUP_BOWEN_ID,
+        agent_version_id=other_version_id,
+    )
+    # A query manifest for the same version must stay on the existing
+    # scope-based query route and must not appear in this publication list.
+    repository.save_export_manifest(
+        query_manifest,
+        policy_snapshot_id=policy_id,
+        course_id=COURSE_ID,
+        group_id=GROUP_BOWEN_ID,
+        agent_version_id=version_id,
+    )
+
+    with database.session() as db:
+        service = ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
+        pending = service.list_embedding_manifests_for_agent_version(
+            TEACHER_ID,
+            agent_version_id=version_id,
+        )
+        assert pending.model_dump(mode="json") == {
+            "agent_version_id": version_id,
+            "items": [
+                {
+                    "manifest_hash": first_manifest.manifest_hash,
+                    "confirmation_revision": 7,
+                    "confirmed": False,
+                }
+            ],
+        }
+
+        # No ProviderOperation row has been inserted; discovery is driven by
+        # the durable publication manifest itself.
+        assert (
+            db.scalar(
+                select(ProviderOperation.id).where(
+                    ProviderOperation.export_manifest_hash == first_manifest.manifest_hash
+                )
+            )
+            is None
+        )
+
+        with pytest.raises(ProviderDisclosureError) as student:
+            service.list_embedding_manifests_for_agent_version(
+                str(_student["user"]["id"]),
+                agent_version_id=version_id,
+            )
+        assert student.value.code == "forbidden"
+
+        with pytest.raises(ProviderDisclosureError) as missing:
+            service.list_embedding_manifests_for_agent_version(
+                TEACHER_ID,
+                agent_version_id="00000000-0000-4000-8000-000000000404",
+            )
+        assert missing.value.code == "not_found"
+
+
 def _route_app(service: ProviderDisclosureService) -> FastAPI:
     app = FastAPI()
     app.state.provider_disclosure_service = service
@@ -676,3 +888,45 @@ def test_router_lists_only_teacher_visible_query_manifests() -> None:
             }
         ],
     }
+
+
+def test_router_lists_publication_manifests_by_agent_version() -> None:
+    policy = _policy()
+    agent_version_id = "agent-version-router-publication"
+    publication = _embedding_manifest(policy, operation_revision=2)
+    service = ProviderDisclosureService(
+        InMemoryProviderDisclosureStore(
+            policy,
+            _manifest(policy),
+            agent_version_id=agent_version_id,
+            publication_manifests=(publication,),
+        )
+    )
+    app = _route_app(service)
+
+    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
+        user=SimpleNamespace(id="student")
+    )
+    with TestClient(app) as client:
+        forbidden = client.get(f"/provider/data-call/pending/agent-versions/{agent_version_id}")
+    assert forbidden.status_code == 403
+
+    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
+        user=SimpleNamespace(id="teacher")
+    )
+    with TestClient(app) as client:
+        response = client.get(f"/provider/data-call/pending/agent-versions/{agent_version_id}")
+        assert response.status_code == 200, response.text
+        assert response.json() == {
+            "agent_version_id": agent_version_id,
+            "items": [
+                {
+                    "manifest_hash": publication.manifest_hash,
+                    "confirmation_revision": 2,
+                    "confirmed": False,
+                }
+            ],
+        }
+
+        missing = client.get("/provider/data-call/pending/agent-versions/agent-version-missing")
+    assert missing.status_code == 404

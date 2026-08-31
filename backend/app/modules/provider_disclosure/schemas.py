@@ -91,6 +91,31 @@ class ProviderDataCallManifestListResponseV1(BaseModel):
     items: tuple[ProviderDataCallManifestSummaryV1, ...] = ()
 
 
+class ProviderDataCallPublicationManifestSummaryV1(BaseModel):
+    """One teacher-visible, exact embedding publication manifest.
+
+    Publication manifests are bound to an AgentVersion rather than a debate
+    turn.  The DTO intentionally carries only the CAS/status values needed by
+    the teacher confirmation flow; provider selectors, policy hashes, owner
+    IDs and server-side ledger fields remain private.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    manifest_hash: str = Field(pattern=_SHA256_PATTERN)
+    confirmation_revision: int = Field(ge=1)
+    confirmed: bool
+
+
+class ProviderDataCallPublicationManifestListResponseV1(BaseModel):
+    """Teacher-only list of exact embedding manifests for one AgentVersion."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    agent_version_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    items: tuple[ProviderDataCallPublicationManifestSummaryV1, ...] = ()
+
+
 class ProviderDataCallConfirmationRequestV1(BaseModel):
     """Teacher confirmation bound to the exact disclosure revision and hashes."""
 
@@ -117,6 +142,14 @@ ProviderDataCallDisclosure = ProviderDataCallDisclosureV1
 ProviderDataCallDisclosureResponse = ProviderDataCallDisclosureResponseV1
 ProviderDataCallManifestSummary = ProviderDataCallManifestSummaryV1
 ProviderDataCallManifestListResponse = ProviderDataCallManifestListResponseV1
+ProviderDataCallPublicationManifestSummary = ProviderDataCallPublicationManifestSummaryV1
+ProviderDataCallPublicationManifestListResponse = ProviderDataCallPublicationManifestListResponseV1
+# AgentVersion naming aliases keep the dedicated route contract discoverable
+# without introducing a second wire shape.
+ProviderDataCallAgentVersionManifestSummaryV1 = ProviderDataCallPublicationManifestSummaryV1
+ProviderDataCallAgentVersionManifestListResponseV1 = (
+    ProviderDataCallPublicationManifestListResponseV1
+)
 ProviderDataCallConfirmationRequest = ProviderDataCallConfirmationRequestV1
 
 
@@ -133,4 +166,10 @@ __all__ = [
     "ProviderDataCallManifestListResponseV1",
     "ProviderDataCallManifestSummary",
     "ProviderDataCallManifestSummaryV1",
+    "ProviderDataCallPublicationManifestListResponse",
+    "ProviderDataCallPublicationManifestListResponseV1",
+    "ProviderDataCallPublicationManifestSummary",
+    "ProviderDataCallPublicationManifestSummaryV1",
+    "ProviderDataCallAgentVersionManifestListResponseV1",
+    "ProviderDataCallAgentVersionManifestSummaryV1",
 ]

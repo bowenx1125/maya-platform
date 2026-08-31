@@ -49,11 +49,14 @@ from .schemas import (
     ProviderDataCallDisclosureV1,
     ProviderDataCallManifestListResponseV1,
     ProviderDataCallManifestSummaryV1,
+    ProviderDataCallPublicationManifestListResponseV1,
+    ProviderDataCallPublicationManifestSummaryV1,
 )
 
 PROVIDER_DISCLOSURE_VERSION = "ProviderDataCallV1"
 SUPPLIER_DISPLAY_NAME = "Alibaba Cloud Model Studio"
 STORAGE_FACT = "The supplier stores call data as required by applicable law."
+EMBEDDING_OPERATION = "embedding"
 EMBEDDING_QUERY_OPERATION = "embedding_query"
 
 _PURPOSES: Mapping[str, str] = {
@@ -155,6 +158,12 @@ class ProviderDisclosureStore(Protocol):
     def is_teacher_for_scope(self, user_id: str, scope_id: str) -> bool:
         """Return whether the account teaches the exact scope owner course."""
 
+    def agent_version_exists(self, agent_version_id: str) -> bool:
+        """Return whether an AgentVersion exists, independent of manifests."""
+
+    def is_teacher_for_agent_version(self, user_id: str, agent_version_id: str) -> bool:
+        """Return whether the account teaches the AgentVersion's exact course."""
+
     def list_export_manifests(
         self,
         *,
@@ -165,6 +174,14 @@ class ProviderDisclosureStore(Protocol):
 
     def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
         """Return a safe opaque turn identity when the ledger provides one."""
+
+    def list_export_manifests_for_agent_version(
+        self,
+        *,
+        agent_version_id: str,
+        provider_operation: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        """Return owner-bound manifests for one AgentVersion and operation."""
 
 
 def _blocked(code: str = "provider_preflight_blocked") -> ProviderDisclosureError:
@@ -301,6 +318,100 @@ class ProviderDisclosureService:
             scope_id=scope_id,
             items=tuple(summaries),
         )
+
+    def list_embedding_manifests_for_agent_version(
+        self,
+        actor_user_id: str,
+        *,
+        agent_version_id: str,
+    ) -> ProviderDataCallPublicationManifestListResponseV1:
+        """List teacher-visible publication manifests for one AgentVersion.
+
+        Publication manifests are durable before the first embedding operation
+        is created.  The lookup therefore starts from the exact AgentVersion
+        owner relation and never joins ``ProviderOperation``; an unconfirmed
+        manifest remains discoverable so the teacher can review and confirm it.
+        """
+
+        if not isinstance(agent_version_id, str) or not _SAFE_OPAQUE_ID_RE.fullmatch(
+            agent_version_id
+        ):
+            raise ProviderDisclosureError("not_found", "The requested AgentVersion was not found.")
+
+        exists = getattr(self.store, "agent_version_exists", None)
+        if not callable(exists):
+            raise _blocked("provider_agent_version_lookup_unavailable")
+        try:
+            version_exists = bool(exists(agent_version_id))
+        except Exception as exc:
+            raise _blocked("provider_agent_version_lookup_unavailable") from exc
+        if not version_exists:
+            raise ProviderDisclosureError("not_found", "The requested AgentVersion was not found.")
+
+        authorizer = getattr(self.store, "is_teacher_for_agent_version", None)
+        if not callable(authorizer):
+            raise _blocked("provider_manifest_authorization_unavailable")
+        try:
+            allowed = bool(authorizer(actor_user_id, agent_version_id))
+        except Exception as exc:
+            raise _blocked("provider_manifest_authorization_unavailable") from exc
+        if not allowed:
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+
+        list_manifests = getattr(self.store, "list_export_manifests_for_agent_version", None)
+        if not callable(list_manifests):
+            raise _blocked("provider_manifest_listing_unavailable")
+        try:
+            manifests = tuple(
+                list_manifests(
+                    agent_version_id=agent_version_id,
+                    provider_operation=EMBEDDING_OPERATION,
+                )
+            )
+        except ProviderDisclosureError:
+            raise
+        except Exception as exc:
+            raise _blocked("provider_manifest_listing_unavailable") from exc
+
+        summaries: list[ProviderDataCallPublicationManifestSummaryV1] = []
+        for manifest in manifests:
+            if not isinstance(manifest, ExportManifestV1):
+                raise _blocked("provider_manifest_invalid")
+            if manifest.provider_operation != EMBEDDING_OPERATION:
+                raise _blocked("provider_manifest_listing_invalid")
+
+            # Resolve every row by its own immutable policy and manifest hash.
+            # This keeps a publication listing correct when the configured
+            # current policy has advanced since the manifest was created.
+            policy, exact_manifest = self._load(
+                policy_ref=manifest.policy_hash,
+                manifest_ref=manifest.manifest_hash,
+            )
+            if exact_manifest != manifest:
+                raise _blocked("provider_manifest_listing_invalid")
+            try:
+                confirmation = self.store.get_export_confirmation(manifest.manifest_hash)
+            except Exception as exc:
+                raise _blocked("provider_confirmation_unavailable") from exc
+            revision = self._revision(manifest)
+            summaries.append(
+                ProviderDataCallPublicationManifestSummaryV1(
+                    manifest_hash=manifest.manifest_hash,
+                    confirmation_revision=revision,
+                    confirmed=confirmation is not None
+                    and self._confirmation_matches(confirmation, policy, manifest, revision),
+                )
+            )
+
+        summaries.sort(key=lambda item: item.manifest_hash)
+        return ProviderDataCallPublicationManifestListResponseV1(
+            agent_version_id=agent_version_id,
+            items=tuple(summaries),
+        )
+
+    # Descriptive alias used by callers that name the operation rather than
+    # the underlying AgentVersion lookup.
+    list_embedding_publication_manifests = list_embedding_manifests_for_agent_version
 
     def confirm(
         self,
@@ -619,12 +730,21 @@ class InMemoryProviderDisclosureStore:
         manifest: ExportManifestV1,
         *,
         teacher_ids: tuple[str, ...] = ("teacher",),
+        agent_version_id: str | None = None,
+        publication_manifests: tuple[ExportManifestV1, ...] = (),
     ) -> None:
         self.policy = policy
         self.manifest = manifest
         self.teacher_ids = frozenset(teacher_ids)
+        self.agent_version_id = agent_version_id
+        self.publication_manifests = tuple(publication_manifests)
+        self.manifests: dict[str, ExportManifestV1] = {manifest.manifest_hash: manifest}
+        self.manifests.update({item.manifest_hash: item for item in self.publication_manifests})
         self.confirmations: dict[str, ExportConfirmationV1] = {}
-        self.confirmation_manifest_ids: dict[str, str] = {manifest.manifest_hash: "manifest-1"}
+        self.confirmation_manifest_ids: dict[str, str] = {
+            item.manifest_hash: f"manifest-{index}"
+            for index, item in enumerate(self.manifests.values(), start=1)
+        }
         self._lock = RLock()
 
     def get_policy_snapshot(self, reference: str | None = None) -> ProviderPolicySnapshotV1 | None:
@@ -636,9 +756,11 @@ class InMemoryProviderDisclosureStore:
         return self.policy
 
     def get_export_manifest(self, reference: str | None = None) -> ExportManifestV1 | None:
-        if reference is None or reference in {self.manifest.scope_id, self.manifest.manifest_hash}:
+        if reference is None:
             return self.manifest
-        return None
+        if reference in {self.manifest.scope_id, self.manifest.manifest_hash}:
+            return self.manifest
+        return self.manifests.get(reference)
 
     def get_current_export_manifest(self) -> ExportManifestV1:
         return self.manifest
@@ -658,7 +780,8 @@ class InMemoryProviderDisclosureStore:
         expected_revision: int,
     ) -> str:
         del manifest_id
-        if expected_revision != self.manifest.operation_revision:
+        manifest = self.manifests.get(confirmation.manifest_hash)
+        if manifest is None or expected_revision != manifest.operation_revision:
             raise ProviderDisclosureStoreError("provider disclosure revision is stale")
         with self._lock:
             existing = self.confirmations.get(confirmation.manifest_hash)
@@ -672,7 +795,7 @@ class InMemoryProviderDisclosureStore:
         return user_id in self.teacher_ids
 
     def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
-        return user_id in self.teacher_ids and manifest_hash == self.manifest.manifest_hash
+        return user_id in self.teacher_ids and manifest_hash in self.manifests
 
     def is_teacher_for_scope(self, user_id: str, scope_id: str) -> bool:
         return (
@@ -680,6 +803,12 @@ class InMemoryProviderDisclosureStore:
             and self.manifest.scope_id == scope_id
             and self.manifest.provider_operation == EMBEDDING_QUERY_OPERATION
         )
+
+    def agent_version_exists(self, agent_version_id: str) -> bool:
+        return self.agent_version_id == agent_version_id
+
+    def is_teacher_for_agent_version(self, user_id: str, agent_version_id: str) -> bool:
+        return user_id in self.teacher_ids and self.agent_version_id == agent_version_id
 
     def list_export_manifests(
         self,
@@ -694,6 +823,24 @@ class InMemoryProviderDisclosureStore:
             return ()
         return (self.manifest,)
 
+    def list_export_manifests_for_agent_version(
+        self,
+        *,
+        agent_version_id: str,
+        provider_operation: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        if self.agent_version_id != agent_version_id:
+            return ()
+        candidates = (self.manifest, *self.publication_manifests)
+        seen: set[str] = set()
+        manifests: list[ExportManifestV1] = []
+        for item in candidates:
+            if item.provider_operation != provider_operation or item.manifest_hash in seen:
+                continue
+            seen.add(item.manifest_hash)
+            manifests.append(item)
+        return tuple(manifests)
+
     def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
         del manifest_hash
         return None
@@ -706,6 +853,7 @@ class InMemoryProviderDisclosureStore:
         with self._lock:
             self.policy = policy
             self.manifest = manifest
+            self.manifests[manifest.manifest_hash] = manifest
             self.confirmation_manifest_ids[manifest.manifest_hash] = (
                 f"manifest-{len(self.confirmation_manifest_ids) + 1}"
             )
@@ -841,6 +989,30 @@ class SqlAlchemyProviderDisclosureStore:
             is not None
         )
 
+    def agent_version_exists(self, agent_version_id: str) -> bool:
+        return (
+            self.db.scalar(select(AgentVersion.id).where(AgentVersion.id == agent_version_id))
+            is not None
+        )
+
+    def is_teacher_for_agent_version(self, user_id: str, agent_version_id: str) -> bool:
+        """Authorize through the exact AgentVersion -> course ownership chain."""
+
+        return (
+            self.db.scalar(
+                select(AgentVersion.id)
+                .join(Agent, Agent.id == AgentVersion.agent_id)
+                .join(Group, Group.id == Agent.group_id)
+                .join(CourseMember, CourseMember.course_id == Group.course_id)
+                .where(
+                    AgentVersion.id == agent_version_id,
+                    CourseMember.user_id == user_id,
+                    CourseMember.role == "teacher",
+                )
+            )
+            is not None
+        )
+
     def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
         return (
             self.db.scalar(
@@ -913,6 +1085,53 @@ class SqlAlchemyProviderDisclosureStore:
             .where(
                 ProviderExportManifest.scope_id == scope_id,
                 ProviderExportManifest.provider_operation == provider_operation,
+            )
+            .order_by(
+                ProviderExportManifest.created_at.asc(),
+                ProviderExportManifest.manifest_hash.asc(),
+            )
+        ).all()
+        manifests: list[ExportManifestV1] = []
+        for manifest_hash in hashes:
+            try:
+                manifest = self._control.get_export_manifest(str(manifest_hash))
+            except Exception as exc:
+                raise ProviderDisclosureStoreError("provider manifest row is invalid") from exc
+            if manifest is None:
+                raise ProviderDisclosureStoreError("provider manifest row is missing")
+            manifests.append(manifest)
+        return tuple(manifests)
+
+    def list_export_manifests_for_agent_version(
+        self,
+        *,
+        agent_version_id: str,
+        provider_operation: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        """Load only owner-bound manifests for one AgentVersion.
+
+        The query intentionally does not join ``ProviderOperation``.  The
+        publication manifest is persisted before its first embedding batch,
+        so requiring an operation row would hide the exact unconfirmed item a
+        teacher must discover and review.
+        """
+
+        hashes = self.db.scalars(
+            select(ProviderExportManifest.manifest_hash)
+            .join(
+                AgentVersion,
+                AgentVersion.id == ProviderExportManifest.agent_version_id,
+            )
+            .join(Agent, Agent.id == AgentVersion.agent_id)
+            .join(Group, Group.id == Agent.group_id)
+            .where(
+                ProviderExportManifest.agent_version_id == agent_version_id,
+                ProviderExportManifest.provider_operation == provider_operation,
+                ProviderExportManifest.course_id.is_not(None),
+                ProviderExportManifest.group_id.is_not(None),
+                ProviderExportManifest.agent_version_id.is_not(None),
+                ProviderExportManifest.group_id == Agent.group_id,
+                ProviderExportManifest.course_id == Group.course_id,
             )
             .order_by(
                 ProviderExportManifest.created_at.asc(),

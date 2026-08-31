@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 
 from app.core.errors import Error, PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
@@ -14,6 +14,7 @@ from .schemas import (
     ProviderDataCallConfirmationRequestV1,
     ProviderDataCallDisclosureResponseV1,
     ProviderDataCallManifestListResponseV1,
+    ProviderDataCallPublicationManifestListResponseV1,
 )
 from .service import ProviderDisclosureError, ProviderDisclosureService
 
@@ -26,7 +27,12 @@ def get_provider_disclosure_service(request: Request) -> ProviderDisclosureServi
     service = getattr(request.app.state, "provider_disclosure_service", None)
     if service is None or any(
         not callable(getattr(service, method, None))
-        for method in ("disclose", "confirm", "list_embedding_query_manifests")
+        for method in (
+            "disclose",
+            "confirm",
+            "list_embedding_query_manifests",
+            "list_embedding_manifests_for_agent_version",
+        )
     ):
         raise invalid_state("Provider disclosure is not configured.")
     return cast(ProviderDisclosureService, service)
@@ -111,6 +117,39 @@ def provider_data_call_manifests(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+@router.get(
+    "/pending/agent-versions/{agent_version_id}",
+    response_model=ProviderDataCallPublicationManifestListResponseV1,
+    operation_id="listProviderDataCallPublicationManifests",
+    responses={
+        401: {"model": Error, "description": "Authentication is required."},
+        403: {"model": Error, "description": "Teacher authorization is required."},
+        404: {"model": Error, "description": "AgentVersion was not found."},
+        422: {"model": Error, "description": "Provider manifest listing is blocked."},
+    },
+)
+def provider_data_call_agent_version_manifests(
+    agent_version_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    ),
+    context: AuthContext = Depends(require_auth),
+    service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
+) -> ProviderDataCallPublicationManifestListResponseV1:
+    """List teacher-visible ``embedding`` publication manifests for one version."""
+
+    try:
+        return service.list_embedding_manifests_for_agent_version(
+            str(context.user.id),
+            agent_version_id=agent_version_id,
+        )
+    except ProviderDisclosureError as error:
+        _raise_domain_error(error)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 @router.post(
     "/disclosure/confirm",
     response_model=ProviderDataCallDisclosureResponseV1,
@@ -149,6 +188,7 @@ __all__ = [
     "get_provider_disclosure_service",
     "provider_data_call_disclosure",
     "provider_data_call_manifests",
+    "provider_data_call_agent_version_manifests",
     "confirm_provider_data_call_disclosure",
     "provider_disclosure_router",
     "router",
