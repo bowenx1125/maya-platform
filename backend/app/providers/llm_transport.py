@@ -45,6 +45,17 @@ class LLMAcceptanceUnknown(LLMTransportError):
         super().__init__(message)
 
 
+class LLMHTTPRejected(LLMTransportError):
+    """A received HTTP status that is charged but never retried."""
+
+    acceptance: TransportAcceptance = "accepted"
+    safe_error_code = "llm_http_rejected"
+
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+        super().__init__()
+
+
 # Descriptive aliases used by callers that name the classification first.
 LLMTransportAcceptanceUnknown = LLMAcceptanceUnknown
 LLMAcceptanceUnknownError = LLMAcceptanceUnknown
@@ -164,6 +175,7 @@ __all__ = [
     "LLM_TOTAL_TIMEOUT_SECONDS",
     "LLMAcceptanceUnknown",
     "LLMAcceptanceUnknownError",
+    "LLMHTTPRejected",
     "LLMTransport",
     "LLMTransportAcceptanceUnknown",
     "LLMTransportAcceptanceUnknownError",

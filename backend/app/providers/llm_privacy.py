@@ -72,10 +72,12 @@ class LLMOutboundScanResult:
 class LLMOutboundManifestV1:
     """Pure manifest check used before a runtime persists/export-confirms."""
 
-    field_classes: tuple[str, ...] = tuple(sorted(LLM_REQUIRED_OUTBOUND_FIELD_CLASSES))
-    max_attempts: int = 1
-    repair_policy_version: str | None = None
-    repair_policy_hash: str | None = None
+    field_classes: tuple[str, ...] = tuple(
+        sorted(LLM_REQUIRED_OUTBOUND_FIELD_CLASSES | {LLM_REPAIR_FEEDBACK_FIELD_CLASS})
+    )
+    max_attempts: int = 2
+    repair_policy_version: str | None = LLM_REPAIR_FEEDBACK_POLICY_VERSION
+    repair_policy_hash: str | None = LLM_REPAIR_FEEDBACK_POLICY_HASH
 
     def __post_init__(self) -> None:
         if isinstance(self.max_attempts, bool) or not isinstance(self.max_attempts, int):

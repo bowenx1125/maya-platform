@@ -560,6 +560,8 @@ map_provider_turn_output = map_provider_output
 validate_provider_output = validate_llm_output
 parse_provider_output = parse_llm_output_json
 RepairFeedback = RepairFeedbackV1
+LLMProviderOutputV1 = MappedLLMTurnV1
+ProviderTurnOutputV1 = MappedLLMTurnV1
 
 
 __all__ = [
@@ -572,6 +574,8 @@ __all__ = [
     "LLM_TURN_OUTPUT_SCHEMA_NAME",
     "LLM_TURN_OUTPUT_SCHEMA_VERSION",
     "MappedLLMTurnV1",
+    "LLMProviderOutputV1",
+    "ProviderTurnOutputV1",
     "REPAIR_CODES",
     "RepairFeedback",
     "RepairFeedbackV1",

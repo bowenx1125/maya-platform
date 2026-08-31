@@ -258,10 +258,9 @@ def debate_budget_cap(agent_count: int, *, round_count: int = 2) -> LLMBudgetCap
         raise LLMPriceCardError("agent count is invalid")
     if round_count != 2:
         raise LLMPriceCardError("the LLM-A cap is frozen for two rounds")
-    requests = agent_count * round_count
-    if requests <= LLM_SMALL_DEBATE_MAX_ATTEMPTS:
+    if agent_count == 2:
         return LLMBudgetCapV1(LLM_SMALL_DEBATE_MAX_ATTEMPTS, LLM_SMALL_DEBATE_MAX_COST)
-    if requests <= LLM_FULL_DEBATE_MAX_ATTEMPTS:
+    if agent_count == 5:
         return LLMBudgetCapV1(LLM_FULL_DEBATE_MAX_ATTEMPTS, LLM_FULL_DEBATE_MAX_COST)
     raise LLMPriceCardError("debate exceeds the LLM-A Agent cap")
 

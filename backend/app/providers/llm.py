@@ -912,6 +912,7 @@ from app.providers.llm_tokenizer import (  # noqa: E402
 from app.providers.llm_transport import (  # noqa: E402
     HttpxLLMTransport,
     LLMAcceptanceUnknown,
+    LLMHTTPRejected,
     LLMTransport,
     LLMTransportError,
     LLMTransportNotSent,
@@ -926,6 +927,7 @@ __all__ += [
     "FixedDashScopeLLMAdapter",
     "HttpxLLMTransport",
     "LLMAcceptanceUnknown",
+    "LLMHTTPRejected",
     "LLMAdapter",
     "LLMAdapterError",
     "LLMBudgetCapV1",

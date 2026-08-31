@@ -75,11 +75,14 @@ from .llm_transport import (
 )
 
 LLM_ENDPOINT_PATH: Final = "/compatible-mode/v1/chat/completions"
+DEFAULT_DASHSCOPE_LLM_ENDPOINT_PATH: Final = LLM_ENDPOINT_PATH
 LLM_PROVIDER_OPERATION: Final = "llm_debate_turn"
 LLM_PROMPT_CONTRACT_VERSION: Final = "prompt_request_v1"
 LLM_CONNECT_TIMEOUT: Final = 5.0
 LLM_TOTAL_TIMEOUT: Final = 120.0
 LLM_RESERVED_OUTPUT_TOKENS: Final = LLM_RESERVED_OUTPUT_TOKEN_CAP
+REAL_LLM_MODEL: Final = LLM_MODEL_KEY
+REAL_LLM_REGION: Final = LLM_REGION
 
 AttemptAcceptance = Literal["not_sent", "accepted", "acceptance_unknown"]
 AttemptStatus = Literal["succeeded", "failed", "not_sent", "acceptance_unknown"]
@@ -589,8 +592,9 @@ class DashScopeLLMAdapter:
             raise LLMAdapterError(code=exc.code) from exc
         if attempt_no == 1 and prompt.request.repair_feedback is not None:
             raise LLMAdapterError(code="llm_repair_feedback_unexpected")
-        if attempt_no == 2 and prompt.request.repair_feedback is None:
-            raise LLMAdapterError(code="llm_repair_feedback_required")
+        # Attempt two is also the proven-not-sent transport retry.  In that
+        # case the caller deliberately supplies the unchanged base request;
+        # structure repair supplies the optional closed feedback field.
         schema = load_llm_turn_output_schema()
         if not isinstance(schema, dict):  # defensive typing for the body below
             raise LLMAdapterError(code="llm_schema_invalid")
@@ -1116,11 +1120,15 @@ __all__ = [
     "LLMAdapterError",
     "LLM_ENDPOINT_PATH",
     "LLM_PROVIDER_OPERATION",
+    "DEFAULT_DASHSCOPE_LLM_ENDPOINT_PATH",
     "LLMRequest",
     "LLMRequestV1",
     "LLMResponse",
     "LLMResponseError",
+    "LLM_REPAIR_FEEDBACK_SCHEMA_HASH",
     "LLM_TURN_OUTPUT_SCHEMA_HASH",
+    "REAL_LLM_MODEL",
+    "REAL_LLM_REGION",
     "LLMUsage",
     "LLMUsageV1",
     "LLMValidatedResultV1",
