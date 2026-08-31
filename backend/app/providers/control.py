@@ -433,6 +433,7 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "opaque_local_id",
         "public_agent_name",
         "anonymous_insight_summary",
+        "aggregate_vote_count",
         "current_tts_speech",
         "server_authored_structure_repair_feedback",
     }

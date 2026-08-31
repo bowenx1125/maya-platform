@@ -115,7 +115,6 @@ class ReportParticipant(_ClosedModel):
 
     slot: Slot
     agent_name: str = Field(min_length=1, max_length=160)
-    position_summary: str = Field(min_length=1, max_length=1600)
 
 
 class ReportSpeech(_ClosedModel):
@@ -227,7 +226,7 @@ def _validate_request_semantics(request: ReportRequest) -> None:
     text_values.extend(
         value
         for participant in request.participants
-        for value in (participant.agent_name, participant.position_summary)
+        for value in (participant.agent_name,)
     )
     text_values.extend(speech.speech for speech in request.speeches)
     text_values.extend(source.excerpt for source in request.sources)

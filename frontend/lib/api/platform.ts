@@ -72,6 +72,8 @@ export type ProviderDataCallManifestListResponse =
   components["schemas"]["ProviderDataCallManifestListResponseV1"];
 export type ProviderDataCallPublicationManifestListResponse =
   components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
+export type ProviderDataCallReportManifestListResponse =
+  components["schemas"]["ProviderDataCallReportManifestListResponseV1"];
 
 /**
  * Teacher-only, debate-scoped approval status for LLM turns.
@@ -137,6 +139,10 @@ export type DemoRuntimeStatus = {
 };
 export type DebateDraftRequest =
   operations["createDebate"]["requestBody"]["content"]["application/json"];
+export type ContinueRealReportRequest =
+  operations["continueRealReport"]["requestBody"]["content"]["application/json"];
+export type ContinueRealReportResponse =
+  operations["continueRealReport"]["responses"][202]["content"]["application/json"];
 export type DebateDraftUpdateRequest =
   operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
 export type AdvancePlaybackRequest =
@@ -765,6 +771,16 @@ export class PlatformApi {
           params: { path: { agent_version_id: agentVersionId } },
         },
       ),
+    );
+  }
+
+  async listProviderDataCallReportManifests(
+    debateId: string,
+  ): Promise<ProviderDataCallReportManifestListResponse> {
+    return unwrap(
+      await this.client.GET("/provider/data-call/pending/reports/{debate_id}", {
+        params: { path: { debate_id: debateId } },
+      }),
     );
   }
 
@@ -1417,6 +1433,25 @@ export class PlatformApi {
           },
         },
       )) as unknown as ClientResult<ReportRevision>,
+    );
+  }
+
+  async continueRealReport(
+    debateId: string,
+    revisionId: string,
+    body: ContinueRealReportRequest,
+  ): Promise<ContinueRealReportResponse> {
+    return unwrap(
+      await this.client.POST(
+        "/debates/{debate_id}/report/revisions/{revision_id}/continue",
+        {
+          params: {
+            path: { debate_id: debateId, revision_id: revisionId },
+            header: { "X-CSRF-Token": this.csrfToken ?? "" },
+          },
+          body,
+        },
+      ),
     );
   }
 

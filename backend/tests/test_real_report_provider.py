@@ -37,16 +37,14 @@ def _request() -> ReportRequest:
         {
             "topic": "How can classrooms share cultural knowledge responsibly?",
             "participants": [
-                {
-                    "slot": "A",
-                    "agent_name": "River Keeper",
-                    "position_summary": "Protect shared resources through careful stewardship.",
-                },
-                {
-                    "slot": "B",
-                    "agent_name": "Community Gardener",
-                    "position_summary": "Pair open learning with consent and context.",
-                },
+            {
+                "slot": "A",
+                "agent_name": "River Keeper",
+            },
+            {
+                "slot": "B",
+                "agent_name": "Community Gardener",
+            },
             ],
             "speeches": [
                 {
@@ -232,6 +230,7 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
     assert [message["role"] for message in messages] == ["system", "user"]
     assert messages[0]["content"] == prepared.system_message.content
     assert messages[1]["content"] == prepared.user_message.content
+    assert "position_summary" not in messages[1]["content"]
     wrapper = cast(dict[str, object], transport.last_json["response_format"])
     schema_wrapper = cast(dict[str, object], wrapper["json_schema"])
     assert wrapper["type"] == "json_schema"
@@ -240,6 +239,21 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
     assert schema_wrapper["schema"]
     assert len(prepared.request_hash) == 64
     assert provider.build_request(_request()).request_hash == prepared.request_hash
+
+
+def test_execute_prepared_sends_frozen_wire_without_rebuilding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = FakeTransport(_response())
+    provider = _provider(transport)
+    prepared = provider.build_request(_request())
+
+    def fail_build(_provider: RealReportProvider, _value: object) -> object:
+        raise AssertionError("prepared execution must not rebuild the wire")
+
+    monkeypatch.setattr(RealReportProvider, "build_request", fail_build)
+    assert isinstance(provider.execute_prepared(prepared), ServiceReportSectionOutput)
+    assert transport.calls == 1
 
 
 def test_request_hash_does_not_change_with_authorization_secret() -> None:

@@ -279,10 +279,11 @@ class RealReportProvider:
     prepare = build_request
     prepare_request = build_request
 
-    def execute(self, value: ReportRequest | Mapping[str, object]) -> ReportSectionOutput:
-        """Make one transport call and return only validated report sections."""
+    def execute_prepared(self, prepared: ReportWireRequest) -> ReportSectionOutput:
+        """Send one already-built wire request without rebuilding it."""
 
-        prepared = self.build_request(value)
+        if not isinstance(prepared, ReportWireRequest):
+            raise ReportProviderError("report_wire_invalid")
         transport = self.transport
         if transport is None:  # pragma: no cover - guarded by __post_init__
             raise ReportProviderError("report_transport_missing")
@@ -310,6 +311,11 @@ class RealReportProvider:
         if self.price_card is None:  # pragma: no cover - build_request rejects first
             raise ReportProviderError("report_price_card_required")
         return _response_sections(payload, price_card=self.price_card, prepared=prepared)
+
+    def execute(self, value: ReportRequest | Mapping[str, object]) -> ReportSectionOutput:
+        """Build once, then make one transport call."""
+
+        return self.execute_prepared(self.build_request(value))
 
     generate = execute
     complete = execute

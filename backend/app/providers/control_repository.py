@@ -1312,6 +1312,53 @@ class ProviderRepository:
             state="succeeded",
         )
 
+    def complete_report_in_session(
+        self,
+        db: Session,
+        operation_id: str,
+        *,
+        response_hash: str,
+    ) -> ProviderOperation:
+        """Stage Real Report success on the caller's transaction.
+
+        Reserve/send are intentionally committed by the narrow control
+        repository before transport.  The report revision, current-success
+        pointer, Job and this final operation/reservation promotion must share
+        the caller Session so a publication rollback cannot leave ``succeeded``.
+        """
+
+        if not _SHA256_RE.fullmatch(response_hash):
+            raise ProviderRepositoryError("staged response hash is invalid")
+        operation = db.get(ProviderOperation, operation_id)
+        if operation is None:
+            raise OperationStateError("provider operation does not exist")
+        # The operation may have been read before the independent reserve/send
+        # CAS. Refresh it before applying the caller-owned final CAS fence.
+        db.refresh(operation)
+        if (
+            operation.provider_operation != "llm_maya_report"
+            or operation.state != "sending"
+            or operation.request_count != 1
+            or operation.charged_request_count != 1
+            or operation.staged_response_hash is not None
+        ):
+            raise OperationStateError("Real Report operation is not sending")
+        reservation = db.scalar(
+            select(ProviderReservation).where(
+                ProviderReservation.operation_id == operation_id,
+            )
+        )
+        if reservation is None or reservation.state != "sending":
+            raise OperationStateError("Real Report reservation is not sending")
+        now = self._now()
+        operation.staged_response_hash = response_hash
+        operation.state = "succeeded"
+        operation.safe_error_code = None
+        operation.updated_at = now
+        reservation.state = "succeeded"
+        reservation.updated_at = now
+        return operation
+
     def mark_failed(
         self, operation_id: str, *, safe_error_code: str = "provider_failed"
     ) -> ProviderOperationV1:

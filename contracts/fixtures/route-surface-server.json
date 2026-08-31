@@ -2779,6 +2779,56 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/report/revisions/{revision_id}/continue": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "continueRealReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinueRealReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Continue one already-confirmed and attached Real Report operation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContinueRealReportResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/report/download": {
       "get": {
         "tags": [
@@ -3164,6 +3214,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProviderDataCallPublicationManifestListResponseV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/provider/data-call/pending/reports/{debate_id}": {
+      "get": {
+        "tags": [
+          "Provider"
+        ],
+        "operationId": "listProviderDataCallReportManifests",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]+$",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teacher-only exact prepared Real Report manifests for one Debate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderDataCallReportManifestListResponseV1"
                 }
               }
             }
@@ -3582,6 +3674,9 @@
                 "public_predecessor_speech",
                 "current_evidence_excerpt",
                 "opaque_local_id",
+                "public_agent_name",
+                "anonymous_insight_summary",
+                "aggregate_vote_count",
                 "current_tts_speech",
                 "server_authored_structure_repair_feedback"
               ]
@@ -3768,6 +3863,209 @@
             "items": {
               "$ref": "#/components/schemas/ProviderDataCallPublicationManifestSummaryV1"
             }
+          }
+        }
+      },
+      "ProviderDataCallReportManifestSummaryV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "manifest_hash",
+          "confirmation_revision",
+          "confirmed"
+        ],
+        "properties": {
+          "report_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "manifest_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "confirmation_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProviderDataCallReportManifestListResponseV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "debate_id"
+        ],
+        "properties": {
+          "debate_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,255}$"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderDataCallReportManifestSummaryV1"
+            }
+          }
+        }
+      },
+      "ContinueRealReportRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "manifest_hash",
+          "call_no"
+        ],
+        "properties": {
+          "manifest_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "call_no": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          }
+        }
+      },
+      "ContinueRealReportResponse": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ContinueGeneratingReportRevision"
+          },
+          {
+            "$ref": "#/components/schemas/ContinueReadyReportRevision"
+          },
+          {
+            "$ref": "#/components/schemas/ContinueFailedReportRevision"
+          }
+        ]
+      },
+      "ContinueGeneratingReportRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "generating"
+          },
+          "english_markdown": {
+            "type": "null"
+          },
+          "word_count": {
+            "type": "null"
+          },
+          "translated_markdown": {
+            "type": "null"
+          },
+          "safe_error_code": {
+            "type": "null"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "ContinueReadyReportRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "english_markdown",
+          "word_count",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "ready"
+          },
+          "english_markdown": {
+            "type": "string",
+            "minLength": 1
+          },
+          "word_count": {
+            "type": "integer",
+            "minimum": 600,
+            "maximum": 900
+          },
+          "translated_markdown": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "safe_error_code": {
+            "type": "null"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          }
+        }
+      },
+      "ContinueFailedReportRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision_no",
+          "status",
+          "safe_error_code",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "failed"
+          },
+          "english_markdown": {
+            "type": "null"
+          },
+          "word_count": {
+            "type": "null"
+          },
+          "translated_markdown": {
+            "type": "null"
+          },
+          "safe_error_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/IsoTime"
           }
         }
       },

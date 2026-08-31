@@ -64,6 +64,8 @@ const implementedOperationIds = new Set([
   "listDebates",
   "createDebate",
   "getDebate",
+  "continueRealReport",
+  "listProviderDataCallReportManifests",
   "updateDebateDraft",
   "startDebate",
   "advanceDebatePlayback",

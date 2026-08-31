@@ -66,7 +66,7 @@ from .policy import (
     mock_barrage_insight_v1,
     validate_insight_partition,
 )
-from .real_prompt import REPORT_SYSTEM_PROMPT
+from .real_prompt import REPORT_SYSTEM_PROMPT, ReportWireRequest
 from .real_provider import REAL_REPORT_MODEL, ReportProviderError
 from .real_schema import (
     ReportInsight,
@@ -126,9 +126,9 @@ _REPORT_PADDING_SENTENCE = (
 class RealReportProviderPort(Protocol):
     """Narrow provider seam used by the report worker and fake transports."""
 
-    def build_request(self, value: ReportRequest) -> Any: ...
+    def build_request(self, value: ReportRequest) -> ReportWireRequest: ...
 
-    def execute(self, value: ReportRequest) -> ReportSectionOutput: ...
+    def execute_prepared(self, value: ReportWireRequest) -> ReportSectionOutput: ...
 
 
 class RealReportRepositoryPort(Protocol):
@@ -152,15 +152,19 @@ class RealReportRepositoryPort(Protocol):
 
     def transition(self, operation_id: str, **kwargs: Any) -> Any: ...
 
-    def mark_accepted(self, operation_id: str, *, response_hash: str) -> Any: ...
-
-    def mark_succeeded(self, operation_id: str) -> Any: ...
-
     def mark_failed(self, operation_id: str, *, safe_error_code: str) -> Any: ...
 
     def mark_not_sent(self, operation_id: str, *, safe_error_code: str) -> Any: ...
 
     def mark_acceptance_unknown(self, operation_id: str, *, safe_error_code: str) -> Any: ...
+
+    def complete_report_in_session(
+        self,
+        db: Session,
+        operation_id: str,
+        *,
+        response_hash: str,
+    ) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -1154,9 +1158,6 @@ def build_real_report_request(context: ReportContext) -> ReportRequest:
         ReportParticipant(
             slot=cast(Any, participant.slot),
             agent_name=participant.agent_name,
-            position_summary=(
-                participant.current_position_summary or participant.initial_position_summary
-            ),
         )
         for participant in context.manifest.participants
     )
@@ -1598,14 +1599,20 @@ def _create_report_revision_for_insight(
 
 @dataclass(frozen=True, slots=True)
 class RealReportPreparedOperation:
-    """Hash-only preparation result retained by the explicit continue seam."""
+    """Frozen provider wire plus its immutable report context."""
 
     revision_id: str
     debate_id: str
     manifest_hash: str
     operation_id: str
-    request: ReportRequest
+    wire: ReportWireRequest
     context: ReportContext
+
+    @property
+    def request(self) -> ReportRequest:
+        """Compatibility view of the closed report input, without rebuilding wire."""
+
+        return self.wire.report
 
 
 def _report_provider_policy_hash(provider: RealReportProviderPort) -> str:
@@ -1630,7 +1637,7 @@ def _report_manifest(
     context: ReportContext,
     request: ReportRequest,
     provider: RealReportProviderPort,
-    prepared: Any,
+    wire: ReportWireRequest,
 ) -> ExportManifestV1:
     policy_hash = _report_provider_policy_hash(provider)
     policy = db.scalar(
@@ -1659,7 +1666,16 @@ def _report_manifest(
         ExportFieldV1(
             "public_predecessor_speech",
             _report_field_hash(
-                [{"slot": item.slot, "speech": item.speech} for item in request.speeches]
+                [
+                    {
+                        "slot": item.slot,
+                        "round_no": item.round_no,
+                        "turn_index": item.turn_index,
+                        "speech": item.speech,
+                        "used_evidence_ids": list(item.used_evidence_ids),
+                    }
+                    for item in request.speeches
+                ]
             ),
         ),
         ExportFieldV1("current_evidence_excerpt", _report_field_hash(source_projection)),
@@ -1673,9 +1689,15 @@ def _report_manifest(
                 [{"category": item.category, "summary": item.summary} for item in request.insights]
             ),
         ),
+        ExportFieldV1(
+            "aggregate_vote_count",
+            _report_field_hash(
+                [{"slot": item.slot, "count": item.count} for item in request.votes]
+            ),
+        ),
     )
-    estimated_cost = getattr(prepared, "estimated_cost_cny", None)
-    budget = getattr(prepared, "budget", None)
+    estimated_cost = wire.estimated_cost_cny
+    budget = wire.budget
     max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
     if max_tokens <= LLM_RESERVED_OUTPUT_TOKEN_CAP:
         raise ReportProviderError("report_budget_invalid")
@@ -1721,13 +1743,13 @@ def prepare_real_report_operation(
         insight_snapshot_id=revision.insight_snapshot_id,
     )
     request = build_real_report_request(context)
-    prepared = runtime.provider.build_request(request)
+    wire = runtime.provider.build_request(request)
     manifest = _report_manifest(
         db,
         context=context,
         request=request,
         provider=runtime.provider,
-        prepared=prepared,
+        wire=wire,
     )
     policy_row_id = db.scalar(
         select(ProviderPolicySnapshot.id).where(
@@ -1762,16 +1784,14 @@ def prepare_real_report_operation(
         )
     )
     if existing is not None:
-        if existing.request_hash != prepared.request_hash or (
-            existing.export_manifest_hash != manifest.manifest_hash
-        ):
+        if existing.export_manifest_hash != manifest.manifest_hash:
             raise ReportProviderError("report_operation_stale")
         return RealReportPreparedOperation(
             revision_id=revision.id,
             debate_id=revision.debate_id,
             manifest_hash=manifest.manifest_hash,
             operation_id=existing.id,
-            request=request,
+            wire=wire,
             context=context,
         )
     operation_request = ProviderReservationRequestV1(
@@ -1780,7 +1800,7 @@ def prepare_real_report_operation(
         provider_operation="llm_maya_report",
         logical_item_id=revision.id,
         attempt_no=1,
-        request_hash=prepared.request_hash,
+        request_hash=wire.request_hash,
         max_tokens=manifest.max_total_tokens,
         max_cost_cny=manifest.max_cost_cny,
         policy_hash=manifest.policy_hash,
@@ -1797,7 +1817,7 @@ def prepare_real_report_operation(
         debate_id=revision.debate_id,
         manifest_hash=manifest.manifest_hash,
         operation_id=str(operation.id),
-        request=request,
+        wire=wire,
         context=context,
     )
 
@@ -1941,8 +1961,10 @@ def _process_real_report_revision(
             manifest_hash=manifest_hash,
             call_no=call_no,
         )
-        budget = getattr(runtime.provider.build_request(prepared.request), "budget", None)
-        max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
+        wire = prepared.wire
+        if wire.request_hash != operation.request_hash:
+            raise ReportProviderError("report_wire_hash_stale")
+        max_tokens = wire.budget.input_tokens + LLM_RESERVED_OUTPUT_TOKEN_CAP
         request = ProviderReservationRequestV1(
             operation_id=operation.id,
             scope_id=prepared.debate_id,
@@ -1966,7 +1988,7 @@ def _process_real_report_revision(
             raise ReportProviderError("report_operation_not_prepared")
         runtime.repository.reserve(operation.id)
         runtime.repository.transition(operation.id, expected="reserved", state="sending")
-        sections = runtime.provider.execute(prepared.request)
+        sections = runtime.provider.execute_prepared(wire)
         markdown = render_real_report_markdown(prepared.context, sections)
         count = validate_report_markdown(
             markdown,
@@ -1995,7 +2017,6 @@ def _process_real_report_revision(
         )
     )
     try:
-        runtime.repository.mark_accepted(operation.id, response_hash=output_hash)
         revision.status = "ready"
         revision.attempt = 1
         revision.english_markdown = markdown
@@ -2026,13 +2047,22 @@ def _process_real_report_revision(
             pointer.revision_id = revision.id
             pointer.debate_id = revision.debate_id
             pointer.revision_status = "ready"
-        runtime.repository.mark_succeeded(operation.id)
         _mark_job_completed(db, REPORT_GENERATE_OPERATION, revision.id, attempt=1)
-        db.flush()
         _mark_debate_completed(db, revision.debate_id)
+        # Flush report publication first so a constraint failure is rolled
+        # back before the operation can be promoted.  The final operation and
+        # reservation state are then staged on this same caller Session.
+        db.flush()
+        runtime.repository.complete_report_in_session(
+            db,
+            operation.id,
+            response_hash=output_hash,
+        )
     except ReportProviderError as exc:
+        db.rollback()
         _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
     except Exception:
+        db.rollback()
         _mark_real_report_failed(
             db,
             revision=revision,

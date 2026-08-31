@@ -1012,6 +1012,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/report/revisions/{revision_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["continueRealReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/report/download": {
         parameters: {
             query?: never;
@@ -1124,6 +1140,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider/data-call/pending/reports/{debate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProviderDataCallReportManifests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/provider/data-call/disclosure/confirm": {
         parameters: {
             query?: never;
@@ -1166,7 +1198,7 @@ export interface components {
             /** @constant */
             region: "cn-beijing";
             purpose: string;
-            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
             storage_fact: string;
             no_training_basis: string;
             retention_setting: string;
@@ -1205,6 +1237,54 @@ export interface components {
         ProviderDataCallPublicationManifestListResponseV1: {
             agent_version_id: string;
             items: components["schemas"]["ProviderDataCallPublicationManifestSummaryV1"][];
+        };
+        ProviderDataCallReportManifestSummaryV1: {
+            report_revision_id?: string | null;
+            manifest_hash: string;
+            confirmation_revision: number;
+            confirmed: boolean;
+        };
+        ProviderDataCallReportManifestListResponseV1: {
+            debate_id: string;
+            items?: components["schemas"]["ProviderDataCallReportManifestSummaryV1"][];
+        };
+        ContinueRealReportRequest: {
+            manifest_hash: string;
+            call_no: number;
+        };
+        ContinueRealReportResponse: components["schemas"]["ContinueGeneratingReportRevision"] | components["schemas"]["ContinueReadyReportRevision"] | components["schemas"]["ContinueFailedReportRevision"];
+        ContinueGeneratingReportRevision: {
+            id: components["schemas"]["Uuid"];
+            revision_no: number;
+            /** @constant */
+            status: "generating";
+            english_markdown?: null;
+            word_count?: null;
+            translated_markdown?: null;
+            safe_error_code?: null;
+            created_at: components["schemas"]["IsoTime"];
+        };
+        ContinueReadyReportRevision: {
+            id: components["schemas"]["Uuid"];
+            revision_no: number;
+            /** @constant */
+            status: "ready";
+            english_markdown: string;
+            word_count: number;
+            translated_markdown?: string | null;
+            safe_error_code?: null;
+            created_at: components["schemas"]["IsoTime"];
+        };
+        ContinueFailedReportRevision: {
+            id: components["schemas"]["Uuid"];
+            revision_no: number;
+            /** @constant */
+            status: "failed";
+            english_markdown?: null;
+            word_count?: null;
+            translated_markdown?: null;
+            safe_error_code: string;
+            created_at: components["schemas"]["IsoTime"];
         };
         LoginRequest: {
             username: string;
@@ -3767,6 +3847,39 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    continueRealReport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+                revision_id: components["parameters"]["RevisionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinueRealReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Continue one already-confirmed and attached Real Report operation. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinueRealReportResponse"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
     downloadCurrentReport: {
         parameters: {
             query?: {
@@ -4005,6 +4118,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listProviderDataCallReportManifests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                debate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teacher-only exact prepared Real Report manifests for one Debate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallReportManifestListResponseV1"];
                 };
             };
             401: components["responses"]["Error"];

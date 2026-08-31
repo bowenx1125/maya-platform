@@ -38,12 +38,10 @@ def _raw_request() -> dict[str, object]:
             {
                 "slot": "A",
                 "agent_name": "River Keeper",
-                "position_summary": "Protect shared resources through careful stewardship.",
             },
             {
                 "slot": "B",
                 "agent_name": "Community Gardener",
-                "position_summary": "Pair open learning with consent and context.",
             },
         ],
         "speeches": [
@@ -241,7 +239,7 @@ def test_request_rejects_private_text_and_identity_shaped_values() -> None:
     ):
         payload = _raw_request()
         participant = cast(list[dict[str, object]], payload["participants"])[0]
-        participant["position_summary"] = forbidden
+        participant["agent_name"] = forbidden
         with pytest.raises(ReportBoundaryError):
             validate_report_request(payload)
 
