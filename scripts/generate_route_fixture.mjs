@@ -65,6 +65,7 @@ const implemented = new Set([
   "getDebate",
   "updateDebateDraft",
   "startDebate",
+  "retryDebatePreparation",
   "advanceDebatePlayback",
   "pauseDebate",
   "resumeDebate",
@@ -87,6 +88,7 @@ const implemented = new Set([
   "listTranslationBatches",
   "translateCurrentPublishedContent",
   "getProviderDataCallDisclosure",
+  "listProviderDataCallManifests",
   "confirmProviderDataCallDisclosure",
 ]);
 const methods = new Set([

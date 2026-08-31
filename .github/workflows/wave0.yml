@@ -125,6 +125,9 @@ jobs:
           test -f backend/tests/test_wave4_embedding_http_transport.py
           test -f backend/tests/test_wave4_embedding_identity_orm.py
           test -f backend/tests/test_wave4_embedding_identity_search.py
+          test -f backend/tests/test_wave4_embedding_generation_query.py
+          test -f backend/tests/test_wave4_embedding_playback_retry.py
+          test -f backend/tests/test_wave4_embedding_sql_query.py
           test -f backend/tests/test_wave4_prompt.py
           test -f backend/tests/test_wave4_evidence_trace.py
           test -f frontend/tests/wave4-mutual-learning.test.tsx

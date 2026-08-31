@@ -35,7 +35,6 @@ from app.core.db import Database
 from app.core.models import (
     KnowledgeChunk,
     KnowledgeDocument,
-    KnowledgeSnapshot,
     SnapshotDocument,
     StoredFile,
     VoicePreview,
@@ -249,17 +248,27 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
                 "updated_at": now,
             },
         )
-        session.add(
-            KnowledgeSnapshot(
-                id=snapshot_id,
-                agent_version_id=version_id,
-                stored_file_id=source_file_id,
-                content_hash="3" * 64,
-                total_char_count=9,
-                embedding_key="mock",
-                chunking_json="{}",
-                created_at=now,
-            )
+        # Keep the historical 0003 Snapshot insert independent of the latest
+        # ORM too. Migration 0013 adds the closed five-field embedding
+        # identity, which must not be emitted before those columns exist.
+        session.execute(
+            text(
+                "INSERT INTO knowledge_snapshots "
+                "(id, agent_version_id, combined_file_id, content_hash, "
+                "total_char_count, embedding_model_key, chunking_config_json, created_at) "
+                "VALUES (:id, :agent_version_id, :combined_file_id, :content_hash, "
+                ":total_char_count, :embedding_model_key, :chunking_config_json, :created_at)"
+            ),
+            {
+                "id": snapshot_id,
+                "agent_version_id": version_id,
+                "combined_file_id": source_file_id,
+                "content_hash": "3" * 64,
+                "total_char_count": 9,
+                "embedding_model_key": "mock",
+                "chunking_config_json": "{}",
+                "created_at": now,
+            },
         )
         session.add(
             SnapshotDocument(

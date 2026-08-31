@@ -4,13 +4,13 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_CHANGES_REQUIRED_P1_5 / REAL_EMBED_1024_NOT_RUN`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G1_5_REPAIR_CANDIDATE / G2_REAUDIT_PENDING / REAL_EMBED_1024_NOT_RUN`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
 formal content, Embedding/provider ports and durable provider-control foundations.
-Independent G2 audit of `2af97df` returned `CHANGES_REQUIRED` with
-`P0=0 / P1=5 / P2=0`. All five repairs passed local checks. The exact-SHA re-audit of
+Independent Mock G2 audit of `2af97df` returned `CHANGES_REQUIRED` with
+`P0=0 / P1=5 / P2=0`. All five Mock repairs passed local checks. The exact-SHA re-audit of
 `1aa7170` verified those repairs but found two additional P1 boundary cases: bounded
 Persona fields could overrun the 200-word Mock turn limit, and incomplete running
 legacy Debates could still reach generation without confirmed Persona. Both incremental
@@ -28,6 +28,15 @@ arbitrary-string uniqueness optimization has stopped. Final Sol High audit of ex
 clean SHA `48ff91f` returned `PASS / P0=0 / P1=0 / P2=0`. This unlocks W4-EMBED code
 and fake-transport acceptance, not an automatic real request. No formal Maya runtime
 Provider request has been made.
+
+The W4-EMBED repair candidate now implements the frozen real 1024 identity end to end
+through injected fake transport: durable multi-batch publication and continuation,
+student publication orchestration, identity-matched query retrieval, exact per-turn
+teacher disclosure/confirmation and non-terminal explicit retry. Current deterministic
+evidence is backend `796`, frontend `33 files / 209 tests`, Ruff/mypy/lint/typecheck/build,
+OpenAPI/generated/route/WS/repository boundaries and all populated Wave 1–4/0013
+migration probes. It has not called a real Provider and cannot run the one permitted
+1024 preflight until a new exact clean SHA receives Sol High `P0=0 / P1=0`.
 
 ## Source and remote
 
@@ -107,13 +116,15 @@ No real Provider was called.
   contracts before another request.
 - Real LLM and Translation remain unavailable. The Embedding candidate now has a fixed
   runtime selector, no-redirect single-attempt transport, exact teacher disclosure and
-  confirmation CAS, durable policy/export/budget ledgers, and an atomic SQL Snapshot
-  publication seam exercised only through injected fake transport. It has made zero
-  formal Maya runtime calls. Independent audit of exact clean SHA `8be4833` returned
+  confirmation CAS, durable policy/export/budget/stage ledgers, atomic SQL Snapshot
+  publication, restart-safe missing-batch continuation and identity-matched query
+  retrieval exercised only through injected fake transport. It has made zero formal
+  Maya runtime calls. Independent audit of exact clean SHA `8be4833` returned
   `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`: the candidate still used dimension 256,
   accepted vectors were process-local, student publication did not enter the runtime,
   query retrieval remained Mock 256, and the teacher confirmation UI/authorization was
-  not bound to the build's course. Real Embedding is not signed.
+  not bound to the build's course. The current repair candidate claims closure of all
+  five findings, but Real Embedding remains unsigned pending exact-SHA re-audit.
 - An independent account-only preflight used non-student fixtures for one 256-dimension
   Embedding request and one structured LLM request. Both succeeded as basic API
   availability evidence while Maya's formal selectors stayed Mock. They are not Gate
@@ -154,11 +165,8 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Repair all five W4-EMBED P1 findings under the frozen 1024 identity: explicit request
-dimension and exact endpoint/policy binding, durable accepted-vector recovery, real
-student publication orchestration, identity-matched real query retrieval, and a
-course-bound reachable teacher confirmation workflow. Run fake-transport and full
-local checks, then obtain Sol High P0/P1 closure before the one permitted 1024
-preflight. A successful preflight still does not sign W4-EMBED; publication, retrieval,
-Evidence receipt, restart and browser G3 must also pass. GitHub CI remains deferred to
-the final integrated Wave 4 PR.
+Submit the exact clean W4-EMBED repair SHA to independent Sol High. Any P0/P1 returns to
+the local debug/test loop. Only `PASS / P0=0 / P1=0` unlocks the one safe 3-text 1024
+preflight. A successful preflight still does not sign W4-EMBED; empty-runtime browser G3
+publication, exact teacher confirmation, query retrieval, Evidence receipt and restart
+must also pass. GitHub CI remains deferred to the final integrated Wave 4 PR.

@@ -1,6 +1,6 @@
 # W4-EMBED G1.5 Gate Packet
 
-Status: `G2 CHANGES_REQUIRED / P0=0 / P1=5 / P2=0 / FORMAL MAYA RUNTIME CALLS 0`
+Status: `G1.5 REPAIR CANDIDATE / G2 REAUDIT PENDING / FORMAL MAYA RUNTIME CALLS 0`
 
 Issues: `#19 W4-EMBED-RUNTIME`, `#20 W4-PROVIDER-PREFLIGHT`
 
@@ -25,6 +25,23 @@ Implemented boundaries:
   with operation success;
 - fake-transport integration tests only.
 
+The current repair candidate additionally closes the five prior G2 findings:
+
+- all document and query requests are fixed to
+  `dashscope / text-embedding-v4 / cn-beijing / 1024 / w4-embed-v1`, including
+  the provider-visible dimension and exact endpoint/policy equality check;
+- sanitized accepted vectors and stages are durable SQL rows; restart reconciliation
+  preserves accepted work, never retries acceptance-unknown work and continues only a
+  proven `not_sent` missing batch;
+- confirmed student publication prepares the exact owner-bound build/export manifest,
+  invokes the controlled runtime and atomically publishes the immutable Snapshot;
+- generation retrieval embeds the exact 1–3 frozen turn subqueries with the published
+  Snapshot identity and emits normal server-assigned Evidence receipts;
+- the course teacher can discover each exact per-turn manifest through a dedicated safe
+  DTO, review/confirm it, and explicitly retry the non-terminal pending turn. Ordinary
+  classroom WebSocket/DTOs receive only a safe recoverable code, never a manifest,
+  provider, model or endpoint.
+
 ## Frozen invariants
 
 - No request occurs before exact policy, manifest, confirmation and budget preflight.
@@ -36,27 +53,36 @@ Implemented boundaries:
 - The Provider operation and product snapshot cannot report contradictory success.
 - A worker, fake transport or local test cannot sign its own real-service Gate.
 
-## Deterministic evidence
+## Current deterministic evidence
 
-- backend full suite: `711 passed`;
-- frontend: `32 files / 206 tests`, lint, TypeScript and production build passed;
+- backend full suite: `796 passed`;
+- frontend: `33 files / 209 tests`, lint, TypeScript and production build passed;
 - Ruff and mypy passed;
-- frozen OpenAPI, generated client and strict live route comparison passed with `73`
-  platform operations and zero placeholders;
+- frozen OpenAPI and generated client passed; the route semantic fixture contains `75`
+  platform operations with zero placeholders, the live FastAPI comparator reports `55`
+  implemented strict operations with zero placeholders, and the response checker covers
+  `75` operations;
 - repository/secret boundary and generated-source red-team probe passed;
-- migrations 0001–0012 and formal-content acceptance passed;
+- fresh/repeat migrations 0001–0013 plus populated Wave 1/2/3/4, Evidence Trace and
+  Embedding identity downgrade/re-upgrade probes passed;
+- fake-transport product evidence proves confirmation-before-call, exact 1024 request,
+  durable query-stage reuse, publication/retrieval/Evidence receipt continuity,
+  non-terminal provider gating and explicit retry;
 - formal Maya runtime Provider calls: `0`; independent preflight calls: `2`.
 
-## Known incomplete seams for Sol classification
+## Remaining Gate boundary
 
-1. Accepted vector staging is currently process-local; restart recovery is not yet a
-   durable SQL product path.
-2. The student publication API does not yet prepare the exact SnapshotBuild/export
-   manifest and invoke this runtime end to end.
-3. Retrieval does not yet use a real query embedding compatible with the published
-   real document-vector snapshot.
-4. No current private-account plan, region, logging, retention or no-training control
-   has been verified; therefore no real request is authorized.
+No formal real 1024 request may run until a new exact clean SHA receives independent
+Sol High `PASS / P0=0 / P1=0`. That audit must challenge the five repaired findings,
+the pre-confirmation `prepared` operation (zero reservation/call), course authorization,
+partial continuation, acceptance-unknown behavior, ordinary DTO secrecy and the
+non-terminal Playback retry fence.
+
+After PASS, exactly one safe 3-text 1024 preflight is allowed. It can prove only
+`REAL EMBEDDING 1024 PREFLIGHT PASS`; W4-EMBED itself still requires empty-runtime
+browser G3 publication → teacher confirmation → query → retrieval → Evidence receipt
+and restart evidence. Current private-account plan/logging/retention controls must remain
+fail closed unless the persisted reviewed policy proves them.
 
 ## G2 audit question
 
@@ -70,7 +96,5 @@ and returned `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`:
 4. query embedding and retrieval remained Mock 256;
 5. teacher disclosure was not page-reachable or course/build-authorized.
 
-A new clean SHA must close all P1 findings and receive read-only Sol High PASS before
-the one permitted 1024 preflight. W4-EMBED real G3 then still requires publication,
-query, retrieval, Evidence receipt, restart and browser evidence under a newly
-confirmed exact manifest.
+The current repair candidate claims closure of these five findings but does not sign
+itself. A new exact clean SHA now goes to independent read-only Sol High re-audit.

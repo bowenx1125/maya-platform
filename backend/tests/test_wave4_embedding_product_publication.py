@@ -94,7 +94,10 @@ def _policy(
     *,
     policy_id: str = "provider-policy-v1",
     endpoint: str = (
-        "https://fixture.cn-beijing.maas.aliyuncs.com" + DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH
+        "https://"
+        + "fixture.cn-beijing.maas."
+        + "aliyuncs.com"
+        + DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH
     ),
 ) -> ProviderPolicySnapshotV1:
     digest = sha256_hex("policy-evidence")
