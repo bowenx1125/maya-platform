@@ -143,9 +143,7 @@ def mock_persona_response(
     return MockPersonaResponse(
         stance=stance,
         speech=speech,
-        position_summary=(
-            f"Prioritize {dimensions.value_priority} by applying {dimensions.debate_strategy}."
-        ),
+        position_summary=position_summary_for_persona(persona),
         teaching_dimensions=dimensions,
         evidence_ids=ordered_evidence,
         rule_set_id=MOCK_PERSONA_RULE_SET_ID,
@@ -202,6 +200,13 @@ def bounded_dimension_sentence(label: str, value: str) -> str:
     normalized = " ".join(value.split()).strip()
     if not normalized:
         raise ValueError("a teaching dimension cannot be empty")
+    # The authoritative debate surface is English-only.  A Persona may still
+    # contain Chinese (or another script) and the complete raw value remains
+    # available in the structured comparison DTO; speech gets a fixed,
+    # field-level authored-perspective fallback instead of a partial or
+    # machine-translated value.  This also covers mixed-script values.
+    if _contains_non_ascii_text(normalized):
+        return f"My teaching {label} remains bounded by the authored Persona."
     words = _SPEECH_WORD_RE.findall(normalized)
     # A valid Persona value may contain punctuation, separators or numerals
     # that do not belong in a source-bearing classroom claim.  Project from a
@@ -222,6 +227,52 @@ def bounded_dimension_sentence(label: str, value: str) -> str:
     closing = " ".join(words[-2:])
     sentence = f'My {label} balances "{opening}" with "{middle}" and "{closing}".'
     return _source_neutral_sentence(label, sentence)
+
+
+def _contains_non_ascii_text(value: str) -> bool:
+    """Return whether a value contains script text outside the safe ASCII view."""
+
+    return any(ord(character) > 127 for character in value)
+
+
+def english_safe_dimension_value(
+    value: str,
+    *,
+    fallback: str = "the authored teaching dimension",
+) -> str:
+    """Project one Persona value into a short, English-safe position phrase.
+
+    The raw six dimensions are deliberately preserved by
+    :func:`teaching_dimensions_for_persona` for the student comparison DTO.
+    This helper is only for compact Mock position summaries, where copying a
+    CJK or mixed-script value would violate the authoritative speech boundary.
+    """
+
+    normalized = " ".join(value.split()).strip()
+    if not normalized or _contains_non_ascii_text(normalized) or re.search(r"\d", normalized):
+        return fallback
+    words = _SPEECH_WORD_RE.findall(normalized)
+    if not words or len(words) > SPEECH_DIMENSION_WORD_LIMIT:
+        return fallback
+    candidate = normalized.rstrip(".!?")
+    if has_explicit_source_claim(f"An authored dimension is {candidate}."):
+        return fallback
+    return candidate
+
+
+def position_summary_for_persona(persona: PersonaInput) -> str:
+    """Build the Mock position summary without leaking raw authored scripts."""
+
+    dimensions = teaching_dimensions_for_persona(persona)
+    value_priority = english_safe_dimension_value(
+        dimensions.value_priority,
+        fallback="the authored value priority",
+    )
+    debate_strategy = english_safe_dimension_value(
+        dimensions.debate_strategy,
+        fallback="the authored debate strategy",
+    )
+    return f"Prioritize {value_priority} by applying {debate_strategy}."
 
 
 def _source_neutral_sentence(label: str, sentence: str) -> str:
@@ -430,7 +481,9 @@ __all__ = [
     "contrasting_persona_fixtures",
     "bounded_dimension_sentence",
     "bounded_teaching_dimensions_for_persona",
+    "english_safe_dimension_value",
     "mock_persona_comparison",
     "mock_persona_response",
+    "position_summary_for_persona",
     "teaching_dimensions_for_persona",
 ]

@@ -21,6 +21,7 @@ from typing import Literal, Protocol, cast
 from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
 from app.modules.agents.persona_mock import (
     bounded_teaching_dimensions_for_persona,
+    english_safe_dimension_value,
     teaching_dimensions_for_persona,
 )
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
@@ -44,6 +45,7 @@ from app.modules.debates.generation.types import (
 
 MutualClaimType = Literal["factual", "interpretation", "value_judgement", "proposal"]
 _SPEECH_ALPHA_WORD_RE = re.compile(r"[A-Za-z]+(?:['’\-][A-Za-z]+)*")
+_MOCK_MATCHING_PASSAGE_CLAIM = "A matching passage was retrieved from the current snapshot."
 
 
 def _complete_excerpt(value: str, *, max_words: int = 8) -> str:
@@ -66,6 +68,20 @@ def _complete_excerpt(value: str, *, max_words: int = 8) -> str:
     # sentence-complete inside the surrounding source statement.
     head = " ".join(words[: max_words - 6])
     return f"Excerpt begins {head}; receipt text continues elsewhere"
+
+
+def _safe_receipt_claim(value: str) -> str:
+    """Keep non-English receipt text in the inspector, never in speech.
+
+    Receipt text remains untouched in the typed receipt and its server-owned
+    lineage.  The Mock's authoritative English speech uses one truthful claim
+    for any non-ASCII script instead of quoting or attempting translation.
+    """
+
+    normalized = " ".join(value.split()).strip()
+    if any(ord(character) > 127 for character in normalized):
+        return _MOCK_MATCHING_PASSAGE_CLAIM
+    return f'The current snapshot passage says, "{_complete_excerpt(normalized)}".'
 
 
 def _bounded_identity(value: str, *, max_words: int = 3) -> str:
@@ -402,6 +418,14 @@ class MockLLMProvider:
             if isinstance(persona, (PersonaSpecV1, PersonaProviderViewV1))
             else None
         )
+        position_value = (
+            english_safe_dimension_value(
+                dimensions.value_priority,
+                fallback="the authored value priority",
+            )
+            if dimensions is not None
+            else "the authored value priority"
+        )
         safe_name = _bounded_identity(participant.agent_name)
         teaching_line = (
             ""
@@ -416,13 +440,10 @@ class MockLLMProvider:
             )
         )
         phase = prompt.phase
-        source_excerpt = ""
+        source_claim = ""
         if used:
-            source_excerpt = _complete_excerpt(prompt.receipts[0].text)
-            evidence_line = (
-                f'The current snapshot passage says, "{source_excerpt}". '
-                "I use it only as this participant's bounded evidence."
-            )
+            source_claim = _safe_receipt_claim(prompt.receipts[0].text)
+            evidence_line = f"{source_claim} I use it only as this participant's bounded evidence."
         else:
             evidence_line = (
                 "No relevant passage was retrieved, so this is honest general reasoning "
@@ -497,9 +518,7 @@ class MockLLMProvider:
             claims, trace_claims = _mutual_claims(
                 speech,
                 turn_id=prompt.turn_plan.turn_id,
-                source_sentence=(
-                    f'The current snapshot passage says, "{source_excerpt}".' if used else None
-                ),
+                source_sentence=(source_claim if used else None),
                 used_evidence_ids=used,
                 has_receipts=bool(prompt.receipts),
                 core_claims=(
@@ -526,12 +545,7 @@ class MockLLMProvider:
                 evidence_trace_claims=trace_claims,
                 position_summary=(
                     "Balance agency, safety, innovation, and community effects through "
-                    "accountable safeguards"
-                    + (
-                        f", prioritizing {dimensions.value_priority}."
-                        if dimensions is not None
-                        else "."
-                    )
+                    "accountable safeguards" + f", prioritizing {position_value}."
                 ),
                 position_update="unchanged",
                 remaining_uncertainty=[
@@ -560,9 +574,7 @@ class MockLLMProvider:
             claims, trace_claims = _mutual_claims(
                 speech,
                 turn_id=prompt.turn_plan.turn_id,
-                source_sentence=(
-                    f'The current snapshot passage says, "{source_excerpt}".' if used else None
-                ),
+                source_sentence=(source_claim if used else None),
                 used_evidence_ids=used,
                 has_receipts=bool(prompt.receipts),
                 core_claims=(
@@ -592,12 +604,7 @@ class MockLLMProvider:
                 ],
                 position_summary=(
                     "Recommend transparent safeguards, independent review, and an "
-                    "affected-community correction path"
-                    + (
-                        f", prioritizing {dimensions.value_priority}."
-                        if dimensions is not None
-                        else "."
-                    )
+                    "affected-community correction path" + f", prioritizing {position_value}."
                 ),
                 position_update="clarified",
                 position_update_reason=(
@@ -634,9 +641,7 @@ class MockLLMProvider:
         claims, trace_claims = _mutual_claims(
             speech,
             turn_id=prompt.turn_plan.turn_id,
-            source_sentence=(
-                f'The current snapshot passage says, "{source_excerpt}".' if used else None
-            ),
+            source_sentence=(source_claim if used else None),
             used_evidence_ids=used,
             has_receipts=bool(prompt.receipts),
             core_claims=(
@@ -660,12 +665,7 @@ class MockLLMProvider:
             answered_question_ids=answered,
             position_summary=(
                 "Refine the balance toward transparent safeguards, independent review, "
-                "and community voice"
-                + (
-                    f", prioritizing {dimensions.value_priority}."
-                    if dimensions is not None
-                    else "."
-                )
+                "and community voice" + f", prioritizing {position_value}."
             ),
             position_update="clarified",
             position_update_reason=(
