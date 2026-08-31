@@ -1976,14 +1976,13 @@ class PlaybackService:
             and prepared.llm_publication is not None
         )
         if (
-            (recoverable_provider_error or recoverable_tts_error)
-            and await self._defer_provider_preparation(
-                db,
-                debate_id=debate_id,
-                turn_id=turn_id,
-                claim_token=claim_token,
-                code=str(error_code),
-            )
+            recoverable_provider_error or recoverable_tts_error
+        ) and await self._defer_provider_preparation(
+            db,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            claim_token=claim_token,
+            code=str(error_code),
         ):
             return
         failed_event: EventRecord | None = None

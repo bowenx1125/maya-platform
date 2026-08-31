@@ -29,6 +29,7 @@ from .types import (
 if TYPE_CHECKING:
     from .runtime import LLMPreparedAttemptV1
 
+
 def _canonical(value: object) -> str:
     return json.dumps(
         value,
@@ -145,9 +146,7 @@ def _context_record(context: GenerationContext) -> dict[str, object]:
     return {
         "version": LLM_RECOVERY_INPUT_VERSION,
         "participants": [_participant_record(item) for item in context.participants],
-        "predecessor_fences": [
-            _predecessor_fence_record(item) for item in context.predecessors
-        ],
+        "predecessor_fences": [_predecessor_fence_record(item) for item in context.predecessors],
     }
 
 
@@ -370,17 +369,11 @@ def context_from_recovery_input(value: LLMRecoveryInputV1) -> GenerationContext:
         raise ValueError("recovery participant fence is not closed")
     if payload.get("version") != LLM_RECOVERY_INPUT_VERSION:
         raise ValueError("recovery participant fence version is unsupported")
-    if not isinstance(participants_value, list) or not isinstance(
-        predecessor_fences_value, list
-    ):
+    if not isinstance(participants_value, list) or not isinstance(predecessor_fences_value, list):
         raise ValueError("recovery participant fence is unavailable")
     participants = tuple(participant_from_record(item) for item in participants_value)
     participant = next(
-        (
-            item
-            for item in participants
-            if item.participant_id == prompt_request.participant_id
-        ),
+        (item for item in participants if item.participant_id == prompt_request.participant_id),
         None,
     )
     if participant is None:
@@ -434,9 +427,7 @@ def context_from_recovery_input(value: LLMRecoveryInputV1) -> GenerationContext:
         structured_value: dict[str, object] = {
             "speech": item.speech,
             "key_claims": [claim.model_dump(mode="json") for claim in item.key_claims],
-            "engagements": [
-                engagement.model_dump(mode="json") for engagement in item.engagements
-            ],
+            "engagements": [engagement.model_dump(mode="json") for engagement in item.engagements],
             "answered_question_ids": list(item.answered_question_ids),
             "learned_from_others": list(item.learned_from_others),
             "position_summary": item.position_summary,
@@ -455,8 +446,7 @@ def context_from_recovery_input(value: LLMRecoveryInputV1) -> GenerationContext:
             "change_from_opening": item.change_from_opening,
             "final_consensus": list(item.final_consensus),
             "final_disagreements": [
-                disagreement.model_dump(mode="json")
-                for disagreement in item.final_disagreements
+                disagreement.model_dump(mode="json") for disagreement in item.final_disagreements
             ],
             "final_recommendation": item.final_recommendation,
         }
@@ -482,9 +472,7 @@ def context_from_recovery_input(value: LLMRecoveryInputV1) -> GenerationContext:
                 transcript_hash=str(fence.get("transcript_hash", "")),
                 attempt=1,
                 publication_status=(
-                    "public"
-                    if str(fence.get("publication_status")) == "public"
-                    else "final_ready"
+                    "public" if str(fence.get("publication_status")) == "public" else "final_ready"
                 ),
                 evidence_trace=(),
             )

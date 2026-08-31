@@ -300,8 +300,7 @@ def test_fake_two_agent_two_round_path_stages_and_publishes_every_turn(monkeypat
     assert all(turn.evidence_trace for turn in turns)
     assert all(operation.state == "succeeded" for operation in ledger.operations())
     assert all(
-        ledger.get_llm_accepted_stage(operation.id) is not None
-        for operation in ledger.operations()
+        ledger.get_llm_accepted_stage(operation.id) is not None for operation in ledger.operations()
     )
 
 

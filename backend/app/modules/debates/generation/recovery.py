@@ -326,9 +326,7 @@ class LLMRecoveryService:
             receipts: Sequence[object] = ()
             queries: Sequence[object] = ()
             if recovery_input is not None:
-                receipts = receipts_from_recovery_input(
-                    cast(LLMRecoveryInputV1, recovery_input)
-                )
+                receipts = receipts_from_recovery_input(cast(LLMRecoveryInputV1, recovery_input))
                 from .retrieval import TurnSubquery
 
                 queries = tuple(

@@ -389,15 +389,10 @@ class SqlTurnPreparer:
             # disabled for this bounded product run.
             dual_real = _dual_real(self.settings)
             outbound_manifest = (
-                LLMOutboundManifestV1(max_attempts=1)
-                if dual_real
-                else LLMOutboundManifestV1()
+                LLMOutboundManifestV1(max_attempts=1) if dual_real else LLMOutboundManifestV1()
             )
             self.llm.outbound_manifest = outbound_manifest
-        if (
-            _dual_real(self.settings)
-            and int(getattr(outbound_manifest, "max_attempts", 0)) != 1
-        ):
+        if _dual_real(self.settings) and int(getattr(outbound_manifest, "max_attempts", 0)) != 1:
             raise PlatformError(
                 "provider_preflight_blocked",
                 "The dual Real-Core LLM manifest must permit exactly one attempt.",
@@ -615,14 +610,18 @@ class SqlTurnPreparer:
             or str(getattr(stage, "rule_set_hash", "")) != expected_prompt.request.rule_set_hash
         ):
             raise PlatformError("llm_recovery_fence_stale", "The accepted prompt is stale.", 503)
-        operation_row = db.execute(
-            text(
-                "SELECT scope_id, logical_item_id, attempt_no, request_hash, policy_hash, "
-                "export_manifest_hash, build_manifest_hash, model_key "
-                "FROM provider_operations WHERE id=:operation_id"
-            ),
-            {"operation_id": str(getattr(stage, "operation_id", ""))},
-        ).mappings().first()
+        operation_row = (
+            db.execute(
+                text(
+                    "SELECT scope_id, logical_item_id, attempt_no, request_hash, policy_hash, "
+                    "export_manifest_hash, build_manifest_hash, model_key "
+                    "FROM provider_operations WHERE id=:operation_id"
+                ),
+                {"operation_id": str(getattr(stage, "operation_id", ""))},
+            )
+            .mappings()
+            .first()
+        )
         if operation_row is None or (
             str(operation_row["scope_id"]) != str(context.debate_id)
             or str(operation_row["logical_item_id"]) != str(turn.id)
@@ -676,10 +675,7 @@ class SqlTurnPreparer:
             ) from exc
         for receipt in final.used_receipts:
             chunk = db.execute(
-                text(
-                    "SELECT snapshot_id, text FROM knowledge_chunks "
-                    "WHERE id=:chunk_id"
-                ),
+                text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
                 {"chunk_id": receipt.chunk_id},
             ).first()
             if (
@@ -692,11 +688,7 @@ class SqlTurnPreparer:
                     "llm_recovery_fence_stale", "The accepted evidence is stale.", 503
                 )
         participant_row = next(
-            (
-                item
-                for item in participants
-                if str(item.participant_id) == str(turn.participant_id)
-            ),
+            (item for item in participants if str(item.participant_id) == str(turn.participant_id)),
             None,
         )
         if participant_row is None:

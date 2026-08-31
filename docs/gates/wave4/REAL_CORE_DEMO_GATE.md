@@ -7,14 +7,14 @@ delay Demo V1. Everything else belongs to the Wave 4.1 Post-Demo Hardening backl
 
 ## Demo composition
 
-| Component | Demo V1 mode |
-| --- | --- |
-| Embedding | Real DashScope `text-embedding-v4` at 1024 |
-| Debate LLM | Real fixed Qwen structured output |
-| TTS | Mock |
-| Voice | Mock |
-| Translation | Mock |
-| Maya Report | Mock |
+| Component   | Demo V1 mode                               |
+| ----------- | ------------------------------------------ |
+| Embedding   | Real DashScope `text-embedding-v4` at 1024 |
+| Debate LLM  | Real fixed Qwen structured output          |
+| TTS         | Mock                                       |
+| Voice       | Mock                                       |
+| Translation | Mock                                       |
+| Maya Report | Mock                                       |
 
 The browser and delivery report must expose this Real/Mock composition without exposing
 model IDs, endpoints, workspace IDs, credentials or raw Provider responses.

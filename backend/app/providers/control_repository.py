@@ -1038,9 +1038,7 @@ class ProviderRepository:
             if existing_stage_row is not None or existing_input_row is not None:
                 if existing_stage_row is None or existing_input_row is None:
                     raise ProviderRepositoryError("LLM accepted bundle is partial")
-                existing_stage = _llm_stage_from_row(
-                    cast(Mapping[str, object], existing_stage_row)
-                )
+                existing_stage = _llm_stage_from_row(cast(Mapping[str, object], existing_stage_row))
                 existing_input = _llm_recovery_input_from_row(
                     cast(Mapping[str, object], existing_input_row)
                 )
@@ -1059,10 +1057,12 @@ class ProviderRepository:
             ):
                 raise ProviderRepositoryError("LLM accepted stage response hash is stale")
             now = self._now()
-            connection.execute(recovery_table.insert().values(
-                **recovery_input.as_record(),
-                created_at=now,
-            ))
+            connection.execute(
+                recovery_table.insert().values(
+                    **recovery_input.as_record(),
+                    created_at=now,
+                )
+            )
             connection.execute(stage_table.insert().values(**stage.as_record(), created_at=now))
             if operation_state == "sending":
                 changed = connection.execute(

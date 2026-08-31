@@ -33,7 +33,7 @@ Report. Product UI and delivery evidence must identify each component as Real or
 - Fake-transport W4-EMBED G2 received Sol High PASS at exact SHA `0c7c6e3`.
 - The response-dialect delta received incremental Sol PASS at `af0bd19`.
 - Frozen real identity is `dashscope / text-embedding-v4 / cn-beijing / 1024 /
-  w4-embed-v1`.
+w4-embed-v1`.
 - Product code has exact teacher manifest/confirmation, 1024 request validation,
   immutable Snapshot publication, restart-safe batch continuation and identity-matched
   real query retrieval.
@@ -63,17 +63,17 @@ production recovery. Excluded work is in
 
 ## Real-Core Demo completion state
 
-| Acceptance slice | Current result |
-| --- | --- |
-| New environment starts | Not yet re-accepted from an empty runtime root |
-| Real Embedding 1024 product E2E | Real Snapshot + Chinese query PASS; final Evidence Turn pending local projection fix |
-| Real LLM two-round product E2E | Not complete |
-| 2–3 confirmed Agents complete two rounds | Not complete with real core Providers |
-| Chinese real RAG hit and Evidence Receipt | Not complete |
-| Teacher export confirmation and budget enforcement | Fake-tested; not yet accepted in real E2E |
-| Accepted-after-restart avoids a second LLM charge | Fake product path PASS; real Demo scenario pending |
-| Browser create-to-Replay chain | Not complete for Real-Core candidate |
-| Demo package and Real/Mock disclosure | Not complete |
+| Acceptance slice                                   | Current result                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| New environment starts                             | Not yet re-accepted from an empty runtime root                                       |
+| Real Embedding 1024 product E2E                    | Real Snapshot + Chinese query PASS; final Evidence Turn pending local projection fix |
+| Real LLM two-round product E2E                     | Not complete                                                                         |
+| 2–3 confirmed Agents complete two rounds           | Not complete with real core Providers                                                |
+| Chinese real RAG hit and Evidence Receipt          | Not complete                                                                         |
+| Teacher export confirmation and budget enforcement | Fake-tested; not yet accepted in real E2E                                            |
+| Accepted-after-restart avoids a second LLM charge  | Fake product path PASS; real Demo scenario pending                                   |
+| Browser create-to-Replay chain                     | Not complete for Real-Core candidate                                                 |
+| Demo package and Real/Mock disclosure              | Not complete                                                                         |
 
 ## Real call ledger
 

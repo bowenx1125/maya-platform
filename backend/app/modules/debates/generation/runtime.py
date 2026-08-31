@@ -652,8 +652,7 @@ class LLMTurnRuntime:
                 raise LLMRuntimeError(code="llm_attempt_exceeds_manifest")
         effective_repair_policy_hash = repair_policy_hash or (
             effective_manifest.repair_policy_hash
-            if effective_manifest is not None
-            and effective_manifest.repair_policy_hash is not None
+            if effective_manifest is not None and effective_manifest.repair_policy_hash is not None
             else ""
         )
         self._require_adapter_preflight(manifest=effective_manifest)
@@ -1060,9 +1059,11 @@ class LLMTurnRuntime:
                 if parameter.kind
                 in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
             }
-            kwargs = metadata if accepts_kwargs else {
-                name: value for name, value in metadata.items() if name in accepted_names
-            }
+            kwargs = (
+                metadata
+                if accepts_kwargs
+                else {name: value for name, value in metadata.items() if name in accepted_names}
+            )
             return sender(prepared.request, **kwargs)
         if getattr(sender, "__name__", "") == "execute":
             try:
@@ -1338,7 +1339,8 @@ class LLMTurnRuntime:
             safe_code = str(exc.code)
             failure_kind: AttemptFailureKind = (
                 "structure_invalid"
-                if safe_code in {
+                if safe_code
+                in {
                     "output_truncated",
                     "json_invalid",
                     "schema_invalid",
@@ -1446,16 +1448,14 @@ class LLMTurnRuntime:
                 raise LLMRuntimeError(code="llm_stage_unavailable") from exc
         operation: object | None = prepared.operation
         if (
-            (stage_method is not None or combined_store is not None)
-            and prepared.operation_id is not None
-        ):
+            stage_method is not None or combined_store is not None
+        ) and prepared.operation_id is not None:
             getter = _method(self.ledger, "get")
             if getter is not None:
                 operation = _invoke(getter, prepared.operation_id)
         if (
             combined_store is None
-            and
-            stage_method is None
+            and stage_method is None
             and prepared.operation_id is not None
             and _operation_state(operation) != "accepted"
         ):
@@ -1978,9 +1978,7 @@ class LLMTurnRuntime:
                         plan=context.turn,
                         participant=context.participant,
                         participants=context.participants,
-                        receipts=cast(
-                            Sequence[SnapshotRetrievalReceipt], current.receipts
-                        ),
+                        receipts=cast(Sequence[SnapshotRetrievalReceipt], current.receipts),
                         predecessors=context.predecessors,
                         pending_question=context.effective_pending_question,
                     )

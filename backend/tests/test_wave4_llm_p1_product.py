@@ -363,16 +363,17 @@ async def test_restart_requeues_complete_bundle_without_llm_call_and_publishes_p
                 text(
                     "SELECT p.state,s.generation_status,s.safe_error_code "
                     "FROM provider_operations AS p "
-                        "JOIN llm_accepted_stages AS a ON a.operation_id=p.id "
-                        "JOIN debate_turns AS s ON s.id=a.turn_id "
-                        "WHERE s.id=:turn_id AND p.state='accepted'"
+                    "JOIN llm_accepted_stages AS a ON a.operation_id=p.id "
+                    "JOIN debate_turns AS s ON s.id=a.turn_id "
+                    "WHERE s.id=:turn_id AND p.state='accepted'"
                 ),
                 {"turn_id": turn_id},
             ).one()
             assert staged == ("accepted", "pending", "tts_timeout")
-            assert connection.execute(
-                text("SELECT COUNT(*) FROM llm_recovery_inputs")
-            ).scalar_one() == adapter.call_count
+            assert (
+                connection.execute(text("SELECT COUNT(*) FROM llm_recovery_inputs")).scalar_one()
+                == adapter.call_count
+            )
         calls_before_restart = adapter.call_count
         assert calls_before_restart in {1, 2}
         await first_tasks.close()
@@ -412,9 +413,12 @@ async def test_restart_requeues_complete_bundle_without_llm_call_and_publishes_p
                 {"turn_id": turn_id},
             ).one()
             assert operation == ("succeeded", "succeeded")
-            assert connection.execute(
-                text("SELECT state FROM jobs WHERE turn_id=:turn_id"), {"turn_id": turn_id}
-            ).scalar_one() == "completed"
+            assert (
+                connection.execute(
+                    text("SELECT state FROM jobs WHERE turn_id=:turn_id"), {"turn_id": turn_id}
+                ).scalar_one()
+                == "completed"
+            )
             source = connection.execute(
                 text(
                     "SELECT snapshot_id,chunk_id FROM turn_sources WHERE turn_id=:turn_id "
@@ -552,17 +556,23 @@ async def test_playback_publication_failure_rolls_back_turn_files_and_operation(
                 "accepted",
                 "accepted",
             )
-            assert connection.execute(
-                text("SELECT COUNT(*) FROM turn_sources WHERE turn_id=:turn_id"),
-                {"turn_id": turn_id},
-            ).scalar_one() == 0
-            assert connection.execute(
-                text(
-                    "SELECT COUNT(*) FROM stored_files "
-                    "WHERE kind='debate_audio' AND relative_path=:relative_path"
-                ),
-                {"relative_path": relative_audio_path},
-            ).scalar_one() == 0
+            assert (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM turn_sources WHERE turn_id=:turn_id"),
+                    {"turn_id": turn_id},
+                ).scalar_one()
+                == 0
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT COUNT(*) FROM stored_files "
+                        "WHERE kind='debate_audio' AND relative_path=:relative_path"
+                    ),
+                    {"relative_path": relative_audio_path},
+                ).scalar_one()
+                == 0
+            )
         path = Path(settings.resolved_data_root) / relative_audio_path
         assert not path.exists()
     finally:
@@ -767,16 +777,25 @@ def _atomic_fixture(database: Database) -> tuple[SimpleNamespace, SimpleNamespac
                 "debate_id": debate_id,
                 "participant": "participant",
                 "snapshot": "snapshot",
-            "transcript": transcript_hash,
+                "transcript": transcript_hash,
             },
         )
         connection.execute(
             text(
                 "INSERT INTO provider_operations VALUES (:id,:scope,'llm_debate_turn',:turn,1,:request,:output,'accepted','now')"  # noqa: E501
             ),
-            {"id": operation_id, "scope": debate_id, "turn": turn_id, "request": request_hash, "output": "o" * 64},  # noqa: E501
+            {
+                "id": operation_id,
+                "scope": debate_id,
+                "turn": turn_id,
+                "request": request_hash,
+                "output": "o" * 64,
+            },  # noqa: E501
         )
-        connection.execute(text("INSERT INTO provider_reservations VALUES (:id,'accepted','now')"), {"id": operation_id})  # noqa: E501
+        connection.execute(
+            text("INSERT INTO provider_reservations VALUES (:id,'accepted','now')"),
+            {"id": operation_id},
+        )  # noqa: E501
         connection.execute(
             text(
                 "INSERT INTO llm_accepted_stages (operation_id,turn_id,attempt_no,request_hash,prompt_hash,prompt_contract_version,schema_hash,tokenizer_id,tokenizer_hash,rule_set_hash,persona_spec_hash,transcript_hash,receipt_hash,policy_hash,export_manifest_hash,build_manifest_hash,repair_policy_hash,generation_fence,model_key,output_json,output_hash) VALUES (:operation_id,:turn_id,1,:request_hash,:prompt_hash,:prompt_contract_version,:schema_hash,:tokenizer_id,:tokenizer_hash,:rule_set_hash,:persona_spec_hash,:transcript_hash,:receipt_hash,:policy_hash,:export_manifest_hash,:build_manifest_hash,NULL,:generation_fence,:model_key,:output_json,:output_hash)"  # noqa: E501
@@ -831,8 +850,14 @@ def test_sql_publication_promotes_operation_and_reservation_atomically(tmp_path)
             ),
         )
     with database.engine.connect() as connection:
-        assert connection.execute(text("SELECT state FROM provider_operations")).scalar_one() == "succeeded"  # noqa: E501
-        assert connection.execute(text("SELECT state FROM provider_reservations")).scalar_one() == "succeeded"  # noqa: E501
+        assert (
+            connection.execute(text("SELECT state FROM provider_operations")).scalar_one()
+            == "succeeded"
+        )  # noqa: E501
+        assert (
+            connection.execute(text("SELECT state FROM provider_reservations")).scalar_one()
+            == "succeeded"
+        )  # noqa: E501
     database.dispose()
 
 
@@ -842,9 +867,7 @@ def test_sql_publication_failure_rolls_turn_and_operation_back(tmp_path) -> None
     stage, recovery = _atomic_fixture(database)
     with pytest.raises(RuntimeError, match="reservation CAS"):
         with database.session() as db:
-            db.execute(
-                text("UPDATE debate_turns SET structured_json='changed' WHERE id='turn-p1'")
-            )
+            db.execute(text("UPDATE debate_turns SET structured_json='changed' WHERE id='turn-p1'"))
             db.execute(
                 text("DELETE FROM provider_reservations WHERE operation_id=:operation_id"),
                 {"operation_id": stage.operation_id},
@@ -867,9 +890,17 @@ def test_sql_publication_failure_rolls_turn_and_operation_back(tmp_path) -> None
                 ),
             )
     with database.engine.connect() as connection:
-        assert connection.execute(text("SELECT state FROM provider_operations")).scalar_one() == "accepted"  # noqa: E501
-        assert connection.execute(text("SELECT structured_json FROM debate_turns")).scalar_one() == "{}"  # noqa: E501
-        assert connection.execute(text("SELECT COUNT(*) FROM provider_reservations")).scalar_one() == 1  # noqa: E501
+        assert (
+            connection.execute(text("SELECT state FROM provider_operations")).scalar_one()
+            == "accepted"
+        )  # noqa: E501
+        assert (
+            connection.execute(text("SELECT structured_json FROM debate_turns")).scalar_one()
+            == "{}"
+        )  # noqa: E501
+        assert (
+            connection.execute(text("SELECT COUNT(*) FROM provider_reservations")).scalar_one() == 1
+        )  # noqa: E501
     database.dispose()
 
 

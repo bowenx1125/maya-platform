@@ -362,8 +362,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     str(row[0])
                     for row in db.execute(
                         text(
-                            "SELECT DISTINCT debate_id FROM debate_turns "
-                            "WHERE id IN :turn_ids"
+                            "SELECT DISTINCT debate_id FROM debate_turns WHERE id IN :turn_ids"
                         ).bindparams(bindparam("turn_ids", expanding=True)),
                         {"turn_ids": tuple(protected_turns)},
                     ).all()
@@ -409,21 +408,21 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "UPDATE debate_turns SET generation_status='failed', "
                         "preparation_stage='failed', safe_error_code='process_restarted', "
                         "updated_at=:updated_at WHERE generation_status IN ('pending','running') "
-                            "AND id NOT IN :accepted_turn_ids "
-                            "AND id NOT IN :blocked_turn_ids "
-                            "AND id NOT IN :deferred_provider_turn_ids "
-                            "AND id IN (SELECT turn_id FROM jobs WHERE debate_id IS NOT NULL "
-                            "AND turn_id IS NOT NULL AND state IN ('pending','running'))"
-                        )
-                        .bindparams(bindparam("accepted_turn_ids", expanding=True))
-                        .bindparams(bindparam("blocked_turn_ids", expanding=True))
-                        .bindparams(bindparam("deferred_provider_turn_ids", expanding=True)),
-                        {
-                            "updated_at": _now(),
-                            "accepted_turn_ids": tuple(accepted_recovery_turns) or ("",),
-                            "blocked_turn_ids": tuple(blocked_recovery_turns) or ("",),
-                            "deferred_provider_turn_ids": tuple(deferred_provider_turns) or ("",),
-                        },
+                        "AND id NOT IN :accepted_turn_ids "
+                        "AND id NOT IN :blocked_turn_ids "
+                        "AND id NOT IN :deferred_provider_turn_ids "
+                        "AND id IN (SELECT turn_id FROM jobs WHERE debate_id IS NOT NULL "
+                        "AND turn_id IS NOT NULL AND state IN ('pending','running'))"
+                    )
+                    .bindparams(bindparam("accepted_turn_ids", expanding=True))
+                    .bindparams(bindparam("blocked_turn_ids", expanding=True))
+                    .bindparams(bindparam("deferred_provider_turn_ids", expanding=True)),
+                    {
+                        "updated_at": _now(),
+                        "accepted_turn_ids": tuple(accepted_recovery_turns) or ("",),
+                        "blocked_turn_ids": tuple(blocked_recovery_turns) or ("",),
+                        "deferred_provider_turn_ids": tuple(deferred_provider_turns) or ("",),
+                    },
                 )
             db.execute(
                 text(

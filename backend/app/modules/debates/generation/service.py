@@ -534,9 +534,7 @@ class TurnGenerationService:
                 queries=subqueries,
                 build_manifest_hash=str(options["build_manifest_hash"]),
                 repair_policy_hash=str(options.get("repair_policy_hash") or ""),
-                identity_tokens=tuple(
-                    cast(Sequence[str], options.get("identity_tokens") or ())
-                ),
+                identity_tokens=tuple(cast(Sequence[str], options.get("identity_tokens") or ())),
                 outbound_manifest=options.get("outbound_manifest"),
                 question_target_ids=tuple(
                     cast(Sequence[str], options.get("question_target_ids") or ())

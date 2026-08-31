@@ -1241,26 +1241,31 @@ def _scan_recovery_input_value(value: object, *, path: tuple[str, ...] = ()) -> 
                     code="llm_recovery_input_forbidden",
                 )
             folded = re.sub(r"[\s.-]+", "_", key.casefold())
-            identity_path = path in {
-                ("input", "persona_provider_view"),
-                ("input", "request", "persona_provider_view"),
-            } and folded == "identity"
+            identity_path = (
+                path
+                in {
+                    ("input", "persona_provider_view"),
+                    ("input", "request", "persona_provider_view"),
+                }
+                and folded == "identity"
+            )
             if (
                 folded in _RECOVERY_INPUT_FORBIDDEN_KEYS
-                or folded == "identity" and not identity_path
+                or folded == "identity"
+                and not identity_path
                 or any(
-                marker in folded
-                for marker in (
-                    "agent_md",
-                    "teacher_note",
-                    "student_identity",
-                    "user_identity",
-                    "member_identity",
-                    "credential",
-                    "authorization",
-                    "endpoint",
-                    "workspace",
-                )
+                    marker in folded
+                    for marker in (
+                        "agent_md",
+                        "teacher_note",
+                        "student_identity",
+                        "user_identity",
+                        "member_identity",
+                        "credential",
+                        "authorization",
+                        "endpoint",
+                        "workspace",
+                    )
                 )
             ):
                 raise ProviderControlError(
@@ -1924,10 +1929,7 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         recovery_input.__post_init__()
         if recovery_input.operation_id != stage.operation_id:
             raise OperationStateError("LLM recovery input does not match operation")
-        if (
-            recovery_input.turn_id != stage.turn_id
-            or recovery_input.attempt_no != stage.attempt_no
-        ):
+        if recovery_input.turn_id != stage.turn_id or recovery_input.attempt_no != stage.attempt_no:
             raise OperationStateError("LLM recovery input does not match stage")
         with self._lock:
             operation = self.operation(stage.operation_id)

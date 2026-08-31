@@ -132,30 +132,37 @@ class SqlLLMPublication:
             or len(output_hash) != 64
         ):
             raise RuntimeError("LLM publication stage identity is stale")
-        operation_row = self.db.execute(
-            text(
-                "SELECT state, provider_operation, logical_item_id, request_hash, "
-                "staged_response_hash FROM provider_operations WHERE id=:operation_id"
-            ),
-            {"operation_id": operation_id},
-        ).mappings().first()
+        operation_row = (
+            self.db.execute(
+                text(
+                    "SELECT state, provider_operation, logical_item_id, request_hash, "
+                    "staged_response_hash FROM provider_operations WHERE id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+            .mappings()
+            .first()
+        )
         if operation_row is None:
             raise RuntimeError("LLM publication operation is unavailable")
         if (
             str(operation_row["provider_operation"]) != "llm_debate_turn"
             or str(operation_row["logical_item_id"]) != turn_id
             or str(operation_row["request_hash"]) != request_hash
-            or str(operation_row["staged_response_hash"] or "")
-            not in {"", output_hash}
+            or str(operation_row["staged_response_hash"] or "") not in {"", output_hash}
         ):
             raise RuntimeError("LLM publication operation identity is stale")
-        stage_row = self.db.execute(
-            text(
-                "SELECT output_hash, turn_id, request_hash FROM llm_accepted_stages "
-                "WHERE operation_id=:operation_id"
-            ),
-            {"operation_id": operation_id},
-        ).mappings().first()
+        stage_row = (
+            self.db.execute(
+                text(
+                    "SELECT output_hash, turn_id, request_hash FROM llm_accepted_stages "
+                    "WHERE operation_id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+            .mappings()
+            .first()
+        )
         if stage_row is None or (
             str(stage_row["output_hash"]) != output_hash
             or str(stage_row["turn_id"]) != turn_id
@@ -198,8 +205,7 @@ class SqlLLMPublication:
             or prompt_hash != str(stage_row.get("prompt_hash", getattr(stage, "prompt_hash", "")))
             or fence_hash != str(getattr(stage, "generation_fence", ""))
             or str(identity_value.get("request_hash", "")) != request_hash
-            or str(identity_value.get("prompt_hash", ""))
-            != str(getattr(stage, "prompt_hash", ""))
+            or str(identity_value.get("prompt_hash", "")) != str(getattr(stage, "prompt_hash", ""))
             or str(identity_value.get("turn_id", "")) != turn_id
             or _as_int(identity_value.get("attempt_no", 0), 0)
             != _as_int(getattr(stage, "attempt_no", 0), 0)
@@ -224,14 +230,18 @@ class SqlLLMPublication:
                 raise RuntimeError("LLM publication recovery identity is stale")
         if identity_value.get("repair_policy_hash") != getattr(stage, "repair_policy_hash", None):
             raise RuntimeError("LLM publication recovery identity is stale")
-        recovery_row = self.db.execute(
-            text(
-                "SELECT input_hash, input_json, input_version, operation_id, turn_id, attempt_no "
-                "FROM llm_recovery_inputs "
-                "WHERE operation_id=:operation_id"
-            ),
-            {"operation_id": operation_id},
-        ).mappings().first()
+        recovery_row = (
+            self.db.execute(
+                text(
+                    "SELECT input_hash, input_json, input_version, operation_id, turn_id, attempt_no "
+                    "FROM llm_recovery_inputs "
+                    "WHERE operation_id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+            .mappings()
+            .first()
+        )
         if recovery_row is None or (
             str(recovery_row["input_hash"]) != input_hash
             or str(recovery_row["input_json"]) != input_json
@@ -240,17 +250,21 @@ class SqlLLMPublication:
             or str(recovery_row["turn_id"]) != turn_id
         ):
             raise RuntimeError("LLM publication recovery row is unavailable")
-        turn_row = self.db.execute(
-            text(
-                "SELECT t.generation_status, t.structured_json, t.evidence_trace_json, "
-                "t.debate_id, t.participant_id, t.knowledge_snapshot_id, "
-                "t.predecessor_turn_ids_json, t.transcript_hash, t.cutoff_turn_index, "
-                "d.cancellation_generation "
-                "FROM debate_turns AS t JOIN debates AS d ON d.id=t.debate_id "
-                "WHERE t.id=:turn_id"
-            ),
-            {"turn_id": turn_id},
-        ).mappings().first()
+        turn_row = (
+            self.db.execute(
+                text(
+                    "SELECT t.generation_status, t.structured_json, t.evidence_trace_json, "
+                    "t.debate_id, t.participant_id, t.knowledge_snapshot_id, "
+                    "t.predecessor_turn_ids_json, t.transcript_hash, t.cutoff_turn_index, "
+                    "d.cancellation_generation "
+                    "FROM debate_turns AS t JOIN debates AS d ON d.id=t.debate_id "
+                    "WHERE t.id=:turn_id"
+                ),
+                {"turn_id": turn_id},
+            )
+            .mappings()
+            .first()
+        )
         if turn_row is None or str(turn_row["generation_status"]) != "final_ready":
             raise RuntimeError("LLM publication turn is not final-ready")
         if not str(turn_row["structured_json"] or ""):
@@ -270,9 +284,7 @@ class SqlLLMPublication:
             raise RuntimeError("LLM publication recovery identity is stale")
         if str(request_value.get("turn_id", "")) != turn_id:
             raise RuntimeError("LLM publication recovery identity is stale")
-        if str(request_value.get("transcript_hash", "")) != str(
-            turn_row["transcript_hash"] or ""
-        ):
+        if str(request_value.get("transcript_hash", "")) != str(turn_row["transcript_hash"] or ""):
             raise RuntimeError("LLM publication transcript fence is stale")
         final_ready = kwargs.get("final_ready")
         recovery_receipts = (
@@ -289,10 +301,7 @@ class SqlLLMPublication:
             if not isinstance(chunk_id, str) or not isinstance(snapshot_id, str):
                 raise RuntimeError("LLM publication recovery receipt is invalid")
             chunk = self.db.execute(
-                text(
-                    "SELECT snapshot_id, text FROM knowledge_chunks "
-                    "WHERE id=:chunk_id"
-                ),
+                text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
                 {"chunk_id": chunk_id},
             ).first()
             if (
@@ -307,8 +316,7 @@ class SqlLLMPublication:
                 str(_read(final_ready, "turn_id", "")) != turn_id
                 or str(_read(final_ready, "debate_id", turn_row["debate_id"]))
                 != str(turn_row["debate_id"])
-                or str(_read(final_ready, "participant_id", ""))
-                != str(turn_row["participant_id"])
+                or str(_read(final_ready, "participant_id", "")) != str(turn_row["participant_id"])
                 or str(_read(final_ready, "snapshot_id", ""))
                 != str(turn_row["knowledge_snapshot_id"])
                 or str(_read(final_ready, "transcript_hash", ""))
@@ -328,9 +336,7 @@ class SqlLLMPublication:
                 snapshot_id = _read(receipt, "snapshot_id", "")
                 chunk_id = _read(receipt, "chunk_id", "")
                 chunk = self.db.execute(
-                    text(
-                        "SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"
-                    ),
+                    text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
                     {"chunk_id": str(chunk_id)},
                 ).first()
                 if (
@@ -340,15 +346,19 @@ class SqlLLMPublication:
                     or str(chunk[1]) != str(_read(receipt, "text", ""))
                 ):
                     raise RuntimeError("LLM publication receipt crossed its snapshot")
-        manifest_row = self.db.execute(
-            text(
-                "SELECT scope_id, provider_operation, model_key, policy_hash, "
-                "build_manifest_hash, debate_id, turn_id, max_attempts, "
-                "max_total_tokens, max_cost_cny, repair_policy_version, repair_policy_hash "
-                "FROM provider_export_manifests WHERE manifest_hash=:manifest_hash"
-            ),
-            {"manifest_hash": str(getattr(stage, "export_manifest_hash", ""))},
-        ).mappings().first()
+        manifest_row = (
+            self.db.execute(
+                text(
+                    "SELECT scope_id, provider_operation, model_key, policy_hash, "
+                    "build_manifest_hash, debate_id, turn_id, max_attempts, "
+                    "max_total_tokens, max_cost_cny, repair_policy_version, repair_policy_hash "
+                    "FROM provider_export_manifests WHERE manifest_hash=:manifest_hash"
+                ),
+                {"manifest_hash": str(getattr(stage, "export_manifest_hash", ""))},
+            )
+            .mappings()
+            .first()
+        )
         if manifest_row is None or (
             str(manifest_row["scope_id"]) != str(turn_row["debate_id"])
             or str(manifest_row["provider_operation"]) != "llm_debate_turn"
@@ -368,10 +378,7 @@ class SqlLLMPublication:
         state = str(operation_row["state"])
         if state == "succeeded":
             reservation = self.db.execute(
-                text(
-                    "SELECT state FROM provider_reservations "
-                    "WHERE operation_id=:operation_id"
-                ),
+                text("SELECT state FROM provider_reservations WHERE operation_id=:operation_id"),
                 {"operation_id": operation_id},
             ).scalar_one_or_none()
             if str(reservation) != "succeeded":
