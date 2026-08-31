@@ -9,8 +9,8 @@ discussion is never a default implementation input.
 Maya is a local-first teaching platform where student groups build culture-focused
 Agents from an authored persona, an immutable Markdown RAG snapshot, a constrained
 3D avatar and an optional voice. A teacher selects 2–5 published Agents in click
-order, runs a fixed two-round English debate, opens anonymous classroom interaction,
-and generates a civilization mutual-learning report.
+order, runs a versioned 2–5-round English mutual-learning session, opens anonymous
+classroom interaction, and generates a civilization mutual-learning report.
 
 The Demo principle is: complete interfaces, simple internals, and one demonstrable
 main flow. Mock evidence, real-provider evidence and human acceptance must always be

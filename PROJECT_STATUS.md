@@ -4,7 +4,7 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED / W4_LLM_A_G0_SOL_PASS / W4_LLM_A_G1_IN_PROGRESS`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED / W4_LLM_A_G0_SOL_PASS / W4_LLM_A_G2_AUDIT_CANDIDATE`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -25,29 +25,13 @@ evidence is backend `822`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typec
 OpenAPI/generated/route/WS/repository boundaries and all populated Wave 1–4/0013
 migration probes.
 
-Sol High audited the prior exact candidate `9fabfb1` and returned
-`CHANGES_REQUIRED / P0=0 / P1=2 / P2=1`: actual outbound document/query text needed an
-explicit forbidden-data scan, the ordinary student publication error leaked a manifest
-hash, and the pre-confirmation zero-reservation invariant needed a direct assertion. The
-current clean repair candidate scans actual real-Embedding text before any export or
-call, keeps unsafe input at zero manifest/operation/call, removes the hash from the
-student error, adds a dedicated course-authorized teacher discovery page/DTO, and proves
-`prepared / 0 requests / 0 charged / no reservation / no budget` before confirmation.
-Sol High re-audited exact clean SHA `0c7c6e3` and returned
-`PASS / P0=0 / P1=0 / P2=0`, unlocking only the one contracted safe 1024 preflight.
-That single request returned HTTP 200 but the local adapter rejected the documented
-native DashScope `output.embeddings` envelope because it incorrectly required a
-response `model`; the preflight therefore ended
-`REAL EMBEDDING 1024 PREFLIGHT FAILED` with safe code `embedding_model_mismatch`.
-The request was not repeated. Official documentation confirms the native response uses
-`text_index` and does not return `model`; commit `dbef20e` now isolates that exception
-to the fixed DashScope-native dialect while generic/OpenAI-compatible responses still
-require exact model. Incremental Sol then found one P1 conflict case where a correct
-top-level model could mask a wrong `output.model`; commit `48da2a7` now validates both
-locations independently and rejects every conflicting explicit declaration. Fake tests
-cover the repair; Sol High returned `EMBED_DELTA PASS / P0=0 / P1=0 / P2=0` on exact
-SHA `af0bd19`. The real preflight remains FAILED and cannot be retried. No CI run has
-occurred.
+Sol High signed the fake-transport Embedding candidate at exact SHA `0c7c6e3` with
+`PASS / P0=0 / P1=0 / P2=0`. Its one permitted safe 1024 preflight returned HTTP 200
+but failed local validation as `embedding_model_mismatch`; it was not repeated. The
+documented native response-dialect repair and explicit-model conflict check are
+fake-tested and received incremental `EMBED_DELTA PASS / P0=0 / P1=0 / P2=0` at
+`af0bd19`. The truthful service status remains FAILED, the allowance is exhausted, and
+no vectors or PASS claim were retained.
 
 W4-LLM-A G0-S began `CHANGES_REQUIRED / P1=6`; wire/schema, atomic publication, budget,
 ownership, privacy and tokenizer contracts closed those findings. Re-audits closed
@@ -57,6 +41,24 @@ server-authored code/JSON-Pointer grammar and policy hash to the confirmed manif
 Sol High returned `LLM_A_G0 PASS / P0=0 / P1=0 / P2=0` on exact SHA `4182d1a`.
 Issues #22–#24 now own ledger/migration, adapter/output and turn runtime/disclosure fake
 implementation. The PASS does not authorize a real LLM call.
+
+Issues #22–#25 are now integrated locally. Migration `0014` isolates Provider budget
+buckets and persists exact Debate/Turn manifests plus immutable accepted LLM stages.
+The fixed adapter scans the exact two-message request before transport, binds the pinned
+tokenizer, price card, output schema and repair policy, stages accepted output before
+local mapping, and rejects legacy authority, identity leakage, budget drift and
+unauthorized retries with zero calls. The product runtime reuses the exact prepared
+operation after teacher confirmation, publishes Turn/Evidence/usage/success atomically,
+never retries acceptance-unknown work, and performs startup reconciliation without a
+network client. A teacher-only Debate page lists only turn ID, manifest hash, revision
+and confirmation state; Provider/model/endpoint/prompt/usage remain server-only.
+
+Current local G1.5 evidence is backend `874`, frontend `35 files / 214 tests`, Ruff,
+mypy (`157` source files), lint, TypeScript, production build, migrations 0001–0014,
+frozen OpenAPI/generated client (`77` operations), WebSocket fixtures, document and
+repository/secret boundaries. The integrated LLM work made `0` real Provider calls and
+ran no GitHub CI. Incremental Sol review closed the two prior ledger/adapter P1 findings
+at `P0=0 / P1=0 / P2=0`; final same-SHA LLM-A G2 is still required.
 
 ## Source and remote
 
@@ -117,7 +119,9 @@ implementation. The PASS does not authorize a real LLM call.
 - Real TTS attempts 1–3 failed; attempt 3 ended `tts_audio_invalid` and remains
   `FAILED-DEFERRED` until the Wave 4 TTS Gate fixes endpoint/language/diagnostic
   contracts before another request.
-- Real LLM and Translation remain unavailable. The Embedding candidate now has a fixed
+- Formal LLM and Translation selectors remain Mock. The real LLM adapter/runtime is a
+  fake-transported G2 audit candidate and has made no real request; it is not a
+  real-service PASS. The Embedding candidate now has a fixed
   runtime selector, no-redirect single-attempt transport, exact teacher disclosure and
   confirmation CAS, durable policy/export/budget/stage ledgers, atomic SQL Snapshot
   publication, restart-safe missing-batch continuation and identity-matched query
@@ -174,8 +178,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Do not repeat the exhausted 1024 preflight. Complete Issues #22–#24 through Luna local
-fake-transport implementation, main-window integration and exact-SHA Sol G2 audit.
+Do not repeat the exhausted 1024 preflight. Freeze the current LLM-A integration SHA
+and obtain independent Sol G2 with `P0=0 / P1=0`; iterate locally if the audit finds a
+defect. After LLM-A G2, run the empty-runtime local G3 chain without a real LLM request.
 W4-EMBED remains unsigned because the real preflight and empty-runtime browser
 publication/query/retrieval/Evidence/restart chain have not passed. GitHub CI remains
 deferred to the final integrated Wave 4 PR.
