@@ -4,7 +4,7 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED / W4_LLM_A_G0_SOL_PASS / W4_LLM_A_G2_AUDIT_CANDIDATE`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED / W4_LLM_A_G0_SOL_PASS / W4_LLM_A_G2_CHANGES_REQUIRED`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -57,8 +57,10 @@ Current local G1.5 evidence is backend `875`, frontend `35 files / 214 tests`, R
 mypy (`157` source files), lint, TypeScript, production build, migrations 0001–0014,
 frozen OpenAPI/generated client (`77` operations), WebSocket fixtures, document and
 repository/secret boundaries. The integrated LLM work made `0` real Provider calls and
-ran no GitHub CI. Incremental Sol review closed the two prior ledger/adapter P1 findings
-at `P0=0 / P1=0 / P2=0`; final same-SHA LLM-A G2 is still required.
+ran no GitHub CI. Final Sol audit of `9cb9709` returned
+`CHANGES_REQUIRED / P0=0 / P1=2 / P2=0`: production still needs atomic
+Turn/Evidence/usage/success and durable zero-network accepted-stage recovery. The repair
+loop is active; G2 is not signed.
 
 ## Source and remote
 
@@ -178,9 +180,10 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Do not repeat the exhausted 1024 preflight. Freeze the current LLM-A integration SHA
-and obtain independent Sol G2 with `P0=0 / P1=0`; iterate locally if the audit finds a
-defect. After LLM-A G2, run the empty-runtime local G3 chain without a real LLM request.
+Do not repeat the exhausted 1024 preflight. Add the 0015 accepted-stage recovery input,
+atomic SQL Turn/Evidence/usage/success publication and zero-network startup continuation;
+then rerun the full local matrix and exact-SHA Sol G2. After PASS, run the empty-runtime
+local G3 chain without a real LLM request.
 W4-EMBED remains unsigned because the real preflight and empty-runtime browser
 publication/query/retrieval/Evidence/restart chain have not passed. GitHub CI remains
 deferred to the final integrated Wave 4 PR.
