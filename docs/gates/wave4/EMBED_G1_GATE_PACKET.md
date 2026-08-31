@@ -42,6 +42,22 @@ The current repair candidate additionally closes the five prior G2 findings:
   classroom WebSocket/DTOs receive only a safe recoverable code, never a manifest,
   provider, model or endpoint.
 
+Independent Sol High then audited exact clean SHA
+`9fabfb1f9f3a718005f55cfa7f34ed17afd7919f` and returned
+`CHANGES_REQUIRED / P0=0 / P1=2 / P2=1`. The current candidate closes those three
+findings without making a Provider call:
+
+- the actual real-Embedding document text and canonical turn queries are scanned before
+  export hashing, manifest persistence, confirmation or Provider selection; credential-
+  and private-identity-shaped inputs fail closed with no manifest, operation, reservation
+  or Provider call;
+- ordinary student publication errors no longer contain a manifest hash. A dedicated,
+  course-authorized teacher route discovers exact publication manifests from the
+  AgentVersion owner chain, including an unconfirmed manifest that has no operation row;
+- direct regression assertions prove a pre-confirmation query operation remains
+  `prepared` with zero requests, zero charged requests, no reservation and no scope
+  budget.
+
 ## Frozen invariants
 
 - No request occurs before exact policy, manifest, confirmation and budget preflight.
@@ -55,13 +71,13 @@ The current repair candidate additionally closes the five prior G2 findings:
 
 ## Current deterministic evidence
 
-- backend full suite: `796 passed`;
-- frontend: `33 files / 209 tests`, lint, TypeScript and production build passed;
+- backend full suite: `812 passed`;
+- frontend: `34 files / 210 tests`, lint, TypeScript and production build passed;
 - Ruff and mypy passed;
-- frozen OpenAPI and generated client passed; the route semantic fixture contains `75`
+- frozen OpenAPI and generated client passed; the route semantic fixture contains `76`
   platform operations with zero placeholders, the live FastAPI comparator reports `55`
   implemented strict operations with zero placeholders, and the response checker covers
-  `75` operations;
+  `76` operations;
 - repository/secret boundary and generated-source red-team probe passed;
 - fresh/repeat migrations 0001–0013 plus populated Wave 1/2/3/4, Evidence Trace and
   Embedding identity downgrade/re-upgrade probes passed;
@@ -73,10 +89,11 @@ The current repair candidate additionally closes the five prior G2 findings:
 ## Remaining Gate boundary
 
 No formal real 1024 request may run until a new exact clean SHA receives independent
-Sol High `PASS / P0=0 / P1=0`. That audit must challenge the five repaired findings,
-the pre-confirmation `prepared` operation (zero reservation/call), course authorization,
-partial continuation, acceptance-unknown behavior, ordinary DTO secrecy and the
-non-terminal Playback retry fence.
+Sol High `PASS / P0=0 / P1=0`. That audit must verify the three latest repairs as well as
+the five earlier findings, actual outbound-text blocking, the pre-confirmation `prepared`
+operation (zero reservation/call), course authorization, partial continuation,
+acceptance-unknown behavior, ordinary DTO secrecy and the non-terminal Playback retry
+fence.
 
 After PASS, exactly one safe 3-text 1024 preflight is allowed. It can prove only
 `REAL EMBEDDING 1024 PREFLIGHT PASS`; W4-EMBED itself still requires empty-runtime

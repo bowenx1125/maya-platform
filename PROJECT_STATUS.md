@@ -33,10 +33,21 @@ The W4-EMBED repair candidate now implements the frozen real 1024 identity end t
 through injected fake transport: durable multi-batch publication and continuation,
 student publication orchestration, identity-matched query retrieval, exact per-turn
 teacher disclosure/confirmation and non-terminal explicit retry. Current deterministic
-evidence is backend `796`, frontend `33 files / 209 tests`, Ruff/mypy/lint/typecheck/build,
+evidence is backend `812`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typecheck/build,
 OpenAPI/generated/route/WS/repository boundaries and all populated Wave 1–4/0013
 migration probes. It has not called a real Provider and cannot run the one permitted
 1024 preflight until a new exact clean SHA receives Sol High `P0=0 / P1=0`.
+
+Sol High audited the prior exact candidate `9fabfb1` and returned
+`CHANGES_REQUIRED / P0=0 / P1=2 / P2=1`: actual outbound document/query text needed an
+explicit forbidden-data scan, the ordinary student publication error leaked a manifest
+hash, and the pre-confirmation zero-reservation invariant needed a direct assertion. The
+current clean repair candidate scans actual real-Embedding text before any export or
+call, keeps unsafe input at zero manifest/operation/call, removes the hash from the
+student error, adds a dedicated course-authorized teacher discovery page/DTO, and proves
+`prepared / 0 requests / 0 charged / no reservation / no budget` before confirmation.
+This repair is awaiting exact-SHA Sol re-audit; no formal runtime request or CI run has
+occurred.
 
 ## Source and remote
 

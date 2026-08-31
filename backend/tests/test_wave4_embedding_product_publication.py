@@ -844,9 +844,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     assert transport.calls == []
 
     _teacher, teacher_csrf = login(client, "teacher-demo")
-    pending = client.get(
-        f"/api/v1/provider/data-call/pending/agent-versions/{version_id}"
-    )
+    pending = client.get(f"/api/v1/provider/data-call/pending/agent-versions/{version_id}")
     assert pending.status_code == 200, pending.text
     pending_body = pending.json()
     assert pending_body["agent_version_id"] == version_id
