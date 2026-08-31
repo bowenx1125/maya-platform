@@ -352,7 +352,7 @@ class Settings(BaseSettings):
             ("REPORT_PROVIDER",),
             ("LLM_PROVIDER", "REPORT_PROVIDER"),
             ("EMBEDDING_PROVIDER", "REPORT_PROVIDER"),
-            ("LLM_PROVIDER", "EMBEDDING_PROVIDER", "REPORT_PROVIDER"),
+            ("LLM_PROVIDER", "REPORT_PROVIDER", "EMBEDDING_PROVIDER"),
         }
         if real_slice_names not in allowed_real_compositions:
             raise RuntimeError(

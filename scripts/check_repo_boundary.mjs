@@ -170,6 +170,7 @@ function walk(directory) {
       relativePath === "backend/tests/test_wave1b_voices.py" ||
       relativePath === "backend/tests/test_wave4_llm_adapter.py" ||
       relativePath === "backend/tests/test_wave4_llm_runtime.py" ||
+      relativePath === "backend/tests/test_real_report_provider.py" ||
       relativePath === "docs/contracts/wave4/LLM_A_RUNTIME_V1.md";
     if (!supplierUrlAllowed && supplierUrlPattern.test(text))
       boundaryFailures.push(

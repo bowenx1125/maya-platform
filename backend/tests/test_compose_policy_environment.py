@@ -1,4 +1,4 @@
-"""Check that the dual-Real policy hashes cross the Compose boundary safely."""
+"""Check that the Real-Core policy hashes cross the Compose boundary safely."""
 
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ import yaml
 from app.core.config import Settings
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DUAL_REAL_POLICY_VARIABLES = (
+REAL_PROVIDER_POLICY_VARIABLES = (
     "EMBEDDING_PROVIDER_POLICY_HASH",
     "LLM_PROVIDER_POLICY_HASH",
+    "REPORT_PROVIDER_POLICY_HASH",
 )
 
 
@@ -32,13 +33,14 @@ def _env_example_names() -> set[str]:
     }
 
 
-def test_compose_forwards_dual_real_policy_hashes_to_backend_without_logging(
+def test_compose_forwards_real_core_policy_hashes_to_backend_without_logging(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     environment = _backend_environment()
     assert environment["PROVIDER_POLICY_HASH"] == "${PROVIDER_POLICY_HASH:-}"
     expected_variables = {
         "LLM_PROVIDER": "dashscope",
+        "MAYA_REPORT_PROVIDER": "dashscope",
         "EMBEDDING_PROVIDER": "dashscope",
         "TTS_PROVIDER": "mock",
         "VOICE_PROVIDER": "mock",
@@ -46,8 +48,9 @@ def test_compose_forwards_dual_real_policy_hashes_to_backend_without_logging(
         "DASHSCOPE_API_KEY": "fixture-key",
         "DASHSCOPE_WORKSPACE_ID": "fixture-workspace",
         "DASHSCOPE_REGION": "cn-beijing",
-        DUAL_REAL_POLICY_VARIABLES[0]: "a" * 64,
-        DUAL_REAL_POLICY_VARIABLES[1]: "b" * 64,
+        REAL_PROVIDER_POLICY_VARIABLES[0]: "a" * 64,
+        REAL_PROVIDER_POLICY_VARIABLES[1]: "b" * 64,
+        REAL_PROVIDER_POLICY_VARIABLES[2]: "d" * 64,
         "LLM_PRICE_CARD_VERSION": "fixture-price-card-v1",
         "LLM_INPUT_PRICE_CNY_PER_MILLION": "1",
         "LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION": "0.5",
@@ -64,29 +67,33 @@ def test_compose_forwards_dual_real_policy_hashes_to_backend_without_logging(
     settings.validate_provider_configuration()
     assert settings.embedding_provider == "dashscope"
     assert settings.llm_provider == "dashscope"
+    assert settings.report_provider == "dashscope"
     assert settings.provider_policy_hash_for("embedding") == "a" * 64
     assert settings.provider_policy_hash_for("llm") == "b" * 64
+    assert settings.provider_policy_hash_for("report") == "d" * 64
 
 
 def test_env_example_and_manual_demo_use_compose_variable_names() -> None:
-    assert set(DUAL_REAL_POLICY_VARIABLES) <= _env_example_names()
+    assert set(REAL_PROVIDER_POLICY_VARIABLES) <= _env_example_names()
     assert "PROVIDER_POLICY_HASH" in _env_example_names()
 
     readme = (PROJECT_ROOT / "manual-tests/real-core-demo/README.md").read_text(encoding="utf-8")
     for name in (
         "LLM_PROVIDER=dashscope",
+        "MAYA_REPORT_PROVIDER=dashscope",
         "EMBEDDING_PROVIDER=dashscope",
         "TTS_PROVIDER=mock",
         "VOICE_PROVIDER=mock",
         "TRANSLATION_PROVIDER=mock",
         "EMBEDDING_PROVIDER_POLICY_HASH=",
         "LLM_PROVIDER_POLICY_HASH=",
+        "REPORT_PROVIDER_POLICY_HASH=",
         "PROVIDER_POLICY_HASH=",
     ):
         assert name in readme
 
 
-@pytest.mark.parametrize("name", DUAL_REAL_POLICY_VARIABLES)
+@pytest.mark.parametrize("name", REAL_PROVIDER_POLICY_VARIABLES)
 def test_compose_policy_hash_slots_are_explicit_empty_defaults(name: str) -> None:
     expression = _backend_environment()[name]
     assert re.fullmatch(rf"\$\{{{name}:-\}}", expression)

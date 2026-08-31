@@ -52,8 +52,33 @@ fresh target/version and the exact fixture hash.
 Import separately reviewed, endpoint-bound Embedding, debate-LLM and Report
 policy files before enabling the corresponding real selectors. Keep all JSON files
 outside the repository and import them one command at a time. Before restarting
-the isolated Compose application, put the three policy hashes and dual-Real values
-in the ignored root `.env`.
+the isolated Compose application, put the three policy hashes and Real-Core selector
+values in the ignored root `.env`.
+
+The reviewed Real-Core composition uses the following selector and policy names.
+Keep the legacy `PROVIDER_POLICY_HASH` empty so the Embedding, debate-LLM and
+Maya Report policies remain endpoint-bound independently. The price-card fields
+are the existing server-only accounting inputs and must be populated from the
+reviewed card before enabling a real LLM-backed selector.
+
+```dotenv
+LLM_PROVIDER=dashscope
+MAYA_REPORT_PROVIDER=dashscope
+EMBEDDING_PROVIDER=dashscope
+TTS_PROVIDER=mock
+VOICE_PROVIDER=mock
+TRANSLATION_PROVIDER=mock
+EMBEDDING_PROVIDER_POLICY_HASH=
+LLM_PROVIDER_POLICY_HASH=
+REPORT_PROVIDER_POLICY_HASH=
+PROVIDER_POLICY_HASH=
+LLM_PRICE_CARD_VERSION=
+LLM_INPUT_PRICE_CNY_PER_MILLION=
+LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION=
+LLM_OUTPUT_PRICE_CNY_PER_MILLION=
+LLM_PRICE_CARD_RETRIEVED_AT=
+LLM_PRICE_CARD_SOURCE_CONTENT_SHA256=
+```
 
 ```bash
 MAYA_BASE_URL=http://127.0.0.1:18080 \
