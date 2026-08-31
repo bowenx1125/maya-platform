@@ -61,9 +61,7 @@ POLICY_FIELDS: Final = frozenset(
         "region",
     }
 )
-IDENTITY_FIELDS: Final = frozenset(
-    {"provider", "model", "region", "endpoint", "contract_version"}
-)
+IDENTITY_FIELDS: Final = frozenset({"provider", "model", "region", "endpoint", "contract_version"})
 REQUIRED_FIELDS: Final = frozenset({"reviewed", "policy_hash", *POLICY_FIELDS, *IDENTITY_FIELDS})
 SHA256_RE: Final = re.compile(r"^[0-9a-f]{64}$")
 SAFE_ID_RE: Final = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
@@ -204,15 +202,22 @@ def _checked_document(document: Mapping[str, object]) -> dict[str, object]:
         raise _fail("policy account product is not authorized")
 
     endpoint = _llm_endpoint(document["endpoint"])
-    urls = {field: _url(document[field], field) for field in (
-        "privacy_notice_url", "service_terms_url", "faq_url"
-    )}
-    hashes = {field: _sha(document[field], field) for field in (
-        "privacy_notice_sha256", "service_terms_sha256", "faq_sha256"
-    )}
-    timestamps = {field: _timestamp(document[field], field) for field in (
-        "privacy_notice_retrieved_at", "service_terms_retrieved_at", "faq_retrieved_at"
-    )}
+    urls = {
+        field: _url(document[field], field)
+        for field in ("privacy_notice_url", "service_terms_url", "faq_url")
+    }
+    hashes = {
+        field: _sha(document[field], field)
+        for field in ("privacy_notice_sha256", "service_terms_sha256", "faq_sha256")
+    }
+    timestamps = {
+        field: _timestamp(document[field], field)
+        for field in (
+            "privacy_notice_retrieved_at",
+            "service_terms_retrieved_at",
+            "faq_retrieved_at",
+        )
+    }
     no_training = _text(document["no_training_basis"], "no_training_basis", limit=240)
     retention = _text(document["retention_setting"], "retention_setting", limit=160)
     if no_training.casefold() in UNREVIEWED_VALUES:
@@ -253,9 +258,7 @@ def _checked_document(document: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def validate_reviewed_policy(
-    document: Mapping[str, object], *, acknowledge_reviewed: bool
-) -> Any:
+def validate_reviewed_policy(document: Mapping[str, object], *, acknowledge_reviewed: bool) -> Any:
     """Validate fixed identity and return the existing server-side policy DTO."""
 
     if acknowledge_reviewed is not True:
@@ -326,7 +329,9 @@ def import_reviewed_policy(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--policy-file", "--policy-json", dest="policy_file", type=Path, required=True)
+    parser.add_argument(
+        "--policy-file", "--policy-json", dest="policy_file", type=Path, required=True
+    )
     parser.add_argument("--database-url", required=True)
     parser.add_argument(
         "--acknowledge-reviewed",
@@ -349,7 +354,11 @@ def main(argv: list[str] | None = None) -> int:
     except PolicyImportError as exc:
         print(f"LLM policy import failed: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps({"status": result.status, "policy_hash": result.policy_hash}, separators=(",", ":")))
+    print(
+        json.dumps(
+            {"status": result.status, "policy_hash": result.policy_hash}, separators=(",", ":")
+        )
+    )
     return 0
 
 

@@ -115,6 +115,14 @@ jobs:
           test -f scripts/test_wave4_migration.py
           test -f scripts/test_wave4_evidence_migration.py
           test -f scripts/test_wave4_embedding_identity_migration.py
+          test -f scripts/import_provider_policy.py
+          test -f scripts/test_import_provider_policy.py
+          test -f scripts/import_llm_policy.py
+          test -f scripts/test_import_llm_policy.py
+          test -f scripts/reset_demo_runtime.py
+          test -f scripts/test_reset_demo_runtime.py
+          test -f manual-tests/real-core-demo/scripts/acceptance.py
+          test -f manual-tests/real-core-demo/scripts/test_acceptance.py
           test -f backend/tests/test_wave4_mutual_learning.py
           test -f backend/tests/test_wave4_persona_persistence.py
           test -f backend/tests/test_wave4_persona_activation_migration.py
@@ -210,6 +218,15 @@ jobs:
 
       - name: Local Demo initializer safety probe
         run: uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
+
+      - name: Real-Core offline importer and driver checks
+        run: |
+          uv run --directory backend pytest -q \
+            ../scripts/test_import_provider_policy.py \
+            ../scripts/test_import_llm_policy.py \
+            tests/test_real_core_dual_composition.py
+          uv run --directory backend python ../scripts/test_reset_demo_runtime.py
+          uv run --directory backend python ../manual-tests/real-core-demo/scripts/acceptance.py check
 
       - name: Wave 3 backend tests and migration smoke
         working-directory: backend

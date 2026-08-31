@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -17,14 +18,13 @@ for path in (ROOT, BACKEND):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from scripts.import_llm_policy import (
-    LLM_ENDPOINT_PATH,
-    PolicyImportError,
-    import_reviewed_policy,
-    load_policy_file,
-    main,
-    validate_reviewed_policy,
-)
+_policy_module: Any = importlib.import_module("scripts.import_llm_policy")
+LLM_ENDPOINT_PATH = _policy_module.LLM_ENDPOINT_PATH
+PolicyImportError = _policy_module.PolicyImportError
+import_reviewed_policy = _policy_module.import_reviewed_policy
+load_policy_file = _policy_module.load_policy_file
+main = _policy_module.main
+validate_reviewed_policy = _policy_module.validate_reviewed_policy
 
 
 def _digest(value: str) -> str:
@@ -77,26 +77,24 @@ def _llm_document() -> dict[str, Any]:
 
 
 def test_empty_db_holds_embedding_and_llm_policies_and_repeats_idempotently(tmp_path: Path) -> None:
-    from app.core.db import Database
-    from app.core.models import ProviderPolicySnapshot
-    from sqlalchemy import func, select
-
-    from scripts.import_provider_policy import (
-        import_reviewed_policy as import_embedding,
-    )
-    from scripts.test_import_provider_policy import _document as embedding_document
+    db_module: Any = importlib.import_module("app.core.db")
+    models_module: Any = importlib.import_module("app.core.models")
+    sqlalchemy_module: Any = importlib.import_module("sqlalchemy")
+    embedding_module: Any = importlib.import_module("scripts.import_provider_policy")
+    embedding_test_module: Any = importlib.import_module("scripts.test_import_provider_policy")
+    Database = db_module.Database
+    ProviderPolicySnapshot = models_module.ProviderPolicySnapshot
+    import_embedding = embedding_module.import_reviewed_policy
+    embedding_document = embedding_test_module._document
+    func, select = sqlalchemy_module.func, sqlalchemy_module.select
 
     database_url = f"sqlite:///{tmp_path / 'dual-policy.sqlite3'}"
     embedding = import_embedding(
         embedding_document(), database_url=database_url, acknowledge_reviewed=True
     )
     llm = _llm_document()
-    first = import_reviewed_policy(
-        llm, database_url=database_url, acknowledge_reviewed=True
-    )
-    second = import_reviewed_policy(
-        llm, database_url=database_url, acknowledge_reviewed=True
-    )
+    first = import_reviewed_policy(llm, database_url=database_url, acknowledge_reviewed=True)
+    second = import_reviewed_policy(llm, database_url=database_url, acknowledge_reviewed=True)
 
     assert embedding.status == "created"
     assert first.status == "created"
@@ -105,7 +103,12 @@ def test_empty_db_holds_embedding_and_llm_policies_and_repeats_idempotently(tmp_
     database = Database(database_url)
     try:
         with database.engine.connect() as connection:
-            assert connection.execute(select(func.count()).select_from(ProviderPolicySnapshot)).scalar_one() == 2
+            assert (
+                connection.execute(
+                    select(func.count()).select_from(ProviderPolicySnapshot)
+                ).scalar_one()
+                == 2
+            )
     finally:
         database.dispose()
 
@@ -208,4 +211,7 @@ def test_cli_prints_only_status_and_hash(tmp_path: Path, capsys: Any) -> None:
     )
     output = capsys.readouterr().out
     assert "fixture.cn-beijing" not in output
-    assert json.loads(output) == {"status": "created", "policy_hash": _llm_document()["policy_hash"]}
+    assert json.loads(output) == {
+        "status": "created",
+        "policy_hash": _llm_document()["policy_hash"],
+    }
