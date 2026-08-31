@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from threading import RLock
@@ -59,6 +59,8 @@ VOICE_ENROLLMENT_BUCKET = "voice_enrollment"
 REPAIR_FEEDBACK_POLICY_VERSION = "repair_feedback_v1"
 REPAIR_FEEDBACK_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
 LLM_TURN_OUTPUT_SCHEMA_HASH = "1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c"
+LLM_RECOVERY_INPUT_VERSION = "llm_recovery_input_v1"
+LLM_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
     {
         # 0010/0013 used ``embedding`` for snapshot publication.  Keep this
@@ -87,6 +89,72 @@ ALLOWED_ACCOUNT_PRODUCTS = frozenset(
 )
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_CODE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_RECOVERY_INPUT_FORBIDDEN_KEYS = frozenset(
+    {
+        "agent_md",
+        "agent_markdown",
+        "raw_agent_md",
+        "teacher_note",
+        "student_identity",
+        "student_id",
+        "student_name",
+        "user_id",
+        "user_name",
+        "member_id",
+        "member_name",
+        "nickname",
+        "email",
+        "phone",
+        "credential",
+        "credentials",
+        "api_key",
+        "authorization",
+        "bearer",
+        "password",
+        "secret",
+        "header",
+        "headers",
+        "endpoint",
+        "url",
+        "workspace",
+        "workspace_id",
+        "provider",
+        "supplier",
+        "model",
+        "usage",
+        "policy",
+    }
+)
+_RECOVERY_INPUT_IDENTITY_KEYS = frozenset(
+    {
+        "request_hash",
+        "prompt_hash",
+        "prompt_contract_version",
+        "schema_hash",
+        "tokenizer_id",
+        "tokenizer_hash",
+        "rule_set_hash",
+        "persona_spec_hash",
+        "transcript_hash",
+        "receipt_hash",
+        "policy_hash",
+        "export_manifest_hash",
+        "build_manifest_hash",
+        "repair_policy_hash",
+        "generation_fence",
+        "model_key",
+        "debate_id",
+        "turn_id",
+        "attempt_no",
+    }
+)
+_RECOVERY_INPUT_TOP_LEVEL_KEYS = frozenset({"identity", "input"})
+_RECOVERY_INPUT_FORBIDDEN_VALUE_RE = re.compile(
+    r"(?ix)(?:\b(?:api[\s_-]*key|authorization|credential(?:s)?|"
+    r"password|secret|token)\b\s*[=:]|\bbearer\b(?:\s*[=:]|\s+[A-Za-z0-9._-]+)|"
+    r"\bsk-[A-Za-z0-9._-]+\b|\b(?:agent\.md|teacher[\s_-]*note)\b|"
+    r"(?:^|[\s\"'])/(?:Users|home|tmp|var|private|workspace|root)/)"
+)
 
 
 def budget_bucket_for_operation(provider_operation: str) -> str:
@@ -1145,6 +1213,292 @@ class LLMAcceptedStageV1:
         }
 
 
+def _recovery_input_no_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, nested in pairs:
+        if key in value:
+            raise ProviderControlError(
+                "LLM recovery input JSON contains duplicate keys",
+                code="llm_recovery_input_invalid",
+            )
+        value[key] = nested
+    return value
+
+
+def _scan_recovery_input_value(value: object, *, path: tuple[str, ...] = ()) -> None:
+    """Reject private/control fields without including their values in errors."""
+
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if not isinstance(key, str):
+                raise ProviderControlError(
+                    "LLM recovery input contains an invalid field",
+                    code="llm_recovery_input_forbidden",
+                )
+            folded = re.sub(r"[\s.-]+", "_", key.casefold())
+            identity_path = path == ("input", "persona_provider_view") and folded == "identity"
+            if (
+                folded in _RECOVERY_INPUT_FORBIDDEN_KEYS
+                or folded == "identity" and not identity_path
+                or any(
+                marker in folded
+                for marker in (
+                    "agent_md",
+                    "teacher_note",
+                    "student_identity",
+                    "user_identity",
+                    "member_identity",
+                    "credential",
+                    "authorization",
+                    "endpoint",
+                    "workspace",
+                )
+                )
+            ):
+                raise ProviderControlError(
+                    "LLM recovery input contains a forbidden field",
+                    code="llm_recovery_input_forbidden",
+                )
+            _scan_recovery_input_value(nested, path=path + (folded,))
+        return
+    if isinstance(value, (list, tuple)):
+        for nested in value:
+            _scan_recovery_input_value(nested, path=path)
+        return
+    if isinstance(value, str) and _RECOVERY_INPUT_FORBIDDEN_VALUE_RE.search(value):
+        raise ProviderControlError(
+            "LLM recovery input contains a forbidden value",
+            code="llm_recovery_input_forbidden",
+        )
+    if value is not None and not isinstance(value, (str, int, float, bool)):
+        raise ProviderControlError(
+            "LLM recovery input contains an unsupported value",
+            code="llm_recovery_input_invalid",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LLMRecoveryInputV1:
+    """Immutable canonical input retained for zero-network local recovery."""
+
+    operation_id: str
+    turn_id: str
+    attempt_no: int
+    input_version: str
+    input_json: str
+    input_hash: str
+
+    @staticmethod
+    def _identity(decoded: Mapping[str, object]) -> Mapping[str, object]:
+        if set(decoded) != _RECOVERY_INPUT_TOP_LEVEL_KEYS:
+            raise ProviderControlError(
+                "LLM recovery input envelope is not closed",
+                code="llm_recovery_input_invalid",
+            )
+        identity = decoded.get("identity")
+        nested_input = decoded.get("input")
+        if not isinstance(identity, Mapping) or not isinstance(nested_input, Mapping):
+            raise ProviderControlError(
+                "LLM recovery input envelope is invalid",
+                code="llm_recovery_input_invalid",
+            )
+        if set(identity) != _RECOVERY_INPUT_IDENTITY_KEYS:
+            raise ProviderControlError(
+                "LLM recovery input identity is not closed",
+                code="llm_recovery_input_identity_invalid",
+            )
+        return identity
+
+    def identity(self) -> Mapping[str, object]:
+        try:
+            decoded = json.loads(
+                self.input_json,
+                object_pairs_hook=_recovery_input_no_duplicate_pairs,
+                parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+            )
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ProviderControlError(
+                "LLM recovery input JSON is invalid",
+                code="llm_recovery_input_invalid",
+            ) from exc
+        if not isinstance(decoded, Mapping):
+            raise ProviderControlError(
+                "LLM recovery input envelope is invalid",
+                code="llm_recovery_input_invalid",
+            )
+        return self._identity(decoded)
+
+    def assert_stage_identity(
+        self,
+        stage: LLMAcceptedStageV1,
+        operation: ProviderOperationV1 | None = None,
+    ) -> None:
+        """Bind the canonical envelope identity to its operation and stage."""
+
+        identity = self.identity()
+        expected = {
+            "request_hash": stage.request_hash,
+            "prompt_hash": stage.prompt_hash,
+            "prompt_contract_version": stage.prompt_contract_version,
+            "schema_hash": stage.schema_hash,
+            "tokenizer_id": stage.tokenizer_id,
+            "tokenizer_hash": stage.tokenizer_hash,
+            "rule_set_hash": stage.rule_set_hash,
+            "persona_spec_hash": stage.persona_spec_hash,
+            "transcript_hash": stage.transcript_hash,
+            "receipt_hash": stage.receipt_hash,
+            "policy_hash": stage.policy_hash,
+            "export_manifest_hash": stage.export_manifest_hash,
+            "build_manifest_hash": stage.build_manifest_hash,
+            "repair_policy_hash": stage.repair_policy_hash,
+            "generation_fence": stage.generation_fence,
+            "model_key": stage.model_key,
+            "debate_id": operation.scope_id if operation is not None else identity.get("debate_id"),
+            "turn_id": stage.turn_id,
+            "attempt_no": stage.attempt_no,
+        }
+        if dict(identity) != expected:
+            raise ProviderControlError(
+                "LLM recovery input identity does not match accepted stage",
+                code="llm_recovery_input_identity_mismatch",
+            )
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.operation_id, "LLM recovery operation id"),
+            (self.turn_id, "LLM recovery turn id"),
+        ):
+            _safe_identifier(value, field_name=name)
+        if (
+            isinstance(self.attempt_no, bool)
+            or not isinstance(self.attempt_no, int)
+            or self.attempt_no not in {1, 2}
+        ):
+            raise ProviderControlError(
+                "LLM recovery input attempt is invalid",
+                code="llm_recovery_input_invalid",
+            )
+        if self.input_version != LLM_RECOVERY_INPUT_VERSION:
+            raise ProviderControlError(
+                "LLM recovery input version is unsupported",
+                code="llm_recovery_input_version_invalid",
+            )
+        if not isinstance(self.input_json, str):
+            raise ProviderControlError(
+                "LLM recovery input JSON is invalid",
+                code="llm_recovery_input_invalid",
+            )
+        try:
+            raw = self.input_json.encode("utf-8")
+        except UnicodeError as exc:
+            raise ProviderControlError(
+                "LLM recovery input JSON is invalid",
+                code="llm_recovery_input_invalid",
+            ) from exc
+        if not raw or len(raw) > LLM_RECOVERY_INPUT_BYTES_LIMIT:
+            raise ProviderControlError(
+                "LLM recovery input JSON exceeds the closed size limit",
+                code="llm_recovery_input_size_exceeded",
+            )
+        try:
+            decoded = json.loads(
+                self.input_json,
+                object_pairs_hook=_recovery_input_no_duplicate_pairs,
+                parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+            )
+            canonical = canonical_json_bytes(decoded).decode("utf-8")
+        except (TypeError, ValueError, UnicodeError) as exc:
+            raise ProviderControlError(
+                "LLM recovery input JSON is invalid",
+                code="llm_recovery_input_invalid",
+            ) from exc
+        if not isinstance(decoded, Mapping) or canonical != self.input_json:
+            raise ProviderControlError(
+                "LLM recovery input JSON is not canonical",
+                code="llm_recovery_input_canonical_invalid",
+            )
+        identity = self._identity(decoded)
+        for key, identity_value in identity.items():
+            if key.endswith("_hash"):
+                if identity_value is None and key == "repair_policy_hash":
+                    continue
+                if not isinstance(identity_value, str):
+                    raise ProviderControlError(
+                        "LLM recovery identity hash is invalid",
+                        code="llm_recovery_input_identity_invalid",
+                    )
+                _hash(identity_value, field_name="LLM recovery identity hash")
+            elif key == "attempt_no":
+                if (
+                    isinstance(identity_value, bool)
+                    or not isinstance(identity_value, int)
+                    or identity_value not in {1, 2}
+                ):
+                    raise ProviderControlError(
+                        "LLM recovery identity attempt is invalid",
+                        code="llm_recovery_input_identity_invalid",
+                    )
+            elif key == "generation_fence":
+                if not isinstance(identity_value, str):
+                    raise ProviderControlError(
+                        "LLM recovery identity fence is invalid",
+                        code="llm_recovery_input_identity_invalid",
+                    )
+                if identity_value:
+                    _safe_identifier(identity_value, field_name="LLM recovery identity fence")
+            elif not isinstance(identity_value, str):
+                raise ProviderControlError(
+                    "LLM recovery identity value is invalid",
+                    code="llm_recovery_input_identity_invalid",
+                )
+            elif not identity_value:
+                raise ProviderControlError(
+                    "LLM recovery identity value is invalid",
+                    code="llm_recovery_input_identity_invalid",
+                )
+        _scan_recovery_input_value(decoded["input"], path=("input",))
+        _hash(self.input_hash, field_name="LLM recovery input hash")
+        if sha256_hex(raw) != self.input_hash:
+            raise ProviderControlError(
+                "LLM recovery input hash does not match canonical JSON",
+                code="llm_recovery_input_hash_mismatch",
+            )
+
+    @property
+    def hash(self) -> str:
+        return self.input_hash
+
+    @property
+    def canonical_json(self) -> str:
+        return self.input_json
+
+    def as_record(self) -> dict[str, object]:
+        return {
+            "operation_id": self.operation_id,
+            "turn_id": self.turn_id,
+            "attempt_no": self.attempt_no,
+            "input_version": self.input_version,
+            "input_json": self.input_json,
+            "input_hash": self.input_hash,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class LLMAcceptedBundleV1:
+    """The exact accepted stage and its canonical input recovery pair."""
+
+    stage: LLMAcceptedStageV1
+    recovery_input: LLMRecoveryInputV1
+
+    @property
+    def input(self) -> LLMRecoveryInputV1:
+        return self.recovery_input
+
+    def __iter__(self) -> Iterator[object]:
+        yield self.stage
+        yield self.recovery_input
+
+
 LLMUsageLedgerV1 = LLMAcceptedStageV1
 LlmAcceptedStageV1 = LLMAcceptedStageV1
 LlmUsageLedgerV1 = LLMUsageLedgerV1
@@ -1242,6 +1596,19 @@ class ProviderOperationRepository(Protocol):
     def get_llm_accepted_stage(self, operation_id: str) -> LLMAcceptedStageV1 | None:
         """Read the immutable accepted LLM stage for local recovery."""
 
+    def stage_llm_accepted_with_recovery(
+        self,
+        stage: LLMAcceptedStageV1,
+        recovery_input: LLMRecoveryInputV1,
+    ) -> LLMAcceptedStageV1:
+        """Persist an accepted stage and canonical input atomically."""
+
+    def load_llm_accepted_bundle(
+        self,
+        operation_id: str,
+    ) -> LLMAcceptedBundleV1 | None:
+        """Load an exact stage/input pair, or no recoverable bundle."""
+
     def mark_succeeded(self, operation_id: str) -> ProviderOperationV1:
         """Commit the final success and usage ledger atomically in production."""
 
@@ -1323,6 +1690,7 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         self._operations: dict[str, ProviderOperationV1] = {}
         self._reservations: dict[str, ProviderReservationV1] = {}
         self._llm_stages: dict[str, LLMAcceptedStageV1] = {}
+        self._llm_recovery_inputs: dict[str, LLMRecoveryInputV1] = {}
         self._by_key: dict[tuple[str, str, str, int], str] = {}
         self._lock = RLock()
 
@@ -1537,6 +1905,98 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
                 self.mark_accepted(operation.id, response_hash=stage.output_hash)
             return stage
 
+    def stage_llm_accepted_with_recovery(
+        self,
+        stage: LLMAcceptedStageV1,
+        recovery_input: LLMRecoveryInputV1,
+    ) -> LLMAcceptedStageV1:
+        """Persist an accepted stage and its canonical input atomically."""
+
+        stage.__post_init__()
+        recovery_input.__post_init__()
+        if recovery_input.operation_id != stage.operation_id:
+            raise OperationStateError("LLM recovery input does not match operation")
+        if (
+            recovery_input.turn_id != stage.turn_id
+            or recovery_input.attempt_no != stage.attempt_no
+        ):
+            raise OperationStateError("LLM recovery input does not match stage")
+        with self._lock:
+            operation = self.operation(stage.operation_id)
+            if operation.provider_operation != "llm_debate_turn":
+                raise OperationStateError("LLM stage operation type is invalid")
+            recovery_input.assert_stage_identity(stage, operation)
+            existing_stage = self._llm_stages.get(stage.operation_id)
+            existing_input = self._llm_recovery_inputs.get(stage.operation_id)
+            if existing_stage is not None or existing_input is not None:
+                if existing_stage != stage or existing_input != recovery_input:
+                    raise OperationStateError("LLM accepted bundle is immutable")
+                if operation.state not in {"accepted", "succeeded"}:
+                    raise OperationStateError("LLM accepted bundle operation state is invalid")
+                if existing_stage is None:
+                    raise OperationStateError("LLM accepted bundle is partial")
+                return existing_stage
+            if operation.state not in {"sending", "accepted"}:
+                raise OperationStateError("LLM accepted bundle requires an accepted response")
+            if (
+                operation.logical_item_id != stage.turn_id
+                or operation.attempt_no != stage.attempt_no
+                or operation.request_hash != stage.request_hash
+                or operation.policy_hash != stage.policy_hash
+                or operation.export_manifest_hash != stage.export_manifest_hash
+                or operation.model_key != stage.model_key
+            ):
+                raise OperationStateError("LLM accepted stage does not match operation")
+            if stage.completion_tokens > operation.max_tokens:
+                raise OperationStateError("LLM accepted stage exceeds reserved output tokens")
+            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
+                str(operation.max_cost_cny)
+            ):
+                raise OperationStateError("LLM accepted stage exceeds reserved cost")
+            if (
+                operation.state == "accepted"
+                and operation.staged_response_hash != stage.output_hash
+            ):
+                raise OperationStateError("LLM accepted stage response hash is stale")
+            self._llm_recovery_inputs[recovery_input.operation_id] = recovery_input
+            self._llm_stages[stage.operation_id] = stage
+            if operation.state == "sending":
+                self.mark_accepted(operation.id, response_hash=stage.output_hash)
+            return stage
+
+    def load_llm_accepted_bundle(
+        self,
+        operation_id: str,
+    ) -> LLMAcceptedBundleV1 | None:
+        with self._lock:
+            stage = self._llm_stages.get(operation_id)
+            recovery_input = self._llm_recovery_inputs.get(operation_id)
+            if stage is None and recovery_input is None:
+                return None
+            if stage is None:
+                raise OperationStateError("LLM recovery input has no accepted stage")
+            # A stage without an input is a pre-0015 accepted row: keep the
+            # old stage readable, but never present it as recoverable input.
+            if recovery_input is None:
+                return None
+            operation = self._operations.get(operation_id)
+            if operation is None:
+                raise OperationStateError("LLM accepted bundle operation does not exist")
+            if (
+                recovery_input.operation_id != stage.operation_id
+                or recovery_input.turn_id != stage.turn_id
+                or recovery_input.attempt_no != stage.attempt_no
+            ):
+                raise OperationStateError("LLM accepted bundle identity is corrupt")
+            try:
+                recovery_input.__post_init__()
+                recovery_input.assert_stage_identity(stage, operation)
+            except ProviderControlError as exc:
+                raise OperationStateError("LLM accepted bundle identity is corrupt") from exc
+            if operation.state not in {"accepted", "succeeded"}:
+                raise OperationStateError("LLM accepted bundle operation state is invalid")
+            return LLMAcceptedBundleV1(stage=stage, recovery_input=recovery_input)
+
     save_llm_accepted_stage = stage_llm_accepted
 
     def get_llm_accepted_stage(self, operation_id: str) -> LLMAcceptedStageV1 | None:
@@ -1574,8 +2034,29 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         staged_response_complete: bool = False,
     ) -> ProviderOperationV1:
         operation = self.operation(operation_id)
+        legacy_accepted_stage = False
         if operation.provider_operation == "llm_debate_turn":
-            staged_response_complete = operation_id in self._llm_stages
+            legacy_stage = self._llm_stages.get(operation_id)
+            legacy_accepted_stage = (
+                operation.state == "accepted"
+                and legacy_stage is not None
+                and operation_id not in self._llm_recovery_inputs
+            )
+            if legacy_accepted_stage and legacy_stage is not None:
+                try:
+                    legacy_stage.__post_init__()
+                except ProviderControlError:
+                    legacy_accepted_stage = False
+            try:
+                staged_response_complete = self.load_llm_accepted_bundle(operation_id) is not None
+            except OperationStateError:
+                staged_response_complete = False
+            if legacy_accepted_stage:
+                # 0014 accepted rows are authoritative output stages, but
+                # cannot be resumed without the additive 0015 input.  Keep
+                # their acceptance state and let callers surface the blocked
+                # recovery explicitly instead of relabeling it uncertain.
+                return operation
         target = startup_recovery_state(
             operation.state,
             staged_response_complete=staged_response_complete,
@@ -1701,9 +2182,13 @@ __all__ = [
     "LLM_BARRAGE_INSIGHT_BUCKET",
     "LLM_DEBATE_TURN_BUCKET",
     "LLM_MAYA_REPORT_BUCKET",
+    "LLM_RECOVERY_INPUT_BYTES_LIMIT",
+    "LLM_RECOVERY_INPUT_VERSION",
     "LLM_TURN_OUTPUT_SCHEMA_HASH",
+    "LLMAcceptedBundleV1",
     "LLMAcceptedStage",
     "LLMAcceptedStageV1",
+    "LLMRecoveryInputV1",
     "LLMUsageLedger",
     "LLMUsageLedgerV1",
     "LLMUsageV1",

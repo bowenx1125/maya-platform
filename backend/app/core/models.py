@@ -1412,6 +1412,11 @@ class ProviderOperation(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    recovery_input: Mapped[LlmRecoveryInput | None] = relationship(
+        back_populates="operation",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -1652,6 +1657,59 @@ LLMAcceptedStage = LlmAcceptedStage
 LLMUsageLedger = LlmAcceptedStage
 LlmUsageLedger = LlmAcceptedStage
 LLMUsage = LlmAcceptedStage
+
+
+class LlmRecoveryInput(Base):
+    """Immutable canonical input retained for zero-network LLM recovery."""
+
+    __tablename__ = "llm_recovery_inputs"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "provider_operations.id",
+            ondelete="RESTRICT",
+            name="fk_llm_recovery_inputs_operation",
+        ),
+        primary_key=True,
+    )
+    turn_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("debate_turns.id", ondelete="RESTRICT", name="fk_llm_recovery_inputs_turn"),
+        nullable=False,
+    )
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    input_json: Mapped[str] = mapped_column(Text, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    operation: Mapped[ProviderOperation] = relationship(back_populates="recovery_input")
+
+    __table_args__ = (
+        UniqueConstraint("turn_id", "attempt_no", name="uq_llm_recovery_inputs_turn_attempt"),
+        CheckConstraint(
+            "attempt_no >= 1 AND attempt_no <= 2",
+            name="ck_llm_recovery_inputs_attempt",
+        ),
+        CheckConstraint(
+            "input_version = 'llm_recovery_input_v1'",
+            name="ck_llm_recovery_inputs_version",
+        ),
+        CheckConstraint(
+            "length(CAST(input_json AS BLOB)) > 0 "
+            "AND length(CAST(input_json AS BLOB)) <= 262144",
+            name="ck_llm_recovery_inputs_size",
+        ),
+        CheckConstraint(
+            "length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'",
+            name="ck_llm_recovery_inputs_hash",
+        ),
+        Index("ix_llm_recovery_inputs_turn", "turn_id", "attempt_no"),
+    )
+
+
+LLMRecoveryInput = LlmRecoveryInput
 
 
 class ProviderReservation(Base):

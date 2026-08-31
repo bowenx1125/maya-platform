@@ -28,6 +28,7 @@ from sqlalchemy.sql import Executable
 from app.core.db import Database
 from app.core.models import (
     LlmAcceptedStage,
+    LlmRecoveryInput,
     ProviderExportConfirmation,
     ProviderExportManifest,
     ProviderOperation,
@@ -42,9 +43,12 @@ from app.providers.control import (
     ExportConfirmationV1,
     ExportFieldV1,
     ExportManifestV1,
+    LLMAcceptedBundleV1,
     LLMAcceptedStageV1,
+    LLMRecoveryInputV1,
     OperationState,
     OperationStateError,
+    ProviderControlError,
     ProviderOperationV1,
     ProviderPolicySnapshotV1,
     ProviderReservationRequestV1,
@@ -64,6 +68,7 @@ _BUDGET_TABLE = cast(Table, ProviderScopeBudget.__table__)
 _OPERATION_TABLE = cast(Table, ProviderOperation.__table__)
 _RESERVATION_TABLE = cast(Table, ProviderReservation.__table__)
 _LLM_STAGE_TABLE = cast(Table, LlmAcceptedStage.__table__)
+_LLM_RECOVERY_INPUT_TABLE = cast(Table, LlmRecoveryInput.__table__)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -949,6 +954,133 @@ class ProviderRepository:
                 )
         return stage
 
+    def stage_llm_accepted_with_recovery(
+        self,
+        stage: LLMAcceptedStageV1,
+        recovery_input: LLMRecoveryInputV1,
+    ) -> LLMAcceptedStageV1:
+        """Persist the accepted stage/input pair in one SQL transaction."""
+
+        stage.__post_init__()
+        recovery_input.__post_init__()
+        if (
+            recovery_input.operation_id != stage.operation_id
+            or recovery_input.turn_id != stage.turn_id
+            or recovery_input.attempt_no != stage.attempt_no
+        ):
+            raise ProviderRepositoryError("LLM recovery input does not match accepted stage")
+
+        operation_table = _OPERATION_TABLE
+        stage_table = _LLM_STAGE_TABLE
+        recovery_table = _LLM_RECOVERY_INPUT_TABLE
+        reservation_table = _RESERVATION_TABLE
+        with self._write_connection() as connection:
+            operation_row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == stage.operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if operation_row is None:
+                raise ProviderRepositoryError("LLM accepted stage operation does not exist")
+            try:
+                recovery_input.assert_stage_identity(
+                    stage,
+                    _operation_from_row(cast(Mapping[str, object], operation_row)),
+                )
+            except ProviderControlError as exc:
+                raise ProviderRepositoryError(
+                    "LLM recovery input identity does not match accepted stage"
+                ) from exc
+            if (
+                operation_row["provider_operation"] != "llm_debate_turn"
+                or operation_row["logical_item_id"] != stage.turn_id
+                or _as_int(operation_row["attempt_no"]) != stage.attempt_no
+                or operation_row["request_hash"] != stage.request_hash
+                or operation_row["policy_hash"] != stage.policy_hash
+                or operation_row["export_manifest_hash"] != stage.export_manifest_hash
+                or operation_row["build_manifest_hash"] != stage.build_manifest_hash
+                or operation_row["model_key"] != stage.model_key
+            ):
+                raise ProviderRepositoryError("LLM accepted stage does not match operation")
+            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
+                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
+            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
+                str(operation_row["max_cost_cny"])
+            ):
+                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
+
+            existing_stage_row = (
+                connection.execute(
+                    select(stage_table).where(stage_table.c.operation_id == stage.operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            existing_input_row = (
+                connection.execute(
+                    select(recovery_table).where(
+                        recovery_table.c.operation_id == recovery_input.operation_id
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if existing_stage_row is not None or existing_input_row is not None:
+                if existing_stage_row is None or existing_input_row is None:
+                    raise ProviderRepositoryError("LLM accepted bundle is partial")
+                existing_stage = _llm_stage_from_row(
+                    cast(Mapping[str, object], existing_stage_row)
+                )
+                existing_input = _llm_recovery_input_from_row(
+                    cast(Mapping[str, object], existing_input_row)
+                )
+                if not _stages_equal(existing_stage, stage) or existing_input != recovery_input:
+                    raise ProviderRepositoryError("LLM accepted bundle is immutable")
+                if operation_row["state"] not in {"accepted", "succeeded"}:
+                    raise ProviderRepositoryError("LLM accepted bundle operation state is invalid")
+                return existing_stage
+
+            operation_state = str(operation_row["state"])
+            if operation_state not in {"sending", "accepted"}:
+                raise ProviderRepositoryError("LLM accepted bundle requires an accepted response")
+            if (
+                operation_state == "accepted"
+                and operation_row["staged_response_hash"] != stage.output_hash
+            ):
+                raise ProviderRepositoryError("LLM accepted stage response hash is stale")
+            now = self._now()
+            connection.execute(recovery_table.insert().values(
+                **recovery_input.as_record(),
+                created_at=now,
+            ))
+            connection.execute(stage_table.insert().values(**stage.as_record(), created_at=now))
+            if operation_state == "sending":
+                changed = connection.execute(
+                    update(operation_table)
+                    .where(
+                        operation_table.c.id == stage.operation_id,
+                        operation_table.c.state == "sending",
+                    )
+                    .values(
+                        state="accepted",
+                        staged_response_hash=stage.output_hash,
+                        updated_at=now,
+                    )
+                )
+                reservation_changed = connection.execute(
+                    update(reservation_table)
+                    .where(
+                        reservation_table.c.operation_id == stage.operation_id,
+                        reservation_table.c.state == "sending",
+                    )
+                    .values(state="accepted", updated_at=now)
+                )
+                if changed.rowcount != 1 or reservation_changed.rowcount != 1:
+                    raise ProviderRepositoryError("LLM accepted bundle transition failed")
+        return stage
+
     save_llm_accepted_stage = stage_llm_accepted
     save_llm_stage = stage_llm_accepted
     persist_llm_stage = stage_llm_accepted
@@ -961,6 +1093,71 @@ class ProviderRepository:
             select(_LLM_STAGE_TABLE).where(_LLM_STAGE_TABLE.c.operation_id == operation_id)
         )
         return _llm_stage_from_row(row) if row is not None else None
+
+    def load_llm_accepted_bundle(self, operation_id: str) -> LLMAcceptedBundleV1 | None:
+        """Load and validate one exact accepted stage/input recovery bundle."""
+
+        operation_table = _OPERATION_TABLE
+        with self.engine.connect() as connection:
+            operation_row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            stage_row = (
+                connection.execute(
+                    select(_LLM_STAGE_TABLE).where(_LLM_STAGE_TABLE.c.operation_id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            input_row = (
+                connection.execute(
+                    select(_LLM_RECOVERY_INPUT_TABLE).where(
+                        _LLM_RECOVERY_INPUT_TABLE.c.operation_id == operation_id
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        if stage_row is None and input_row is None:
+            return None
+        if stage_row is None:
+            raise ProviderRepositoryError("LLM recovery input has no accepted stage")
+        # Accepted rows written before 0015 remain readable through the old
+        # stage accessor, but cannot be resumed without their missing input.
+        if input_row is None:
+            return None
+        if operation_row is None:
+            raise ProviderRepositoryError("LLM accepted bundle operation does not exist")
+        stage = _llm_stage_from_row(cast(Mapping[str, object], stage_row))
+        recovery_input = _llm_recovery_input_from_row(cast(Mapping[str, object], input_row))
+        try:
+            recovery_input.assert_stage_identity(
+                stage,
+                _operation_from_row(cast(Mapping[str, object], operation_row)),
+            )
+        except ProviderControlError as exc:
+            raise ProviderRepositoryError("LLM accepted bundle identity is corrupt") from exc
+        if (
+            operation_row["provider_operation"] != "llm_debate_turn"
+            or operation_row["logical_item_id"] != stage.turn_id
+            or _as_int(operation_row["attempt_no"]) != stage.attempt_no
+            or operation_row["request_hash"] != stage.request_hash
+            or operation_row["policy_hash"] != stage.policy_hash
+            or operation_row["export_manifest_hash"] != stage.export_manifest_hash
+            or operation_row["build_manifest_hash"] != stage.build_manifest_hash
+            or operation_row["model_key"] != stage.model_key
+            or operation_row["state"] not in {"accepted", "succeeded"}
+            or operation_row["staged_response_hash"] != stage.output_hash
+            or recovery_input.operation_id != stage.operation_id
+            or recovery_input.turn_id != stage.turn_id
+            or recovery_input.attempt_no != stage.attempt_no
+        ):
+            raise ProviderRepositoryError("LLM accepted bundle identity is corrupt")
+        return LLMAcceptedBundleV1(stage=stage, recovery_input=recovery_input)
 
     get_accepted_llm_stage = get_llm_accepted_stage
     get_llm_stage = get_llm_accepted_stage
@@ -1003,15 +1200,31 @@ class ProviderRepository:
         staged_response_complete: bool | None = None,
     ) -> ProviderOperationV1:
         current = self.operation(operation_id)
+        legacy_accepted_stage = False
         if current.provider_operation == "llm_debate_turn":
-            complete = (
-                self._read_one(
-                    select(_LLM_STAGE_TABLE.c.operation_id).where(
-                        _LLM_STAGE_TABLE.c.operation_id == operation_id
+            if current.state == "accepted":
+                try:
+                    legacy_accepted_stage = (
+                        self.get_llm_accepted_stage(operation_id) is not None
+                        and self._read_one(
+                            select(_LLM_RECOVERY_INPUT_TABLE.c.operation_id).where(
+                                _LLM_RECOVERY_INPUT_TABLE.c.operation_id == operation_id
+                            )
+                        )
+                        is None
                     )
-                )
-                is not None
-            )
+                except ProviderControlError:
+                    legacy_accepted_stage = False
+            try:
+                complete = self.load_llm_accepted_bundle(operation_id) is not None
+            except ProviderRepositoryError:
+                complete = False
+            if legacy_accepted_stage:
+                # 0014 accepted rows are authoritative output stages, but
+                # cannot be resumed without the additive 0015 input.  Keep
+                # their acceptance state and let callers surface the blocked
+                # recovery explicitly instead of relabeling it uncertain.
+                return current
         else:
             complete = (
                 current.staged_response_hash is not None
@@ -1265,6 +1478,20 @@ def _llm_stage_from_row(row: Mapping[str, object]) -> LLMAcceptedStageV1:
         safe_error_code=_optional_string(row["safe_error_code"]),
         repair_policy_version=_optional_string(row["repair_policy_version"]),
     )
+
+
+def _llm_recovery_input_from_row(row: Mapping[str, object]) -> LLMRecoveryInputV1:
+    try:
+        return LLMRecoveryInputV1(
+            operation_id=str(row["operation_id"]),
+            turn_id=str(row["turn_id"]),
+            attempt_no=_as_int(row["attempt_no"]),
+            input_version=str(row["input_version"]),
+            input_json=str(row["input_json"]),
+            input_hash=str(row["input_hash"]),
+        )
+    except Exception as exc:
+        raise ProviderRepositoryError("LLM recovery input is corrupt") from exc
 
 
 def _stages_equal(left: LLMAcceptedStageV1, right: LLMAcceptedStageV1) -> bool:
