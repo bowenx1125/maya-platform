@@ -54,6 +54,7 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   providerGateLoading: "Loading the exact disclosure…",
   providerGateEmpty: "No retryable external query is currently pending.",
   providerGateReview: "Review exact disclosure",
+  providerGateReviewAll: "Review all turn approvals",
   providerGateConfirmed: "Disclosure confirmed",
   providerGateRefresh: "Refresh confirmation",
   providerGateRetry: "Retry this turn",

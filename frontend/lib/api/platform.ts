@@ -72,6 +72,32 @@ export type ProviderDataCallManifestListResponse =
   components["schemas"]["ProviderDataCallManifestListResponseV1"];
 export type ProviderDataCallPublicationManifestListResponse =
   components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
+
+/**
+ * Teacher-only, debate-scoped approval status for LLM turns.
+ *
+ * This endpoint is intentionally kept as a handwritten DTO until the main
+ * window freezes its operationId and regenerates the shared OpenAPI client.
+ * Keep this type limited to the opaque identifiers and CAS/status values the
+ * teacher page needs; provider details and request data never cross this
+ * boundary.
+ */
+export type ProviderDataCallDebateManifestItem = {
+  turn_id: string;
+  manifest_hash: string;
+  confirmation_revision: number;
+  confirmed: boolean;
+};
+export type ProviderDataCallDebateManifestSummary =
+  ProviderDataCallDebateManifestItem;
+export type ProviderDataCallDebateManifestListResponse = {
+  debate_id: string;
+  items: ProviderDataCallDebateManifestSummary[];
+};
+export type ProviderDataCallDebateManifestSummaryV1 =
+  ProviderDataCallDebateManifestSummary;
+export type ProviderDataCallDebateManifestListResponseV1 =
+  ProviderDataCallDebateManifestListResponse;
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
@@ -384,6 +410,36 @@ export class PlatformApi {
     return payload as T;
   }
 
+  private async getJson<T>(path: string): Promise<T> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+      },
+    );
+    const raw = await response.text();
+    let payload: unknown;
+    try {
+      payload = raw ? JSON.parse(raw) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    if (!response.ok) {
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    return payload as T;
+  }
+
   async login(username: string, password: string): Promise<AuthSession> {
     const result = await this.client.POST("/auth/login", {
       body: { username, password },
@@ -651,6 +707,14 @@ export class PlatformApi {
       await this.client.GET("/provider/data-call/pending", {
         params: { query: { scope_id: scopeId } },
       }),
+    );
+  }
+
+  async listProviderDataCallDebateManifests(
+    debateId: string,
+  ): Promise<ProviderDataCallDebateManifestListResponse> {
+    return this.getJson<ProviderDataCallDebateManifestListResponse>(
+      `provider/data-call/pending/debates/${encodeURIComponent(debateId)}`,
     );
   }
 

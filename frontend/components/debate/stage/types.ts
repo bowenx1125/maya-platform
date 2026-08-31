@@ -103,6 +103,7 @@ export type PlaybackStageLabels = {
   providerGateLoading?: string;
   providerGateEmpty?: string;
   providerGateReview?: string;
+  providerGateReviewAll?: string;
   providerGateConfirmed?: string;
   providerGateRefresh?: string;
   providerGateRetry?: string;

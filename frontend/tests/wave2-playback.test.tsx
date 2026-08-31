@@ -384,6 +384,11 @@ describe("Wave 2 M12 playback stage", () => {
         .getAttribute("href"),
     ).toBe(`/teacher/provider-disclosures/${manifestHash}`);
     expect(
+      screen
+        .getByRole("link", { name: "Review all turn approvals" })
+        .getAttribute("href"),
+    ).toBe(`/teacher/provider-approvals/debates/${debateId}`);
+    expect(
       socket
         .commands()
         .some((command) => command.command_type === "playback.media.prepare"),

@@ -168,6 +168,7 @@ export default function TeacherDebateControlPage() {
       providerGateLoading: t("debateProviderGateLoading"),
       providerGateEmpty: t("debateProviderGateEmpty"),
       providerGateReview: t("debateProviderGateReview"),
+      providerGateReviewAll: t("debateProviderGateReviewAll"),
       providerGateConfirmed: t("debateProviderGateConfirmed"),
       providerGateRefresh: t("debateProviderGateRefresh"),
       providerGateRetry: t("debateProviderGateRetry"),

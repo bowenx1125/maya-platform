@@ -3089,6 +3089,13 @@ export function DebateStage({
               aria-label={labels.providerGateTitle}
             >
               <strong>{labels.providerGateTitle}</strong>
+              <a
+                href={`/teacher/provider-approvals/debates/${debateId}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {labels.providerGateReviewAll}
+              </a>
               {providerGate.loading ? (
                 <span>{labels.providerGateLoading}</span>
               ) : providerGate.error ? (
