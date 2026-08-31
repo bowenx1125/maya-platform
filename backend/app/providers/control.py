@@ -29,6 +29,7 @@ FIXED_REGION = "cn-beijing"
 FIXED_MODELS: Mapping[str, str] = MappingProxyType(
     {
         "embedding": "text-embedding-v4",
+        "embedding_snapshot": "text-embedding-v4",
         "embedding_query": "text-embedding-v4",
         "llm_debate": "qwen3.7-plus-2026-05-26",
         "llm_debate_turn": "qwen3.7-plus-2026-05-26",
@@ -66,11 +67,14 @@ _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
         "embedding": EMBEDDING_SNAPSHOT_BUCKET,
         "embedding_snapshot": EMBEDDING_SNAPSHOT_BUCKET,
         "embedding_query": EMBEDDING_QUERY_BUCKET,
+        "llm_debate": LLM_DEBATE_TURN_BUCKET,
         "llm_debate_turn": LLM_DEBATE_TURN_BUCKET,
         "llm_barrage_insight": LLM_BARRAGE_INSIGHT_BUCKET,
         "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
         "tts_synthesis": TTS_SYNTHESIS_BUCKET,
+        "tts": TTS_SYNTHESIS_BUCKET,
         "voice_enrollment": VOICE_ENROLLMENT_BUCKET,
+        "voice": VOICE_ENROLLMENT_BUCKET,
     }
 )
 ALLOWED_ACCOUNT_PRODUCTS = frozenset(

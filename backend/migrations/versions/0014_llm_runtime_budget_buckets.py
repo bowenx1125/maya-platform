@@ -47,7 +47,9 @@ _OPERATION_BUCKETS = {
     "llm_barrage_insight": "llm_barrage_insight",
     "llm_maya_report": "llm_maya_report",
     "tts_synthesis": "tts_synthesis",
+    "tts": "tts_synthesis",
     "voice_enrollment": "voice_enrollment",
+    "voice": "voice_enrollment",
 }
 _REPAIR_POLICY_VERSION = "repair_feedback_v1"
 _REPAIR_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
