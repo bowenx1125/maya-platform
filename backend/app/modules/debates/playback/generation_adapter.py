@@ -8,7 +8,9 @@ complete final-ready predecessor prefix, and returns one validated
 
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, cast
 from uuid import UUID
@@ -21,10 +23,13 @@ from app.core.errors import PlatformError, conflict
 from app.core.models import (
     Agent,
     AgentVersion,
+    CourseMember,
     Group,
     KnowledgeChunk,
     KnowledgeSnapshot,
+    ProviderPolicySnapshot,
     SnapshotDocument,
+    User,
 )
 from app.modules.agents.persona_service import (
     PERSONA_CONFIRMATION_REQUIRED,
@@ -47,6 +52,7 @@ from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
 from app.modules.debates.generation.prompt_request import confirmed_persona_provider_view
+from app.modules.debates.generation.runtime import LLMTurnRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
@@ -78,9 +84,21 @@ from app.modules.knowledge.providers.sql_query import (
 from app.modules.knowledge.providers.sql_stage import SqlAlchemyEmbeddingStageStore
 from app.modules.knowledge.providers.tokenizer import TokenizerError, count_tokens
 from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
+from app.providers.control import (
+    LLM_DEBATE_TURN_BUCKET,
+    REPAIR_FEEDBACK_POLICY_HASH,
+    ProviderScopeBudgetV1,
+)
 from app.providers.control_repository import ProviderRepository
-from app.providers.factory import embedding_provider as select_embedding_provider
+from app.providers.factory import (
+    embedding_provider as select_embedding_provider,
+)
+from app.providers.factory import (
+    llm_provider as select_fixed_llm_provider,
+)
 from app.providers.llm import LLMProvider, llm_provider
+from app.providers.llm_adapter import DashScopeLLMAdapter
+from app.providers.llm_price_card import debate_budget_cap
 
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
@@ -173,9 +191,232 @@ class SqlSnapshotRetriever(SnapshotRetriever):
 class SqlTurnPreparer:
     """Build and run one M11 generation context from M10's immutable rows."""
 
-    def __init__(self, *, settings: object | None = None, llm: LLMProvider | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        settings: object | None = None,
+        llm: LLMProvider | None = None,
+        llm_runtime: LLMTurnRuntime | None = None,
+        llm_runtime_options: Mapping[str, object] | None = None,
+    ) -> None:
         self.settings = settings
-        self.llm = llm or llm_provider(settings)
+        if llm is not None:
+            self.llm = llm
+        elif settings is not None and getattr(settings, "llm_provider", "mock") == "dashscope":
+            self.llm = select_fixed_llm_provider(settings)
+        else:
+            self.llm = llm_provider(settings)
+        self.llm_runtime = llm_runtime
+        self.llm_runtime_options = dict(llm_runtime_options or {})
+
+    @staticmethod
+    def _authoritative_identity_tokens(
+        db: Session,
+        *,
+        course_id: str,
+        group_id: str,
+        participants: tuple[ParticipantContext, ...],
+    ) -> tuple[str, ...]:
+        """Collect identity tokens from the current course/group graph only."""
+
+        values: list[str] = []
+        member_ids = db.scalars(
+            select(CourseMember.user_id).where(CourseMember.course_id == course_id)
+        ).all()
+        for member_id in member_ids:
+            values.append(str(member_id))
+            user = db.get(User, str(member_id))
+            if user is not None:
+                values.extend((str(user.username), str(user.display_name)))
+        agent_rows = db.scalars(select(Agent).where(Agent.group_id == group_id)).all()
+        values.extend(str(row.name) for row in agent_rows)
+        values.extend(str(item.agent_name) for item in participants)
+        return tuple(
+            dict.fromkeys(
+                value.strip()
+                for value in values
+                if isinstance(value, str) and len(value.strip()) >= 3
+            )
+        )
+
+    def _llm_runtime_for_turn(
+        self,
+        db: Session,
+        *,
+        debate: Any,
+        turn: DebateTurn,
+        participant_row: DebateParticipant,
+        participants: tuple[ParticipantContext, ...],
+    ) -> tuple[LLMTurnRuntime | None, Mapping[str, object], Any | None]:
+        """Compose the real LLM runtime and its pre-manifest callback.
+
+        The callback is invoked only after the pure prompt builder has
+        produced the exact two messages.  It scans those messages, persists
+        the owner-bound manifest, and exposes the current confirmation state;
+        no operation reservation exists until that callback succeeds.
+        """
+
+        if self.llm_runtime is not None:
+            return self.llm_runtime, self.llm_runtime_options, None
+        if not isinstance(self.llm, DashScopeLLMAdapter):
+            return None, {}, None
+        policy_hash = self.llm_runtime_options.get("policy_hash") or getattr(
+            self.settings, "provider_policy_hash", None
+        )
+        if not isinstance(policy_hash, str) or not policy_hash:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact LLM Provider policy is unavailable.",
+                503,
+            )
+        repository = ProviderRepository(db, require_export_confirmation=False)
+        policy = repository.get_policy_snapshot(policy_hash)
+        if policy is None or policy.policy_hash != policy_hash:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact LLM Provider policy is unavailable.",
+                503,
+            )
+        policy_row_id = db.scalar(
+            select(ProviderPolicySnapshot.id).where(
+                ProviderPolicySnapshot.policy_hash == policy_hash
+            )
+        )
+        if policy_row_id is None:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact LLM Provider policy snapshot is unavailable.",
+                503,
+            )
+        try:
+            cap = debate_budget_cap(len(participants), round_count=2)
+            repository.ensure_scope_budget(
+                str(debate.id),
+                ProviderScopeBudgetV1(
+                    max_requests=cap.max_requests,
+                    max_total_tokens=cap.max_total_tokens,
+                    max_cost_cny=cap.max_cost_cny,
+                    budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                ),
+            )
+        except Exception as exc:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact LLM budget is unavailable.",
+                503,
+            ) from exc
+        outbound_manifest = getattr(self.llm, "outbound_manifest", None)
+        if outbound_manifest is None:
+            from app.providers.llm_privacy import LLMOutboundManifestV1
+
+            outbound_manifest = LLMOutboundManifestV1()
+            self.llm.outbound_manifest = outbound_manifest
+        runtime = LLMTurnRuntime(
+            ledger=repository,
+            adapter=self.llm,
+            manifest_store=repository,
+            agent_count=len(participants),
+            round_count=2,
+        )
+        version = db.get(AgentVersion, str(participant_row.agent_version_id))
+        agent = db.get(Agent, version.agent_id) if version is not None else None
+        group = db.get(Group, agent.group_id) if agent is not None else None
+        if version is None or agent is None or group is None:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The frozen LLM Persona owner is unavailable.",
+                503,
+            )
+        static_options: dict[str, object] = {
+            "scope_id": str(debate.id),
+            "policy_hash": policy_hash,
+            "policy_snapshot_id": str(policy_row_id),
+            "course_id": str(group.course_id),
+            "group_id": str(group.id),
+            "agent_version_id": str(version.id),
+            "repair_policy_hash": REPAIR_FEEDBACK_POLICY_HASH,
+            "outbound_manifest": outbound_manifest,
+            "identity_tokens": tuple(
+                dict.fromkeys(
+                    (
+                        *self._authoritative_identity_tokens(
+                            db,
+                            course_id=str(group.course_id),
+                            group_id=str(group.id),
+                            participants=participants,
+                        ),
+                        *tuple(getattr(self.llm, "identity_tokens", ())),
+                    )
+                )
+            ),
+        }
+
+        def prepare_manifest(
+            prompt: object,
+            context: GenerationContext,
+            _receipts: object,
+            _queries: object,
+        ) -> Mapping[str, object]:
+            request = getattr(prompt, "request", None)
+            request_hash = str(getattr(request, "request_hash", ""))
+            build_manifest_hash = hashlib.sha256(
+                json.dumps(
+                    {
+                        "version": "llm-turn-build-v1",
+                        "debate_id": str(context.debate_id),
+                        "turn_id": str(context.turn.turn_id),
+                        "request_hash": request_hash,
+                        "persona_spec_hash": str(getattr(request, "persona_spec_hash", "")),
+                        "transcript_hash": str(getattr(request, "transcript_hash", "")),
+                        "receipt_hash": str(getattr(request, "receipt_hash", "")),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            manifest = runtime.prepare_manifest(
+                prompt,  # type: ignore[arg-type]
+                debate_id=str(debate.id),
+                turn_id=str(turn.id),
+                policy_hash=policy_hash,
+                build_manifest_hash=build_manifest_hash,
+                policy_snapshot_id=str(policy_row_id),
+                course_id=str(group.course_id),
+                group_id=str(group.id),
+                agent_version_id=str(version.id),
+                identity_tokens=tuple(static_options["identity_tokens"]),  # type: ignore[arg-type]
+                outbound_manifest=outbound_manifest,
+            )
+            persisted = repository.get_export_manifest(manifest.manifest_hash) or manifest
+            confirmed = False
+            confirmation_revision = int(persisted.operation_revision)
+            try:
+                require_exact_confirmation(
+                    db,
+                    persisted,
+                    policy,
+                    course_id=str(group.course_id),
+                    group_id=str(group.id),
+                    agent_version_id=str(version.id),
+                )
+            except ProductPublicationError as exc:
+                if exc.code not in {
+                    "provider_confirmation_required",
+                    "provider_confirmation_stale",
+                }:
+                    raise
+            else:
+                confirmed = True
+            return {
+                **static_options,
+                "manifest_hash": persisted.manifest_hash,
+                "build_manifest_hash": persisted.build_manifest_hash,
+                "confirmation_revision": confirmation_revision,
+                "confirmed": confirmed,
+            }
+
+        return runtime, static_options, prepare_manifest
 
     def __call__(
         self,
@@ -262,6 +503,13 @@ class SqlTurnPreparer:
             context=context,
             transcript_hash=expected_fence.transcript_hash,
         )
+        llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
+            db,
+            debate=debate,
+            turn=current,
+            participant_row=participant_row,
+            participants=participants,
+        )
         generator = TurnGenerationService(
             SqlSnapshotRetriever(db, query_embeddings=query_embeddings),
             self.llm,
@@ -272,6 +520,9 @@ class SqlTurnPreparer:
                 and persisted_rule_set_id == "ordered_multi_agent_rounds_demo_v2"
                 else None
             ),
+            llm_runtime=llm_runtime,
+            llm_runtime_options=llm_runtime_options,
+            llm_manifest_preparer=llm_manifest_preparer,
         )
         generated = generator.generate(context)
         final = generated.final_ready

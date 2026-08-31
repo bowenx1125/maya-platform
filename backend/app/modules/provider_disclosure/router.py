@@ -12,6 +12,7 @@ from app.modules.auth.service import AuthContext
 
 from .schemas import (
     ProviderDataCallConfirmationRequestV1,
+    ProviderDataCallDebateManifestListResponseV1,
     ProviderDataCallDisclosureResponseV1,
     ProviderDataCallManifestListResponseV1,
     ProviderDataCallPublicationManifestListResponseV1,
@@ -32,6 +33,7 @@ def get_provider_disclosure_service(request: Request) -> ProviderDisclosureServi
             "confirm",
             "list_embedding_query_manifests",
             "list_embedding_manifests_for_agent_version",
+            "list_llm_manifests_for_debate",
         )
     ):
         raise invalid_state("Provider disclosure is not configured.")
@@ -150,6 +152,39 @@ def provider_data_call_agent_version_manifests(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+@router.get(
+    "/pending/debates/{debate_id}",
+    response_model=ProviderDataCallDebateManifestListResponseV1,
+    operation_id="listProviderDataCallDebateManifests",
+    responses={
+        401: {"model": Error, "description": "Authentication is required."},
+        403: {"model": Error, "description": "Teacher authorization is required."},
+        404: {"model": Error, "description": "Debate was not found."},
+        422: {"model": Error, "description": "Provider manifest listing is blocked."},
+    },
+)
+def provider_data_call_debate_manifests(
+    debate_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    ),
+    context: AuthContext = Depends(require_auth),
+    service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
+) -> ProviderDataCallDebateManifestListResponseV1:
+    """List exact LLM turn manifests through Debate -> Course ownership."""
+
+    try:
+        return service.list_llm_manifests_for_debate(
+            str(context.user.id),
+            debate_id=debate_id,
+        )
+    except ProviderDisclosureError as error:
+        _raise_domain_error(error)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 @router.post(
     "/disclosure/confirm",
     response_model=ProviderDataCallDisclosureResponseV1,
@@ -189,6 +224,7 @@ __all__ = [
     "provider_data_call_disclosure",
     "provider_data_call_manifests",
     "provider_data_call_agent_version_manifests",
+    "provider_data_call_debate_manifests",
     "confirm_provider_data_call_disclosure",
     "provider_disclosure_router",
     "router",

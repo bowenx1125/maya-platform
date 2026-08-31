@@ -1,12 +1,20 @@
 """Teacher-only ProviderDataCallV1 disclosure and confirmation seam."""
 
-from .router import provider_data_call_agent_version_manifests, router
+from .router import (
+    provider_data_call_agent_version_manifests,
+    provider_data_call_debate_manifests,
+    router,
+)
 from .schemas import (
     DisclosureFieldClass,
     ProviderDataCallAgentVersionManifestListResponseV1,
     ProviderDataCallAgentVersionManifestSummaryV1,
     ProviderDataCallConfirmationRequest,
     ProviderDataCallConfirmationRequestV1,
+    ProviderDataCallDebateManifestListResponse,
+    ProviderDataCallDebateManifestListResponseV1,
+    ProviderDataCallDebateManifestSummary,
+    ProviderDataCallDebateManifestSummaryV1,
     ProviderDataCallDisclosure,
     ProviderDataCallDisclosureResponse,
     ProviderDataCallDisclosureResponseV1,
@@ -23,6 +31,7 @@ from .schemas import (
 )
 from .service import (
     EMBEDDING_OPERATION,
+    LLM_DEBATE_OPERATION,
     PROVIDER_DISCLOSURE_VERSION,
     InMemoryProviderDisclosureStore,
     ProviderDisclosureError,
@@ -35,10 +44,15 @@ from .service import (
 __all__ = [
     "DisclosureFieldClass",
     "EMBEDDING_OPERATION",
+    "LLM_DEBATE_OPERATION",
     "InMemoryProviderDisclosureStore",
     "PROVIDER_DISCLOSURE_VERSION",
     "ProviderDataCallConfirmationRequest",
     "ProviderDataCallConfirmationRequestV1",
+    "ProviderDataCallDebateManifestListResponse",
+    "ProviderDataCallDebateManifestListResponseV1",
+    "ProviderDataCallDebateManifestSummary",
+    "ProviderDataCallDebateManifestSummaryV1",
     "ProviderDataCallDisclosure",
     "ProviderDataCallDisclosureResponse",
     "ProviderDataCallDisclosureResponseV1",
@@ -60,5 +74,6 @@ __all__ = [
     "ProviderDisclosureStoreError",
     "SqlAlchemyProviderDisclosureStore",
     "provider_data_call_agent_version_manifests",
+    "provider_data_call_debate_manifests",
     "router",
 ]

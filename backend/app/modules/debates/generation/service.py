@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Protocol, cast
 
@@ -108,6 +108,9 @@ class TurnGenerationService:
         fence: GenerationFence | None = None,
         rule_set_id: str = RULE_SET_ID,
         mock_retrieval_policy_id: str | None = None,
+        llm_runtime: object | None = None,
+        llm_runtime_options: Mapping[str, object] | None = None,
+        llm_manifest_preparer: Callable[..., Mapping[str, object]] | None = None,
     ) -> None:
         if rule_set_id not in SUPPORTED_RULE_SET_IDS:
             raise ValueError("unsupported Debate rule set")
@@ -123,6 +126,9 @@ class TurnGenerationService:
         self.fence = fence
         self.rule_set_id = rule_set_id
         self.mock_retrieval_policy_id = mock_retrieval_policy_id
+        self.llm_runtime = llm_runtime
+        self.llm_runtime_options = dict(llm_runtime_options or {})
+        self.llm_manifest_preparer = llm_manifest_preparer
 
     def generate(
         self,
@@ -281,6 +287,30 @@ class TurnGenerationService:
             raise GenerationFailed(
                 "Turn generation failed before the provider request.", attempt=1
             ) from exc
+
+        if self.llm_runtime is not None:
+            if self.llm_manifest_preparer is not None:
+                try:
+                    prepared_options = self.llm_manifest_preparer(
+                        provider_prompt,
+                        context,
+                        receipts,
+                        subqueries,
+                    )
+                except Exception as exc:
+                    if self.fence is not None and active_claim is not None:
+                        self.fence.release(active_claim)
+                    raise GenerationFailed(
+                        "The exact LLM export manifest could not be prepared.", attempt=1
+                    ) from exc
+                self.llm_runtime_options.update(dict(prepared_options))
+            return self._generate_with_llm_runtime(
+                context,
+                provider_prompt=provider_prompt,
+                receipts=receipts,
+                subqueries=subqueries,
+                active_claim=active_claim,
+            )
 
         for attempt in (1, 2):
             attempt_record = (
@@ -458,6 +488,121 @@ class TurnGenerationService:
                     )
                 continue
         raise GenerationFailed("Turn generation did not produce a result.", attempt=2)
+
+    def _generate_with_llm_runtime(
+        self,
+        context: GenerationContext,
+        *,
+        provider_prompt: ProviderPromptV1,
+        receipts: Sequence[SnapshotRetrievalReceipt],
+        subqueries: Sequence[TurnSubquery],
+        active_claim: TurnClaim | None,
+    ) -> GenerationResult:
+        """Run the fixed adapter through the durable LLM-A runtime seam."""
+
+        runtime = self.llm_runtime
+        if runtime is None:  # pragma: no cover - guarded by the caller
+            raise GenerationFailed("LLM runtime is unavailable", attempt=1)
+        options = self.llm_runtime_options
+        required = ("policy_hash", "manifest_hash", "build_manifest_hash")
+        if any(not isinstance(options.get(name), str) or not options[name] for name in required):
+            if self.fence is not None and active_claim is not None:
+                self.fence.release(active_claim)
+            error = GenerationProviderError("LLM disclosure identity is unavailable.")
+            error.code = "provider_preflight_blocked"  # type: ignore[attr-defined]
+            error.acceptance_state = PromptAcceptanceState.NOT_SENT  # type: ignore[attr-defined]
+            error.failure_kind = PromptFailureKind.BUDGET  # type: ignore[attr-defined]
+            raise error
+        try:
+            prepare = runtime.prepare
+            prepared = prepare(
+                provider_prompt,
+                debate_id=context.debate_id,
+                turn_id=context.turn.turn_id,
+                scope_id=str(options.get("scope_id") or context.debate_id),
+                policy_hash=str(options["policy_hash"]),
+                manifest_hash=str(options["manifest_hash"]),
+                confirmation_revision=int(options.get("confirmation_revision", 1)),
+                fence=options.get("fence"),
+                attempt_no=1,
+                retrieval_reused=False,
+                receipts=receipts,
+                queries=subqueries,
+                build_manifest_hash=str(options["build_manifest_hash"]),
+                repair_policy_hash=str(options.get("repair_policy_hash") or ""),
+                identity_tokens=tuple(options.get("identity_tokens") or ()),
+                outbound_manifest=options.get("outbound_manifest"),
+                question_target_ids=tuple(options.get("question_target_ids") or ()),
+            )
+            run = runtime.run
+            outcome = run(
+                prepared,
+                context=context,
+                confirmed=options.get("confirmed"),
+                validator=self.validator,
+            )
+        except GenerationProviderError:
+            raise
+        except Exception as exc:
+            if self.fence is not None and active_claim is not None:
+                self.fence.release(active_claim)
+            raise GenerationFailed(
+                "The durable LLM runtime could not prepare this turn.", attempt=1
+            ) from exc
+
+        traces = tuple(
+            GenerationAttempt(
+                attempt=int(getattr(item, "attempt_no", 1)),
+                retrieval_count=len(receipts),
+                provider_called=bool(getattr(item, "provider_called", False)),
+                failure_code=getattr(item, "safe_error_code", None),
+            )
+            for item in getattr(outcome, "attempts", ())
+        )
+        if getattr(outcome, "status", None) == "succeeded":
+            final = getattr(outcome, "final_ready", None)
+            if final is None:
+                raise GenerationFailed(
+                    "The durable LLM runtime returned no final-ready turn.", attempt=2
+                )
+            if self.fence is not None:
+                if active_claim is None or not self.fence.complete(
+                    active_claim,
+                    stage="generation",
+                    attempt=int(getattr(final, "attempt", 1)),
+                    predecessor_turn_ids=tuple(
+                        item.turn_id for item in provider_prompt.request.predecessors
+                    ),
+                    transcript_hash=provider_prompt.request.transcript_hash,
+                ):
+                    raise GenerationDiscarded(
+                        "The turn generation result arrived after its fence changed."
+                    )
+            return GenerationResult(final, traces or (GenerationAttempt(1, len(receipts), True),))
+
+        status = str(getattr(outcome, "status", "failed"))
+        if status in {"provider_confirmation_required", "not_sent", "acceptance_unknown"}:
+            if self.fence is not None and active_claim is not None:
+                self.fence.release(active_claim)
+            error = GenerationProviderError("The LLM turn is waiting for a safe provider retry.")
+            error.code = {
+                "provider_confirmation_required": "provider_confirmation_required",
+                "not_sent": "provider_not_sent",
+                "acceptance_unknown": "acceptance_unknown",
+            }[status]  # type: ignore[attr-defined]
+            error.acceptance_state = (
+                PromptAcceptanceState.NOT_SENT
+                if status == "not_sent"
+                else PromptAcceptanceState.UNKNOWN
+            )  # type: ignore[attr-defined]
+            error.failure_kind = PromptFailureKind.TRANSPORT_UNKNOWN  # type: ignore[attr-defined]
+            raise error
+        if self.fence is not None and active_claim is not None:
+            self.fence.release(active_claim)
+        raise GenerationFailed(
+            "Turn generation failed after the durable LLM runtime.",
+            attempt=2 if traces and len(traces) > 1 else 1,
+        )
 
     def _validate_mutual_strict(
         self,

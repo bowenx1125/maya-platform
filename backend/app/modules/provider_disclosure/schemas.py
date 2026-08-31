@@ -20,6 +20,7 @@ DisclosureFieldClass = Literal[
     "current_evidence_excerpt",
     "opaque_local_id",
     "current_tts_speech",
+    "server_authored_structure_repair_feedback",
 ]
 
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -91,6 +92,32 @@ class ProviderDataCallManifestListResponseV1(BaseModel):
     items: tuple[ProviderDataCallManifestSummaryV1, ...] = ()
 
 
+class ProviderDataCallDebateManifestSummaryV1(BaseModel):
+    """Teacher-visible status for one exact LLM turn manifest.
+
+    The debate envelope is intentionally separate from the older query-scope
+    listing.  A turn manifest is owned by ``Turn -> Debate -> Course`` and
+    therefore always has a non-null opaque turn identity.  Provider/model,
+    prompt, policy and ledger details stay on the server side.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    turn_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    manifest_hash: str = Field(pattern=_SHA256_PATTERN)
+    confirmation_revision: int = Field(ge=1)
+    confirmed: bool
+
+
+class ProviderDataCallDebateManifestListResponseV1(BaseModel):
+    """Teacher-only exact pending LLM manifests for one Debate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    debate_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    items: tuple[ProviderDataCallDebateManifestSummaryV1, ...] = ()
+
+
 class ProviderDataCallPublicationManifestSummaryV1(BaseModel):
     """One teacher-visible, exact embedding publication manifest.
 
@@ -144,6 +171,8 @@ ProviderDataCallManifestSummary = ProviderDataCallManifestSummaryV1
 ProviderDataCallManifestListResponse = ProviderDataCallManifestListResponseV1
 ProviderDataCallPublicationManifestSummary = ProviderDataCallPublicationManifestSummaryV1
 ProviderDataCallPublicationManifestListResponse = ProviderDataCallPublicationManifestListResponseV1
+ProviderDataCallDebateManifestSummary = ProviderDataCallDebateManifestSummaryV1
+ProviderDataCallDebateManifestListResponse = ProviderDataCallDebateManifestListResponseV1
 # AgentVersion naming aliases keep the dedicated route contract discoverable
 # without introducing a second wire shape.
 ProviderDataCallAgentVersionManifestSummaryV1 = ProviderDataCallPublicationManifestSummaryV1
@@ -166,6 +195,10 @@ __all__ = [
     "ProviderDataCallManifestListResponseV1",
     "ProviderDataCallManifestSummary",
     "ProviderDataCallManifestSummaryV1",
+    "ProviderDataCallDebateManifestSummary",
+    "ProviderDataCallDebateManifestSummaryV1",
+    "ProviderDataCallDebateManifestListResponse",
+    "ProviderDataCallDebateManifestListResponseV1",
     "ProviderDataCallPublicationManifestListResponse",
     "ProviderDataCallPublicationManifestListResponseV1",
     "ProviderDataCallPublicationManifestSummary",

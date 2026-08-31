@@ -61,6 +61,7 @@ _SAFE_GENERATION_CODES = {
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",
     "provider_not_sent",
+    "acceptance_unknown",
 }
 
 
@@ -1921,16 +1922,14 @@ class PlaybackService:
             raise
         except Exception as exc:
             last_error = exc
-        if (
-            isinstance(last_error, PlatformError)
-            and last_error.code in _RECOVERABLE_PROVIDER_GENERATION_CODES
-            and await self._defer_provider_preparation(
-                db,
-                debate_id=debate_id,
-                turn_id=turn_id,
-                claim_token=claim_token,
-                code=last_error.code,
-            )
+        if getattr(
+            last_error, "code", None
+        ) in _RECOVERABLE_PROVIDER_GENERATION_CODES and await self._defer_provider_preparation(
+            db,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            claim_token=claim_token,
+            code=str(last_error.code),
         ):
             return
         failed_event: EventRecord | None = None
@@ -1942,6 +1941,8 @@ class PlaybackService:
             code = "turn_generation_failed"
             if isinstance(last_error, PlatformError) and last_error.code in _SAFE_GENERATION_CODES:
                 code = last_error.code
+            elif getattr(last_error, "code", None) in _SAFE_GENERATION_CODES:
+                code = str(last_error.code)
             fail_job = getattr(self.repository, "fail_turn_job", None)
             if callable(fail_job):
                 fail_job(db, turn, claim_token, code)
@@ -2014,7 +2015,14 @@ class PlaybackService:
                         "message": (
                             "Teacher confirmation is required before this turn can continue."
                             if code == "provider_confirmation_required"
-                            else "The provider request was not sent. The teacher may retry safely."
+                            else (
+                                "The provider acceptance is unknown and requires reconciliation."
+                                if code == "acceptance_unknown"
+                                else (
+                                    "The provider request was not sent. "
+                                    "The teacher may retry safely."
+                                )
+                            )
                         ),
                         "recoverable": True,
                     },

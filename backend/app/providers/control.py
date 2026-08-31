@@ -67,6 +67,7 @@ _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
         "embedding": EMBEDDING_SNAPSHOT_BUCKET,
         "embedding_snapshot": EMBEDDING_SNAPSHOT_BUCKET,
         "embedding_query": EMBEDDING_QUERY_BUCKET,
+        "llm_debate": LLM_DEBATE_TURN_BUCKET,
         "llm_debate_turn": LLM_DEBATE_TURN_BUCKET,
         "llm_barrage_insight": LLM_BARRAGE_INSIGHT_BUCKET,
         "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
