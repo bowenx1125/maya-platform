@@ -68,6 +68,8 @@ class PreparedTurn:
     word_count: int | None = None
     generation_attempt: int = 1
     evidence_trace: tuple[Mapping[str, Any], ...] = ()
+    # Server-only accepted-stage handoff; never projected to browser DTOs.
+    llm_publication: object | None = None
 
 
 @dataclass

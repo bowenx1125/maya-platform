@@ -89,6 +89,9 @@ class GenerationResult:
 
     final_ready: FinalReadyTurn
     attempts: tuple[GenerationAttempt, ...]
+    # Real LLM turns may hand a server-only accepted-stage publication to the
+    # playback SQL seam.  Mock/legacy generation leaves this unset.
+    llm_publication: object | None = None
 
 
 class TurnGenerationService:
@@ -583,7 +586,11 @@ class TurnGenerationService:
                     raise GenerationDiscarded(
                         "The turn generation result arrived after its fence changed."
                     )
-            return GenerationResult(final, traces or (GenerationAttempt(1, len(receipts), True),))
+            return GenerationResult(
+                final,
+                traces or (GenerationAttempt(1, len(receipts), True),),
+                getattr(outcome, "deferred_publication", None),
+            )
 
         status = str(getattr(outcome, "status", "failed"))
         if status in {"provider_confirmation_required", "not_sent", "acceptance_unknown"}:

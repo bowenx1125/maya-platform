@@ -16,10 +16,11 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
 from .events import EventRecord
+from .llm_publication import SqlLLMPublication
 from .protocols import (
     PlaybackRepository,
     PreparedGenerationFence,
@@ -231,6 +232,113 @@ class SqlPlaybackRepository(PlaybackRepository):
                     )
                 ).all()
             }
+        accepted_recovery_turns: set[str] = set()
+        blocked_recovery_turns: set[str] = set()
+        deferred_provider_turns: set[str] = set()
+        if (
+            self._has_table(db, "llm_accepted_stages")
+            and self._has_table(db, "llm_recovery_inputs")
+            and self._has_table(db, "provider_operations")
+        ):
+            accepted_recovery_turns = {
+                str(row[0])
+                for row in db.execute(
+                    text(
+                        "SELECT s.turn_id FROM llm_accepted_stages AS s "
+                        "JOIN llm_recovery_inputs AS r ON r.operation_id=s.operation_id "
+                        "JOIN provider_operations AS p ON p.id=s.operation_id "
+                        "WHERE p.provider_operation='llm_debate_turn' "
+                        "AND p.state='accepted' AND p.logical_item_id=s.turn_id"
+                    )
+                ).all()
+            }
+            blocked_recovery_turns = {
+                str(row[0])
+                for row in db.execute(
+                    text(
+                        "SELECT s.turn_id FROM llm_accepted_stages AS s "
+                        "JOIN provider_operations AS p ON p.id=s.operation_id "
+                        "LEFT JOIN llm_recovery_inputs AS r ON r.operation_id=s.operation_id "
+                        "WHERE p.provider_operation='llm_debate_turn' "
+                        "AND p.state='accepted' AND r.operation_id IS NULL"
+                    )
+                ).all()
+            }
+            # A complete accepted bundle is a local continuation point.  It
+            # must not be converted into process_restarted/failed work; the
+            # next playback preparation will map/validate it without a
+            # provider call and proceed to TTS.
+            if accepted_recovery_turns:
+                if self._has_table(db, "debate_turns"):
+                    db.execute(
+                        text(
+                            "UPDATE debate_turns SET generation_status='pending', "
+                            "preparation_stage='generation', safe_error_code=NULL, "
+                            "updated_at=:updated_at WHERE id IN :turn_ids"
+                        ).bindparams(bindparam("turn_ids", expanding=True)),
+                        {"updated_at": _now(), "turn_ids": tuple(accepted_recovery_turns)},
+                    )
+                if self._has_table(db, "jobs"):
+                    db.execute(
+                        text(
+                            "UPDATE jobs SET state='pending', claim_token=NULL, "
+                            "safe_error_code=NULL, updated_at=:updated_at "
+                            "WHERE turn_id IN :turn_ids AND state IN ('pending','running')"
+                        ).bindparams(bindparam("turn_ids", expanding=True)),
+                        {"updated_at": _now(), "turn_ids": tuple(accepted_recovery_turns)},
+                    )
+            if blocked_recovery_turns:
+                if self._has_table(db, "debate_turns"):
+                    db.execute(
+                        text(
+                            "UPDATE debate_turns SET generation_status='pending', "
+                            "preparation_stage='generation', "
+                            "safe_error_code='llm_recovery_input_unavailable', "
+                            "updated_at=:updated_at WHERE id IN :turn_ids"
+                        ).bindparams(bindparam("turn_ids", expanding=True)),
+                        {"updated_at": _now(), "turn_ids": tuple(blocked_recovery_turns)},
+                    )
+                if self._has_table(db, "jobs"):
+                    db.execute(
+                        text(
+                            "UPDATE jobs SET state='pending', claim_token=NULL, "
+                            "safe_error_code='llm_recovery_input_unavailable', "
+                            "updated_at=:updated_at WHERE turn_id IN :turn_ids "
+                            "AND state IN ('pending','running')"
+                        ).bindparams(bindparam("turn_ids", expanding=True)),
+                        {"updated_at": _now(), "turn_ids": tuple(blocked_recovery_turns)},
+                    )
+        if self._has_table(db, "jobs"):
+            deferred_provider_turns = {
+                str(row[0])
+                for row in db.execute(
+                    text(
+                        "SELECT DISTINCT turn_id FROM jobs "
+                        "WHERE turn_id IS NOT NULL AND state IN ('pending','running') "
+                        "AND safe_error_code IN "
+                        "('provider_confirmation_required','provider_not_sent',"
+                        "'acceptance_unknown')"
+                    )
+                ).all()
+            }
+            if deferred_provider_turns and self._has_table(db, "debate_turns"):
+                db.execute(
+                    text(
+                        "UPDATE debate_turns SET generation_status='pending', "
+                        "preparation_stage='generation', updated_at=:updated_at "
+                        "WHERE id IN :turn_ids"
+                    ).bindparams(bindparam("turn_ids", expanding=True)),
+                    {"updated_at": _now(), "turn_ids": tuple(deferred_provider_turns)},
+                )
+            if deferred_provider_turns:
+                db.execute(
+                    text(
+                        "UPDATE jobs SET state='pending', claim_token=NULL, "
+                        "updated_at=:updated_at WHERE turn_id IN :turn_ids "
+                        "AND state IN ('pending','running')"
+                    ).bindparams(bindparam("turn_ids", expanding=True)),
+                    {"updated_at": _now(), "turn_ids": tuple(deferred_provider_turns)},
+                )
         affected: tuple[str, ...] = ()
         if self._has_table(db, "jobs"):
             all_inflight = tuple(
@@ -245,7 +353,26 @@ class SqlPlaybackRepository(PlaybackRepository):
             # A paused run keeps its cancellation generation and can continue
             # after the teacher reconnects.  Only non-paused in-flight runs
             # are interrupted and converted to failed debates on restart.
-            affected = tuple(item for item in all_inflight if item not in paused_ids)
+            accepted_recovery_debates: set[str] = set()
+            protected_turns = (
+                accepted_recovery_turns | blocked_recovery_turns | deferred_provider_turns
+            )
+            if protected_turns and self._has_table(db, "debate_turns"):
+                accepted_recovery_debates = {
+                    str(row[0])
+                    for row in db.execute(
+                        text(
+                            "SELECT DISTINCT debate_id FROM debate_turns "
+                            "WHERE id IN :turn_ids"
+                        ).bindparams(bindparam("turn_ids", expanding=True)),
+                        {"turn_ids": tuple(protected_turns)},
+                    ).all()
+                }
+            affected = tuple(
+                item
+                for item in all_inflight
+                if item not in paused_ids and item not in accepted_recovery_debates
+            )
             if paused_ids:
                 if self._has_table(db, "debate_turns"):
                     db.execute(
@@ -282,21 +409,43 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "UPDATE debate_turns SET generation_status='failed', "
                         "preparation_stage='failed', safe_error_code='process_restarted', "
                         "updated_at=:updated_at WHERE generation_status IN ('pending','running') "
-                        "AND id IN (SELECT turn_id FROM jobs WHERE debate_id IS NOT NULL "
-                        "AND turn_id IS NOT NULL AND state IN ('pending','running'))"
-                    ),
-                    {"updated_at": _now()},
+                            "AND id NOT IN :accepted_turn_ids "
+                            "AND id NOT IN :blocked_turn_ids "
+                            "AND id NOT IN :deferred_provider_turn_ids "
+                            "AND id IN (SELECT turn_id FROM jobs WHERE debate_id IS NOT NULL "
+                            "AND turn_id IS NOT NULL AND state IN ('pending','running'))"
+                        )
+                        .bindparams(bindparam("accepted_turn_ids", expanding=True))
+                        .bindparams(bindparam("blocked_turn_ids", expanding=True))
+                        .bindparams(bindparam("deferred_provider_turn_ids", expanding=True)),
+                        {
+                            "updated_at": _now(),
+                            "accepted_turn_ids": tuple(accepted_recovery_turns) or ("",),
+                            "blocked_turn_ids": tuple(blocked_recovery_turns) or ("",),
+                            "deferred_provider_turn_ids": tuple(deferred_provider_turns) or ("",),
+                        },
                 )
             db.execute(
                 text(
                     "UPDATE jobs SET state='interrupted', safe_error_code='process_restarted', "
                     "updated_at=:updated_at WHERE debate_id IS NOT NULL "
-                    "AND state IN ('pending','running') AND debate_id NOT IN "
+                    "AND state IN ('pending','running') AND turn_id NOT IN :accepted_turn_ids "
+                    "AND turn_id NOT IN :blocked_turn_ids "
+                    "AND turn_id NOT IN :deferred_provider_turn_ids "
+                    "AND debate_id NOT IN "
                     "(SELECT ps.debate_id FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
                     "WHERE ps.status='paused' AND d.status='running')"
-                ),
-                {"updated_at": _now()},
+                )
+                .bindparams(bindparam("accepted_turn_ids", expanding=True))
+                .bindparams(bindparam("blocked_turn_ids", expanding=True))
+                .bindparams(bindparam("deferred_provider_turn_ids", expanding=True)),
+                {
+                    "updated_at": _now(),
+                    "accepted_turn_ids": tuple(accepted_recovery_turns) or ("",),
+                    "blocked_turn_ids": tuple(blocked_recovery_turns) or ("",),
+                    "deferred_provider_turn_ids": tuple(deferred_provider_turns) or ("",),
+                },
             )
         state_columns = (
             self._columns(db, "playback_states")
@@ -375,6 +524,29 @@ class SqlPlaybackRepository(PlaybackRepository):
                 {"updated_at": _now()},
             )
         return affected
+
+    def recoverable_llm_turns(self, db: Any) -> tuple[tuple[str, str], ...]:
+        """Return accepted stage turns that can continue locally after restart."""
+
+        required = (
+            "llm_accepted_stages",
+            "llm_recovery_inputs",
+            "provider_operations",
+            "debate_turns",
+        )
+        if any(not self._has_table(db, table) for table in required):
+            return ()
+        rows = db.execute(
+            text(
+                "SELECT DISTINCT t.debate_id, t.id FROM debate_turns AS t "
+                "JOIN llm_accepted_stages AS s ON s.turn_id=t.id "
+                "JOIN llm_recovery_inputs AS r ON r.operation_id=s.operation_id "
+                "JOIN provider_operations AS p ON p.id=s.operation_id "
+                "WHERE p.provider_operation='llm_debate_turn' AND p.state='accepted' "
+                "AND p.logical_item_id=t.id ORDER BY t.debate_id, t.turn_index, t.id"
+            )
+        ).all()
+        return tuple((str(row[0]), str(row[1])) for row in rows)
 
     def audio_swap_journals(self, db: Any) -> list[SqlRow]:
         if not self._has_table(db, "file_operations"):
@@ -1883,6 +2055,22 @@ class SqlPlaybackRepository(PlaybackRepository):
             )
             if int(getattr(completed, "rowcount", 0)) != 1:
                 raise RuntimeError("turn completion lost its claimed job fence")
+        handoff = prepared.llm_publication
+        if handoff is not None:
+            commit = SqlLLMPublication(db).commit_llm_turn_success
+            commit(
+                operation_id=str(getattr(handoff, "operation_id", "")),
+                turn_id=str(getattr(handoff, "turn_id", turn.id)),
+                debate_id=str(getattr(handoff, "debate_id", turn.values.get("debate_id", ""))),
+                request_hash=str(getattr(handoff, "request_hash", "")),
+                operation=getattr(handoff, "operation", None),
+                stage=getattr(handoff, "stage", None),
+                usage=getattr(handoff, "usage", None),
+                result=getattr(handoff, "result", None),
+                final_ready=getattr(handoff, "final_ready", None),
+                evidence_trace=getattr(handoff, "evidence_trace", ()),
+                recovery_input=getattr(handoff, "recovery_input", None),
+            )
         return accepted
 
     def ensure_turn_jobs(self, db: Any, debate: SqlRow, turns: list[SqlRow]) -> None:
@@ -2027,6 +2215,14 @@ class SqlPlaybackRepository(PlaybackRepository):
         if claim_token is None or code not in {
             "provider_confirmation_required",
             "provider_not_sent",
+            "acceptance_unknown",
+            "tts_timeout",
+            "tts_http_rejected",
+            "tts_response_invalid",
+            "tts_result_url_rejected",
+            "tts_result_dns_failed",
+            "tts_result_download_failed",
+            "tts_audio_invalid",
         }:
             return False
         timestamp = _now()

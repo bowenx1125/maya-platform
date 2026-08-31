@@ -62,6 +62,13 @@ _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",
     "provider_not_sent",
     "acceptance_unknown",
+    "tts_timeout",
+    "tts_http_rejected",
+    "tts_response_invalid",
+    "tts_result_url_rejected",
+    "tts_result_dns_failed",
+    "tts_result_download_failed",
+    "tts_audio_invalid",
 }
 
 
@@ -165,9 +172,13 @@ class PlaybackService:
     async def recover_startup(self, db: Any) -> tuple[str, ...]:
         """Fence interrupted work, revoke controllers and recover audio swaps."""
 
+        recoverable_llm_turns: tuple[tuple[str, str], ...] = ()
         async with self._lock:
             recover = getattr(self.repository, "recover_startup", None)
             affected = tuple(recover(db)) if callable(recover) else ()
+            recoverable = getattr(self.repository, "recoverable_llm_turns", None)
+            if callable(recoverable):
+                recoverable_llm_turns = tuple(recoverable(db))
             # The SQL adapter applies this fence in one statement.  Mirror the
             # restart matrix for the in-memory/test adapter so playback never
             # resumes a stale local ``playing`` clock and an in-flight
@@ -312,7 +323,23 @@ class PlaybackService:
             self._controller_sessions.clear()
             self._runtime_cache.clear()
             self._media_command_results.clear()
-            return affected
+        # Requeue accepted-stage continuations only after the restart fence
+        # transaction commits.  SqlTurnPreparer then maps/validates locally
+        # and TTS remains the only later stage; no provider call is retried.
+        for debate_id, turn_id in recoverable_llm_turns:
+            debate = self.repository.get_debate(db, debate_id)
+            if debate is not None:
+                turn = next(
+                    (
+                        item
+                        for item in self._turns(db, debate)
+                        if str(getattr(item, "id", "")) == turn_id
+                    ),
+                    None,
+                )
+                if turn is not None:
+                    await self._enqueue(debate, turn)
+        return affected
 
     # ------------------------------------------------------------------
     # Generic repository/ORM helpers.  The setup and generation workers can
@@ -1524,6 +1551,7 @@ class PlaybackService:
                     {"evidence_trace": result.get("evidence_trace", ())}
                 )
             ),
+            llm_publication=result.get("llm_publication"),
         )
 
     async def _generation_fence(
@@ -1650,7 +1678,6 @@ class PlaybackService:
         if self.settings is not None:
             embedding = getattr(self.settings, "embedding_provider", "mock")
             blocked_selectors = (
-                getattr(self.settings, "llm_provider", "mock"),
                 getattr(self.settings, "tts_provider", "mock"),
                 getattr(self.settings, "voice_provider", "mock"),
                 getattr(self.settings, "translation_provider", None) or "mock",
@@ -1778,11 +1805,19 @@ class PlaybackService:
         ready_events: list[EventRecord] = []
         next_turn_to_enqueue: Any | None = None
         last_error: Exception | None = None
+        audio: Any | None = None
+        prepared: PreparedTurn | None = None
         try:
             # M11 owns the single shared attempt 1|2 repair budget.  Playback
             # invokes that orchestrator once and therefore cannot multiply two
             # generation attempts into four provider calls.
             prepared = self._validate_prepared(await self._call_preparer(db, debate, turn, 1))
+            # Accepted LLM stage + its recovery input must survive a process
+            # crash before TTS.  Generation deliberately leaves the provider
+            # operation ``accepted``; only the final mark_turn_ready
+            # transaction may promote it to ``succeeded``.
+            if prepared.llm_publication is not None:
+                self._commit(db)
             voice = self._resolve_voice(db, participant)
             prepared = replace(
                 prepared,
@@ -1921,10 +1956,28 @@ class PlaybackService:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            print("P1_SERVICE_DIAGNOSTIC", repr(exc), repr(exc.__cause__))
             last_error = exc
-        error_code = getattr(last_error, "code", None)
+            # The final Turn/source/job writes and the LLM operation CAS share
+            # this transaction.  Roll back before either the recoverable or
+            # terminal handler starts a new state transition.
+            self._rollback(db)
+            if audio is not None and self.audio_store is not None:
+                self.audio_store.remove_turn(debate_id, turn_id)
+        error_code = getattr(last_error, "code", None) or getattr(last_error, "safe_code", None)
+        recoverable_provider_error = error_code in {
+            "provider_confirmation_required",
+            "provider_not_sent",
+            "acceptance_unknown",
+        }
+        recoverable_tts_error = (
+            isinstance(error_code, str)
+            and error_code.startswith("tts_")
+            and prepared is not None
+            and prepared.llm_publication is not None
+        )
         if (
-            error_code in _RECOVERABLE_PROVIDER_GENERATION_CODES
+            (recoverable_provider_error or recoverable_tts_error)
             and await self._defer_provider_preparation(
                 db,
                 debate_id=debate_id,
@@ -2021,8 +2074,13 @@ class PlaybackService:
                                 "The provider acceptance is unknown and requires reconciliation."
                                 if code == "acceptance_unknown"
                                 else (
-                                    "The provider request was not sent. "
-                                    "The teacher may retry safely."
+                                    "The TTS stage did not complete. The accepted LLM result "
+                                    "is retained for a local retry."
+                                    if code.startswith("tts_")
+                                    else (
+                                        "The provider request was not sent. "
+                                        "The teacher may retry safely."
+                                    )
                                 )
                             )
                         ),

@@ -15,7 +15,7 @@ from dataclasses import replace
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -38,13 +38,16 @@ from app.modules.agents.persona_service import (
 from app.modules.debates.generation import (
     FinalReadyTurn,
     GenerationContext,
+    MutualLearningValidator,
     ParticipantContext,
     SnapshotRetrievalReceipt,
     SnapshotRetriever,
     StructuredTurnResult,
     TurnGenerationService,
     TurnPolicy,
+    build_provider_prompt,
     build_turn_subqueries,
+    compute_prompt_receipt_hash,
     compute_transcript_hash,
     public_evidence_trace,
 )
@@ -52,6 +55,7 @@ from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
 from app.modules.debates.generation.prompt_request import confirmed_persona_provider_view
+from app.modules.debates.generation.recovery import LLMRecoveryService
 from app.modules.debates.generation.runtime import LLMTurnRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
@@ -100,6 +104,7 @@ from app.providers.llm import LLMProvider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import debate_budget_cap
 
+from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
 
@@ -234,11 +239,11 @@ class SqlTurnPreparer:
             if user is not None:
                 add(user.username)
                 add(user.display_name)
-        agent_rows = db.scalars(select(Agent).where(Agent.group_id == group_id)).all()
-        for row in agent_rows:
-            add(row.name)
-        for item in participants:
-            add(item.agent_name)
+        # Agent names are fictional or cultural labels and are an intentional
+        # field of PersonaProviderViewV1.  Treating them as student identity
+        # would reject every normal Persona before the provider manifest is
+        # created.  Authenticated course-user identifiers remain forbidden.
+        del group_id, participants
         return tuple(
             dict.fromkeys(
                 value.strip()
@@ -278,6 +283,7 @@ class SqlTurnPreparer:
                 503,
             )
         repository = ProviderRepository(db, require_export_confirmation=False)
+        publication = SqlLLMPublication(db, ledger=repository)
         policy = repository.get_policy_snapshot(policy_hash)
         if policy is None or policy.policy_hash != policy_hash:
             raise PlatformError(
@@ -322,9 +328,11 @@ class SqlTurnPreparer:
         runtime = LLMTurnRuntime(
             ledger=repository,
             adapter=self.llm,
+            stage_store=publication,
             manifest_store=repository,
             agent_count=len(participants),
             round_count=2,
+            defer_publication=True,
         )
         version = db.get(AgentVersion, str(participant_row.agent_version_id))
         agent = db.get(Agent, version.agent_id) if version is not None else None
@@ -426,6 +434,222 @@ class SqlTurnPreparer:
 
         return runtime, static_options, prepare_manifest
 
+    @staticmethod
+    def _accepted_operation_id(db: Session, turn_id: str) -> str | None:
+        """Find one exact accepted LLM attempt for local restart continuation."""
+
+        row = db.execute(
+            text(
+                "SELECT id FROM provider_operations "
+                "WHERE provider_operation='llm_debate_turn' AND logical_item_id=:turn_id "
+                "AND state='accepted' ORDER BY attempt_no DESC, id DESC LIMIT 1"
+            ),
+            {"turn_id": turn_id},
+        ).first()
+        return str(row[0]) if row is not None else None
+
+    def _resume_accepted_turn(
+        self,
+        db: Session,
+        *,
+        turn: DebateTurn,
+        context: GenerationContext,
+        expected_fence: PreparedGenerationFence,
+        cancellation_generation: int,
+        runtime: LLMTurnRuntime,
+        publication: SqlLLMPublication,
+        participants: tuple[ParticipantContext, ...],
+    ) -> PreparedTurn | None:
+        operation_id = self._accepted_operation_id(db, str(turn.id))
+        if operation_id is None:
+            return None
+        recovery = LLMRecoveryService(
+            ProviderRepository(db, require_export_confirmation=False),
+            stage_store=publication,
+            runtime=runtime,
+            recovery_store=publication,
+            adapter=self.llm,
+        )
+        outcome = recovery.resume_accepted(
+            operation_id,
+            context=context,
+            validator=MutualLearningValidator(),
+        )
+        if outcome.status != "succeeded" or outcome.final_ready is None:
+            code = outcome.safe_error_code or "llm_recovery_failed"
+            raise PlatformError(code, "The accepted LLM turn cannot be resumed locally.", 503)
+        final = outcome.final_ready
+        if final.turn_id != str(turn.id) or final.participant_id != str(turn.participant_id):
+            raise PlatformError("llm_recovery_failed", "The accepted LLM turn owner is stale.", 503)
+        expected_predecessors = tuple(str(item) for item in expected_fence.predecessor_turn_ids)
+        if (
+            final.snapshot_id != str(turn.knowledge_snapshot_id)
+            or final.predecessor_turn_ids != expected_predecessors
+            or final.transcript_hash != expected_fence.transcript_hash
+            or final.cutoff_turn_index != expected_fence.cutoff_turn_index
+        ):
+            raise PlatformError(
+                "llm_recovery_fence_stale", "The accepted turn fence is stale.", 503
+            )
+        stage = outcome.stage
+        if stage is None:
+            raise PlatformError("llm_recovery_failed", "The accepted stage is unavailable.", 503)
+        if str(getattr(stage, "persona_spec_hash", "")) != str(
+            context.participant.persona_spec_hash or ""
+        ):
+            raise PlatformError("llm_recovery_fence_stale", "The accepted Persona is stale.", 503)
+        receipts = tuple(
+            PreparedSource(
+                snapshot_id=receipt.snapshot_id,
+                query_kind=receipt.query_kind,
+                query_hash=receipt.query_hash,
+                threshold_key=receipt.threshold_key,
+                source_filename=receipt.source_filename,
+                chunk_id=receipt.chunk_id,
+                evidence_id=receipt.resolved_evidence_id(),
+                rank=receipt.rank,
+                score=receipt.score,
+                text=receipt.text,
+                source_document_id=receipt.source_document_id,
+                source_start_offset=receipt.source_start_offset,
+                source_end_offset=receipt.source_end_offset,
+                excerpt=receipt.excerpt,
+                query_id=receipt.query_id,
+            )
+            for receipt in final.used_receipts
+        )
+        if str(getattr(stage, "receipt_hash", "")) != compute_prompt_receipt_hash(
+            final.used_receipts
+        ):
+            raise PlatformError("llm_recovery_fence_stale", "The accepted evidence is stale.", 503)
+        if str(getattr(stage, "transcript_hash", "")) != expected_fence.transcript_hash:
+            raise PlatformError(
+                "llm_recovery_fence_stale", "The accepted transcript is stale.", 503
+            )
+        expected_prompt = build_provider_prompt(
+            context,
+            persona=context.participant.persona,
+            receipts=final.used_receipts,
+        )
+        if (
+            str(getattr(stage, "prompt_hash", "")) != expected_prompt.request.request_hash
+            or str(getattr(stage, "rule_set_hash", "")) != expected_prompt.request.rule_set_hash
+        ):
+            raise PlatformError("llm_recovery_fence_stale", "The accepted prompt is stale.", 503)
+        operation_row = db.execute(
+            text(
+                "SELECT scope_id, logical_item_id, attempt_no, request_hash, policy_hash, "
+                "export_manifest_hash, build_manifest_hash, model_key "
+                "FROM provider_operations WHERE id=:operation_id"
+            ),
+            {"operation_id": str(getattr(stage, "operation_id", ""))},
+        ).mappings().first()
+        if operation_row is None or (
+            str(operation_row["scope_id"]) != str(context.debate_id)
+            or str(operation_row["logical_item_id"]) != str(turn.id)
+            or int(operation_row["attempt_no"]) != int(getattr(stage, "attempt_no", 0))
+            or str(operation_row["request_hash"]) != str(getattr(stage, "request_hash", ""))
+            or str(operation_row["policy_hash"]) != str(getattr(stage, "policy_hash", ""))
+            or str(operation_row["export_manifest_hash"])
+            != str(getattr(stage, "export_manifest_hash", ""))
+            or str(operation_row["build_manifest_hash"])
+            != str(getattr(stage, "build_manifest_hash", ""))
+            or str(operation_row["model_key"]) != "qwen3.7-plus-2026-05-26"
+        ):
+            raise PlatformError("llm_recovery_fence_stale", "The accepted operation is stale.", 503)
+        expected_generation_fence = hashlib.sha256(
+            json.dumps(
+                {
+                    "predecessor_turn_ids": list(expected_fence.predecessor_turn_ids),
+                    "transcript_hash": expected_fence.transcript_hash,
+                    "cutoff_turn_index": expected_fence.cutoff_turn_index,
+                    "generation": cancellation_generation,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if str(getattr(stage, "generation_fence", "")) != expected_generation_fence:
+            raise PlatformError("llm_recovery_fence_stale", "The accepted fence is stale.", 503)
+        deferred = outcome.deferred_publication
+        recovery_input = getattr(deferred, "recovery_input", None)
+        if recovery_input is None:
+            raise PlatformError(
+                "llm_recovery_input_unavailable",
+                "The accepted recovery input is unavailable.",
+                503,
+            )
+        input_json = getattr(recovery_input, "input_json", None)
+        try:
+            recovery_payload = json.loads(str(input_json))
+            recovery_fence = recovery_payload.get("fence", {})
+            if int(recovery_fence.get("generation", -1)) != cancellation_generation:
+                raise ValueError("recovery generation fence is stale")
+        except (TypeError, ValueError, AttributeError, json.JSONDecodeError) as exc:
+            raise PlatformError(
+                "llm_recovery_fence_stale", "The accepted fence is stale.", 503
+            ) from exc
+        for receipt in final.used_receipts:
+            chunk = db.execute(
+                text(
+                    "SELECT snapshot_id, chunk_text FROM knowledge_chunks "
+                    "WHERE id=:chunk_id"
+                ),
+                {"chunk_id": receipt.chunk_id},
+            ).first()
+            if (
+                chunk is None
+                or str(chunk[0]) != receipt.snapshot_id
+                or str(chunk[0]) != str(turn.knowledge_snapshot_id)
+                or str(chunk[1]) != receipt.text
+            ):
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted evidence is stale.", 503
+                )
+        participant_row = next(
+            (
+                item
+                for item in participants
+                if str(item.participant_id) == str(turn.participant_id)
+            ),
+            None,
+        )
+        if participant_row is None:
+            raise PlatformError("llm_recovery_failed", "The accepted turn owner is stale.", 503)
+        voice_kind = str(getattr(turn, "actual_tts_voice_kind", "mock_sentinel"))
+        voice_profile_id = getattr(turn, "actual_tts_voice_profile_id", None)
+        voice_token = str(voice_profile_id) if voice_kind == "platform_profile" else "mock"
+        return PreparedTurn(
+            speech=final.speech,
+            sources=tuple(
+                RetrievalSourceDTO(
+                    source_filename=item.source_filename,
+                    chunk_id=UUID(item.chunk_id),
+                )
+                for item in final.public_sources
+            ),
+            retrieval_status=final.retrieval_status,
+            grounding_mode=final.grounding_mode,
+            structured=final.structured.model_dump(mode="json"),
+            voice_token=voice_token,
+            actual_voice_kind=voice_kind,
+            actual_voice_profile_id=(str(voice_profile_id) if voice_profile_id else None),
+            source_receipts=receipts,
+            predecessor_turn_ids=final.predecessor_turn_ids,
+            transcript_hash=final.transcript_hash,
+            cutoff_turn_index=final.cutoff_turn_index,
+            word_count=count_turn_words(
+                final.speech,
+                final.structured.question.text
+                if final.structured.question.type != "none"
+                else None,
+            ),
+            generation_attempt=final.attempt,
+            evidence_trace=tuple(dict(item) for item in final.evidence_trace),
+            llm_publication=outcome.deferred_publication,
+        )
+
     def __call__(
         self,
         db: Any,
@@ -435,7 +659,6 @@ class SqlTurnPreparer:
         attempt: int,
         cancellation_generation: int,
     ) -> PreparedTurn:
-        del cancellation_generation
         if not isinstance(db, Session):
             raise ValueError("SQL turn preparation requires a database Session")
         if attempt != 1:
@@ -503,6 +726,40 @@ class SqlTurnPreparer:
             participants=participants,
             predecessors=predecessors,
         )
+        llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
+            db,
+            debate=debate,
+            turn=current,
+            participant_row=participant_row,
+            participants=participants,
+        )
+        if llm_runtime is not None:
+            llm_runtime_options = {
+                **dict(llm_runtime_options),
+                "fence": {
+                    "predecessor_turn_ids": list(expected_fence.predecessor_turn_ids),
+                    "transcript_hash": expected_fence.transcript_hash,
+                    "cutoff_turn_index": expected_fence.cutoff_turn_index,
+                    "generation": cancellation_generation,
+                },
+            }
+        if llm_runtime is not None and isinstance(self.llm, DashScopeLLMAdapter):
+            publication = SqlLLMPublication(
+                db,
+                ledger=ProviderRepository(db, require_export_confirmation=False),
+            )
+            resumed = self._resume_accepted_turn(
+                db,
+                turn=current,
+                context=context,
+                expected_fence=expected_fence,
+                cancellation_generation=cancellation_generation,
+                runtime=llm_runtime,
+                publication=publication,
+                participants=participants,
+            )
+            if resumed is not None:
+                return resumed
         query_embeddings = self._query_embedding_service(
             db,
             debate=debate,
@@ -510,13 +767,6 @@ class SqlTurnPreparer:
             participant_row=participant_row,
             context=context,
             transcript_hash=expected_fence.transcript_hash,
-        )
-        llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
-            db,
-            debate=debate,
-            turn=current,
-            participant_row=participant_row,
-            participants=participants,
         )
         generator = TurnGenerationService(
             SqlSnapshotRetriever(db, query_embeddings=query_embeddings),
@@ -597,6 +847,7 @@ class SqlTurnPreparer:
             ),
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
+            llm_publication=generated.llm_publication,
         )
 
     def _query_embedding_service(

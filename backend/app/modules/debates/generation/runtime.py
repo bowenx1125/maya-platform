@@ -24,6 +24,7 @@ from app.providers.control import (
     REPAIR_FEEDBACK_POLICY_HASH,
     ExportFieldV1,
     ExportManifestV1,
+    LLMRecoveryInputV1,
     ProviderReservationRequestV1,
 )
 from app.providers.llm_adapter import (
@@ -61,6 +62,7 @@ from .evidence_trace import (
 from .mutual_learning_validator import MutualLearningValidator
 from .prompt_attempt import repair_prompt_request
 from .prompt_request import PromptMessageV1, PromptRequestV1, ProviderPromptV1
+from .recovery_input import build_llm_recovery_input
 from .retrieval import TurnSubquery
 from .types import (
     EvidenceTraceClaimV1,
@@ -129,6 +131,12 @@ class LLMAtomicPublicationPort(Protocol):
     """Turn + EvidenceTrace + usage + succeeded transaction seam."""
 
     def commit_turn_success(self, **kwargs: object) -> object: ...
+
+
+class LLMDeferredPublicationPort(Protocol):
+    """Server-only publication payload consumed by the playback transaction."""
+
+    def commit_llm_turn_success(self, **kwargs: object) -> object: ...
 
 
 class LLMManifestPreparationPort(Protocol):
@@ -263,10 +271,39 @@ class LLMRunOutcomeV1:
     final_ready: FinalReadyTurn | None = None
     safe_error_code: str | None = None
     retry_allowed: bool = False
+    deferred_publication: object | None = None
 
     @property
     def succeeded(self) -> bool:
         return self.status == "succeeded"
+
+
+@dataclass(frozen=True, slots=True)
+class LLMDeferredPublicationV1:
+    """Opaque server-only handoff from generation to playback SQL.
+
+    Runtime generation stages the accepted provider result and performs all
+    local validation/evidence derivation, but deliberately leaves the
+    operation in ``accepted``.  Playback consumes this value in its own
+    SQLAlchemy Session together with the DebateTurn/TTS publication.
+    """
+
+    operation_id: str
+    turn_id: str
+    debate_id: str
+    request_hash: str
+    operation: object
+    stage: object
+    usage: object
+    result: MutualLearningTurnResultV1
+    final_ready: FinalReadyTurn
+    recovery_input: LLMRecoveryInputV1 | None = None
+
+    @property
+    def publication(self) -> LLMDeferredPublicationV1:
+        """Compatibility alias used by playback adapters."""
+
+        return self
 
 
 def _sequence(value: object) -> Sequence[object]:
@@ -422,6 +459,7 @@ class LLMTurnRuntime:
         tokenizer: object | None = None,
         agent_count: int = 2,
         round_count: int = 2,
+        defer_publication: bool = False,
     ) -> None:
         if isinstance(agent_count, bool) or not isinstance(agent_count, int) or agent_count < 2:
             raise ValueError("agent_count must be at least two")
@@ -437,6 +475,8 @@ class LLMTurnRuntime:
         self.tokenizer = tokenizer
         self.agent_count = agent_count
         self.round_count = round_count
+        self.defer_publication = defer_publication
+        self._recovery_inputs: dict[str, LLMRecoveryInputV1] = {}
 
     def prepare_manifest(
         self,
@@ -1285,9 +1325,40 @@ class LLMTurnRuntime:
             raise
 
     def _stage(
-        self, prepared: LLMPreparedAttemptV1, response: object
+        self,
+        prepared: LLMPreparedAttemptV1,
+        response: object,
+        *,
+        context: GenerationContext | None = None,
     ) -> tuple[object, object | None]:
         accepted = self._accepted_stage_value(prepared, response)
+        recovery_input: LLMRecoveryInputV1 | None = None
+        combined_store = _method(
+            self.stage_store,
+            "stage_accepted_with_recovery",
+            "stage_llm_accepted_with_recovery",
+        )
+        if combined_store is None:
+            combined_store = _method(
+                self.ledger,
+                "stage_accepted_with_recovery",
+                "stage_llm_accepted_with_recovery",
+            )
+        # Legacy/unit callers may intentionally exercise the stage-only port
+        # without a GenerationContext.  The production playback path always
+        # supplies context and therefore takes the combined stage+recovery
+        # seam; retain the older stage-only behavior for those fakes.
+        if combined_store is not None and context is None:
+            combined_store = None
+        if combined_store is not None:
+            try:
+                assert context is not None
+                recovery_input = build_llm_recovery_input(prepared, context, stage=accepted)
+                accepted = _invoke(combined_store, accepted, recovery_input)
+                if prepared.operation_id is not None:
+                    self._recovery_inputs[prepared.operation_id] = recovery_input
+            except Exception as exc:
+                raise LLMRuntimeError(code="llm_stage_unavailable") from exc
         stage_method = (
             _method(
                 self.stage_store,
@@ -1310,7 +1381,7 @@ class LLMTurnRuntime:
                 "stage_accepted_llm",
                 "record_llm_accepted",
             )
-        if stage_method is not None:
+        if stage_method is not None and combined_store is None:
             try:
                 accepted = _invoke(
                     stage_method,
@@ -1322,11 +1393,16 @@ class LLMTurnRuntime:
             except Exception as exc:
                 raise LLMRuntimeError(code="llm_stage_unavailable") from exc
         operation: object | None = prepared.operation
-        if stage_method is not None and prepared.operation_id is not None:
+        if (
+            (stage_method is not None or combined_store is not None)
+            and prepared.operation_id is not None
+        ):
             getter = _method(self.ledger, "get")
             if getter is not None:
                 operation = _invoke(getter, prepared.operation_id)
         if (
+            combined_store is None
+            and
             stage_method is None
             and prepared.operation_id is not None
             and _operation_state(operation) != "accepted"
@@ -1756,10 +1832,16 @@ class LLMTurnRuntime:
                     response, "accepted", "validated", "response", default=response
                 )
             stage: object | None = None
+            recovery_input: LLMRecoveryInputV1 | None = None
             has_stage = _result_value(accepted, "accepted_stage", "stage") is not None
             if has_stage or self._has_accepted_payload(accepted):
                 try:
-                    operation, stage = self._stage(current, accepted)
+                    operation, stage = self._stage(
+                        current,
+                        accepted,
+                        context=context,
+                    )
+                    recovery_input = self._recovery_inputs.pop(operation_id or "", None)
                 except LLMRuntimeError as exc:
                     operation = self._fail_operation(operation_id, operation, exc.code)
                     return LLMRunOutcomeV1(
@@ -1872,7 +1954,10 @@ class LLMTurnRuntime:
                     final=final,
                     usage=_result_value(accepted, "usage"),
                 )
-                if publication_result is not None:
+                deferred_publication: object | None = None
+                if isinstance(publication_result, LLMDeferredPublicationV1):
+                    deferred_publication = publication_result
+                elif publication_result is not None:
                     operation = publication_result
             except TurnValidationError:
                 traces.append(
@@ -1907,7 +1992,31 @@ class LLMTurnRuntime:
                 )
             )
             return LLMRunOutcomeV1(
-                "succeeded", tuple(traces), operation, stage=stage, result=result, final_ready=final
+                "succeeded",
+                tuple(traces),
+                operation,
+                stage=stage,
+                result=result,
+                final_ready=final,
+                deferred_publication=(
+                    LLMDeferredPublicationV1(
+                        operation_id=str(operation_id),
+                        turn_id=current.turn_id,
+                        debate_id=current.debate_id,
+                        request_hash=current.request_hash,
+                        operation=operation,
+                        stage=stage,
+                        usage=_result_value(accepted, "usage"),
+                        result=result,
+                        final_ready=final,
+                        recovery_input=recovery_input,
+                    )
+                    if self.defer_publication
+                    and operation_id is not None
+                    and stage is not None
+                    and final is not None
+                    else deferred_publication
+                ),
             )
         return LLMRunOutcomeV1("failed", tuple(traces), safe_error_code="llm_attempt_exhausted")
 
@@ -1923,6 +2032,10 @@ class LLMTurnRuntime:
         final: FinalReadyTurn | None,
         usage: object,
     ) -> object | None:
+        if self.defer_publication:
+            # The accepted stage has already been made durable.  Playback
+            # owns the final DebateTurn/Evidence/usage CAS in its Session.
+            return None
         method = _method(self.publication, "commit_turn_success", "publish_atomic", "publish")
         if method is not None:
             try:
@@ -1954,6 +2067,7 @@ class LLMTurnRuntime:
         receipts: Sequence[object] = (),
         queries: Sequence[object] = (),
         validator: MutualLearningValidator | None = None,
+        recovery_input: LLMRecoveryInputV1 | None = None,
     ) -> LLMRunOutcomeV1:
         """Validate and publish a durable accepted stage without transport."""
 
@@ -2026,6 +2140,28 @@ class LLMTurnRuntime:
             publication = _method(
                 self.publication, "commit_turn_success", "publish_atomic", "publish"
             )
+            if self.defer_publication:
+                if final is None:
+                    raise LLMRuntimeError(code="llm_recovery_context_missing")
+                return LLMRunOutcomeV1(
+                    "succeeded",
+                    operation=operation,
+                    stage=stage,
+                    result=result,
+                    final_ready=final,
+                    deferred_publication=LLMDeferredPublicationV1(
+                        operation_id=operation_id,
+                        turn_id=str(_read(stage, "turn_id", "")),
+                        debate_id=context.debate_id if context is not None else "",
+                        request_hash=str(_read(stage, "request_hash", "")),
+                        operation=operation,
+                        stage=stage,
+                        usage=stage,
+                        result=result,
+                        final_ready=final,
+                        recovery_input=recovery_input,
+                    ),
+                )
             if publication is not None:
                 _invoke(
                     publication,
@@ -2093,6 +2229,8 @@ __all__ = [
     "LLMAcceptedStagePort",
     "LLMAcceptedStageV1",
     "LLMAtomicPublicationPort",
+    "LLMDeferredPublicationPort",
+    "LLMDeferredPublicationV1",
     "LLMAttemptTraceV1",
     "LLMConfirmationPort",
     "LLMGenerationFenceV1",
