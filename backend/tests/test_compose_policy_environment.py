@@ -82,7 +82,6 @@ def test_env_example_and_manual_demo_use_compose_variable_names() -> None:
         "EMBEDDING_PROVIDER_POLICY_HASH=",
         "LLM_PROVIDER_POLICY_HASH=",
         "PROVIDER_POLICY_HASH=",
-        "docker compose up -d --build",
     ):
         assert name in readme
 

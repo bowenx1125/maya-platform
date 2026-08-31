@@ -318,9 +318,8 @@ def test_attach_calls_one_to_seven_is_atomic_and_summary_counts_charges(
             summary = get_acceptance_run(session, actor_user_id=TEACHER_ID, run_id=run_id)
             assert summary.call_count == 7
             assert summary.charged_request_count == 7
-            assert [item.call_no for item in summary.calls] == list(range(1, 8))
-            assert all(item.purpose == "embedding" for item in summary.calls)
             assert summary.starting_charged_requests == 0
+            assert "calls" not in summary.model_dump()
     finally:
         database.dispose()
 
@@ -359,8 +358,9 @@ def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
                 run_id=run_id,
                 request=DemoAcceptanceCallRequest(operation_id=UUID(eighth), call_no=8),
             )
-            assert response.calls[-1].call_no == 8
-            assert response.calls[-1].purpose == "embedding_query"
+            assert response.call_count == 2
+            assert response.charged_request_count == 0
+            assert "calls" not in response.model_dump()
         with pytest.raises(ValidationError):
             DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=9)
         with database.engine.begin() as connection:
@@ -436,6 +436,16 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
         body = response.json()
         assert body["starting_charged_requests"] == 0
         assert body["call_count"] == body["charged_request_count"] == 0
+        assert {
+            "calls",
+            "operation_id",
+            "call_no",
+            "purpose",
+            "request_count",
+        }.isdisjoint(body)
+        # ``state`` is the run lifecycle state; no per-call state object is
+        # present because the response no longer contains a calls collection.
+        assert body["state"] == "prepared"
         assert not any(
             forbidden in response.text.casefold()
             for forbidden in ("provider", "model", "endpoint", "api_key", "workspace", "key")

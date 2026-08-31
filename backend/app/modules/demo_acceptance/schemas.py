@@ -11,17 +11,6 @@ from app.providers.control import DEMO_ACCEPTANCE_MAX_CALLS, DEMO_ACCEPTANCE_PLA
 
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 AcceptanceRunState = Literal["prepared", "executing", "executed", "verified"]
-ProviderOperationState = Literal[
-    "prepared",
-    "reserved",
-    "sending",
-    "accepted",
-    "succeeded",
-    "not_sent",
-    "acceptance_unknown",
-    "failed",
-    "abandoned",
-]
 
 
 class _ClosedModel(BaseModel):
@@ -48,17 +37,6 @@ class DemoAcceptanceCallRequest(_ClosedModel):
     call_no: int = Field(ge=1, le=DEMO_ACCEPTANCE_MAX_CALLS)
 
 
-class DemoAcceptanceCall(_ClosedModel):
-    """A provider-neutral operation status bound to one call ordinal."""
-
-    operation_id: UUID
-    call_no: int = Field(ge=1, le=DEMO_ACCEPTANCE_MAX_CALLS)
-    purpose: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_]+$")
-    state: ProviderOperationState
-    request_count: int = Field(ge=0)
-    charged_request_count: int = Field(ge=0)
-
-
 class DemoAcceptanceRunResponse(_ClosedModel):
     id: UUID
     plan_version: Literal["real_core_demo_v2"] = DEMO_ACCEPTANCE_PLAN_VERSION
@@ -74,7 +52,6 @@ class DemoAcceptanceRunResponse(_ClosedModel):
     starting_charged_requests: Literal[0] = 0
     call_count: int = Field(ge=0, le=DEMO_ACCEPTANCE_MAX_CALLS)
     charged_request_count: int = Field(ge=0)
-    calls: tuple[DemoAcceptanceCall, ...] = ()
 
 
 # Short aliases keep the module easy to discover without widening the wire DTOs.
@@ -87,7 +64,6 @@ __all__ = [
     "AcceptanceCallRequest",
     "AcceptanceRunCreateRequest",
     "AcceptanceRunResponse",
-    "DemoAcceptanceCall",
     "DemoAcceptanceCallRequest",
     "DemoAcceptanceRunBindDebateRequest",
     "DemoAcceptanceRunBindReportRequest",

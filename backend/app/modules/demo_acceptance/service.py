@@ -44,13 +44,11 @@ from app.seed import GROUP_BOWEN_ID
 
 from .schemas import (
     AcceptanceRunState,
-    DemoAcceptanceCall,
     DemoAcceptanceCallRequest,
     DemoAcceptanceRunBindDebateRequest,
     DemoAcceptanceRunBindReportRequest,
     DemoAcceptanceRunCreateRequest,
     DemoAcceptanceRunResponse,
-    ProviderOperationState,
 )
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -273,7 +271,6 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
         )
         .order_by(ProviderOperation.call_no, ProviderOperation.id)
     ).all()
-    calls: list[DemoAcceptanceCall] = []
     seen: set[int] = set()
     for operation in operations:
         call_no = operation.call_no
@@ -284,7 +281,7 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
             )
         try:
             validate_demo_acceptance_call_no(call_no)
-            operation_id = UUID(operation.id)
+            UUID(operation.id)
         except (ProviderControlError, ValueError):
             _raise_conflict(
                 "demo_acceptance_ledger_invalid",
@@ -296,17 +293,7 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
                 "demo_acceptance_ledger_invalid",
                 "The Demo acceptance ledger is inconsistent.",
             )
-        calls.append(
-            DemoAcceptanceCall(
-                operation_id=operation_id,
-                call_no=call_no,
-                purpose=operation.provider_operation,
-                state=cast(ProviderOperationState, operation.state),
-                request_count=operation.request_count,
-                charged_request_count=operation.charged_request_count,
-            )
-        )
-    charged = sum(item.charged_request_count for item in calls)
+    charged = sum(operation.charged_request_count for operation in operations)
     return DemoAcceptanceRunResponse(
         id=UUID(run.id),
         plan_version=DEMO_ACCEPTANCE_PLAN_VERSION,
@@ -322,9 +309,8 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
         ),
         state=cast(AcceptanceRunState, run.state),
         starting_charged_requests=0,
-        call_count=len(calls),
+        call_count=len(operations),
         charged_request_count=charged,
-        calls=tuple(calls),
     )
 
 
