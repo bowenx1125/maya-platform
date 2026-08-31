@@ -36,6 +36,7 @@ SECRET_RE = re.compile(
     r"(?i)(api[_-]?key|authorization\s*[:=]|bearer\s+[A-Za-z0-9._-]+|"
     r"password\s*[:=]|secret\s*[:=]|sk-[A-Za-z0-9])"
 )
+CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 BASE_URL_RE = re.compile(r"http://(?P<host>127\.0\.0\.1|localhost):(?P<port>[0-9]{1,5})/?")
 CHECKPOINT_FIELDS = {
     "version",
@@ -829,6 +830,91 @@ def _fetch_audio(api: Api, media_url: str) -> None:
     require(bool(response.content), "audio_empty")
 
 
+def _verify_turn_evidence(connection: Any, row: Any) -> None:
+    """Reconcile one turn's receipts, trace rows and persisted sources."""
+
+    from sqlalchemy import text
+
+    turn_id = str(row["id"])
+    snapshot_id = str(row["knowledge_snapshot_id"])
+    speech = row["speech"]
+    require(isinstance(speech, str) and speech.strip(), "speech_missing")
+    require(CJK_RE.search(speech) is None, "speech_not_english_safe")
+    try:
+        receipts = json.loads(str(row["retrieval_receipts_json"]))
+        traces = json.loads(str(row["evidence_trace_json"]))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AcceptanceError("evidence_json_invalid") from exc
+    require(isinstance(receipts, list) and isinstance(traces, list), "evidence_json_shape")
+    receipt_by_id: dict[str, Mapping[str, Any]] = {}
+    for receipt in receipts:
+        require(isinstance(receipt, dict), "receipt_shape")
+        evidence_id = receipt.get("evidence_id")
+        require(isinstance(evidence_id, str) and evidence_id, "receipt_evidence_id")
+        require(evidence_id not in receipt_by_id, "receipt_duplicate")
+        require(receipt.get("snapshot_id") == snapshot_id, "receipt_snapshot")
+        require(isinstance(receipt.get("chunk_id"), str), "receipt_chunk")
+        require(isinstance(receipt.get("source_filename"), str), "receipt_filename")
+        receipt_by_id[evidence_id] = receipt
+    sources = connection.execute(
+        text(
+            "SELECT evidence_id,chunk_id,snapshot_id,source_filename FROM turn_sources "
+            "WHERE turn_id=:turn_id ORDER BY rank,evidence_id"
+        ),
+        {"turn_id": turn_id},
+    ).mappings().all()
+    source_by_id: dict[str, Mapping[str, Any]] = {}
+    for source in sources:
+        evidence_id = str(source["evidence_id"])
+        require(evidence_id not in source_by_id, "source_duplicate")
+        source_by_id[evidence_id] = source
+        receipt = receipt_by_id.get(evidence_id)
+        require(receipt is not None, "source_receipt_missing")
+        require(
+            (str(source["chunk_id"]), str(source["snapshot_id"]), str(source["source_filename"]))
+            == (
+                str(receipt["chunk_id"]),
+                snapshot_id,
+                str(receipt["source_filename"]),
+            ),
+            "source_receipt_mismatch",
+        )
+    require(set(source_by_id) == set(receipt_by_id), "source_receipt_set_mismatch")
+    traced_source_ids: set[str] = set()
+    for trace in traces:
+        require(isinstance(trace, dict), "trace_shape")
+        support_mode = trace.get("support_mode")
+        require(
+            support_mode in {"direct", "contextual", "general_reasoning", "no_match"},
+            "trace_support_mode",
+        )
+        evidence_id = trace.get("evidence_id")
+        source_fields = ("evidence_id", "chunk_id", "source_filename")
+        if support_mode in {"direct", "contextual"}:
+            require(isinstance(evidence_id, str) and evidence_id, "trace_evidence_id")
+            receipt = receipt_by_id.get(evidence_id)
+            source = source_by_id.get(evidence_id)
+            require(receipt is not None and source is not None, "trace_source_missing")
+            require(
+                (trace.get("chunk_id"), trace.get("source_filename"))
+                == (receipt["chunk_id"], receipt["source_filename"]),
+                "trace_receipt_mismatch",
+            )
+            require(
+                str(source["snapshot_id"]) == snapshot_id
+                and str(source["chunk_id"]) == str(trace["chunk_id"])
+                and str(source["source_filename"]) == str(trace["source_filename"]),
+                "trace_source_mismatch",
+            )
+            traced_source_ids.add(evidence_id)
+        else:
+            require(
+                all(trace.get(field) is None for field in source_fields),
+                "trace_unsourced_fields",
+            )
+    require(traced_source_ids == set(source_by_id), "source_trace_set_mismatch")
+
+
 def _mark_provider_call(
     checkpoint: dict[str, Any],
     checkpoint_path: Path,
@@ -1211,23 +1297,26 @@ def verify(
 
             turns = connection.execute(
                 text(
-                    "SELECT turn_index,participant_id,generation_status,retrieval_status,"
+                    "SELECT id,turn_index,participant_id,knowledge_snapshot_id,speech,"
+                    "generation_status,retrieval_status,"
                     "retrieval_receipts_json,evidence_trace_json FROM debate_turns "
                     "WHERE debate_id=:debate_id ORDER BY turn_index"
                 ),
                 {"debate_id": checkpoint["debate_id"]},
-            ).all()
+            ).mappings().all()
             require(len(turns) == 4, "turn_count")
-            require(all(row[2:4] == ("final_ready", "matched") for row in turns), "turn_status")
             require(
                 all(
-                    bool(json.loads(str(row[4]))) and bool(json.loads(str(row[5])))
+                    row["generation_status"] == "final_ready"
+                    and row["retrieval_status"] == "matched"
                     for row in turns
                 ),
-                "evidence_missing",
+                "turn_status",
             )
+            for row in turns:
+                _verify_turn_evidence(connection, row)
             require(
-                [int(row[0]) for row in turns] == [0, 1, 2, 3],
+                [int(row["turn_index"]) for row in turns] == [0, 1, 2, 3],
                 "turn_order",
             )
             real_participant_ids = connection.execute(

@@ -17,6 +17,7 @@ AcceptanceError = acceptance.AcceptanceError
 Api = acceptance.Api
 CHECKPOINT_FIELDS = acceptance.CHECKPOINT_FIELDS
 SevenCallGate = acceptance.SevenCallGate
+verify_turn_evidence = acceptance._verify_turn_evidence
 load_fixture = acceptance.load_fixture
 main = acceptance.main
 read_checkpoint = acceptance.read_checkpoint
@@ -222,3 +223,51 @@ def test_execute_requires_explicit_cap_before_password_or_http(
             ]
         )
     assert raised.value.code == 2
+
+
+def test_turn_evidence_rejects_mismatched_source_lineage() -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, str]]:
+            return [
+                {
+                    "evidence_id": "evidence-1",
+                    "chunk_id": "wrong-chunk",
+                    "snapshot_id": "snapshot-1",
+                    "source_filename": "lesson.md",
+                }
+            ]
+
+    class Connection:
+        def execute(self, *_args: object, **_kwargs: object) -> Result:
+            return Result()
+
+    row = {
+        "id": "turn-1",
+        "knowledge_snapshot_id": "snapshot-1",
+        "speech": "This is an English-safe sentence.",
+        "retrieval_receipts_json": json.dumps(
+            [
+                {
+                    "evidence_id": "evidence-1",
+                    "chunk_id": "chunk-1",
+                    "snapshot_id": "snapshot-1",
+                    "source_filename": "lesson.md",
+                }
+            ]
+        ),
+        "evidence_trace_json": json.dumps(
+            [
+                {
+                    "evidence_id": "evidence-1",
+                    "chunk_id": "chunk-1",
+                    "source_filename": "lesson.md",
+                    "support_mode": "direct",
+                }
+            ]
+        ),
+    }
+    with pytest.raises(AcceptanceError, match="source_receipt_mismatch"):
+        verify_turn_evidence(Connection(), row)
