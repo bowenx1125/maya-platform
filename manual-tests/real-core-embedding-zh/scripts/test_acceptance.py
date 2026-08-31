@@ -12,9 +12,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from acceptance import (  # noqa: E402
+from acceptance import (
     CHECKPOINT_FIELDS,
     AcceptanceError,
+    Api,
     TwoCallGate,
     load_fixture,
     main,
@@ -97,6 +98,78 @@ def test_default_check_is_provider_free(capsys: pytest.CaptureFixture[str]) -> N
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "FIXTURE_OK"
     assert output["real_calls"] == 0
+
+
+@pytest.mark.parametrize(
+    ("base_url", "origin"),
+    [
+        ("http://127.0.0.1:18080", "http://127.0.0.1:18080"),
+        ("http://127.0.0.1:18080/", "http://127.0.0.1:18080"),
+        ("http://localhost:8080", "http://localhost:8080"),
+    ],
+)
+def test_api_sends_exact_same_origin_on_every_request(
+    base_url: str,
+    origin: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[dict[str, str]] = []
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return {}
+
+    class CapturingClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def request(self, _method: str, _path: str, **kwargs: object) -> Response:
+            headers = kwargs.get("headers")
+            assert isinstance(headers, dict)
+            observed.append(dict(headers))
+            return Response()
+
+        @staticmethod
+        def close() -> None:
+            pass
+
+    monkeypatch.setattr("acceptance.httpx.Client", CapturingClient)
+    api = Api(base_url)
+    try:
+        api.request("GET", "/health", expected={200})
+        api.csrf = "csrf-token"
+        api.request("POST", "/api/v1/auth/logout", expected={200})
+    finally:
+        api.close()
+
+    assert [headers["Origin"] for headers in observed] == [origin, origin]
+    assert observed[1]["X-CSRF-Token"] == "csrf-token"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "",
+        "http://127.0.0.1",
+        "http://127.0.0.1:",
+        "http://127.0.0.1:0",
+        "http://127.0.0.1:65536",
+        "http://127.0.0.1:18080/path",
+        "http://127.0.0.1:18080?next=evil",
+        "http://127.0.0.1:18080#fragment",
+        "https://127.0.0.1:18080",
+        "http://127.0.0.2:18080",
+        "http://localhost:18080",
+        "http://LOCALHOST:8080",
+        "http://127.0.0.1:18080@evil.example:80",
+    ],
+)
+def test_api_rejects_base_url_outside_loopback_allowlist(base_url: str) -> None:
+    with pytest.raises(AcceptanceError, match="base_url"):
+        Api(base_url)
 
 
 def test_execute_requires_explicit_cap_before_any_password_or_http(

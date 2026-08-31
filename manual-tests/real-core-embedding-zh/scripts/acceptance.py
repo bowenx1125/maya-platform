@@ -221,13 +221,25 @@ class TwoCallGate:
         return {"snapshot_calls": 1, "query_calls": 1, "total_calls": 2}
 
 
+BASE_URL_RE = re.compile(
+    r"http://(?P<host>127\.0\.0\.1|localhost):(?P<port>[0-9]{1,5})/?"
+)
+
+
+def _validated_origin(base_url: str) -> str:
+    require(isinstance(base_url, str), "base_url")
+    match = BASE_URL_RE.fullmatch(base_url)
+    require(match is not None, "base_url")
+    host = str(match.group("host"))
+    port = int(str(match.group("port")))
+    require(1 <= port <= 65535, "base_url")
+    require(host != "localhost" or port == 8080, "base_url")
+    return f"http://{host}:{port}"
+
+
 class Api:
     def __init__(self, base_url: str) -> None:
-        require(
-            base_url.startswith("http://127.0.0.1:")
-            or base_url == "http://localhost:8080",
-            "base_url",
-        )
+        self.origin = _validated_origin(base_url)
         self.client = httpx.Client(
             base_url=base_url, timeout=20, follow_redirects=False
         )
@@ -248,7 +260,7 @@ class Api:
         key: str | None = None,
         params: Mapping[str, str] | None = None,
     ) -> tuple[int, Mapping[str, Any]]:
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {"Origin": self.origin}
         if self.csrf:
             headers["X-CSRF-Token"] = self.csrf
         if key:
