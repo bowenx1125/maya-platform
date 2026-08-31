@@ -1,0 +1,1130 @@
+"""Fixed, injected-transport DashScope Chat adapter for W4-LLM-A.
+
+This module deliberately stops at the provider boundary.  Durable operation
+state, teacher confirmation and atomic publication belong to the runtime
+worker and its repository port.  ``execute`` returns a hash/usage-rich result
+that those layers can persist without importing an ORM model.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any, Final, Literal, cast
+from urllib.parse import urlsplit
+
+import httpx
+
+from app.modules.debates.generation.prompt_budget import (
+    PromptBudgetError,
+    PromptBudgetV1,
+    preflight_prompt_budget,
+)
+from app.modules.debates.generation.prompt_request import (
+    PromptMessageV1,
+    ProviderPromptV1,
+    build_provider_prompt_from_mutual_input,
+)
+from app.modules.debates.generation.types import (
+    MutualLearningPromptInput,
+    MutualLearningTurnResultV1,
+    TurnPromptInput,
+)
+
+from .llm_output import (
+    LLM_REPAIR_FEEDBACK_SCHEMA_HASH,
+    LLM_TURN_OUTPUT_SCHEMA_HASH,
+    LLMOutputError,
+    MappedLLMTurnV1,
+    RepairFeedbackV1,
+    load_llm_turn_output_schema,
+    map_provider_output,
+    parse_llm_output_json,
+)
+from .llm_price_card import (
+    LLM_INPUT_TOKEN_CAP,
+    LLM_MODEL_KEY,
+    LLM_REGION,
+    LLM_REQUEST_BYTES_CAP,
+    LLM_REQUESTED_OUTPUT_TOKEN_CAP,
+    LLM_RESERVED_OUTPUT_TOKEN_CAP,
+    LLMPriceCardError,
+    LLMPriceCardV1,
+)
+from .llm_privacy import (
+    LLMOutboundManifestV1,
+    LLMOutboundPrivacyError,
+    scan_llm_outbound_messages,
+)
+from .llm_tokenizer import (
+    ConservativeLLMTokenizer,
+    LLMTokenizerError,
+    LLMTokenizerPort,
+    tokenizer_authorized,
+)
+from .llm_transport import (
+    HttpxLLMTransport,
+    LLMAcceptanceUnknown,
+    LLMTransport,
+    LLMTransportError,
+    LLMTransportNotSent,
+    LLMTransportResponse,
+)
+
+LLM_ENDPOINT_PATH: Final = "/compatible-mode/v1/chat/completions"
+LLM_PROVIDER_OPERATION: Final = "llm_debate_turn"
+LLM_PROMPT_CONTRACT_VERSION: Final = "prompt_request_v1"
+LLM_CONNECT_TIMEOUT: Final = 5.0
+LLM_TOTAL_TIMEOUT: Final = 120.0
+LLM_RESERVED_OUTPUT_TOKENS: Final = LLM_RESERVED_OUTPUT_TOKEN_CAP
+
+AttemptAcceptance = Literal["not_sent", "accepted", "acceptance_unknown"]
+AttemptStatus = Literal["succeeded", "failed", "not_sent", "acceptance_unknown"]
+AttemptFailureKind = Literal[
+    "none",
+    "structure_invalid",
+    "provider_rejected",
+    "provider_terminal",
+    "provider_usage_unknown",
+    "provider_usage_overrun",
+    "provider_cost_overrun",
+    "transport_not_sent",
+    "transport_unknown",
+]
+
+
+class LLMAdapterError(RuntimeError):
+    """A pre-send adapter boundary failed with a safe code."""
+
+    def __init__(
+        self,
+        message: str = "LLM adapter rejected the request",
+        *,
+        code: str = "llm_adapter_invalid",
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class LLMResponseError(LLMAdapterError):
+    """The HTTP response was received but failed closed acceptance."""
+
+    def __init__(
+        self,
+        message: str = "LLM provider response is invalid",
+        *,
+        code: str = "provider_response_invalid",
+        json_pointers: Sequence[str] = (),
+    ) -> None:
+        super().__init__(message, code=code)
+        self.json_pointers = tuple(json_pointers)
+
+
+@dataclass(frozen=True, slots=True)
+class DashScopeLLMConfig:
+    """Fixed Beijing resource settings with the secret kept out of repr."""
+
+    api_key: str = field(default="", repr=False)
+    workspace_id: str = ""
+    region: str = LLM_REGION
+    model_key: str = LLM_MODEL_KEY
+    endpoint: str | None = None
+    policy_hash: str = ""
+    repair_policy_hash: str = LLM_REPAIR_FEEDBACK_SCHEMA_HASH
+
+    def __post_init__(self) -> None:
+        if self.region != LLM_REGION:
+            raise LLMAdapterError(code="llm_region_invalid")
+        if self.model_key != LLM_MODEL_KEY:
+            raise LLMAdapterError(code="llm_model_invalid")
+        if (
+            not isinstance(self.workspace_id, str)
+            or not self.workspace_id
+            or any(
+                char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+                for char in self.workspace_id
+            )
+        ):
+            raise LLMAdapterError(code="llm_workspace_invalid")
+        if self.endpoint is not None:
+            self._validate_endpoint(self.endpoint)
+        if self.repair_policy_hash != LLM_REPAIR_FEEDBACK_SCHEMA_HASH:
+            raise LLMAdapterError(code="llm_repair_policy_stale")
+
+    @staticmethod
+    def _validate_endpoint(value: str) -> None:
+        try:
+            parsed = urlsplit(value)
+            port = parsed.port
+        except ValueError as exc:
+            raise LLMAdapterError(code="llm_endpoint_invalid") from exc
+        if (
+            parsed.scheme.lower() != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or port is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise LLMAdapterError(code="llm_endpoint_invalid")
+
+    @property
+    def resolved_endpoint(self) -> str:
+        expected_host = f"{self.workspace_id}.cn-beijing.maas.aliyuncs.com"
+        value = self.endpoint or f"https://{expected_host}{LLM_ENDPOINT_PATH}"
+        self._validate_endpoint(value)
+        parsed = urlsplit(value)
+        if parsed.hostname != expected_host or parsed.path != LLM_ENDPOINT_PATH:
+            raise LLMAdapterError(code="llm_endpoint_invalid")
+        return value
+
+    @property
+    def model(self) -> str:
+        return self.model_key
+
+
+@dataclass(frozen=True, slots=True)
+class LLMRequestV1:
+    """Exact provider request plus hash-only identity metadata."""
+
+    endpoint: str
+    method: Literal["POST"]
+    body: Mapping[str, object]
+    messages: tuple[PromptMessageV1, PromptMessageV1]
+    prompt: ProviderPromptV1
+    budget: PromptBudgetV1
+    request_hash: str
+    prompt_contract_version: str
+    schema_hash: str
+    tokenizer_id: str
+    tokenizer_asset_hash: str
+    rule_set_hash: str
+    persona_spec_hash: str
+    transcript_hash: str
+    receipt_hash: str
+    turn_id: str
+    generation_fence: str
+    policy_hash: str
+    export_manifest_hash: str
+    repair_policy_hash: str
+    build_manifest_hash: str = ""
+    attempt_no: int = 1
+    retrieval_reused: bool = False
+
+    @property
+    def user_message(self) -> PromptMessageV1:
+        return self.messages[1]
+
+    @property
+    def system_message(self) -> PromptMessageV1:
+        return self.messages[0]
+
+    @property
+    def model_key(self) -> str:
+        return LLM_MODEL_KEY
+
+    @property
+    def prompt_hash(self) -> str:
+        return self.prompt.request.request_hash
+
+    @property
+    def output_schema_hash(self) -> str:
+        return self.schema_hash
+
+
+@dataclass(frozen=True, slots=True)
+class LLMUsageV1:
+    """Validated supplier usage used by the accepted-stage ledger."""
+
+    prompt_tokens: int
+    cached_input_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+    @property
+    def input_tokens(self) -> int:
+        return self.prompt_tokens
+
+    @property
+    def output_tokens(self) -> int:
+        return self.completion_tokens
+
+    @property
+    def cached_tokens(self) -> int:
+        return self.cached_input_tokens
+
+
+@dataclass(frozen=True, slots=True)
+class LLMValidatedResultV1:
+    """ORM-free result for operation/accepted-stage persistence."""
+
+    status: AttemptStatus
+    acceptance: AttemptAcceptance
+    failure_kind: AttemptFailureKind
+    safe_error_code: str | None
+    request: LLMRequestV1
+    http_status: int | None = None
+    finish_reason: str | None = None
+    usage: LLMUsageV1 | None = None
+    mapped: MappedLLMTurnV1 | None = None
+    json_pointers: tuple[str, ...] = ()
+    estimated_cost_cny: Decimal = Decimal("0")
+    actual_cost_cny: Decimal | None = None
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status == "succeeded" and self.mapped is not None
+
+    @property
+    def result(self) -> MutualLearningTurnResultV1 | None:
+        return self.mapped.result if self.mapped is not None else None
+
+    @property
+    def validated(self) -> MutualLearningTurnResultV1 | None:
+        return self.result
+
+    @property
+    def provider_output(self) -> Mapping[str, object] | None:
+        return self.mapped.provider_output if self.mapped is not None else None
+
+    @property
+    def provider_output_json(self) -> str | None:
+        return self.mapped.provider_output_json if self.mapped is not None else None
+
+    @property
+    def provider_output_hash(self) -> str | None:
+        return self.mapped.provider_output_hash if self.mapped is not None else None
+
+    @property
+    def accepted_output_json(self) -> str | None:
+        return self.provider_output_json
+
+    @property
+    def accepted_output_hash(self) -> str | None:
+        return self.provider_output_hash
+
+    @property
+    def acceptance_state(self) -> AttemptAcceptance:
+        return self.acceptance
+
+    @property
+    def transport_classification(self) -> AttemptAcceptance:
+        return self.acceptance
+
+    @property
+    def failure(self) -> str | None:
+        return self.safe_error_code
+
+    @property
+    def retry_allowed(self) -> bool:
+        return (
+            self.request.attempt_no == 1
+            and self.acceptance in {"not_sent", "accepted"}
+            and self.failure_kind in {"transport_not_sent", "structure_invalid"}
+        )
+
+    @property
+    def retry_action(self) -> Literal["retry_transport", "retry_structure", "fail_closed"]:
+        if self.retry_allowed and self.failure_kind == "transport_not_sent":
+            return "retry_transport"
+        if self.retry_allowed and self.failure_kind == "structure_invalid":
+            return "retry_structure"
+        return "fail_closed"
+
+    @property
+    def ledger_fields(self) -> dict[str, object]:
+        """Safe values matching the accepted-stage/usage ledger contract."""
+
+        request = self.request
+        usage = self.usage
+        card = self._price_card
+        return {
+            "provider_operation": LLM_PROVIDER_OPERATION,
+            "model_key": request.model_key,
+            "prompt_contract_version": request.prompt_contract_version,
+            "prompt_hash": request.prompt.request_hash,
+            "request_hash": request.request_hash,
+            "schema_hash": request.schema_hash,
+            "tokenizer_id": request.tokenizer_id,
+            "tokenizer_asset_hash": request.tokenizer_asset_hash,
+            "rule_set_hash": request.rule_set_hash,
+            "persona_spec_hash": request.persona_spec_hash,
+            "transcript_hash": request.transcript_hash,
+            "receipt_hash": request.receipt_hash,
+            "turn_id": request.turn_id,
+            "generation_fence": request.generation_fence,
+            "policy_hash": request.policy_hash,
+            "export_manifest_hash": request.export_manifest_hash,
+            "repair_policy_hash": request.repair_policy_hash,
+            "build_manifest_hash": request.build_manifest_hash,
+            "attempt_no": request.attempt_no,
+            "retrieval_reused": request.retrieval_reused,
+            "provider_output_json": self.provider_output_json,
+            "provider_output_hash": self.provider_output_hash,
+            "prompt_tokens": usage.prompt_tokens if usage else None,
+            "cached_input_tokens": usage.cached_input_tokens if usage else None,
+            "completion_tokens": usage.completion_tokens if usage else None,
+            "total_tokens": usage.total_tokens if usage else None,
+            "price_card_version": card.version,
+            "input_price_per_million": format(card.input_rate, "f"),
+            "cached_input_price_per_million": format(card.cached_input_rate, "f"),
+            "output_price_per_million": format(card.output_rate, "f"),
+            "estimated_cost_cny": format(self.estimated_cost_cny, "f"),
+            "actual_cost_cny": (
+                format(self.actual_cost_cny, "f") if self.actual_cost_cny is not None else None
+            ),
+            "safe_error_code": self.safe_error_code,
+            "acceptance": self.acceptance,
+            "finish_reason": self.finish_reason,
+        }
+
+    # ``_price_card`` is attached at construction through a private field
+    # replacement to keep the public dataclass shape stable.  The property is
+    # replaced by the adapter when it creates a result.
+    _price_card: LLMPriceCardV1 = field(
+        default_factory=LLMPriceCardV1,
+        repr=False,
+        compare=False,
+    )
+
+
+def _canonical(value: object) -> str:
+    try:
+        return json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+    except (TypeError, ValueError) as exc:
+        raise LLMAdapterError(code="llm_request_invalid") from exc
+
+
+def _zero_or_hash(value: object) -> str:
+    return str(value) if isinstance(value, str) else ""
+
+
+def _request_user_payload(prompt: ProviderPromptV1) -> dict[str, object]:
+    try:
+        value = json.loads(prompt.user_message.content)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise LLMAdapterError(code="llm_prompt_json_invalid") from exc
+    if not isinstance(value, dict):
+        raise LLMAdapterError(code="llm_prompt_json_invalid")
+    feedback = value.get("repair_feedback")
+    if feedback is not None:
+        try:
+            value["repair_feedback"] = RepairFeedbackV1.from_value(feedback).as_dict()
+        except LLMOutputError as exc:
+            raise LLMAdapterError(code="llm_repair_feedback_invalid") from exc
+    return value
+
+
+def _make_result(
+    request: LLMRequestV1,
+    *,
+    status: AttemptStatus,
+    acceptance: AttemptAcceptance,
+    failure_kind: AttemptFailureKind,
+    safe_error_code: str | None,
+    http_status: int | None = None,
+    finish_reason: str | None = None,
+    usage: LLMUsageV1 | None = None,
+    mapped: MappedLLMTurnV1 | None = None,
+    json_pointers: Sequence[str] = (),
+    price_card: LLMPriceCardV1,
+    actual_cost_cny: Decimal | None = None,
+) -> LLMValidatedResultV1:
+    return LLMValidatedResultV1(
+        status=status,
+        acceptance=acceptance,
+        failure_kind=failure_kind,
+        safe_error_code=safe_error_code,
+        request=request,
+        http_status=http_status,
+        finish_reason=finish_reason,
+        usage=usage,
+        mapped=mapped,
+        json_pointers=tuple(json_pointers),
+        estimated_cost_cny=price_card.reservation_cost(),
+        actual_cost_cny=actual_cost_cny,
+        _price_card=price_card,
+    )
+
+
+def _response_parts(response: object) -> tuple[int, object]:
+    if isinstance(response, LLMTransportResponse):
+        return response.status_code, response.payload
+    if isinstance(response, Mapping):
+        return 200, response
+    status = getattr(response, "status_code", None)
+    json_method = getattr(response, "json", None)
+    if isinstance(status, int) and callable(json_method):
+        try:
+            return status, json_method()
+        except Exception as exc:
+            raise LLMResponseError(code="provider_response_invalid") from exc
+    raise LLMResponseError(code="provider_response_invalid")
+
+
+def _usage(value: object) -> LLMUsageV1 | None:
+    if not isinstance(value, Mapping):
+        return None
+    prompt_value = value.get("prompt_tokens")
+    completion_value = value.get("completion_tokens")
+    total_value = value.get("total_tokens")
+    if any(
+        isinstance(item, bool) or not isinstance(item, int) or item < 0
+        for item in (prompt_value, completion_value, total_value)
+    ):
+        return None
+    prompt = cast(int, prompt_value)
+    completion = cast(int, completion_value)
+    total = cast(int, total_value)
+    details = value.get("prompt_tokens_details")
+    cached = 0
+    if details is not None:
+        if not isinstance(details, Mapping):
+            return None
+        cached_value = details.get("cached_tokens")
+        if isinstance(cached_value, bool) or not isinstance(cached_value, int) or cached_value < 0:
+            return None
+        cached = cached_value
+    if total != prompt + completion or cached > prompt:
+        return None
+    return LLMUsageV1(
+        prompt_tokens=prompt,
+        cached_input_tokens=cached,
+        completion_tokens=completion,
+        total_tokens=total,
+    )
+
+
+def _has_nonempty(value: object) -> bool:
+    if value is None or value is False:
+        return False
+    if isinstance(value, str):
+        return bool(value)
+    if isinstance(value, (list, tuple, dict)):
+        return bool(value)
+    return True
+
+
+class DashScopeLLMAdapter:
+    """Fixed qwen3.7-plus adapter using one explicitly injected transport."""
+
+    key = "dashscope"
+    provider = "dashscope"
+    model_key = LLM_MODEL_KEY
+
+    def __init__(
+        self,
+        config: DashScopeLLMConfig,
+        transport: LLMTransport | None = None,
+        *,
+        tokenizer: LLMTokenizerPort | object | None = None,
+        price_card: LLMPriceCardV1 | None = None,
+        identity_tokens: Sequence[str] = (),
+        outbound_manifest: LLMOutboundManifestV1 | None = None,
+    ) -> None:
+        self.config = config
+        self.transport = transport or HttpxLLMTransport()
+        self.tokenizer = tokenizer if tokenizer is not None else ConservativeLLMTokenizer()
+        self.price_card = price_card or LLMPriceCardV1()
+        self.identity_tokens = tuple(identity_tokens)
+        self.outbound_manifest = outbound_manifest
+
+    def _validate_tokenizer(self) -> None:
+        if not tokenizer_authorized(self.tokenizer):
+            raise LLMAdapterError(
+                "a reviewed supplier-compatible tokenizer is required",
+                code="llm_tokenizer_unapproved",
+            )
+        tokenizer_id = getattr(self.tokenizer, "tokenizer_id", None)
+        asset_hash = getattr(self.tokenizer, "asset_hash", None)
+        if (
+            not isinstance(tokenizer_id, str)
+            or not tokenizer_id.strip()
+            or not isinstance(asset_hash, str)
+            or not asset_hash.strip()
+        ):
+            raise LLMAdapterError(code="llm_tokenizer_invalid")
+
+    def _tokenizer_identity(self) -> tuple[str, str]:
+        tokenizer_id = getattr(self.tokenizer, "tokenizer_id", None)
+        asset_hash = getattr(self.tokenizer, "asset_hash", None)
+        if not isinstance(tokenizer_id, str) or not isinstance(asset_hash, str):
+            raise LLMAdapterError(code="llm_tokenizer_invalid")
+        return tokenizer_id, asset_hash
+
+    def build_request(
+        self,
+        prompt: ProviderPromptV1,
+        *,
+        generation_fence: str = "",
+        policy_hash: str | None = None,
+        export_manifest_hash: str = "",
+        repair_policy_hash: str | None = None,
+        build_manifest_hash: str = "",
+        attempt_no: int = 1,
+        retrieval_reused: bool = False,
+        identity_tokens: Sequence[str] | None = None,
+        outbound_manifest: LLMOutboundManifestV1 | None = None,
+    ) -> LLMRequestV1:
+        """Build and scan the exact request without network I/O."""
+
+        if not isinstance(prompt, ProviderPromptV1):
+            raise LLMAdapterError(code="llm_prompt_invalid")
+        if (
+            isinstance(attempt_no, bool)
+            or not isinstance(attempt_no, int)
+            or attempt_no not in {1, 2}
+        ):
+            raise LLMAdapterError(code="llm_attempt_invalid")
+        self._validate_tokenizer()
+        try:
+            self.price_card.reservation_cost()
+        except LLMPriceCardError as exc:
+            raise LLMAdapterError(code=exc.code) from exc
+        if attempt_no == 1 and prompt.request.repair_feedback is not None:
+            raise LLMAdapterError(code="llm_repair_feedback_unexpected")
+        if attempt_no == 2 and prompt.request.repair_feedback is None:
+            raise LLMAdapterError(code="llm_repair_feedback_required")
+        schema = load_llm_turn_output_schema()
+        if not isinstance(schema, dict):  # defensive typing for the body below
+            raise LLMAdapterError(code="llm_schema_invalid")
+        payload = _request_user_payload(prompt)
+        user = _canonical(payload)
+        system = prompt.system_message.content
+        messages = (
+            PromptMessageV1(role="system", content=system),
+            PromptMessageV1(role="user", content=user),
+        )
+        try:
+            budget = preflight_prompt_budget(
+                (system, user),
+                request_bytes=len(user.encode("utf-8")),
+                requested_output_tokens=LLM_REQUESTED_OUTPUT_TOKEN_CAP,
+                input_token_limit=LLM_INPUT_TOKEN_CAP,
+                request_bytes_limit=LLM_REQUEST_BYTES_CAP,
+                output_token_limit=LLM_REQUESTED_OUTPUT_TOKEN_CAP,
+                token_counter=self.tokenizer,
+            )
+        except (PromptBudgetError, LLMTokenizerError, ValueError) as exc:
+            raise LLMAdapterError(code=getattr(exc, "code", "llm_budget_failed")) from exc
+        manifest = outbound_manifest or self.outbound_manifest
+        field_classes = manifest.field_classes if manifest is not None else ()
+        try:
+            scan_llm_outbound_messages(
+                messages,
+                identity_tokens=(
+                    self.identity_tokens if identity_tokens is None else identity_tokens
+                ),
+                workspace_id=self.config.workspace_id,
+                field_classes=field_classes,
+            )
+        except LLMOutboundPrivacyError as exc:
+            raise LLMAdapterError(code=exc.code) from exc
+        resolved_policy_hash = _zero_or_hash(
+            policy_hash if policy_hash is not None else self.config.policy_hash
+        )
+        resolved_repair_hash = repair_policy_hash or self.config.repair_policy_hash
+        body: dict[str, object] = {
+            "model": LLM_MODEL_KEY,
+            "messages": [
+                {"role": message.role, "content": message.content} for message in messages
+            ],
+            "enable_thinking": False,
+            "stream": False,
+            "temperature": 0.2,
+            "top_p": 0.8,
+            "max_completion_tokens": LLM_REQUESTED_OUTPUT_TOKEN_CAP,
+            "n": 1,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maya_llm_turn_output_v1",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+        }
+        endpoint = self.config.resolved_endpoint
+        tokenizer_id, tokenizer_asset_hash = self._tokenizer_identity()
+        hash_input = {
+            "method": "POST",
+            "endpoint": endpoint,
+            "body": body,
+            "prompt_contract_version": LLM_PROMPT_CONTRACT_VERSION,
+            "schema_hash": LLM_TURN_OUTPUT_SCHEMA_HASH,
+            "tokenizer_id": tokenizer_id,
+            "tokenizer_asset_hash": tokenizer_asset_hash,
+            "rule_set_hash": prompt.request.rule_set_hash,
+            "persona_spec_hash": prompt.request.persona_spec_hash,
+            "transcript_hash": prompt.request.transcript_hash,
+            "receipt_hash": prompt.request.receipt_hash,
+            "turn_id": prompt.request.turn_id,
+            "generation_fence": generation_fence,
+            "policy_hash": resolved_policy_hash,
+            "export_manifest_hash": export_manifest_hash,
+            "repair_policy_hash": resolved_repair_hash,
+            "build_manifest_hash": build_manifest_hash,
+        }
+        request_hash = hashlib.sha256(_canonical(hash_input).encode("utf-8")).hexdigest()
+        return LLMRequestV1(
+            endpoint=endpoint,
+            method="POST",
+            body=body,
+            messages=messages,
+            prompt=prompt,
+            budget=budget,
+            request_hash=request_hash,
+            prompt_contract_version=LLM_PROMPT_CONTRACT_VERSION,
+            schema_hash=LLM_TURN_OUTPUT_SCHEMA_HASH,
+            tokenizer_id=tokenizer_id,
+            tokenizer_asset_hash=tokenizer_asset_hash,
+            rule_set_hash=prompt.request.rule_set_hash,
+            persona_spec_hash=prompt.request.persona_spec_hash,
+            transcript_hash=prompt.request.transcript_hash,
+            receipt_hash=prompt.request.receipt_hash,
+            turn_id=prompt.request.turn_id,
+            generation_fence=generation_fence,
+            policy_hash=resolved_policy_hash,
+            export_manifest_hash=export_manifest_hash,
+            repair_policy_hash=resolved_repair_hash,
+            build_manifest_hash=build_manifest_hash,
+            attempt_no=attempt_no,
+            retrieval_reused=retrieval_reused,
+        )
+
+    prepare = build_request
+    prepare_request = build_request
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        return headers
+
+    def execute(
+        self,
+        prompt: ProviderPromptV1,
+        *,
+        generation_fence: str = "",
+        policy_hash: str | None = None,
+        export_manifest_hash: str = "",
+        repair_policy_hash: str | None = None,
+        build_manifest_hash: str = "",
+        attempt_no: int = 1,
+        retrieval_reused: bool = False,
+        identity_tokens: Sequence[str] | None = None,
+        outbound_manifest: LLMOutboundManifestV1 | None = None,
+        question_target_ids: Sequence[str] = (),
+    ) -> LLMValidatedResultV1:
+        request = self.build_request(
+            prompt,
+            generation_fence=generation_fence,
+            policy_hash=policy_hash,
+            export_manifest_hash=export_manifest_hash,
+            repair_policy_hash=repair_policy_hash,
+            build_manifest_hash=build_manifest_hash,
+            attempt_no=attempt_no,
+            retrieval_reused=retrieval_reused,
+            identity_tokens=identity_tokens,
+            outbound_manifest=outbound_manifest,
+        )
+        # The scanner is intentionally repeated immediately before transport;
+        # callers may also scan during manifest preparation.
+        active_manifest = outbound_manifest or self.outbound_manifest
+        try:
+            scan_llm_outbound_messages(
+                request.messages,
+                identity_tokens=(
+                    self.identity_tokens if identity_tokens is None else identity_tokens
+                ),
+                workspace_id=self.config.workspace_id,
+                field_classes=active_manifest.field_classes if active_manifest is not None else (),
+            )
+        except LLMOutboundPrivacyError as exc:
+            raise LLMAdapterError(code=exc.code) from exc
+        try:
+            response = self.transport.post(
+                request.endpoint,
+                headers=self._headers(),
+                json=request.body,
+                timeout=HttpxLLMTransport.timeout(),
+            )
+        except LLMTransportNotSent:
+            return _make_result(
+                request,
+                status="not_sent",
+                acceptance="not_sent",
+                failure_kind="transport_not_sent",
+                safe_error_code="llm_transport_not_sent",
+                price_card=self.price_card,
+            )
+        except LLMAcceptanceUnknown:
+            return _make_result(
+                request,
+                status="acceptance_unknown",
+                acceptance="acceptance_unknown",
+                failure_kind="transport_unknown",
+                safe_error_code="llm_acceptance_unknown",
+                price_card=self.price_card,
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
+            return _make_result(
+                request,
+                status="not_sent",
+                acceptance="not_sent",
+                failure_kind="transport_not_sent",
+                safe_error_code="llm_transport_not_sent",
+                price_card=self.price_card,
+            )
+        except (
+            httpx.WriteError,
+            httpx.WriteTimeout,
+            httpx.ReadError,
+            httpx.ReadTimeout,
+            httpx.RemoteProtocolError,
+            httpx.NetworkError,
+            httpx.TimeoutException,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            LLMTransportError,
+        ):
+            return _make_result(
+                request,
+                status="acceptance_unknown",
+                acceptance="acceptance_unknown",
+                failure_kind="transport_unknown",
+                safe_error_code="llm_acceptance_unknown",
+                price_card=self.price_card,
+            )
+        except Exception:
+            # An injected transport must never turn an unknown socket outcome
+            # into an accidental retry recommendation.
+            return _make_result(
+                request,
+                status="acceptance_unknown",
+                acceptance="acceptance_unknown",
+                failure_kind="transport_unknown",
+                safe_error_code="llm_acceptance_unknown",
+                price_card=self.price_card,
+            )
+        try:
+            status_code, payload = _response_parts(response)
+        except LLMResponseError as exc:
+            return _make_result(
+                request,
+                status="failed",
+                acceptance="accepted",
+                failure_kind="provider_terminal",
+                safe_error_code=exc.code,
+                price_card=self.price_card,
+            )
+        if status_code != 200:
+            return _make_result(
+                request,
+                status="failed",
+                acceptance="accepted",
+                failure_kind="provider_rejected",
+                safe_error_code="llm_http_rejected",
+                http_status=status_code,
+                price_card=self.price_card,
+            )
+        if not isinstance(payload, Mapping):
+            return _make_result(
+                request,
+                status="failed",
+                acceptance="accepted",
+                failure_kind="provider_terminal",
+                safe_error_code="provider_response_invalid",
+                http_status=status_code,
+                price_card=self.price_card,
+            )
+        if payload.get("object") != "chat.completion":
+            return self._failed_response(request, status_code, "provider_envelope_invalid")
+        if payload.get("model") != LLM_MODEL_KEY:
+            return self._failed_response(request, status_code, "provider_model_mismatch")
+        choices = payload.get("choices")
+        if (
+            not isinstance(choices, list)
+            or len(choices) != 1
+            or not isinstance(choices[0], Mapping)
+        ):
+            return self._failed_response(request, status_code, "provider_choices_invalid")
+        choice = choices[0]
+        if choice.get("index") != 0:
+            return self._failed_response(request, status_code, "provider_choice_index_invalid")
+        message = choice.get("message")
+        if not isinstance(message, Mapping) or message.get("role") != "assistant":
+            return self._failed_response(request, status_code, "provider_message_invalid")
+        if any(
+            _has_nonempty(message.get(key))
+            for key in ("refusal", "reasoning_content", "tool_calls", "function_call")
+        ):
+            return self._failed_response(request, status_code, "provider_terminal_output")
+        finish_reason = choice.get("finish_reason")
+        usage = _usage(payload.get("usage"))
+        if usage is None:
+            return self._failed_response(
+                request,
+                status_code,
+                "provider_usage_unknown",
+                finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+            )
+        if usage.completion_tokens > LLM_RESERVED_OUTPUT_TOKENS:
+            return self._failed_response(
+                request,
+                status_code,
+                "provider_usage_overrun",
+                finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+                usage=usage,
+            )
+        if usage.prompt_tokens > LLM_INPUT_TOKEN_CAP:
+            return self._failed_response(
+                request,
+                status_code,
+                "provider_usage_overrun",
+                finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+                usage=usage,
+            )
+        actual_cost = self.price_card.actual_cost(
+            prompt_tokens=usage.prompt_tokens,
+            cached_input_tokens=usage.cached_input_tokens,
+            completion_tokens=usage.completion_tokens,
+        )
+        if actual_cost > self.price_card.reservation_cost():
+            return _make_result(
+                request,
+                status="failed",
+                acceptance="accepted",
+                failure_kind="provider_cost_overrun",
+                safe_error_code="provider_cost_overrun",
+                http_status=status_code,
+                finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+                usage=usage,
+                price_card=self.price_card,
+                actual_cost_cny=actual_cost,
+            )
+        if finish_reason == "length":
+            return _make_result(
+                request,
+                status="failed",
+                acceptance="accepted",
+                failure_kind="structure_invalid",
+                safe_error_code="output_truncated",
+                http_status=status_code,
+                finish_reason="length",
+                usage=usage,
+                json_pointers=(),
+                price_card=self.price_card,
+                actual_cost_cny=actual_cost,
+            )
+        content = message.get("content")
+        if not isinstance(content, str) or not content:
+            return self._failed_response(request, status_code, "provider_content_invalid")
+        if finish_reason != "stop":
+            safe_code = {
+                "content_filter": "provider_content_filtered",
+                "tool_calls": "provider_tool_calls",
+                "function_call": "provider_function_call",
+                None: "provider_finish_reason_missing",
+            }.get(finish_reason, "provider_finish_reason_invalid")
+            return self._failed_response(
+                request,
+                status_code,
+                safe_code,
+                finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+                usage=usage,
+            )
+        try:
+            parsed = parse_llm_output_json(content)
+            mapped = map_provider_output(
+                parsed,
+                request.prompt.request,
+                question_target_ids=question_target_ids,
+            )
+        except LLMOutputError as exc:
+            return _make_result(
+                request,
+                status="failed",
+                acceptance="accepted",
+                failure_kind="structure_invalid",
+                safe_error_code=exc.code,
+                http_status=status_code,
+                finish_reason="stop",
+                usage=usage,
+                json_pointers=exc.json_pointers,
+                price_card=self.price_card,
+                actual_cost_cny=actual_cost,
+            )
+        return _make_result(
+            request,
+            status="succeeded",
+            acceptance="accepted",
+            failure_kind="none",
+            safe_error_code=None,
+            http_status=status_code,
+            finish_reason="stop",
+            usage=usage,
+            mapped=mapped,
+            price_card=self.price_card,
+            actual_cost_cny=actual_cost,
+        )
+
+    call = execute
+    generate = execute
+
+    def _failed_response(
+        self,
+        request: LLMRequestV1,
+        status_code: int,
+        safe_code: str,
+        *,
+        finish_reason: str | None = None,
+        usage: LLMUsageV1 | None = None,
+    ) -> LLMValidatedResultV1:
+        result = _make_result(
+            request,
+            status="failed",
+            acceptance="accepted",
+            failure_kind=(
+                "provider_usage_unknown"
+                if safe_code == "provider_usage_unknown"
+                else "provider_usage_overrun"
+                if safe_code == "provider_usage_overrun"
+                else "provider_terminal"
+            ),
+            safe_error_code=safe_code,
+            http_status=status_code,
+            finish_reason=finish_reason,
+            usage=usage,
+            price_card=self.price_card,
+            actual_cost_cny=(
+                self.price_card.actual_cost(
+                    prompt_tokens=usage.prompt_tokens,
+                    cached_input_tokens=usage.cached_input_tokens,
+                    completion_tokens=usage.completion_tokens,
+                )
+                if usage is not None
+                else None
+            ),
+        )
+        return result
+
+    def _failed_response_with_card(
+        self,
+        request: LLMRequestV1,
+        status_code: int,
+        safe_code: str,
+        *,
+        finish_reason: str | None = None,
+        usage: LLMUsageV1 | None = None,
+    ) -> LLMValidatedResultV1:
+        return _make_result(
+            request,
+            status="failed",
+            acceptance="accepted",
+            failure_kind="provider_terminal",
+            safe_error_code=safe_code,
+            http_status=status_code,
+            finish_reason=finish_reason,
+            usage=usage,
+            price_card=self.price_card,
+            actual_cost_cny=(
+                self.price_card.actual_cost(
+                    prompt_tokens=usage.prompt_tokens,
+                    cached_input_tokens=usage.cached_input_tokens,
+                    completion_tokens=usage.completion_tokens,
+                )
+                if usage is not None
+                else None
+            ),
+        )
+
+    def generate_turn(
+        self,
+        prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+    ) -> MutualLearningTurnResultV1:
+        """Protocol-compatible façade for the provider-neutral generation service."""
+
+        if isinstance(prompt, ProviderPromptV1):
+            provider_prompt = prompt
+        elif (
+            isinstance(prompt, MutualLearningPromptInput) and prompt.participant.persona is not None
+        ):
+            provider_prompt = build_provider_prompt_from_mutual_input(
+                prompt,
+                persona=prompt.participant.persona,
+                token_counter=self.tokenizer,
+            )
+        else:
+            from .llm import LLMProviderError
+
+            raise LLMProviderError("llm_prompt_invalid")
+        result = self.execute(provider_prompt)
+        if result.succeeded and result.result is not None:
+            return result.result
+        # Import lazily to avoid a module cycle: ``llm.py`` re-exports this
+        # adapter while its historical Mock error class remains authoritative.
+        from .llm import LLMProviderError
+
+        error = LLMProviderError(result.safe_error_code or "llm_generation_failed")
+        error.acceptance_state = result.acceptance
+        error.failure_kind = result.failure_kind
+        cast(Any, error).adapter_result = result
+        raise error
+
+
+# Alternate names used by a runtime worker or tests.
+DashScopeLLMProvider = DashScopeLLMAdapter
+FixedDashScopeLLMAdapter = DashScopeLLMAdapter
+LLMAdapter = DashScopeLLMAdapter
+LLMRequest = LLMRequestV1
+LLMUsage = LLMUsageV1
+ValidatedLLMResult = LLMValidatedResultV1
+LLMResponse = LLMTransportResponse
+
+
+def classify_transport_error(error: object) -> AttemptAcceptance:
+    """Classify injected transport failures without reading raw messages."""
+
+    if isinstance(error, LLMTransportNotSent):
+        return "not_sent"
+    if isinstance(error, LLMAcceptanceUnknown):
+        return "acceptance_unknown"
+    return "acceptance_unknown"
+
+
+def classify_transport(error: object) -> AttemptAcceptance:
+    return classify_transport_error(error)
+
+
+__all__ = [
+    "AttemptAcceptance",
+    "AttemptFailureKind",
+    "AttemptStatus",
+    "DashScopeLLMAdapter",
+    "DashScopeLLMConfig",
+    "DashScopeLLMProvider",
+    "FixedDashScopeLLMAdapter",
+    "LLMAdapter",
+    "LLMAdapterError",
+    "LLM_ENDPOINT_PATH",
+    "LLM_PROVIDER_OPERATION",
+    "LLMRequest",
+    "LLMRequestV1",
+    "LLMResponse",
+    "LLMResponseError",
+    "LLM_TURN_OUTPUT_SCHEMA_HASH",
+    "LLMUsage",
+    "LLMUsageV1",
+    "LLMValidatedResultV1",
+    "ValidatedLLMResult",
+    "classify_transport",
+    "classify_transport_error",
+]

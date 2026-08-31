@@ -3,8 +3,9 @@
 Wave 2 intentionally does not ship a real text-model adapter.  The Mock
 provider emits a stable structured object from the canonical prompt bytes and
 offers explicit, test-only failure injection for the shared attempt-1/2
-repair path.  A future reviewed adapter can implement the same protocol
-without changing the generation service or public DTOs.
+repair path.  The fixed Wave 4 adapter is re-exported at the end of this
+module; its transport/output/privacy/accounting implementation lives in small
+sibling modules so this historical Mock port remains stable.
 """
 
 from __future__ import annotations
@@ -860,4 +861,101 @@ __all__ = [
     "llm_provider",
     "select_llm_provider",
     "validate_llm_provider_selector",
+]
+
+# Import after the Mock definitions so the historical provider port and its
+# error classes remain available while the fixed Wave 4 implementation stays
+# in small sibling modules.
+from app.providers.llm_adapter import (  # noqa: E402
+    DashScopeLLMAdapter,
+    DashScopeLLMConfig,
+    DashScopeLLMProvider,
+    FixedDashScopeLLMAdapter,
+    LLMAdapter,
+    LLMAdapterError,
+    LLMRequest,
+    LLMRequestV1,
+    LLMResponseError,
+    LLMUsage,
+    LLMUsageV1,
+    LLMValidatedResultV1,
+    ValidatedLLMResult,
+)
+from app.providers.llm_output import (  # noqa: E402
+    LLMOutputError,
+    LLMOutputValidationError,
+    MappedLLMTurnV1,
+    RepairFeedbackV1,
+    map_llm_output,
+    map_provider_output,
+)
+from app.providers.llm_price_card import (  # noqa: E402
+    LLMBudgetCapV1,
+    LLMPriceCardError,
+    LLMPriceCardV1,
+    actual_cost,
+    debate_budget_cap,
+    reservation_cost,
+)
+from app.providers.llm_privacy import (  # noqa: E402
+    LLMOutboundManifestV1,
+    LLMOutboundPrivacyError,
+    LLMOutboundScanResult,
+    scan_llm_outbound_messages,
+)
+from app.providers.llm_tokenizer import (  # noqa: E402
+    ConservativeLLMTokenizer,
+    LLMTokenizerError,
+    LLMTokenizerPort,
+    PinnedLLMTokenizer,
+)
+from app.providers.llm_transport import (  # noqa: E402
+    HttpxLLMTransport,
+    LLMAcceptanceUnknown,
+    LLMTransport,
+    LLMTransportError,
+    LLMTransportNotSent,
+    LLMTransportResponse,
+)
+
+__all__ += [
+    "ConservativeLLMTokenizer",
+    "DashScopeLLMAdapter",
+    "DashScopeLLMConfig",
+    "DashScopeLLMProvider",
+    "FixedDashScopeLLMAdapter",
+    "HttpxLLMTransport",
+    "LLMAcceptanceUnknown",
+    "LLMAdapter",
+    "LLMAdapterError",
+    "LLMBudgetCapV1",
+    "LLMOutboundManifestV1",
+    "LLMOutboundPrivacyError",
+    "LLMOutboundScanResult",
+    "LLMOutputError",
+    "LLMOutputValidationError",
+    "LLMPriceCardError",
+    "LLMPriceCardV1",
+    "LLMRequest",
+    "LLMRequestV1",
+    "LLMResponseError",
+    "LLMTokenizerError",
+    "LLMTokenizerPort",
+    "LLMTransport",
+    "LLMTransportError",
+    "LLMTransportNotSent",
+    "LLMTransportResponse",
+    "LLMUsage",
+    "LLMUsageV1",
+    "LLMValidatedResultV1",
+    "MappedLLMTurnV1",
+    "PinnedLLMTokenizer",
+    "RepairFeedbackV1",
+    "ValidatedLLMResult",
+    "actual_cost",
+    "debate_budget_cap",
+    "map_llm_output",
+    "map_provider_output",
+    "reservation_cost",
+    "scan_llm_outbound_messages",
 ]

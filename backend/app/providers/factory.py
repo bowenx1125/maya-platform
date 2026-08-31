@@ -20,7 +20,15 @@ from app.providers.dashscope import (
     DashScopeTTSProvider,
     DashScopeVoiceCloneProvider,
 )
-from app.providers.llm import LLMProvider
+from app.providers.llm import (
+    DashScopeLLMAdapter,
+    DashScopeLLMConfig,
+    LLMOutboundManifestV1,
+    LLMPriceCardV1,
+    LLMProvider,
+    LLMTokenizerPort,
+    LLMTransport,
+)
 from app.providers.llm import llm_provider as select_llm_provider
 from app.providers.tts import MockTTSProvider, TTSProvider
 from app.providers.voice import MockVoiceCloneProvider, VoiceCloneProvider
@@ -56,14 +64,38 @@ def tts_provider(settings: Settings) -> TTSProvider:
     raise RuntimeError("tts provider is not supported")
 
 
-def llm_provider(settings: Settings) -> LLMProvider:
-    """Return the reviewed Wave 2 text provider.
+def llm_provider(
+    settings: Settings,
+    *,
+    transport: LLMTransport | None = None,
+    tokenizer: LLMTokenizerPort | object | None = None,
+    price_card: LLMPriceCardV1 | None = None,
+    outbound_manifest: LLMOutboundManifestV1 | None = None,
+) -> LLMProvider:
+    """Compose Mock or the inert fixed LLM adapter without making a call."""
 
-    Wave 2 intentionally exposes only the deterministic Mock implementation;
-    ``select_llm_provider`` fails closed for a real selector.
-    """
-
-    return select_llm_provider(settings)
+    if settings.llm_provider == "mock":
+        return select_llm_provider(settings)
+    if settings.llm_provider != "dashscope":
+        raise RuntimeError("llm provider is not supported")
+    if (
+        not settings.dashscope_api_key
+        or not settings.dashscope_workspace_id
+        or settings.dashscope_region != "cn-beijing"
+    ):
+        raise RuntimeError("DashScope LLM provider is not configured")
+    return DashScopeLLMAdapter(
+        DashScopeLLMConfig(
+            api_key=settings.dashscope_api_key,
+            workspace_id=settings.dashscope_workspace_id,
+            region=settings.dashscope_region,
+            policy_hash=settings.provider_policy_hash or "",
+        ),
+        transport,
+        tokenizer=tokenizer,
+        price_card=price_card,
+        outbound_manifest=outbound_manifest,
+    )
 
 
 def embedding_provider(

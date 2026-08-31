@@ -222,9 +222,10 @@ class Settings(BaseSettings):
         """Allow Mock everywhere, or one explicitly gated real-provider slice.
 
         The real-service startup composition is deliberately asymmetric:
-        DashScope may be selected for Embedding-only or TTS-only while all
-        companions remain Mock/disabled.  LLM and Voice stay closed until
-        their later Gates.  Two simultaneous real selectors fail at startup.
+        one reviewed DashScope slice may be selected while all companions
+        remain Mock/disabled.  The LLM adapter still requires its own runtime
+        confirmation/operation gate before any request; selector construction
+        alone performs no network I/O.
         """
 
         selectors = (
@@ -239,12 +240,7 @@ class Settings(BaseSettings):
             raise RuntimeError("translation provider is not supported")
 
         non_mock = [
-            name
-            for name, value in (
-                ("LLM_PROVIDER", self.llm_provider),
-                ("VOICE_PROVIDER", self.voice_provider),
-            )
-            if value != "mock"
+            name for name, value in (("VOICE_PROVIDER", self.voice_provider),) if value != "mock"
         ]
         if self.translation_provider not in {None, "", "mock"}:
             non_mock.append("TRANSLATION_PROVIDER")
@@ -254,7 +250,8 @@ class Settings(BaseSettings):
                 "Mock companions: " + ", ".join(non_mock)
             )
         real_slices = sum(
-            value == "dashscope" for value in (self.embedding_provider, self.tts_provider)
+            value == "dashscope"
+            for value in (self.llm_provider, self.embedding_provider, self.tts_provider)
         )
         if real_slices > 1:
             raise RuntimeError("runtime provider gate permits only one reviewed DashScope slice")
@@ -267,6 +264,21 @@ class Settings(BaseSettings):
                 raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
         if self.embedding_provider == "dashscope" and self.provider_policy_hash is None:
             raise RuntimeError("PROVIDER_POLICY_HASH is required for real Embedding publication")
+        if self.llm_provider == "dashscope":
+            if not self.dashscope_api_key or not self.dashscope_api_key.strip():
+                raise RuntimeError(
+                    "DASHSCOPE_API_KEY is required for real Provider work; "
+                    "Mock companions remain the default"
+                )
+            if not self.dashscope_workspace_id or not self.dashscope_workspace_id.strip():
+                raise RuntimeError(
+                    "DASHSCOPE_WORKSPACE_ID is required for real Provider work; "
+                    "Mock companions remain the default"
+                )
+            if self.dashscope_region != "cn-beijing":
+                raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
+            if self.provider_policy_hash is None:
+                raise RuntimeError("PROVIDER_POLICY_HASH is required for real LLM publication")
 
     @property
     def secret_bytes(self) -> bytes:
