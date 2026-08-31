@@ -17,7 +17,11 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .embedding import ValidatedEmbeddingBatchV1, validate_embedding_batch_response
+from .embedding import (
+    EmbeddingResponseDialect,
+    ValidatedEmbeddingBatchV1,
+    validate_embedding_batch_response,
+)
 from .packing import (
     MAX_BATCH_ITEMS,
     MAX_BATCH_TOKENS,
@@ -306,6 +310,7 @@ class OpenAICompatibleEmbeddingAdapter:
     # OpenAI-compatible endpoint is a closed resource.
     provider = ""
     region = ""
+    response_dialect: EmbeddingResponseDialect = "generic"
 
     def __init__(
         self,
@@ -392,6 +397,7 @@ class OpenAICompatibleEmbeddingAdapter:
             expected_provider=self.provider,
             expected_region=self.region or None,
             expected_policy_version=self.policy_version,
+            response_dialect=self.response_dialect,
         )
 
     def embed(self, batch: EmbeddingBatchV1) -> ValidatedEmbeddingBatchV1:
@@ -404,6 +410,7 @@ class DashScopeEmbeddingAdapter(OpenAICompatibleEmbeddingAdapter):
     key = "dashscope"
     provider = REAL_EMBEDDING_PROVIDER
     region = REAL_EMBEDDING_REGION
+    response_dialect: EmbeddingResponseDialect = "dashscope_native"
 
     def __init__(
         self,

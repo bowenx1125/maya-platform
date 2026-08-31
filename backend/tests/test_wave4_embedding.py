@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,9 @@ from app.modules.knowledge.providers import (
     REAL_EMBEDDING_MODEL,
     REAL_EMBEDDING_POLICY_VERSION,
     REAL_EMBEDDING_PROVIDER,
+    EmbeddingBatchV1,
     EmbeddingHTTPRejected,
+    EmbeddingModelError,
     EmbeddingPlanError,
     EmbeddingResponseError,
     EmbeddingShapeError,
@@ -38,6 +41,7 @@ from app.modules.knowledge.providers.adapters import (
     EmbeddingAcceptanceUnknown,
     EmbeddingTransportNotSent,
     EmbeddingTransportResponse,
+    OpenAICompatibleEmbeddingAdapter,
 )
 from app.modules.knowledge.providers.embedding import validate_embedding_response
 from app.modules.knowledge.providers.operations import (
@@ -258,6 +262,144 @@ def test_dashscope_adapter_uses_only_injected_transport_and_validates_fixed_shap
     assert result.count == 1
     assert len(transport.calls) == 1
     assert transport.calls[0][1]["model"] == "text-embedding-v4"
+
+
+def _real_three_item_batch() -> EmbeddingBatchV1:
+    build = replace(
+        _manual_build(3),
+        embedding_model_key=REAL_EMBEDDING_MODEL,
+        embedding_dimension=REAL_EMBEDDING_DIMENSION,
+        embedding_provider=REAL_EMBEDDING_PROVIDER,
+        embedding_region="cn-beijing",
+        embedding_policy_version=REAL_EMBEDDING_POLICY_VERSION,
+    )
+    return plan_embedding_batches(build).batches[0]
+
+
+def _native_dashscope_response(
+    batch: EmbeddingBatchV1,
+    *,
+    model: str | None = None,
+    vectors: list[list[float]] | None = None,
+    text_indices: list[int] | None = None,
+) -> dict[str, object]:
+    values = vectors or [[0.0] * REAL_EMBEDDING_DIMENSION for _ in batch.items]
+    indices = text_indices or list(range(len(batch.items)))
+    output: dict[str, object] = {
+        "embeddings": [
+            {"text_index": index, "embedding": vector}
+            for index, vector in zip(indices, values, strict=False)
+        ]
+    }
+    response: dict[str, object] = {
+        "request_id": "request-fixture",
+        "code": "",
+        "message": "",
+        "output": output,
+        "usage": {"total_tokens": batch.total_tokens},
+    }
+    if model is not None:
+        response["model"] = model
+    return response
+
+
+def test_dashscope_native_response_without_model_accepts_three_1024_items() -> None:
+    batch = _real_three_item_batch()
+    transport = _FakeTransport(_native_dashscope_response(batch))
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"), transport
+    )
+
+    result = adapter.embed_batch(batch)
+
+    assert result.count == 3
+    assert all(len(vector) == REAL_EMBEDDING_DIMENSION for vector in result.vectors)
+    assert transport.calls[0][1]["model"] == REAL_EMBEDDING_MODEL
+    assert transport.calls[0][1]["parameters"] == {"dimension": REAL_EMBEDDING_DIMENSION}
+
+
+def test_dashscope_native_explicit_wrong_model_is_rejected() -> None:
+    batch = _real_three_item_batch()
+    transport = _FakeTransport(_native_dashscope_response(batch, model="wrong-model"))
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"), transport
+    )
+
+    with pytest.raises(EmbeddingModelError) as error:
+        adapter.embed_batch(batch)
+    assert error.value.code == "embedding_model_mismatch"
+
+
+def test_dashscope_native_data_envelope_without_model_is_rejected() -> None:
+    batch = _real_three_item_batch()
+    transport = _FakeTransport(
+        {
+            "data": [
+                {"index": index, "embedding": [0.0] * REAL_EMBEDDING_DIMENSION}
+                for index in range(3)
+            ]
+        }
+    )
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"), transport
+    )
+
+    with pytest.raises(EmbeddingModelError) as error:
+        adapter.embed_batch(batch)
+    assert error.value.code == "embedding_model_mismatch"
+
+
+def test_generic_missing_model_is_rejected_even_with_valid_data() -> None:
+    batch = _real_three_item_batch()
+    transport = _FakeTransport(
+        {
+            "data": [
+                {"index": index, "embedding": [0.0] * REAL_EMBEDDING_DIMENSION}
+                for index in range(3)
+            ]
+        }
+    )
+    adapter = OpenAICompatibleEmbeddingAdapter(
+        transport,
+        endpoint="https://example.invalid/embeddings",
+        model_key=REAL_EMBEDDING_MODEL,
+        dimension=REAL_EMBEDDING_DIMENSION,
+        policy_version=REAL_EMBEDDING_POLICY_VERSION,
+    )
+
+    with pytest.raises(EmbeddingModelError) as error:
+        adapter.embed_batch(batch)
+    assert error.value.code == "embedding_model_mismatch"
+
+
+def test_dashscope_native_shape_checks_remain_fail_closed() -> None:
+    batch = _real_three_item_batch()
+    cases = (
+        _native_dashscope_response(batch, vectors=[[0.0] * REAL_EMBEDDING_DIMENSION] * 2),
+        _native_dashscope_response(batch, text_indices=[0, 2, 1]),
+        _native_dashscope_response(
+            batch,
+            vectors=[
+                [0.0] * (REAL_EMBEDDING_DIMENSION - 1),
+                [0.0] * REAL_EMBEDDING_DIMENSION,
+                [0.0] * REAL_EMBEDDING_DIMENSION,
+            ],
+        ),
+        _native_dashscope_response(
+            batch,
+            vectors=[
+                [float("nan")] + [0.0] * (REAL_EMBEDDING_DIMENSION - 1),
+                [0.0] * REAL_EMBEDDING_DIMENSION,
+                [0.0] * REAL_EMBEDDING_DIMENSION,
+            ],
+        ),
+    )
+    for response in cases:
+        adapter = DashScopeEmbeddingAdapter(
+            DashScopeEmbeddingConfig(workspace_id="workspace"), _FakeTransport(response)
+        )
+        with pytest.raises(EmbeddingShapeError):
+            adapter.embed_batch(batch)
 
 
 def test_real_dashscope_payload_pins_dimension_and_request_hash_without_key() -> None:

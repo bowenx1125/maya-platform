@@ -6,7 +6,7 @@ import math
 import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 from .packing import EmbeddingBatchV1
 from .snapshot_build import (
@@ -47,6 +47,9 @@ class EmbeddingShapeError(EmbeddingValidationError):
 
 class EmbeddingDimensionError(EmbeddingShapeError):
     """A vector does not have the fixed dimension."""
+
+
+EmbeddingResponseDialect = Literal["generic", "dashscope_native"]
 
 
 class EmbeddingProvider(Protocol):
@@ -153,27 +156,33 @@ def _normalise_response(
     response: object,
     *,
     expected_model: str,
-) -> Mapping[str, object]:
+    response_dialect: EmbeddingResponseDialect,
+) -> tuple[Mapping[str, object], bool]:
     payload = _mapping(response, field="embedding response")
-    # OpenAI-compatible responses are already in the closed shape.  DashScope
-    # uses ``output.embeddings`` in some API versions; normalize only that
-    # documented envelope and keep model/count validation identical.
-    output = payload.get("output")
-    if isinstance(output, Mapping) and "data" not in payload:
-        raw_embeddings = output.get("embeddings")
-        if isinstance(raw_embeddings, list):
-            # Do not manufacture a model identity when the supplier omits it.
-            # A response is accepted only when the fixed model is explicit in
-            # the returned envelope.
-            model = payload.get("model", output.get("model"))
-            normalized: dict[str, object] = {
-                "model": model,
-                "data": raw_embeddings,
-            }
-            if "build_manifest_hash" in payload:
-                normalized["build_manifest_hash"] = payload["build_manifest_hash"]
-            return normalized
-    return payload
+    if response_dialect not in {"generic", "dashscope_native"}:
+        raise EmbeddingResponseError(
+            "embedding response dialect is invalid", code="embedding_response_invalid"
+        )
+    # OpenAI-compatible responses are already in the closed ``data`` shape.
+    # Only the fixed DashScope adapter may normalize the supplier's native
+    # ``output.embeddings`` envelope.  Keeping this opt-in prevents an
+    # arbitrary missing-model response from crossing the generic boundary.
+    if response_dialect == "dashscope_native":
+        output = payload.get("output")
+        if isinstance(output, Mapping) and "data" not in payload:
+            raw_embeddings = output.get("embeddings")
+            if isinstance(raw_embeddings, list):
+                # The native successful response may omit model.  If it is
+                # present, it is still compared with the request model below.
+                model = payload.get("model", output.get("model"))
+                normalized: dict[str, object] = {
+                    "model": model,
+                    "data": raw_embeddings,
+                }
+                if "build_manifest_hash" in payload:
+                    normalized["build_manifest_hash"] = payload["build_manifest_hash"]
+                return normalized, True
+    return payload, False
 
 
 def _index(value: object) -> int:
@@ -218,6 +227,7 @@ def validate_embedding_response(
     expected_region: str | None = None,
     expected_policy_version: str | None = None,
     expected_build_manifest_hash: str | None = None,
+    response_dialect: EmbeddingResponseDialect = "generic",
 ) -> tuple[tuple[float, ...], ...]:
     """Validate exact model/count/order/dimension/finite values.
 
@@ -259,9 +269,17 @@ def validate_embedding_response(
             "embedding validation identity is not a closed resource",
             code="embedding_identity_mismatch",
         )
-    payload = _normalise_response(response, expected_model=expected_model)
+    payload, native_envelope = _normalise_response(
+        response,
+        expected_model=expected_model,
+        response_dialect=response_dialect,
+    )
     model = payload.get("model")
-    if model != expected_model:
+    if model is not None and model != expected_model:
+        raise EmbeddingModelError(
+            "embedding model does not match the fixed model", code="embedding_model_mismatch"
+        )
+    if model is None and not native_envelope:
         raise EmbeddingModelError(
             "embedding model does not match the fixed model", code="embedding_model_mismatch"
         )
@@ -281,7 +299,9 @@ def validate_embedding_response(
     vectors: list[tuple[float, ...]] = []
     for expected_index, raw_item in enumerate(raw_data):
         item = _mapping(raw_item, field="embedding item")
-        raw_index = item.get("index", item.get("text_index"))
+        raw_index = (
+            item.get("text_index") if native_envelope else item.get("index", item.get("text_index"))
+        )
         if _index(raw_index) != expected_index:
             raise EmbeddingShapeError(
                 "embedding response order does not match the request",
@@ -300,6 +320,7 @@ def validate_embedding_batch_response(
     expected_provider: str | None = None,
     expected_region: str | None = None,
     expected_policy_version: str | None = None,
+    response_dialect: EmbeddingResponseDialect = "generic",
 ) -> ValidatedEmbeddingBatchV1:
     """Validate a provider result against one exact planned batch."""
 
@@ -319,8 +340,13 @@ def validate_embedding_batch_response(
         expected_region=region or None,
         expected_policy_version=policy_version or None,
         expected_build_manifest_hash=batch.build_manifest_hash,
+        response_dialect=response_dialect,
     )
-    payload = _normalise_response(response, expected_model=model)
+    payload, _native_envelope = _normalise_response(
+        response,
+        expected_model=model,
+        response_dialect=response_dialect,
+    )
     response_build_hash = payload.get("build_manifest_hash")
     if response_build_hash is not None and response_build_hash != batch.build_manifest_hash:
         raise EmbeddingResponseError(
@@ -364,6 +390,7 @@ def validate_real_embedding_response(
     *,
     expected_count: int,
     expected_build_manifest_hash: str | None = None,
+    response_dialect: EmbeddingResponseDialect = "generic",
 ) -> tuple[tuple[float, ...], ...]:
     """Validate the fixed real text-embedding-v4/1024 response shape."""
 
@@ -376,6 +403,7 @@ def validate_real_embedding_response(
         expected_region=REAL_EMBEDDING_REGION,
         expected_policy_version=REAL_EMBEDDING_POLICY_VERSION,
         expected_build_manifest_hash=expected_build_manifest_hash,
+        response_dialect=response_dialect,
     )
 
 
@@ -404,6 +432,7 @@ __all__ = [
     "EmbeddingDimensionError",
     "EmbeddingModelError",
     "EmbeddingProvider",
+    "EmbeddingResponseDialect",
     "EmbeddingResponseError",
     "EmbeddingShapeError",
     "EmbeddingValidationError",
