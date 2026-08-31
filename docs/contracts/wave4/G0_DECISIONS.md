@@ -41,16 +41,19 @@ Status: `FROZEN / REAL EMBEDDING 1024 DELTA`
     zero calls; a durable atomic reservation precedes network I/O; repair uses one
     frozen retry; acceptance-unknown consumes the cap and is never retried or
     published; safe codes hide supplier details.
+    W4-LLM-A uses an independent `llm_debate_turn` budget bucket, an immutable accepted
+    stage and one atomic Turn/Evidence/usage/operation publication transaction as frozen
+    in `LLM_A_RUNTIME_V1.md`.
 16. **Which Gates are fully Mock-completable?** W4-PERSONA, W4-RAG-TRACE, W4-PROMPT and
     W4-CONTENT. Their G1/G2/G3 must finish before real Provider evidence.
 17. **When does billed work begin?** Two isolated account preflight calls already
     occurred: one 256-dimension Embedding request and one structured LLM request, both
     with non-student fixtures while Maya's selectors stayed Mock. They are availability
-    evidence only and are not Gate evidence. The next permitted real request is one
-    W4-EMBED 1024 preflight after its implementation, deterministic checks, independent
-    Sol audit, formal content hash, immutable SnapshotBuild and exact teacher
-    export-manifest confirmation pass. The account must also be a verified
+    evidence only and are not Gate evidence. The separately authorized W4-EMBED 1024
+    preflight later used exactly one safe three-text request; HTTP was 200 but local
+    response parsing failed closed, so its status is `REAL EMBEDDING 1024 PREFLIGHT
+FAILED` and it must not be repeated under the current Gate. The account must be a verified
     pay-as-you-go API or Token Plan Team account with an accepted
     ProviderPolicySnapshot; personal/Coding/unknown plans stop at zero calls. The
     user's standing authorization removes a repeated per-call confirmation, but no
-    Gate or cap. A 256 or LLM preflight must not be repeated.
+    Gate or cap. A 256, 1024 or LLM preflight must not be repeated.

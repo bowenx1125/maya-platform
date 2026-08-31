@@ -1,16 +1,16 @@
 # W4-EMBED G1.5 Gate Packet
 
-Status: `G1.5 REPAIR CANDIDATE / G2 REAUDIT PENDING / FORMAL MAYA RUNTIME CALLS 0`
+Status: `G2 SOL PASS / REAL 1024 PREFLIGHT FAILED RESPONSE CONTRACT / W4-EMBED NOT SIGNED`
 
 Issues: `#19 W4-EMBED-RUNTIME`, `#20 W4-PROVIDER-PREFLIGHT`
 
 ## Authorized scope
 
-This candidate implements and tests the real-Embedding control seams without making a
-formal Maya runtime request. It does not authorize a real Provider call or claim a
-complete real RAG path. An independent account-only preflight made one 256-dimension
-Embedding request and one LLM request with non-student fixtures; those are availability
-evidence only. Formal real Embedding is now frozen at 1024 and has not run.
+This candidate implements and tests the real-Embedding control seams. It does not claim
+a complete real RAG path. An independent account-only preflight made one 256-dimension
+Embedding request and one LLM request with non-student fixtures; those remain
+availability evidence only. The separately gated 1024 preflight has now used its single
+request allowance and failed local response validation after HTTP 200.
 
 Implemented boundaries:
 
@@ -58,6 +58,22 @@ findings without making a Provider call:
   `prepared` with zero requests, zero charged requests, no reservation and no scope
   budget.
 
+Sol High re-audited exact clean SHA
+`0c7c6e3c85ad8dced45e1588e99a19921f1a1a8a` and returned
+`PASS / P0=0 / P1=0 / P2=0` on all eight repaired findings.
+
+The single permitted three-text 1024 preflight then made one request. It returned HTTP
+200, but the local adapter rejected it as `embedding_model_mismatch`. The official
+DashScope synchronous response contract documents `output.embeddings[].text_index` and
+does not return `model` in that native envelope. The generic validator had incorrectly
+applied the OpenAI-compatible response-model requirement to both dialects.
+
+Commit `dbef20e` introduces an explicit response dialect: generic/OpenAI-compatible
+responses still require exact model, while only the fixed DashScope adapter accepts the
+documented native `output.embeddings` envelope without model; any explicit model must
+still match. Fake tests reject wrong model, wrong envelope, count/order/dimension and
+non-finite vectors. No second real request was made.
+
 ## Frozen invariants
 
 - No request occurs before exact policy, manifest, confirmation and budget preflight.
@@ -71,7 +87,7 @@ findings without making a Provider call:
 
 ## Current deterministic evidence
 
-- backend full suite: `812 passed`;
+- backend full suite: `817 passed`;
 - frontend: `34 files / 210 tests`, lint, TypeScript and production build passed;
 - Ruff and mypy passed;
 - frozen OpenAPI and generated client passed; the route semantic fixture contains `76`
@@ -84,22 +100,18 @@ findings without making a Provider call:
 - fake-transport product evidence proves confirmation-before-call, exact 1024 request,
   durable query-stage reuse, publication/retrieval/Evidence receipt continuity,
   non-terminal provider gating and explicit retry;
-- formal Maya runtime Provider calls: `0`; independent preflight calls: `2`.
+- formal real 1024 preflight calls: `1` (HTTP 200, local validation failed);
+  earlier independent availability calls: `2`.
 
 ## Remaining Gate boundary
 
-No formal real 1024 request may run until a new exact clean SHA receives independent
-Sol High `PASS / P0=0 / P1=0`. That audit must verify the three latest repairs as well as
-the five earlier findings, actual outbound-text blocking, the pre-confirmation `prepared`
-operation (zero reservation/call), course authorization, partial continuation,
-acceptance-unknown behavior, ordinary DTO secrecy and the non-terminal Playback retry
-fence.
-
-After PASS, exactly one safe 3-text 1024 preflight is allowed. It can prove only
-`REAL EMBEDDING 1024 PREFLIGHT PASS`; W4-EMBED itself still requires empty-runtime
-browser G3 publication → teacher confirmation → query → retrieval → Evidence receipt
-and restart evidence. Current private-account plan/logging/retention controls must remain
-fail closed unless the persisted reviewed policy proves them.
+The response-dialect correction requires an incremental exact-SHA Sol review, but the
+single 1024 preflight allowance is exhausted and must not be repeated. The only truthful
+service status remains `REAL EMBEDDING 1024 PREFLIGHT FAILED`; HTTP 200 alone is not a
+Gate PASS. W4-EMBED also still lacks empty-runtime browser G3 publication → teacher
+confirmation → query → retrieval → Evidence receipt and restart evidence. Current
+private-account plan/logging/retention controls remain fail closed unless the persisted
+reviewed policy proves them.
 
 ## G2 audit question
 
@@ -113,5 +125,6 @@ and returned `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`:
 4. query embedding and retrieval remained Mock 256;
 5. teacher disclosure was not page-reachable or course/build-authorized.
 
-The current repair candidate claims closure of these five findings but does not sign
-itself. A new exact clean SHA now goes to independent read-only Sol High re-audit.
+Those five findings and the later two P1/one P2 findings were closed and signed by Sol
+High on `0c7c6e3`; the only subsequent code delta is the isolated documented
+response-dialect correction described above.

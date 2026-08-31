@@ -9,7 +9,7 @@ The intended local Demo supplier is Alibaba Cloud Model Studio in the existing
 
 | Operation        | Fixed resource                                        | Mode                                                                    |
 | ---------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
-| Debate LLM       | `qwen3.7-plus-2026-05-26`                             | non-thinking, structured output, temperature `0.2`, top_p `0.8`         |
+| Debate LLM       | `qwen3.7-plus-2026-05-26`                             | exact Chat/JSON-Schema wire in `LLM_A_RUNTIME_V1.md`                    |
 | Text embedding   | `text-embedding-v4`, dimension `1024`                 | synchronous; max 10 inputs, 8,000 tokens/item and 30,000 tokens/request |
 | Voice-clone TTS  | `qwen3-tts-vc-2026-01-22`                             | HTTP, language `English`                                                |
 | Voice enrollment | `qwen-voice-enrollment` targeting the fixed TTS model | separate TTS Gate only                                                  |
@@ -34,6 +34,11 @@ preflight card, not UI content: embedding CNY 0.5/million input tokens and TTS C
 0.8/10,000 billed characters were the Beijing list prices at review time. The LLM Gate
 must refresh its price card from the official account/region before the first request;
 if that refresh makes a frozen cap impossible, it stops.
+
+The exact W4-LLM-A endpoint, body, strict provider-output schema, durable runner,
+teacher confirmation, budget buckets, privacy scanner and atomic publication contract
+are frozen separately in `LLM_A_RUNTIME_V1.md` and
+`LLM_TURN_OUTPUT_SCHEMA_V1.json`. A schema ID alone never authorizes a request.
 
 The official Beijing embedding table also reports 33,000 tokens as its batch ceiling;
 Maya deliberately freezes the lower 30,000-token request ceiling and an 8,000-token
@@ -184,7 +189,9 @@ fixed model, region, allowed account product, current ProviderPolicySnapshot, ex
 export-manifest/build confirmation, token/character estimate, cumulative count/cost
 and generation fence. Failure produces a safe local code with zero request.
 
-Every external request uses one shared durable reservation contract:
+Every external request uses one shared durable reservation contract. Budget allocation
+is additionally isolated by the closed `(scope_id, budget_bucket)` identity in
+`LLM_A_RUNTIME_V1.md`; one operation cannot consume another operation's allowance:
 
 `prepared -> reserved -> sending -> accepted -> succeeded`
 

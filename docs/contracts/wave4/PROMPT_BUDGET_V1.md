@@ -1,6 +1,6 @@
 # PromptBudgetV1 and PromptRequestV1
 
-Status: `FROZEN / P1 REPAIRED / SOL G2 PASS / REAL CALLS 0`
+Status: `FROZEN / MOCK SOL G2 PASS / LLM-A RUNTIME DELTA CANDIDATE`
 
 ## Logical request
 
@@ -21,7 +21,9 @@ copy of the prose rules. `prompt_request_v1` contains:
 - the pending question once;
 - a query catalog and a deduplicated evidence catalog. Each evidence excerpt appears
   once and queries refer to evidence IDs;
-- the closed StructuredTurnResult + EvidenceTrace output schema identifier.
+- the closed StructuredTurnResult + EvidenceTrace output schema identifier. For real
+  W4-LLM-A this identifier is not sent alone: `LLM_A_RUNTIME_V1.md` requires the
+  complete strict `LLM_TURN_OUTPUT_SCHEMA_V1.json` object and its exact hash.
 
 Other Agents' Persona, snapshot ID, teacher-only notes, user identity and private
 drafts are absent. Same-round and future turns are absent even when a lower-index
@@ -45,8 +47,9 @@ For `llm_debate_turn_v1`:
 
 W4-LLM-A must pin the supplier-compatible local tokenizer and its asset hash. Before
 that tokenizer can authorize a request, a conservative fallback counts each UTF-8 byte
-as one token; it may reject an otherwise valid request but cannot undercount it. The
-Provider's returned usage is evidence after send, never the only budget guard.
+as one token; it may reject an otherwise valid request but cannot authorize a real LLM
+request. The Provider's returned usage is evidence after send, never the only budget
+guard. Attempt 1 and 2 use the same tokenizer object identity, ID and asset hash.
 
 There is deliberately no percentage-reduction KPI. Acceptance measures the serialized
 baseline and final request, proves the duplicate classes are absent, and enforces the
@@ -86,9 +89,10 @@ acceptance state, safe error code, price-card version, estimated cost and nullab
 reconciled actual cost.
 
 Before network I/O, the attempt and its worst-case count/cost allowance are atomically
-reserved through the durable state machine in ProviderDataCallV1. A read-then-send
-budget check is forbidden. Concurrent workers therefore cannot each observe spare
-budget and exceed the Debate cap.
+reserved through the durable state machine in ProviderDataCallV1 and the
+`llm_debate_turn` budget bucket. A read-then-send budget check is forbidden. Concurrent
+workers therefore cannot each observe spare budget and exceed the Debate cap, while an
+Embedding-query reservation cannot consume or install the LLM allowance.
 
 Supplier request IDs are encrypted/restricted operations data and never enter normal
 API responses. API keys never enter the database or logs. There is no Wave 4 cost

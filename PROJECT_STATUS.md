@@ -4,39 +4,26 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G1_5_REPAIR_CANDIDATE / G2_REAUDIT_PENDING / REAL_EMBED_1024_NOT_RUN`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED_RESPONSE_CONTRACT / W4_LLM_A_G0_REPAIR_CANDIDATE`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
 formal content, Embedding/provider ports and durable provider-control foundations.
-Independent Mock G2 audit of `2af97df` returned `CHANGES_REQUIRED` with
-`P0=0 / P1=5 / P2=0`. All five Mock repairs passed local checks. The exact-SHA re-audit of
-`1aa7170` verified those repairs but found two additional P1 boundary cases: bounded
-Persona fields could overrun the 200-word Mock turn limit, and incomplete running
-legacy Debates could still reach generation without confirmed Persona. Both incremental
-P1 repairs passed the full local matrix. The exact-SHA audit of `cd2c5b5` verified the
-legacy-generation fix but found two further Persona projection P1s: mid-field
-differences could collide, and legal source-shaped Persona wording could enter speech
-as an unsupported attribution. The audit of `8e83c01` verified source safety but showed
-that bounded free-text sampling cannot honestly promise a unique speech for every
-possible raw difference. The user then froze the Persona Mock Gate at seven concrete
-criteria: stable PersonaSpec, visible six dimensions, required confirmation, correct
-freeze/hash/version, no unconfirmed Debate/Provider, visibly different behavior for
-clearly different projections, and no Evidence fabrication/raw private leakage. The
-current implementation satisfies all seven, so Persona Mock is PASS and further
-arbitrary-string uniqueness optimization has stopped. Final Sol High audit of exact
-clean SHA `48ff91f` returned `PASS / P0=0 / P1=0 / P2=0`. This unlocks W4-EMBED code
-and fake-transport acceptance, not an automatic real request. No formal Maya runtime
-Provider request has been made.
+Mock G2 and subsequent Persona boundary audits closed every P0/P1. The user froze the
+Persona Mock Gate at seven concrete criteria: stable PersonaSpec, six visible teaching
+dimensions, required confirmation, correct freeze/hash/version, no unconfirmed
+Debate/Provider, visibly different behavior for clearly different projections, and no
+Evidence fabrication/raw private leakage. Exact SHA `48ff91f` received final Sol High
+`PASS / P0=0 / P1=0 / P2=0`; arbitrary-string uniqueness optimization stopped. That
+PASS unlocked W4-EMBED code and fake-transport acceptance, not a real request.
 
 The W4-EMBED repair candidate now implements the frozen real 1024 identity end to end
 through injected fake transport: durable multi-batch publication and continuation,
 student publication orchestration, identity-matched query retrieval, exact per-turn
 teacher disclosure/confirmation and non-terminal explicit retry. Current deterministic
-evidence is backend `812`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typecheck/build,
+evidence is backend `817`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typecheck/build,
 OpenAPI/generated/route/WS/repository boundaries and all populated Wave 1–4/0013
-migration probes. It has not called a real Provider and cannot run the one permitted
-1024 preflight until a new exact clean SHA receives Sol High `P0=0 / P1=0`.
+migration probes.
 
 Sol High audited the prior exact candidate `9fabfb1` and returned
 `CHANGES_REQUIRED / P0=0 / P1=2 / P2=1`: actual outbound document/query text needed an
@@ -46,8 +33,17 @@ current clean repair candidate scans actual real-Embedding text before any expor
 call, keeps unsafe input at zero manifest/operation/call, removes the hash from the
 student error, adds a dedicated course-authorized teacher discovery page/DTO, and proves
 `prepared / 0 requests / 0 charged / no reservation / no budget` before confirmation.
-This repair is awaiting exact-SHA Sol re-audit; no formal runtime request or CI run has
-occurred.
+Sol High re-audited exact clean SHA `0c7c6e3` and returned
+`PASS / P0=0 / P1=0 / P2=0`, unlocking only the one contracted safe 1024 preflight.
+That single request returned HTTP 200 but the local adapter rejected the documented
+native DashScope `output.embeddings` envelope because it incorrectly required a
+response `model`; the preflight therefore ended
+`REAL EMBEDDING 1024 PREFLIGHT FAILED` with safe code `embedding_model_mismatch`.
+The request was not repeated. Official documentation confirms the native response uses
+`text_index` and does not return `model`; commit `dbef20e` now isolates that exception
+to the fixed DashScope-native dialect while generic/OpenAI-compatible responses still
+require exact model. Fake tests cover the repair; a new incremental Sol audit is still
+required. No CI run has occurred.
 
 ## Source and remote
 
@@ -65,9 +61,8 @@ occurred.
 - Transitional `dev-main` remains at the complete-source R0 integration SHA
   `5a681f324e6b1ec034af8f8c021ee58889e053fb`; canonical work branches from `main`.
 - R0 Issue `#5` and PR `#6` record the Issue/worktree/owner/PR/audit trail.
-- Candidate `3c07fe1` passed two private CI runs and independent Sol High audit;
-  evidence-only head `dc6f699` passed two more CI runs and Sol incremental audit. Both
-  audits returned `P0=0 / P1=0 / P2=0`.
+- Candidate `3c07fe1` and evidence head `dc6f699` passed private CI and Sol audits with
+  `P0=0 / P1=0 / P2=0`.
 - Merge SHA `5a681f3` passed full deterministic CI on `dev-main` and again after the
   guarded canonical `main` switch. The main window verified the integrated tree and
   signed R0.
@@ -82,13 +77,6 @@ occurred.
 - Main-window browser G3 passed locale-only controls, waiting restoration, early/full
   Finish boundaries, manual-only Reconnect, localhost/LAN teacher control, two
   retained Replay cycles, anonymous interaction, Mock Maya report and Mock translation.
-
-R0 reran the complete deterministic suite from the full-source worktree: backend
-`433`, frontend `28 files / 193 tests`, document authority, format/lint/type/build,
-OpenAPI/generated-client/69-response/strict-route (`53 implemented / 0 placeholders`),
-WebSocket `30/18`, commands `6/7`, private results `5/6`, repository/secret boundary,
-0001–0007 fresh/repeat/populated/downgrade/re-upgrade evidence and Compose all passed.
-No real Provider was called.
 
 ## Implemented product scope
 
@@ -129,19 +117,24 @@ No real Provider was called.
   runtime selector, no-redirect single-attempt transport, exact teacher disclosure and
   confirmation CAS, durable policy/export/budget/stage ledgers, atomic SQL Snapshot
   publication, restart-safe missing-batch continuation and identity-matched query
-  retrieval exercised only through injected fake transport. It has made zero formal
-  Maya runtime calls. Independent audit of exact clean SHA `8be4833` returned
+  retrieval exercised through injected fake transport. Independent audit of exact clean
+  SHA `8be4833` returned
   `CHANGES_REQUIRED / P0=0 / P1=5 / P2=0`: the candidate still used dimension 256,
   accepted vectors were process-local, student publication did not enter the runtime,
   query retrieval remained Mock 256, and the teacher confirmation UI/authorization was
   not bound to the build's course. The current repair candidate claims closure of all
-  five findings, but Real Embedding remains unsigned pending exact-SHA re-audit.
+  five findings; exact SHA `0c7c6e3` later received Sol High PASS after all incremental
+  repairs.
 - An independent account-only preflight used non-student fixtures for one 256-dimension
   Embedding request and one structured LLM request. Both succeeded as basic API
   availability evidence while Maya's formal selectors stayed Mock. They are not Gate
   PASS evidence and must not be repeated. The formal real Embedding identity is now
-  frozen at `dashscope / text-embedding-v4 / cn-beijing / 1024 / w4-embed-v1`; its
-  preflight has not run.
+  frozen at `dashscope / text-embedding-v4 / cn-beijing / 1024 / w4-embed-v1`.
+- The one permitted 1024 preflight made exactly one three-text batch request. HTTP was
+  200, but local response parsing failed closed as `embedding_model_mismatch`, so the
+  only truthful status is `REAL EMBEDDING 1024 PREFLIGHT FAILED`. The call was not
+  repeated; no vectors, cosine or PASS claim were retained. The official response-shape
+  repair is fake-tested and awaiting incremental Sol review.
 - Later real calls are authorized in principle by the user but still require the exact
   policy/export/budget Gate and must fail closed if the account plan or controls cannot
   be verified.
@@ -171,13 +164,15 @@ code`, not the full historical monolith.
    archived and must not be a default task input.
 2. Claim-level evidence proves lineage, not factual correctness.
 3. Real Provider policy/account/logging controls have not been verified against the
-   current private account, so every real call remains blocked.
+   current private account. The single 1024 preflight allowance is exhausted, so no
+   further real Embedding call is permitted by the current Gate.
 4. TTS is still a hard blocker for complete real-service G5.
 
 ## Next Gate
 
-Submit the exact clean W4-EMBED repair SHA to independent Sol High. Any P0/P1 returns to
-the local debug/test loop. Only `PASS / P0=0 / P1=0` unlocks the one safe 3-text 1024
-preflight. A successful preflight still does not sign W4-EMBED; empty-runtime browser G3
-publication, exact teacher confirmation, query retrieval, Evidence receipt and restart
-must also pass. GitHub CI remains deferred to the final integrated Wave 4 PR.
+Submit the isolated DashScope response-dialect repair to incremental Sol High; do not
+repeat the exhausted 1024 preflight. In parallel, obtain Sol High G0-S PASS on the new
+W4-LLM-A wire/schema/runtime/budget/disclosure contracts before any Luna LLM coding.
+W4-EMBED remains unsigned because the real preflight and empty-runtime browser
+publication/query/retrieval/Evidence/restart chain have not passed. GitHub CI remains
+deferred to the final integrated Wave 4 PR.

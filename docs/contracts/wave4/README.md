@@ -1,6 +1,6 @@
 # Wave 4 Contract Set
 
-Status: `G0-S PASS / PERSONA MOCK PASS / MOCK G2 SOL PASS / REAL EMBEDDING 1024 CONTRACT FROZEN / FORMAL MAYA RUNTIME CALLS 0`
+Status: `G0-S PASS / PERSONA MOCK PASS / MOCK G2 SOL PASS / REAL EMBEDDING 1024 PREFLIGHT FAILED / LLM-A G0 DELTA CANDIDATE`
 
 These files freeze the pre-code contract for Issue #8. They distinguish three layers:
 
@@ -23,3 +23,10 @@ inputs to a frozen Gate, not a promise that a supplier will keep a model or pric
 available. Any unavailable model, changed price basis or changed regional behavior
 fails preflight and requires an explicit contract revision; there is no silent
 `latest` fallback.
+
+W4-LLM-A design is additionally specified by:
+
+- `LLM_A_RUNTIME_V1.md` — exact Beijing wire, privacy, durable runner, budget,
+  confirmation and atomic publication rules;
+- `LLM_TURN_OUTPUT_SCHEMA_V1.json` — the complete strict Provider-output schema whose
+  references are mapped to server-owned IDs after validation.
