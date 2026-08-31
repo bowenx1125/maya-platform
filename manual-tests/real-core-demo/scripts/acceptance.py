@@ -157,6 +157,10 @@ def load_fixture() -> Fixture:
     from app.modules.debates.generation import GenerationContext, MutualLearningPolicy
     from app.modules.debates.generation.retrieval import build_turn_subqueries
     from app.modules.debates.generation.types import ParticipantContext
+    from app.modules.debates.topic_language import (
+        TopicLanguageError,
+        validate_english_topic,
+    )
     from app.modules.knowledge.markdown import (
         TOKEN_RE,
         build_chunks,
@@ -225,7 +229,11 @@ def load_fixture() -> Fixture:
     knowledge = (PACKET / str(manifest["knowledge_path"])).read_bytes()
     real_persona = (PACKET / str(manifest["real_persona_path"])).read_text(encoding="utf-8")
     topic = (PACKET / str(manifest["topic_path"])).read_text(encoding="utf-8").strip()
-    require(CJK_RE.search(topic) is not None, "topic_not_chinese")
+    try:
+        topic = validate_english_topic(topic)
+    except TopicLanguageError as exc:
+        raise AcceptanceError("topic_not_english") from exc
+    require(CJK_RE.search(topic) is None, "topic_not_english")
     terms = tuple(
         item.strip()
         for item in (PACKET / str(manifest["expected_terms_path"]))

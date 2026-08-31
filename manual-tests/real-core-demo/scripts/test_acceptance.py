@@ -86,15 +86,16 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
     return values
 
 
-def test_fixture_is_one_chunk_and_query_is_chinese() -> None:
+def test_fixture_has_english_topic_and_chinese_query_terms() -> None:
     fixture = load_fixture()
     assert "mock_persona_path" not in fixture.manifest
     assert fixture.manifest["real_participant_slot"] == "B"
     assert fixture.real_persona_hash
     assert "文化知识" in fixture.query_text
     assert "上下文" in fixture.query_text
+    assert "共同责任" in fixture.query_text
     assert fixture.topic.startswith("How should")
-    assert "课堂" in fixture.topic
+    assert not acceptance.CJK_RE.search(fixture.topic)
     assert fixture.manifest["call_cap"] == {
         "snapshot": 1,
         "real_query": 2,

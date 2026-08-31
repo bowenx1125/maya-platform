@@ -13,7 +13,7 @@ Report revision to become `generating`, confirms its exact teacher disclosure,
 binds it as acceptance call 8, continues the same prepared operation, and checks
 the final 600–900-word English-safe revision.
 
-The packet contains only fictional, identity-free text. It never prints a
+The packet uses an English debate topic while preserving Chinese retrieval terms in the derived query. It contains only fictional, identity-free text. It never prints a
 credential, raw Provider response, endpoint, model/resource identifier or student
 data. Pending manifests expose only immutable hashes and the Report revision ID;
 provider operation IDs and the raw ledger stay server-side.
