@@ -1491,6 +1491,45 @@ def _read_history_replay_views(api: Api, debate_id: str, revision_id: str) -> No
     require(revision.get("id") == revision_id, "history_report_revision")
 
 
+def _verify_report_policy_binding(
+    connection: Any,
+    *,
+    debate_id: str,
+    revision_id: str,
+    report_manifest_hash: str,
+    acceptance_run_id: str,
+    expected_policy_hash: str,
+) -> None:
+    """Verify the Report manifest through its scope and bound call 8."""
+
+    from sqlalchemy import text
+
+    report_policy = connection.execute(
+        text(
+            "SELECT m.policy_hash FROM provider_export_manifests m "
+            "JOIN provider_operations po ON po.export_manifest_hash=m.manifest_hash "
+            "AND po.scope_id=m.scope_id "
+            "WHERE m.scope_id=:debate_id "
+            "AND m.manifest_hash=:manifest_hash "
+            "AND m.provider_operation='llm_maya_report' "
+            "AND po.provider_operation='llm_maya_report' "
+            "AND po.logical_item_id=:revision_id "
+            "AND po.acceptance_run_id=:run_id "
+            "AND po.call_no=:call_no "
+            "AND po.state='succeeded' AND po.request_count=1 "
+            "AND po.charged_request_count=1 AND po.attempt_no=1"
+        ),
+        {
+            "debate_id": debate_id,
+            "manifest_hash": report_manifest_hash,
+            "revision_id": revision_id,
+            "run_id": acceptance_run_id,
+            "call_no": EXPECTED_HAPPY_PATH_CALLS,
+        },
+    ).all()
+    require(report_policy == [(expected_policy_hash,)], "report_policy_binding")
+
+
 def report_acceptance_adapter(
     *,
     api: Api,
@@ -2167,14 +2206,14 @@ def verify(
                 },
             ).all()
             require(report_operation == [("succeeded", 1, 1, 1)], "report_ledger_count")
-            report_policy = connection.execute(
-                text(
-                    "SELECT policy_hash FROM provider_export_manifests "
-                    "WHERE debate_id=:debate_id AND provider_operation='llm_maya_report'"
-                ),
-                {"debate_id": checkpoint["debate_id"]},
-            ).all()
-            require(report_policy == [(report_policy_hash,)], "report_policy_binding")
+            _verify_report_policy_binding(
+                connection,
+                debate_id=str(checkpoint["debate_id"]),
+                revision_id=str(checkpoint["report_revision_id"]),
+                report_manifest_hash=str(checkpoint["bound_manifest_hashes"][-1]),
+                acceptance_run_id=str(checkpoint["acceptance_run_id"]),
+                expected_policy_hash=report_policy_hash,
+            )
             run_counts = connection.execute(
                 text(
                     "SELECT COUNT(*),COALESCE(SUM(charged_request_count),0) "

@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -600,6 +602,85 @@ def test_report_adapter_binds_call_eight_after_disclosure_and_report_binding(
         "summary",
     ]
     assert value["bound_manifest_hashes"][-1] == manifest_hash
+
+
+def test_report_policy_binding_sql_uses_scope_and_call_eight() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    debate_id = "00000000-0000-4000-8000-000000000009"
+    revision_id = "00000000-0000-4000-8000-000000000010"
+    run_id = "00000000-0000-4000-8000-000000000008"
+    manifest_hash = "f" * 64
+    policy_hash = "a" * 64
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE provider_export_manifests "
+                "(manifest_hash TEXT PRIMARY KEY, scope_id TEXT NOT NULL, "
+                "provider_operation TEXT NOT NULL, policy_hash TEXT NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE provider_operations "
+                "(export_manifest_hash TEXT NOT NULL, scope_id TEXT NOT NULL, "
+                "provider_operation TEXT NOT NULL, logical_item_id TEXT NOT NULL, "
+                "acceptance_run_id TEXT, call_no INTEGER, state TEXT NOT NULL, "
+                "request_count INTEGER NOT NULL, charged_request_count INTEGER NOT NULL, "
+                "attempt_no INTEGER NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO provider_export_manifests "
+                "(manifest_hash,scope_id,provider_operation,policy_hash) "
+                "VALUES (:manifest,:scope,:operation,:policy)"
+            ),
+            {
+                "manifest": manifest_hash,
+                "scope": debate_id,
+                "operation": "llm_maya_report",
+                "policy": policy_hash,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO provider_operations "
+                "(export_manifest_hash,scope_id,provider_operation,logical_item_id,"
+                "acceptance_run_id,call_no,state,request_count,charged_request_count,attempt_no) "
+                "VALUES (:manifest,:scope,:operation,:revision,:run,:call_no,:state,:requests,"
+                ":charged,:attempt)"
+            ),
+            {
+                "manifest": manifest_hash,
+                "scope": debate_id,
+                "operation": "llm_maya_report",
+                "revision": revision_id,
+                "run": run_id,
+                "call_no": 8,
+                "state": "succeeded",
+                "requests": 1,
+                "charged": 1,
+                "attempt": 1,
+            },
+        )
+    with engine.connect() as connection:
+        with pytest.raises(OperationalError):
+            connection.execute(
+                text(
+                    "SELECT policy_hash FROM provider_export_manifests "
+                    "WHERE debate_id=:debate_id AND provider_operation='llm_maya_report'"
+                ),
+                {"debate_id": debate_id},
+            ).all()
+        acceptance._verify_report_policy_binding(
+            connection,
+            debate_id=debate_id,
+            revision_id=revision_id,
+            report_manifest_hash=manifest_hash,
+            acceptance_run_id=run_id,
+            expected_policy_hash=policy_hash,
+        )
+    engine.dispose()
 
 
 @pytest.mark.parametrize(
