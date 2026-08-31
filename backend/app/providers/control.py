@@ -61,6 +61,11 @@ REPAIR_FEEDBACK_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5a
 LLM_TURN_OUTPUT_SCHEMA_HASH = "1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c"
 LLM_RECOVERY_INPUT_VERSION = "llm_recovery_input_v1"
 LLM_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
+DEMO_ACCEPTANCE_PLAN_VERSION = "real_core_demo_7call_v2"
+DEMO_ACCEPTANCE_MAX_CALLS = 7
+# Descriptive aliases keep the bounded Demo contract discoverable to callers.
+REAL_CORE_DEMO_PLAN_VERSION = DEMO_ACCEPTANCE_PLAN_VERSION
+REAL_CORE_DEMO_CALL_LIMIT = DEMO_ACCEPTANCE_MAX_CALLS
 _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
     {
         # 0010/0013 used ``embedding`` for snapshot publication.  Keep this
@@ -174,6 +179,22 @@ def validate_budget_bucket(value: str) -> str:
 
     if value not in PROVIDER_BUDGET_BUCKETS:
         raise ProviderControlError("budget bucket is not allowlisted", code="budget_bucket_invalid")
+    return value
+
+
+def validate_demo_acceptance_call_no(value: int) -> int:
+    """Validate one ordinal in the closed seven-call Demo plan."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ProviderControlError(
+            "Demo acceptance call ordinal is invalid",
+            code="acceptance_call_invalid",
+        )
+    if value < 1 or value > DEMO_ACCEPTANCE_MAX_CALLS:
+        raise ProviderControlError(
+            "Demo acceptance call ordinal is outside the frozen plan",
+            code="acceptance_call_invalid",
+        )
     return value
 
 
@@ -904,6 +925,17 @@ class ProviderOperationV1:
     charged_request_count: int = 0
     staged_response_hash: str | None = None
     safe_error_code: str | None = None
+    acceptance_run_id: str | None = None
+    call_no: int | None = None
+
+    def __post_init__(self) -> None:
+        if (self.acceptance_run_id is None) != (self.call_no is None):
+            raise ProviderControlError(
+                "Demo acceptance run and call ordinal must be paired",
+                code="acceptance_call_invalid",
+            )
+        if self.call_no is not None:
+            validate_demo_acceptance_call_no(self.call_no)
 
     @property
     def budget_bucket(self) -> str:
@@ -940,6 +972,8 @@ class ProviderOperationV1:
             "charged_request_count": self.charged_request_count,
             "staged_response_hash": self.staged_response_hash,
             "safe_error_code": self.safe_error_code,
+            "acceptance_run_id": self.acceptance_run_id,
+            "call_no": self.call_no,
             "budget_bucket": self.budget_bucket,
         }
 
@@ -1590,6 +1624,15 @@ class ProviderOperationRepository(Protocol):
     def get(self, operation_id: str) -> ProviderOperationV1 | None:
         """Read one operation by opaque local ID."""
 
+    def attach_acceptance_call(
+        self,
+        operation_id: str,
+        *,
+        acceptance_run_id: str,
+        call_no: int,
+    ) -> ProviderOperationV1:
+        """Atomically bind one pre-send operation to a Demo call ordinal."""
+
     def mark_not_sent(
         self, operation_id: str, *, safe_error_code: str = "provider_not_sent"
     ) -> ProviderOperationV1:
@@ -1705,6 +1748,7 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         self._llm_stages: dict[str, LLMAcceptedStageV1] = {}
         self._llm_recovery_inputs: dict[str, LLMRecoveryInputV1] = {}
         self._by_key: dict[tuple[str, str, str, int], str] = {}
+        self._acceptance_calls: dict[tuple[str, int], str] = {}
         self._lock = RLock()
 
     def _budget(self, scope_id: str, budget_bucket: str) -> ProviderScopeBudgetV1:
@@ -1736,6 +1780,38 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             self._operations[operation.id] = operation
             self._by_key[operation.idempotency_key] = operation.id
             return operation
+
+    def attach_acceptance_call(
+        self,
+        operation_id: str,
+        *,
+        acceptance_run_id: str,
+        call_no: int,
+    ) -> ProviderOperationV1:
+        validate_demo_acceptance_call_no(call_no)
+        if not acceptance_run_id:
+            raise ProviderControlError(
+                "Demo acceptance run is required",
+                code="acceptance_run_invalid",
+            )
+        with self._lock:
+            operation = self.operation(operation_id)
+            if operation.acceptance_run_id is not None or operation.call_no is not None:
+                raise OperationStateError("provider operation already has an acceptance call")
+            if operation.state != "prepared" or operation.request_count != 0:
+                raise OperationStateError("provider operation is no longer pre-send")
+            if operation.charged_request_count != 0:
+                raise OperationStateError("provider operation has already been charged")
+            if (acceptance_run_id, call_no) in self._acceptance_calls:
+                raise OperationStateError("Demo acceptance call ordinal is already bound")
+            updated = replace(
+                operation,
+                acceptance_run_id=acceptance_run_id,
+                call_no=call_no,
+            )
+            self._operations[operation_id] = updated
+            self._acceptance_calls[(acceptance_run_id, call_no)] = operation_id
+            return updated
 
     def create(self, request: ProviderReservationRequestV1) -> ProviderOperationV1:
         return self.create_prepared(request)

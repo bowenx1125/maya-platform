@@ -27,6 +27,7 @@ from sqlalchemy.sql import Executable
 
 from app.core.db import Database
 from app.core.models import (
+    DemoAcceptanceRun,
     LlmAcceptedStage,
     LlmRecoveryInput,
     ProviderExportConfirmation,
@@ -59,6 +60,7 @@ from app.providers.control import (
     can_transition,
     startup_recovery_state,
     validate_budget_bucket,
+    validate_demo_acceptance_call_no,
 )
 
 _POLICY_TABLE = cast(Table, ProviderPolicySnapshot.__table__)
@@ -66,6 +68,7 @@ _MANIFEST_TABLE = cast(Table, ProviderExportManifest.__table__)
 _CONFIRMATION_TABLE = cast(Table, ProviderExportConfirmation.__table__)
 _BUDGET_TABLE = cast(Table, ProviderScopeBudget.__table__)
 _OPERATION_TABLE = cast(Table, ProviderOperation.__table__)
+_ACCEPTANCE_RUN_TABLE = cast(Table, DemoAcceptanceRun.__table__)
 _RESERVATION_TABLE = cast(Table, ProviderReservation.__table__)
 _LLM_STAGE_TABLE = cast(Table, LlmAcceptedStage.__table__)
 _LLM_RECOVERY_INPUT_TABLE = cast(Table, LlmRecoveryInput.__table__)
@@ -628,6 +631,8 @@ class ProviderRepository:
             "charged_request_count": 0,
             "staged_response_hash": None,
             "safe_error_code": None,
+            "acceptance_run_id": None,
+            "call_no": None,
             "created_at": now,
             "updated_at": now,
         }
@@ -639,6 +644,131 @@ class ProviderRepository:
         return self.operation(operation_id)
 
     create = create_prepared
+
+    def attach_acceptance_call(
+        self,
+        operation_id: str,
+        *,
+        acceptance_run_id: str,
+        call_no: int,
+    ) -> ProviderOperationV1:
+        """Atomically bind a zero-use operation to one frozen Demo ordinal."""
+
+        validate_demo_acceptance_call_no(call_no)
+        if not isinstance(acceptance_run_id, str) or not acceptance_run_id.strip():
+            raise ProviderRepositoryError("Demo acceptance run is required")
+        operation_table = _OPERATION_TABLE
+        run_table = _ACCEPTANCE_RUN_TABLE
+        with self._write_connection() as connection:
+            run_row = (
+                connection.execute(
+                    select(run_table).where(run_table.c.id == acceptance_run_id)
+                )
+                .mappings()
+                .first()
+            )
+            if run_row is None:
+                raise ProviderRepositoryError("Demo acceptance run does not exist")
+            if run_row["state"] not in {"prepared", "executing"}:
+                raise ProviderRepositoryError("Demo acceptance run is already terminal")
+
+            operation_row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if operation_row is None:
+                raise OperationStateError("provider operation does not exist")
+            bound_run = operation_row.get("acceptance_run_id")
+            bound_call = operation_row.get("call_no")
+            if bound_run is not None or bound_call is not None:
+                if str(bound_run) != acceptance_run_id:
+                    raise ProviderRepositoryError("provider operation belongs to another Demo run")
+                raise ProviderRepositoryError("provider operation already has a Demo call ordinal")
+            if (
+                operation_row["state"] != "prepared"
+                or _as_int(operation_row["request_count"] or 0) != 0
+                or _as_int(operation_row["charged_request_count"] or 0) != 0
+                or operation_row["staged_response_hash"] is not None
+            ):
+                raise ProviderRepositoryError("provider operation is no longer pre-send")
+            owner_manifest = (
+                connection.execute(
+                    select(_MANIFEST_TABLE).where(
+                        _MANIFEST_TABLE.c.manifest_hash
+                        == operation_row["export_manifest_hash"]
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            target_version_matches = operation_row["scope_id"] == run_row["target_version_id"]
+            target_manifest_matches = (
+                owner_manifest is not None
+                and owner_manifest["agent_version_id"] == run_row["target_version_id"]
+            )
+            debate_matches = (
+                run_row["debate_id"] is not None
+                and operation_row["scope_id"] == run_row["debate_id"]
+            )
+            debate_manifest_matches = (
+                owner_manifest is not None
+                and run_row["debate_id"] is not None
+                and owner_manifest["debate_id"] == run_row["debate_id"]
+            )
+            if not (
+                target_version_matches
+                or target_manifest_matches
+                or debate_matches
+                or debate_manifest_matches
+            ):
+                raise ProviderRepositoryError("provider operation does not belong to Demo run")
+            duplicate = (
+                connection.execute(
+                    select(operation_table.c.id).where(
+                        operation_table.c.acceptance_run_id == acceptance_run_id,
+                        operation_table.c.call_no == call_no,
+                    )
+                )
+                .first()
+            )
+            if duplicate is not None:
+                raise ProviderRepositoryError("Demo acceptance call ordinal is already bound")
+            now = self._now()
+            changed = connection.execute(
+                update(operation_table)
+                .where(
+                    operation_table.c.id == operation_id,
+                    operation_table.c.state == "prepared",
+                    operation_table.c.request_count == 0,
+                    operation_table.c.charged_request_count == 0,
+                    operation_table.c.acceptance_run_id.is_(None),
+                    operation_table.c.call_no.is_(None),
+                )
+                .values(
+                    acceptance_run_id=acceptance_run_id,
+                    call_no=call_no,
+                    updated_at=now,
+                )
+            )
+            if changed.rowcount != 1:
+                raise ProviderRepositoryError("provider operation attach CAS failed")
+            if run_row["state"] == "prepared":
+                run_changed = connection.execute(
+                    update(run_table)
+                    .where(run_table.c.id == acceptance_run_id, run_table.c.state == "prepared")
+                    .values(state="executing", updated_at=now)
+                )
+                if run_changed.rowcount != 1:
+                    raise ProviderRepositoryError("Demo acceptance run state CAS failed")
+        return self.operation(operation_id)
+
+    # Descriptive aliases keep the narrow seam easy to find for generation
+    # callers without creating another persistence path.
+    attach_acceptance_call_no = attach_acceptance_call
+    bind_acceptance_call = attach_acceptance_call
 
     def get(self, operation_id: str) -> ProviderOperationV1 | None:
         table = _OPERATION_TABLE
@@ -1430,6 +1560,10 @@ def _operation_from_row(row: Mapping[str, object]) -> ProviderOperationV1:
         safe_error_code=(
             str(row["safe_error_code"]) if row["safe_error_code"] is not None else None
         ),
+        acceptance_run_id=(
+            str(row["acceptance_run_id"]) if row.get("acceptance_run_id") is not None else None
+        ),
+        call_no=(_as_int(row["call_no"]) if row.get("call_no") is not None else None),
     )
 
 

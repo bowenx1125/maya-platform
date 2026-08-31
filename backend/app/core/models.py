@@ -1374,6 +1374,70 @@ class ProviderScopeBudget(Base):
     )
 
 
+class DemoAcceptanceRun(Base):
+    """Server-side identity and bounded call ledger for one Real-Core Demo run."""
+
+    __tablename__ = "demo_acceptance_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    plan_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    fixture_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    baseline_agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    )
+    baseline_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    baseline_snapshot_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("knowledge_snapshots.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    debate_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("debates.id", ondelete="RESTRICT"), nullable=True
+    )
+    report_revision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("civilization_report_revisions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="prepared")
+    starting_charged_requests: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    operations: Mapped[list[ProviderOperation]] = relationship(
+        back_populates="acceptance_run",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "plan_version = 'real_core_demo_7call_v2'",
+            name="ck_demo_acceptance_runs_plan_version",
+        ),
+        CheckConstraint(
+            "length(fixture_hash) = 64 AND fixture_hash NOT GLOB '*[^0-9a-f]*'",
+            name="ck_demo_acceptance_runs_fixture_hash",
+        ),
+        CheckConstraint(
+            "state IN ('prepared', 'executing', 'executed', 'verified')",
+            name="ck_demo_acceptance_runs_state",
+        ),
+        CheckConstraint(
+            "starting_charged_requests = 0",
+            name="ck_demo_acceptance_runs_initial_charged_zero",
+        ),
+        Index("ix_demo_acceptance_runs_target", "target_agent_id", "target_version_id"),
+        Index("ix_demo_acceptance_runs_debate", "debate_id"),
+    )
+
+
 class ProviderOperation(Base):
     """Generic server-side ProviderDataCallV1 operation metadata."""
 
@@ -1396,9 +1460,18 @@ class ProviderOperation(Base):
     charged_request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     staged_response_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    acceptance_run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("demo_acceptance_runs.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    call_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
+    acceptance_run: Mapped[DemoAcceptanceRun | None] = relationship(
+        back_populates="operations",
+    )
     reservations: Mapped[list[ProviderReservation]] = relationship(
         back_populates="operation", cascade="all, delete-orphan"
     )
@@ -1438,8 +1511,23 @@ class ProviderOperation(Base):
             "request_count >= 0 AND charged_request_count >= 0",
             name="ck_provider_operations_counters",
         ),
+        CheckConstraint(
+            "(acceptance_run_id IS NULL AND call_no IS NULL) OR "
+            "(acceptance_run_id IS NOT NULL AND call_no IS NOT NULL)",
+            name="ck_provider_operations_acceptance_call_pair",
+        ),
+        CheckConstraint(
+            "call_no IS NULL OR (call_no >= 1 AND call_no <= 7)",
+            name="ck_provider_operations_call_no",
+        ),
+        UniqueConstraint(
+            "acceptance_run_id",
+            "call_no",
+            name="uq_provider_operations_acceptance_call",
+        ),
         Index("ix_provider_operations_scope_state", "scope_id", "state"),
         Index("ix_provider_operations_state", "state"),
+        Index("ix_provider_operations_acceptance_run", "acceptance_run_id", "call_no"),
     )
 
 
