@@ -141,7 +141,6 @@ def load_fixture() -> Fixture:
         require(
             "@" not in value and UUID_RE.search(value) is None, "fixture_identity_like"
         )
-    require(any("\u4e00" <= char <= "\u9fff" for char in topic), "topic_not_chinese")
     require(all(term in knowledge.decode("utf-8") for term in terms), "term_missing")
 
     normalized = normalize_markdown(
@@ -156,7 +155,15 @@ def load_fixture() -> Fixture:
     )
 
     participants = (
-        ParticipantContext("p1", "a1", "Agent 1", "A", 0, "s1"),
+        ParticipantContext(
+            "p1",
+            "a1",
+            "Agent 1",
+            "A",
+            0,
+            "s1",
+            initial_position_summary="分享文化知识必须保留共同责任并保护文化意义",
+        ),
         ParticipantContext("p2", "a2", "Agent 2", "B", 1, "s2"),
     )
     turn = MutualLearningPolicy().plan(participants, round_count=2)[0]

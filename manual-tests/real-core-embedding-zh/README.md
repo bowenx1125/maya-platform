@@ -1,8 +1,9 @@
 # REAL-EMBED-E2E 中文固定夹具
 
 本目录只服务 `DEMO-BLOCKER — REAL-EMBED-E2E`。素材全部为原创、虚构、无身份
-信息，冻结一份中文单-chunk Markdown、一个可确定性编译的 Persona、一条中文辩题和
-预期命中词。
+信息，冻结一份中文单-chunk Markdown、一个可确定性编译的中文 Persona、一条符合
+平台语言合同的英文辩题和预期命中词。实际 opening query 仍包含 Persona 的中文
+initial position，因此验收的是中文查询文本，不是只做英文跨语言查询。
 
 默认检查完全离线，不读取 `.env`、不连接服务、不会调用 Provider：
 

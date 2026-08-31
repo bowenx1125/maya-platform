@@ -53,11 +53,12 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
     return values
 
 
-def test_fixture_is_one_chunk_and_opening_query_is_chinese() -> None:
+def test_fixture_is_one_chunk_and_opening_query_contains_chinese_position() -> None:
     fixture = load_fixture()
     assert fixture.persona_hash
-    assert "玛雅" in fixture.query_text
-    assert any("\u4e00" <= char <= "\u9fff" for char in fixture.topic)
+    assert "文化知识" in fixture.query_text
+    assert "共同责任" in fixture.query_text
+    assert fixture.topic.startswith("How should")
 
 
 def test_checkpoint_is_closed_hash_bound_and_private(tmp_path: Path) -> None:
