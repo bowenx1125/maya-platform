@@ -1599,11 +1599,14 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             return tuple(self.recover_one(operation_id) for operation_id in ids)
 
     def recover_llm_startup(self) -> tuple[ProviderOperationV1, ...]:
-        return tuple(
-            operation
-            for operation in self.recover_startup()
-            if operation.provider_operation == "llm_debate_turn"
-        )
+        with self._lock:
+            ids = tuple(
+                operation.id
+                for operation in self._operations.values()
+                if operation.provider_operation == "llm_debate_turn"
+                and operation.state in {"reserved", "sending", "accepted"}
+            )
+            return tuple(self.recover_one(operation_id) for operation_id in ids)
 
     def operations(self, *, scope_id: str | None = None) -> tuple[ProviderOperationV1, ...]:
         with self._lock:

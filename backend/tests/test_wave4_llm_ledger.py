@@ -34,6 +34,7 @@ from app.providers.control_repository import (
     ProviderRepositoryError,
     ScopeBudgetAmbiguous,
 )
+from app.providers.llm_recovery import recover_llm_startup
 from sqlalchemy import inspect, text
 
 
@@ -248,6 +249,39 @@ def test_llm_startup_never_treats_unstaged_accepted_output_as_complete() -> None
     repository.transition(operation.id, expected="reserved", state="sending")
     repository.mark_accepted(operation.id, response_hash=_hash("response"))
     assert repository.recover_one(operation.id).state == "acceptance_unknown"
+
+
+def test_llm_startup_recovery_does_not_touch_other_provider_buckets() -> None:
+    repository = InMemoryProviderOperationRepository(
+        scope_budgets={
+            ("debate", EMBEDDING_QUERY_BUCKET): ProviderScopeBudgetV1(
+                max_requests=1,
+                max_total_tokens=10,
+                max_cost_cny=0.01,
+                budget_bucket=EMBEDDING_QUERY_BUCKET,
+            ),
+            ("debate", LLM_DEBATE_TURN_BUCKET): ProviderScopeBudgetV1(
+                max_requests=1,
+                max_total_tokens=10,
+                max_cost_cny=0.01,
+                budget_bucket=LLM_DEBATE_TURN_BUCKET,
+            ),
+        }
+    )
+    embedding = repository.create_prepared(
+        _request(scope_id="debate", operation="embedding_query", item="query")
+    )
+    llm = repository.create_prepared(
+        _request(scope_id="debate", operation="llm_debate_turn", item="turn")
+    )
+    repository.reserve(embedding.id)
+    repository.reserve(llm.id)
+
+    recovered = recover_llm_startup(repository)
+
+    assert tuple(item.id for item in recovered) == (llm.id,)
+    assert repository.get(llm.id).state == "not_sent"
+    assert repository.get(embedding.id).state == "reserved"
 
 
 def test_0014_schema_has_composite_budget_and_llm_stage(tmp_path: Path) -> None:

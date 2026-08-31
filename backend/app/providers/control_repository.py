@@ -1037,11 +1037,15 @@ class ProviderRepository:
         return tuple(self.recover_one(str(row[0])) for row in rows)
 
     def recover_llm_startup(self) -> tuple[ProviderOperationV1, ...]:
-        return tuple(
-            operation
-            for operation in self.recover_startup()
-            if operation.provider_operation == "llm_debate_turn"
-        )
+        table = _OPERATION_TABLE
+        with self.engine.connect() as connection:
+            rows = connection.execute(
+                select(table.c.id).where(
+                    table.c.provider_operation == "llm_debate_turn",
+                    table.c.state.in_(("reserved", "sending", "accepted")),
+                )
+            ).all()
+        return tuple(self.recover_one(str(row[0])) for row in rows)
 
     def operations(self, *, scope_id: str | None = None) -> tuple[ProviderOperationV1, ...]:
         table = _OPERATION_TABLE

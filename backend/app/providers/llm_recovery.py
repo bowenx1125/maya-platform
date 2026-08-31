@@ -18,7 +18,7 @@ from app.providers.control import ProviderOperationV1
 class LLMRecoveryRepository(Protocol):
     """Minimal repository port required for startup reconciliation."""
 
-    def recover_startup(self) -> tuple[ProviderOperationV1, ...]:
+    def recover_llm_startup(self) -> tuple[ProviderOperationV1, ...]:
         """Reconcile stranded operations without invoking a provider."""
 
 
@@ -27,11 +27,7 @@ def recover_llm_startup(
 ) -> tuple[ProviderOperationV1, ...]:
     """Run deterministic zero-network recovery for LLM operations only."""
 
-    return tuple(
-        operation
-        for operation in repository.recover_startup()
-        if operation.provider_operation == "llm_debate_turn"
-    )
+    return repository.recover_llm_startup()
 
 
 def recover_provider_startup(

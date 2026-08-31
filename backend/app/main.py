@@ -64,7 +64,9 @@ from app.modules.translations.router import router as translations_router
 from app.modules.translations.service import TranslationService, startup_translation_service
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
+from app.providers.control_repository import ProviderRepository
 from app.providers.factory import tts_provider
+from app.providers.llm_recovery import recover_llm_startup
 from app.seed import COURSE_ID, seed_demo_data
 
 logger = logging.getLogger("maya.backend")
@@ -158,6 +160,7 @@ def create_app(
                     if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
                         seed_demo_data(session)
             recover_embedding_provider_startup(runtime_database)
+            recover_llm_startup(ProviderRepository(runtime_database))
             with runtime_database.session() as session:
                 recover_startup(session, runtime_settings.resolved_data_root)
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
