@@ -355,7 +355,7 @@ class SqlAlchemyQueryControlAdapter(
     def logical_item_id(self) -> str:
         return self.request.logical_item_id or _logical_item_id(self.request)
 
-    def _load_exact_manifest(self) -> object:
+    def _load_exact_manifest(self, *, require_confirmation: bool = True) -> object:
         request = self.request
         try:
             policy = self.repository.get_policy_snapshot(request.policy_hash)
@@ -363,7 +363,9 @@ class SqlAlchemyQueryControlAdapter(
             confirmation = self.repository.get_export_confirmation(request.export_manifest_hash)
         except Exception as exc:
             raise SqlQueryPreflightError() from exc
-        if policy is None or manifest is None or confirmation is None:
+        if policy is None or manifest is None:
+            raise SqlQueryPreflightError("query policy/export manifest is missing")
+        if require_confirmation and confirmation is None:
             raise SqlQueryPreflightError("query policy/export confirmation is missing")
         try:
             policy.validate()
@@ -378,11 +380,17 @@ class SqlAlchemyQueryControlAdapter(
             or manifest.model_key != request.identity.model_key
             or manifest.policy_hash != request.policy_hash
             or manifest.build_manifest_hash != request.build_manifest_hash
-            or confirmation.manifest_hash != request.export_manifest_hash
-            or confirmation.policy_hash != request.policy_hash
             or (
-                request.confirmation_revision is not None
-                and confirmation.confirmation_revision != request.confirmation_revision
+                require_confirmation
+                and (
+                    confirmation is None
+                    or confirmation.manifest_hash != request.export_manifest_hash
+                    or confirmation.policy_hash != request.policy_hash
+                    or (
+                        request.confirmation_revision is not None
+                        and confirmation.confirmation_revision != request.confirmation_revision
+                    )
+                )
             )
         ):
             raise SqlQueryPreflightError("query policy/export confirmation is stale")
@@ -396,6 +404,7 @@ class SqlAlchemyQueryControlAdapter(
         snapshot_id: str,
         identity: EmbeddingIdentityV1,
         query_hashes: tuple[str, ...],
+        require_confirmation: bool = True,
     ) -> object:
         request = self.request
         if (
@@ -406,7 +415,7 @@ class SqlAlchemyQueryControlAdapter(
             raise SqlQueryPreflightError("query request context does not match the frozen turn")
         if any(not _SHA256_RE.fullmatch(value) for value in request.query_hashes):
             raise SqlQueryPreflightError("query hash context is invalid")
-        return self._load_exact_manifest()
+        return self._load_exact_manifest(require_confirmation=require_confirmation)
 
     def require_exact_manifest(
         self,
@@ -492,6 +501,72 @@ class SqlAlchemyQueryControlAdapter(
             model_key=self.request.identity.model_key,
         )
 
+    @staticmethod
+    def _validate_total_tokens(total_tokens: int) -> None:
+        if (
+            isinstance(total_tokens, bool)
+            or not isinstance(total_tokens, int)
+            or total_tokens < 1
+            or total_tokens > MAX_BATCH_TOKENS
+            or total_tokens > SQL_QUERY_MAX_TOTAL_TOKENS
+        ):
+            raise SqlQueryBudgetError("query token allowance is invalid")
+
+    @staticmethod
+    def _matches_request(
+        current: ProviderOperationV1,
+        request: ProviderReservationRequestV1,
+    ) -> bool:
+        return bool(
+            current.request_hash == request.request_hash
+            and current.policy_hash == request.policy_hash
+            and current.export_manifest_hash == request.export_manifest_hash
+            and current.build_manifest_hash == request.build_manifest_hash
+            and current.model_key == request.model_key
+            and current.max_tokens == request.max_tokens
+            and abs(current.max_cost_cny - request.max_cost_cny) <= 1e-12
+        )
+
+    def prepare_disclosure_operation(
+        self,
+        *,
+        snapshot_id: str,
+        identity: EmbeddingIdentityV1,
+        query_hashes: tuple[str, ...],
+        total_tokens: int,
+    ) -> ProviderOperationV1:
+        """Persist the exact turn mapping before confirmation, with zero reservation."""
+
+        with self._lock:
+            self._assert_context(
+                snapshot_id=snapshot_id,
+                identity=identity,
+                query_hashes=query_hashes,
+                require_confirmation=False,
+            )
+            self._validate_total_tokens(total_tokens)
+            operations = self._existing_operations()
+            self._check_prior_attempts(operations)
+            request = self._request(total_tokens)
+            current = next(
+                (
+                    operation
+                    for operation in operations
+                    if operation.attempt_no == self.request.attempt_no
+                ),
+                None,
+            )
+            if current is not None:
+                if not self._matches_request(current, request):
+                    raise SqlQueryBudgetError("existing query operation drifted")
+                return current
+            try:
+                return self.repository.create_prepared(request)
+            except Exception as exc:
+                raise SqlQueryBudgetError(
+                    "query disclosure operation could not be persisted"
+                ) from exc
+
     def reserve_query(
         self,
         *,
@@ -509,14 +584,7 @@ class SqlAlchemyQueryControlAdapter(
             )
             if request_count != 1:
                 raise SqlQueryBudgetError("one query batch must reserve exactly one request")
-            if (
-                isinstance(total_tokens, bool)
-                or not isinstance(total_tokens, int)
-                or total_tokens < 1
-                or total_tokens > MAX_BATCH_TOKENS
-                or total_tokens > SQL_QUERY_MAX_TOTAL_TOKENS
-            ):
-                raise SqlQueryBudgetError("query token allowance is invalid")
+            self._validate_total_tokens(total_tokens)
             self._ensure_budget()
             operations = self._existing_operations()
             self._check_prior_attempts(operations)
@@ -530,15 +598,7 @@ class SqlAlchemyQueryControlAdapter(
             )
             request = self._request(total_tokens)
             if current is not None:
-                if (
-                    current.request_hash != request.request_hash
-                    or current.policy_hash != request.policy_hash
-                    or current.export_manifest_hash != request.export_manifest_hash
-                    or current.build_manifest_hash != request.build_manifest_hash
-                    or current.model_key != request.model_key
-                    or current.max_tokens != request.max_tokens
-                    or abs(current.max_cost_cny - request.max_cost_cny) > 1e-12
-                ):
+                if not self._matches_request(current, request):
                     raise SqlQueryBudgetError("existing query operation drifted")
                 if current.state == "acceptance_unknown":
                     raise SqlQueryBudgetError(
@@ -551,6 +611,21 @@ class SqlAlchemyQueryControlAdapter(
                         return self.repository.reservation(current.id)
                     except Exception:
                         return current
+                if current.state == "prepared":
+                    try:
+                        self.repository.reserve(current.id)
+                        current = self.repository.operation(current.id)
+                    except Exception as exc:
+                        raise SqlQueryBudgetError("query reservation failed") from exc
+                    if current.state != "reserved":
+                        raise SqlQueryBudgetError("query reservation did not commit")
+                    self._active_operation = current
+                    try:
+                        return self.repository.reservation(current.id)
+                    except Exception as exc:
+                        raise SqlQueryBudgetError(
+                            "query reservation could not be reloaded"
+                        ) from exc
                 raise SqlQueryBudgetError(
                     "query attempt already exists and cannot be reused",
                     code="embedding_query_attempt_duplicate",

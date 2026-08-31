@@ -347,6 +347,40 @@
   flex: 1 1 220px;
 }
 
+.providerGateCard {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #cfc6dc;
+  border-radius: 13px;
+  color: var(--ink);
+  background: #faf8fc;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.providerGateCard ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.providerGateCard li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.providerGateCard button,
+.providerGateCard a {
+  width: fit-content;
+}
+
 .transcriptHeader {
   align-items: flex-start;
   padding-bottom: 13px;

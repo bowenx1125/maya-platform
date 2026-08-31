@@ -932,6 +932,25 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/preparation/retry:
+    post:
+      tags: [Debates]
+      operationId: retryDebatePreparation
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RetryPreparationRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/PlaybackState" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /debates/{debate_id}/pause:
     post:
       tags: [Debates]
@@ -1355,6 +1374,27 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /provider/data-call/pending:
+    get:
+      tags: [Provider]
+      operationId: listProviderDataCallManifests
+      parameters:
+        - name: scope_id
+          in: query
+          required: true
+          schema:
+            { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+      responses:
+        "200":
+          description: Teacher-only exact provider manifests for one Debate scope.
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ProviderDataCallManifestListResponseV1" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /provider/data-call/disclosure/confirm:
     post:
       tags: [Provider]
@@ -1616,6 +1656,28 @@ components:
         policy_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         confirmation_revision: { type: integer, minimum: 1 }
+    ProviderDataCallManifestSummaryV1:
+      type: object
+      additionalProperties: false
+      required: [manifest_hash, turn_id, confirmation_revision, confirmed]
+      properties:
+        manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        turn_id:
+          oneOf:
+            - { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+            - { type: "null" }
+        confirmation_revision: { type: integer, minimum: 1 }
+        confirmed: { type: boolean }
+    ProviderDataCallManifestListResponseV1:
+      type: object
+      additionalProperties: false
+      required: [scope_id, items]
+      properties:
+        scope_id:
+          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ProviderDataCallManifestSummaryV1" }
     LoginRequest:
       type: object
       required: [username, password]
@@ -2126,6 +2188,13 @@ components:
         expected_control_version: { type: integer, minimum: 0 }
         expected_current_turn_id:
           oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+    RetryPreparationRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_control_version, turn_id]
+      properties:
+        expected_control_version: { type: integer, minimum: 0 }
+        turn_id: { $ref: "#/components/schemas/Uuid" }
     DebateParticipant:
       type: object
       required:

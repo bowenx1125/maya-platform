@@ -194,6 +194,15 @@ function fakeApi(initial: DebateDetail): DebatePlaybackApi {
       status: "ready",
       control_version: initial.playback.control_version + 1,
     }),
+    listProviderDataCallManifests: vi.fn().mockResolvedValue({
+      scope_id: initial.id,
+      items: [],
+    }),
+    retryDebatePreparation: vi.fn().mockResolvedValue({
+      ...initial.playback,
+      status: "preparing",
+      control_version: initial.playback.control_version + 1,
+    }),
   };
 }
 
@@ -314,6 +323,90 @@ describe("Wave 2 M12 playback stage", () => {
             (command) => command.command_type === "playback.controller.acquire",
           ),
       ).toBe(true),
+    );
+  });
+
+  it("keeps provider-gated preparation non-ready until exact confirmation and retry", async () => {
+    const initial = detail();
+    const socket = new TestSocket();
+    const api = fakeApi(initial);
+    const manifestHash = "a".repeat(64);
+    api.listProviderDataCallManifests = vi
+      .fn()
+      .mockResolvedValueOnce({
+        scope_id: debateId,
+        items: [
+          {
+            manifest_hash: manifestHash,
+            turn_id: turnId,
+            confirmation_revision: 1,
+            confirmed: false,
+          },
+        ],
+      })
+      .mockResolvedValue({
+        scope_id: debateId,
+        items: [
+          {
+            manifest_hash: manifestHash,
+            turn_id: turnId,
+            confirmation_revision: 1,
+            confirmed: true,
+          },
+        ],
+      });
+    const { container } = render(
+      <DebateStage
+        api={api}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("message")).toBe(true));
+    socket.emit("message", {
+      ...envelope("error", 1, {
+        code: "provider_confirmation_required",
+        message: "Teacher confirmation is required.",
+        recoverable: true,
+      }),
+    });
+    await waitFor(() =>
+      expect(api.listProviderDataCallManifests).toHaveBeenCalledWith(debateId),
+    );
+    expect(
+      container.querySelector('[data-playback-status="preparing"]'),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Review exact disclosure" })
+        .getAttribute("href"),
+    ).toBe(`/teacher/provider-disclosures/${manifestHash}`);
+    expect(
+      socket
+        .commands()
+        .some((command) => command.command_type === "playback.media.prepare"),
+    ).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh confirmation" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Retry this turn" }),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry this turn" }));
+    await waitFor(() =>
+      expect(api.retryDebatePreparation).toHaveBeenCalledWith(
+        debateId,
+        { expected_control_version: 0, turn_id: turnId },
+        { idempotency: expect.anything() },
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("provider-query-gate")).toBeNull(),
     );
   });
 

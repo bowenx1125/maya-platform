@@ -213,6 +213,28 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
             assert transport.calls == []
             db.rollback()
 
+        pending = client.get(
+            "/api/v1/provider/data-call/pending",
+            params={"scope_id": debate_id},
+        )
+        assert pending.status_code == 200, pending.text
+        pending_body = pending.json()
+        assert pending_body == {
+            "scope_id": debate_id,
+            "items": [
+                {
+                    "manifest_hash": manifest_hash,
+                    "turn_id": first_turn_id,
+                    "confirmation_revision": 1,
+                    "confirmed": False,
+                }
+            ],
+        }
+        assert not any(
+            forbidden in pending.text.casefold()
+            for forbidden in ("dashscope", "text-embedding", "endpoint", "workspace")
+        )
+
         disclosure = client.get(
             "/api/v1/provider/data-call/disclosure",
             params={"manifest_hash": manifest_hash},
@@ -229,6 +251,12 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
             },
         )
         assert confirmed.status_code == 200, confirmed.text
+        confirmed_pending = client.get(
+            "/api/v1/provider/data-call/pending",
+            params={"scope_id": debate_id},
+        )
+        assert confirmed_pending.status_code == 200
+        assert confirmed_pending.json()["items"][0]["confirmed"] is True
 
         for _run in range(2):
             with database.session() as db:

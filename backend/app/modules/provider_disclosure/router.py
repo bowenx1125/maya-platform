@@ -25,7 +25,8 @@ def get_provider_disclosure_service(request: Request) -> ProviderDisclosureServi
 
     service = getattr(request.app.state, "provider_disclosure_service", None)
     if service is None or any(
-        not callable(getattr(service, method, None)) for method in ("disclose", "confirm")
+        not callable(getattr(service, method, None))
+        for method in ("disclose", "confirm", "list_embedding_query_manifests")
     ):
         raise invalid_state("Provider disclosure is not configured.")
     return cast(ProviderDisclosureService, service)

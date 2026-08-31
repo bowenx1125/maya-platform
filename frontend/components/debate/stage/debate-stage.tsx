@@ -14,6 +14,7 @@ import type {
   DebatePlaybackState,
   DebateTurn,
   IdempotencyHandle,
+  ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
 import { EvidenceTraceInspector, normaliseEvidenceTrace } from "../../evidence";
@@ -56,6 +57,14 @@ import type {
 } from "./types";
 
 type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
+
+type ProviderGateState = {
+  code: "provider_confirmation_required" | "provider_not_sent";
+  loading: boolean;
+  value: ProviderDataCallManifestListResponse | null;
+  error: string | null;
+  selectedManifestHash: string | null;
+};
 
 function visibleRoundPhase(
   turn: VisiblePlaybackTurn | null,
@@ -518,6 +527,10 @@ export function DebateStage({
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
+  const [providerGate, setProviderGate] = useState<ProviderGateState | null>(
+    null,
+  );
+  const [providerRetryBusy, setProviderRetryBusy] = useState(false);
   const audioPointerInput =
     currentAudioDebateId !== undefined
       ? currentAudioDebateId
@@ -597,6 +610,10 @@ export function DebateStage({
   const startIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const pauseIdempotencyRef = useRef<IdempotencyHandle | null>(null);
   const resumeIdempotencyRef = useRef<IdempotencyHandle | null>(null);
+  const providerRetryIdempotencyRef = useRef<{
+    turnId: string;
+    handle: IdempotencyHandle;
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const labelsRef = useRef(labels);
 
@@ -613,6 +630,8 @@ export function DebateStage({
   useEffect(() => {
     if (catalogDebateIdRef.current === debateId) return;
     catalogDebateIdRef.current = debateId;
+    providerRetryIdempotencyRef.current = null;
+    setProviderGate(null);
     replayCatalogRef.current = new Map(
       normalisePublicTurns(detail.public_turns).map((turn) => [
         turn.id,
@@ -1611,6 +1630,85 @@ export function DebateStage({
     ],
   );
 
+  const refreshProviderGate = useCallback(
+    async (code: ProviderGateState["code"]) => {
+      setProviderGate((current) => ({
+        code,
+        loading: true,
+        value: current?.code === code ? current.value : null,
+        error: null,
+        selectedManifestHash:
+          current?.code === code ? current.selectedManifestHash : null,
+      }));
+      try {
+        const value = await api.listProviderDataCallManifests(debateId);
+        if (!mountedRef.current || closingRef.current) return;
+        setProviderGate((current) => {
+          const retained = current?.selectedManifestHash;
+          const selected =
+            (retained &&
+            value.items.some((item) => item.manifest_hash === retained)
+              ? retained
+              : null) ??
+            value.items.find((item) => !item.confirmed)?.manifest_hash ??
+            value.items.find(
+              (item) => item.turn_id === playbackRef.current.current_turn_id,
+            )?.manifest_hash ??
+            value.items[value.items.length - 1]?.manifest_hash ??
+            null;
+          return {
+            code,
+            loading: false,
+            value,
+            error: null,
+            selectedManifestHash: selected,
+          };
+        });
+      } catch (cause) {
+        if (!mountedRef.current || closingRef.current) return;
+        setProviderGate({
+          code,
+          loading: false,
+          value: null,
+          error: errorText(cause, labelsRef.current.connectionError),
+          selectedManifestHash: null,
+        });
+      }
+    },
+    [api, debateId],
+  );
+
+  const retryProviderPreparation = useCallback(
+    async (turnId: string) => {
+      if (readOnly || providerRetryBusy) return;
+      setProviderRetryBusy(true);
+      setControlError(null);
+      const current = providerRetryIdempotencyRef.current;
+      const idempotency =
+        current?.turnId === turnId ? current.handle : createIdempotencyHandle();
+      providerRetryIdempotencyRef.current = { turnId, handle: idempotency };
+      try {
+        const next = await api.retryDebatePreparation(
+          debateId,
+          {
+            expected_control_version: playbackRef.current.control_version,
+            turn_id: turnId,
+          },
+          { idempotency },
+        );
+        providerRetryIdempotencyRef.current = null;
+        setProviderGate(null);
+        setFailure(null);
+        applyPlayback(next, "running");
+      } catch (cause) {
+        setControlError(errorText(cause, labelsRef.current.connectionError));
+      } finally {
+        setProviderRetryBusy(false);
+      }
+    },
+    [api, applyPlayback, debateId, providerRetryBusy, readOnly],
+  );
+
   const handleEvent = useCallback(
     (event: PlaybackEvent) => {
       const recoveryFence = recoveryFenceRef.current;
@@ -1708,6 +1806,7 @@ export function DebateStage({
                 playbackRef.current.status === "paused")
             )
           ) {
+            setProviderGate(null);
             pendingActionRef.current = "start";
             const readyParticipant = detailRef.current.participants.find(
               (participant) => participant.slot === payload.slot,
@@ -2036,6 +2135,7 @@ export function DebateStage({
           );
           break;
         case "debate.failed":
+          setProviderGate(null);
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -2049,6 +2149,7 @@ export function DebateStage({
           setFailure(labelsRef.current.debateFailed);
           break;
         case "debate.stopped": {
+          setProviderGate(null);
           pauseAudio(true);
           setVisible(null);
           setAvatars([]);
@@ -2072,8 +2173,18 @@ export function DebateStage({
         }
         case "error":
           setFailure(labelsRef.current.retryReason);
-          if (payload.recoverable === true) {
+          if (
+            payload.code === "provider_confirmation_required" ||
+            payload.code === "provider_not_sent"
+          ) {
+            const code = payload.code;
+            applyPlayback({ status: "preparing" });
+            void refreshProviderGate(code);
+          } else if (payload.recoverable === true) {
+            setProviderGate(null);
             applyPlayback({ status: "ready" });
+          } else {
+            setProviderGate(null);
           }
           break;
         default:
@@ -2102,6 +2213,7 @@ export function DebateStage({
       setActiveParticipant,
       requestReconnect,
       refreshRecoverySnapshot,
+      refreshProviderGate,
       setAvatars,
       setVisible,
       updatePublicTurns,
@@ -2968,6 +3080,67 @@ export function DebateStage({
             <div className={styles.failureCard} role="alert">
               <span>{failure}</span>
             </div>
+          ) : null}
+
+          {providerGate ? (
+            <section
+              className={styles.providerGateCard}
+              data-testid="provider-query-gate"
+              aria-label={labels.providerGateTitle}
+            >
+              <strong>{labels.providerGateTitle}</strong>
+              {providerGate.loading ? (
+                <span>{labels.providerGateLoading}</span>
+              ) : providerGate.error ? (
+                <span role="alert">{providerGate.error}</span>
+              ) : providerGate.value?.items.length ? (
+                <ul>
+                  {providerGate.value.items
+                    .filter(
+                      (item) =>
+                        item.manifest_hash ===
+                        providerGate.selectedManifestHash,
+                    )
+                    .map((item) => (
+                      <li key={item.manifest_hash}>
+                        {item.confirmed ? (
+                          <span>{labels.providerGateConfirmed}</span>
+                        ) : (
+                          <a
+                            href={`/teacher/provider-disclosures/${item.manifest_hash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {labels.providerGateReview}
+                          </a>
+                        )}
+                        {item.confirmed && item.turn_id ? (
+                          <button
+                            type="button"
+                            disabled={providerRetryBusy || readOnly}
+                            onClick={() =>
+                              void retryProviderPreparation(
+                                item.turn_id as string,
+                              )
+                            }
+                          >
+                            {labels.providerGateRetry}
+                          </button>
+                        ) : null}
+                      </li>
+                    ))}
+                </ul>
+              ) : (
+                <span>{labels.providerGateEmpty}</span>
+              )}
+              <button
+                type="button"
+                disabled={providerGate.loading}
+                onClick={() => void refreshProviderGate(providerGate.code)}
+              >
+                {labels.providerGateRefresh}
+              </button>
+            </section>
           ) : null}
 
           {controlError ? (

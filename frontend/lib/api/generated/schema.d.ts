@@ -739,6 +739,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/preparation/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retryDebatePreparation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/pause": {
         parameters: {
             query?: never;
@@ -1060,6 +1076,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider/data-call/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProviderDataCallManifests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/provider/data-call/disclosure/confirm": {
         parameters: {
             query?: never;
@@ -1112,6 +1144,16 @@ export interface components {
             policy_hash: string;
             manifest_hash: string;
             confirmation_revision: number;
+        };
+        ProviderDataCallManifestSummaryV1: {
+            manifest_hash: string;
+            turn_id: string | null;
+            confirmation_revision: number;
+            confirmed: boolean;
+        };
+        ProviderDataCallManifestListResponseV1: {
+            scope_id: string;
+            items: components["schemas"]["ProviderDataCallManifestSummaryV1"][];
         };
         LoginRequest: {
             username: string;
@@ -1408,6 +1450,10 @@ export interface components {
         PlaybackControlRequest: {
             expected_control_version: number;
             expected_current_turn_id?: components["schemas"]["Uuid"] | null;
+        };
+        RetryPreparationRequest: {
+            expected_control_version: number;
+            turn_id: components["schemas"]["Uuid"];
         };
         DebateParticipant: {
             id: components["schemas"]["Uuid"];
@@ -3205,6 +3251,32 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
+    retryDebatePreparation: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryPreparationRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PlaybackState"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
     pauseDebate: {
         parameters: {
             query?: never;
@@ -3812,6 +3884,31 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    listProviderDataCallManifests: {
+        parameters: {
+            query: {
+                scope_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teacher-only exact provider manifests for one Debate scope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallManifestListResponseV1"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     confirmProviderDataCallDisclosure: {

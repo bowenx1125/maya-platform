@@ -188,6 +188,11 @@ function apiFor(
     replayDebate: vi.fn().mockResolvedValue(replay),
     pauseDebate: vi.fn().mockResolvedValue({ ...replay, status: "paused" }),
     resumeDebate: vi.fn().mockResolvedValue({ ...replay, status: "ready" }),
+    listProviderDataCallManifests: vi.fn().mockResolvedValue({
+      scope_id: initial.id,
+      items: [],
+    }),
+    retryDebatePreparation: vi.fn().mockResolvedValue(replay),
   };
 }
 

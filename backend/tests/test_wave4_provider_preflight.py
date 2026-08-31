@@ -173,9 +173,7 @@ def test_query_manifest_discovery_is_exact_and_teacher_course_bound() -> None:
     store = InMemoryProviderDisclosureStore(policy, manifest)
     service = ProviderDisclosureService(store)
 
-    pending = service.list_embedding_query_manifests(
-        "teacher", scope_id=manifest.scope_id
-    )
+    pending = service.list_embedding_query_manifests("teacher", scope_id=manifest.scope_id)
     assert pending.model_dump(mode="json") == {
         "scope_id": manifest.scope_id,
         "items": [
@@ -185,7 +183,7 @@ def test_query_manifest_discovery_is_exact_and_teacher_course_bound() -> None:
                 "confirmation_revision": 3,
                 "confirmed": False,
             }
-        ]
+        ],
     }
     encoded = json.dumps(pending.model_dump(mode="json"), sort_keys=True).casefold()
     for forbidden in (
@@ -209,9 +207,7 @@ def test_query_manifest_discovery_is_exact_and_teacher_course_bound() -> None:
         ),
         actor_user_id="teacher",
     )
-    confirmed = service.list_embedding_query_manifests(
-        "teacher", scope_id=manifest.scope_id
-    )
+    confirmed = service.list_embedding_query_manifests("teacher", scope_id=manifest.scope_id)
     assert confirmed.items[0].confirmed is True
     assert confirmed.items[0].confirmation_revision == 3
 
@@ -515,11 +511,14 @@ def test_sql_query_manifest_listing_is_owner_bound_and_returns_safe_summary(
     version_id = created.json()["versions"][0]["id"]
 
     with database.session() as db:
-        assert db.scalar(
-            select(AgentVersion.id)
-            .join(Agent, Agent.id == AgentVersion.agent_id)
-            .where(Agent.group_id == GROUP_BOWEN_ID, AgentVersion.id == version_id)
-        ) == version_id
+        assert (
+            db.scalar(
+                select(AgentVersion.id)
+                .join(Agent, Agent.id == AgentVersion.agent_id)
+                .where(Agent.group_id == GROUP_BOWEN_ID, AgentVersion.id == version_id)
+            )
+            == version_id
+        )
 
     policy = _policy(snapshot_revision=11)
     manifest = _query_manifest(policy, scope_id="sql-query-list")
@@ -675,5 +674,5 @@ def test_router_lists_only_teacher_visible_query_manifests() -> None:
                 "confirmation_revision": 1,
                 "confirmed": False,
             }
-        ]
+        ],
     }

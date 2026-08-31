@@ -45,6 +45,8 @@ export type DebatePlaybackApi = Pick<
   | "advanceDebatePlayback"
   | "pauseDebate"
   | "resumeDebate"
+  | "retryDebatePreparation"
+  | "listProviderDataCallManifests"
   | "replayDebate"
 >;
 
@@ -97,6 +99,13 @@ export type PlaybackStageLabels = {
   controllerWaiting?: string;
   controlBusy?: string;
   retryReason?: string;
+  providerGateTitle?: string;
+  providerGateLoading?: string;
+  providerGateEmpty?: string;
+  providerGateReview?: string;
+  providerGateConfirmed?: string;
+  providerGateRefresh?: string;
+  providerGateRetry?: string;
   noPublishedSpeech?: string;
   audioNotRetained?: string;
   selectedTurn?: string;

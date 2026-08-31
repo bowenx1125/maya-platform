@@ -297,7 +297,6 @@ class ProviderDisclosureService:
                     and self._confirmation_matches(confirmation, policy, manifest, revision),
                 )
             )
-        summaries.sort(key=lambda item: item.manifest_hash)
         return ProviderDataCallManifestListResponseV1(
             scope_id=scope_id,
             items=tuple(summaries),
@@ -470,9 +469,7 @@ class ProviderDisclosureService:
             # Compatibility for a pre-listing fake store only.  Production
             # SQL stores implement the scope-aware authorizer above.
             allowed = (
-                bool(self.teacher_authorizer(actor_user_id))
-                if self.teacher_authorizer
-                else False
+                bool(self.teacher_authorizer(actor_user_id)) if self.teacher_authorizer else False
             )
         if not allowed:
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
@@ -489,10 +486,7 @@ class ProviderDisclosureService:
             raise _blocked("provider_manifest_listing_unavailable") from exc
         if turn_id is None:
             return None
-        if (
-            not isinstance(turn_id, str)
-            or not _SAFE_OPAQUE_ID_RE.fullmatch(turn_id)
-        ):
+        if not isinstance(turn_id, str) or not _SAFE_OPAQUE_ID_RE.fullmatch(turn_id):
             raise _blocked("provider_manifest_listing_invalid")
         return turn_id
 

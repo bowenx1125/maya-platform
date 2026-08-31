@@ -2698,9 +2698,7 @@ class PlaybackService:
             if current_index < 0 or target_index not in {current_index, current_index + 1}:
                 raise invalid_state("Only the current or adjacent prepared turn can be retried.")
             target = turns[target_index]
-            code = str(
-                self._get(target, "safe_error_code", "failed_code", default="") or ""
-            )
+            code = str(self._get(target, "safe_error_code", "failed_code", default="") or "")
             if (
                 self._get(target, "generation_status", default="") != "pending"
                 or code not in _RECOVERABLE_PROVIDER_GENERATION_CODES

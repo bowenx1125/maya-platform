@@ -195,6 +195,8 @@ describe("Wave 3 playback controls", () => {
           replayDebate: vi.fn(),
           pauseDebate: vi.fn(),
           resumeDebate: vi.fn(),
+          listProviderDataCallManifests: vi.fn(),
+          retryDebatePreparation: vi.fn(),
         }}
         debateId={debateId}
         detail={initial}
@@ -239,6 +241,8 @@ describe("Wave 3 playback controls", () => {
       replayDebate: vi.fn().mockResolvedValue(replayState),
       pauseDebate: vi.fn(),
       resumeDebate: vi.fn(),
+      listProviderDataCallManifests: vi.fn(),
+      retryDebatePreparation: vi.fn(),
     };
     render(
       <DebateStage
@@ -293,6 +297,8 @@ describe("Wave 3 playback controls", () => {
       replayDebate: vi.fn(),
       pauseDebate: vi.fn(),
       resumeDebate: vi.fn(),
+      listProviderDataCallManifests: vi.fn(),
+      retryDebatePreparation: vi.fn(),
     };
     render(
       <DebateStage

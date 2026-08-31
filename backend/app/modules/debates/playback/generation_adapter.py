@@ -76,6 +76,7 @@ from app.modules.knowledge.providers.sql_query import (
     controlled_query_provider,
 )
 from app.modules.knowledge.providers.sql_stage import SqlAlchemyEmbeddingStageStore
+from app.modules.knowledge.providers.tokenizer import TokenizerError, count_tokens
 from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider as select_embedding_provider
@@ -408,6 +409,47 @@ class SqlTurnPreparer:
                 "The exact real query export manifest is unavailable.",
                 503,
             ) from error
+        logical_item_id = f"turn:{turn.id}"
+        operations = tuple(
+            operation
+            for operation in repository.operations(scope_id=str(debate.id))
+            if operation.provider_operation == "embedding_query"
+            and operation.logical_item_id == logical_item_id
+        )
+        attempt_no = 1
+        if operations:
+            latest = max(operations, key=lambda operation: operation.attempt_no)
+            if latest.state == "not_sent" and latest.attempt_no < 2:
+                attempt_no = latest.attempt_no + 1
+            else:
+                attempt_no = latest.attempt_no
+        try:
+            total_tokens = sum(count_tokens(text) for text in query_plan.query_texts)
+            pending_control = SqlAlchemyQueryControlAdapter(
+                db,
+                scope_id=str(debate.id),
+                snapshot_id=snapshot.id,
+                identity=identity,
+                policy_hash=policy.policy_hash,
+                export_manifest_hash=query_plan.manifest.manifest_hash,
+                build_manifest_hash=query_plan.build_manifest_hash,
+                query_hashes=query_plan.query_hashes,
+                attempt_no=attempt_no,
+                logical_item_id=logical_item_id,
+                repository=ProviderRepository(db, require_export_confirmation=False),
+            )
+            pending_control.prepare_disclosure_operation(
+                snapshot_id=snapshot.id,
+                identity=identity,
+                query_hashes=query_plan.query_hashes,
+                total_tokens=total_tokens,
+            )
+        except (TokenizerError, SqlQueryError) as error:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact real query disclosure could not be persisted.",
+                503,
+            ) from error
         try:
             confirmation = require_exact_confirmation(
                 db,
@@ -450,20 +492,6 @@ class SqlTurnPreparer:
                 "The real query Provider resource changed.",
                 503,
             )
-        logical_item_id = f"turn:{turn.id}"
-        operations = tuple(
-            operation
-            for operation in repository.operations(scope_id=str(debate.id))
-            if operation.provider_operation == "embedding_query"
-            and operation.logical_item_id == logical_item_id
-        )
-        attempt_no = 1
-        if operations:
-            latest = max(operations, key=lambda operation: operation.attempt_no)
-            if latest.state == "not_sent" and latest.attempt_no < 2:
-                attempt_no = latest.attempt_no + 1
-            else:
-                attempt_no = latest.attempt_no
         control = SqlAlchemyQueryControlAdapter(
             db,
             scope_id=str(debate.id),

@@ -68,6 +68,8 @@ export type ProviderDataCallDisclosureResponse =
   components["schemas"]["ProviderDataCallDisclosureResponseV1"];
 export type ProviderDataCallConfirmationRequest =
   components["schemas"]["ProviderDataCallConfirmationRequestV1"];
+export type ProviderDataCallManifestListResponse =
+  components["schemas"]["ProviderDataCallManifestListResponseV1"];
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
@@ -83,6 +85,8 @@ export type PlaybackControlRequest =
   operations["pauseDebate"]["requestBody"]["content"]["application/json"];
 export type FinishDebateRequest =
   operations["finishDebate"]["requestBody"]["content"]["application/json"];
+export type RetryPreparationRequest =
+  operations["retryDebatePreparation"]["requestBody"]["content"]["application/json"];
 export type DebateParticipant = components["schemas"]["DebateParticipant"];
 export type DebateTurn = components["schemas"]["DebateTurn"];
 export type DebatePlaybackState = components["schemas"]["PlaybackState"];
@@ -638,6 +642,16 @@ export class PlatformApi {
     );
   }
 
+  async listProviderDataCallManifests(
+    scopeId: string,
+  ): Promise<ProviderDataCallManifestListResponse> {
+    return unwrap(
+      await this.client.GET("/provider/data-call/pending", {
+        params: { query: { scope_id: scopeId } },
+      }),
+    );
+  }
+
   async setDocuments(
     versionId: string,
     expectedRevision: number,
@@ -1067,6 +1081,27 @@ export class PlatformApi {
       });
       return unwrap(result);
     });
+  }
+
+  async retryDebatePreparation(
+    debateId: string,
+    body: RetryPreparationRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebatePlaybackState> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/preparation/retry", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
   }
 
   async advanceDebatePlayback(
