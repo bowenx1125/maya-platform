@@ -767,11 +767,39 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     assert first.status_code == 409, first.text
     first_body = first.json()
     assert first_body["code"] == "provider_confirmation_required"
-    manifest_hash = first_body["details"]["manifest_hash"]
-    assert isinstance(manifest_hash, str) and len(manifest_hash) == 64
+    public_error = json.dumps(first_body, ensure_ascii=False).casefold()
+    assert "manifest_hash" not in public_error
+    assert "dashscope" not in public_error
+    assert REAL_EMBEDDING_MODEL not in public_error
+    assert "endpoint" not in public_error
     assert transport.calls == []
 
     _teacher, teacher_csrf = login(client, "teacher-demo")
+    pending = client.get(
+        f"/api/v1/provider/data-call/pending/agent-versions/{version_id}"
+    )
+    assert pending.status_code == 200, pending.text
+    pending_body = pending.json()
+    assert pending_body["agent_version_id"] == version_id
+    assert len(pending_body["items"]) == 1
+    pending_item = pending_body["items"][0]
+    assert set(pending_item) == {
+        "manifest_hash",
+        "confirmation_revision",
+        "confirmed",
+    }
+    manifest_hash = pending_item["manifest_hash"]
+    assert isinstance(manifest_hash, str) and len(manifest_hash) == 64
+    assert pending_item["confirmed"] is False
+    pending_public = json.dumps(pending_body, ensure_ascii=False).casefold()
+    for forbidden in (
+        "dashscope",
+        "text-embedding",
+        "endpoint",
+        "policy_hash",
+        "workspace",
+    ):
+        assert forbidden not in pending_public
     disclosure = client.get(
         "/api/v1/provider/data-call/disclosure",
         params={"manifest_hash": manifest_hash},

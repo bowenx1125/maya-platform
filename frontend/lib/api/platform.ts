@@ -70,6 +70,8 @@ export type ProviderDataCallConfirmationRequest =
   components["schemas"]["ProviderDataCallConfirmationRequestV1"];
 export type ProviderDataCallManifestListResponse =
   components["schemas"]["ProviderDataCallManifestListResponseV1"];
+export type ProviderDataCallPublicationManifestListResponse =
+  components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
@@ -649,6 +651,19 @@ export class PlatformApi {
       await this.client.GET("/provider/data-call/pending", {
         params: { query: { scope_id: scopeId } },
       }),
+    );
+  }
+
+  async listProviderDataCallPublicationManifests(
+    agentVersionId: string,
+  ): Promise<ProviderDataCallPublicationManifestListResponse> {
+    return unwrap(
+      await this.client.GET(
+        "/provider/data-call/pending/agent-versions/{agent_version_id}",
+        {
+          params: { path: { agent_version_id: agentVersionId } },
+        },
+      ),
     );
   }
 

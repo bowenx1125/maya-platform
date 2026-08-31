@@ -366,16 +366,13 @@ def _recover_publish_guard(db: Session, guard_id: str | None) -> None:
 
 def _raise_embedding_publication_error(
     error: ProductPublicationError,
-    *,
-    manifest_hash: str | None = None,
 ) -> NoReturn:
     """Expose only stable product-safe real-publication failures."""
 
-    if error.code == "provider_confirmation_required" and manifest_hash is not None:
+    if error.code == "provider_confirmation_required":
         raise conflict(
             "provider_confirmation_required",
             "The course teacher must confirm the exact provider disclosure.",
-            {"manifest_hash": manifest_hash},
         ) from error
     if error.code == "persona_confirmation_required":
         raise validation_failure(
@@ -433,7 +430,6 @@ def _publish_real_embedding_snapshot(
             "Real Embedding is unavailable until every policy and account control is verified.",
             503,
         )
-    manifest_hash: str | None = None
     try:
         build = prepare_real_snapshot_build(
             db,
@@ -451,7 +447,6 @@ def _publish_real_embedding_snapshot(
             agent_version_id=version.id,
             policy=policy,
         )
-        manifest_hash = manifest.manifest_hash
         confirmation = require_exact_confirmation(
             db,
             manifest,
@@ -478,7 +473,7 @@ def _publish_real_embedding_snapshot(
             claim_token=record.claim_token,
         )
     except ProductPublicationError as error:
-        _raise_embedding_publication_error(error, manifest_hash=manifest_hash)
+        _raise_embedding_publication_error(error)
     if result.status != "succeeded":
         code = result.safe_error_code or "provider_unavailable"
         if code not in {

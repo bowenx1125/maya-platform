@@ -190,8 +190,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     expect(keys[1]).toBe(keys[0]);
   });
 
-  it("exposes only the exact teacher disclosure link for a blocked real publish", async () => {
-    const manifestHash = "b".repeat(64);
+  it("links to teacher-only version approvals without consuming a manifest hash", async () => {
     const api = {
       version: vi.fn().mockResolvedValue(draftVersion()),
       agent: vi.fn().mockResolvedValue(createdAgent()),
@@ -208,7 +207,6 @@ describe("Wave 1A UI idempotency wiring", () => {
         new PlatformApiError(409, "Teacher confirmation required.", {
           code: "provider_confirmation_required",
           message: "Teacher confirmation required.",
-          details: { manifest_hash: manifestHash },
         }),
       ),
     };
@@ -219,12 +217,14 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
 
     const link = await screen.findByRole("link", {
-      name: "Open exact provider disclosure",
+      name: "Open teacher approval page",
     });
     expect(link.getAttribute("href")).toBe(
-      `/teacher/provider-disclosures/${manifestHash}`,
+      "/teacher/provider-approvals/agent-versions/version-id",
     );
-    expect(link.textContent).not.toMatch(/qwen|workspace|https?:\/\//i);
+    expect(link.textContent).not.toMatch(
+      /manifest|qwen|workspace|https?:\/\//i,
+    );
   });
 
   it("replays safe delete through the action-specific retry path", async () => {

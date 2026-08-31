@@ -537,9 +537,8 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   const [retryAction, setRetryAction] = useState<
     "uploadKnowledge" | "publish" | null
   >(null);
-  const [providerManifestHash, setProviderManifestHash] = useState<
-    string | null
-  >(null);
+  const [providerConfirmationRequired, setProviderConfirmationRequired] =
+    useState(false);
   const [pendingKnowledgeUpload, setPendingKnowledgeUpload] = useState<{
     file: File;
     signature: string;
@@ -694,7 +693,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     abandonPublishIntent();
     setSaving(true);
     setError(null);
-    setProviderManifestHash(null);
+    setProviderConfirmationRequired(false);
     setNotice(null);
     setConflict(false);
     try {
@@ -723,7 +722,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     abandonPublishIntent();
     setSaving(true);
     setError(null);
-    setProviderManifestHash(null);
+    setProviderConfirmationRequired(false);
     setNotice(null);
     setConflict(false);
     try {
@@ -923,7 +922,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     if (!retry) abandonUploadIntent();
     setSaving(true);
     setError(null);
-    setProviderManifestHash(null);
+    setProviderConfirmationRequired(false);
     setNotice(null);
     const handle = mutationStore.handleFor(publishIntent);
     try {
@@ -937,14 +936,10 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       setVersion(next);
       setNotice("publishedNotice");
     } catch (cause) {
-      const manifestHash =
+      setProviderConfirmationRequired(
         cause instanceof PlatformApiError &&
-        cause.code === "provider_confirmation_required" &&
-        typeof cause.details?.manifest_hash === "string" &&
-        /^[0-9a-f]{64}$/.test(cause.details.manifest_hash)
-          ? cause.details.manifest_hash
-          : null;
-      setProviderManifestHash(manifestHash);
+          cause.code === "provider_confirmation_required",
+      );
       if (isConflict(cause)) setConflict(true);
       if (isAmbiguousMutationFailure(cause)) {
         setRetryAction("publish");
@@ -1023,13 +1018,13 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           />
         </>
       ) : null}
-      {providerManifestHash ? (
+      {providerConfirmationRequired ? (
         <div className="notice notice-warning" role="status">
           <strong>{t("providerConfirmationNeeded")}</strong>
           <span>{t("shareDisclosureWithTeacher")}</span>
           <Link
             className="text-link"
-            href={`/teacher/provider-disclosures/${providerManifestHash}`}
+            href={`/teacher/provider-approvals/agent-versions/${currentVersion.id}`}
           >
             {t("openProviderDisclosure")}
           </Link>

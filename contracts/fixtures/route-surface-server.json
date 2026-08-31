@@ -3098,6 +3098,46 @@
         }
       }
     },
+    "/api/v1/provider/data-call/pending/agent-versions/{agent_version_id}": {
+      "get": {
+        "tags": [
+          "Provider"
+        ],
+        "operationId": "listProviderDataCallPublicationManifests",
+        "parameters": [
+          {
+            "name": "agent_version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,255}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teacher-only exact embedding publication manifests for one AgentVersion.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderDataCallPublicationManifestListResponseV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/provider/data-call/disclosure/confirm": {
       "post": {
         "tags": [
@@ -3595,6 +3635,48 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProviderDataCallManifestSummaryV1"
+            }
+          }
+        }
+      },
+      "ProviderDataCallPublicationManifestSummaryV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "manifest_hash",
+          "confirmation_revision",
+          "confirmed"
+        ],
+        "properties": {
+          "manifest_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "confirmation_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProviderDataCallPublicationManifestListResponseV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_version_id",
+          "items"
+        ],
+        "properties": {
+          "agent_version_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,255}$"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderDataCallPublicationManifestSummaryV1"
             }
           }
         }

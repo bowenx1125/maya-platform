@@ -1092,6 +1092,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider/data-call/pending/agent-versions/{agent_version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProviderDataCallPublicationManifests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/provider/data-call/disclosure/confirm": {
         parameters: {
             query?: never;
@@ -1154,6 +1170,15 @@ export interface components {
         ProviderDataCallManifestListResponseV1: {
             scope_id: string;
             items: components["schemas"]["ProviderDataCallManifestSummaryV1"][];
+        };
+        ProviderDataCallPublicationManifestSummaryV1: {
+            manifest_hash: string;
+            confirmation_revision: number;
+            confirmed: boolean;
+        };
+        ProviderDataCallPublicationManifestListResponseV1: {
+            agent_version_id: string;
+            items: components["schemas"]["ProviderDataCallPublicationManifestSummaryV1"][];
         };
         LoginRequest: {
             username: string;
@@ -3904,6 +3929,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderDataCallManifestListResponseV1"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listProviderDataCallPublicationManifests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teacher-only exact embedding publication manifests for one AgentVersion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
                 };
             };
             401: components["responses"]["Error"];

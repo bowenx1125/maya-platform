@@ -323,8 +323,8 @@ const enMessages = {
     "Published. This version and its evidence snapshot are now immutable.",
   providerConfirmationNeeded: "Teacher confirmation required",
   shareDisclosureWithTeacher:
-    "Share this exact disclosure link with the course teacher, then publish again after confirmation.",
-  openProviderDisclosure: "Open exact provider disclosure",
+    "Ask the course teacher to review this Agent version in Provider approvals, then publish again after confirmation.",
+  openProviderDisclosure: "Open teacher approval page",
   agentWorkbench: "AGENT WORKBENCH",
   groundingRag: "RAG grounded",
   groundingGeneral: "General reasoning",
@@ -1019,8 +1019,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   publishedNotice: "已发布。这个版本和证据快照现在不可变。",
   providerConfirmationNeeded: "需要教师确认",
   shareDisclosureWithTeacher:
-    "请把这个精确披露链接发给课程教师；确认后再重新发布。",
-  openProviderDisclosure: "打开精确 Provider 数据披露",
+    "请课程教师在 Provider 审批中查看这个智能体版本；确认后再重新发布。",
+  openProviderDisclosure: "打开教师审批页面",
   agentWorkbench: "智能体工作台",
   groundingRag: "RAG 证据回答",
   groundingGeneral: "一般推理",

@@ -10,7 +10,13 @@ from typing import Any
 
 import pytest
 from app.core.errors import PlatformError
-from app.core.models import Agent, AgentVersion, KnowledgeChunk, KnowledgeSnapshot
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    KnowledgeChunk,
+    KnowledgeSnapshot,
+    ProviderReservation,
+)
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
@@ -234,6 +240,29 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
             forbidden in pending.text.casefold()
             for forbidden in ("dashscope", "text-embedding", "endpoint", "workspace")
         )
+        prepared_operations = tuple(
+            operation
+            for operation in ProviderRepository(database).operations(scope_id=debate_id)
+            if operation.provider_operation == "embedding_query"
+        )
+        assert len(prepared_operations) == 1
+        prepared_operation = prepared_operations[0]
+        assert (
+            prepared_operation.state,
+            prepared_operation.request_count,
+            prepared_operation.charged_request_count,
+            prepared_operation.reservation_id,
+        ) == ("prepared", 0, 0, None)
+        assert ProviderRepository(database).get_scope_budget(debate_id) is None
+        with database.session() as db:
+            assert (
+                db.scalar(
+                    select(ProviderReservation.id).where(
+                        ProviderReservation.operation_id == prepared_operation.id
+                    )
+                )
+                is None
+            )
 
         disclosure = client.get(
             "/api/v1/provider/data-call/disclosure",
