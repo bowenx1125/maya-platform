@@ -1922,14 +1922,16 @@ class PlaybackService:
             raise
         except Exception as exc:
             last_error = exc
-        if getattr(
-            last_error, "code", None
-        ) in _RECOVERABLE_PROVIDER_GENERATION_CODES and await self._defer_provider_preparation(
-            db,
-            debate_id=debate_id,
-            turn_id=turn_id,
-            claim_token=claim_token,
-            code=str(last_error.code),
+        error_code = getattr(last_error, "code", None)
+        if (
+            error_code in _RECOVERABLE_PROVIDER_GENERATION_CODES
+            and await self._defer_provider_preparation(
+                db,
+                debate_id=debate_id,
+                turn_id=turn_id,
+                claim_token=claim_token,
+                code=str(error_code),
+            )
         ):
             return
         failed_event: EventRecord | None = None
@@ -1941,8 +1943,8 @@ class PlaybackService:
             code = "turn_generation_failed"
             if isinstance(last_error, PlatformError) and last_error.code in _SAFE_GENERATION_CODES:
                 code = last_error.code
-            elif getattr(last_error, "code", None) in _SAFE_GENERATION_CODES:
-                code = str(last_error.code)
+            elif error_code in _SAFE_GENERATION_CODES:
+                code = str(error_code)
             fail_job = getattr(self.repository, "fail_turn_job", None)
             if callable(fail_job):
                 fail_job(db, turn, claim_token, code)

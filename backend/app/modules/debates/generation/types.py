@@ -69,6 +69,11 @@ class GenerationProviderError(RuntimeError):
     """Provider-neutral technical failure eligible for one shared retry."""
 
     code = "provider_unavailable"
+    # Runtime adapters may attach these safe classifications before the
+    # playback worker decides whether the turn is recoverable.  They are
+    # deliberately strings so this base contract stays provider-neutral.
+    acceptance_state: str = "unknown"
+    failure_kind: str = "transport_unknown"
 
 
 class GenerationFailed(RuntimeError):

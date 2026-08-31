@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 
 from .runtime import (
     LLMAcceptedStagePort,
@@ -156,7 +156,8 @@ class LLMRecoveryService:
                     queries = loaded[2]
             resume = getattr(self.runtime, "resume_accepted_stage", None)
             if callable(resume):
-                return resume(
+                local_resume = cast(Callable[..., LLMRunOutcomeV1], resume)
+                return local_resume(
                     stage,
                     result,
                     context=context,

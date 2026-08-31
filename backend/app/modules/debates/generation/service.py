@@ -36,6 +36,7 @@ from .retrieval import (
     TurnSubquery,
     build_turn_subqueries,
 )
+from .runtime import LLMTurnRuntime
 from .types import (
     EvidenceTraceClaimV1,
     FinalReadyTurn,
@@ -500,7 +501,7 @@ class TurnGenerationService:
     ) -> GenerationResult:
         """Run the fixed adapter through the durable LLM-A runtime seam."""
 
-        runtime = self.llm_runtime
+        runtime = cast(LLMTurnRuntime, self.llm_runtime)
         if runtime is None:  # pragma: no cover - guarded by the caller
             raise GenerationFailed("LLM runtime is unavailable", attempt=1)
         options = self.llm_runtime_options
@@ -509,9 +510,9 @@ class TurnGenerationService:
             if self.fence is not None and active_claim is not None:
                 self.fence.release(active_claim)
             error = GenerationProviderError("LLM disclosure identity is unavailable.")
-            error.code = "provider_preflight_blocked"  # type: ignore[attr-defined]
-            error.acceptance_state = PromptAcceptanceState.NOT_SENT  # type: ignore[attr-defined]
-            error.failure_kind = PromptFailureKind.BUDGET  # type: ignore[attr-defined]
+            error.code = "provider_preflight_blocked"
+            error.acceptance_state = PromptAcceptanceState.NOT_SENT
+            error.failure_kind = PromptFailureKind.BUDGET
             raise error
         try:
             prepare = runtime.prepare
@@ -522,7 +523,7 @@ class TurnGenerationService:
                 scope_id=str(options.get("scope_id") or context.debate_id),
                 policy_hash=str(options["policy_hash"]),
                 manifest_hash=str(options["manifest_hash"]),
-                confirmation_revision=int(options.get("confirmation_revision", 1)),
+                confirmation_revision=int(cast(int | str, options.get("confirmation_revision", 1))),
                 fence=options.get("fence"),
                 attempt_no=1,
                 retrieval_reused=False,
@@ -530,16 +531,20 @@ class TurnGenerationService:
                 queries=subqueries,
                 build_manifest_hash=str(options["build_manifest_hash"]),
                 repair_policy_hash=str(options.get("repair_policy_hash") or ""),
-                identity_tokens=tuple(options.get("identity_tokens") or ()),
+                identity_tokens=tuple(
+                    cast(Sequence[str], options.get("identity_tokens") or ())
+                ),
                 outbound_manifest=options.get("outbound_manifest"),
-                question_target_ids=tuple(options.get("question_target_ids") or ()),
+                question_target_ids=tuple(
+                    cast(Sequence[str], options.get("question_target_ids") or ())
+                ),
             )
             run = runtime.run
             outcome = run(
                 prepared,
                 context=context,
                 confirmed=options.get("confirmed"),
-                validator=self.validator,
+                validator=cast(MutualLearningValidator, self.validator),
             )
         except GenerationProviderError:
             raise
@@ -589,13 +594,13 @@ class TurnGenerationService:
                 "provider_confirmation_required": "provider_confirmation_required",
                 "not_sent": "provider_not_sent",
                 "acceptance_unknown": "acceptance_unknown",
-            }[status]  # type: ignore[attr-defined]
+            }[status]
             error.acceptance_state = (
                 PromptAcceptanceState.NOT_SENT
                 if status == "not_sent"
                 else PromptAcceptanceState.UNKNOWN
-            )  # type: ignore[attr-defined]
-            error.failure_kind = PromptFailureKind.TRANSPORT_UNKNOWN  # type: ignore[attr-defined]
+            )
+            error.failure_kind = PromptFailureKind.TRANSPORT_UNKNOWN
             raise error
         if self.fence is not None and active_claim is not None:
             self.fence.release(active_claim)

@@ -27,6 +27,7 @@ from app.providers.control import (
     ProviderReservationRequestV1,
 )
 from app.providers.llm_adapter import (
+    AttemptFailureKind,
     DashScopeLLMAdapter,
     DashScopeLLMConfig,
     LLMAcceptedCandidateV1,
@@ -46,6 +47,7 @@ from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
     LLM_REQUEST_COST_CAP,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
+    LLMPriceCardV1,
     debate_budget_cap,
 )
 from app.providers.llm_privacy import LLMOutboundManifestV1, scan_llm_outbound_messages
@@ -59,11 +61,16 @@ from .evidence_trace import (
 from .mutual_learning_validator import MutualLearningValidator
 from .prompt_attempt import repair_prompt_request
 from .prompt_request import PromptMessageV1, PromptRequestV1, ProviderPromptV1
+from .retrieval import TurnSubquery
 from .types import (
+    EvidenceTraceClaimV1,
     FinalReadyTurn,
     GenerationContext,
+    KeyClaimV1,
     MutualLearningTurnResultV1,
+    SnapshotRetrievalReceipt,
     TurnValidationError,
+    ValidatedTurn,
 )
 from .validator import final_ready_turn
 
@@ -161,10 +168,14 @@ class LLMGenerationFenceV1:
             )
         ids = _read(value, "predecessor_turn_ids", ())
         return cls(
-            predecessor_turn_ids=tuple(str(item) for item in ids) if _sequence(ids) else (),
+            predecessor_turn_ids=(
+                tuple(str(item) for item in _sequence(ids)) if _sequence(ids) else ()
+            ),
             transcript_hash=str(_read(value, "transcript_hash", prompt.transcript_hash)),
-            cutoff_turn_index=int(_read(value, "cutoff_turn_index", -1)),
-            generation=int(_read(value, "generation", _read(value, "cancellation_generation", 0))),
+            cutoff_turn_index=_as_int(_read(value, "cutoff_turn_index", -1), -1),
+            generation=_as_int(
+                _read(value, "generation", _read(value, "cancellation_generation", 0))
+            ),
         )
 
     def as_record(self) -> dict[str, object]:
@@ -272,6 +283,21 @@ def _read(value: object | None, name: str, default: object = None) -> object:
     return getattr(value, name, default)
 
 
+def _as_int(value: object, default: int = 0) -> int:
+    """Narrow a ledger/provider scalar without accepting booleans."""
+
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (str, float, Decimal)):
+        try:
+            return int(value)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    return default
+
+
 def _operation_state(value: object | None) -> str | None:
     state = _read(value, "state")
     return str(state) if state is not None else None
@@ -316,7 +342,7 @@ def _safe_code(value: object, default: str = "llm_provider_failed") -> str:
 def _transport_decision(error: object) -> tuple[str, str, bool]:
     """Normalize the adapter's string acceptance classification safely."""
 
-    classification = classify_transport_error(error)
+    classification: object = classify_transport_error(error)
     if isinstance(classification, str) and classification == "acceptance_unknown":
         # Protocol fakes may carry the richer acceptance fields directly on
         # the exception while the fixed adapter returns the string literal.
@@ -539,7 +565,10 @@ class LLMTurnRuntime:
             raise LLMRuntimeError(code="llm_owner_mismatch")
         if confirmation_revision < 1:
             raise LLMRuntimeError(code="provider_revision_invalid")
-        effective_manifest = outbound_manifest or getattr(self.adapter, "outbound_manifest", None)
+        effective_manifest = cast(
+            LLMOutboundManifestV1 | None,
+            outbound_manifest or getattr(self.adapter, "outbound_manifest", None),
+        )
         self._require_adapter_preflight(manifest=effective_manifest)
         generation_fence = LLMGenerationFenceV1.from_value(fence, prompt.request)
         generation_fence_hash = _hash_record(generation_fence.as_record())
@@ -640,7 +669,10 @@ class LLMTurnRuntime:
         tokenizer = self.tokenizer or getattr(self.adapter, "tokenizer", None)
         if tokenizer is None or not tokenizer_authorized(tokenizer):
             raise LLMRuntimeError(code="llm_tokenizer_unauthorized")
-        card = self.price_card or getattr(self.adapter, "price_card", None)
+        card = cast(
+            LLMPriceCardV1 | None,
+            self.price_card or getattr(self.adapter, "price_card", None),
+        )
         if card is None:
             raise LLMRuntimeError(code="llm_price_card_missing")
         try:
@@ -663,10 +695,13 @@ class LLMTurnRuntime:
         prompt: ProviderPromptV1,
         *,
         identity_tokens: Sequence[str] = (),
-        outbound_manifest: LLMOutboundManifestV1 | None = None,
+        outbound_manifest: object | None = None,
     ) -> None:
         scanner = scan_llm_outbound_messages
-        effective_manifest = outbound_manifest or getattr(self.adapter, "outbound_manifest", None)
+        effective_manifest = cast(
+            LLMOutboundManifestV1 | None,
+            outbound_manifest or getattr(self.adapter, "outbound_manifest", None),
+        )
         try:
             scanner(
                 prompt.messages,
@@ -794,16 +829,15 @@ class LLMTurnRuntime:
                 raise LLMRuntimeError(code="llm_budget_invalid") from exc
         # The post-0014 ledger may accept keyword fields directly; preserve a
         # plain dict seam instead of defining another provider DTO here.
-        budget_input = int(
+        budget_input = _as_int(
             _result_value(
                 _result_value(request, "budget", default=prompt.budget),
                 "max_input_tokens",
                 "input_token_limit",
                 default=0,
             )
-            or 0
         )
-        budget_output = int(
+        budget_output = _as_int(
             _result_value(
                 _result_value(request, "budget", default=prompt.budget),
                 "max_output_tokens",
@@ -811,7 +845,6 @@ class LLMTurnRuntime:
                 "requested_output_tokens",
                 default=0,
             )
-            or 0
         )
         max_tokens = budget_input + budget_output
         if max_tokens == 0:
@@ -820,7 +853,7 @@ class LLMTurnRuntime:
         # reservation must carry the one-attempt ceiling, otherwise every
         # prepared turn would consume the complete 2x2 allowance and the
         # fifth call would fail despite the eight-call contract.
-        max_cost = LLM_REQUEST_COST_CAP
+        max_cost: object = LLM_REQUEST_COST_CAP
         reservation_cost = _method(price_card, "reservation_cost")
         if reservation_cost is not None:
             try:
@@ -851,7 +884,10 @@ class LLMTurnRuntime:
             "budget_bucket": LLM_DEBATE_BUCKET,
         }
         try:
-            return ProviderReservationRequestV1(**payload)
+            constructor = cast(
+                Callable[..., ProviderReservationRequestV1], ProviderReservationRequestV1
+            )
+            return constructor(**payload)
         except Exception as exc:
             raise LLMRuntimeError(code="llm_budget_invalid") from exc
 
@@ -860,7 +896,7 @@ class LLMTurnRuntime:
         if _operation_state(operation) not in {None, "prepared"}:
             raise LLMRuntimeError(code="llm_preparation_failed")
         if any(
-            int(_read(operation, field, 0) or 0) != 0
+            _as_int(_read(operation, field, 0)) != 0
             for field in ("request_count", "charged_request_count")
         ):
             raise LLMRuntimeError(code="llm_preparation_failed")
@@ -921,7 +957,9 @@ class LLMTurnRuntime:
             # invocation could otherwise repeat a real transport call made by
             # a protocol-compatible fake.
             try:
-                parameters = inspect.signature(sender).parameters.values()
+                parameters: tuple[inspect.Parameter, ...] = tuple(
+                    inspect.signature(sender).parameters.values()
+                )
             except (TypeError, ValueError):
                 parameters = ()
             accepts_kwargs = any(
@@ -1098,16 +1136,16 @@ class LLMTurnRuntime:
             "model_key": _result_value(request, "model_key", default=LLM_MODEL_KEY),
             "output_json": output_json,
             "output_hash": output_hash,
-            "prompt_tokens": int(
-                _result_value(usage, "prompt_tokens", "input_tokens", default=0) or 0
+            "prompt_tokens": _as_int(
+                _result_value(usage, "prompt_tokens", "input_tokens", default=0)
             ),
-            "cached_input_tokens": int(
-                _result_value(usage, "cached_input_tokens", "cached_tokens", default=0) or 0
+            "cached_input_tokens": _as_int(
+                _result_value(usage, "cached_input_tokens", "cached_tokens", default=0)
             ),
-            "completion_tokens": int(
-                _result_value(usage, "completion_tokens", "output_tokens", default=0) or 0
+            "completion_tokens": _as_int(
+                _result_value(usage, "completion_tokens", "output_tokens", default=0)
             ),
-            "total_tokens": int(_result_value(usage, "total_tokens", default=0) or 0),
+            "total_tokens": _as_int(_result_value(usage, "total_tokens", default=0)),
             "retrieval_reused": prepared.retrieval_reused,
             "safe_error_code": _result_value(response, "safe_error_code", default=None),
             "generation_fence": _result_value(
@@ -1145,7 +1183,8 @@ class LLMTurnRuntime:
                 }
             )
         try:
-            return LLMAcceptedStageV1(**fields)
+            constructor = cast(Callable[..., LLMAcceptedStageV1], LLMAcceptedStageV1)
+            return constructor(**fields)
         except Exception as exc:
             raise LLMRuntimeError(code="llm_stage_unavailable") from exc
 
@@ -1199,7 +1238,7 @@ class LLMTurnRuntime:
             request = _read(accepted, "request", default=prepared.request)
             usage = _read(accepted, "usage")
             safe_code = str(exc.code)
-            failure_kind = (
+            failure_kind: AttemptFailureKind = (
                 "structure_invalid"
                 if safe_code in {
                     "output_truncated",
@@ -1394,13 +1433,14 @@ class LLMTurnRuntime:
         *,
         prepared: LLMPreparedAttemptV1,
         context: GenerationContext,
-    ) -> object:
+    ) -> ValidatedTurn:
         """Derive server-owned trace rows after mutual-result validation."""
 
-        result = _read(checked, "result")
+        checked_turn = cast(ValidatedTurn, checked)
+        result = checked_turn.result
         if not isinstance(result, MutualLearningTurnResultV1):
-            return checked
-        claims = tuple(getattr(result, "evidence_trace_claims", ()))
+            return checked_turn
+        claims: Sequence[EvidenceTraceClaimV1 | KeyClaimV1] = result.evidence_trace_claims
         if not claims and result.key_claims:
             try:
                 for claim in result.key_claims:
@@ -1417,21 +1457,21 @@ class LLMTurnRuntime:
                     "Strict mutual-learning turns require evidence trace claims.",
                     code="evidence_trace_missing",
                 )
-            return checked
+            return checked_turn
         try:
             bundle = build_evidence_trace_bundle(
                 context.turn.turn_id,
                 result.speech,
                 claims,
-                prepared.receipts,
-                prepared.queries,
+                cast(Sequence[SnapshotRetrievalReceipt], prepared.receipts),
+                cast(Sequence[TurnSubquery], prepared.queries),
                 snapshot_id=context.participant.snapshot_id,
             )
             aligned = align_mutual_learning_claim_ids(result, bundle)
         except Exception as exc:
             raise TurnValidationError("The mutual evidence trace is invalid.") from exc
         return replace(
-            checked,
+            checked_turn,
             result=aligned,
             evidence_trace=tuple(item.model_dump(mode="json") for item in bundle.traces),
         )
@@ -1795,7 +1835,9 @@ class LLMTurnRuntime:
                         plan=context.turn,
                         participant=context.participant,
                         participants=context.participants,
-                        receipts=current.receipts,
+                        receipts=cast(
+                            Sequence[SnapshotRetrievalReceipt], current.receipts
+                        ),
                         predecessors=context.predecessors,
                         pending_question=context.effective_pending_question,
                     )
@@ -1814,7 +1856,7 @@ class LLMTurnRuntime:
                         predecessor_turn_ids=current.fence.predecessor_turn_ids,
                         cutoff_turn_index=current.fence.cutoff_turn_index,
                         transcript_hash=current.fence.transcript_hash,
-                        attempt=current.attempt_no,  # type: ignore[arg-type]
+                        attempt=current.attempt_no,
                     )
                 publication_result = self._publish(
                     current,
@@ -1929,7 +1971,7 @@ class LLMTurnRuntime:
                     plan=context.turn,
                     participant=context.participant,
                     participants=context.participants,
-                    receipts=receipts,
+                    receipts=cast(Sequence[SnapshotRetrievalReceipt], receipts),
                     predecessors=context.predecessors,
                     pending_question=context.effective_pending_question,
                 )
@@ -1951,7 +1993,7 @@ class LLMTurnRuntime:
                     ),
                     budget=object(),
                     price_card=object(),
-                    attempt_no=int(_read(stage, "attempt_no", 1) or 1),
+                    attempt_no=_as_int(_read(stage, "attempt_no", 1), 1),
                     retrieval_reused=bool(_read(stage, "retrieval_reused", False)),
                     receipts=tuple(receipts),
                     queries=tuple(queries),

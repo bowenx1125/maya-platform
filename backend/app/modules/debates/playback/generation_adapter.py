@@ -203,9 +203,9 @@ class SqlTurnPreparer:
         if llm is not None:
             self.llm = llm
         elif settings is not None and getattr(settings, "llm_provider", "mock") == "dashscope":
-            self.llm = select_fixed_llm_provider(settings)
+            self.llm = select_fixed_llm_provider(cast(Settings, settings))
         else:
-            self.llm = llm_provider(settings)
+            self.llm = llm_provider(cast(Settings, settings))
         self.llm_runtime = llm_runtime
         self.llm_runtime_options = dict(llm_runtime_options or {})
 
@@ -303,7 +303,7 @@ class SqlTurnPreparer:
                 ProviderScopeBudgetV1(
                     max_requests=cap.max_requests,
                     max_total_tokens=cap.max_total_tokens,
-                    max_cost_cny=cap.max_cost_cny,
+                    max_cost_cny=float(cap.max_cost_cny),
                     budget_bucket=LLM_DEBATE_TURN_BUCKET,
                 ),
             )
