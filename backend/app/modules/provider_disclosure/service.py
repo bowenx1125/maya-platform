@@ -819,10 +819,18 @@ class ProviderDisclosureService:
         if resolved_policy_ref is None:
             current_policy = getattr(self.store, "get_current_policy_snapshot", None)
             try:
+                # An explicitly selected manifest carries its own immutable
+                # policy binding.  Never substitute the store's newest
+                # policy (which may belong to another provider operation).
+                # Only the legacy no-reference path may use current policy.
                 policy = (
-                    current_policy()
-                    if callable(current_policy)
-                    else self.store.get_policy_snapshot(manifest.policy_hash)
+                    self.store.get_policy_snapshot(manifest.policy_hash)
+                    if resolved_manifest_ref is not None
+                    else (
+                        current_policy()
+                        if callable(current_policy)
+                        else self.store.get_policy_snapshot(manifest.policy_hash)
+                    )
                 )
             except Exception as exc:
                 raise _blocked("provider_policy_unavailable") from exc

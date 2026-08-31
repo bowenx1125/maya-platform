@@ -137,6 +137,96 @@ def _service(
     return ProviderDisclosureService(store), store, selected_policy, manifest
 
 
+def test_explicit_manifest_uses_its_policy_when_newer_policy_is_current() -> None:
+    embedding_policy = _policy(policy_id="embedding-policy", snapshot_revision=1)
+    llm_policy = _policy(policy_id="llm-policy", snapshot_revision=2)
+    embedding_manifest = _embedding_manifest(embedding_policy, scope_id="embedding-build")
+    current_llm_manifest = _manifest(llm_policy, scope_id="llm-build")
+    llm_turn_manifest = ExportManifestV1(
+        scope_id="dual-debate",
+        provider_operation="llm_debate_turn",
+        model_key=FIXED_MODELS["llm_debate_turn"],
+        policy_hash=llm_policy.policy_hash,
+        build_manifest_hash=_digest("llm-turn-build"),
+        persona_spec_hash=_digest("llm-turn-persona"),
+        fields=(ExportFieldV1("topic_and_platform_rules", _digest("llm-turn-topic")),),
+        debate_id="dual-debate",
+        turn_id="dual-turn",
+    )
+    report_manifest = ExportManifestV1(
+        scope_id="dual-debate",
+        provider_operation="llm_maya_report",
+        model_key=FIXED_MODELS["llm_maya_report"],
+        policy_hash=llm_policy.policy_hash,
+        build_manifest_hash=_digest("report-build"),
+        persona_spec_hash=_digest("report-persona"),
+        fields=(ExportFieldV1("aggregate_vote_count", _digest("report-votes")),),
+    )
+
+    class DualPolicyStore(InMemoryProviderDisclosureStore):
+        def __init__(self) -> None:
+            super().__init__(
+                llm_policy,
+                current_llm_manifest,
+                agent_version_id="dual-version",
+                publication_manifests=(embedding_manifest,),
+                debate_id="dual-debate",
+                debate_manifests=(llm_turn_manifest, report_manifest),
+                turn_ids_by_manifest={
+                    llm_turn_manifest.manifest_hash: "dual-turn",
+                    report_manifest.manifest_hash: "dual-report",
+                },
+            )
+            self.policies = {
+                embedding_policy.policy_hash: embedding_policy,
+                llm_policy.policy_hash: llm_policy,
+            }
+
+        def get_policy_snapshot(
+            self, reference: str | None = None
+        ) -> ProviderPolicySnapshotV1 | None:
+            if reference is None:
+                return llm_policy
+            return self.policies.get(reference)
+
+        def get_current_policy_snapshot(self) -> ProviderPolicySnapshotV1:
+            return llm_policy
+
+    store = DualPolicyStore()
+    service = ProviderDisclosureService(store, manifest_ref=embedding_manifest.manifest_hash)
+    disclosed = service.disclose("teacher")
+    assert disclosed.manifest_hash == embedding_manifest.manifest_hash
+    assert disclosed.policy_hash == embedding_policy.policy_hash
+
+    confirmed = service.confirm(
+        ProviderDataCallConfirmationRequestV1(
+            policy_hash=embedding_policy.policy_hash,
+            manifest_hash=embedding_manifest.manifest_hash,
+            expected_revision=embedding_manifest.operation_revision,
+        ),
+        actor_user_id="teacher",
+    )
+    assert confirmed.policy_hash == embedding_policy.policy_hash
+
+    with pytest.raises(ProviderDisclosureError) as stale:
+        service.disclose(
+            "teacher",
+            policy_ref=llm_policy.policy_hash,
+            manifest_ref=embedding_manifest.manifest_hash,
+        )
+    assert stale.value.code == "provider_preflight_stale"
+
+    publication = service.list_embedding_manifests_for_agent_version(
+        "teacher",
+        agent_version_id="dual-version",
+    )
+    assert publication.items[0].confirmed is True
+    llm = service.list_llm_manifests_for_debate("teacher", debate_id="dual-debate")
+    assert llm.items[0].manifest_hash == llm_turn_manifest.manifest_hash
+    report = service.list_report_manifests_for_debate("teacher", debate_id="dual-debate")
+    assert report.items[0].manifest_hash == report_manifest.manifest_hash
+
+
 def test_disclosure_has_exact_teacher_allowlist_and_no_provider_secrets() -> None:
     service, _store, policy, manifest = _service()
 
@@ -541,6 +631,56 @@ def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
         )
     finally:
         reloaded_session.close()
+        database.dispose()
+
+
+def test_sql_explicit_manifest_resolves_its_policy_after_newer_policy_insert(
+    tmp_path: Any,
+) -> None:
+    database = Database(f"sqlite:///{tmp_path / 'dual-policy.sqlite3'}")
+    database.initialize_schema()
+    repository = ProviderRepository(database)
+    embedding_policy = _policy(policy_id="embedding-policy", snapshot_revision=1)
+    embedding_id = repository.save_policy_snapshot(embedding_policy, snapshot_id="embedding-1")
+    embedding_manifest = _embedding_manifest(embedding_policy, scope_id="embedding-build")
+    repository.save_export_manifest(
+        embedding_manifest,
+        policy_snapshot_id=embedding_id,
+        manifest_id="embedding-manifest-1",
+    )
+    llm_policy = _policy(policy_id="llm-policy", snapshot_revision=2)
+    repository.save_policy_snapshot(llm_policy, snapshot_id="llm-1")
+
+    session = database.session_factory()
+    try:
+        service = ProviderDisclosureService(
+            SqlAlchemyProviderDisclosureStore(session),
+            teacher_authorizer=lambda user_id: user_id == "teacher",
+            manifest_ref=embedding_manifest.manifest_hash,
+        )
+        disclosed = service.disclose("teacher")
+        assert disclosed.policy_hash == embedding_policy.policy_hash
+        confirmed = service.confirm(
+            ProviderDataCallConfirmationRequestV1(
+                policy_hash=embedding_policy.policy_hash,
+                manifest_hash=embedding_manifest.manifest_hash,
+                expected_revision=1,
+            ),
+            actor_user_id="teacher",
+            manifest_ref=embedding_manifest.manifest_hash,
+        )
+        assert confirmed.policy_hash == embedding_policy.policy_hash
+        session.commit()
+
+        with pytest.raises(ProviderDisclosureError) as stale:
+            service.disclose(
+                "teacher",
+                policy_ref=llm_policy.policy_hash,
+                manifest_ref=embedding_manifest.manifest_hash,
+            )
+        assert stale.value.code == "provider_preflight_stale"
+    finally:
+        session.close()
         database.dispose()
 
 
