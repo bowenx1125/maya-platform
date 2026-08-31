@@ -87,7 +87,7 @@ non-finite vectors. No second real request was made.
 
 ## Current deterministic evidence
 
-- backend full suite: `817 passed`;
+- backend full suite: `822 passed`;
 - frontend: `34 files / 210 tests`, lint, TypeScript and production build passed;
 - Ruff and mypy passed;
 - frozen OpenAPI and generated client passed; the route semantic fixture contains `76`

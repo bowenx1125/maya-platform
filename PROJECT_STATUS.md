@@ -21,7 +21,7 @@ The W4-EMBED repair candidate now implements the frozen real 1024 identity end t
 through injected fake transport: durable multi-batch publication and continuation,
 student publication orchestration, identity-matched query retrieval, exact per-turn
 teacher disclosure/confirmation and non-terminal explicit retry. Current deterministic
-evidence is backend `817`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typecheck/build,
+evidence is backend `822`, frontend `34 files / 210 tests`, Ruff/mypy/lint/typecheck/build,
 OpenAPI/generated/route/WS/repository boundaries and all populated Wave 1–4/0013
 migration probes.
 
@@ -42,8 +42,11 @@ response `model`; the preflight therefore ended
 The request was not repeated. Official documentation confirms the native response uses
 `text_index` and does not return `model`; commit `dbef20e` now isolates that exception
 to the fixed DashScope-native dialect while generic/OpenAI-compatible responses still
-require exact model. Fake tests cover the repair; a new incremental Sol audit is still
-required. No CI run has occurred.
+require exact model. Incremental Sol then found one P1 conflict case where a correct
+top-level model could mask a wrong `output.model`; commit `48da2a7` now validates both
+locations independently and rejects every conflicting explicit declaration. Fake tests
+cover the repair; a final incremental Sol audit is still required. No CI run has
+occurred.
 
 ## Source and remote
 

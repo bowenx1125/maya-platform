@@ -20,13 +20,28 @@ The six design findings were:
 5. no exact per-turn owner-bound teacher discovery/confirmation/retry design;
 6. no exact-message privacy scan or same-tokenizer identity across attempts.
 
+The first repair re-audit closed those six categories but found four remaining P1
+ambiguities. The current contract additionally freezes:
+
+1. `-1` as a non-index sentinel only for whole-turn engagement and `question.mode=none`,
+   with exact mode/target/text cross-rules and rejection before indexing;
+2. the exact Chat choice/role/finish/usage envelope: only `finish_reason=stop` can enter
+   product validation; `length` is staged repairable and every refusal/tool/filter/
+   wrong-model/usage failure is terminal;
+3. automatic attempt 2 only under a teacher-confirmed two-attempt/full-cost manifest,
+   with a closed transport classification table for pre-byte connect, write/read
+   uncertainty and every HTTP response;
+4. a 1,510-token worst-case output reservation, immutable Decimal price-card fields,
+   cached-token fallback, upward CNY rounding, usage overrun handling and permanent
+   worst-case allocation for every accepted/unknown attempt.
+
 ## Repair authority
 
 The current candidate freezes the missing decisions in:
 
 - `docs/contracts/wave4/LLM_A_RUNTIME_V1.md`;
 - `docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json` with SHA-256
-  `3f580bc66e642f9dee7666b544d77e220a86fe6656b187e8752774e5636af6e8`;
+  `1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c`;
 - revised `PROVIDER_DATA_CALL_V1.md` and `PROMPT_BUDGET_V1.md` cross-references.
 
 The exact request is one no-redirect Beijing Chat Completion using

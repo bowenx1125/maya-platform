@@ -73,7 +73,7 @@ Official references checked 2026-08-31:
 
 The supplier schema is the exact repository file
 `LLM_TURN_OUTPUT_SCHEMA_V1.json`, SHA-256
-`3f580bc66e642f9dee7666b544d77e220a86fe6656b187e8752774e5636af6e8`.
+`1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c`.
 The schema name is `maya_llm_turn_output_v1`; `strict=true` and every object has
 `additionalProperties=false`.
 
@@ -83,23 +83,44 @@ It returns only bounded integer references into the exact ordered catalogs in th
 request:
 
 - `used_evidence_refs[]` indexes the current request's evidence catalog;
-- `target_turn_ref` and `target_claim_ref` index visible prior-turn catalogs;
-- `target_participant_ref` indexes the allowed next-question target catalog;
+- `target_turn_ref` indexes the visible prior-turn catalog;
+- `target_claim_ref=-1` means the engagement targets the whole referenced turn and is
+  never used as an array index; a non-negative value indexes only that turn's visible
+  claim catalog;
+- `question.mode=none` requires `target_participant_ref=-1` and `text=""`;
+- `question.mode=ask` requires a non-negative `target_participant_ref` within the
+  allowed next-question target catalog and non-empty text;
 - `answered_required_question` is a boolean; the server maps `true` only to the one
   assigned pending question.
 
-The server rejects an out-of-range reference, maps valid references to its own IDs,
+All other negative references, a sentinel used outside its one rule, and every
+out-of-range reference are rejected before Python/SQL indexing. The server maps valid
+references to its own IDs,
 requires every `claim_text` to be an exact speech substring, derives UTF-16 spans and
 claim IDs, then applies the existing RuleSet, EvidenceTrace and cross-Snapshot validators.
 Opening/exchange/final field rules remain those of
 `ordered_multi_expert_mutual_learning_v1`; the JSON Schema does not replace phase
 validation.
 
-A successful HTTP response must have exactly one choice, a non-empty assistant content
-string, the fixed model identity, non-negative integer usage and a supported finish
-reason. Content is parsed as JSON and validated again locally against the exact schema.
-Missing/extra fields, refusal, tool output, wrong model, malformed usage, invalid JSON,
-schema failure, RuleSet failure or Evidence failure never reaches `final_ready`.
+A successful HTTP response must be `object=chat.completion`, have the exact fixed model,
+and contain exactly one choice with `index=0`, `message.role=assistant`, non-empty string
+content, no non-empty refusal/reasoning/tool/function field and no tool call. Only
+`finish_reason=stop` is eligible for JSON and local product validation.
+
+`finish_reason=length` is staged as an accepted, charged, truncated structure failure;
+it never publishes but attempt 1 may enter the one structure-repair path below.
+`content_filter`, `tool_calls`, `function_call`, `null` and every unknown finish reason
+are terminal accepted failures with no retry. A wrong model, multiple choices, wrong
+choice index/role or non-empty refusal/tool/reasoning content is terminal with no retry.
+
+Usage must contain non-negative integer `prompt_tokens`, `completion_tokens` and
+`total_tokens`, with `total_tokens = prompt_tokens + completion_tokens`. Optional
+`prompt_tokens_details.cached_tokens` is a non-negative integer no greater than
+`prompt_tokens`; when absent it is zero. Missing or malformed usage is staged as
+`provider_usage_unknown`, retains the full reservation, never publishes and is not
+retried. Content is parsed as JSON and validated again locally against the exact schema.
+Missing/extra fields, invalid JSON, schema failure, RuleSet failure or Evidence failure
+never reaches `final_ready`.
 
 ## Outbound privacy boundary
 
@@ -153,8 +174,37 @@ recoverable for a later local validation/publication pass and never triggers a s
 request.
 
 Startup performs reconciliation only. `sending` becomes `acceptance_unknown`; it is not
-retried. An accepted complete stage can be validated/published locally. Only a proven
-`not_sent` attempt may create attempt 2, and only within the frozen two-attempt limit.
+retried. An accepted complete stage can be validated/published locally.
+
+Attempt 2 is automatic only when the teacher-confirmed manifest already disclosed
+`max_attempts=2` and the full two-attempt worst-case cost. It is created only after
+attempt 1 reaches either:
+
+- proven `not_sent`, in which case the base request is byte-identical; or
+- accepted HTTP 200 with `finish_reason=length`, invalid JSON, schema failure or local
+  RuleSet/output-structure failure, in which case only the frozen safe code and JSON
+  pointer list are added as `repair_feedback`.
+
+Attempt 2 is never pre-created and cannot be triggered by missing confirmation, budget,
+privacy, wrong model, refusal/content filter, usage failure, HTTP rejection or
+acceptance-unknown. It is the final attempt regardless of its outcome.
+
+### Transport and acceptance classification
+
+| Event                                                               | State                  | Automatic attempt 2 |
+| ------------------------------------------------------------------- | ---------------------- | ------------------- |
+| DNS/TCP/TLS/connect failure or connect timeout before request bytes | `not_sent`             | yes, attempt 1 only |
+| write timeout/error after writing may have begun                    | `acceptance_unknown`   | never               |
+| read timeout, EOF or remote protocol error after send               | `acceptance_unknown`   | never               |
+| any HTTP 3xx (redirects disabled), 4xx, 5xx                         | accepted `failed`      | never               |
+| HTTP 200 + `stop` + valid usage                                     | `accepted`             | local validation    |
+| HTTP 200 + `length` or structural invalidity + valid usage          | accepted repairable    | yes, attempt 1 only |
+| HTTP 200 + refusal/filter/tool/wrong model/unknown finish/bad usage | accepted terminal fail | never               |
+
+An HTTP status proves a response was received, not that it was free. Every HTTP outcome
+holds the full charged reservation. A proven `not_sent` transition atomically releases
+its reservation/allocation before attempt 2 reserves; every uncertain or accepted
+attempt keeps its worst-case allocation permanently.
 
 ## Budget buckets and migration 0014
 
@@ -171,9 +221,30 @@ buckets are:
 
 For W4-LLM-A, a 2-Agent × 2-round Gate fixture has at most 8 charged attempts and CNY
 1.20. The general 5-Agent × 2-round limit remains 20 charged attempts and CNY 3.00.
-Each request also retains the PromptBudgetV1 32,000-input-token, 96-KiB canonical-user,
-1,500-output-token and CNY 0.15 ceilings. Attempt 2 consumes a call and budget; it is not
-free. The ninth Gate-fixture call or any concurrent over-allocation fails before send.
+Each request retains the PromptBudgetV1 32,000-input-token, 96-KiB canonical-user and
+CNY 0.15 ceilings. The request asks for 1,500 output tokens, but the official API permits
+up to ten tokens of overshoot, so pre-send reserves 1,510 output tokens. The corresponding
+worst-case token buckets are 268,080 for the 8-attempt fixture and 670,200 for the
+20-attempt fixture. A response over 1,510 output tokens is `provider_usage_overrun`,
+never publishes and is not retried.
+
+The immutable price card contains version, model, region, currency `CNY`, input,
+cached-input and output prices per million tokens, retrieval time and official-source
+content hash. All values are non-negative `Decimal` strings. Reservation cost is:
+
+`ceil_6((input_cap * max(input_rate, cached_input_rate) + 1510 * output_rate) / 1_000_000)`
+
+where `ceil_6` rounds toward positive infinity to CNY 0.000001. If the result exceeds
+CNY 0.15, preparation stops at zero calls. Accepted actual cost is
+`ceil_6(((prompt-cached)*input_rate + cached*cached_input_rate + completion*output_rate)/1_000_000)`.
+Missing cached usage means cached=0. Missing/malformed usage, a cost above the reservation
+or any count above the frozen tolerance retains the full reservation and blocks product
+publication.
+
+An accepted/unknown attempt never releases unused worst-case allocation; its actual cost
+is an audit value only. A proven not-sent attempt releases atomically before another
+reservation. Attempt 2 that reaches send consumes its own call and worst-case budget.
+The ninth Gate-fixture charged call or any concurrent over-allocation fails before send.
 
 Migration `0014_llm_runtime_budget_buckets` must:
 
@@ -212,9 +283,11 @@ teacher-only pending DTO is:
 It contains no provider, model, endpoint, policy, prompt, Persona, transcript, evidence
 text or usage. Authorization uses the exact Debate course. Student/other-course access
 is 403 and missing Debate/Turn is 404. The teacher opens the existing exact disclosure
-screen, confirms by policy/manifest/revision CAS, then explicitly retries the pending
-non-terminal turn. Confirmation-required and proven-not-sent states leave the Debate
-running; ordinary WS carries only the safe code.
+screen, where the disclosure includes `max_attempts=2` and the full two-attempt maximum,
+confirms by policy/manifest/revision CAS, then explicitly retries the pending non-terminal
+turn. That click starts attempt 1; the two narrowly classified attempt-2 paths above are
+automatic under the confirmed cap. Confirmation-required and proven-not-sent exhaustion
+leave the Debate running; ordinary WS carries only the safe code.
 
 ## Tokenizer and retry continuity
 

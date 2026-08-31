@@ -91,7 +91,8 @@
           "target_claim_ref": {
             "type": "integer",
             "minimum": -1,
-            "maximum": 31
+            "maximum": 31,
+            "description": "-1 means engage the turn as a whole; non-negative values index that turn's visible claim catalog."
           },
           "relation": {
             "type": "string",
@@ -168,11 +169,13 @@
         "target_participant_ref": {
           "type": "integer",
           "minimum": -1,
-          "maximum": 15
+          "maximum": 15,
+          "description": "-1 is valid only when mode is none; non-negative values index the allowed question-target catalog."
         },
         "text": {
           "type": "string",
-          "maxLength": 1000
+          "maxLength": 1000,
+          "description": "Empty only when mode is none; mode ask requires non-empty text."
         }
       }
     },

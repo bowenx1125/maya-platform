@@ -38,7 +38,8 @@ For `llm_debate_turn_v1`:
 
 - maximum serialized input: 32,000 model tokens before send;
 - maximum canonical request bytes: 96 KiB before send;
-- maximum requested output: 1,500 model tokens;
+- maximum requested output: 1,500 model tokens, with 1,510 reserved to cover the
+  supplier's documented ten-token completion tolerance;
 - maximum attempts per turn: 2;
 - maximum LLM calls for a 5-Agent × 2-round debate: 20;
 - maximum estimated charge: CNY 0.15 per request and CNY 3.00 per debate;
@@ -61,13 +62,18 @@ Retrieval executes once and freezes the ordered query/receipt set before the fir
 call. Attempt 2 reuses the exact receipt hash, transcript hash, Persona hash, rule hash,
 model configuration and base request.
 
-Attempt 2 is allowed only for:
+Attempt 2 is automatic only after the teacher has confirmed the exact manifest's
+two-attempt maximum and full worst-case cost. It is allowed only for:
 
 - a Provider response known to have completed but failing closed JSON/schema/rule
   validation: append only a stable safe error code and JSON pointer list as
   `repair_feedback`;
 - a transport failure that the adapter can prove occurred before the supplier accepted
   the request: resend the identical frozen request once.
+
+`LLM_A_RUNTIME_V1.md` is authoritative for the exact transport classification table.
+Any HTTP status is accepted/charged; only a pre-byte DNS/TCP/TLS/connect failure is
+`not_sent`. Write/read/protocol uncertainty is `acceptance_unknown` and never retries.
 
 Retrieval may run a second time only when the first retrieval ended in a technical
 failure before any LLM request. That is a retrieval retry, not a structure repair.
@@ -87,6 +93,11 @@ Every external attempt records server-side:
 `cached_input_tokens`, `output_tokens`, `attempt_no`, `retrieval_reused`, request
 acceptance state, safe error code, price-card version, estimated cost and nullable
 reconciled actual cost.
+
+Price-card fields, Decimal ceiling, cached-token fallback, missing usage and overrun
+rules are frozen in `LLM_A_RUNTIME_V1.md`. An accepted/unknown attempt retains its full
+worst-case allocation; only proven not-sent releases atomically before another
+reservation.
 
 Before network I/O, the attempt and its worst-case count/cost allowance are atomically
 reserved through the durable state machine in ProviderDataCallV1 and the
