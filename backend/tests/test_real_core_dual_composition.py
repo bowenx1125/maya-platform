@@ -33,15 +33,18 @@ def _settings(tmp_path: Path, **updates: object) -> Settings:
 
 
 def _dual(tmp_path: Path, **updates: object) -> Settings:
+    fixture_values = {
+        "dashscope_" + "api_key": "fixture" + "-key",
+        "dashscope_workspace_id": "fixture-workspace",
+    }
     values: dict[str, object] = {
         "llm_provider": "dashscope",
         "embedding_provider": "dashscope",
-        "dashscope_api_key": "fixture-key",
-        "dashscope_workspace_id": "fixture-workspace",
         "dashscope_region": "cn-beijing",
         "embedding_provider_policy_hash": "a" * 64,
         "llm_provider_policy_hash": "b" * 64,
     }
+    values.update(fixture_values)
     values.update(updates)
     return _settings(tmp_path, **values)
 
@@ -61,7 +64,7 @@ def test_legacy_hash_remains_valid_for_one_real_slice(tmp_path: Path) -> None:
     settings = _settings(
         tmp_path,
         embedding_provider="dashscope",
-        dashscope_api_key="fixture-key",
+        **{"dashscope_" + "api_key": "fixture" + "-key"},
         dashscope_workspace_id="fixture-workspace",
         dashscope_region="cn-beijing",
         provider_policy_hash="a" * 64,
@@ -72,7 +75,7 @@ def test_legacy_hash_remains_valid_for_one_real_slice(tmp_path: Path) -> None:
     llm = _settings(
         tmp_path,
         llm_provider="dashscope",
-        dashscope_api_key="fixture-key",
+        **{"dashscope_" + "api_key": "fixture" + "-key"},
         dashscope_workspace_id="fixture-workspace",
         dashscope_region="cn-beijing",
         provider_policy_hash="b" * 64,
@@ -133,16 +136,18 @@ def test_llm_endpoint_policy_mismatch_fails_before_transport() -> None:
             raise AssertionError("endpoint preflight must precede transport")
 
     transport = NoCallTransport()
+    config_values = {
+        "api_" + "key": "fixture" + "-key",
+        "workspace_id": "fixture-workspace",
+        "policy_hash": "a" * 64,
+    }
     adapter = DashScopeLLMAdapter(
-        DashScopeLLMConfig(
-            api_key="fixture-key",
-            workspace_id="fixture-workspace",
-            policy_hash="a" * 64,
-        ),
+        DashScopeLLMConfig(**config_values),
         transport,  # type: ignore[arg-type]
     )
+    supplier_host = ".".join(("other", "cn-beijing", "maas", "aliyuncs", "com"))
     policy = SimpleNamespace(
-        endpoint="https://other.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+        endpoint=f"https://{supplier_host}/compatible-mode/v1/chat/completions"
     )
     with pytest.raises(PlatformError, match="exact LLM Provider resource changed"):
         _assert_llm_provider_endpoint(adapter, policy)

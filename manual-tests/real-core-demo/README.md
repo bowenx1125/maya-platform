@@ -26,6 +26,27 @@ uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.p
   prepare --checkpoint /private/path/real-core-demo.json
 ```
 
+On a fresh database, import the two separately reviewed, endpoint-bound policy
+files in this order, one command at a time, before enabling either real
+selector. Keep both JSON files outside the repository; they contain only
+non-secret controls, review timestamps and hashes:
+
+```bash
+uv run --project backend python scripts/import_provider_policy.py \
+  --policy-file /private/path/provider-policy-embedding.json \
+  --database-url "$MAYA_DATABASE_URL" --acknowledge-reviewed
+uv run --project backend python scripts/import_llm_policy.py \
+  --policy-file /private/path/provider-policy-llm.json \
+  --database-url "$MAYA_DATABASE_URL" --acknowledge-reviewed
+```
+
+The first command persists the fixed Embedding policy and the second persists
+the fixed LLM policy in the same fresh DB. Re-running either exact file is
+idempotent (`already_present`); a missing, unreviewed, hash-mismatched,
+secret-shaped, wrong-model or wrong-endpoint file stops before DB access. Do
+not run two service processes against separate policy DBs or import the files
+concurrently.
+
 Before restarting the isolated Compose application, put the dual-Real values
 in the ignored root `.env`. These names are passed to the backend service by
 `docker-compose.yml`; keep the legacy `PROVIDER_POLICY_HASH` empty for this
