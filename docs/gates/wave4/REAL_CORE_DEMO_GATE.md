@@ -1,6 +1,6 @@
 # Real-Core Demo Gate
 
-Status: `REAL-EMBED-OFFLINE-GATE PASS / P0=0 / P1=0 / P2=0 / REAL-CORE CALLS 0`
+Status: `REAL-EMBED-SNAPSHOT-QUERY PASS / EVIDENCE TURN PENDING / REAL-CORE CALLS 2`
 
 Every task in this Gate is classified before execution. Only `DEMO-BLOCKER` work may
 delay Demo V1. Everything else belongs to the Wave 4.1 Post-Demo Hardening backlog.
@@ -43,6 +43,20 @@ secret-boundary checks. Sol High returned `PASS / P0=0 / P1=0 / P2=0`.
 
 No product Provider request may occur until the actual account controls are reviewed and
 the matching non-secret policy is imported into the isolated empty runtime.
+
+## First formal product result
+
+The reviewed policy and exact teacher confirmations authorized two requests. The durable
+ledger records one successful 1024 Snapshot request and one successful Chinese query
+request, each with `request_count=1` and `charged_request_count=1`; no retry occurred.
+The Snapshot is immutable and the query accepted stage is complete.
+
+The following local Mock LLM step failed before Turn publication because its public
+speech quoted a Chinese Evidence excerpt while authoritative speech is English-only.
+This leaves no partial speech, TurnSource, audio or EvidenceTrace. The temporary failed
+Debate is audit evidence, not a reason to add production recovery to Demo V1. The next
+candidate fixes the public projection and creates a new Debate against the accepted
+Snapshot.
 
 ## Minimal Real Embedding E2E
 

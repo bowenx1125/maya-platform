@@ -66,7 +66,7 @@ production recovery. Excluded work is in
 | Acceptance slice | Current result |
 | --- | --- |
 | New environment starts | Not yet re-accepted from an empty runtime root |
-| Real Embedding 1024 product E2E | Offline Gate PASS; formal two-call product run not complete |
+| Real Embedding 1024 product E2E | Real Snapshot + Chinese query PASS; final Evidence Turn pending local projection fix |
 | Real LLM two-round product E2E | Not complete |
 | 2–3 confirmed Agents complete two rounds | Not complete with real core Providers |
 | Chinese real RAG hit and Evidence Receipt | Not complete |
@@ -77,7 +77,17 @@ production recovery. Excluded work is in
 
 ## Real call ledger
 
-Calls made after the Real-Core Demo scope reset in this status: `0`.
+Calls made after the Real-Core Demo scope reset in this status: `2`.
+
+- Real Snapshot Embedding: `1`, durable ledger `succeeded / request_count=1 / charged=1`.
+- Real Chinese query Embedding: `1`, durable ledger `succeeded / request_count=1 / charged=1`.
+- Automatic retry: `0`.
+
+The immutable 1024 Snapshot and its Chinese query vector were accepted correctly. The
+subsequent local Mock LLM turn failed before publication because a Chinese Evidence
+excerpt was copied into the English-only authoritative speech. No partial Turn, source,
+audio or EvidenceTrace was published. The failed temporary Debate is retained only as
+audit evidence; Demo V1 will not add a SQL recovery framework to salvage it.
 
 Known historical bounded evidence, which is not the Real-Core product E2E:
 
@@ -94,20 +104,19 @@ response or publication mismatch fails closed before another call.
 
 ## Minimum remaining Demo blockers
 
-1. `DEMO-BLOCKER — REAL-EMBED-E2E`: the offline implementation Gate is PASS at exact
-   SHA `e6d6c2780723dfeae33db953ea8c49edd37c8901`, with Sol High
-   `P0=0 / P1=0 / P2=0`, backend `925 passed`, reviewed-policy importer, fixed Chinese
-   one-chunk fixture, product driver and confirmed-Persona Chinese query path. Before the
-   formal two-call run, verify the account-side policy controls and import the exact
-   reviewed non-secret policy into a new runtime. Then execute one 1024 Snapshot request,
-   one Chinese query request and stopped-database Evidence verification.
-2. `DEMO-BLOCKER — REAL-LLM-E2E`: 2–3 confirmed Agents, their own RAG, PromptRequestV1,
-   fixed Qwen structured output and complete two-round Evidence Trace.
-3. `DEMO-BLOCKER — BROWSER-E2E`: empty-runtime student Agent/Persona/knowledge/publish,
+1. `DEMO-BLOCKER — ENGLISH-SAFE-MOCK-PROJECTION`: keep Chinese Evidence in the Receipt
+   inspector while emitting an English-safe evidence claim in authoritative Mock speech;
+   preserve the exact Evidence ID, chunk, Snapshot, support mode and TurnSource.
+2. `DEMO-BLOCKER — REAL-CORE-PROVIDER-COMPOSITION`: permit only the reviewed
+   Real-Embedding + Real-LLM pair with Mock companions, using separate endpoint-bound
+   policy hashes. Do not generalize this into a multi-Provider framework.
+3. `DEMO-BLOCKER — REAL-LLM-E2E`: reuse the accepted real Snapshot in a new 2-Agent,
+   2-round Debate; fixed Qwen structured output and complete Evidence Trace must pass.
+4. `DEMO-BLOCKER — BROWSER-E2E`: empty-runtime student Agent/Persona/knowledge/publish,
    teacher Debate/playback/finish, interaction/history/Replay.
-4. `DEMO-BLOCKER — DEMO-PACKAGE`: fixed Agent/RAG/topic assets, one startup entry,
+5. `DEMO-BLOCKER — DEMO-PACKAGE`: fixed Agent/RAG/topic assets, one startup entry,
    reset and failure-recovery instructions, plus visible Real/Mock disclosure.
-5. One final integrated GitHub PR/CI on the exact locally accepted SHA.
+6. One final integrated GitHub PR/CI on the exact locally accepted SHA.
 
 ## Post-Demo Hardening
 
@@ -135,10 +144,9 @@ See [Wave 4.1 Post-Demo Hardening](docs/requirements/WAVE_4_1_POST_DEMO_HARDENIN
 
 ## Next Gate
 
-Verify the reviewed account policy, then execute `REAL-EMBED-E2E` only through the
-product path. It is a newly authorized formal Demo publication, not a repeat of the
-exhausted preflight. Use the fixed Chinese fixture, exact teacher manifest/confirmation,
-the two-call cap and fail-closed call ledger.
-After it passes, proceed immediately to `REAL-LLM-E2E`, then browser E2E and Demo package.
+Fix only the local English-safe evidence projection, then freeze the exact dual Real-Core
+Provider composition and execute a new 2-Agent, 2-round Debate against the already
+published real Snapshot. Do not build a failed-Debate SQL recovery seam. Proceed directly
+to browser E2E and the Demo package after the integrated real debate passes.
 The active packet is
 [Real-Core Demo Gate](docs/gates/wave4/REAL_CORE_DEMO_GATE.md).
