@@ -24,6 +24,7 @@ from app.providers.llm import (
     DashScopeLLMAdapter,
     DashScopeLLMConfig,
     LLMOutboundManifestV1,
+    LLMPriceCardError,
     LLMPriceCardV1,
     LLMProvider,
     LLMTokenizerPort,
@@ -89,6 +90,31 @@ def llm_provider(
         raise RuntimeError(
             "LLM_PROVIDER_POLICY_HASH is required for the selected real LLM resource"
         )
+    try:
+        configured_price_card = price_card or LLMPriceCardV1(
+            version=settings.llm_price_card_version or "",
+            input_price_per_million=(
+                settings.llm_input_price_cny_per_million
+                if settings.llm_input_price_cny_per_million is not None
+                else ""
+            ),
+            cached_input_price_per_million=(
+                settings.llm_cached_input_price_cny_per_million
+                if settings.llm_cached_input_price_cny_per_million is not None
+                else ""
+            ),
+            output_price_per_million=(
+                settings.llm_output_price_cny_per_million
+                if settings.llm_output_price_cny_per_million is not None
+                else ""
+            ),
+            retrieved_at=settings.llm_price_card_retrieved_at or "",
+            source_content_sha256=settings.llm_price_card_source_content_sha256 or "",
+        )
+        configured_price_card.assert_reviewed()
+        configured_price_card.reservation_cost()
+    except LLMPriceCardError as exc:
+        raise RuntimeError(f"LLM price card is invalid: {exc}") from exc
     return DashScopeLLMAdapter(
         DashScopeLLMConfig(
             api_key=settings.dashscope_api_key,
@@ -98,7 +124,7 @@ def llm_provider(
         ),
         transport,
         tokenizer=tokenizer,
-        price_card=price_card,
+        price_card=configured_price_card,
         outbound_manifest=outbound_manifest,
     )
 

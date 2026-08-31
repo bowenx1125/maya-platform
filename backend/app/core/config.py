@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+from decimal import Decimal
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 from pathlib import Path
@@ -63,6 +64,33 @@ class Settings(BaseSettings):
     llm_provider_policy_hash: str | None = Field(
         default=None,
         validation_alias="LLM_PROVIDER_POLICY_HASH",
+    )
+    # The reviewed LLM price card is server-only accounting input.  Keep the
+    # values explicit in the environment so a real request cannot silently
+    # fall back to the adapter's unreviewed zero-value default.
+    llm_price_card_version: str | None = Field(
+        default=None,
+        validation_alias="LLM_PRICE_CARD_VERSION",
+    )
+    llm_input_price_cny_per_million: Decimal | None = Field(
+        default=None,
+        validation_alias="LLM_INPUT_PRICE_CNY_PER_MILLION",
+    )
+    llm_cached_input_price_cny_per_million: Decimal | None = Field(
+        default=None,
+        validation_alias="LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION",
+    )
+    llm_output_price_cny_per_million: Decimal | None = Field(
+        default=None,
+        validation_alias="LLM_OUTPUT_PRICE_CNY_PER_MILLION",
+    )
+    llm_price_card_retrieved_at: str | None = Field(
+        default=None,
+        validation_alias="LLM_PRICE_CARD_RETRIEVED_AT",
+    )
+    llm_price_card_source_content_sha256: str | None = Field(
+        default=None,
+        validation_alias="LLM_PRICE_CARD_SOURCE_CONTENT_SHA256",
     )
     deepl_api_key: str | None = Field(default=None, validation_alias="DEEPL_API_KEY")
     # Provider selectors intentionally default to local mocks.  They are
@@ -216,6 +244,21 @@ class Settings(BaseSettings):
             raise ValueError("provider slice policy hash must be a lowercase SHA-256 value")
         return value.strip()
 
+    @field_validator(
+        "llm_price_card_version",
+        "llm_input_price_cny_per_million",
+        "llm_cached_input_price_cny_per_million",
+        "llm_output_price_cny_per_million",
+        "llm_price_card_retrieved_at",
+        "llm_price_card_source_content_sha256",
+        mode="before",
+    )
+    @classmethod
+    def empty_llm_price_card_value_is_missing(cls, value: object) -> object:
+        # Compose forwards empty defaults for an all-Mock runtime. Treat them
+        # as absent so optional fields stay inert until the LLM is real.
+        return None if value is None or (isinstance(value, str) and not value.strip()) else value
+
     @property
     def is_test(self) -> bool:
         """Whether ephemeral test-only defaults may be used."""
@@ -327,9 +370,7 @@ class Settings(BaseSettings):
                     "EMBEDDING_PROVIDER_POLICY_HASH is required for real Embedding publication"
                 )
             if self.llm_provider_policy_hash is None:
-                raise RuntimeError(
-                    "LLM_PROVIDER_POLICY_HASH is required for real LLM publication"
-                )
+                raise RuntimeError("LLM_PROVIDER_POLICY_HASH is required for real LLM publication")
         elif self.embedding_provider == "dashscope" and self.embedding_policy_hash is None:
             raise RuntimeError(
                 "EMBEDDING_PROVIDER_POLICY_HASH (or an unambiguous legacy "
@@ -340,6 +381,39 @@ class Settings(BaseSettings):
                 "LLM_PROVIDER_POLICY_HASH (or an unambiguous legacy "
                 "PROVIDER_POLICY_HASH) is required for real LLM publication"
             )
+        if self.llm_provider == "dashscope":
+            self._validate_llm_price_card()
+
+    def _validate_llm_price_card(self) -> None:
+        """Validate the configured reviewed card through the existing model."""
+
+        from app.providers.llm_price_card import LLMPriceCardError, LLMPriceCardV1
+
+        try:
+            card = LLMPriceCardV1(
+                version=self.llm_price_card_version or "",
+                input_price_per_million=(
+                    self.llm_input_price_cny_per_million
+                    if self.llm_input_price_cny_per_million is not None
+                    else ""
+                ),
+                cached_input_price_per_million=(
+                    self.llm_cached_input_price_cny_per_million
+                    if self.llm_cached_input_price_cny_per_million is not None
+                    else ""
+                ),
+                output_price_per_million=(
+                    self.llm_output_price_cny_per_million
+                    if self.llm_output_price_cny_per_million is not None
+                    else ""
+                ),
+                retrieved_at=self.llm_price_card_retrieved_at or "",
+                source_content_sha256=self.llm_price_card_source_content_sha256 or "",
+            )
+            card.assert_reviewed()
+            card.reservation_cost()
+        except LLMPriceCardError as exc:
+            raise RuntimeError(f"LLM price card is invalid: {exc}") from exc
 
     @property
     def embedding_policy_hash(self) -> str | None:

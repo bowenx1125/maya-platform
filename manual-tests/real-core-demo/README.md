@@ -61,7 +61,18 @@ TRANSLATION_PROVIDER=mock
 EMBEDDING_PROVIDER_POLICY_HASH=<embedding-policy-sha256>
 LLM_PROVIDER_POLICY_HASH=<llm-policy-sha256>
 PROVIDER_POLICY_HASH=
+LLM_PRICE_CARD_VERSION=<reviewed-price-card-version>
+LLM_INPUT_PRICE_CNY_PER_MILLION=<reviewed-input-rate>
+LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION=<reviewed-cached-input-rate>
+LLM_OUTPUT_PRICE_CNY_PER_MILLION=<reviewed-output-rate>
+LLM_PRICE_CARD_RETRIEVED_AT=<rfc3339-timestamp-with-timezone>
+LLM_PRICE_CARD_SOURCE_CONTENT_SHA256=<reviewed-source-sha256>
 ```
+
+The six price-card values are reviewed accounting metadata, not current prices
+embedded in the application; supply them from the approved price-card source.
+The timestamp must include a timezone, and the configured worst-case request
+must remain within the fixed CNY 0.15 single-request cap.
 
 Then restart the isolated application with `docker compose up -d --build` and
 execute once. The explicit flag is an operator confirmation of the
