@@ -1,0 +1,420 @@
+"""Fake-transport tests for the one-shot Real report provider boundary."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, cast
+from uuid import UUID
+
+import pytest
+from app.modules.reports.real_provider import (
+    REAL_REPORT_MODEL,
+    REAL_REPORT_SCHEMA_NAME,
+    RealReportProvider,
+    ReportProviderError,
+)
+from app.modules.reports.real_schema import (
+    REPORT_SECTION_FIELDS,
+    ReportRequest,
+)
+from app.modules.reports.schemas import ReportSectionOutput as ServiceReportSectionOutput
+from app.providers.llm_adapter import DashScopeLLMConfig
+from app.providers.llm_price_card import LLMPriceCardV1
+from app.providers.llm_tokenizer import ConservativeLLMTokenizer, PinnedLLMTokenizer
+from app.providers.llm_transport import (
+    LLMAcceptanceUnknown,
+    LLMTransportNotSent,
+    LLMTransportResponse,
+)
+
+EVIDENCE_ID = UUID("12345678-1234-4234-8234-123456789abc")
+
+
+def _request() -> ReportRequest:
+    return ReportRequest.model_validate(
+        {
+            "topic": "How can classrooms share cultural knowledge responsibly?",
+            "participants": [
+                {
+                    "slot": "A",
+                    "agent_name": "River Keeper",
+                    "position_summary": "Protect shared resources through careful stewardship.",
+                },
+                {
+                    "slot": "B",
+                    "agent_name": "Community Gardener",
+                    "position_summary": "Pair open learning with consent and context.",
+                },
+            ],
+            "speeches": [
+                {
+                    "slot": "A",
+                    "round_no": 1,
+                    "turn_index": 0,
+                    "speech": (
+                        "A classroom should preserve context and distinguish evidence from "
+                        "interpretation."
+                    ),
+                    "used_evidence_ids": [str(EVIDENCE_ID)],
+                },
+                {
+                    "slot": "B",
+                    "round_no": 1,
+                    "turn_index": 1,
+                    "speech": (
+                        "Learners can compare perspectives when a community helps define what is "
+                        "shared."
+                    ),
+                    "used_evidence_ids": [],
+                },
+                {
+                    "slot": "A",
+                    "round_no": 2,
+                    "turn_index": 2,
+                    "speech": "Careful listening makes a responsible exchange possible.",
+                    "used_evidence_ids": [],
+                },
+                {
+                    "slot": "B",
+                    "round_no": 2,
+                    "turn_index": 3,
+                    "speech": (
+                        "The class can keep uncertainty visible while revising its questions."
+                    ),
+                    "used_evidence_ids": [],
+                },
+            ],
+            "sources": [
+                {
+                    "evidence_id": str(EVIDENCE_ID),
+                    "excerpt": (
+                        "A public source describes context, consent, and shared responsibility."
+                    ),
+                }
+            ],
+            "votes": [{"slot": "A", "count": 2}, {"slot": "B", "count": 1}],
+            "insights": [
+                {"category": "support", "summary": "Participants valued careful listening."}
+            ],
+        }
+    )
+
+
+def _sections() -> dict[str, str]:
+    return {
+        field: f"A careful English section for {field.replace('_', ' ')}."
+        for field in REPORT_SECTION_FIELDS
+    }
+
+
+def _response(
+    content: str | None = None,
+    *,
+    usage: Mapping[str, object] | None = None,
+    model: str = REAL_REPORT_MODEL,
+    finish_reason: str = "stop",
+) -> dict[str, object]:
+    return {
+        "object": "chat.completion",
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": content if content is not None else json.dumps(_sections()),
+                },
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": usage
+        or {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 200},
+    }
+
+
+@dataclass
+class FakeTransport:
+    payload: object
+    status_code: int = 200
+
+    def __post_init__(self) -> None:
+        self.calls = 0
+        self.last_url = ""
+        self.last_headers: dict[str, str] = {}
+        self.last_json: dict[str, object] = {}
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        json: Mapping[str, object],
+        timeout: object,
+    ) -> object:
+        del timeout
+        self.calls += 1
+        self.last_url = url
+        self.last_headers = dict(headers)
+        self.last_json = dict(json)
+        if isinstance(self.payload, BaseException):
+            raise self.payload
+        return LLMTransportResponse(self.status_code, self.payload)
+
+
+def _tokenizer() -> PinnedLLMTokenizer:
+    return PinnedLLMTokenizer(
+        "reviewed-report-tokenizer-v1",
+        "a" * 64,
+        lambda value: len(value.split()),
+    )
+
+
+def _price_card(**changes: str) -> LLMPriceCardV1:
+    values: dict[str, str] = {
+        "input_price_per_million": "0.5",
+        "cached_input_price_per_million": "0.1",
+        "output_price_per_million": "1.0",
+        "retrieved_at": "2026-08-31T00:00:00Z",
+        "source_content_sha256": "b" * 64,
+    }
+    values.update(changes)
+    return LLMPriceCardV1(**values)
+
+
+def _provider(transport: object) -> RealReportProvider:
+    return RealReportProvider(
+        config=DashScopeLLMConfig(
+            api_key="fixture-secret",
+            workspace_id="workspace123",
+            policy_hash="c" * 64,
+        ),
+        transport=cast(Any, transport),
+        tokenizer=_tokenizer(),
+        price_card=_price_card(),
+    )
+
+
+def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
+    transport = FakeTransport(_response())
+    provider = _provider(transport)
+    prepared = provider.build_request(_request())
+    result = provider.execute(_request())
+
+    assert isinstance(result, ServiceReportSectionOutput)
+    assert transport.calls == 1
+    assert transport.last_url == (
+        "https://workspace123.cn-beijing.maas.aliyuncs.com/"
+        "compatible-mode/v1/chat/completions"
+    )
+    assert transport.last_headers["Authorization"] == "Bearer fixture-secret"
+    assert "fixture-secret" not in json.dumps(transport.last_json)
+    assert set(transport.last_json) == {
+        "model",
+        "messages",
+        "enable_thinking",
+        "stream",
+        "temperature",
+        "top_p",
+        "max_completion_tokens",
+        "n",
+        "response_format",
+    }
+    assert transport.last_json["model"] == REAL_REPORT_MODEL
+    assert transport.last_json["enable_thinking"] is False
+    assert transport.last_json["stream"] is False
+    assert transport.last_json["temperature"] == 0.2
+    assert transport.last_json["top_p"] == 0.8
+    assert transport.last_json["max_completion_tokens"] == 1500
+    assert transport.last_json["n"] == 1
+    messages = cast(list[dict[str, str]], transport.last_json["messages"])
+    assert [message["role"] for message in messages] == ["system", "user"]
+    assert messages[0]["content"] == prepared.system_message.content
+    assert messages[1]["content"] == prepared.user_message.content
+    wrapper = cast(dict[str, object], transport.last_json["response_format"])
+    schema_wrapper = cast(dict[str, object], wrapper["json_schema"])
+    assert wrapper["type"] == "json_schema"
+    assert schema_wrapper["name"] == REAL_REPORT_SCHEMA_NAME
+    assert schema_wrapper["strict"] is True
+    assert schema_wrapper["schema"]
+    assert len(prepared.request_hash) == 64
+    assert provider.build_request(_request()).request_hash == prepared.request_hash
+
+
+def test_request_hash_does_not_change_with_authorization_secret() -> None:
+    first = _provider(FakeTransport(_response())).build_request(_request())
+    second_provider = RealReportProvider(
+        config=DashScopeLLMConfig(
+            api_key="another-fixture-secret",
+            workspace_id="workspace123",
+            policy_hash="c" * 64,
+        ),
+        transport=FakeTransport(_response()),
+        tokenizer=_tokenizer(),
+        price_card=_price_card(),
+    )
+    second = second_provider.build_request(_request())
+    assert first.request_hash == second.request_hash
+
+
+@pytest.mark.parametrize(
+    ("tokenizer", "price_card", "expected"),
+    (
+        (None, _price_card(), "report_tokenizer_required"),
+        (ConservativeLLMTokenizer(), _price_card(), "report_tokenizer_unapproved"),
+        (_tokenizer(), None, "report_price_card_required"),
+        (_tokenizer(), LLMPriceCardV1(), "llm_price_card_unreviewed"),
+    ),
+)
+def test_reviewed_tokenizer_and_price_card_are_required_before_transport(
+    tokenizer: object | None,
+    price_card: LLMPriceCardV1 | None,
+    expected: str,
+) -> None:
+    transport = FakeTransport(_response())
+    provider = RealReportProvider(
+        config=DashScopeLLMConfig(workspace_id="workspace123"),
+        transport=transport,
+        tokenizer=tokenizer,
+        price_card=price_card,
+    )
+    with pytest.raises(ReportProviderError, match=expected):
+        provider.execute(_request())
+    assert transport.calls == 0
+
+
+def test_reviewed_price_card_cost_ceiling_is_zero_call() -> None:
+    transport = FakeTransport(_response())
+    provider = RealReportProvider(
+        config=DashScopeLLMConfig(workspace_id="workspace123"),
+        transport=transport,
+        tokenizer=_tokenizer(),
+        price_card=_price_card(
+            input_price_per_million="100",
+            cached_input_price_per_million="100",
+            output_price_per_million="100",
+        ),
+    )
+    with pytest.raises(ReportProviderError, match="llm_request_cost_exceeded"):
+        provider.execute(_request())
+    assert transport.calls == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    (
+        ("debate_overview", "课堂总结。", "report_output_language"),
+        ("debate_overview", "# Heading\nEnglish prose.", "report_output_markdown"),
+        ("debate_overview", "The winner is clear.", "report_output_winner_language"),
+        ("debate_overview", "The final vote total is 2.", "report_output_vote_total"),
+    ),
+)
+def test_output_language_markdown_winner_and_vote_total_fail_without_retry(
+    field: str, value: str, expected: str
+) -> None:
+    sections = _sections()
+    sections[field] = value
+    transport = FakeTransport(_response(json.dumps(sections)))
+    with pytest.raises(ReportProviderError, match=expected):
+        _provider(transport).execute(_request())
+    assert transport.calls == 1
+
+
+def test_output_extra_field_and_malformed_json_fail_once() -> None:
+    extra = _sections()
+    extra["unexpected"] = "not allowed"
+    transport = FakeTransport(_response(json.dumps(extra)))
+    with pytest.raises(ReportProviderError, match="report_output_schema"):
+        _provider(transport).execute(_request())
+    assert transport.calls == 1
+
+    malformed = FakeTransport(_response("not-json"))
+    with pytest.raises(ReportProviderError, match="report_content_json"):
+        _provider(malformed).execute(_request())
+    assert malformed.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("usage", "expected"),
+    (
+        (
+            {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 201},
+            "report_usage_overrun",
+        ),
+        (
+            {"prompt_tokens": 32_001, "completion_tokens": 1, "total_tokens": 32_002},
+            "report_usage_overrun",
+        ),
+        (
+            {"prompt_tokens": 80, "completion_tokens": 1_511, "total_tokens": 1_591},
+            "report_usage_overrun",
+        ),
+        (
+            {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 200, "extra": 1},
+            "report_usage_shape",
+        ),
+    ),
+)
+def test_usage_shape_and_caps_fail_after_one_received_response(
+    usage: Mapping[str, object], expected: str
+) -> None:
+    transport = FakeTransport(_response(usage=usage))
+    with pytest.raises(ReportProviderError, match=expected):
+        _provider(transport).execute(_request())
+    assert transport.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    (
+        (LLMTransportNotSent(), "report_transport_not_sent"),
+        (LLMAcceptanceUnknown(), "report_acceptance_unknown"),
+        (RuntimeError("raw transport details"), "report_transport_unknown"),
+    ),
+)
+def test_transport_failure_is_never_retried_or_echoed(
+    payload: BaseException, expected: str
+) -> None:
+    transport = FakeTransport(payload)
+    with pytest.raises(ReportProviderError, match=expected) as error:
+        _provider(transport).execute(_request())
+    assert transport.calls == 1
+    assert "raw transport details" not in str(error.value)
+
+
+def test_http_rejection_wrong_model_and_finish_reason_are_one_call_terminal_failures() -> None:
+    rejected = FakeTransport(_response(), status_code=429)
+    with pytest.raises(ReportProviderError, match="report_http_rejected"):
+        _provider(rejected).execute(_request())
+    assert rejected.calls == 1
+
+    wrong_model = FakeTransport(_response(model="other-model"))
+    with pytest.raises(ReportProviderError, match="report_response_resource"):
+        _provider(wrong_model).execute(_request())
+    assert wrong_model.calls == 1
+
+    truncated = FakeTransport(_response(finish_reason="length"))
+    with pytest.raises(ReportProviderError, match="report_finish_reason"):
+        _provider(truncated).execute(_request())
+    assert truncated.calls == 1
+
+
+def test_response_shape_and_private_or_provider_fields_fail_closed() -> None:
+    response = _response()
+    response["extra"] = "provider internals"
+    transport = FakeTransport(response)
+    with pytest.raises(ReportProviderError, match="report_response_shape"):
+        _provider(transport).execute(_request())
+    assert transport.calls == 1
+
+    response = _response()
+    message = cast(
+        dict[str, object],
+        cast(list[dict[str, object]], response["choices"])[0]["message"],
+    )
+    message["teacher_note"] = "private"
+    transport = FakeTransport(response)
+    with pytest.raises(ReportProviderError, match="report_message_shape"):
+        _provider(transport).execute(_request())
+    assert transport.calls == 1
