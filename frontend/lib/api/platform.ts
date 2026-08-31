@@ -103,6 +103,38 @@ export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
 export type DebateSummary = components["schemas"]["DebateSummary"];
 export type DebateDetail = components["schemas"]["DebateDetail"];
+
+/**
+ * Browser-safe Real-Core Demo status. These handwritten DTOs intentionally
+ * stay outside the frozen generated client: the endpoint exposes only
+ * presentation labels and component modes, never provider configuration.
+ */
+export type DemoComponentKey =
+  "embedding" | "llm" | "tts" | "voice" | "translation" | "report";
+export type DemoComponent = {
+  key: DemoComponentKey;
+  label: string;
+  mode: "real" | "mock";
+};
+export type DemoComposition = {
+  components: DemoComponent[];
+};
+export type DemoBaseline = {
+  agent_id: string;
+  version_id: string;
+  snapshot_id: string;
+  group_id: string;
+  system_baseline: true;
+  immutable: true;
+  usable: boolean;
+};
+export type DemoRuntimeStatus = {
+  baseline: DemoBaseline;
+  composition: DemoComposition;
+  dirty_agents: number;
+  dirty_debates: number;
+  dirty_interactions: number;
+};
 export type DebateDraftRequest =
   operations["createDebate"]["requestBody"]["content"]["application/json"];
 export type DebateDraftUpdateRequest =
@@ -493,6 +525,11 @@ export class PlatformApi {
 
   async courses(): Promise<Course[]> {
     return unwrap(await this.client.GET("/courses"));
+  }
+
+  /** Read the safe composition badge used by the authenticated Demo shell. */
+  async demoStatus(): Promise<DemoRuntimeStatus> {
+    return this.getJson<DemoRuntimeStatus>("demo/status");
   }
 
   async course(courseId: string): Promise<CourseDetail> {

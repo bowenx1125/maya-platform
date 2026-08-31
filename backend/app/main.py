@@ -41,6 +41,8 @@ from app.modules.debates.playback.task_manager import TaskManager
 from app.modules.debates.playback.wave3_bridge import Wave3EventPublisher
 from app.modules.debates.playback.wave3_projection import wave3_snapshot_projection
 from app.modules.debates.setup.router import router as debate_setup_router
+from app.modules.demo_baseline.router import router as demo_baseline_router
+from app.modules.demo_baseline.service import ensure_demo_baseline
 from app.modules.interactions.router import router as interaction_router
 from app.modules.interactions.service import InteractionService
 from app.modules.knowledge.providers import recover_embedding_provider_startup
@@ -159,6 +161,9 @@ def create_app(
                 with runtime_database.session() as session:
                     if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
                         seed_demo_data(session)
+            if not runtime_settings.is_test:
+                with runtime_database.session() as session:
+                    ensure_demo_baseline(session, runtime_settings.resolved_data_root)
             recover_embedding_provider_startup(runtime_database)
             recover_llm_startup(ProviderRepository(runtime_database))
             with runtime_database.session() as session:
@@ -291,6 +296,7 @@ def create_app(
     app.include_router(reports_router, prefix="/api/v1")
     app.include_router(translations_router, prefix="/api/v1")
     app.include_router(provider_disclosure_router, prefix="/api/v1")
+    app.include_router(demo_baseline_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:

@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 
 import { LanguageSwitcher, useT } from "./locale";
 import { useSession } from "./session-provider";
+import { DemoCompositionBadge } from "./demo-composition";
 
 export function AppShell({
   children,
@@ -104,7 +105,10 @@ export function AppShell({
           </button>
         </div>
       </header>
-      <main className="app-main">{children}</main>
+      <main className="app-main">
+        <DemoCompositionBadge />
+        {children}
+      </main>
     </div>
   );
 }
