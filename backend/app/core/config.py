@@ -296,11 +296,20 @@ class Settings(BaseSettings):
             )
         if real_slice_names:
             if not self.dashscope_api_key or not self.dashscope_api_key.strip():
-                raise RuntimeError("DASHSCOPE_API_KEY is required for real Provider work")
+                raise RuntimeError(
+                    "DASHSCOPE_API_KEY is required for real Provider work; "
+                    "Mock companions remain the default"
+                )
             if not self.dashscope_workspace_id or not self.dashscope_workspace_id.strip():
-                raise RuntimeError("DASHSCOPE_WORKSPACE_ID is required for real Provider work")
+                raise RuntimeError(
+                    "DASHSCOPE_WORKSPACE_ID is required for real Provider work; "
+                    "Mock companions remain the default"
+                )
             if self.dashscope_region != "cn-beijing":
-                raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
+                raise RuntimeError(
+                    "DASHSCOPE_REGION must be cn-beijing for real Provider work; "
+                    "Mock companions remain the default"
+                )
         # A legacy PROVIDER_POLICY_HASH is endpoint-ambiguous when both real
         # slices are selected.  Require the two explicit fields in that case;
         # a single-real configuration may still use the old field.
