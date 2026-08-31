@@ -220,17 +220,25 @@ class SqlTurnPreparer:
         """Collect identity tokens from the current course/group graph only."""
 
         values: list[str] = []
+
+        def add(value: object) -> None:
+            if isinstance(value, str) and value.strip():
+                values.append(value)
+
         member_ids = db.scalars(
             select(CourseMember.user_id).where(CourseMember.course_id == course_id)
         ).all()
         for member_id in member_ids:
-            values.append(str(member_id))
+            add(str(member_id))
             user = db.get(User, str(member_id))
             if user is not None:
-                values.extend((str(user.username), str(user.display_name)))
+                add(user.username)
+                add(user.display_name)
         agent_rows = db.scalars(select(Agent).where(Agent.group_id == group_id)).all()
-        values.extend(str(row.name) for row in agent_rows)
-        values.extend(str(item.agent_name) for item in participants)
+        for row in agent_rows:
+            add(row.name)
+        for item in participants:
+            add(item.agent_name)
         return tuple(
             dict.fromkeys(
                 value.strip()

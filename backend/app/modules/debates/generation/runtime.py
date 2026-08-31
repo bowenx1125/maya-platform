@@ -12,9 +12,11 @@ there is no default network client and no provider selector here.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from typing import Literal, Protocol, cast
 
 from app.providers.control import (
@@ -26,8 +28,8 @@ from app.providers.control import (
 )
 from app.providers.llm_adapter import (
     DashScopeLLMAdapter,
-    LLMAcceptedCandidateV1,
     DashScopeLLMConfig,
+    LLMAcceptedCandidateV1,
     LLMRequestV1,
     LLMUsageV1,
     LLMValidatedResultV1,
@@ -40,7 +42,12 @@ from app.providers.llm_output import (
     MappedLLMTurnV1,
     map_provider_output,
 )
-from app.providers.llm_price_card import debate_budget_cap
+from app.providers.llm_price_card import (
+    LLM_INPUT_TOKEN_CAP,
+    LLM_REQUEST_COST_CAP,
+    LLM_RESERVED_OUTPUT_TOKEN_CAP,
+    debate_budget_cap,
+)
 from app.providers.llm_privacy import LLMOutboundManifestV1, scan_llm_outbound_messages
 from app.providers.llm_tokenizer import tokenizer_authorized
 
@@ -282,6 +289,19 @@ def _hash_record(value: object) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _prepared_operation_id(scope_id: str, turn_id: str, attempt_no: int) -> str:
+    """Derive a stable opaque operation ID for confirmation re-entry."""
+
+    return _hash_record(
+        {
+            "provider_operation": LLM_DEBATE_OPERATION,
+            "scope_id": scope_id,
+            "turn_id": turn_id,
+            "attempt_no": attempt_no,
+        }
+    )
+
+
 def _safe_code(value: object, default: str = "llm_provider_failed") -> str:
     text = str(value)
     return (
@@ -291,6 +311,43 @@ def _safe_code(value: object, default: str = "llm_provider_failed") -> str:
         and all(char.isascii() and (char.isalnum() or char in "_.:-") for char in text)
         else default
     )
+
+
+def _transport_decision(error: object) -> tuple[str, str, bool]:
+    """Normalize the adapter's string acceptance classification safely."""
+
+    classification = classify_transport_error(error)
+    if isinstance(classification, str) and classification == "acceptance_unknown":
+        # Protocol fakes may carry the richer acceptance fields directly on
+        # the exception while the fixed adapter returns the string literal.
+        if _read(error, "acceptance", _read(error, "acceptance_state")) is not None:
+            classification = error
+    if isinstance(classification, str):
+        if classification == "not_sent":
+            return "not_sent", "provider_not_sent", True
+        return "acceptance_unknown", "acceptance_unknown", False
+    acceptance = str(
+        _result_value(
+            classification,
+            "acceptance",
+            "acceptance_state",
+            default="unknown",
+        )
+    )
+    code = _safe_code(
+        _result_value(
+            classification,
+            "safe_error_code",
+            "code",
+            default=("provider_not_sent" if acceptance == "not_sent" else "acceptance_unknown"),
+        ),
+        "acceptance_unknown",
+    )
+    not_sent = acceptance in {"not_sent", "transport_not_sent"} or (
+        _result_value(classification, "retry_allowed", default=False) is True
+        and code == "provider_not_sent"
+    )
+    return acceptance, code, not_sent
 
 
 def _invoke(method: Callable[..., object], *args: object, **kwargs: object) -> object:
@@ -385,8 +442,8 @@ class LLMTurnRuntime:
             raise LLMRuntimeError(code="provider_preflight_blocked")
         if not isinstance(build_manifest_hash, str) or not build_manifest_hash:
             raise LLMRuntimeError(code="llm_build_manifest_missing")
-        self._require_adapter_preflight()
         manifest = outbound_manifest or LLMOutboundManifestV1()
+        self._require_adapter_preflight(manifest=manifest)
         self._scan(
             prompt,
             identity_tokens=identity_tokens,
@@ -482,13 +539,14 @@ class LLMTurnRuntime:
             raise LLMRuntimeError(code="llm_owner_mismatch")
         if confirmation_revision < 1:
             raise LLMRuntimeError(code="provider_revision_invalid")
-        self._require_adapter_preflight()
+        effective_manifest = outbound_manifest or getattr(self.adapter, "outbound_manifest", None)
+        self._require_adapter_preflight(manifest=effective_manifest)
         generation_fence = LLMGenerationFenceV1.from_value(fence, prompt.request)
         generation_fence_hash = _hash_record(generation_fence.as_record())
         self._scan(
             prompt,
             identity_tokens=identity_tokens,
-            outbound_manifest=outbound_manifest,
+            outbound_manifest=effective_manifest,
         )
         request = self._build_request(
             prompt,
@@ -500,7 +558,7 @@ class LLMTurnRuntime:
             attempt_no=attempt_no,
             retrieval_reused=retrieval_reused,
             identity_tokens=identity_tokens,
-            outbound_manifest=outbound_manifest,
+            outbound_manifest=effective_manifest,
         )
         request_hash = self._request_hash(request, prompt)
         budget = _result_value(request, "budget", default=prompt.budget)
@@ -526,7 +584,27 @@ class LLMTurnRuntime:
             try:
                 operation = _invoke(creator, ledger_request, budget_bucket=LLM_DEBATE_BUCKET)
             except Exception as exc:
-                raise LLMRuntimeError(code="llm_preparation_failed") from exc
+                # A teacher may confirm after an earlier zero-use prepare.
+                # Re-enter that exact frozen operation instead of creating a
+                # duplicate; any hash/state mismatch remains a hard failure.
+                existing_get = _method(self.ledger, "get")
+                existing = (
+                    _invoke(
+                        existing_get,
+                        _prepared_operation_id(resolved_scope, resolved_turn, attempt_no),
+                    )
+                    if existing_get is not None
+                    else None
+                )
+                if (
+                    existing is None
+                    or _operation_state(existing) != "prepared"
+                    or _read(existing, "request_hash") != request_hash
+                    or _read(existing, "policy_hash") != policy_hash
+                    or _read(existing, "export_manifest_hash") != manifest_hash
+                ):
+                    raise LLMRuntimeError(code="llm_preparation_failed") from exc
+                operation = existing
             self._assert_prepared_zero(operation)
         return LLMPreparedAttemptV1(
             prompt=prompt,
@@ -550,11 +628,11 @@ class LLMTurnRuntime:
             repair_policy_hash=repair_policy_hash,
             generation_fence_hash=generation_fence_hash,
             identity_tokens=tuple(identity_tokens),
-            outbound_manifest=outbound_manifest,
+            outbound_manifest=effective_manifest,
             question_target_ids=tuple(question_target_ids),
         )
 
-    def _require_adapter_preflight(self) -> None:
+    def _require_adapter_preflight(self, *, manifest: object | None = None) -> None:
         """Fail closed unless a real adapter carries reviewed local inputs."""
 
         if not isinstance(self.adapter, DashScopeLLMAdapter):
@@ -577,7 +655,7 @@ class LLMTurnRuntime:
             raise
         except Exception as exc:
             raise LLMRuntimeError(code="llm_price_card_invalid") from exc
-        if getattr(self.adapter, "outbound_manifest", None) is None:
+        if manifest is None and getattr(self.adapter, "outbound_manifest", None) is None:
             raise LLMRuntimeError(code="llm_manifest_missing")
 
     def _scan(
@@ -588,11 +666,14 @@ class LLMTurnRuntime:
         outbound_manifest: LLMOutboundManifestV1 | None = None,
     ) -> None:
         scanner = scan_llm_outbound_messages
+        effective_manifest = outbound_manifest or getattr(self.adapter, "outbound_manifest", None)
         try:
             scanner(
                 prompt.messages,
                 identity_tokens=identity_tokens,
-                field_classes=(outbound_manifest.field_classes if outbound_manifest else ()),
+                field_classes=(
+                    effective_manifest.field_classes if effective_manifest is not None else ()
+                ),
             )
         except Exception as exc:
             raise LLMRuntimeError(
@@ -734,8 +815,12 @@ class LLMTurnRuntime:
         )
         max_tokens = budget_input + budget_output
         if max_tokens == 0:
-            max_tokens = int(_result_value(cap, "max_total_tokens", default=0) or 0)
-        max_cost = _result_value(cap, "max_cost_cny", "cost_cny", default=0)
+            max_tokens = LLM_INPUT_TOKEN_CAP + LLM_RESERVED_OUTPUT_TOKEN_CAP
+        # ``LLMBudgetCapV1.max_cost_cny`` is the debate-wide total.  A
+        # reservation must carry the one-attempt ceiling, otherwise every
+        # prepared turn would consume the complete 2x2 allowance and the
+        # fifth call would fail despite the eight-call contract.
+        max_cost = LLM_REQUEST_COST_CAP
         reservation_cost = _method(price_card, "reservation_cost")
         if reservation_cost is not None:
             try:
@@ -750,6 +835,7 @@ class LLMTurnRuntime:
                 except Exception:
                     pass
         payload = {
+            "operation_id": _prepared_operation_id(scope_id, turn_id, attempt_no),
             "scope_id": scope_id,
             "provider_operation": LLM_DEBATE_OPERATION,
             "logical_item_id": turn_id,
@@ -817,27 +903,40 @@ class LLMTurnRuntime:
         if sender is None:
             raise LLMRuntimeError(code="llm_adapter_unavailable")
         if getattr(sender, "__name__", "") == "send_accepted":
+            metadata = {
+                "prompt": prepared.prompt,
+                "generation_fence": prepared.generation_fence_hash,
+                "policy_hash": prepared.policy_hash,
+                "export_manifest_hash": prepared.manifest_hash,
+                "repair_policy_hash": prepared.repair_policy_hash or None,
+                "build_manifest_hash": prepared.build_manifest_hash,
+                "attempt_no": prepared.attempt_no,
+                "retrieval_reused": prepared.retrieval_reused,
+                "identity_tokens": prepared.identity_tokens,
+                "outbound_manifest": prepared.outbound_manifest,
+                "question_target_ids": prepared.question_target_ids,
+            }
+            # Inspect the callable before invoking it.  A metadata mismatch is
+            # a pre-call compatibility problem; catching ``TypeError`` after
+            # invocation could otherwise repeat a real transport call made by
+            # a protocol-compatible fake.
             try:
-                return _invoke(
-                    sender,
-                    prepared.request,
-                    prompt=prepared.prompt,
-                    generation_fence=prepared.generation_fence_hash,
-                    policy_hash=prepared.policy_hash,
-                    export_manifest_hash=prepared.manifest_hash,
-                    repair_policy_hash=prepared.repair_policy_hash or None,
-                    build_manifest_hash=prepared.build_manifest_hash,
-                    attempt_no=prepared.attempt_no,
-                    retrieval_reused=prepared.retrieval_reused,
-                    identity_tokens=prepared.identity_tokens,
-                    outbound_manifest=prepared.outbound_manifest,
-                    question_target_ids=prepared.question_target_ids,
-                )
-            except TypeError as first:
-                try:
-                    return _invoke(sender, prepared.request)
-                except TypeError:
-                    raise first from None
+                parameters = inspect.signature(sender).parameters.values()
+            except (TypeError, ValueError):
+                parameters = ()
+            accepts_kwargs = any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters
+            )
+            accepted_names = {
+                parameter.name
+                for parameter in parameters
+                if parameter.kind
+                in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+            }
+            kwargs = metadata if accepts_kwargs else {
+                name: value for name, value in metadata.items() if name in accepted_names
+            }
+            return sender(prepared.request, **kwargs)
         if getattr(sender, "__name__", "") == "execute":
             try:
                 return _invoke(
@@ -1099,19 +1198,41 @@ class LLMTurnRuntime:
         except LLMOutputError as exc:
             request = _read(accepted, "request", default=prepared.request)
             usage = _read(accepted, "usage")
+            safe_code = str(exc.code)
+            failure_kind = (
+                "structure_invalid"
+                if safe_code in {
+                    "output_truncated",
+                    "json_invalid",
+                    "schema_invalid",
+                    "reference_invalid",
+                    "rule_invalid",
+                }
+                else (
+                    "provider_usage_unknown"
+                    if safe_code == "provider_usage_unknown"
+                    else (
+                        "provider_usage_overrun"
+                        if safe_code in {"provider_usage_overrun", "provider_cost_overrun"}
+                        else "provider_terminal"
+                    )
+                )
+            )
             return LLMValidatedResultV1(
                 status="failed",
                 acceptance="accepted",
-                failure_kind="structure_invalid",
-                safe_error_code=exc.code,
-                request=request,
-                usage=usage,
+                failure_kind=failure_kind,
+                safe_error_code=safe_code,
+                request=cast(LLMRequestV1, request),
+                usage=cast(LLMUsageV1 | None, usage),
                 accepted_candidate=(
                     accepted if isinstance(accepted, LLMAcceptedCandidateV1) else None
                 ),
                 json_pointers=tuple(exc.json_pointers),
-                estimated_cost_cny=_read(accepted, "estimated_cost_cny", default=0),
-                actual_cost_cny=_read(accepted, "actual_cost_cny"),
+                estimated_cost_cny=cast(
+                    Decimal, _read(accepted, "estimated_cost_cny", default=Decimal("0"))
+                ),
+                actual_cost_cny=cast(Decimal | None, _read(accepted, "actual_cost_cny")),
             )
         except Exception:
             if _read(accepted, "schema_valid") is False:
@@ -1373,15 +1494,32 @@ class LLMTurnRuntime:
                             )
                         except Exception as exc:
                             raise LLMRuntimeError(code="llm_sending_transition_failed") from exc
+                # Re-check the exact wire messages after the durable sending
+                # fence and immediately before the adapter boundary.  A
+                # privacy/manifest failure is a local terminal failure, never
+                # an acceptance-unknown transport event.
+                self._scan(
+                    current.prompt,
+                    identity_tokens=current.identity_tokens,
+                    outbound_manifest=current.outbound_manifest,
+                )
                 response = self._send(current)
             except LLMRuntimeError as exc:
                 # Reservation/sending failures happen before any adapter
                 # boundary and therefore are terminal zero-call failures.
-                if exc.code in {
+                if exc.code.startswith("llm_") or exc.code in {
                     "llm_reservation_failed",
                     "llm_sending_transition_failed",
                     "llm_operation_transition_failed",
                     "llm_preparation_failed",
+                    "llm_outbound_data_forbidden",
+                    "llm_manifest_field_forbidden",
+                    "llm_manifest_fields_missing",
+                    "llm_manifest_invalid",
+                    "llm_repair_policy_missing",
+                    "llm_repair_policy_stale",
+                    "llm_repair_field_missing",
+                    "llm_tokenizer_unauthorized",
                 }:
                     if operation_id is not None:
                         try:
@@ -1408,28 +1546,7 @@ class LLMTurnRuntime:
                         operation,
                         safe_error_code=exc.code,
                     )
-                classification = classify_transport_error(exc)
-                acceptance = str(
-                    _result_value(
-                        classification,
-                        "acceptance",
-                        "acceptance_state",
-                        default="unknown",
-                    )
-                )
-                code = _safe_code(
-                    _result_value(
-                        classification,
-                        "safe_error_code",
-                        "code",
-                        default="acceptance_unknown",
-                    ),
-                    "acceptance_unknown",
-                )
-                not_sent = acceptance in {"not_sent", "transport_not_sent"} or (
-                    _result_value(classification, "retry_allowed", default=False) is True
-                    and code == "provider_not_sent"
-                )
+                acceptance, code, not_sent = _transport_decision(exc)
                 if not_sent:
                     if operation_id is not None:
                         operation = self._transition(
@@ -1479,28 +1596,7 @@ class LLMTurnRuntime:
                     safe_error_code="acceptance_unknown",
                 )
             except Exception as exc:
-                classification = classify_transport_error(exc)
-                acceptance = str(
-                    _result_value(
-                        classification,
-                        "acceptance",
-                        "acceptance_state",
-                        default="unknown",
-                    )
-                )
-                code = _safe_code(
-                    _result_value(
-                        classification,
-                        "safe_error_code",
-                        "code",
-                        default="acceptance_unknown",
-                    ),
-                    "acceptance_unknown",
-                )
-                not_sent = acceptance in {"not_sent", "transport_not_sent"} or (
-                    _result_value(classification, "retry_allowed", default=False) is True
-                    and code == "provider_not_sent"
-                )
+                acceptance, code, not_sent = _transport_decision(exc)
                 if not_sent:
                     if operation_id is not None:
                         operation = self._transition(
@@ -1629,6 +1725,19 @@ class LLMTurnRuntime:
             if (
                 not repairable
                 and current.attempt_no == 1
+                and _result_value(accepted, "failure_kind") == "structure_invalid"
+                and str(
+                    _result_value(accepted, "acceptance", "acceptance_state", default="accepted")
+                )
+                in {"accepted", ""}
+            ):
+                # Provider references and other mapper-level shape failures
+                # are safe to repair with the closed code/pointer envelope;
+                # raw rejected content never enters the second request.
+                repairable = True
+            if (
+                not repairable
+                and current.attempt_no == 1
                 and safe_error in {"output_truncated", "json_invalid", "schema_invalid"}
                 and _read(accepted, "schema_valid") is False
             ):
@@ -1667,6 +1776,7 @@ class LLMTurnRuntime:
                     )
                 )
                 if current.attempt_no == 1:
+                    operation = self._fail_operation(operation_id, operation, code)
                     current = self._attempt_two(current, response=accepted)
                     continue
                 return LLMRunOutcomeV1(
@@ -1728,6 +1838,7 @@ class LLMTurnRuntime:
                     )
                 )
                 if current.attempt_no == 1:
+                    operation = self._fail_operation(operation_id, operation, "rule_invalid")
                     current = self._attempt_two(current, response=accepted)
                     continue
                 return LLMRunOutcomeV1(
@@ -1864,7 +1975,9 @@ class LLMTurnRuntime:
                     attempt=prepared.attempt_no,
                 )
                 result = cast(MutualLearningTurnResultV1, checked.result)
-            publication = _method(self.publication, "commit_turn_success", "publish_atomic", "publish")
+            publication = _method(
+                self.publication, "commit_turn_success", "publish_atomic", "publish"
+            )
             if publication is not None:
                 _invoke(
                     publication,
@@ -1930,6 +2043,7 @@ __all__ = [
     "DashScopeLLMAdapter",
     "DashScopeLLMConfig",
     "LLMAcceptedStagePort",
+    "LLMAcceptedStageV1",
     "LLMAtomicPublicationPort",
     "LLMAttemptTraceV1",
     "LLMConfirmationPort",
@@ -1938,6 +2052,7 @@ __all__ = [
     "LLMRuntime",
     "LLMRuntimeError",
     "LLMRuntimeLedgerPort",
+    "LLMManifestPreparationPort",
     "LLMPreparedAttemptV1",
     "LLMRunOutcomeV1",
     "LLMProviderAdapter",

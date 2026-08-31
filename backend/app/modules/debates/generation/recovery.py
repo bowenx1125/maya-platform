@@ -144,7 +144,11 @@ class LLMRecoveryService:
             receipts: Sequence[object] = ()
             queries: Sequence[object] = ()
             result = loaded
-            if isinstance(loaded, tuple) and loaded and isinstance(loaded[0], MutualLearningTurnResultV1):
+            if (
+                isinstance(loaded, tuple)
+                and loaded
+                and isinstance(loaded[0], MutualLearningTurnResultV1)
+            ):
                 result = loaded[0]
                 if len(loaded) > 1:
                     receipts = loaded[1]
