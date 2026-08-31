@@ -33,7 +33,7 @@ class DemoAcceptanceRunBindReportRequest(_ClosedModel):
 
 
 class DemoAcceptanceCallRequest(_ClosedModel):
-    operation_id: UUID
+    manifest_hash: str = Field(pattern=_SHA256_PATTERN)
     call_no: int = Field(ge=1, le=DEMO_ACCEPTANCE_MAX_CALLS)
 
 

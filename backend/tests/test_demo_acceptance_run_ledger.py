@@ -50,6 +50,10 @@ HASH_A = "a" * 64
 HASH_B = "b" * 64
 
 
+def _manifest_hash(item: str) -> str:
+    return hashlib.sha256(f"manifest:{item}".encode()).hexdigest()
+
+
 def _migration_config(database_url: str) -> Config:
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
@@ -140,9 +144,16 @@ def _create_run(database: Database, *, fixture_hash: str = FIXTURE_HASH) -> str:
         return str(result.id)
 
 
-def _provider_operation(database: Database, *, item: str, purpose: str = "embedding") -> str:
+def _provider_operation(
+    database: Database,
+    *,
+    item: str,
+    purpose: str = "embedding",
+    manifest_hash: str | None = None,
+    scope_id: str = TARGET_VERSION_ID,
+) -> str:
     request = ProviderReservationRequestV1(
-        scope_id=TARGET_VERSION_ID,
+        scope_id=scope_id,
         provider_operation=purpose,
         logical_item_id=item,
         attempt_no=1,
@@ -150,7 +161,7 @@ def _provider_operation(database: Database, *, item: str, purpose: str = "embedd
         max_tokens=1,
         max_cost_cny=0.001,
         policy_hash=HASH_A,
-        export_manifest_hash=HASH_B,
+        export_manifest_hash=manifest_hash or _manifest_hash(item),
     )
     return (
         ProviderRepository(database, require_export_confirmation=False).create_prepared(request).id
@@ -290,22 +301,33 @@ def test_attach_calls_one_to_seven_is_atomic_and_summary_counts_charges(
     database = _database(tmp_path)
     try:
         run_id = _create_run(database)
-        operation_ids = [
-            _provider_operation(database, item=f"call-{index}") for index in range(1, 8)
-        ]
-        for call_no, operation_id in enumerate(operation_ids, start=1):
+        manifest_hashes = [_manifest_hash(f"call-{index}") for index in range(1, 8)]
+        for call_no, manifest_hash in enumerate(manifest_hashes, start=1):
+            operation_id = _provider_operation(
+                database,
+                item=f"call-{call_no}",
+                manifest_hash=manifest_hash,
+            )
             with database.session() as session:
                 response = attach_acceptance_call(
                     session,
                     actor_user_id=TEACHER_ID,
                     run_id=run_id,
                     request=DemoAcceptanceCallRequest(
-                        operation_id=UUID(operation_id),
+                        manifest_hash=manifest_hash,
                         call_no=call_no,
                     ),
                 )
                 assert response.call_count == call_no
                 assert response.charged_request_count == 0
+            with database.engine.connect() as connection:
+                assert connection.execute(
+                    text(
+                        "SELECT acceptance_run_id,call_no,provider_operation "
+                        "FROM provider_operations WHERE id=:operation_id"
+                    ),
+                    {"operation_id": operation_id},
+                ).one() == (run_id, call_no, "embedding")
         with database.engine.begin() as connection:
             connection.execute(
                 text(
@@ -324,29 +346,102 @@ def test_attach_calls_one_to_seven_is_atomic_and_summary_counts_charges(
         database.dispose()
 
 
+def test_attach_manifest_resolution_fails_closed_for_missing_cross_run_and_multiple_operations(
+    tmp_path: Path,
+) -> None:
+    database = _database(tmp_path)
+    try:
+        run_id = _create_run(database)
+        with database.session() as session:
+            with pytest.raises(PlatformError, match="does not identify exactly one"):
+                attach_acceptance_call(
+                    session,
+                    actor_user_id=TEACHER_ID,
+                    run_id=run_id,
+                    request=DemoAcceptanceCallRequest(
+                        manifest_hash="c" * 64,
+                        call_no=1,
+                    ),
+                )
+
+        cross_run_manifest = _manifest_hash("cross-run")
+        _provider_operation(
+            database,
+            item="cross-run",
+            manifest_hash=cross_run_manifest,
+            scope_id="another-run-target",
+        )
+        with database.session() as session:
+            with pytest.raises(PlatformError, match="does not belong"):
+                attach_acceptance_call(
+                    session,
+                    actor_user_id=TEACHER_ID,
+                    run_id=run_id,
+                    request=DemoAcceptanceCallRequest(
+                        manifest_hash=cross_run_manifest,
+                        call_no=1,
+                    ),
+                )
+
+        ambiguous_manifest = _manifest_hash("ambiguous")
+        _provider_operation(
+            database,
+            item="ambiguous-1",
+            manifest_hash=ambiguous_manifest,
+        )
+        _provider_operation(
+            database,
+            item="ambiguous-2",
+            manifest_hash=ambiguous_manifest,
+        )
+        with database.session() as session:
+            with pytest.raises(PlatformError, match="does not identify exactly one"):
+                attach_acceptance_call(
+                    session,
+                    actor_user_id=TEACHER_ID,
+                    run_id=run_id,
+                    request=DemoAcceptanceCallRequest(
+                        manifest_hash=ambiguous_manifest,
+                        call_no=1,
+                    ),
+                )
+    finally:
+        database.dispose()
+
+
 def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
     tmp_path: Path,
 ) -> None:
     database = _database(tmp_path)
     try:
         run_id = _create_run(database)
-        first = _provider_operation(database, item="duplicate-first")
-        second = _provider_operation(database, item="duplicate-second")
+        first_manifest = _manifest_hash("duplicate-first")
+        second_manifest = _manifest_hash("duplicate-second")
+        _provider_operation(
+            database,
+            item="duplicate-first",
+            manifest_hash=first_manifest,
+        )
+        second = _provider_operation(
+            database,
+            item="duplicate-second",
+            manifest_hash=second_manifest,
+        )
         with database.session() as session:
             attach_acceptance_call(
                 session,
                 actor_user_id=TEACHER_ID,
                 run_id=run_id,
-                request=DemoAcceptanceCallRequest(operation_id=UUID(first), call_no=1),
+                request=DemoAcceptanceCallRequest(manifest_hash=first_manifest, call_no=1),
             )
             with pytest.raises(PlatformError, match="could not be attached"):
                 attach_acceptance_call(
                     session,
                     actor_user_id=TEACHER_ID,
                     run_id=run_id,
-                    request=DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=1),
+                    request=DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=1),
                 )
-        eighth = _provider_operation(
+        _provider_operation(
             database,
             item="semantic-extra-query",
             purpose="embedding_query",
@@ -356,13 +451,16 @@ def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
                 session,
                 actor_user_id=TEACHER_ID,
                 run_id=run_id,
-                request=DemoAcceptanceCallRequest(operation_id=UUID(eighth), call_no=8),
+                request=DemoAcceptanceCallRequest(
+                    manifest_hash=_manifest_hash("semantic-extra-query"),
+                    call_no=8,
+                ),
             )
             assert response.call_count == 2
             assert response.charged_request_count == 0
             assert "calls" not in response.model_dump()
         with pytest.raises(ValidationError):
-            DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=9)
+            DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=9)
         with database.engine.begin() as connection:
             connection.execute(
                 text(
@@ -376,7 +474,7 @@ def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
                     session,
                     actor_user_id=TEACHER_ID,
                     run_id=run_id,
-                    request=DemoAcceptanceCallRequest(operation_id=UUID(second), call_no=2),
+                    request=DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=2),
                 )
     finally:
         database.dispose()
@@ -388,6 +486,12 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
     # opaque IDs, plan/hash, state and counters.
     app, database, settings = app_factory()
     from fastapi.testclient import TestClient
+
+    with pytest.raises(ValidationError):
+        DemoAcceptanceCallRequest(
+            operation_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+            call_no=1,
+        )
 
     with TestClient(app) as client:
         with database.session() as session:

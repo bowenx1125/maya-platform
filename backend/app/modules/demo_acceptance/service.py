@@ -259,6 +259,54 @@ def _operation_belongs_to_run(
     return run.debate_id is not None and manifest.debate_id == run.debate_id
 
 
+def _resolve_acceptance_operation(
+    db: Session,
+    *,
+    run: DemoAcceptanceRun,
+    manifest_hash: str,
+) -> ProviderOperation:
+    """Resolve the one pre-send operation disclosed by a manifest hash.
+
+    The disclosure intentionally omits the server-only operation id.  A
+    manifest may be referenced by more than one provider attempt, so accepting
+    anything other than one exact operation is unsafe and must fail closed.
+    The repository repeats the state checks inside its write transaction; the
+    checks here keep the public lookup from selecting an ineligible operation.
+    """
+
+    if _SHA256_RE.fullmatch(manifest_hash) is None:
+        _raise_conflict(
+            "demo_acceptance_manifest_invalid",
+            "The Demo manifest is invalid.",
+        )
+    operations = db.scalars(
+        select(ProviderOperation)
+        .where(ProviderOperation.export_manifest_hash == manifest_hash)
+        .order_by(ProviderOperation.created_at, ProviderOperation.id)
+    ).all()
+    if len(operations) != 1:
+        _raise_conflict(
+            "demo_acceptance_manifest_ambiguous",
+            "The Demo manifest does not identify exactly one provider operation.",
+        )
+    operation = operations[0]
+    if not _operation_belongs_to_run(db, operation, run):
+        _raise_conflict(
+            "demo_acceptance_operation_mismatch",
+            "The provider operation does not belong to this Demo run.",
+        )
+    if (
+        operation.state != "prepared"
+        or operation.request_count != 0
+        or operation.charged_request_count != 0
+        or operation.staged_response_hash is not None
+        or operation.acceptance_run_id is not None
+        or operation.call_no is not None
+    ):
+        _raise_conflict("demo_acceptance_call_conflict", "The Demo call could not be attached.")
+    return operation
+
+
 def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
     run = db.get(DemoAcceptanceRun, run_id)
     if run is None:
@@ -518,14 +566,11 @@ def attach_acceptance_call(
 ) -> DemoAcceptanceRunResponse:
     run = _require_teacher_run(db, actor_user_id, run_id)
     _require_run_open(run)
-    operation = db.get(ProviderOperation, str(request.operation_id))
-    if operation is None:
-        raise not_found()
-    if not _operation_belongs_to_run(db, operation, run):
-        _raise_conflict(
-            "demo_acceptance_operation_mismatch",
-            "The provider operation does not belong to this Demo run.",
-        )
+    operation = _resolve_acceptance_operation(
+        db,
+        run=run,
+        manifest_hash=request.manifest_hash,
+    )
     db.flush()
     try:
         ProviderRepository(db).attach_acceptance_call(
