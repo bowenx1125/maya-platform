@@ -293,7 +293,7 @@ class RealReportProvider:
             response = transport.post(
                 prepared.endpoint,
                 headers=headers,
-                json=cast(Mapping[str, object], prepared.body),
+                json=prepared.body,
                 timeout=HttpxLLMTransport.timeout(),
             )
         except LLMTransportNotSent:
