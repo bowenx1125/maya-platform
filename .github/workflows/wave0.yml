@@ -224,6 +224,7 @@ jobs:
           uv run --directory backend pytest -q \
             ../scripts/test_import_provider_policy.py \
             ../scripts/test_import_llm_policy.py \
+            ../manual-tests/real-core-demo/scripts/test_acceptance.py \
             tests/test_real_core_dual_composition.py
           uv run --directory backend python ../scripts/test_reset_demo_runtime.py
           uv run --directory backend python ../manual-tests/real-core-demo/scripts/acceptance.py check
