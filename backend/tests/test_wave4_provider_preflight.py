@@ -25,9 +25,12 @@ from app.modules.provider_disclosure import (
 from app.providers.control import (
     FIXED_MODELS,
     ExportFieldV1,
+    ExportManifestError,
     ExportManifestV1,
     PolicyValidationError,
     ProviderPolicySnapshotV1,
+    confirm_export_manifest,
+    validate_provider_preflight,
 )
 from app.providers.control_repository import ProviderRepository
 from app.seed import COURSE_ID, GROUP_BOWEN_ID, TEACHER_ID
@@ -387,15 +390,36 @@ def test_confirmation_is_durably_visible_to_a_new_service_instance() -> None:
     service.confirm(request, actor_user_id="teacher")
 
     reloaded = ProviderDisclosureService(store)
-    assert (
+    assert reloaded.disclose("teacher").confirmation_revision == 1
+    with pytest.raises(ProviderDisclosureError) as legacy:
         reloaded.preflight(
             actor_user_id="teacher",
             provider_operation="llm_debate",
             model_key=FIXED_MODELS["llm_debate"],
             scope_id=manifest.scope_id,
-        ).export_manifest_hash
-        == manifest.manifest_hash
+        )
+    assert legacy.value.code == "provider_preflight_blocked"
+
+
+def test_legacy_llm_operation_is_read_only_at_pure_preflight() -> None:
+    policy = _policy()
+    manifest = _manifest(policy)
+    confirmation = confirm_export_manifest(
+        manifest,
+        policy,
+        confirmed_at="2026-08-31T00:00:00Z",
     )
+
+    with pytest.raises(ExportManifestError) as legacy:
+        validate_provider_preflight(
+            policy,
+            manifest,
+            confirmation,
+            scope_id=manifest.scope_id,
+            provider_operation="llm_debate",
+            model_key=FIXED_MODELS["llm_debate"],
+        )
+    assert getattr(legacy.value, "code", None) == "provider_operation_legacy"
 
 
 def test_missing_manifest_is_not_found_and_preflight_never_calls_transport() -> None:
@@ -419,7 +443,9 @@ def test_missing_manifest_is_not_found_and_preflight_never_calls_transport() -> 
 
 
 def test_confirmed_fake_preflight_blocks_secret_payload_without_transport() -> None:
-    service, _store, policy, manifest = _service()
+    policy = _policy()
+    manifest = _query_manifest(policy)
+    service = ProviderDisclosureService(InMemoryProviderDisclosureStore(policy, manifest))
     request = ProviderDataCallConfirmationRequestV1(
         policy_hash=policy.policy_hash,
         manifest_hash=manifest.manifest_hash,
@@ -428,8 +454,8 @@ def test_confirmed_fake_preflight_blocks_secret_payload_without_transport() -> N
     service.confirm(request, actor_user_id="teacher")
     result = service.preflight(
         actor_user_id="teacher",
-        provider_operation="llm_debate",
-        model_key=FIXED_MODELS["llm_debate"],
+        provider_operation="embedding_query",
+        model_key=FIXED_MODELS["embedding_query"],
         scope_id=manifest.scope_id,
         payload={"speech": "safe"},
     )
@@ -437,8 +463,8 @@ def test_confirmed_fake_preflight_blocks_secret_payload_without_transport() -> N
     with pytest.raises(ProviderDisclosureError) as blocked:
         service.preflight(
             actor_user_id="teacher",
-            provider_operation="llm_debate",
-            model_key=FIXED_MODELS["llm_debate"],
+            provider_operation="embedding_query",
+            model_key=FIXED_MODELS["embedding_query"],
             scope_id=manifest.scope_id,
             payload={"student_id": "private"},
         )

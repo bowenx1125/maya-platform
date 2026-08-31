@@ -666,6 +666,11 @@ def validate_provider_preflight(
 ) -> ProviderPreflightV1:
     """Fail closed on stale policy/export hashes or forbidden outbound data."""
 
+    if provider_operation == "llm_debate":
+        raise ExportManifestError(
+            "legacy llm_debate authority is read-only",
+            code="provider_operation_legacy",
+        )
     if region != FIXED_REGION or policy.region != region:
         raise PolicyValidationError(
             "provider region is not authorized", code="policy_region_invalid"
