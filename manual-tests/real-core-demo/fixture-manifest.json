@@ -1,0 +1,19 @@
+{
+  "manifest_version": "real-core-demo-v1",
+  "language": "zh-CN",
+  "knowledge_path": "knowledge.md",
+  "real_persona_path": "AGENT_REAL.md",
+  "mock_persona_path": "AGENT_MOCK.md",
+  "topic_path": "topic.txt",
+  "expected_terms_path": "expected-terms.txt",
+  "chunking_version": "markdown-chunk-v1",
+  "expected_chunk_count": 1,
+  "call_cap": {
+    "snapshot": 1,
+    "real_query": 2,
+    "llm_turn": 4,
+    "total": 7
+  },
+  "snapshot_document_filename": "maya-real-core-demo.md",
+  "real_participant_slot": "A"
+}
