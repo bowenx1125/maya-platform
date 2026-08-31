@@ -103,6 +103,7 @@ from .query_embedding import (
     search_snapshot,
     snapshot_embedding_identity,
 )
+from .query_manifest import QueryExportPlanV1, QueryManifestError, ensure_real_query_export_manifest
 from .recovery import recover_embedding_provider_startup
 from .runtime import (
     AcceptedEmbeddingStageV1,
@@ -166,6 +167,21 @@ from .snapshot_build import (
     embedding_identity_for,
     embedding_policy_version_for,
     prepare_snapshot_build,
+)
+from .sql_query import (
+    SQL_QUERY_MAX_COST_CNY,
+    SQL_QUERY_MAX_REQUESTS,
+    SQL_QUERY_MAX_TOTAL_TOKENS,
+    SQL_QUERY_PRICE_CNY_PER_MILLION,
+    SQL_QUERY_PROVIDER_OPERATION,
+    SqlAlchemyQueryControlAdapter,
+    SqlQueryBatchProvider,
+    SqlQueryBudgetError,
+    SqlQueryError,
+    SqlQueryPreflightError,
+    SqlQueryRequestV1,
+    SqlQueryStageError,
+    controlled_query_provider,
 )
 from .sql_runtime import (
     EMBEDDING_MAX_COST_CNY,
@@ -272,6 +288,8 @@ __all__ = [
     "QueryEmbeddingRunner",
     "QueryEmbeddingService",
     "QueryEmbeddingV1",
+    "QueryExportPlanV1",
+    "QueryManifestError",
     "QUERY_EMBEDDING_VERSION",
     "QUERY_PROVIDER_OPERATION",
     "SnapshotQueryEmbeddingService",
@@ -319,7 +337,19 @@ __all__ = [
     "SnapshotPublisherPort",
     "SqlAlchemyEmbeddingControlAdapter",
     "SqlAlchemyEmbeddingStageStore",
+    "SqlAlchemyQueryControlAdapter",
     "SqlAlchemySnapshotPublicationStore",
+    "SqlQueryBatchProvider",
+    "SqlQueryBudgetError",
+    "SqlQueryError",
+    "SqlQueryPreflightError",
+    "SqlQueryRequestV1",
+    "SqlQueryStageError",
+    "SQL_QUERY_MAX_COST_CNY",
+    "SQL_QUERY_MAX_REQUESTS",
+    "SQL_QUERY_MAX_TOTAL_TOKENS",
+    "SQL_QUERY_PRICE_CNY_PER_MILLION",
+    "SQL_QUERY_PROVIDER_OPERATION",
     "TokenizerError",
     "Utf8ByteTokenizer",
     "ValidatedEmbeddingBatchV1",
@@ -333,6 +363,8 @@ __all__ = [
     "count_tokens_conservatively",
     "continue_from_stages",
     "continue_snapshot_embedding",
+    "controlled_query_provider",
+    "ensure_real_query_export_manifest",
     "execute_embedding_batch",
     "execute_embedding_snapshot",
     "execute_snapshot_embedding",

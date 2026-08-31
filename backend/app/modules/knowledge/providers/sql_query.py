@@ -749,11 +749,13 @@ class SqlAlchemyQueryControlAdapter(
                 ):
                     self.repository.mark_not_sent(operation.id)
                     raise
-                if isinstance(exc, EmbeddingAcceptanceUnknown) or (
-                    isinstance(exc, EmbeddingProviderError)
-                    and getattr(exc, "code", None) == "acceptance_unknown"
-                ) or isinstance(
-                    exc, (TimeoutError, ConnectionError)
+                if (
+                    isinstance(exc, EmbeddingAcceptanceUnknown)
+                    or (
+                        isinstance(exc, EmbeddingProviderError)
+                        and getattr(exc, "code", None) == "acceptance_unknown"
+                    )
+                    or isinstance(exc, (TimeoutError, ConnectionError))
                 ):
                     self.repository.mark_acceptance_unknown(operation.id)
                     if isinstance(exc, EmbeddingAcceptanceUnknown):

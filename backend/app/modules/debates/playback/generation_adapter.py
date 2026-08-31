@@ -10,14 +10,22 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import PlatformError
-from app.core.models import AgentVersion, KnowledgeChunk, SnapshotDocument
+from app.core.config import Settings
+from app.core.errors import PlatformError, conflict
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    Group,
+    KnowledgeChunk,
+    KnowledgeSnapshot,
+    SnapshotDocument,
+)
 from app.modules.agents.persona_service import (
     PERSONA_CONFIRMATION_REQUIRED,
     is_persona_confirmed,
@@ -31,6 +39,7 @@ from app.modules.debates.generation import (
     StructuredTurnResult,
     TurnGenerationService,
     TurnPolicy,
+    build_turn_subqueries,
     compute_transcript_hash,
     public_evidence_trace,
 )
@@ -42,7 +51,34 @@ from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
-from app.modules.knowledge.vector import MockVectorStore, StoredVectorRow
+from app.modules.knowledge.providers.adapters import (
+    DashScopeEmbeddingConfig,
+    EmbeddingAcceptanceUnknown,
+    EmbeddingTransportNotSent,
+)
+from app.modules.knowledge.providers.product_publication import (
+    ProductPublicationError,
+    require_exact_confirmation,
+)
+from app.modules.knowledge.providers.query_embedding import (
+    QueryEmbeddingError,
+    QueryEmbeddingService,
+    persisted_snapshot_identity,
+)
+from app.modules.knowledge.providers.query_manifest import (
+    QueryManifestError,
+    ensure_real_query_export_manifest,
+)
+from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
+from app.modules.knowledge.providers.sql_query import (
+    SqlAlchemyQueryControlAdapter,
+    SqlQueryError,
+    controlled_query_provider,
+)
+from app.modules.knowledge.providers.sql_stage import SqlAlchemyEmbeddingStageStore
+from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
+from app.providers.control_repository import ProviderRepository
+from app.providers.factory import embedding_provider as select_embedding_provider
 from app.providers.llm import LLMProvider, llm_provider
 
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
@@ -50,12 +86,22 @@ from .schemas import RetrievalSourceDTO
 
 
 class SqlSnapshotSearch:
-    """Snapshot-scoped search over the existing immutable 256-d Mock vectors."""
+    """Search one immutable Snapshot through its persisted five-field identity."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        query_embeddings: QueryEmbeddingService | None = None,
+    ) -> None:
         self.db = db
+        self.query_embeddings = query_embeddings or QueryEmbeddingService()
 
     def search(self, snapshot_id: str, query: str, *, top_k: int = 6) -> tuple[object, ...]:
+        snapshot = self.db.get(KnowledgeSnapshot, snapshot_id)
+        if snapshot is None:
+            raise ValueError("the immutable query Snapshot is unavailable")
+        identity = persisted_snapshot_identity(snapshot)
         rows = self.db.execute(
             select(KnowledgeChunk, SnapshotDocument)
             .join(
@@ -81,15 +127,22 @@ class SqlSnapshotSearch:
             )
             for chunk, document in rows
         ]
-        return tuple(MockVectorStore(vectors).search(query, top_k=top_k))
+        store = IdentityVectorStore(identity, vectors)
+        query_value = self.query_embeddings.embed_query(snapshot, query)
+        return tuple(store.search_values(query_value, top_k=top_k))
 
 
 class SqlSnapshotRetriever(SnapshotRetriever):
     """Snapshot retriever that binds immutable document offsets to receipts."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        query_embeddings: QueryEmbeddingService | None = None,
+    ) -> None:
         self._db = db
-        super().__init__(SqlSnapshotSearch(db))
+        super().__init__(SqlSnapshotSearch(db, query_embeddings=query_embeddings))
 
     def retrieve(self, *args: Any, **kwargs: Any) -> Any:
         result = super().retrieve(*args, **kwargs)
@@ -170,6 +223,11 @@ class SqlTurnPreparer:
         )
         if participant is None:
             raise ValueError("turn participant is unavailable")
+        participant_row = next(
+            (row for row in participant_rows if str(row.id) == participant.participant_id), None
+        )
+        if participant_row is None:
+            raise ValueError("turn participant row is unavailable")
         expected_fence = generation_fence(db, debate, current)
         persisted_rule_set_id = str(debate.rule_set_id)
         is_mutual = persisted_rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
@@ -195,8 +253,16 @@ class SqlTurnPreparer:
             participants=participants,
             predecessors=predecessors,
         )
+        query_embeddings = self._query_embedding_service(
+            db,
+            debate=debate,
+            turn=current,
+            participant_row=participant_row,
+            context=context,
+            transcript_hash=expected_fence.transcript_hash,
+        )
         generator = TurnGenerationService(
-            SqlSnapshotRetriever(db),
+            SqlSnapshotRetriever(db, query_embeddings=query_embeddings),
             self.llm,
             rule_set_id=persisted_rule_set_id,
             mock_retrieval_policy_id=(
@@ -241,11 +307,6 @@ class SqlTurnPreparer:
             )
             for receipt in final.used_receipts
         )
-        participant_row = next(
-            (row for row in participant_rows if str(row.id) == participant.participant_id), None
-        )
-        if participant_row is None:
-            raise ValueError("turn participant row is unavailable")
         voice_kind = str(getattr(participant_row, "effective_voice_kind", "mock_sentinel"))
         voice_profile_id = getattr(participant_row, "effective_voice_profile_id", None)
         if voice_kind not in {"platform_profile", "mock_sentinel"}:
@@ -277,6 +338,172 @@ class SqlTurnPreparer:
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
         )
+
+    def _query_embedding_service(
+        self,
+        db: Session,
+        *,
+        debate: Any,
+        turn: DebateTurn,
+        participant_row: DebateParticipant,
+        context: GenerationContext,
+        transcript_hash: str,
+    ) -> QueryEmbeddingService:
+        snapshot = db.get(KnowledgeSnapshot, str(participant_row.knowledge_snapshot_id))
+        if snapshot is None:
+            raise ValueError("the immutable query Snapshot is unavailable")
+        identity = persisted_snapshot_identity(snapshot)
+        if identity.provider == "mock":
+            return QueryEmbeddingService()
+        if identity.provider != REAL_EMBEDDING_PROVIDER:
+            raise PlatformError(
+                "provider_unavailable", "The service is temporarily unavailable.", 503
+            )
+        if getattr(self.settings, "embedding_provider", "mock") != "dashscope":
+            raise PlatformError(
+                "provider_unavailable", "The service is temporarily unavailable.", 503
+            )
+        policy_hash = getattr(self.settings, "provider_policy_hash", None)
+        if not isinstance(policy_hash, str):
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "Real Embedding is unavailable until every policy control is verified.",
+                503,
+            )
+        repository = ProviderRepository(db)
+        policy = repository.get_policy_snapshot(policy_hash)
+        if policy is None or policy.policy_hash != policy_hash:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "Real Embedding is unavailable until every policy control is verified.",
+                503,
+            )
+        version = db.get(AgentVersion, str(participant_row.agent_version_id))
+        if version is None or not isinstance(version.persona_spec_hash, str):
+            raise ValueError("the frozen query Persona is unavailable")
+        agent = db.get(Agent, version.agent_id)
+        group = db.get(Group, agent.group_id) if agent is not None else None
+        if agent is None or group is None:
+            raise ValueError("the frozen query owner is unavailable")
+        subqueries = build_turn_subqueries(context)
+        try:
+            query_plan = ensure_real_query_export_manifest(
+                db,
+                db=db,
+                scope_id=str(debate.id),
+                turn_id=str(turn.id),
+                course_id=group.course_id,
+                group_id=group.id,
+                agent_version_id=version.id,
+                snapshot_id=snapshot.id,
+                identity=identity,
+                transcript_hash=transcript_hash,
+                persona_spec_hash=version.persona_spec_hash,
+                subqueries=tuple((item.query_kind, item.text) for item in subqueries),
+                policy=policy,
+            )
+        except QueryManifestError as error:
+            raise PlatformError(
+                error.code,
+                "The exact real query export manifest is unavailable.",
+                503,
+            ) from error
+        try:
+            confirmation = require_exact_confirmation(
+                db,
+                query_plan.manifest,
+                policy,
+                course_id=group.course_id,
+                group_id=group.id,
+                agent_version_id=version.id,
+            )
+        except ProductPublicationError as error:
+            if error.code == "provider_confirmation_required":
+                raise conflict(
+                    "provider_confirmation_required",
+                    "The course teacher must confirm the exact query disclosure.",
+                    {
+                        "manifest_hash": query_plan.manifest.manifest_hash,
+                        "turn_id": str(turn.id),
+                    },
+                ) from error
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact real query confirmation is stale.",
+                503,
+            ) from error
+        selected_provider = select_embedding_provider(cast(Settings, self.settings))
+        config = getattr(selected_provider, "config", None)
+        if not isinstance(config, DashScopeEmbeddingConfig):
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The real query Provider resource is not fixed.",
+                503,
+            )
+        try:
+            endpoint_matches = config.resolved_endpoint == policy.endpoint
+        except Exception:
+            endpoint_matches = False
+        if not endpoint_matches:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The real query Provider resource changed.",
+                503,
+            )
+        logical_item_id = f"turn:{turn.id}"
+        operations = tuple(
+            operation
+            for operation in repository.operations(scope_id=str(debate.id))
+            if operation.provider_operation == "embedding_query"
+            and operation.logical_item_id == logical_item_id
+        )
+        attempt_no = 1
+        if operations:
+            latest = max(operations, key=lambda operation: operation.attempt_no)
+            if latest.state == "not_sent" and latest.attempt_no < 2:
+                attempt_no = latest.attempt_no + 1
+            else:
+                attempt_no = latest.attempt_no
+        control = SqlAlchemyQueryControlAdapter(
+            db,
+            scope_id=str(debate.id),
+            snapshot_id=snapshot.id,
+            identity=identity,
+            policy_hash=policy.policy_hash,
+            export_manifest_hash=query_plan.manifest.manifest_hash,
+            build_manifest_hash=query_plan.build_manifest_hash,
+            query_hashes=query_plan.query_hashes,
+            attempt_no=attempt_no,
+            logical_item_id=logical_item_id,
+            confirmation_revision=confirmation.confirmation_revision,
+        )
+        stage_store = SqlAlchemyEmbeddingStageStore(db)
+        controlled_provider = controlled_query_provider(
+            selected_provider,
+            control=control,
+            stage_store=stage_store,
+        )
+        service = QueryEmbeddingService(
+            provider=controlled_provider,
+            control=control,
+            manifest=control,
+            budget=control,
+            build_manifest_hash=query_plan.build_manifest_hash,
+        )
+        try:
+            service.embed_subqueries(snapshot, query_plan.query_texts)
+        except EmbeddingTransportNotSent as error:
+            raise PlatformError(
+                "provider_not_sent", "The real query request was not sent.", 503
+            ) from error
+        except EmbeddingAcceptanceUnknown as error:
+            raise PlatformError(
+                "acceptance_unknown", "The real query request outcome is unknown.", 503
+            ) from error
+        except (QueryEmbeddingError, SqlQueryError) as error:
+            code = getattr(error, "code", "provider_unavailable")
+            raise PlatformError(code, "The real query embedding failed safely.", 503) from error
+        return service
 
     @staticmethod
     def _round_count(debate: Any) -> int:

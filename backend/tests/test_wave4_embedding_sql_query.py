@@ -453,8 +453,7 @@ def test_provider_identity_and_hard_scope_caps_fail_closed(tmp_path: Path) -> No
             total_tokens=1,
         )
     assert (
-        len(repository.operations(scope_id=control.request.scope_id))
-        == SQL_QUERY_MAX_REQUESTS + 1
+        len(repository.operations(scope_id=control.request.scope_id)) == SQL_QUERY_MAX_REQUESTS + 1
     )
     database.dispose()
 
