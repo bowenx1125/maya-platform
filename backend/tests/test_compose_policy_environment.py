@@ -48,6 +48,12 @@ def test_compose_forwards_dual_real_policy_hashes_to_backend_without_logging(
         "DASHSCOPE_REGION": "cn-beijing",
         DUAL_REAL_POLICY_VARIABLES[0]: "a" * 64,
         DUAL_REAL_POLICY_VARIABLES[1]: "b" * 64,
+        "LLM_PRICE_CARD_VERSION": "fixture-price-card-v1",
+        "LLM_INPUT_PRICE_CNY_PER_MILLION": "1",
+        "LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION": "0.5",
+        "LLM_OUTPUT_PRICE_CNY_PER_MILLION": "2",
+        "LLM_PRICE_CARD_RETRIEVED_AT": "2026-08-31T00:00:00Z",
+        "LLM_PRICE_CARD_SOURCE_CONTENT_SHA256": "c" * 64,
     }
     for name, value in expected_variables.items():
         expression = environment[name]
