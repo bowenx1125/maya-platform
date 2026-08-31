@@ -44,7 +44,7 @@ This candidate implements the frozen W4-LLM-A contract with fake transports only
 
 ## Mechanical evidence
 
-- backend: `874` tests passed;
+- backend: `875` tests passed;
 - frontend: `35 files / 214 tests` passed;
 - Ruff and mypy (`157` application files) passed;
 - ESLint, TypeScript and Next production build passed;

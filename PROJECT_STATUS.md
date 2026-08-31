@@ -53,7 +53,7 @@ never retries acceptance-unknown work, and performs startup reconciliation witho
 network client. A teacher-only Debate page lists only turn ID, manifest hash, revision
 and confirmation state; Provider/model/endpoint/prompt/usage remain server-only.
 
-Current local G1.5 evidence is backend `874`, frontend `35 files / 214 tests`, Ruff,
+Current local G1.5 evidence is backend `875`, frontend `35 files / 214 tests`, Ruff,
 mypy (`157` source files), lint, TypeScript, production build, migrations 0001–0014,
 frozen OpenAPI/generated client (`77` operations), WebSocket fixtures, document and
 repository/secret boundaries. The integrated LLM work made `0` real Provider calls and
