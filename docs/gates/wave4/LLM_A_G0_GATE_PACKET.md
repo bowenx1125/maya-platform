@@ -1,6 +1,6 @@
 # W4-LLM-A G0 Gate Packet
 
-Status: `G0-S REPAIR CANDIDATE / IMPLEMENTATION NOT AUTHORIZED / REAL LLM CALLS 0`
+Status: `G0-S SOL PASS / FAKE-TRANSPORT G1 AUTHORIZED / REAL LLM CALLS 0`
 
 The historical independent structured-LLM account preflight is availability evidence
 only and must not be repeated. This packet authorizes no Provider call.
@@ -86,8 +86,12 @@ a real call. Attempt 2 preserves every base hash, receipt and tokenizer identity
   tokens and CNY 0.15;
 - LLM-A, Embedding query, LLM-B, TTS and Voice buckets are non-transferable.
 
-## Required G0-S result
+## G0-S result
 
-Sol High must verify that all six decisions are closed without implementation ambiguity.
-Only `PASS / P0=0 / P1=0` authorizes the migration/adapter/runtime coding sequence.
-Workers cannot sign this Gate and no real request is part of implementation acceptance.
+Sol High verified the original six findings, the four retry/response/budget follow-ups
+and the final repair-feedback allowlist/manifest boundary on exact clean SHA `4182d1a`.
+Result: `PASS / P0=0 / P1=0 / P2=0`.
+
+This authorizes Issues #22–#24 for migration, adapter and runtime work with fake
+transports only. Workers cannot sign G2 and no real request is part of implementation
+acceptance; the historical LLM preflight remains non-repeatable.

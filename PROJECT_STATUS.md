@@ -4,7 +4,7 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Current state
 
-`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED_RESPONSE_CONTRACT / W4_LLM_A_G0_REPAIR_CANDIDATE`
+`WAVE_3_G3_PASS / W4_R0_PASS / W4_G0_SOL_PASS / PERSONA_MOCK_GATE_PASS / W4_MOCK_G2_SOL_PASS / W4_EMBED_G2_SOL_PASS / REAL_EMBED_1024_PREFLIGHT_FAILED / W4_LLM_A_G0_SOL_PASS / W4_LLM_A_G1_IN_PROGRESS`
 
 The integrated local Wave 4 Mock candidate implements the versioned mutual-learning
 protocol, confirmed Persona, claim-level Evidence Trace, strict PromptRequestV1,
@@ -52,10 +52,11 @@ occurred.
 W4-LLM-A G0-S began `CHANGES_REQUIRED / P1=6`; wire/schema, atomic publication, budget,
 ownership, privacy and tokenizer contracts closed those findings. Re-audits closed
 finish/usage, sentinel, retry and 1,510-Token reservation semantics, then found one P1:
-repair feedback lacked a confirmed outbound class. The current candidate adds a finite
+repair feedback lacked a confirmed outbound class. The final candidate binds a finite
 server-authored code/JSON-Pointer grammar and policy hash to the confirmed manifest.
-Luna migration/implementation and every real LLM call remain unauthorized pending final
-G0-S PASS.
+Sol High returned `LLM_A_G0 PASS / P0=0 / P1=0 / P2=0` on exact SHA `4182d1a`.
+Issues #22–#24 now own ledger/migration, adapter/output and turn runtime/disclosure fake
+implementation. The PASS does not authorize a real LLM call.
 
 ## Source and remote
 
@@ -65,19 +66,10 @@ G0-S PASS.
 - Verified complete bundle: `backups/pre-wave4-a235c29/maya-platform-a235c29.bundle`
   outside the repository; SHA-256 starts `553b852a1f51`.
 - Canonical private repository: `bowenx1125/maya-platform`.
-- The old runtime-only remote main `2fd80784bd79c88261eb2319a961b5c659b9e687`
-  is preserved as branch and tag `runtime-handoff-20260830`.
 - Canonical remote `main` is at signed R0 closure SHA
   `48f6d7fda3aba988f705027669ba2db4c6358805`; deterministic CI run `33312476209`
   passed on that exact SHA.
-- Transitional `dev-main` remains at the complete-source R0 integration SHA
-  `5a681f324e6b1ec034af8f8c021ee58889e053fb`; canonical work branches from `main`.
 - R0 Issue `#5` and PR `#6` record the Issue/worktree/owner/PR/audit trail.
-- Candidate `3c07fe1` and evidence head `dc6f699` passed private CI and Sol audits with
-  `P0=0 / P1=0 / P2=0`.
-- Merge SHA `5a681f3` passed full deterministic CI on `dev-main` and again after the
-  guarded canonical `main` switch. The main window verified the integrated tree and
-  signed R0.
 
 ## Signed Wave 3 evidence
 
@@ -182,9 +174,8 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Do not repeat the exhausted 1024 preflight. Obtain Sol High G0-S PASS on the final
-W4-LLM-A wire/schema/runtime/budget/disclosure/repair-feedback contracts before any Luna
-LLM coding.
+Do not repeat the exhausted 1024 preflight. Complete Issues #22–#24 through Luna local
+fake-transport implementation, main-window integration and exact-SHA Sol G2 audit.
 W4-EMBED remains unsigned because the real preflight and empty-runtime browser
 publication/query/retrieval/Evidence/restart chain have not passed. GitHub CI remains
 deferred to the final integrated Wave 4 PR.
