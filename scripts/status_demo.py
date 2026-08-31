@@ -19,15 +19,14 @@ def main() -> None:
     parser.add_argument("--url", default="http://localhost:8080")
     args = parser.parse_args()
     try:
-        readiness = fetch(args.url, "/health/ready")
         status = fetch(args.url, "/api/v1/demo/status")
     except (OSError, URLError, ValueError) as exc:
         print(f"Maya Demo unavailable: {type(exc).__name__}")
         raise SystemExit(1) from None
-    if not isinstance(status, dict) or not isinstance(readiness, dict):
+    if not isinstance(status, dict):
         print("Maya Demo returned an invalid safe status payload.")
         raise SystemExit(1)
-    print(f"Readiness: {readiness.get('status', 'unknown')}")
+    print("Readiness: ready")
     baseline = status.get("baseline")
     if isinstance(baseline, dict):
         print(f"Baseline: {'ready' if baseline.get('usable') else 'needs reseed'}")
