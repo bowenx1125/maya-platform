@@ -66,7 +66,7 @@ production recovery. Excluded work is in
 | Acceptance slice | Current result |
 | --- | --- |
 | New environment starts | Not yet re-accepted from an empty runtime root |
-| Real Embedding 1024 product E2E | Not complete |
+| Real Embedding 1024 product E2E | Offline Gate PASS; formal two-call product run not complete |
 | Real LLM two-round product E2E | Not complete |
 | 2–3 confirmed Agents complete two rounds | Not complete with real core Providers |
 | Chinese real RAG hit and Evidence Receipt | Not complete |
@@ -94,11 +94,13 @@ response or publication mismatch fails closed before another call.
 
 ## Minimum remaining Demo blockers
 
-1. `DEMO-BLOCKER — REAL-EMBED-E2E`: fixed Chinese Markdown fixture through exact teacher
-   confirmation, one minimal 1024 Snapshot build, Chinese query retrieval and Evidence
-   Receipt verification. Its R0 design audit is `CHANGES_REQUIRED / P1=2`: add a safe
-   reviewed-policy import entry and the frozen one-chunk Chinese fixture/E2E driver
-   before any real call.
+1. `DEMO-BLOCKER — REAL-EMBED-E2E`: the offline implementation Gate is PASS at exact
+   SHA `e6d6c2780723dfeae33db953ea8c49edd37c8901`, with Sol High
+   `P0=0 / P1=0 / P2=0`, backend `925 passed`, reviewed-policy importer, fixed Chinese
+   one-chunk fixture, product driver and confirmed-Persona Chinese query path. Before the
+   formal two-call run, verify the account-side policy controls and import the exact
+   reviewed non-secret policy into a new runtime. Then execute one 1024 Snapshot request,
+   one Chinese query request and stopped-database Evidence verification.
 2. `DEMO-BLOCKER — REAL-LLM-E2E`: 2–3 confirmed Agents, their own RAG, PromptRequestV1,
    fixed Qwen structured output and complete two-round Evidence Trace.
 3. `DEMO-BLOCKER — BROWSER-E2E`: empty-runtime student Agent/Persona/knowledge/publish,
@@ -124,17 +126,19 @@ See [Wave 4.1 Post-Demo Hardening](docs/requirements/WAVE_4_1_POST_DEMO_HARDENIN
 - Canonical private repository: `bowenx1125/maya-platform`.
 - The last remote CI evidence remains the R0 run on `48f6d7f`; no intermediate Wave 4
   branch has been pushed and GitHub CI remains deferred to the final integrated PR.
-- Docker is stopped. `data/` and `backend/data/` are absent. Real-Core browser evidence
-  must build new Agents, documents, snapshots and Debates from an empty runtime root.
+- The integration worktree has no runtime data. A separate pre-existing local stack owns
+  port 8080 and must not be stopped or reused. Real-Core acceptance must use an isolated
+  port and empty runtime root, then build new Agents, documents, snapshots and Debates.
 - Ignored `.env` and the private Demo account file remain mode `0600`; their contents,
   credentials, raw Provider responses and student-private data must never be reported.
 - Real TTS, Voice, Translation and Report remain Mock for Demo V1.
 
 ## Next Gate
 
-Execute `REAL-EMBED-E2E` only through the product path. It is a newly authorized formal
-Demo publication, not a repeat of the exhausted preflight. Use the fixed Chinese fixture,
-exact teacher manifest/confirmation, the smallest batch count and fail-closed call ledger.
+Verify the reviewed account policy, then execute `REAL-EMBED-E2E` only through the
+product path. It is a newly authorized formal Demo publication, not a repeat of the
+exhausted preflight. Use the fixed Chinese fixture, exact teacher manifest/confirmation,
+the two-call cap and fail-closed call ledger.
 After it passes, proceed immediately to `REAL-LLM-E2E`, then browser E2E and Demo package.
 The active packet is
 [Real-Core Demo Gate](docs/gates/wave4/REAL_CORE_DEMO_GATE.md).

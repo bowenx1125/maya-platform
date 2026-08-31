@@ -1,6 +1,6 @@
 # Real-Core Demo Gate
 
-Status: `REAL-EMBED-R0 CHANGES_REQUIRED / P0=0 / P1=2 / REAL-CORE CALLS 0`
+Status: `REAL-EMBED-OFFLINE-GATE PASS / P0=0 / P1=0 / P2=0 / REAL-CORE CALLS 0`
 
 Every task in this Gate is classified before execution. Only `DEMO-BLOCKER` work may
 delay Demo V1. Everything else belongs to the Wave 4.1 Post-Demo Hardening backlog.
@@ -33,7 +33,16 @@ Sol High reviewed clean integration candidate
    manifest and product E2E driver. The fixture must stay below 600 whitespace tokens,
    produce exactly one chunk and freeze the topic plus expected Chinese matching terms.
 
-No product Provider request may occur until both findings receive Sol P0/P1 closure.
+Both findings are closed on exact clean SHA
+`e6d6c2780723dfeae33db953ea8c49edd37c8901`. The safe policy importer, frozen
+identity-free Chinese fixture and bounded product driver are present. The product path
+uses a legal English topic while the confirmed structured Persona supplies the Chinese
+opening-query position; raw `AGENT.md` private text is excluded. Root verification passed
+backend `925`, Ruff, mypy `159`, fixture/importer `28`, document authority and repository
+secret-boundary checks. Sol High returned `PASS / P0=0 / P1=0 / P2=0`.
+
+No product Provider request may occur until the actual account controls are reviewed and
+the matching non-secret policy is imported into the isolated empty runtime.
 
 ## Minimal Real Embedding E2E
 
