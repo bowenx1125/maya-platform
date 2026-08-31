@@ -1236,7 +1236,10 @@ def _scan_recovery_input_value(value: object, *, path: tuple[str, ...] = ()) -> 
                     code="llm_recovery_input_forbidden",
                 )
             folded = re.sub(r"[\s.-]+", "_", key.casefold())
-            identity_path = path == ("input", "persona_provider_view") and folded == "identity"
+            identity_path = path in {
+                ("input", "persona_provider_view"),
+                ("input", "request", "persona_provider_view"),
+            } and folded == "identity"
             if (
                 folded in _RECOVERY_INPUT_FORBIDDEN_KEYS
                 or folded == "identity" and not identity_path

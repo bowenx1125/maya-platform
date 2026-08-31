@@ -393,6 +393,23 @@ def test_recovery_input_rejects_forbidden_fields_and_values(
         )
 
 
+def test_recovery_input_allows_confirmed_persona_identity_in_canonical_request() -> None:
+    _repository, _request, _stage, recovery_input = _prepare_in_memory()
+    document = _recovery_document(recovery_input)
+    nested_input = document["input"]
+    assert isinstance(nested_input, dict)
+    nested_input["request"] = {
+        "persona_provider_view": {
+            "identity": {"name": "Civic Historian", "role": "expert"},
+            "core_values": ["reciprocity"],
+        }
+    }
+
+    rebuilt = _recovery_with_document(recovery_input, document)
+
+    assert rebuilt.input_hash != recovery_input.input_hash
+
+
 def test_recovery_input_size_limit_counts_utf8_bytes() -> None:
     _repository, request, stage, recovery_input = _prepare_in_memory()
     document = _recovery_document(recovery_input)
