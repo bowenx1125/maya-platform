@@ -1,0 +1,16 @@
+{
+  "manifest_version": "real-embed-zh-v1",
+  "language": "zh-CN",
+  "knowledge_path": "knowledge.md",
+  "persona_path": "AGENT.md",
+  "topic_path": "topic.txt",
+  "expected_terms_path": "expected-terms.txt",
+  "chunking_version": "markdown-heading-paragraph-v1",
+  "expected_chunk_count": 1,
+  "call_cap": {
+    "snapshot": 1,
+    "query": 1,
+    "total": 2
+  },
+  "snapshot_document_filename": "maya-cultural-knowledge-zh.md"
+}
