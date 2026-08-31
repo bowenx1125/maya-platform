@@ -535,15 +535,19 @@ def map_provider_output(
         position_update=cast(Any, payload.get("position_update")),
         position_update_reason=cast(str, position_update_reason),
         remaining_uncertainty=uncertainty,
-        unresolved_issue=cast(str, unresolved_issue),
+        unresolved_issue=cast(str, unresolved_issue) or None,
         question=question,
         used_evidence_id=list(dict.fromkeys(all_evidence_ids)),
         missing_information=missing,
         unresolved_questions=unresolved_questions,
-        change_from_opening=cast(str, change_from_opening),
+        # The closed Provider schema uses an empty string sentinel because
+        # strict JSON schema cannot omit phase-specific keys.  The domain
+        # contract uses ``None`` so opening/exchange validators can distinguish
+        # absent final-only values from real final-integration content.
+        change_from_opening=cast(str, change_from_opening) or None,
         final_consensus=final_consensus,
         final_disagreements=final_disagreements,
-        final_recommendation=cast(str, recommendation),
+        final_recommendation=cast(str, recommendation) or None,
     )
     canonical = _canonical(payload)
     return MappedLLMTurnV1(

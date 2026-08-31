@@ -290,7 +290,7 @@ class SqlLLMPublication:
                 raise RuntimeError("LLM publication recovery receipt is invalid")
             chunk = self.db.execute(
                 text(
-                    "SELECT snapshot_id, chunk_text FROM knowledge_chunks "
+                    "SELECT snapshot_id, text FROM knowledge_chunks "
                     "WHERE id=:chunk_id"
                 ),
                 {"chunk_id": chunk_id},
@@ -329,7 +329,7 @@ class SqlLLMPublication:
                 chunk_id = _read(receipt, "chunk_id", "")
                 chunk = self.db.execute(
                     text(
-                        "SELECT snapshot_id, chunk_text FROM knowledge_chunks WHERE id=:chunk_id"
+                        "SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"
                     ),
                     {"chunk_id": str(chunk_id)},
                 ).first()

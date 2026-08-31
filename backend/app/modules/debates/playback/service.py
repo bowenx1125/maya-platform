@@ -1956,7 +1956,6 @@ class PlaybackService:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print("P1_SERVICE_DIAGNOSTIC", repr(exc), repr(exc.__cause__))
             last_error = exc
             # The final Turn/source/job writes and the LLM operation CAS share
             # this transaction.  Roll back before either the recoverable or

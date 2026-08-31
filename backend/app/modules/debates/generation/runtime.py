@@ -1203,7 +1203,12 @@ class LLMTurnRuntime:
             "repair_policy_version": _result_value(
                 response,
                 "repair_policy_version",
-                default=_read(prepared.outbound_manifest, "repair_policy_version"),
+                default=None,
+            )
+            or (
+                _read(prepared.outbound_manifest, "repair_policy_version")
+                if prepared.repair_policy_hash
+                else None
             ),
             "estimated_cost_cny": _result_value(response, "estimated_cost_cny", default=0),
             "actual_cost_cny": _result_value(response, "actual_cost_cny", default=None),

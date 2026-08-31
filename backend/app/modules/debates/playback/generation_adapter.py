@@ -583,7 +583,12 @@ class SqlTurnPreparer:
         input_json = getattr(recovery_input, "input_json", None)
         try:
             recovery_payload = json.loads(str(input_json))
-            recovery_fence = recovery_payload.get("fence", {})
+            recovery_body = recovery_payload.get("input", {})
+            if not isinstance(recovery_body, Mapping):
+                raise ValueError("recovery input body is unavailable")
+            recovery_fence = recovery_body.get("fence", {})
+            if not isinstance(recovery_fence, Mapping):
+                raise ValueError("recovery fence is unavailable")
             if int(recovery_fence.get("generation", -1)) != cancellation_generation:
                 raise ValueError("recovery generation fence is stale")
         except (TypeError, ValueError, AttributeError, json.JSONDecodeError) as exc:
@@ -593,7 +598,7 @@ class SqlTurnPreparer:
         for receipt in final.used_receipts:
             chunk = db.execute(
                 text(
-                    "SELECT snapshot_id, chunk_text FROM knowledge_chunks "
+                    "SELECT snapshot_id, text FROM knowledge_chunks "
                     "WHERE id=:chunk_id"
                 ),
                 {"chunk_id": receipt.chunk_id},
