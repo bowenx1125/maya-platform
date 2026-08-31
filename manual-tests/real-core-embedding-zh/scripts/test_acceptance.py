@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import sqlite3
 import stat
@@ -12,17 +13,16 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from acceptance import (
-    CHECKPOINT_FIELDS,
-    AcceptanceError,
-    Api,
-    TwoCallGate,
-    load_fixture,
-    main,
-    read_checkpoint,
-    verify,
-    write_checkpoint,
-)
+acceptance = importlib.import_module("acceptance")
+CHECKPOINT_FIELDS = acceptance.CHECKPOINT_FIELDS
+AcceptanceError = acceptance.AcceptanceError
+Api = acceptance.Api
+TwoCallGate = acceptance.TwoCallGate
+load_fixture = acceptance.load_fixture
+main = acceptance.main
+read_checkpoint = acceptance.read_checkpoint
+verify = acceptance.verify
+write_checkpoint = acceptance.write_checkpoint
 
 
 def checkpoint(fixture_hash: str) -> dict[str, object]:
