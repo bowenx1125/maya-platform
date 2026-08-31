@@ -13,6 +13,7 @@ from app.modules.auth.service import AuthContext
 from .schemas import (
     ProviderDataCallConfirmationRequestV1,
     ProviderDataCallDisclosureResponseV1,
+    ProviderDataCallManifestListResponseV1,
 )
 from .service import ProviderDisclosureError, ProviderDisclosureService
 
@@ -81,6 +82,34 @@ def provider_data_call_disclosure(
     return _disclose(service, context, manifest_hash)
 
 
+@router.get(
+    "/pending",
+    response_model=ProviderDataCallManifestListResponseV1,
+    operation_id="listProviderDataCallManifests",
+    responses={
+        401: {"model": Error, "description": "Authentication is required."},
+        403: {"model": Error, "description": "Teacher authorization is required."},
+        404: {"model": Error, "description": "Provider export scope was not found."},
+        422: {"model": Error, "description": "Provider manifest listing is blocked."},
+    },
+)
+def provider_data_call_manifests(
+    scope_id: str = Query(..., min_length=1, max_length=255, pattern=r"^[A-Za-z0-9_.:-]+$"),
+    context: AuthContext = Depends(require_auth),
+    service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
+) -> ProviderDataCallManifestListResponseV1:
+    """List teacher-visible ``embedding_query`` manifests for one scope."""
+
+    try:
+        return service.list_embedding_query_manifests(
+            str(context.user.id),
+            scope_id=scope_id,
+        )
+    except ProviderDisclosureError as error:
+        _raise_domain_error(error)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 @router.post(
     "/disclosure/confirm",
     response_model=ProviderDataCallDisclosureResponseV1,
@@ -118,6 +147,7 @@ def provider_disclosure_router() -> APIRouter:
 __all__ = [
     "get_provider_disclosure_service",
     "provider_data_call_disclosure",
+    "provider_data_call_manifests",
     "confirm_provider_data_call_disclosure",
     "provider_disclosure_router",
     "router",

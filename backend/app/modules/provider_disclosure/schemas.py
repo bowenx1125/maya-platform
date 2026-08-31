@@ -62,6 +62,35 @@ class ProviderDataCallDisclosureResponseV1(BaseModel):
         return self.confirmation_revision
 
 
+_SAFE_SCOPE_PATTERN = r"^[A-Za-z0-9_.:-]{1,255}$"
+
+
+class ProviderDataCallManifestSummaryV1(BaseModel):
+    """One teacher-visible, exact manifest waiting for (or holding) consent.
+
+    This is intentionally an identity/status summary, not a disclosure.  The
+    provider model, endpoint, policy details, owner IDs and manifest payload
+    remain server-only.  ``confirmation_revision`` is the revision a teacher
+    must review/confirm even when ``confirmed`` is false.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    manifest_hash: str = Field(pattern=_SHA256_PATTERN)
+    turn_id: str | None = Field(default=None, pattern=_SAFE_SCOPE_PATTERN)
+    confirmation_revision: int = Field(ge=1)
+    confirmed: bool
+
+
+class ProviderDataCallManifestListResponseV1(BaseModel):
+    """Teacher-only list of exact embedding-query manifests for one scope."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    scope_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    items: tuple[ProviderDataCallManifestSummaryV1, ...] = ()
+
+
 class ProviderDataCallConfirmationRequestV1(BaseModel):
     """Teacher confirmation bound to the exact disclosure revision and hashes."""
 
@@ -86,6 +115,8 @@ class ProviderDataCallConfirmationRequestV1(BaseModel):
 ProviderDataCallV1 = ProviderDataCallDisclosureV1
 ProviderDataCallDisclosure = ProviderDataCallDisclosureV1
 ProviderDataCallDisclosureResponse = ProviderDataCallDisclosureResponseV1
+ProviderDataCallManifestSummary = ProviderDataCallManifestSummaryV1
+ProviderDataCallManifestListResponse = ProviderDataCallManifestListResponseV1
 ProviderDataCallConfirmationRequest = ProviderDataCallConfirmationRequestV1
 
 
@@ -98,4 +129,8 @@ __all__ = [
     "ProviderDataCallDisclosureResponse",
     "ProviderDataCallDisclosureV1",
     "ProviderDataCallV1",
+    "ProviderDataCallManifestListResponse",
+    "ProviderDataCallManifestListResponseV1",
+    "ProviderDataCallManifestSummary",
+    "ProviderDataCallManifestSummaryV1",
 ]

@@ -7,11 +7,12 @@ import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from app.core.db import Database
 from app.core.errors import PlatformError, error_body, unauthenticated
-from app.core.models import Course, CourseMember, User
+from app.core.models import Agent, AgentVersion, Course, CourseMember, ProviderOperation, User
 from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
 from app.modules.provider_disclosure import (
     InMemoryProviderDisclosureStore,
@@ -33,6 +34,7 @@ from app.seed import COURSE_ID, GROUP_BOWEN_ID, TEACHER_ID
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from tests.conftest import login
 
@@ -78,6 +80,24 @@ def _manifest(
             ExportFieldV1("topic_and_platform_rules", _digest("rules")),
             ExportFieldV1("current_evidence_excerpt", _digest("evidence")),
         ),
+        operation_revision=operation_revision,
+    )
+
+
+def _query_manifest(
+    policy: ProviderPolicySnapshotV1,
+    *,
+    scope_id: str = "debate-query-scope",
+    operation_revision: int = 1,
+) -> ExportManifestV1:
+    return ExportManifestV1(
+        scope_id=scope_id,
+        provider_operation="embedding_query",
+        model_key=FIXED_MODELS["embedding_query"],
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=_digest(scope_id + "-build"),
+        persona_spec_hash=_digest(scope_id + "-persona"),
+        fields=(ExportFieldV1("current_evidence_excerpt", _digest(scope_id + "-query")),),
         operation_revision=operation_revision,
     )
 
@@ -136,15 +156,7 @@ def test_disclosure_has_exact_teacher_allowlist_and_no_provider_secrets() -> Non
 
 def test_query_embedding_disclosure_is_exact_and_provider_neutral() -> None:
     policy = _policy()
-    manifest = ExportManifestV1(
-        scope_id="debate-query-scope",
-        provider_operation="embedding_query",
-        model_key=FIXED_MODELS["embedding_query"],
-        policy_hash=policy.policy_hash,
-        build_manifest_hash=_digest("query-build"),
-        persona_spec_hash=_digest("query-persona"),
-        fields=(ExportFieldV1("current_evidence_excerpt", _digest("query-text")),),
-    )
+    manifest = _query_manifest(policy)
     response = ProviderDisclosureService(
         InMemoryProviderDisclosureStore(policy, manifest)
     ).disclose("teacher")
@@ -153,6 +165,62 @@ def test_query_embedding_disclosure_is_exact_and_provider_neutral() -> None:
     assert response.disclosure.outbound_field_classes == ("current_evidence_excerpt",)
     assert "retrieval questions" in response.disclosure.purpose
     assert FIXED_MODELS["embedding_query"] not in json.dumps(response.model_dump(mode="json"))
+
+
+def test_query_manifest_discovery_is_exact_and_teacher_course_bound() -> None:
+    policy = _policy()
+    manifest = _query_manifest(policy, operation_revision=3)
+    store = InMemoryProviderDisclosureStore(policy, manifest)
+    service = ProviderDisclosureService(store)
+
+    pending = service.list_embedding_query_manifests(
+        "teacher", scope_id=manifest.scope_id
+    )
+    assert pending.model_dump(mode="json") == {
+        "scope_id": manifest.scope_id,
+        "items": [
+            {
+                "manifest_hash": manifest.manifest_hash,
+                "turn_id": None,
+                "confirmation_revision": 3,
+                "confirmed": False,
+            }
+        ]
+    }
+    encoded = json.dumps(pending.model_dump(mode="json"), sort_keys=True).casefold()
+    for forbidden in (
+        FIXED_MODELS["embedding_query"],
+        "endpoint",
+        "workspace",
+        "policy_hash",
+        "build_manifest_hash",
+        "persona_spec_hash",
+        "fields_json",
+        "course_id",
+        "agent_version_id",
+    ):
+        assert forbidden.casefold() not in encoded
+
+    service.confirm(
+        ProviderDataCallConfirmationRequestV1(
+            policy_hash=policy.policy_hash,
+            manifest_hash=manifest.manifest_hash,
+            expected_revision=3,
+        ),
+        actor_user_id="teacher",
+    )
+    confirmed = service.list_embedding_query_manifests(
+        "teacher", scope_id=manifest.scope_id
+    )
+    assert confirmed.items[0].confirmed is True
+    assert confirmed.items[0].confirmation_revision == 3
+
+    with pytest.raises(ProviderDisclosureError) as forbidden_result:
+        service.list_embedding_query_manifests("student", scope_id=manifest.scope_id)
+    assert forbidden_result.value.code == "forbidden"
+    with pytest.raises(ProviderDisclosureError) as missing:
+        service.list_embedding_query_manifests("teacher", scope_id="other-scope")
+    assert missing.value.code == "forbidden"
 
 
 @pytest.mark.parametrize(
@@ -428,6 +496,88 @@ def test_sql_manifest_authorization_is_bound_to_exact_owner_course(
         assert student.value.code == "forbidden"
 
 
+def test_sql_query_manifest_listing_is_owner_bound_and_returns_safe_summary(
+    client: TestClient,
+) -> None:
+    app = client.app
+    database = app.state.database
+    _student, csrf = login(client, "student-bowen-1")
+    created = client.post(
+        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        headers={
+            "Origin": "http://testserver",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": "provider-query-list-agent-0001",
+        },
+        json={"name": "Query list Agent", "description": ""},
+    )
+    assert created.status_code == 201, created.text
+    version_id = created.json()["versions"][0]["id"]
+
+    with database.session() as db:
+        assert db.scalar(
+            select(AgentVersion.id)
+            .join(Agent, Agent.id == AgentVersion.agent_id)
+            .where(Agent.group_id == GROUP_BOWEN_ID, AgentVersion.id == version_id)
+        ) == version_id
+
+    policy = _policy(snapshot_revision=11)
+    manifest = _query_manifest(policy, scope_id="sql-query-list")
+    repository = ProviderRepository(database)
+    policy_id = repository.save_policy_snapshot(policy)
+    repository.save_export_manifest(
+        manifest,
+        policy_snapshot_id=policy_id,
+        course_id=COURSE_ID,
+        group_id=GROUP_BOWEN_ID,
+        agent_version_id=version_id,
+    )
+    with database.session() as db:
+        now = datetime.now(UTC)
+        db.add(
+            ProviderOperation(
+                id=str(uuid4()),
+                scope_id=manifest.scope_id,
+                provider_operation="embedding_query",
+                logical_item_id="turn:query-turn-1",
+                attempt_no=1,
+                request_hash=_digest("query-request"),
+                max_tokens=1,
+                max_cost_cny=0,
+                policy_hash=policy.policy_hash,
+                export_manifest_hash=manifest.manifest_hash,
+                build_manifest_hash=manifest.build_manifest_hash,
+                model_key=manifest.model_key,
+                state="prepared",
+                request_count=0,
+                charged_request_count=0,
+                staged_response_hash=None,
+                safe_error_code=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    with database.session() as db:
+        service = ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
+        pending = service.list_embedding_query_manifests(
+            TEACHER_ID,
+            scope_id=manifest.scope_id,
+        )
+        assert pending.scope_id == manifest.scope_id
+        assert pending.items[0].manifest_hash == manifest.manifest_hash
+        assert pending.items[0].turn_id == "query-turn-1"
+        assert pending.items[0].confirmation_revision == 1
+        assert pending.items[0].confirmed is False
+
+        with pytest.raises(ProviderDisclosureError) as student:
+            service.list_embedding_query_manifests(
+                str(_student["user"]["id"]),
+                scope_id=manifest.scope_id,
+            )
+        assert student.value.code == "forbidden"
+
+
 def _route_app(service: ProviderDisclosureService) -> FastAPI:
     app = FastAPI()
     app.state.provider_disclosure_service = service
@@ -490,3 +640,40 @@ def test_router_enforces_auth_and_teacher_boundary() -> None:
         )
         assert confirmed.status_code == 200, confirmed.text
         assert confirmed.json()["confirmation_revision"] == 1
+
+
+def test_router_lists_only_teacher_visible_query_manifests() -> None:
+    policy = _policy()
+    manifest = _query_manifest(policy, scope_id="router-query-scope")
+    app = _route_app(ProviderDisclosureService(InMemoryProviderDisclosureStore(policy, manifest)))
+
+    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
+        user=SimpleNamespace(id="student")
+    )
+    with TestClient(app) as client:
+        forbidden = client.get(
+            "/provider/data-call/pending",
+            params={"scope_id": manifest.scope_id},
+        )
+    assert forbidden.status_code == 403
+
+    app.dependency_overrides[require_auth] = lambda: SimpleNamespace(
+        user=SimpleNamespace(id="teacher")
+    )
+    with TestClient(app) as client:
+        response = client.get(
+            "/provider/data-call/pending",
+            params={"scope_id": manifest.scope_id},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "scope_id": manifest.scope_id,
+        "items": [
+            {
+                "manifest_hash": manifest.manifest_hash,
+                "turn_id": None,
+                "confirmation_revision": 1,
+                "confirmed": False,
+            }
+        ]
+    }

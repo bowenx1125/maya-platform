@@ -25,6 +25,7 @@ from app.core.models import (
     Group,
     ProviderExportConfirmation,
     ProviderExportManifest,
+    ProviderOperation,
     ProviderPolicySnapshot,
 )
 from app.providers.control import (
@@ -46,11 +47,14 @@ from .schemas import (
     ProviderDataCallConfirmationRequestV1,
     ProviderDataCallDisclosureResponseV1,
     ProviderDataCallDisclosureV1,
+    ProviderDataCallManifestListResponseV1,
+    ProviderDataCallManifestSummaryV1,
 )
 
 PROVIDER_DISCLOSURE_VERSION = "ProviderDataCallV1"
 SUPPLIER_DISPLAY_NAME = "Alibaba Cloud Model Studio"
 STORAGE_FACT = "The supplier stores call data as required by applicable law."
+EMBEDDING_QUERY_OPERATION = "embedding_query"
 
 _PURPOSES: Mapping[str, str] = {
     "embedding": "Build an evidence search index from an approved immutable snapshot.",
@@ -96,6 +100,7 @@ _UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
     re.IGNORECASE,
 )
+_SAFE_OPAQUE_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 
 
 class ProviderDisclosureError(Exception):
@@ -146,6 +151,20 @@ class ProviderDisclosureStore(Protocol):
 
     def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
         """Return whether the account teaches the exact manifest owner course."""
+
+    def is_teacher_for_scope(self, user_id: str, scope_id: str) -> bool:
+        """Return whether the account teaches the exact scope owner course."""
+
+    def list_export_manifests(
+        self,
+        *,
+        scope_id: str,
+        provider_operation: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        """Return immutable manifests for one scope and operation."""
+
+    def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
+        """Return a safe opaque turn identity when the ledger provides one."""
 
 
 def _blocked(code: str = "provider_preflight_blocked") -> ProviderDisclosureError:
@@ -200,6 +219,89 @@ class ProviderDisclosureService:
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
         self._assert_teacher(actor_user_id, manifest.manifest_hash)
         return self._response(policy, manifest)
+
+    def list_embedding_query_manifests(
+        self,
+        actor_user_id: str,
+        *,
+        scope_id: str,
+    ) -> ProviderDataCallManifestListResponseV1:
+        """List exact query manifests visible to the owning course teacher.
+
+        The lookup is deliberately separate from :meth:`disclose`: dynamic
+        query manifests are created per turn, while the normal disclosure
+        endpoint addresses one already-known hash.  Every returned row is
+        checked against its own course owner before any status is projected.
+        A generic "is any teacher" check is never used for a non-empty scope.
+        """
+
+        if not isinstance(scope_id, str) or not _SAFE_OPAQUE_ID_RE.fullmatch(scope_id):
+            raise ProviderDisclosureError("not_found", "The provider export scope was not found.")
+        list_manifests = getattr(self.store, "list_export_manifests", None)
+        if not callable(list_manifests):
+            raise _blocked("provider_manifest_listing_unavailable")
+        try:
+            manifests = tuple(
+                list_manifests(
+                    scope_id=scope_id,
+                    provider_operation=EMBEDDING_QUERY_OPERATION,
+                )
+            )
+        except ProviderDisclosureError:
+            raise
+        except Exception as exc:
+            raise _blocked("provider_manifest_listing_unavailable") from exc
+
+        if not manifests:
+            # With no row there is no course relation to authorize against.
+            # Durable stores therefore expose a scope-level owner check.  A
+            # legacy injected fake may only provide the old teacher callback;
+            # that fallback is retained for an empty result and never for a
+            # returned manifest.
+            self._assert_teacher_for_scope(actor_user_id, scope_id)
+            return ProviderDataCallManifestListResponseV1(scope_id=scope_id, items=())
+
+        summaries: list[ProviderDataCallManifestSummaryV1] = []
+        for manifest in manifests:
+            if not isinstance(manifest, ExportManifestV1):
+                raise _blocked("provider_manifest_invalid")
+            if (
+                manifest.scope_id != scope_id
+                or manifest.provider_operation != EMBEDDING_QUERY_OPERATION
+            ):
+                raise _blocked("provider_manifest_listing_invalid")
+            self._assert_teacher_for_manifest_scope(actor_user_id, manifest.manifest_hash)
+
+            # Load the policy explicitly by this immutable manifest's hash.
+            # Using the service's configured "current" policy here could turn
+            # an otherwise reviewable pending manifest into an accidental
+            # cross-row disclosure or hide policy drift incorrectly.
+            policy, exact_manifest = self._load(
+                policy_ref=manifest.policy_hash,
+                manifest_ref=manifest.manifest_hash,
+            )
+            if exact_manifest != manifest:
+                raise _blocked("provider_manifest_listing_invalid")
+            try:
+                confirmation = self.store.get_export_confirmation(manifest.manifest_hash)
+            except Exception as exc:
+                raise _blocked("provider_confirmation_unavailable") from exc
+            revision = self._revision(manifest)
+            turn_id = self._turn_id_for_manifest(manifest.manifest_hash)
+            summaries.append(
+                ProviderDataCallManifestSummaryV1(
+                    manifest_hash=manifest.manifest_hash,
+                    turn_id=turn_id,
+                    confirmation_revision=revision,
+                    confirmed=confirmation is not None
+                    and self._confirmation_matches(confirmation, policy, manifest, revision),
+                )
+            )
+        summaries.sort(key=lambda item: item.manifest_hash)
+        return ProviderDataCallManifestListResponseV1(
+            scope_id=scope_id,
+            items=tuple(summaries),
+        )
 
     def confirm(
         self,
@@ -335,6 +437,64 @@ class ProviderDisclosureService:
             allowed = bool(authorizer(actor_user_id))
         if not allowed:
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+
+    def _assert_teacher_for_manifest_scope(self, actor_user_id: str, manifest_hash: str) -> None:
+        """Authorize a manifest through its exact course owner relation."""
+
+        if not isinstance(actor_user_id, str) or not actor_user_id.strip():
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+        authorizer = getattr(self.store, "is_teacher_for_manifest", None)
+        if not callable(authorizer):
+            # A generic authorizer is intentionally not sufficient here: the
+            # list endpoint must not let a teacher enumerate another course.
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+        try:
+            allowed = bool(authorizer(actor_user_id, manifest_hash))
+        except Exception as exc:
+            raise _blocked("provider_manifest_authorization_unavailable") from exc
+        if not allowed:
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+
+    def _assert_teacher_for_scope(self, actor_user_id: str, scope_id: str) -> None:
+        """Authorize an empty listing without widening course visibility."""
+
+        if not isinstance(actor_user_id, str) or not actor_user_id.strip():
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+        authorizer = getattr(self.store, "is_teacher_for_scope", None)
+        if callable(authorizer):
+            try:
+                allowed = bool(authorizer(actor_user_id, scope_id))
+            except Exception as exc:
+                raise _blocked("provider_manifest_authorization_unavailable") from exc
+        else:
+            # Compatibility for a pre-listing fake store only.  Production
+            # SQL stores implement the scope-aware authorizer above.
+            allowed = (
+                bool(self.teacher_authorizer(actor_user_id))
+                if self.teacher_authorizer
+                else False
+            )
+        if not allowed:
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+
+    def _turn_id_for_manifest(self, manifest_hash: str) -> str | None:
+        """Read only the opaque turn token, when durable ledger metadata has one."""
+
+        resolver = getattr(self.store, "get_turn_id_for_manifest", None)
+        if not callable(resolver):
+            return None
+        try:
+            turn_id = resolver(manifest_hash)
+        except Exception as exc:
+            raise _blocked("provider_manifest_listing_unavailable") from exc
+        if turn_id is None:
+            return None
+        if (
+            not isinstance(turn_id, str)
+            or not _SAFE_OPAQUE_ID_RE.fullmatch(turn_id)
+        ):
+            raise _blocked("provider_manifest_listing_invalid")
+        return turn_id
 
     def _load(
         self,
@@ -520,6 +680,30 @@ class InMemoryProviderDisclosureStore:
     def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
         return user_id in self.teacher_ids and manifest_hash == self.manifest.manifest_hash
 
+    def is_teacher_for_scope(self, user_id: str, scope_id: str) -> bool:
+        return (
+            user_id in self.teacher_ids
+            and self.manifest.scope_id == scope_id
+            and self.manifest.provider_operation == EMBEDDING_QUERY_OPERATION
+        )
+
+    def list_export_manifests(
+        self,
+        *,
+        scope_id: str,
+        provider_operation: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        if (
+            self.manifest.scope_id != scope_id
+            or self.manifest.provider_operation != provider_operation
+        ):
+            return ()
+        return (self.manifest,)
+
+    def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
+        del manifest_hash
+        return None
+
     def replace_current(
         self,
         policy: ProviderPolicySnapshotV1,
@@ -692,8 +876,89 @@ class SqlAlchemyProviderDisclosureStore:
             is not None
         )
 
+    def is_teacher_for_scope(self, user_id: str, scope_id: str) -> bool:
+        return (
+            self.db.scalar(
+                select(ProviderExportManifest.id)
+                .join(
+                    AgentVersion,
+                    AgentVersion.id == ProviderExportManifest.agent_version_id,
+                )
+                .join(Agent, Agent.id == AgentVersion.agent_id)
+                .join(Group, Group.id == Agent.group_id)
+                .join(
+                    CourseMember,
+                    CourseMember.course_id == ProviderExportManifest.course_id,
+                )
+                .where(
+                    ProviderExportManifest.scope_id == scope_id,
+                    ProviderExportManifest.provider_operation == EMBEDDING_QUERY_OPERATION,
+                    ProviderExportManifest.course_id.is_not(None),
+                    ProviderExportManifest.group_id.is_not(None),
+                    ProviderExportManifest.agent_version_id.is_not(None),
+                    ProviderExportManifest.group_id == Agent.group_id,
+                    ProviderExportManifest.group_id == Group.id,
+                    ProviderExportManifest.course_id == Group.course_id,
+                    CourseMember.user_id == user_id,
+                    CourseMember.role == "teacher",
+                )
+            )
+            is not None
+        )
+
+    def list_export_manifests(
+        self,
+        *,
+        scope_id: str,
+        provider_operation: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        """Load only the hash/model-independent domain rows for one scope."""
+
+        hashes = self.db.scalars(
+            select(ProviderExportManifest.manifest_hash)
+            .where(
+                ProviderExportManifest.scope_id == scope_id,
+                ProviderExportManifest.provider_operation == provider_operation,
+            )
+            .order_by(
+                ProviderExportManifest.created_at.asc(),
+                ProviderExportManifest.manifest_hash.asc(),
+            )
+        ).all()
+        manifests: list[ExportManifestV1] = []
+        for manifest_hash in hashes:
+            try:
+                manifest = self._control.get_export_manifest(str(manifest_hash))
+            except Exception as exc:
+                raise ProviderDisclosureStoreError("provider manifest row is invalid") from exc
+            if manifest is None:
+                raise ProviderDisclosureStoreError("provider manifest row is missing")
+            manifests.append(manifest)
+        return tuple(manifests)
+
+    def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
+        row = self.db.scalar(
+            select(ProviderOperation.logical_item_id)
+            .join(
+                ProviderExportManifest,
+                ProviderExportManifest.manifest_hash == ProviderOperation.export_manifest_hash,
+            )
+            .where(
+                ProviderOperation.provider_operation == EMBEDDING_QUERY_OPERATION,
+                ProviderOperation.export_manifest_hash == manifest_hash,
+                ProviderOperation.scope_id == ProviderExportManifest.scope_id,
+            )
+            .order_by(ProviderOperation.created_at.asc(), ProviderOperation.id.asc())
+            .limit(1)
+        )
+        value = str(row) if row is not None else ""
+        if value.startswith("turn:") and value[5:]:
+            return value[5:]
+        return None
+
 
 __all__ = [
+    "EMBEDDING_QUERY_OPERATION",
     "InMemoryProviderDisclosureStore",
     "PROVIDER_DISCLOSURE_VERSION",
     "ProviderDisclosureError",
