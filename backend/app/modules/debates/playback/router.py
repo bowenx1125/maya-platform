@@ -34,6 +34,7 @@ from app.modules.debates.schemas import (
     PlaybackCommandRequest,
     PlaybackControlRequest,
     PlaybackState,
+    RetryPreparationRequest,
     Transcript,
 )
 from app.modules.translations.service import attach_translated_text
@@ -153,6 +154,37 @@ async def start_debate_route(
         request_id=getattr(request.state, "request_id", None),
     )
     return _state_or_detail(service, db, str(debate_id), state, context)
+
+
+@router.post(
+    "/debates/{debate_id}/preparation/retry",
+    operation_id="retryDebatePreparation",
+    response_model=PlaybackState,
+    responses={
+        200: {"description": "Provider-gated turn preparation was re-enqueued."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def retry_debate_preparation_route(
+    debate_id: UUID,
+    payload: RetryPreparationRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    return await service.retry_preparation(
+        db,
+        str(debate_id),
+        turn_id=str(payload.turn_id),
+        expected_control_version=payload.expected_control_version,
+        context=context,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.post(

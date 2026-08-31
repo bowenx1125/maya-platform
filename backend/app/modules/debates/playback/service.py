@@ -52,8 +52,15 @@ _SAFE_GENERATION_CODES = {
     "turn_generation_failed",
     "provider_unavailable",
     "persona_confirmation_required",
+    "provider_confirmation_required",
+    "provider_not_sent",
+    "acceptance_unknown",
     "debate_stopped",
     "audio_invalid",
+}
+_RECOVERABLE_PROVIDER_GENERATION_CODES = {
+    "provider_confirmation_required",
+    "provider_not_sent",
 }
 
 
@@ -1739,6 +1746,8 @@ class PlaybackService:
             else:
                 turn.generation_status = "running"
                 turn.preparation_stage = "generation"
+                if hasattr(turn, "failed_code"):
+                    turn.failed_code = None
             participants = self._participants(db, debate)
             participant = self._participant_for_turn(participants, turn)
             slot = self._slot(participant)
@@ -1912,6 +1921,18 @@ class PlaybackService:
             raise
         except Exception as exc:
             last_error = exc
+        if (
+            isinstance(last_error, PlatformError)
+            and last_error.code in _RECOVERABLE_PROVIDER_GENERATION_CODES
+            and await self._defer_provider_preparation(
+                db,
+                debate_id=debate_id,
+                turn_id=turn_id,
+                claim_token=claim_token,
+                code=last_error.code,
+            )
+        ):
+            return
         failed_event: EventRecord | None = None
         failed_epoch: str | None = None
         async with self._lock:
@@ -1956,6 +1977,55 @@ class PlaybackService:
                 self._revoke_epoch(failed_epoch, debate_id, "debate_terminal")
         if failed_event is not None:
             await self._publish_event(failed_event)
+
+    async def _defer_provider_preparation(
+        self,
+        db: Any,
+        *,
+        debate_id: str,
+        turn_id: str,
+        claim_token: str | None,
+        code: str,
+    ) -> bool:
+        """Park an exact provider-gated turn while keeping its Debate resumable."""
+
+        self._rollback(db)
+        deferred_event: EventRecord | None = None
+        async with self._lock:
+            try:
+                debate = self._get_debate(db, debate_id)
+                turns = self._turns(db, debate)
+                turn = next(
+                    (item for item in turns if str(getattr(item, "id", "")) == turn_id),
+                    None,
+                )
+                if turn is None or str(getattr(debate, "status", "")) != "running":
+                    return False
+                defer = getattr(self.repository, "defer_turn_job", None)
+                if not callable(defer) or not defer(db, debate, turn, claim_token, code):
+                    self._rollback(db)
+                    return False
+                deferred_event = self._stage_event(
+                    db,
+                    debate_id,
+                    "error",
+                    {
+                        "code": code,
+                        "message": (
+                            "Teacher confirmation is required before this turn can continue."
+                            if code == "provider_confirmation_required"
+                            else "The provider request was not sent. The teacher may retry safely."
+                        ),
+                        "recoverable": True,
+                    },
+                )
+                self._commit(db)
+            except Exception:
+                self._rollback(db)
+                return False
+        if deferred_event is not None:
+            await self._publish_event(deferred_event)
+        return deferred_event is not None
 
     async def _enqueue(self, debate: Any, turn: Any) -> bool:
         try:
@@ -2565,6 +2635,85 @@ class PlaybackService:
         first = turns[0]
         await self._enqueue(debate, first)
         return self._state_dto(state, db, debate)
+
+    async def retry_preparation(
+        self,
+        db: Any,
+        debate_id: str,
+        *,
+        turn_id: str,
+        expected_control_version: int,
+        context: AuthContext | None = None,
+        idempotency_key: str | None = None,
+    ) -> PlaybackStateDTO:
+        """Explicitly retry one teacher-confirmed or proven-not-sent turn."""
+
+        record: Any | None = None
+        replay = False
+        target: Any | None = None
+        async with self._lock:
+            debate = self._get_debate(db, debate_id)
+            self._assert_teacher(db, debate, context)
+            record, replay = self._claim_control_idempotency(
+                db,
+                context=context,
+                operation="retryDebatePreparation",
+                key=idempotency_key,
+                body={
+                    "debate_id": debate_id,
+                    "turn_id": turn_id,
+                    "expected_control_version": expected_control_version,
+                },
+            )
+            if replay:
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+                return self._state_dto(state, db, debate)
+            if str(self._get(debate, "status", default="")) != "running":
+                raise invalid_state("Only a running Debate can retry preparation.")
+            state = self._state(db, debate)
+            self._check_control(state, expected_control_version)
+            if state.mode != "live" or state.current_turn_id is None:
+                raise invalid_state("Live playback has no retryable turn.")
+            turns = sorted(
+                self._turns(db, debate),
+                key=lambda item: int(self._get(item, "turn_index", default=0) or 0),
+            )
+            current_index = next(
+                (
+                    index
+                    for index, item in enumerate(turns)
+                    if str(getattr(item, "id", "")) == state.current_turn_id
+                ),
+                -1,
+            )
+            target_index = next(
+                (
+                    index
+                    for index, item in enumerate(turns)
+                    if str(getattr(item, "id", "")) == turn_id
+                ),
+                -1,
+            )
+            if current_index < 0 or target_index not in {current_index, current_index + 1}:
+                raise invalid_state("Only the current or adjacent prepared turn can be retried.")
+            target = turns[target_index]
+            code = str(
+                self._get(target, "safe_error_code", "failed_code", default="") or ""
+            )
+            if (
+                self._get(target, "generation_status", default="") != "pending"
+                or code not in _RECOVERABLE_PROVIDER_GENERATION_CODES
+            ):
+                raise invalid_state("The selected turn is not waiting for a safe provider retry.")
+            state.control_version += 1
+            self._save(db, debate, state)
+            result = self._state_dto(state, db, debate)
+            self._finish_control_idempotency(db, record, result)
+            self._commit(db)
+        if target is not None:
+            await self._enqueue(debate, target)
+        return result
 
     async def pause(
         self,

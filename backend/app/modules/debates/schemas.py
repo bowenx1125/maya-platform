@@ -120,6 +120,11 @@ class AdvancePlaybackRequest(_ClosedModel):
     expected_current_turn_id: UUID
 
 
+class RetryPreparationRequest(_ClosedModel):
+    expected_control_version: int = Field(ge=0)
+    turn_id: UUID
+
+
 class DebatePlaybackResource(_ClosedModel):
     playback_url: str = Field(
         pattern=(
@@ -290,6 +295,7 @@ __all__ = [
     "PlaybackCommandRequest",
     "PlaybackState",
     "PlaybackControlRequest",
+    "RetryPreparationRequest",
     "FinishDebateRequest",
     "RetrievalSource",
     "RULE_SET_ID",

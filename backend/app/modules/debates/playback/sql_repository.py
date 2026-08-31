@@ -1935,7 +1935,8 @@ class SqlPlaybackRepository(PlaybackRepository):
         token = str(uuid4())
         changed = db.execute(
             text(
-                "UPDATE jobs SET state='running', claim_token=:token, updated_at=:updated_at "
+                "UPDATE jobs SET state='running', claim_token=:token, safe_error_code=NULL, "
+                "updated_at=:updated_at "
                 "WHERE debate_id=:debate_id AND turn_id=:turn_id AND state='pending' "
                 "AND cancellation_generation=:generation"
             ),
@@ -1965,7 +1966,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             text(
                 "UPDATE debate_turns SET generation_status='running', "
                 "preparation_stage='generation', transcript_hash=:transcript_hash, "
-                "attempt=:attempt, updated_at=:updated_at "
+                "attempt=:attempt, safe_error_code=NULL, updated_at=:updated_at "
                 "WHERE id=:turn_id AND generation_status='pending' "
                 "AND transcript_hash IS NULL AND attempt=:attempt "
                 "AND predecessor_turn_ids_json=:predecessors "
@@ -2012,6 +2013,63 @@ class SqlPlaybackRepository(PlaybackRepository):
             if int(getattr(job, "rowcount", 0)) != 1:
                 raise RuntimeError("turn claim lost its durable job fence")
         return accepted
+
+    def defer_turn_job(
+        self,
+        db: Any,
+        debate: SqlRow,
+        turn: SqlRow,
+        claim_token: str | None,
+        code: str,
+    ) -> bool:
+        """Atomically park one provider-gated turn without terminating its Debate."""
+
+        if claim_token is None or code not in {
+            "provider_confirmation_required",
+            "provider_not_sent",
+        }:
+            return False
+        timestamp = _now()
+        job = db.execute(
+            text(
+                "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=:code, "
+                "updated_at=:updated_at WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                "AND operation='debate_turn_prepare' AND state='running' "
+                "AND claim_token=:claim_token AND cancellation_generation=:generation"
+            ),
+            {
+                "code": code,
+                "updated_at": timestamp,
+                "debate_id": str(debate.id),
+                "turn_id": str(turn.id),
+                "claim_token": claim_token,
+                "generation": int(debate.cancellation_generation or 0),
+            },
+        )
+        if int(getattr(job, "rowcount", 0)) != 1:
+            return False
+        deferred = db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='pending', "
+                "preparation_stage='generation', transcript_hash=NULL, "
+                "safe_error_code=:code, updated_at=:updated_at "
+                "WHERE id=:turn_id AND debate_id=:debate_id "
+                "AND generation_status='running' AND publication_status='unpublished' "
+                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                "AND debates.status='running' "
+                "AND debates.cancellation_generation=:generation)"
+            ),
+            {
+                "code": code,
+                "updated_at": timestamp,
+                "debate_id": str(debate.id),
+                "turn_id": str(turn.id),
+                "generation": int(debate.cancellation_generation or 0),
+            },
+        )
+        if int(getattr(deferred, "rowcount", 0)) != 1:
+            raise RuntimeError("provider-gated turn lost its durable job fence")
+        return True
 
     def fail_turn_job(self, db: Any, turn: SqlRow, claim_token: str | None, code: str) -> None:
         if claim_token is None:

@@ -183,6 +183,15 @@ class PlaybackRepository(Protocol):
 
     def fail_turn_and_debate(self, db: Any, debate: Any, turn: Any, code: str) -> None: ...
 
+    def defer_turn_job(
+        self,
+        db: Any,
+        debate: Any,
+        turn: Any,
+        claim_token: str | None,
+        code: str,
+    ) -> bool: ...
+
     def mark_jobs_interrupted(self, db: Any, debate: Any, code: str) -> None: ...
 
     def teacher_allowed(self, db: Any, debate: Any, context: Any) -> bool: ...
@@ -390,6 +399,25 @@ class MemoryPlaybackRepository:
         turn.generation_status = "failed"
         turn.failed_code = code
         debate.status = "failed"
+
+    def defer_turn_job(
+        self,
+        db: Any,
+        debate: MemoryDebate,
+        turn: MemoryTurn,
+        claim_token: str | None,
+        code: str,
+    ) -> bool:
+        """Return a provider-gated turn to its exact pending generation slot."""
+
+        del db, debate, claim_token
+        if turn.generation_status not in {"running", "pending"}:
+            return False
+        turn.generation_status = "pending"
+        turn.preparation_stage = "generation"
+        turn.predecessor_hash = None
+        turn.failed_code = code
+        return True
 
     def mark_jobs_interrupted(self, db: Any, debate: MemoryDebate, code: str) -> None:
         del db
