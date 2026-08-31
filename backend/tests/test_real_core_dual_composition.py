@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from app.core.config import Settings
+from app.core.errors import PlatformError
+from app.modules.debates.playback.generation_adapter import _assert_llm_provider_endpoint
 from app.modules.knowledge.providers.sql_query import REAL_CORE_DEMO_QUERY_MAX_REQUESTS
 from app.providers.factory import llm_provider
-from app.providers.llm_adapter import DashScopeLLMAdapter
+from app.providers.llm_adapter import DashScopeLLMAdapter, DashScopeLLMConfig
 from app.providers.llm_price_card import (
     REAL_CORE_DEMO_LLM_MAX_REQUESTS,
     real_core_demo_budget_cap,
@@ -118,3 +121,29 @@ def test_dual_demo_caps_llm_and_query_requests(tmp_path: Path) -> None:
 def test_hash_validators_reject_non_sha256_slice_values(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="lowercase SHA-256"):
         _dual(tmp_path, llm_provider_policy_hash="not-a-hash")
+
+
+def test_llm_endpoint_policy_mismatch_fails_before_transport() -> None:
+    class NoCallTransport:
+        calls = 0
+
+        def post(self, *args: object, **kwargs: object) -> object:
+            del args, kwargs
+            self.calls += 1
+            raise AssertionError("endpoint preflight must precede transport")
+
+    transport = NoCallTransport()
+    adapter = DashScopeLLMAdapter(
+        DashScopeLLMConfig(
+            api_key="fixture-key",
+            workspace_id="fixture-workspace",
+            policy_hash="a" * 64,
+        ),
+        transport,  # type: ignore[arg-type]
+    )
+    policy = SimpleNamespace(
+        endpoint="https://other.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+    )
+    with pytest.raises(PlatformError, match="exact LLM Provider resource changed"):
+        _assert_llm_provider_endpoint(adapter, policy)
+    assert transport.calls == 0

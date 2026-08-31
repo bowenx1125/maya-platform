@@ -140,6 +140,26 @@ def _dual_real(settings: object | None) -> bool:
     )
 
 
+def _assert_llm_provider_endpoint(
+    adapter: DashScopeLLMAdapter,
+    policy: object,
+) -> None:
+    """Bind the configured LLM resource to the selected policy before setup."""
+
+    try:
+        configured_endpoint = adapter.config.resolved_endpoint
+        policy_endpoint = getattr(policy, "endpoint", None)
+        matches = isinstance(policy_endpoint, str) and configured_endpoint == policy_endpoint
+    except Exception:
+        matches = False
+    if not matches:
+        raise PlatformError(
+            "provider_preflight_blocked",
+            "The exact LLM Provider resource changed.",
+            503,
+        )
+
+
 class SqlSnapshotSearch:
     """Search one immutable Snapshot through its persisted five-field identity."""
 
@@ -321,6 +341,11 @@ class SqlTurnPreparer:
                 "The exact LLM Provider policy is unavailable.",
                 503,
             )
+        # Endpoint identity is checked before manifest creation, scope-budget
+        # persistence or any transport boundary. A policy hash from the other
+        # real slice (or a swapped workspace resource) therefore fails closed
+        # without creating a zero-use operation or issuing a request.
+        _assert_llm_provider_endpoint(self.llm, policy)
         policy_row_id = db.scalar(
             select(ProviderPolicySnapshot.id).where(
                 ProviderPolicySnapshot.policy_hash == policy_hash
