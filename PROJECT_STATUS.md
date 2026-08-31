@@ -96,7 +96,9 @@ response or publication mismatch fails closed before another call.
 
 1. `DEMO-BLOCKER — REAL-EMBED-E2E`: fixed Chinese Markdown fixture through exact teacher
    confirmation, one minimal 1024 Snapshot build, Chinese query retrieval and Evidence
-   Receipt verification.
+   Receipt verification. Its R0 design audit is `CHANGES_REQUIRED / P1=2`: add a safe
+   reviewed-policy import entry and the frozen one-chunk Chinese fixture/E2E driver
+   before any real call.
 2. `DEMO-BLOCKER — REAL-LLM-E2E`: 2–3 confirmed Agents, their own RAG, PromptRequestV1,
    fixed Qwen structured output and complete two-round Evidence Trace.
 3. `DEMO-BLOCKER — BROWSER-E2E`: empty-runtime student Agent/Persona/knowledge/publish,
@@ -134,3 +136,5 @@ Execute `REAL-EMBED-E2E` only through the product path. It is a newly authorized
 Demo publication, not a repeat of the exhausted preflight. Use the fixed Chinese fixture,
 exact teacher manifest/confirmation, the smallest batch count and fail-closed call ledger.
 After it passes, proceed immediately to `REAL-LLM-E2E`, then browser E2E and Demo package.
+The active packet is
+[Real-Core Demo Gate](docs/gates/wave4/REAL_CORE_DEMO_GATE.md).
