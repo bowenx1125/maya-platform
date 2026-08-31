@@ -89,6 +89,7 @@ const implemented = new Set([
   "translateCurrentPublishedContent",
   "getProviderDataCallDisclosure",
   "listProviderDataCallManifests",
+  "listProviderDataCallDebateManifests",
   "listProviderDataCallPublicationManifests",
   "confirmProviderDataCallDisclosure",
 ]);

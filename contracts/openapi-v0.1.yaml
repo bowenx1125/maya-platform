@@ -1395,6 +1395,27 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /provider/data-call/pending/debates/{debate_id}:
+    get:
+      tags: [Provider]
+      operationId: listProviderDataCallDebateManifests
+      parameters:
+        - name: debate_id
+          in: path
+          required: true
+          schema:
+            { type: string, pattern: "^[A-Za-z0-9_.:-]+$", minLength: 1, maxLength: 255 }
+      responses:
+        "200":
+          description: Teacher-only exact LLM turn manifests for one Debate.
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ProviderDataCallDebateManifestListResponseV1" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /provider/data-call/pending/agent-versions/{agent_version_id}:
     get:
       tags: [Provider]
@@ -1664,6 +1685,7 @@ components:
                 current_evidence_excerpt,
                 opaque_local_id,
                 current_tts_speech,
+                server_authored_structure_repair_feedback,
               ]
         storage_fact: { type: string, minLength: 1 }
         no_training_basis: { type: string, minLength: 1 }
@@ -1699,6 +1721,27 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/ProviderDataCallManifestSummaryV1" }
+    ProviderDataCallDebateManifestSummaryV1:
+      type: object
+      additionalProperties: false
+      required: [turn_id, manifest_hash, confirmation_revision, confirmed]
+      properties:
+        turn_id:
+          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        confirmation_revision: { type: integer, minimum: 1 }
+        confirmed: { type: boolean }
+    ProviderDataCallDebateManifestListResponseV1:
+      type: object
+      additionalProperties: false
+      required: [debate_id, items]
+      properties:
+        debate_id:
+          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        items:
+          type: array
+          items:
+            { $ref: "#/components/schemas/ProviderDataCallDebateManifestSummaryV1" }
     ProviderDataCallPublicationManifestSummaryV1:
       type: object
       additionalProperties: false

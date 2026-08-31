@@ -1092,6 +1092,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider/data-call/pending/debates/{debate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProviderDataCallDebateManifests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/provider/data-call/pending/agent-versions/{agent_version_id}": {
         parameters: {
             query?: never;
@@ -1150,7 +1166,7 @@ export interface components {
             /** @constant */
             region: "cn-beijing";
             purpose: string;
-            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "current_tts_speech")[];
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
             storage_fact: string;
             no_training_basis: string;
             retention_setting: string;
@@ -1170,6 +1186,16 @@ export interface components {
         ProviderDataCallManifestListResponseV1: {
             scope_id: string;
             items: components["schemas"]["ProviderDataCallManifestSummaryV1"][];
+        };
+        ProviderDataCallDebateManifestSummaryV1: {
+            turn_id: string;
+            manifest_hash: string;
+            confirmation_revision: number;
+            confirmed: boolean;
+        };
+        ProviderDataCallDebateManifestListResponseV1: {
+            debate_id: string;
+            items: components["schemas"]["ProviderDataCallDebateManifestSummaryV1"][];
         };
         ProviderDataCallPublicationManifestSummaryV1: {
             manifest_hash: string;
@@ -3929,6 +3955,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderDataCallManifestListResponseV1"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listProviderDataCallDebateManifests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                debate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teacher-only exact LLM turn manifests for one Debate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallDebateManifestListResponseV1"];
                 };
             };
             401: components["responses"]["Error"];
