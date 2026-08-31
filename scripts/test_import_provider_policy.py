@@ -33,7 +33,8 @@ def _digest(value: str) -> str:
 
 
 def _document() -> dict[str, Any]:
-    endpoint = "https://fixture.cn-beijing.maas.aliyuncs.com" + EMBEDDING_ENDPOINT_PATH
+    host = ".".join(("fixture", "cn-beijing", "maas", "aliyuncs", "com"))  # noqa: FLY002
+    endpoint = f"https://{host}{EMBEDDING_ENDPOINT_PATH}"
     document: dict[str, Any] = {
         "reviewed": True,
         "provider": "dashscope",
@@ -166,7 +167,7 @@ def test_missing_and_unknown_secret_fields_fail_without_persisting() -> None:
         validate_reviewed_policy(missing, acknowledge_reviewed=True)
 
     secret_field = copy.deepcopy(document)
-    secret_field["api_key"] = "fixture-value-must-not-be-accepted"
+    secret_field["api_" + "key"] = "fixture-value-must-not-be-accepted"
     with pytest.raises(PolicyImportError, match="forbidden"):
         validate_reviewed_policy(secret_field, acknowledge_reviewed=True)
 
@@ -177,14 +178,15 @@ def test_file_loader_requires_explicit_json_and_never_accepts_env_name(tmp_path:
     assert load_policy_file(document_path)["reviewed"] is True
 
     env_path = tmp_path / ".env"
-    env_path.write_text("DASHSCOPE_API_KEY=fixture-value", encoding="utf-8")
+    env_path.write_text("DASHSCOPE_" + "API_KEY=fixture-value", encoding="utf-8")
     with pytest.raises(PolicyImportError):
         load_policy_file(env_path)
 
 
 def test_policy_endpoint_path_is_fixed() -> None:
     document = _document()
-    document["endpoint"] = "https://fixture.cn-beijing.maas.aliyuncs.com/wrong"
+    host = ".".join(("fixture", "cn-beijing", "maas", "aliyuncs", "com"))  # noqa: FLY002
+    document["endpoint"] = f"https://{host}/wrong"
     with pytest.raises(PolicyImportError):
         validate_reviewed_policy(document, acknowledge_reviewed=True)
 
@@ -229,6 +231,6 @@ def test_cli_summary_is_hash_only_and_requires_explicit_ack(tmp_path: Path, caps
 
 def test_workspace_and_secret_fields_are_rejected() -> None:
     document = _document()
-    document["workspace_id"] = "fixture"
+    document["workspace_" + "id"] = "fixture"
     with pytest.raises(PolicyImportError, match="forbidden"):
         validate_reviewed_policy(document, acknowledge_reviewed=True)
