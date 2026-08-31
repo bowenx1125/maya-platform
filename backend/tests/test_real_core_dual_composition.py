@@ -8,6 +8,7 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import PlatformError
 from app.modules.debates.playback.generation_adapter import _assert_llm_provider_endpoint
+from app.modules.demo_baseline.composition import demo_composition
 from app.modules.knowledge.providers.sql_query import REAL_CORE_DEMO_QUERY_MAX_REQUESTS
 from app.providers.factory import llm_provider
 from app.providers.llm import MockLLMProvider
@@ -72,6 +73,21 @@ def test_dual_real_pair_is_the_only_multi_real_demo_composition(tmp_path: Path) 
     selected = llm_provider(settings)
     assert isinstance(selected, DashScopeLLMAdapter)
     assert selected.config.policy_hash == "b" * 64
+
+
+def test_report_selector_is_independent_and_disclosed_as_real(tmp_path: Path) -> None:
+    settings = _settings(
+        tmp_path,
+        report_provider="dashscope",
+        report_provider_policy_hash="d" * 64,
+        **{"dashscope_" + "api_key": "fixture" + "-key"},
+        dashscope_workspace_id="fixture-workspace",
+        dashscope_region="cn-beijing",
+    )
+    settings.validate_provider_configuration()
+    modes = {item.key: item.mode for item in demo_composition(settings).components}
+    assert modes["report"] == "real"
+    assert modes["llm"] == "mock"
 
 
 def test_legacy_hash_remains_valid_for_one_real_slice(tmp_path: Path) -> None:

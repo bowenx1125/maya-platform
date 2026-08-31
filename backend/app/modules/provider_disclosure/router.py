@@ -16,6 +16,7 @@ from .schemas import (
     ProviderDataCallDisclosureResponseV1,
     ProviderDataCallManifestListResponseV1,
     ProviderDataCallPublicationManifestListResponseV1,
+    ProviderDataCallReportManifestListResponseV1,
 )
 from .service import ProviderDisclosureError, ProviderDisclosureService
 
@@ -185,6 +186,39 @@ def provider_data_call_debate_manifests(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+@router.get(
+    "/pending/reports/{debate_id}",
+    response_model=ProviderDataCallReportManifestListResponseV1,
+    operation_id="listProviderDataCallReportManifests",
+    responses={
+        401: {"model": Error, "description": "Authentication is required."},
+        403: {"model": Error, "description": "Provider disclosure is teacher-only."},
+        404: {"model": Error, "description": "The Debate was not found."},
+        422: {"model": Error, "description": "Provider manifest listing is blocked."},
+    },
+)
+def provider_data_call_report_manifests(
+    debate_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    ),
+    context: AuthContext = Depends(require_auth),
+    service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
+) -> ProviderDataCallReportManifestListResponseV1:
+    """List exact pending Real Report manifests through Debate ownership."""
+
+    try:
+        return service.list_report_manifests_for_debate(
+            str(context.user.id),
+            debate_id=debate_id,
+        )
+    except ProviderDisclosureError as error:
+        _raise_domain_error(error)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 @router.post(
     "/disclosure/confirm",
     response_model=ProviderDataCallDisclosureResponseV1,
@@ -225,6 +259,7 @@ __all__ = [
     "provider_data_call_manifests",
     "provider_data_call_agent_version_manifests",
     "provider_data_call_debate_manifests",
+    "provider_data_call_report_manifests",
     "confirm_provider_data_call_disclosure",
     "provider_disclosure_router",
     "router",

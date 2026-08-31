@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -65,6 +65,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="LLM_PROVIDER_POLICY_HASH",
     )
+    report_provider_policy_hash: str | None = Field(
+        default=None,
+        validation_alias="REPORT_PROVIDER_POLICY_HASH",
+    )
     # The reviewed LLM price card is server-only accounting input.  Keep the
     # values explicit in the environment so a real request cannot silently
     # fall back to the adapter's unreviewed zero-value default.
@@ -96,6 +100,10 @@ class Settings(BaseSettings):
     # Provider selectors intentionally default to local mocks.  They are
     # server-only switches; no provider identity is returned in API DTOs.
     llm_provider: str = Field(default="mock", validation_alias="LLM_PROVIDER")
+    report_provider: str = Field(
+        default="mock",
+        validation_alias=AliasChoices("MAYA_REPORT_PROVIDER", "report_provider"),
+    )
     embedding_provider: str = Field(default="mock", validation_alias="EMBEDDING_PROVIDER")
     tts_provider: str = Field(default="mock", validation_alias="TTS_PROVIDER")
     voice_provider: str = Field(default="mock", validation_alias="VOICE_PROVIDER")
@@ -187,6 +195,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "llm_provider",
+        "report_provider",
         "embedding_provider",
         "tts_provider",
         "voice_provider",
@@ -204,7 +213,13 @@ class Settings(BaseSettings):
         # real provider, while treating the Wave 2 Mock selector uniformly.
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("llm_provider", "embedding_provider", "tts_provider", "voice_provider")
+    @field_validator(
+        "llm_provider",
+        "report_provider",
+        "embedding_provider",
+        "tts_provider",
+        "voice_provider",
+    )
     @classmethod
     def provider_selector_is_supported(cls, value: str) -> str:
         if value not in {"mock", "dashscope"}:
@@ -234,6 +249,7 @@ class Settings(BaseSettings):
     @field_validator(
         "embedding_provider_policy_hash",
         "llm_provider_policy_hash",
+        "report_provider_policy_hash",
         mode="before",
     )
     @classmethod
@@ -297,6 +313,7 @@ class Settings(BaseSettings):
 
         selectors = (
             self.llm_provider,
+            self.report_provider,
             self.embedding_provider,
             self.tts_provider,
             self.voice_provider,
@@ -320,6 +337,7 @@ class Settings(BaseSettings):
             name
             for name, value in (
                 ("LLM_PROVIDER", self.llm_provider),
+                ("REPORT_PROVIDER", self.report_provider),
                 ("EMBEDDING_PROVIDER", self.embedding_provider),
                 ("TTS_PROVIDER", self.tts_provider),
             )
@@ -331,6 +349,10 @@ class Settings(BaseSettings):
             ("LLM_PROVIDER",),
             ("TTS_PROVIDER",),
             ("LLM_PROVIDER", "EMBEDDING_PROVIDER"),
+            ("REPORT_PROVIDER",),
+            ("LLM_PROVIDER", "REPORT_PROVIDER"),
+            ("EMBEDDING_PROVIDER", "REPORT_PROVIDER"),
+            ("LLM_PROVIDER", "EMBEDDING_PROVIDER", "REPORT_PROVIDER"),
         }
         if real_slice_names not in allowed_real_compositions:
             raise RuntimeError(
@@ -356,7 +378,10 @@ class Settings(BaseSettings):
         # A legacy PROVIDER_POLICY_HASH is endpoint-ambiguous when both real
         # slices are selected.  Require the two explicit fields in that case;
         # a single-real configuration may still use the old field.
-        if len(real_slice_names) == 2:
+        if len(real_slice_names) == 2 and set(real_slice_names) == {
+            "LLM_PROVIDER",
+            "EMBEDDING_PROVIDER",
+        }:
             if self.provider_policy_hash is not None and not (
                 self.embedding_provider_policy_hash is not None
                 and self.llm_provider_policy_hash is not None
@@ -381,7 +406,11 @@ class Settings(BaseSettings):
                 "LLM_PROVIDER_POLICY_HASH (or an unambiguous legacy "
                 "PROVIDER_POLICY_HASH) is required for real LLM publication"
             )
-        if self.llm_provider == "dashscope":
+        if self.report_provider == "dashscope" and self.report_policy_hash is None:
+            raise RuntimeError(
+                "REPORT_PROVIDER_POLICY_HASH is required for real Maya Report publication"
+            )
+        if self.llm_provider == "dashscope" or self.report_provider == "dashscope":
             self._validate_llm_price_card()
 
     def _validate_llm_price_card(self) -> None:
@@ -437,6 +466,17 @@ class Settings(BaseSettings):
                 return self.provider_policy_hash
         return None
 
+    @property
+    def report_policy_hash(self) -> str | None:
+        """Return the endpoint policy hash bound to Real Maya Report."""
+
+        if self.report_provider_policy_hash is not None:
+            return self.report_provider_policy_hash
+        if self.provider_policy_hash is not None and self.report_provider == "dashscope":
+            if self.llm_provider != "dashscope" and self.embedding_provider != "dashscope":
+                return self.provider_policy_hash
+        return None
+
     def provider_policy_hash_for(self, slice_name: str) -> str | None:
         """Resolve an endpoint policy hash without silently crossing slices."""
 
@@ -444,7 +484,9 @@ class Settings(BaseSettings):
             return self.embedding_policy_hash
         if slice_name == "llm":
             return self.llm_policy_hash
-        raise ValueError("provider policy slice must be embedding or llm")
+        if slice_name == "report":
+            return self.report_policy_hash
+        raise ValueError("provider policy slice must be embedding, llm or report")
 
     @property
     def secret_bytes(self) -> bytes:

@@ -19,6 +19,8 @@ DisclosureFieldClass = Literal[
     "public_predecessor_speech",
     "current_evidence_excerpt",
     "opaque_local_id",
+    "public_agent_name",
+    "anonymous_insight_summary",
     "current_tts_speech",
     "server_authored_structure_repair_feedback",
 ]
@@ -118,6 +120,26 @@ class ProviderDataCallDebateManifestListResponseV1(BaseModel):
     items: tuple[ProviderDataCallDebateManifestSummaryV1, ...] = ()
 
 
+class ProviderDataCallReportManifestSummaryV1(BaseModel):
+    """Teacher-visible status for one immutable Real Report preparation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    report_revision_id: str | None = Field(default=None, pattern=_SAFE_SCOPE_PATTERN)
+    manifest_hash: str = Field(pattern=_SHA256_PATTERN)
+    confirmation_revision: int = Field(ge=1)
+    confirmed: bool
+
+
+class ProviderDataCallReportManifestListResponseV1(BaseModel):
+    """Teacher-only pending Real Report manifests for one Debate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    debate_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    items: tuple[ProviderDataCallReportManifestSummaryV1, ...] = ()
+
+
 class ProviderDataCallPublicationManifestSummaryV1(BaseModel):
     """One teacher-visible, exact embedding publication manifest.
 
@@ -173,6 +195,8 @@ ProviderDataCallPublicationManifestSummary = ProviderDataCallPublicationManifest
 ProviderDataCallPublicationManifestListResponse = ProviderDataCallPublicationManifestListResponseV1
 ProviderDataCallDebateManifestSummary = ProviderDataCallDebateManifestSummaryV1
 ProviderDataCallDebateManifestListResponse = ProviderDataCallDebateManifestListResponseV1
+ProviderDataCallReportManifestSummary = ProviderDataCallReportManifestSummaryV1
+ProviderDataCallReportManifestListResponse = ProviderDataCallReportManifestListResponseV1
 # AgentVersion naming aliases keep the dedicated route contract discoverable
 # without introducing a second wire shape.
 ProviderDataCallAgentVersionManifestSummaryV1 = ProviderDataCallPublicationManifestSummaryV1
@@ -199,6 +223,10 @@ __all__ = [
     "ProviderDataCallDebateManifestSummaryV1",
     "ProviderDataCallDebateManifestListResponse",
     "ProviderDataCallDebateManifestListResponseV1",
+    "ProviderDataCallReportManifestSummaryV1",
+    "ProviderDataCallReportManifestListResponseV1",
+    "ProviderDataCallReportManifestSummary",
+    "ProviderDataCallReportManifestListResponse",
     "ProviderDataCallPublicationManifestListResponse",
     "ProviderDataCallPublicationManifestListResponseV1",
     "ProviderDataCallPublicationManifestSummary",

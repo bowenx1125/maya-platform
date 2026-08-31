@@ -13,7 +13,6 @@ import json
 import re
 from collections.abc import Mapping
 from typing import Final, Literal, cast
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -68,7 +67,7 @@ class ReportBoundaryError(ValueError):
         self.code = code
 
 
-# These patterns are applied to text fields only.  Opaque evidence UUIDs are
+# These patterns are applied to text fields only. Opaque evidence keys are
 # typed separately and are the one permitted identifier in the provider input.
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _UUID_RE = re.compile(
@@ -126,13 +125,16 @@ class ReportSpeech(_ClosedModel):
     round_no: int = Field(ge=1, le=2)
     turn_index: int = Field(ge=0, le=999)
     speech: str = Field(min_length=1, max_length=8000)
-    used_evidence_ids: tuple[UUID, ...] = ()
+    used_evidence_ids: tuple[str, ...] = ()
 
 
 class ReportSource(_ClosedModel):
     """A used TurnSource projection with no filename, path or full chunk."""
 
-    evidence_id: UUID
+    # Retrieval receipts use opaque ``evidence-*`` keys in addition to UUID
+    # fixtures.  The provider never authors or resolves this key; the service
+    # maps it back to the immutable TurnSource row when rendering citations.
+    evidence_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     excerpt: str = Field(min_length=1, max_length=2400)
 
 

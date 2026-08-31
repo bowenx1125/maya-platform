@@ -16,7 +16,7 @@ from .models import (
     CivilizationReportCurrentSuccess,
     CivilizationReportRevision,
 )
-from .service import process_insight_job, process_report_job
+from .service import RealReportRuntime, process_insight_job, process_report_job
 
 
 class ReportTaskManager:
@@ -26,9 +26,12 @@ class ReportTaskManager:
         self,
         session_factory: Callable[[], Session],
         event_publisher: Callable[[str, str, dict[str, Any]], bool],
+        *,
+        real_runtime: RealReportRuntime | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.event_publisher = event_publisher
+        self.real_runtime = real_runtime
         self._loop: asyncio.AbstractEventLoop | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._closed = False
@@ -122,7 +125,7 @@ class ReportTaskManager:
             {"revision_id": revision_id, "status": "generating"},
         )
         with self.session_factory() as db:
-            revision = process_report_job(db, revision_id)
+            revision = process_report_job(db, revision_id, runtime=self.real_runtime)
             db.commit()
             pointer = db.scalar(
                 select(CivilizationReportCurrentSuccess).where(
@@ -140,6 +143,14 @@ class ReportTaskManager:
                     "word_count": revision.word_count,
                 }
                 event_type = "report.completed"
+            elif status == "generating":
+                payload = {
+                    "revision_id": revision.id,
+                    "revision_no": revision.revision_no,
+                    "status": "generating",
+                    "safe_error_code": "provider_confirmation_required",
+                }
+                event_type = "report.pending"
             else:
                 payload = {
                     "revision_id": revision.id,

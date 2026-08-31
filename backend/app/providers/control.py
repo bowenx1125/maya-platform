@@ -33,6 +33,7 @@ FIXED_MODELS: Mapping[str, str] = MappingProxyType(
         "embedding_query": "text-embedding-v4",
         "llm_debate": "qwen3.7-plus-2026-05-26",
         "llm_debate_turn": "qwen3.7-plus-2026-05-26",
+        "llm_maya_report": "qwen3.7-plus-2026-05-26",
         "tts": "qwen3-tts-vc-2026-01-22",
         "voice_enrollment": "qwen-voice-enrollment",
     }
@@ -430,6 +431,8 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "public_predecessor_speech",
         "current_evidence_excerpt",
         "opaque_local_id",
+        "public_agent_name",
+        "anonymous_insight_summary",
         "current_tts_speech",
         "server_authored_structure_repair_feedback",
     }

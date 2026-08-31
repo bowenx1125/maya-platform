@@ -25,6 +25,10 @@ def demo_composition(settings: Settings) -> DemoComposition:
             DemoComponent(key="tts", label="TTS", mode="mock"),
             DemoComponent(key="voice", label="Voice", mode="mock"),
             DemoComponent(key="translation", label="Translation", mode="mock"),
-            DemoComponent(key="report", label="Maya Report", mode="mock"),
+            DemoComponent(
+                key="report",
+                label="Maya Report",
+                mode="real" if settings.report_provider == "dashscope" else "mock",
+            ),
         )
     )

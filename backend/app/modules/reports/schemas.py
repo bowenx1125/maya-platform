@@ -114,6 +114,13 @@ class Report(ClosedModel):
     current_success_revision: ReadyReportRevision | None = None
 
 
+class ContinueRealReportRequest(ClosedModel):
+    """Teacher-runner acknowledgement for one already attached report call."""
+
+    manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    call_no: int = Field(ge=1, le=8)
+
+
 # Internal deterministic Mock policy result.  ``item_key`` is an in-memory
 # grouping key and is never exposed in a public DTO or report manifest.
 class InsightItemCandidate(ClosedModel):
@@ -299,6 +306,7 @@ __all__ = [
     "MockBarrageInsightResult",
     "ReadyReportRevision",
     "Report",
+    "ContinueRealReportRequest",
     "ReportInputManifestV1",
     "ReportRevisionSummary",
     "ReportSectionOutput",

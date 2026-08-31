@@ -60,8 +60,13 @@ from app.modules.provider_disclosure.service import (
     ProviderDisclosureService,
     SqlAlchemyProviderDisclosureStore,
 )
+from app.modules.reports.real_provider import RealReportProvider
 from app.modules.reports.router import router as reports_router
-from app.modules.reports.service import ReportInsightEnqueuer, recover_report_jobs
+from app.modules.reports.service import (
+    RealReportRuntime,
+    ReportInsightEnqueuer,
+    recover_report_jobs,
+)
 from app.modules.reports.task_manager import ReportTaskManager
 from app.modules.translations.router import router as translations_router
 from app.modules.translations.service import TranslationService, startup_translation_service
@@ -69,7 +74,10 @@ from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import tts_provider
+from app.providers.llm_adapter import DashScopeLLMConfig
+from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_recovery import recover_llm_startup
+from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.seed import COURSE_ID, seed_demo_data
 
 logger = logging.getLogger("maya.backend")
@@ -94,11 +102,45 @@ def create_app(
     playback_tasks = TaskManager()
     playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
     selected_tts = tts_provider(runtime_settings)
+    report_runtime: RealReportRuntime | None = None
+    if runtime_settings.report_provider == "dashscope":
+        report_policy_hash = runtime_settings.report_policy_hash or ""
+        try:
+            report_price_card = LLMPriceCardV1(
+                version=runtime_settings.llm_price_card_version or "",
+                input_price_per_million=runtime_settings.llm_input_price_cny_per_million or "0",
+                cached_input_price_per_million=(
+                    runtime_settings.llm_cached_input_price_cny_per_million or "0"
+                ),
+                output_price_per_million=runtime_settings.llm_output_price_cny_per_million or "0",
+                retrieved_at=runtime_settings.llm_price_card_retrieved_at or "",
+                source_content_sha256=runtime_settings.llm_price_card_source_content_sha256
+                or "0" * 64,
+            )
+        except Exception:
+            # Runtime validation reports the safe configuration error during
+            # lifespan; keep composition construction side-effect free.
+            report_price_card = LLMPriceCardV1()
+        report_runtime = RealReportRuntime(
+            provider=RealReportProvider(
+                config=DashScopeLLMConfig(
+                    api_key=runtime_settings.dashscope_api_key or "",
+                    workspace_id=runtime_settings.dashscope_workspace_id or "unconfigured",
+                    region=runtime_settings.dashscope_region or "cn-beijing",
+                    policy_hash=report_policy_hash,
+                ),
+                tokenizer=ConservativeLLMTokenizer(),
+                price_card=report_price_card,
+                policy_hash=report_policy_hash,
+            ),
+            repository=ProviderRepository(runtime_database, require_export_confirmation=False),
+        )
     event_hub = DebateEventHub(SqlEventStore(runtime_database.session_factory))
     wave3_events = Wave3EventPublisher(runtime_database.session_factory, event_hub)
     report_tasks = ReportTaskManager(
         runtime_database.session_factory,
         wave3_events.publish_summary,
+        real_runtime=report_runtime,
     )
     playback_service = PlaybackService(
         playback_repository,
@@ -196,6 +238,7 @@ def create_app(
     app.state.translation_service = translation_service
     app.state.wave3_event_publisher = wave3_events
     app.state.report_task_manager = report_tasks
+    app.state.report_runtime = report_runtime
     if settings is not None:
         # Route dependencies use get_settings; keep injected app instances
         # internally consistent without changing global process settings.

@@ -14,7 +14,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from decimal import Decimal
+from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, inspect, select, text, update
@@ -29,9 +30,25 @@ from app.core.errors import (
     invalid_state,
     not_found,
 )
-from app.core.models import CourseMember, IdempotencyRecord, Job, KnowledgeChunk
+from app.core.models import (
+    CourseMember,
+    DemoAcceptanceRun,
+    IdempotencyRecord,
+    Job,
+    KnowledgeChunk,
+    ProviderOperation,
+    ProviderPolicySnapshot,
+)
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, TurnSource
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
+from app.providers.control import (
+    LLM_MAYA_REPORT_BUCKET,
+    ExportFieldV1,
+    ExportManifestV1,
+    ProviderReservationRequestV1,
+    ProviderScopeBudgetV1,
+)
+from app.providers.llm_price_card import LLM_RESERVED_OUTPUT_TOKEN_CAP
 
 from .models import (
     BarrageInsightAssignment,
@@ -48,6 +65,16 @@ from .policy import (
     MOCK_MAYA_REPORT_POLICY_KEY,
     mock_barrage_insight_v1,
     validate_insight_partition,
+)
+from .real_prompt import REPORT_SYSTEM_PROMPT
+from .real_provider import REAL_REPORT_MODEL, ReportProviderError
+from .real_schema import (
+    ReportInsight,
+    ReportParticipant,
+    ReportRequest,
+    ReportSource,
+    ReportSpeech,
+    ReportVote,
 )
 from .schemas import (
     BarrageInsight,
@@ -94,6 +121,54 @@ _REPORT_PADDING_SENTENCE = (
     "This record supports careful comparison, source checking, respectful questioning, "
     "and revision after dialogue."
 )
+
+
+class RealReportProviderPort(Protocol):
+    """Narrow provider seam used by the report worker and fake transports."""
+
+    def build_request(self, value: ReportRequest) -> Any: ...
+
+    def execute(self, value: ReportRequest) -> ReportSectionOutput: ...
+
+
+class RealReportRepositoryPort(Protocol):
+    """The durable operation methods required by one-shot Real Report."""
+
+    def get_policy_snapshot(self, reference: str) -> Any: ...
+
+    def ensure_export_manifest(self, manifest: ExportManifestV1, **kwargs: Any) -> str: ...
+
+    def get_export_manifest(self, reference: str) -> ExportManifestV1 | None: ...
+
+    def create_prepared(self, request: ProviderReservationRequestV1) -> Any: ...
+
+    def get(self, operation_id: str) -> Any: ...
+
+    def ensure_scope_budget(self, scope_id: str, budget: ProviderScopeBudgetV1) -> None: ...
+
+    def assert_hashes_current(self, request: ProviderReservationRequestV1) -> None: ...
+
+    def reserve(self, operation_id: str) -> Any: ...
+
+    def transition(self, operation_id: str, **kwargs: Any) -> Any: ...
+
+    def mark_accepted(self, operation_id: str, *, response_hash: str) -> Any: ...
+
+    def mark_succeeded(self, operation_id: str) -> Any: ...
+
+    def mark_failed(self, operation_id: str, *, safe_error_code: str) -> Any: ...
+
+    def mark_not_sent(self, operation_id: str, *, safe_error_code: str) -> Any: ...
+
+    def mark_acceptance_unknown(self, operation_id: str, *, safe_error_code: str) -> Any: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RealReportRuntime:
+    """One-shot report provider plus its server-side control repository."""
+
+    provider: RealReportProviderPort
+    repository: Any
 
 
 def utc_now() -> datetime:
@@ -318,6 +393,7 @@ class ReportTurnContext:
     round_no: int
     turn_index: int
     speech: str
+    used_evidence_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1008,6 +1084,24 @@ def _report_context(
             )
         )
 
+    evidence_by_turn: dict[str, list[str]] = {}
+    for report_source in source_context:
+        evidence_by_turn.setdefault(str(report_source.turn_id), []).append(
+            str(report_source.turn_source_id)
+        )
+    turn_context = [
+        ReportTurnContext(
+            turn_id=item.turn_id,
+            participant_id=item.participant_id,
+            participant_name=item.participant_name,
+            round_no=item.round_no,
+            turn_index=item.turn_index,
+            speech=item.speech,
+            used_evidence_ids=tuple(evidence_by_turn.get(str(item.turn_id), ())),
+        )
+        for item in turn_context
+    ]
+
     final_votes = _final_vote_rows(db, debate_id, str(window["id"]))
     _verify_frozen_vote_projection(window, participants, final_votes)
     vote_by_participant: dict[str, int] = {}
@@ -1051,6 +1145,62 @@ def build_report_input_manifest(db: Session, debate_id: str) -> ReportInputManif
     """Build and validate the exact manifest consumed by Mock Maya."""
 
     return _report_context(db, debate_id).manifest
+
+
+def build_real_report_request(context: ReportContext) -> ReportRequest:
+    """Project one immutable report context into the closed Real input DTO."""
+
+    participants = tuple(
+        ReportParticipant(
+            slot=cast(Any, participant.slot),
+            agent_name=participant.agent_name,
+            position_summary=(
+                participant.current_position_summary or participant.initial_position_summary
+            ),
+        )
+        for participant in context.manifest.participants
+    )
+    slot_by_participant = {
+        str(item.participant_id): item.slot for item in context.manifest.participants
+    }
+    speeches = tuple(
+        ReportSpeech(
+            slot=cast(Any, slot_by_participant.get(str(turn.participant_id), "A")),
+            round_no=turn.round_no,
+            turn_index=turn.turn_index,
+            speech=turn.speech,
+            used_evidence_ids=turn.used_evidence_ids,
+        )
+        for turn in context.turns
+    )
+    sources = tuple(
+        ReportSource(
+            evidence_id=str(source.turn_source_id),
+            excerpt=source.chunk_text[:2400],
+        )
+        for source in context.sources
+    )
+    counts = {str(vote.participant_id): vote.count for vote in context.manifest.votes}
+    votes = tuple(
+        # Public slot is the only vote key crossing the provider boundary.
+        ReportVote(
+            slot=cast(Any, participant.slot),
+            count=counts.get(str(participant.participant_id), 0),
+        )
+        for participant in context.manifest.participants
+    )
+    insights = tuple(
+        ReportInsight(category=item.category, summary=item.summary)
+        for item in context.manifest.insight.items
+    )
+    return ReportRequest(
+        topic=context.manifest.topic or context.debate.topic,
+        participants=participants,
+        speeches=speeches,
+        sources=sources,
+        votes=votes,
+        insights=insights,
+    )
 
 
 def _safe_fragment(value: str, *, limit: int = 260) -> str:
@@ -1270,6 +1420,43 @@ def render_report_markdown(
     return markdown
 
 
+def render_real_report_markdown(
+    context: ReportContext,
+    sections: ReportSectionOutput,
+) -> str:
+    """Render provider prose with server-owned citations and vote aggregates."""
+
+    evidence_suffix = " ".join(_source_lines(context))
+    count_marker = (
+        f"The code-owned final vote total is {context.vote_total}, and the frozen barrage "
+        f"message total is {context.barrage_total}."
+    )
+    vote_lines = " ".join(_vote_lines(context))
+    interaction_suffix = (
+        "Classroom perspectives are reported as aggregates and anonymous themes. "
+        f"{count_marker} {vote_lines} "
+        + (
+            "This session had no classroom interaction data."
+            if context.vote_total == 0 and context.barrage_total == 0
+            else (
+                "These aggregates describe participation patterns, not the accuracy or moral "
+                "weight of an argument."
+            )
+        )
+    )
+    projected = sections.model_copy(
+        update={
+            "evidence_and_arguments": (
+                f"{sections.evidence_and_arguments} {evidence_suffix}".strip()
+            ),
+            "classroom_perspectives": (
+                f"{sections.classroom_perspectives} {interaction_suffix}".strip()
+            ),
+        }
+    )
+    return render_report_markdown(context, projected)
+
+
 def report_word_count(markdown: str) -> int:
     without_citations = _CITATION_RE.sub("", markdown)
     return len(WORD_RE.findall(without_citations))
@@ -1407,6 +1594,475 @@ def _create_report_revision_for_insight(
     db.flush()
     ensure_report_job(db, revision)
     return revision
+
+
+@dataclass(frozen=True, slots=True)
+class RealReportPreparedOperation:
+    """Hash-only preparation result retained by the explicit continue seam."""
+
+    revision_id: str
+    debate_id: str
+    manifest_hash: str
+    operation_id: str
+    request: ReportRequest
+    context: ReportContext
+
+
+def _report_provider_policy_hash(provider: RealReportProviderPort) -> str:
+    value = getattr(provider, "policy_hash", None)
+    if not isinstance(value, str) or not value:
+        config = getattr(provider, "config", None)
+        value = getattr(config, "policy_hash", None)
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ReportProviderError("report_policy_hash")
+    return value
+
+
+def _report_field_hash(value: object) -> str:
+    return _sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    )
+
+
+def _report_manifest(
+    db: Session,
+    *,
+    context: ReportContext,
+    request: ReportRequest,
+    provider: RealReportProviderPort,
+    prepared: Any,
+) -> ExportManifestV1:
+    policy_hash = _report_provider_policy_hash(provider)
+    policy = db.scalar(
+        select(ProviderPolicySnapshot).where(ProviderPolicySnapshot.policy_hash == policy_hash)
+    )
+    if policy is None:
+        raise ReportProviderError("report_policy_unavailable")
+    source_projection = [
+        {"evidence_id": source.evidence_id, "excerpt": source.excerpt}
+        for source in request.sources
+    ]
+    fields = (
+        ExportFieldV1(
+            "topic_and_platform_rules",
+            _report_field_hash({"topic": request.topic, "prompt": REPORT_SYSTEM_PROMPT}),
+        ),
+        ExportFieldV1(
+            "public_agent_name",
+            _report_field_hash(
+                [
+                    {"slot": item.slot, "agent_name": item.agent_name}
+                    for item in request.participants
+                ]
+            ),
+        ),
+        ExportFieldV1(
+            "public_predecessor_speech",
+            _report_field_hash(
+                [{"slot": item.slot, "speech": item.speech} for item in request.speeches]
+            ),
+        ),
+        ExportFieldV1("current_evidence_excerpt", _report_field_hash(source_projection)),
+        ExportFieldV1(
+            "opaque_local_id",
+            _report_field_hash([item.evidence_id for item in request.sources]),
+        ),
+        ExportFieldV1(
+            "anonymous_insight_summary",
+            _report_field_hash(
+                [{"category": item.category, "summary": item.summary} for item in request.insights]
+            ),
+        ),
+    )
+    estimated_cost = getattr(prepared, "estimated_cost_cny", None)
+    budget = getattr(prepared, "budget", None)
+    max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
+    if max_tokens <= LLM_RESERVED_OUTPUT_TOKEN_CAP:
+        raise ReportProviderError("report_budget_invalid")
+    if not isinstance(estimated_cost, (Decimal, int, float, str)):
+        raise ReportProviderError("report_budget_invalid") from None
+    try:
+        max_cost = float(estimated_cost)
+    except (TypeError, ValueError):
+        raise ReportProviderError("report_budget_invalid") from None
+    if max_cost <= 0:
+        raise ReportProviderError("report_budget_invalid")
+    return ExportManifestV1(
+        scope_id=context.debate.id,
+        provider_operation="llm_maya_report",
+        model_key=REAL_REPORT_MODEL,
+        policy_hash=policy_hash,
+        build_manifest_hash=context.manifest.input_hash(),
+        persona_spec_hash=_sha256("real_report_persona_absent_v1"),
+        fields=fields,
+        operation_revision=1,
+        max_attempts=1,
+        max_total_tokens=max_tokens,
+        max_cost_cny=max_cost,
+    )
+
+
+def prepare_real_report_operation(
+    db: Session,
+    revision_id: str,
+    *,
+    runtime: RealReportRuntime,
+) -> RealReportPreparedOperation:
+    """Persist a report manifest/prepared operation without network I/O."""
+
+    revision = db.get(CivilizationReportRevision, revision_id)
+    if revision is None:
+        raise not_found()
+    if revision.status != "generating":
+        raise ReportProviderError("report_revision_not_pending")
+    context = _report_context(
+        db,
+        revision.debate_id,
+        insight_snapshot_id=revision.insight_snapshot_id,
+    )
+    request = build_real_report_request(context)
+    prepared = runtime.provider.build_request(request)
+    manifest = _report_manifest(
+        db,
+        context=context,
+        request=request,
+        provider=runtime.provider,
+        prepared=prepared,
+    )
+    policy_row_id = db.scalar(
+        select(ProviderPolicySnapshot.id).where(
+            ProviderPolicySnapshot.policy_hash == manifest.policy_hash
+        )
+    )
+    if policy_row_id is None:
+        raise ReportProviderError("report_policy_unavailable")
+    runtime.repository.ensure_scope_budget(
+        context.debate.id,
+        ProviderScopeBudgetV1(
+            max_requests=1,
+            max_total_tokens=manifest.max_total_tokens,
+            max_cost_cny=manifest.max_cost_cny,
+            budget_bucket=LLM_MAYA_REPORT_BUCKET,
+        ),
+    )
+    manifest_id = runtime.repository.ensure_export_manifest(
+        manifest,
+        policy_snapshot_id=str(policy_row_id),
+        course_id=None,
+        group_id=None,
+        agent_version_id=None,
+    )
+    del manifest_id
+    existing = db.scalar(
+        select(ProviderOperation).where(
+            ProviderOperation.scope_id == context.debate.id,
+            ProviderOperation.provider_operation == "llm_maya_report",
+            ProviderOperation.logical_item_id == revision.id,
+            ProviderOperation.attempt_no == 1,
+        )
+    )
+    if existing is not None:
+        if existing.request_hash != prepared.request_hash or (
+            existing.export_manifest_hash != manifest.manifest_hash
+        ):
+            raise ReportProviderError("report_operation_stale")
+        return RealReportPreparedOperation(
+            revision_id=revision.id,
+            debate_id=revision.debate_id,
+            manifest_hash=manifest.manifest_hash,
+            operation_id=existing.id,
+            request=request,
+            context=context,
+        )
+    operation_request = ProviderReservationRequestV1(
+        operation_id=str(uuid4()),
+        scope_id=context.debate.id,
+        provider_operation="llm_maya_report",
+        logical_item_id=revision.id,
+        attempt_no=1,
+        request_hash=prepared.request_hash,
+        max_tokens=manifest.max_total_tokens,
+        max_cost_cny=manifest.max_cost_cny,
+        policy_hash=manifest.policy_hash,
+        export_manifest_hash=manifest.manifest_hash,
+        model_key=REAL_REPORT_MODEL,
+        budget_bucket=LLM_MAYA_REPORT_BUCKET,
+    )
+    try:
+        operation = runtime.repository.create_prepared(operation_request)
+    except Exception as exc:
+        raise ReportProviderError("report_operation_prepare_failed") from exc
+    return RealReportPreparedOperation(
+        revision_id=revision.id,
+        debate_id=revision.debate_id,
+        manifest_hash=manifest.manifest_hash,
+        operation_id=str(operation.id),
+        request=request,
+        context=context,
+    )
+
+
+def _pause_real_report_job(db: Session, revision_id: str) -> None:
+    job = db.scalar(
+        select(Job).where(
+            Job.operation == REPORT_GENERATE_OPERATION,
+            Job.report_revision_id == revision_id,
+        )
+    )
+    if job is None:
+        raise ReportProviderError("report_job_missing")
+    job.state = "interrupted"
+    job.attempt = max(int(job.attempt or 0), 1)
+    job.safe_error_code = "provider_confirmation_required"
+    job.updated_at = utc_now()
+
+
+def _resume_real_report_job(db: Session, revision_id: str) -> None:
+    job = db.scalar(
+        select(Job).where(
+            Job.operation == REPORT_GENERATE_OPERATION,
+            Job.report_revision_id == revision_id,
+        )
+    )
+    if job is None:
+        raise ReportProviderError("report_job_missing")
+    if job.state == "interrupted" and job.safe_error_code == "provider_confirmation_required":
+        job.state = "pending"
+        job.safe_error_code = None
+        job.updated_at = utc_now()
+    elif job.state != "pending":
+        raise ReportProviderError("report_job_not_pending")
+
+
+def _bound_report_operation(
+    db: Session,
+    *,
+    prepared: RealReportPreparedOperation,
+    manifest_hash: str,
+    call_no: int,
+) -> tuple[ProviderOperation, DemoAcceptanceRun]:
+    if manifest_hash != prepared.manifest_hash:
+        raise ReportProviderError("report_manifest_stale")
+    operation = db.get(ProviderOperation, prepared.operation_id)
+    if operation is None or operation.export_manifest_hash != manifest_hash:
+        raise ReportProviderError("report_operation_missing")
+    run_id = operation.acceptance_run_id
+    if run_id is None or operation.call_no != call_no:
+        raise ReportProviderError("report_acceptance_call_required")
+    run = db.get(DemoAcceptanceRun, run_id)
+    if (
+        run is None
+        or run.state not in {"prepared", "executing"}
+        or run.report_revision_id != prepared.revision_id
+        or run.debate_id != prepared.debate_id
+    ):
+        raise ReportProviderError("report_acceptance_run_mismatch")
+    return operation, run
+
+
+def _mark_real_report_failed(
+    db: Session,
+    *,
+    revision: CivilizationReportRevision,
+    code: str,
+    runtime: RealReportRuntime,
+    operation_state: str | None = None,
+) -> CivilizationReportRevision:
+    operation = db.get(ProviderOperation, revision.id)
+    if operation is None:
+        operation = db.scalar(
+            select(ProviderOperation).where(
+                ProviderOperation.provider_operation == "llm_maya_report",
+                ProviderOperation.logical_item_id == revision.id,
+                ProviderOperation.attempt_no == 1,
+            )
+        )
+    if operation is not None:
+        try:
+            current = runtime.repository.get(operation.id)
+            state = operation_state or str(getattr(current, "state", operation.state))
+            if state in {"sending", "reserved", "prepared"}:
+                if code == "report_transport_not_sent":
+                    runtime.repository.mark_not_sent(operation.id, safe_error_code=code)
+                elif code == "report_acceptance_unknown":
+                    runtime.repository.mark_acceptance_unknown(operation.id, safe_error_code=code)
+                else:
+                    runtime.repository.mark_failed(operation.id, safe_error_code=code)
+        except Exception:
+            # The report remains failed even if a secondary ledger transition
+            # is unavailable; no provider retry or Mock fallback is allowed.
+            pass
+    revision.status = "failed"
+    revision.english_markdown = None
+    revision.word_count = None
+    revision.safe_error_code = code
+    revision.updated_at = utc_now()
+    report = db.get(CivilizationReport, revision.report_id)
+    if report is not None:
+        report.generation_status = "failed"
+        report.latest_attempt_status = "failed"
+        report.updated_at = utc_now()
+    _mark_job_failed(db, REPORT_GENERATE_OPERATION, revision.id, code, attempt=1)
+    return revision
+
+
+def _process_real_report_revision(
+    db: Session,
+    revision_id: str,
+    *,
+    runtime: RealReportRuntime,
+    manifest_hash: str | None = None,
+    call_no: int | None = None,
+) -> CivilizationReportRevision:
+    revision = db.get(CivilizationReportRevision, revision_id)
+    if revision is None:
+        raise not_found()
+    if revision.status in {"ready", "failed"}:
+        return revision
+    if not _mark_job_running(db, REPORT_GENERATE_OPERATION, revision.id):
+        return revision
+    db.commit()
+    revision = db.get(CivilizationReportRevision, revision_id)
+    if revision is None:
+        raise not_found()
+    try:
+        prepared = prepare_real_report_operation(db, revision.id, runtime=runtime)
+    except ReportProviderError as exc:
+        _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
+        return revision
+    if manifest_hash is None or call_no is None:
+        _pause_real_report_job(db, revision.id)
+        db.flush()
+        return revision
+    try:
+        operation, _run = _bound_report_operation(
+            db,
+            prepared=prepared,
+            manifest_hash=manifest_hash,
+            call_no=call_no,
+        )
+        budget = getattr(runtime.provider.build_request(prepared.request), "budget", None)
+        max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
+        request = ProviderReservationRequestV1(
+            operation_id=operation.id,
+            scope_id=prepared.debate_id,
+            provider_operation="llm_maya_report",
+            logical_item_id=prepared.revision_id,
+            attempt_no=1,
+            request_hash=str(operation.request_hash),
+            max_tokens=max_tokens,
+            max_cost_cny=float(operation.max_cost_cny),
+            policy_hash=str(operation.policy_hash),
+            export_manifest_hash=manifest_hash,
+            model_key=REAL_REPORT_MODEL,
+            budget_bucket=LLM_MAYA_REPORT_BUCKET,
+        )
+        runtime.repository.assert_hashes_current(request)
+        if (
+            operation.state != "prepared"
+            or operation.request_count != 0
+            or operation.charged_request_count != 0
+        ):
+            raise ReportProviderError("report_operation_not_prepared")
+        runtime.repository.reserve(operation.id)
+        runtime.repository.transition(operation.id, expected="reserved", state="sending")
+        sections = runtime.provider.execute(prepared.request)
+        markdown = render_real_report_markdown(prepared.context, sections)
+        count = validate_report_markdown(
+            markdown,
+            manifest=prepared.context.manifest,
+            vote_total=prepared.context.vote_total,
+            barrage_total=prepared.context.barrage_total,
+        )
+    except ReportProviderError as exc:
+        _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
+        return revision
+    except Exception:
+        _mark_real_report_failed(
+            db,
+            revision=revision,
+            code="report_generation_failed",
+            runtime=runtime,
+        )
+        return revision
+
+    output_hash = _sha256(
+        json.dumps(
+            sections.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+    try:
+        runtime.repository.mark_accepted(operation.id, response_hash=output_hash)
+        revision.status = "ready"
+        revision.attempt = 1
+        revision.english_markdown = markdown
+        revision.word_count = count
+        revision.safe_error_code = None
+        revision.updated_at = utc_now()
+        report = db.get(CivilizationReport, revision.report_id)
+        if report is None:
+            raise ReportProviderError("report_aggregate_missing")
+        report.generation_status = "ready"
+        report.latest_attempt_status = "ready"
+        report.updated_at = utc_now()
+        pointer = db.scalar(
+            select(CivilizationReportCurrentSuccess).where(
+                CivilizationReportCurrentSuccess.report_id == report.id
+            )
+        )
+        if pointer is None:
+            db.add(
+                CivilizationReportCurrentSuccess(
+                    report_id=report.id,
+                    revision_id=revision.id,
+                    debate_id=revision.debate_id,
+                    revision_status="ready",
+                )
+            )
+        else:
+            pointer.revision_id = revision.id
+            pointer.debate_id = revision.debate_id
+            pointer.revision_status = "ready"
+        runtime.repository.mark_succeeded(operation.id)
+        _mark_job_completed(db, REPORT_GENERATE_OPERATION, revision.id, attempt=1)
+        db.flush()
+        _mark_debate_completed(db, revision.debate_id)
+    except ReportProviderError as exc:
+        _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
+    except Exception:
+        _mark_real_report_failed(
+            db,
+            revision=revision,
+            code="report_publication_failed",
+            runtime=runtime,
+        )
+    return revision
+
+
+def continue_real_report_revision(
+    db: Session,
+    revision_id: str,
+    *,
+    manifest_hash: str,
+    call_no: int,
+    runtime: RealReportRuntime,
+) -> CivilizationReportRevision:
+    """Continue only an already attached, exact report operation."""
+
+    revision = db.get(CivilizationReportRevision, revision_id)
+    if revision is None:
+        raise not_found()
+    _resume_real_report_job(db, revision.id)
+    return _process_real_report_revision(
+        db,
+        revision.id,
+        runtime=runtime,
+        manifest_hash=manifest_hash,
+        call_no=call_no,
+    )
 
 
 def _latest_insight(db: Session, debate_id: str) -> BarrageInsightSnapshot | None:
@@ -1768,8 +2424,20 @@ def process_report_revision(
     revision_id: str,
     *,
     generator: Any = generate_mock_report,
+    runtime: RealReportRuntime | None = None,
+    manifest_hash: str | None = None,
+    call_no: int | None = None,
 ) -> CivilizationReportRevision:
     """Run a pending report Job with one shared repair attempt."""
+
+    if runtime is not None:
+        return _process_real_report_revision(
+            db,
+            revision_id,
+            runtime=runtime,
+            manifest_hash=manifest_hash,
+            call_no=call_no,
+        )
 
     revision = db.get(CivilizationReportRevision, revision_id)
     if revision is None:
@@ -1909,8 +2577,13 @@ def _mark_debate_completed(db: Session, debate_id: str) -> None:
         debate.updated_at = utc_now()
 
 
-def process_report_job(db: Session, revision_id: str) -> CivilizationReportRevision:
-    return process_report_revision(db, revision_id)
+def process_report_job(
+    db: Session,
+    revision_id: str,
+    *,
+    runtime: RealReportRuntime | None = None,
+) -> CivilizationReportRevision:
+    return process_report_revision(db, revision_id, runtime=runtime)
 
 
 def download_current_report(
@@ -2005,11 +2678,14 @@ def recover_report_jobs(db: Session) -> int:
 
 __all__ = [
     "MOCK_BARRAGE_INSIGHT_POLICY_KEY",
+    "RealReportPreparedOperation",
+    "RealReportRuntime",
     "ReportContext",
     "ReportSourceContext",
     "ReportTurnContext",
     "WORD_RE",
     "build_report_input_manifest",
+    "build_real_report_request",
     "create_insight_snapshot",
     "download_current_report",
     "ensure_insight_job",
@@ -2023,9 +2699,12 @@ __all__ = [
     "process_insight_snapshot",
     "process_report_job",
     "process_report_revision",
+    "prepare_real_report_operation",
+    "continue_real_report_revision",
     "recover_report_jobs",
     "regenerate_report",
     "render_report_markdown",
+    "render_real_report_markdown",
     "report_word_count",
     "validate_report_markdown",
 ]

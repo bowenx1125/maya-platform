@@ -53,6 +53,8 @@ from .schemas import (
     ProviderDataCallManifestSummaryV1,
     ProviderDataCallPublicationManifestListResponseV1,
     ProviderDataCallPublicationManifestSummaryV1,
+    ProviderDataCallReportManifestListResponseV1,
+    ProviderDataCallReportManifestSummaryV1,
 )
 
 PROVIDER_DISCLOSURE_VERSION = "ProviderDataCallV1"
@@ -61,6 +63,7 @@ STORAGE_FACT = "The supplier stores call data as required by applicable law."
 EMBEDDING_OPERATION = "embedding"
 EMBEDDING_QUERY_OPERATION = "embedding_query"
 LLM_DEBATE_OPERATION = "llm_debate_turn"
+LLM_REPORT_OPERATION = "llm_maya_report"
 
 _PURPOSES: Mapping[str, str] = {
     "embedding": "Build an evidence search index from an approved immutable snapshot.",
@@ -69,6 +72,7 @@ _PURPOSES: Mapping[str, str] = {
     ),
     "llm_debate": "Generate the teacher-approved classroom debate speech.",
     "llm_debate_turn": "Generate the teacher-approved classroom debate speech.",
+    "llm_maya_report": "Generate the teacher-approved civilization mutual-learning report.",
     "tts": "Synthesize the current classroom speech for teacher-controlled playback.",
     "voice_enrollment": "Enroll an approved voice sample for a separate voice operation.",
 }
@@ -203,6 +207,13 @@ class ProviderDisclosureStore(Protocol):
         provider_operation: str,
     ) -> tuple[ExportManifestV1, ...]:
         """Return owner-bound manifests for one Debate and operation."""
+
+    def list_report_manifests_for_debate(
+        self,
+        *,
+        debate_id: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        """Return prepared report manifests scoped to one Debate."""
 
 
 def _blocked(code: str = "provider_preflight_blocked") -> ProviderDisclosureError:
@@ -440,6 +451,72 @@ class ProviderDisclosureService:
     # second DTO or a second authorization implementation.
     list_debate_llm_manifests = list_llm_manifests_for_debate
     list_llm_turn_manifests = list_llm_manifests_for_debate
+
+    def list_report_manifests_for_debate(
+        self,
+        actor_user_id: str,
+        *,
+        debate_id: str,
+    ) -> ProviderDataCallReportManifestListResponseV1:
+        """List prepared Real Report manifests without exposing operations."""
+
+        if not isinstance(debate_id, str) or not _SAFE_OPAQUE_ID_RE.fullmatch(debate_id):
+            raise ProviderDisclosureError("not_found", "The Debate was not found.")
+        exists = getattr(self.store, "debate_exists", None)
+        authorizer = getattr(self.store, "is_teacher_for_debate", None)
+        listing = getattr(self.store, "list_report_manifests_for_debate", None)
+        if not callable(exists) or not callable(authorizer) or not callable(listing):
+            raise _blocked("provider_report_manifest_listing_unavailable")
+        try:
+            if not bool(exists(debate_id)):
+                raise ProviderDisclosureError("not_found", "The Debate was not found.")
+            if not bool(authorizer(actor_user_id, debate_id)):
+                raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+            manifests = tuple(listing(debate_id=debate_id))
+        except ProviderDisclosureError:
+            raise
+        except Exception as exc:
+            raise _blocked("provider_report_manifest_listing_unavailable") from exc
+
+        summaries: list[ProviderDataCallReportManifestSummaryV1] = []
+        for manifest in manifests:
+            if not isinstance(manifest, ExportManifestV1):
+                raise _blocked("provider_manifest_invalid")
+            if manifest.provider_operation != LLM_REPORT_OPERATION:
+                raise _blocked("provider_manifest_listing_invalid")
+            policy, exact_manifest = self._load(
+                policy_ref=manifest.policy_hash,
+                manifest_ref=manifest.manifest_hash,
+            )
+            if exact_manifest != manifest:
+                raise _blocked("provider_manifest_listing_invalid")
+            try:
+                confirmation = self.store.get_export_confirmation(manifest.manifest_hash)
+            except Exception as exc:
+                raise _blocked("provider_confirmation_unavailable") from exc
+            operation_lookup = getattr(self.store, "get_report_operation_id", None)
+            revision_id = (
+                str(operation_lookup(manifest.manifest_hash))
+                if callable(operation_lookup)
+                else None
+            )
+            if revision_id is not None and not _SAFE_OPAQUE_ID_RE.fullmatch(revision_id):
+                raise _blocked("provider_manifest_listing_invalid")
+            revision = self._revision(manifest)
+            summaries.append(
+                ProviderDataCallReportManifestSummaryV1(
+                    report_revision_id=revision_id,
+                    manifest_hash=manifest.manifest_hash,
+                    confirmation_revision=revision,
+                    confirmed=confirmation is not None
+                    and self._confirmation_matches(confirmation, policy, manifest, revision),
+                )
+            )
+        summaries.sort(key=lambda item: (item.report_revision_id or "", item.manifest_hash))
+        return ProviderDataCallReportManifestListResponseV1(
+            debate_id=debate_id,
+            items=tuple(summaries),
+        )
 
     def list_embedding_manifests_for_agent_version(
         self,
@@ -971,6 +1048,27 @@ class InMemoryProviderDisclosureStore:
             manifests.append(item)
         return tuple(manifests)
 
+    def list_report_manifests_for_debate(
+        self,
+        *,
+        debate_id: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        candidates = (self.manifest, *self.debate_manifests)
+        return tuple(
+            item
+            for item in candidates
+            if item.provider_operation == LLM_REPORT_OPERATION
+            and (
+                item.scope_id == debate_id
+                or getattr(item, "debate_id", None) in {None, debate_id}
+            )
+        )
+
+    def get_report_operation_id(self, manifest_hash: str) -> str | None:
+        """Optional fake hook for exposing only the report revision token."""
+
+        return self.turn_ids_by_manifest.get(manifest_hash)
+
     def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
         explicit = self.turn_ids_by_manifest.get(manifest_hash)
         if explicit is not None:
@@ -1316,6 +1414,55 @@ class SqlAlchemyProviderDisclosureStore:
             manifests.append(manifest)
         return tuple(manifests)
 
+    def list_report_manifests_for_debate(
+        self,
+        *,
+        debate_id: str,
+    ) -> tuple[ExportManifestV1, ...]:
+        """Load Real Report manifests by their Debate scope.
+
+        Report manifests intentionally have no Debate/Turn owner pair: a
+        report revision is not a turn.  The immutable Debate scope plus the
+        exact course authorization above is the narrow discovery boundary.
+        """
+
+        hashes = self.db.scalars(
+            select(ProviderExportManifest.manifest_hash)
+            .where(
+                ProviderExportManifest.scope_id == debate_id,
+                ProviderExportManifest.provider_operation == LLM_REPORT_OPERATION,
+            )
+            .order_by(
+                ProviderExportManifest.created_at.asc(),
+                ProviderExportManifest.manifest_hash.asc(),
+            )
+        ).all()
+        manifests: list[ExportManifestV1] = []
+        for manifest_hash in hashes:
+            try:
+                manifest = self._control.get_export_manifest(str(manifest_hash))
+            except Exception as exc:
+                raise ProviderDisclosureStoreError(
+                    "provider report manifest row is invalid"
+                ) from exc
+            if manifest is None or manifest.provider_operation != LLM_REPORT_OPERATION:
+                raise ProviderDisclosureStoreError("provider report manifest row is missing")
+            manifests.append(manifest)
+        return tuple(manifests)
+
+    def get_report_operation_id(self, manifest_hash: str) -> str | None:
+        """Return the opaque report revision token for disclosure only."""
+
+        return self.db.scalar(
+            select(ProviderOperation.logical_item_id)
+            .where(
+                ProviderOperation.provider_operation == LLM_REPORT_OPERATION,
+                ProviderOperation.export_manifest_hash == manifest_hash,
+            )
+            .order_by(ProviderOperation.created_at.asc(), ProviderOperation.id.asc())
+            .limit(1)
+        )
+
     def get_turn_id_for_manifest(self, manifest_hash: str) -> str | None:
         # Migration 0014 gives LLM manifests a direct Turn owner.  Resolve it
         # without importing the future ORM field at module import time so this
@@ -1422,6 +1569,7 @@ __all__ = [
     "EMBEDDING_OPERATION",
     "EMBEDDING_QUERY_OPERATION",
     "LLM_DEBATE_OPERATION",
+    "LLM_REPORT_OPERATION",
     "InMemoryProviderDisclosureStore",
     "PROVIDER_DISCLOSURE_VERSION",
     "ProviderDisclosureError",
