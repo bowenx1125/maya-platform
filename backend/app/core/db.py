@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0013_embedding_identity_stage"
+ALEMBIC_HEAD = "0014_llm_runtime_budget_buckets"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
