@@ -35,6 +35,10 @@ from app.modules.knowledge.providers.adapters import (
     EmbeddingTransportResponse,
 )
 from app.modules.knowledge.providers.embedding import ValidatedEmbeddingBatchV1
+from app.modules.knowledge.providers.outbound_guard import (
+    OutboundEmbeddingDataError,
+    scan_real_embedding_texts,
+)
 from app.modules.knowledge.providers.packing import (
     EmbeddingBatchV1,
     EmbeddingPlanError,
@@ -333,6 +337,71 @@ def test_real_build_is_deterministic_and_has_closed_identity(tmp_path: Path) -> 
         first.documents[0].source_sha256
         == hashlib.sha256(b"# Lesson\n\nA bounded lesson.").hexdigest()
     )
+    fixture.database.dispose()
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "api_key: fixture-secret",
+        "secret",
+        "Authorization: Bearer fixture-token",
+        "password = fixture-password",
+        "student_id: 123456",
+        '{"student_id": "123456"}',
+        "private identity: a student",
+        "student@example.invalid",
+        "13800138000",
+        "01234567-89ab-cdef-0123-456789abcdef",
+    ),
+)
+def test_real_embedding_outbound_guard_rejects_credentials_and_private_identity(
+    value: str,
+) -> None:
+    with pytest.raises(OutboundEmbeddingDataError) as raised:
+        scan_real_embedding_texts((value,), field_name="fixture")
+    assert raised.value.code == "embedding_outbound_data_forbidden"
+    assert value not in str(raised.value)
+
+
+def test_real_embedding_outbound_guard_keeps_general_content_available() -> None:
+    scan_real_embedding_texts(
+        (
+            "A general lesson discusses privacy, identity, account security, "
+            "passwords, credentials, authorization, secret histories, and API keys "
+            "without carrying private records."
+        ),
+        field_name="lesson",
+    )
+
+
+def test_unsafe_real_document_is_rejected_before_manifest_or_provider(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_fixture(
+        tmp_path,
+        source=b"# Lesson\n\nstudent_id: 123456\n\nAccountable governance.",
+    )
+    provider = _CountingRealProvider()
+    with pytest.raises(ProductPublicationError) as raised:
+        run_confirmed_real_embedding_publication(
+            fixture.database,
+            data_root=fixture.data_root,
+            course_id=fixture.course_id,
+            group_id=fixture.group_id,
+            agent_version_id=fixture.agent_version_id,
+            policy=_policy(),
+            provider=provider,
+        )
+    assert raised.value.code == "embedding_outbound_data_forbidden"
+    assert provider.call_count == 0
+    with fixture.database.engine.connect() as connection:
+        assert (
+            connection.execute(
+                select(func.count()).select_from(ProviderExportManifest)
+            ).scalar_one()
+            == 0
+        )
     fixture.database.dispose()
 
 

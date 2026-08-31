@@ -28,6 +28,7 @@ from app.providers.control import (
 )
 from app.providers.control_repository import ProviderRepository
 
+from .outbound_guard import OutboundEmbeddingDataError, scan_real_embedding_texts
 from .query_embedding import QUERY_PROVIDER_OPERATION, query_hash
 from .snapshot_build import REAL_EMBEDDING_IDENTITY
 
@@ -181,6 +182,13 @@ def ensure_real_query_export_manifest(
         hashes.append(value_hash)
     if not texts:
         raise QueryManifestError("query manifest has no unique subquery")
+    try:
+        scan_real_embedding_texts(texts, field_name="turn query")
+    except OutboundEmbeddingDataError as exc:
+        raise QueryManifestError(
+            "a turn query contains data forbidden for real Embedding",
+            code=exc.code,
+        ) from exc
     _assert_snapshot_owner(
         db,
         course_id=course_id,

@@ -56,6 +56,7 @@ from .adapters import (
 )
 from .embedding import EmbeddingProvider
 from .operations import EmbeddingOperationV1
+from .outbound_guard import OutboundEmbeddingDataError, scan_real_embedding_texts
 from .packing import (
     DEFAULT_EMBEDDING_COST_CAP_CNY,
     DEFAULT_EMBEDDING_PRICE_CNY_PER_MILLION,
@@ -245,6 +246,21 @@ def _enabled_documents(
     return tuple(documents)
 
 
+def _scan_document_outbound_texts(documents: tuple[SnapshotBuildInputDocument, ...]) -> None:
+    """Reject private/credential-shaped document text before export hashing."""
+
+    try:
+        scan_real_embedding_texts(
+            (document.text for document in documents),
+            field_name="document chunk source",
+        )
+    except OutboundEmbeddingDataError as exc:
+        raise _product_error(
+            "a document contains data forbidden for real Embedding",
+            exc.code,
+        ) from exc
+
+
 def _deterministic_ids(
     *,
     agent_version_id: str,
@@ -303,6 +319,7 @@ def prepare_real_snapshot_build(
         if not version.persona_spec_hash:
             raise _product_error("PersonaSpec hash is missing", "persona_confirmation_required")
         documents = _enabled_documents(db, version=version, group=group, data_root=root)
+        _scan_document_outbound_texts(documents)
         snapshot_id, build_id = _deterministic_ids(
             agent_version_id=version.id,
             revision=version.revision,
@@ -426,6 +443,16 @@ def ensure_real_embedding_export_manifest(
         or identity.policy_version != REAL_EMBEDDING_POLICY_VERSION
     ):
         raise _product_error("build is not the fixed real embedding identity", "identity_mismatch")
+    try:
+        scan_real_embedding_texts(
+            (chunk.text for chunk in build.chunks),
+            field_name="document chunk source",
+        )
+    except OutboundEmbeddingDataError as exc:
+        raise _product_error(
+            "a document contains data forbidden for real Embedding",
+            exc.code,
+        ) from exc
     with _session_for(database) as db:
         _owner_rows(
             db,
@@ -666,6 +693,16 @@ def _run_confirmed(
     selected_build = fresh_build if build is None else build
     if selected_build.manifest_hash != fresh_build.manifest_hash:
         raise _product_error("current source or owner drifted", "snapshot_build_drift")
+    try:
+        scan_real_embedding_texts(
+            (chunk.text for chunk in selected_build.chunks),
+            field_name="document chunk source",
+        )
+    except OutboundEmbeddingDataError as exc:
+        raise _product_error(
+            "a document contains data forbidden for real Embedding",
+            exc.code,
+        ) from exc
     selected_manifest = ensure_real_embedding_export_manifest(
         database,
         selected_build,

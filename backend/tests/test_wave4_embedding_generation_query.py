@@ -15,6 +15,7 @@ from app.core.models import (
     AgentVersion,
     KnowledgeChunk,
     KnowledgeSnapshot,
+    ProviderExportManifest,
     ProviderReservation,
 )
 from app.modules.debates.generation.mutual_learning_policy import (
@@ -28,6 +29,10 @@ from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
     EmbeddingTransportResponse,
 )
+from app.modules.knowledge.providers.query_manifest import (
+    QueryManifestError,
+    ensure_real_query_export_manifest,
+)
 from app.modules.knowledge.providers.snapshot_build import (
     REAL_EMBEDDING_DIMENSION,
     REAL_EMBEDDING_MODEL,
@@ -35,11 +40,12 @@ from app.modules.knowledge.providers.snapshot_build import (
     REAL_EMBEDDING_PROVIDER,
     REAL_EMBEDDING_REGION,
 )
+from app.modules.knowledge.vector import REAL_EMBEDDING_IDENTITY
 from app.providers.control import ProviderPolicySnapshotV1
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm import MockLLMProvider
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from tests.conftest import login
 from tests.test_wave3_mock_rag_delta import (
@@ -315,3 +321,37 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
         ]
         assert len(query_operations) == 1
         assert query_operations[0].state == "succeeded"
+
+
+def test_unsafe_real_query_is_rejected_before_manifest_persistence(
+    app_factory: Any,
+) -> None:
+    app, database, _settings = app_factory()
+    with TestClient(app):
+        config = DashScopeEmbeddingConfig(api_key="fixture", workspace_id="fixture")
+        with database.session() as db:
+            with pytest.raises(QueryManifestError) as raised:
+                ensure_real_query_export_manifest(
+                    database,
+                    db=db,
+                    scope_id="query-scope",
+                    turn_id="query-turn",
+                    course_id="course-id",
+                    group_id="group-id",
+                    agent_version_id="version-id",
+                    snapshot_id="snapshot-id",
+                    identity=REAL_EMBEDDING_IDENTITY,
+                    transcript_hash=_digest("transcript"),
+                    persona_spec_hash=_digest("persona"),
+                    subqueries=(("viewpoint", "student_id: 123456"),),
+                    policy=_policy(config.resolved_endpoint),
+                )
+            assert raised.value.code == "embedding_outbound_data_forbidden"
+        with database.engine.connect() as connection:
+            assert (
+                connection.execute(
+                    select(func.count()).select_from(ProviderExportManifest)
+                ).scalar_one()
+                == 0
+            )
+    database.dispose()
