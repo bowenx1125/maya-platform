@@ -42,6 +42,10 @@ from app.modules.agents.schemas import (
 )
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
+from app.modules.demo_baseline.service import (
+    reject_baseline_document_mutation,
+    reject_baseline_version_mutation,
+)
 from app.modules.knowledge.files import (
     content_disposition,
     frozen_download_filename,
@@ -176,6 +180,8 @@ async def upload_knowledge_document(
     # creates a group-library document only; in particular it does not create
     # or enable an AgentVersion relation.  Teachers retain read-only access to
     # this endpoint and therefore cannot use the standalone create path.
+    if target_id is not None:
+        reject_baseline_version_mutation(target_id)
     scoped = visible_student_version(db, context, target_id) if target_id else None
     if target_id and scoped is not None and scoped.agent.group_id != str(group_id):
         raise not_found()
@@ -517,6 +523,7 @@ async def replace_knowledge_document(
 ) -> KnowledgeDocumentDTO:
     """Edit one group Markdown source using copy-on-write semantics."""
 
+    reject_baseline_document_mutation(str(document_id))
     scoped = visible_student_document(db, context, str(document_id))
     try:
         fields, filename, content = await parse_upload(request)
@@ -659,6 +666,7 @@ def reindex_knowledge_document(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> JobStatus:
+    reject_baseline_document_mutation(str(document_id))
     scoped = visible_student_document(db, context, str(document_id))
     body_hash = parse_json_payload_hash("reindexKnowledgeDocument", context, [str(document_id)], {})
     record, replay = claim_idempotency(
@@ -774,6 +782,7 @@ def hide_knowledge_document(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> KnowledgeDocumentDTO:
+    reject_baseline_document_mutation(str(document_id))
     scoped = visible_student_document(db, context, str(document_id))
     body_hash = parse_json_payload_hash("hideKnowledgeDocument", context, [str(document_id)], {})
     record, replay = claim_idempotency(
@@ -826,6 +835,7 @@ def set_agent_version_documents(
     # contract while validating it explicitly at the service boundary.
     expected_revision = payload.expected_revision
     document_ids = [str(value) for value in payload.document_ids]
+    reject_baseline_version_mutation(str(version_id))
     scoped = visible_student_version(db, context, str(version_id))
     if scoped.version.state != "draft":
         raise version_immutable()

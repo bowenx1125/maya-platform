@@ -71,6 +71,10 @@ from app.modules.avatars import (
     AvatarConfigValidationError,
     validate_avatar_config,
 )
+from app.modules.demo_baseline.service import (
+    reject_baseline_agent_mutation,
+    reject_baseline_version_mutation,
+)
 from app.modules.knowledge.files import content_disposition, frozen_download_filename
 from app.modules.knowledge.markdown import MAX_RAG_CHARS, MarkdownInputError, normalize_markdown
 from app.modules.knowledge.multipart import integer_field, parse_upload
@@ -630,6 +634,7 @@ def update_agent_metadata(
 ) -> AgentDetail:
     """CAS-update description without touching any versioned Agent data."""
 
+    reject_baseline_agent_mutation(str(agent_id))
     scoped = visible_student_agent(db, context, str(agent_id))
     # Close the authorization read snapshot before taking the final writer
     # lock.  This also makes concurrent updates resolve to one deterministic
@@ -697,6 +702,9 @@ def delete_agent(
     with publish and Debate creation, leaving exactly one committed winner.
     """
 
+    # Keep the reserved-ID check before claiming idempotency or touching any
+    # Agent-owned state. The identifier is already a public Demo projection.
+    reject_baseline_agent_mutation(str(agent_id))
     body_hash = parse_json_payload_hash("deleteAgent", context, [str(agent_id)], {})
     record, replay = claim_idempotency(db, context, "deleteAgent", idempotency_key, body_hash)
     if replay is not None:
@@ -783,6 +791,7 @@ def create_next_agent_version(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentVersionDTO:
+    reject_baseline_agent_mutation(str(agent_id))
     scoped = visible_student_agent(db, context, str(agent_id))
     body_hash = parse_json_payload_hash("createNextAgentVersion", context, [str(agent_id)], {})
     record, replay = claim_idempotency(
@@ -906,6 +915,7 @@ def compile_agent_persona(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> PersonaCompileResponse:
+    reject_baseline_version_mutation(str(version_id))
     scoped = visible_student_version(db, context, str(version_id))
     if scoped.version.state != "draft":
         raise version_immutable()
@@ -950,6 +960,7 @@ def confirm_agent_persona(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentVersionDTO:
+    reject_baseline_version_mutation(str(version_id))
     visible = visible_student_version(db, context, str(version_id))
     if visible.version.state != "draft":
         raise version_immutable()
@@ -988,6 +999,7 @@ def update_agent_draft(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AgentVersionDTO:
+    reject_baseline_version_mutation(str(version_id))
     scoped = visible_student_version(db, context, str(version_id))
     if scoped.version.state != "draft":
         raise version_immutable()
@@ -1073,6 +1085,7 @@ async def upload_agent_md(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentVersionDTO:
+    reject_baseline_version_mutation(str(version_id))
     scoped = visible_student_version(db, context, str(version_id))
     if scoped.version.state != "draft":
         raise version_immutable()
@@ -1175,6 +1188,7 @@ def publish_agent_version(
     # Keep the original scope check for the stable permission/not-found
     # boundary, but never reuse that ORM object after the durable claim.  The
     # guarded re-read below is the authority for the publish write.
+    reject_baseline_version_mutation(str(version_id))
     visible_student_version(db, context, str(version_id))
     body_hash = parse_json_payload_hash(
         "publishAgentVersion", context, [str(version_id)], payload.model_dump()

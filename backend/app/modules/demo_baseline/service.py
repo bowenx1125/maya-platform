@@ -16,6 +16,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -108,6 +109,40 @@ class DemoBaselineConflict(RuntimeError):
     """A reserved baseline row or file differs from the frozen fixture."""
 
     code = "demo_baseline_conflict"
+
+
+BASELINE_MUTATION_ERROR_CODE = "demo_baseline_immutable"
+
+
+def _baseline_mutation_error() -> PlatformError:
+    """Return the single safe error used by every baseline write guard."""
+
+    return PlatformError(
+        BASELINE_MUTATION_ERROR_CODE,
+        "The published Demo baseline is immutable.",
+        409,
+    )
+
+
+def reject_baseline_agent_mutation(agent_id: str) -> None:
+    """Reject writes targeting the reserved system Agent."""
+
+    if str(agent_id) == BASELINE_AGENT_ID:
+        raise _baseline_mutation_error()
+
+
+def reject_baseline_version_mutation(version_id: str) -> None:
+    """Reject writes targeting the reserved published version."""
+
+    if str(version_id) == BASELINE_VERSION_ID:
+        raise _baseline_mutation_error()
+
+
+def reject_baseline_document_mutation(document_id: str) -> None:
+    """Reject writes targeting the reserved source document."""
+
+    if str(document_id) == BASELINE_DOCUMENT_ID:
+        raise _baseline_mutation_error()
 
 
 def _now() -> datetime:
