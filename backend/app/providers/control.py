@@ -67,7 +67,6 @@ _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
         "embedding": EMBEDDING_SNAPSHOT_BUCKET,
         "embedding_snapshot": EMBEDDING_SNAPSHOT_BUCKET,
         "embedding_query": EMBEDDING_QUERY_BUCKET,
-        "llm_debate": LLM_DEBATE_TURN_BUCKET,
         "llm_debate_turn": LLM_DEBATE_TURN_BUCKET,
         "llm_barrage_insight": LLM_BARRAGE_INSIGHT_BUCKET,
         "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
@@ -108,6 +107,14 @@ def validate_budget_bucket(value: str) -> str:
     if value not in PROVIDER_BUDGET_BUCKETS:
         raise ProviderControlError("budget bucket is not allowlisted", code="budget_bucket_invalid")
     return value
+
+
+def _legacy_budget_bucket_for_operation(provider_operation: str) -> str | None:
+    """Read-only compatibility for pre-0014 hydrated operation rows."""
+
+    if provider_operation == "llm_debate":
+        return LLM_DEBATE_TURN_BUCKET
+    return _OPERATION_BUCKETS.get(provider_operation)
 
 
 class ProviderControlError(ValueError):
@@ -451,6 +458,20 @@ class ExportManifestV1:
             for item in self.fields
             if item.field_class == "server_authored_structure_repair_feedback"
         }
+        if self.provider_operation == "llm_debate" and (
+            self.debate_id is not None
+            or self.turn_id is not None
+            or self.max_attempts != 1
+            or self.max_total_tokens != 0
+            or self.max_cost_cny != 0
+            or self.repair_policy_version is not None
+            or self.repair_policy_hash is not None
+            or repair_fields
+        ):
+            raise ExportManifestError(
+                "legacy llm_debate manifests are read-only",
+                code="provider_operation_legacy",
+            )
         is_llm_turn = self.provider_operation == "llm_debate_turn"
         if is_llm_turn:
             if self.max_attempts != 2:
@@ -808,7 +829,9 @@ class ProviderOperationV1:
 
     @property
     def budget_bucket(self) -> str:
-        return budget_bucket_for_operation(self.provider_operation)
+        return _legacy_budget_bucket_for_operation(
+            self.provider_operation
+        ) or budget_bucket_for_operation(self.provider_operation)
 
     @property
     def idempotency_key(self) -> tuple[str, str, str, int]:
@@ -859,7 +882,9 @@ class ProviderReservationV1:
 
     @property
     def budget_bucket(self) -> str:
-        return budget_bucket_for_operation(self.provider_operation)
+        return _legacy_budget_bucket_for_operation(
+            self.provider_operation
+        ) or budget_bucket_for_operation(self.provider_operation)
 
     def as_record(self) -> dict[str, object]:
         return {
@@ -1039,6 +1064,12 @@ class LLMAcceptedStageV1:
         if not isinstance(json_value, dict):
             raise ProviderControlError(
                 "LLM stage output JSON must be an object", code="llm_stage_invalid"
+            )
+        canonical_output_hash = sha256_hex(canonical_json_bytes(json_value))
+        if self.output_hash != canonical_output_hash:
+            raise ProviderControlError(
+                "LLM stage output hash does not match canonical output JSON",
+                code="llm_output_hash_mismatch",
             )
         if self.safe_error_code is not None and not _SAFE_CODE_RE.fullmatch(self.safe_error_code):
             raise ProviderControlError("LLM stage safe error is invalid", code="llm_stage_invalid")

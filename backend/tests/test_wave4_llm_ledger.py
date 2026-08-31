@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,18 +16,65 @@ from app.core.db import Database
 from app.providers.control import (
     EMBEDDING_QUERY_BUCKET,
     LLM_DEBATE_TURN_BUCKET,
+    BudgetExceeded,
+    ExportFieldV1,
+    ExportManifestError,
+    ExportManifestV1,
     InMemoryProviderOperationRepository,
     LLMAcceptedStageV1,
     OperationStateError,
+    ProviderControlError,
+    ProviderPolicySnapshotV1,
     ProviderReservationRequestV1,
     ProviderScopeBudgetV1,
+    canonical_json_bytes,
 )
-from app.providers.control_repository import ProviderRepository, ScopeBudgetAmbiguous
+from app.providers.control_repository import (
+    ProviderRepository,
+    ProviderRepositoryError,
+    ScopeBudgetAmbiguous,
+)
 from sqlalchemy import inspect, text
 
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _output_hash(value: object) -> str:
+    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def _valid_stage(*, operation_id: str = "missing-operation") -> LLMAcceptedStageV1:
+    return LLMAcceptedStageV1(
+        operation_id=operation_id,
+        turn_id="turn",
+        attempt_no=1,
+        request_hash=_hash("request"),
+        prompt_hash=_hash("prompt"),
+        prompt_contract_version="PromptRequestV1",
+        schema_hash=_hash("schema"),
+        tokenizer_id="test-tokenizer",
+        tokenizer_hash=_hash("tokenizer"),
+        rule_set_hash=_hash("rules"),
+        persona_spec_hash=_hash("persona"),
+        transcript_hash=_hash("transcript"),
+        receipt_hash=_hash("receipts"),
+        policy_hash=_hash("policy"),
+        export_manifest_hash=_hash("manifest"),
+        build_manifest_hash=_hash("build"),
+        model_key="qwen3.7-plus-2026-05-26",
+        output_json=json.dumps({"ok": True}),
+        output_hash=_output_hash({"ok": True}),
+        prompt_tokens=4,
+        cached_input_tokens=1,
+        completion_tokens=2,
+        total_tokens=6,
+        input_price_cny_per_million="1",
+        cached_input_price_cny_per_million="1",
+        output_price_cny_per_million="1",
+        estimated_cost_cny="0.000006",
+    )
 
 
 def _request(*, scope_id: str, operation: str, item: str) -> ProviderReservationRequestV1:
@@ -43,6 +91,52 @@ def _request(*, scope_id: str, operation: str, item: str) -> ProviderReservation
         build_manifest_hash=_hash("build"),
         model_key="qwen3.7-plus-2026-05-26" if operation == "llm_debate_turn" else "",
     )
+
+
+def _valid_policy() -> ProviderPolicySnapshotV1:
+    return ProviderPolicySnapshotV1(
+        privacy_notice_retrieved_at="2026-08-30T00:00:00Z",
+        privacy_notice_sha256=_hash("privacy"),
+        service_terms_retrieved_at="2026-08-30T00:00:00Z",
+        service_terms_sha256=_hash("terms"),
+        faq_retrieved_at="2026-08-30T00:00:00Z",
+        faq_sha256=_hash("faq"),
+        no_training_basis="payg-api-terms-2026-08-30",
+        prompt_response_logging_disabled=True,
+        inference_log_backflow_disabled=True,
+        optional_content_logging_disabled=True,
+        service_improvement_disabled=True,
+        storage_disclosed=True,
+        retention_setting="unknown",
+    )
+
+
+def test_legacy_llm_alias_is_read_only_for_new_operation_and_manifest_paths(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ProviderControlError, match="closed budget bucket"):
+        _request(scope_id="debate", operation="llm_debate", item="turn")
+
+    policy = _valid_policy()
+    legacy_manifest = ExportManifestV1(
+        scope_id="debate",
+        provider_operation="llm_debate",
+        model_key="qwen3.7-plus-2026-05-26",
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=_hash("build"),
+        persona_spec_hash=_hash("persona"),
+        fields=(ExportFieldV1("topic_and_platform_rules", _hash("rules")),),
+    )
+    with pytest.raises(ExportManifestError, match="read-only"):
+        replace(legacy_manifest, max_attempts=2)
+
+    database = Database(f"sqlite:///{tmp_path / 'legacy-alias.sqlite3'}")
+    database.initialize_schema()
+    repository = ProviderRepository(database)
+    policy_id = repository.save_policy_snapshot(policy)
+    with pytest.raises(ProviderRepositoryError, match="legacy"):
+        repository.save_export_manifest(legacy_manifest, policy_snapshot_id=policy_id)
+    database.dispose()
 
 
 def test_in_memory_budget_buckets_do_not_collide() -> None:
@@ -104,7 +198,7 @@ def test_llm_stage_is_immutable_and_required_for_success() -> None:
         build_manifest_hash=_hash("build"),
         model_key="qwen3.7-plus-2026-05-26",
         output_json=json.dumps({"ok": True}),
-        output_hash=_hash("output"),
+        output_hash=_output_hash({"ok": True}),
         prompt_tokens=4,
         cached_input_tokens=1,
         completion_tokens=2,
@@ -117,7 +211,26 @@ def test_llm_stage_is_immutable_and_required_for_success() -> None:
     assert repository.stage_llm_accepted(stage) == stage
     assert repository.mark_succeeded(operation.id).state == "succeeded"
     with pytest.raises(OperationStateError, match="immutable"):
-        repository.stage_llm_accepted(replace(stage, output_hash=_hash("other")))
+        repository.stage_llm_accepted(
+            replace(stage, output_json='{"ok":false}', output_hash=_output_hash({"ok": False}))
+        )
+    with pytest.raises(ProviderControlError, match="hash"):
+        replace(stage, output_json='{"ok":false}')
+
+
+def test_sql_llm_stage_rejects_tampered_output_before_insert(tmp_path: Path) -> None:
+    database = Database(f"sqlite:///{tmp_path / 'stage-tamper.sqlite3'}")
+    database.initialize_schema()
+    repository = ProviderRepository(database, require_export_confirmation=False)
+    stage = _valid_stage()
+    object.__setattr__(stage, "output_json", '{"ok":false}')
+    with pytest.raises(ProviderControlError, match="hash"):
+        repository.stage_llm_accepted(stage)
+    with database.engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT COUNT(*) FROM llm_accepted_stages")).scalar_one() == 0
+        )
+    database.dispose()
 
 
 def test_llm_startup_never_treats_unstaged_accepted_output_as_complete() -> None:
@@ -178,6 +291,72 @@ def test_sql_budget_lookup_is_ambiguous_without_bucket(tmp_path: Path) -> None:
     with pytest.raises(ScopeBudgetAmbiguous, match="more than one budget bucket"):
         repository.get_scope_budget("scope")
     assert repository.get_scope_budget("scope", LLM_DEBATE_TURN_BUCKET) is not None
+    database.dispose()
+
+
+def test_sql_budget_reservation_and_release_are_bucket_isolated(tmp_path: Path) -> None:
+    database = Database(f"sqlite:///{tmp_path / 'bucket-isolation.sqlite3'}")
+    database.upgrade_schema()
+    repository = ProviderRepository(database, require_export_confirmation=False)
+    for bucket in (EMBEDDING_QUERY_BUCKET, LLM_DEBATE_TURN_BUCKET):
+        repository.save_scope_budget(
+            "shared-scope",
+            ProviderScopeBudgetV1(
+                max_requests=1,
+                max_total_tokens=10,
+                max_cost_cny=0.01,
+                budget_bucket=bucket,
+            ),
+        )
+    operations = [
+        repository.create_prepared(
+            _request(scope_id="shared-scope", operation=operation, item=f"item-{index}")
+        )
+        for index, operation in enumerate(
+            ("embedding_query", "embedding_query", "llm_debate_turn", "llm_debate_turn")
+        )
+    ]
+
+    def reserve(operation_id: str) -> str:
+        try:
+            repository.reserve(operation_id)
+        except BudgetExceeded:
+            return "rejected"
+        return "reserved"
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        outcomes = tuple(executor.map(reserve, (operation.id for operation in operations)))
+    assert outcomes.count("reserved") == 2
+    assert outcomes.count("rejected") == 2
+    query_budget = repository.get_scope_budget("shared-scope", EMBEDDING_QUERY_BUCKET)
+    llm_budget = repository.get_scope_budget("shared-scope", LLM_DEBATE_TURN_BUCKET)
+    assert query_budget is not None and query_budget.max_requests == 1
+    assert llm_budget is not None and llm_budget.max_requests == 1
+    with database.engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT budget_bucket, allocated_requests FROM provider_scope_budgets "
+                "WHERE scope_id='shared-scope' ORDER BY budget_bucket"
+            )
+        ).all()
+    assert dict(rows) == {
+        EMBEDDING_QUERY_BUCKET: 1,
+        LLM_DEBATE_TURN_BUCKET: 1,
+    }
+    for operation, outcome in zip(operations, outcomes, strict=True):
+        if outcome == "reserved":
+            repository.mark_not_sent(operation.id)
+    with database.engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT budget_bucket, allocated_requests FROM provider_scope_budgets "
+                "WHERE scope_id='shared-scope' ORDER BY budget_bucket"
+            )
+        ).all()
+    assert dict(rows) == {
+        EMBEDDING_QUERY_BUCKET: 0,
+        LLM_DEBATE_TURN_BUCKET: 0,
+    }
     database.dispose()
 
 

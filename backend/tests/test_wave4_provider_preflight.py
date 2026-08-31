@@ -472,7 +472,7 @@ def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
     control = ProviderRepository(database)
     policy = _policy()
     policy_id = control.save_policy_snapshot(policy, snapshot_id="policy-1")
-    manifest = _manifest(policy)
+    manifest = _embedding_manifest(policy)
     control.save_export_manifest(
         manifest,
         policy_snapshot_id=policy_id,
@@ -507,8 +507,8 @@ def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
         assert (
             reloaded.preflight(
                 actor_user_id="teacher",
-                provider_operation="llm_debate",
-                model_key=FIXED_MODELS["llm_debate"],
+                provider_operation="embedding",
+                model_key=FIXED_MODELS["embedding"],
                 scope_id=manifest.scope_id,
             ).export_manifest_hash
             == manifest.manifest_hash
@@ -537,7 +537,7 @@ def test_sql_manifest_authorization_is_bound_to_exact_owner_course(
     version_id = created.json()["versions"][0]["id"]
 
     policy = _policy(snapshot_revision=7)
-    manifest = _manifest(policy, scope_id="owned-build")
+    manifest = _embedding_manifest(policy, scope_id="owned-build")
     repository = ProviderRepository(database)
     policy_id = repository.save_policy_snapshot(policy)
     repository.save_export_manifest(

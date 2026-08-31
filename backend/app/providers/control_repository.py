@@ -211,6 +211,10 @@ class ProviderRepository:
         debate_id: str | None = None,
         turn_id: str | None = None,
     ) -> str:
+        if manifest.provider_operation == "llm_debate":
+            raise ProviderRepositoryError(
+                "legacy llm_debate manifests cannot be persisted",
+            )
         manifest_debate_id, manifest_turn_id = _resolve_manifest_owners(
             manifest,
             debate_id=debate_id,
@@ -398,6 +402,11 @@ class ProviderRepository:
     ) -> None:
         """Require an exact confirmed policy/export pair for one operation."""
 
+        if request.provider_operation == "llm_debate":
+            raise ProviderRepositoryError(
+                "legacy llm_debate operations cannot enter new preflight",
+            )
+
         manifest_table = _MANIFEST_TABLE
         confirmation_table = _CONFIRMATION_TABLE
         policy_table = _POLICY_TABLE
@@ -580,6 +589,10 @@ class ProviderRepository:
         )
 
     def create_prepared(self, request: ProviderReservationRequestV1) -> ProviderOperationV1:
+        if request.provider_operation == "llm_debate":
+            raise ProviderRepositoryError(
+                "legacy llm_debate operations cannot be created",
+            )
         if self.require_export_confirmation:
             self.assert_hashes_current(request)
         operation_id = request.operation_id or str(uuid4())
@@ -663,12 +676,12 @@ class ProviderRepository:
                 raise OperationStateError("provider operation does not exist")
             if operation_row["state"] != "prepared":
                 raise OperationStateError("provider operation is not reservable")
+            budget_bucket = budget_bucket_for_operation(str(operation_row["provider_operation"]))
             budget_row = (
                 connection.execute(
                     select(budget_table).where(
                         budget_table.c.scope_id == operation_row["scope_id"],
-                        budget_table.c.budget_bucket
-                        == budget_bucket_for_operation(str(operation_row["provider_operation"])),
+                        budget_table.c.budget_bucket == budget_bucket,
                     )
                 )
                 .mappings()
@@ -689,9 +702,12 @@ class ProviderRepository:
                 raise BudgetExceeded("provider scope allowance exceeded")
             reservation_id = str(uuid4())
             now = self._now()
-            connection.execute(
+            budget_changed = connection.execute(
                 update(budget_table)
-                .where(budget_table.c.scope_id == operation_row["scope_id"])
+                .where(
+                    budget_table.c.scope_id == operation_row["scope_id"],
+                    budget_table.c.budget_bucket == budget_bucket,
+                )
                 .values(
                     allocated_requests=allocated_requests + 1,
                     allocated_total_tokens=allocated_tokens + _as_int(operation_row["max_tokens"]),
@@ -699,6 +715,8 @@ class ProviderRepository:
                     updated_at=now,
                 )
             )
+            if budget_changed.rowcount != 1:
+                raise ScopeBudgetMissing("scope budget changed during reservation")
             connection.execute(
                 reservation_table.insert().values(
                     id=reservation_id,
@@ -791,7 +809,7 @@ class ProviderRepository:
                 )
             if state == "not_sent" and reservation_row is not None:
                 # Releasing is part of the same transaction as the state CAS.
-                connection.execute(
+                budget_changed = connection.execute(
                     update(budget_table)
                     .where(
                         budget_table.c.scope_id == row["scope_id"],
@@ -807,6 +825,8 @@ class ProviderRepository:
                         updated_at=now,
                     )
                 )
+                if budget_changed.rowcount != 1:
+                    raise ProviderRepositoryError("scope budget release CAS failed")
         return self.operation(operation_id)
 
     def mark_not_sent(
@@ -1246,7 +1266,25 @@ def _llm_stage_from_row(row: Mapping[str, object]) -> LLMAcceptedStageV1:
 def _stages_equal(left: LLMAcceptedStageV1, right: LLMAcceptedStageV1) -> bool:
     """Compare normalized records so SQLite Decimal values are deterministic."""
 
-    return left.as_record() == right.as_record()
+    left_record = left.as_record()
+    right_record = right.as_record()
+    for key in (
+        "input_price_cny_per_million",
+        "cached_input_price_cny_per_million",
+        "output_price_cny_per_million",
+        "estimated_cost_cny",
+        "actual_cost_cny",
+    ):
+        left_value = left_record[key]
+        right_value = right_record[key]
+        if left_value is None or right_value is None:
+            if left_value != right_value:
+                return False
+            continue
+        if Decimal(str(left_value)) != Decimal(str(right_value)):
+            return False
+        left_record[key] = right_record[key] = None
+    return left_record == right_record
 
 
 # Explicit integration aliases.
