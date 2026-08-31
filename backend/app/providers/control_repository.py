@@ -459,13 +459,21 @@ class ProviderRepository:
         ):
             raise PolicyExportStale("provider export build hash is stale")
         if request.provider_operation == "llm_debate_turn":
+            max_attempts = _as_int(row["max_attempts"] or 0)
+            retry_policy_matches = (
+                row["repair_policy_version"] == "repair_feedback_v1"
+                and row["repair_policy_hash"]
+                == "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
+            )
+            one_shot_policy_matches = (
+                row["repair_policy_version"] is None and row["repair_policy_hash"] is None
+            )
             if (
                 row["debate_id"] != request.scope_id
                 or row["turn_id"] != request.logical_item_id
-                or _as_int(row["max_attempts"] or 0) != 2
-                or row["repair_policy_version"] != "repair_feedback_v1"
-                or row["repair_policy_hash"]
-                != "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
+                or max_attempts not in {1, 2}
+                or (max_attempts == 2 and not retry_policy_matches)
+                or (max_attempts == 1 and not one_shot_policy_matches)
             ):
                 raise PolicyExportStale("LLM turn export owner or retry policy is stale")
 

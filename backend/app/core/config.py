@@ -53,6 +53,17 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="PROVIDER_POLICY_HASH",
     )
+    # Real-Core Demo uses endpoint-bound policy hashes per Provider slice.  The
+    # legacy single hash remains accepted only when exactly one real slice is
+    # selected; dual Real Embedding + Real LLM must provide both values.
+    embedding_provider_policy_hash: str | None = Field(
+        default=None,
+        validation_alias="EMBEDDING_PROVIDER_POLICY_HASH",
+    )
+    llm_provider_policy_hash: str | None = Field(
+        default=None,
+        validation_alias="LLM_PROVIDER_POLICY_HASH",
+    )
     deepl_api_key: str | None = Field(default=None, validation_alias="DEEPL_API_KEY")
     # Provider selectors intentionally default to local mocks.  They are
     # server-only switches; no provider identity is returned in API DTOs.
@@ -192,6 +203,19 @@ class Settings(BaseSettings):
             raise ValueError("PROVIDER_POLICY_HASH must be a lowercase SHA-256 value")
         return value.strip()
 
+    @field_validator(
+        "embedding_provider_policy_hash",
+        "llm_provider_policy_hash",
+        mode="before",
+    )
+    @classmethod
+    def provider_slice_policy_hash_is_explicit_sha256(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value.strip()) is None:
+            raise ValueError("provider slice policy hash must be a lowercase SHA-256 value")
+        return value.strip()
+
     @property
     def is_test(self) -> bool:
         """Whether ephemeral test-only defaults may be used."""
@@ -219,13 +243,13 @@ class Settings(BaseSettings):
             prepare_catalog(self)
 
     def validate_provider_configuration(self) -> None:
-        """Allow Mock everywhere, or one explicitly gated real-provider slice.
+        """Allow Mock, one real slice, or the frozen dual Real-Core pair.
 
-        The real-service startup composition is deliberately asymmetric:
-        one reviewed DashScope slice may be selected while all companions
-        remain Mock/disabled.  The LLM adapter still requires its own runtime
-        confirmation/operation gate before any request; selector construction
-        alone performs no network I/O.
+        The only multi-real composition admitted by the Demo is DashScope
+        Embedding plus DashScope LLM with Mock/disabled companions.  Each
+        endpoint-bound slice has its own policy hash.  The LLM adapter still
+        requires its own runtime confirmation/operation gate before any
+        request; selector construction alone performs no network I/O.
         """
 
         selectors = (
@@ -249,36 +273,95 @@ class Settings(BaseSettings):
                 "runtime provider gate permits only one reviewed DashScope slice with "
                 "Mock companions: " + ", ".join(non_mock)
             )
-        real_slices = sum(
-            value == "dashscope"
-            for value in (self.llm_provider, self.embedding_provider, self.tts_provider)
+        real_slice_names = tuple(
+            name
+            for name, value in (
+                ("LLM_PROVIDER", self.llm_provider),
+                ("EMBEDDING_PROVIDER", self.embedding_provider),
+                ("TTS_PROVIDER", self.tts_provider),
+            )
+            if value == "dashscope"
         )
-        if real_slices > 1:
-            raise RuntimeError("runtime provider gate permits only one reviewed DashScope slice")
-        if self.embedding_provider == "dashscope" or self.tts_provider == "dashscope":
+        allowed_real_compositions = {
+            (),
+            ("EMBEDDING_PROVIDER",),
+            ("LLM_PROVIDER",),
+            ("TTS_PROVIDER",),
+            ("LLM_PROVIDER", "EMBEDDING_PROVIDER"),
+        }
+        if real_slice_names not in allowed_real_compositions:
+            raise RuntimeError(
+                "runtime provider gate permits only the Real Embedding + Real LLM pair "
+                "or one reviewed DashScope slice with Mock companions"
+            )
+        if real_slice_names:
             if not self.dashscope_api_key or not self.dashscope_api_key.strip():
                 raise RuntimeError("DASHSCOPE_API_KEY is required for real Provider work")
             if not self.dashscope_workspace_id or not self.dashscope_workspace_id.strip():
                 raise RuntimeError("DASHSCOPE_WORKSPACE_ID is required for real Provider work")
             if self.dashscope_region != "cn-beijing":
                 raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
-        if self.embedding_provider == "dashscope" and self.provider_policy_hash is None:
-            raise RuntimeError("PROVIDER_POLICY_HASH is required for real Embedding publication")
-        if self.llm_provider == "dashscope":
-            if not self.dashscope_api_key or not self.dashscope_api_key.strip():
+        # A legacy PROVIDER_POLICY_HASH is endpoint-ambiguous when both real
+        # slices are selected.  Require the two explicit fields in that case;
+        # a single-real configuration may still use the old field.
+        if len(real_slice_names) == 2:
+            if self.provider_policy_hash is not None and not (
+                self.embedding_provider_policy_hash is not None
+                and self.llm_provider_policy_hash is not None
+            ):
                 raise RuntimeError(
-                    "DASHSCOPE_API_KEY is required for real Provider work; "
-                    "Mock companions remain the default"
+                    "dual real Provider work requires separate "
+                    "EMBEDDING_PROVIDER_POLICY_HASH and LLM_PROVIDER_POLICY_HASH"
                 )
-            if not self.dashscope_workspace_id or not self.dashscope_workspace_id.strip():
+            if self.embedding_provider_policy_hash is None:
                 raise RuntimeError(
-                    "DASHSCOPE_WORKSPACE_ID is required for real Provider work; "
-                    "Mock companions remain the default"
+                    "EMBEDDING_PROVIDER_POLICY_HASH is required for real Embedding publication"
                 )
-            if self.dashscope_region != "cn-beijing":
-                raise RuntimeError("DASHSCOPE_REGION must be cn-beijing for real Provider work")
-            if self.provider_policy_hash is None:
-                raise RuntimeError("PROVIDER_POLICY_HASH is required for real LLM publication")
+            if self.llm_provider_policy_hash is None:
+                raise RuntimeError(
+                    "LLM_PROVIDER_POLICY_HASH is required for real LLM publication"
+                )
+        elif self.embedding_provider == "dashscope" and self.embedding_policy_hash is None:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER_POLICY_HASH (or an unambiguous legacy "
+                "PROVIDER_POLICY_HASH) is required for real Embedding publication"
+            )
+        elif self.llm_provider == "dashscope" and self.llm_policy_hash is None:
+            raise RuntimeError(
+                "LLM_PROVIDER_POLICY_HASH (or an unambiguous legacy "
+                "PROVIDER_POLICY_HASH) is required for real LLM publication"
+            )
+
+    @property
+    def embedding_policy_hash(self) -> str | None:
+        """Return the hash bound to real Embedding, with legacy compatibility."""
+
+        if self.embedding_provider_policy_hash is not None:
+            return self.embedding_provider_policy_hash
+        if self.provider_policy_hash is not None and self.embedding_provider == "dashscope":
+            if self.llm_provider != "dashscope":
+                return self.provider_policy_hash
+        return None
+
+    @property
+    def llm_policy_hash(self) -> str | None:
+        """Return the hash bound to real LLM, with legacy compatibility."""
+
+        if self.llm_provider_policy_hash is not None:
+            return self.llm_provider_policy_hash
+        if self.provider_policy_hash is not None and self.llm_provider == "dashscope":
+            if self.embedding_provider != "dashscope":
+                return self.provider_policy_hash
+        return None
+
+    def provider_policy_hash_for(self, slice_name: str) -> str | None:
+        """Resolve an endpoint policy hash without silently crossing slices."""
+
+        if slice_name == "embedding":
+            return self.embedding_policy_hash
+        if slice_name == "llm":
+            return self.llm_policy_hash
+        raise ValueError("provider policy slice must be embedding or llm")
 
     @property
     def secret_bytes(self) -> bytes:

@@ -81,6 +81,8 @@ from app.modules.knowledge.providers.query_manifest import (
 )
 from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
 from app.modules.knowledge.providers.sql_query import (
+    REAL_CORE_DEMO_QUERY_MAX_REQUESTS,
+    SQL_QUERY_MAX_REQUESTS,
     SqlAlchemyQueryControlAdapter,
     SqlQueryError,
     controlled_query_provider,
@@ -90,7 +92,6 @@ from app.modules.knowledge.providers.tokenizer import TokenizerError, count_toke
 from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
-    REPAIR_FEEDBACK_POLICY_HASH,
     ProviderScopeBudgetV1,
 )
 from app.providers.control_repository import ProviderRepository
@@ -102,11 +103,41 @@ from app.providers.factory import (
 )
 from app.providers.llm import LLMProvider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
-from app.providers.llm_price_card import debate_budget_cap
+from app.providers.llm_price_card import debate_budget_cap, real_core_demo_budget_cap
 
 from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
+
+
+def _provider_policy_hash(settings: object | None, slice_name: str) -> str | None:
+    """Resolve one endpoint policy while retaining legacy test settings."""
+
+    resolver = getattr(settings, "provider_policy_hash_for", None)
+    if callable(resolver):
+        return cast(str | None, resolver(slice_name))
+    explicit = getattr(settings, f"{slice_name}_provider_policy_hash", None)
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    legacy = getattr(settings, "provider_policy_hash", None)
+    provider = getattr(settings, f"{slice_name}_provider", "mock")
+    other = "llm" if slice_name == "embedding" else "embedding"
+    other_provider = getattr(settings, f"{other}_provider", "mock")
+    if (
+        isinstance(legacy, str)
+        and legacy
+        and provider == "dashscope"
+        and other_provider != "dashscope"
+    ):
+        return legacy
+    return None
+
+
+def _dual_real(settings: object | None) -> bool:
+    return (
+        getattr(settings, "llm_provider", "mock") == "dashscope"
+        and getattr(settings, "embedding_provider", "mock") == "dashscope"
+    )
 
 
 class SqlSnapshotSearch:
@@ -273,9 +304,8 @@ class SqlTurnPreparer:
             return self.llm_runtime, self.llm_runtime_options, None
         if not isinstance(self.llm, DashScopeLLMAdapter):
             return None, {}, None
-        policy_hash = self.llm_runtime_options.get("policy_hash") or getattr(
-            self.settings, "provider_policy_hash", None
-        )
+        configured_policy_hash = _provider_policy_hash(self.settings, "llm")
+        policy_hash = self.llm_runtime_options.get("policy_hash") or configured_policy_hash
         if not isinstance(policy_hash, str) or not policy_hash:
             raise PlatformError(
                 "provider_preflight_blocked",
@@ -303,7 +333,12 @@ class SqlTurnPreparer:
                 503,
             )
         try:
-            cap = debate_budget_cap(len(participants), round_count=2)
+            dual_real = _dual_real(self.settings)
+            cap = (
+                real_core_demo_budget_cap(len(participants), round_count=2)
+                if dual_real
+                else debate_budget_cap(len(participants), round_count=2)
+            )
             repository.ensure_scope_budget(
                 str(debate.id),
                 ProviderScopeBudgetV1(
@@ -323,8 +358,26 @@ class SqlTurnPreparer:
         if outbound_manifest is None:
             from app.providers.llm_privacy import LLMOutboundManifestV1
 
-            outbound_manifest = LLMOutboundManifestV1()
+            # The dual Real-Core Demo has a fixed seven-request envelope:
+            # one Snapshot, two real queries and four LLM turns.  Each LLM
+            # turn is one-shot; structure/transport repair is deliberately
+            # disabled for this bounded product run.
+            dual_real = _dual_real(self.settings)
+            outbound_manifest = (
+                LLMOutboundManifestV1(max_attempts=1)
+                if dual_real
+                else LLMOutboundManifestV1()
+            )
             self.llm.outbound_manifest = outbound_manifest
+        if (
+            _dual_real(self.settings)
+            and int(getattr(outbound_manifest, "max_attempts", 0)) != 1
+        ):
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The dual Real-Core LLM manifest must permit exactly one attempt.",
+                503,
+            )
         runtime = LLMTurnRuntime(
             ledger=repository,
             adapter=self.llm,
@@ -333,6 +386,7 @@ class SqlTurnPreparer:
             agent_count=len(participants),
             round_count=2,
             defer_publication=True,
+            budget_cap=cap,
         )
         version = db.get(AgentVersion, str(participant_row.agent_version_id))
         agent = db.get(Agent, version.agent_id) if version is not None else None
@@ -350,7 +404,7 @@ class SqlTurnPreparer:
             "course_id": str(group.course_id),
             "group_id": str(group.id),
             "agent_version_id": str(version.id),
-            "repair_policy_hash": REPAIR_FEEDBACK_POLICY_HASH,
+            "repair_policy_hash": getattr(outbound_manifest, "repair_policy_hash", None) or "",
             "outbound_manifest": outbound_manifest,
             "identity_tokens": tuple(
                 dict.fromkeys(
@@ -879,7 +933,7 @@ class SqlTurnPreparer:
             raise PlatformError(
                 "provider_unavailable", "The service is temporarily unavailable.", 503
             )
-        policy_hash = getattr(self.settings, "provider_policy_hash", None)
+        policy_hash = _provider_policy_hash(self.settings, "embedding")
         if not isinstance(policy_hash, str):
             raise PlatformError(
                 "provider_preflight_blocked",
@@ -934,6 +988,12 @@ class SqlTurnPreparer:
         attempt_no = 1
         if operations:
             latest = max(operations, key=lambda operation: operation.attempt_no)
+            if _dual_real(self.settings) and latest.state != "succeeded":
+                raise PlatformError(
+                    "provider_retry_forbidden",
+                    "The Real-Core query attempt is terminal; no retry is authorized.",
+                    503,
+                )
             if latest.state == "not_sent" and latest.attempt_no < 2:
                 attempt_no = latest.attempt_no + 1
             else:
@@ -951,6 +1011,11 @@ class SqlTurnPreparer:
                 query_hashes=query_plan.query_hashes,
                 attempt_no=attempt_no,
                 logical_item_id=logical_item_id,
+                max_requests=(
+                    REAL_CORE_DEMO_QUERY_MAX_REQUESTS
+                    if _dual_real(self.settings)
+                    else SQL_QUERY_MAX_REQUESTS
+                ),
                 repository=ProviderRepository(db, require_export_confirmation=False),
             )
             pending_control.prepare_disclosure_operation(
@@ -1019,6 +1084,11 @@ class SqlTurnPreparer:
             attempt_no=attempt_no,
             logical_item_id=logical_item_id,
             confirmation_revision=confirmation.confirmation_revision,
+            max_requests=(
+                REAL_CORE_DEMO_QUERY_MAX_REQUESTS
+                if _dual_real(self.settings)
+                else SQL_QUERY_MAX_REQUESTS
+            ),
         )
         stage_store = SqlAlchemyEmbeddingStageStore(db)
         controlled_provider = controlled_query_provider(

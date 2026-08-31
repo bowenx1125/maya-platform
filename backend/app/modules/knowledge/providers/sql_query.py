@@ -53,6 +53,7 @@ from app.providers.control_repository import ProviderRepository
 SQL_QUERY_MAX_REQUESTS = 25
 SQL_QUERY_MAX_TOTAL_TOKENS = 150_000
 SQL_QUERY_MAX_COST_CNY = 0.10
+REAL_CORE_DEMO_QUERY_MAX_REQUESTS = 2
 SQL_QUERY_PRICE_CNY_PER_MILLION = Decimal("0.5")
 SQL_QUERY_PROVIDER_OPERATION = QUERY_PROVIDER_OPERATION
 
@@ -319,6 +320,7 @@ class SqlAlchemyQueryControlAdapter(
         logical_item_id: str | None = None,
         confirmation_revision: int | None = None,
         repository: ProviderRepository | None = None,
+        max_requests: int = SQL_QUERY_MAX_REQUESTS,
     ) -> None:
         try:
             request = SqlQueryRequestV1(
@@ -337,6 +339,9 @@ class SqlAlchemyQueryControlAdapter(
             raise SqlQueryPreflightError("query request context is invalid") from exc
         self.request = request
         self.repository = repository or ProviderRepository(database)  # type: ignore[arg-type]
+        if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 1:
+            raise SqlQueryPreflightError("query request cap is invalid")
+        self.max_requests = max_requests
         self._lock = RLock()
         self._active_operation: ProviderOperationV1 | None = None
 
@@ -451,7 +456,7 @@ class SqlAlchemyQueryControlAdapter(
             self.repository.save_scope_budget(
                 self.request.scope_id,
                 ProviderScopeBudgetV1(
-                    max_requests=SQL_QUERY_MAX_REQUESTS,
+                    max_requests=self.max_requests,
                     max_total_tokens=SQL_QUERY_MAX_TOTAL_TOKENS,
                     max_cost_cny=SQL_QUERY_MAX_COST_CNY,
                     budget_bucket=EMBEDDING_QUERY_BUCKET,
@@ -959,6 +964,7 @@ __all__ = [
     "SQL_QUERY_MAX_COST_CNY",
     "SQL_QUERY_MAX_REQUESTS",
     "SQL_QUERY_MAX_TOTAL_TOKENS",
+    "REAL_CORE_DEMO_QUERY_MAX_REQUESTS",
     "SQL_QUERY_PRICE_CNY_PER_MILLION",
     "SQL_QUERY_PROVIDER_OPERATION",
     "SqlAlchemyQueryControlAdapter",

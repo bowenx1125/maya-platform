@@ -84,12 +84,17 @@ def llm_provider(
         or settings.dashscope_region != "cn-beijing"
     ):
         raise RuntimeError("DashScope LLM provider is not configured")
+    policy_hash = settings.provider_policy_hash_for("llm")
+    if not isinstance(policy_hash, str) or not policy_hash:
+        raise RuntimeError(
+            "LLM_PROVIDER_POLICY_HASH is required for the selected real LLM resource"
+        )
     return DashScopeLLMAdapter(
         DashScopeLLMConfig(
             api_key=settings.dashscope_api_key,
             workspace_id=settings.dashscope_workspace_id,
             region=settings.dashscope_region,
-            policy_hash=settings.provider_policy_hash or "",
+            policy_hash=policy_hash,
         ),
         transport,
         tokenizer=tokenizer,

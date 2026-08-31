@@ -412,7 +412,7 @@ def _publish_real_embedding_snapshot(
     expected_revision: int,
     record: IdempotencyRecord,
 ) -> None:
-    policy_hash = settings.provider_policy_hash
+    policy_hash = settings.provider_policy_hash_for("embedding")
     if policy_hash is None:
         raise PlatformError(
             "provider_preflight_blocked",

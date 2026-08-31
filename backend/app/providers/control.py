@@ -542,18 +542,23 @@ class ExportManifestV1:
             )
         is_llm_turn = self.provider_operation == "llm_debate_turn"
         if is_llm_turn:
-            if self.max_attempts != 2:
-                raise ExportManifestError(
-                    "LLM turn manifest must disclose two attempts",
-                    code="export_attempts_invalid",
-                )
-            if (
-                self.repair_policy_version != REPAIR_FEEDBACK_POLICY_VERSION
-                or self.repair_policy_hash != REPAIR_FEEDBACK_POLICY_HASH
-                or not repair_fields
+            if self.max_attempts == 2:
+                if (
+                    self.repair_policy_version != REPAIR_FEEDBACK_POLICY_VERSION
+                    or self.repair_policy_hash != REPAIR_FEEDBACK_POLICY_HASH
+                    or not repair_fields
+                ):
+                    raise ExportManifestError(
+                        "LLM turn manifest must disclose repair feedback policy",
+                        code="repair_policy_invalid",
+                    )
+            elif (
+                self.repair_policy_version is not None
+                or self.repair_policy_hash is not None
+                or repair_fields
             ):
                 raise ExportManifestError(
-                    "LLM turn manifest must disclose repair feedback policy",
+                    "one-shot LLM turn manifests cannot disclose repair feedback",
                     code="repair_policy_invalid",
                 )
         elif repair_fields or self.repair_policy_version is not None:

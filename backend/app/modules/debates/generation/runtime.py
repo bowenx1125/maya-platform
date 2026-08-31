@@ -460,11 +460,19 @@ class LLMTurnRuntime:
         agent_count: int = 2,
         round_count: int = 2,
         defer_publication: bool = False,
+        max_attempts: int = LLM_MAX_ATTEMPTS,
+        budget_cap: object | None = None,
     ) -> None:
         if isinstance(agent_count, bool) or not isinstance(agent_count, int) or agent_count < 2:
             raise ValueError("agent_count must be at least two")
         if round_count != 2:
             raise ValueError("LLM-A runtime is frozen to two rounds")
+        if (
+            isinstance(max_attempts, bool)
+            or not isinstance(max_attempts, int)
+            or max_attempts not in {1, 2}
+        ):
+            raise ValueError("max_attempts must be one or two")
         self.ledger = ledger
         self.adapter = adapter
         self.stage_store = stage_store
@@ -476,7 +484,19 @@ class LLMTurnRuntime:
         self.agent_count = agent_count
         self.round_count = round_count
         self.defer_publication = defer_publication
+        self.max_attempts = max_attempts
+        self.budget_cap = budget_cap
         self._recovery_inputs: dict[str, LLMRecoveryInputV1] = {}
+
+    def _effective_max_attempts(self, prepared: object | None = None) -> int:
+        """Honor the stricter one-shot ceiling carried by a turn manifest."""
+
+        value = self.max_attempts
+        manifest = _read(prepared, "outbound_manifest") if prepared is not None else None
+        manifest_attempts = _read(manifest, "max_attempts") if manifest is not None else None
+        if isinstance(manifest_attempts, int) and not isinstance(manifest_attempts, bool):
+            value = min(value, manifest_attempts)
+        return value
 
     def prepare_manifest(
         self,
@@ -516,7 +536,10 @@ class LLMTurnRuntime:
             outbound_manifest=manifest,
         )
         try:
-            cap = debate_budget_cap(self.agent_count, round_count=self.round_count)
+            cap = self.budget_cap or debate_budget_cap(
+                self.agent_count,
+                round_count=self.round_count,
+            )
             class_hashes = {
                 "topic_and_platform_rules": prompt.request.rule_set_hash,
                 "confirmed_structured_persona": prompt.request.persona_spec_hash,
@@ -596,7 +619,12 @@ class LLMTurnRuntime:
     ) -> LLMPreparedAttemptV1:
         """Freeze request identity and create a prepared zero-use operation."""
 
-        if attempt_no not in {1, 2}:
+        if (
+            isinstance(attempt_no, bool)
+            or not isinstance(attempt_no, int)
+            or attempt_no not in {1, 2}
+            or attempt_no > self.max_attempts
+        ):
             raise LLMRuntimeError(code="llm_attempt_exhausted")
         resolved_debate = debate_id or prompt.request.debate_id
         resolved_turn = turn_id or prompt.request.turn_id
@@ -609,6 +637,14 @@ class LLMTurnRuntime:
             LLMOutboundManifestV1 | None,
             outbound_manifest or getattr(self.adapter, "outbound_manifest", None),
         )
+        if effective_manifest is not None:
+            manifest_attempts = _read(effective_manifest, "max_attempts")
+            if (
+                isinstance(manifest_attempts, int)
+                and not isinstance(manifest_attempts, bool)
+                and attempt_no > manifest_attempts
+            ):
+                raise LLMRuntimeError(code="llm_attempt_exceeds_manifest")
         effective_repair_policy_hash = repair_policy_hash or (
             effective_manifest.repair_policy_hash
             if effective_manifest is not None
@@ -824,6 +860,8 @@ class LLMTurnRuntime:
         return value
 
     def _budget_cap(self, price_card: object, budget: object) -> object:
+        if self.budget_cap is not None:
+            return self.budget_cap
         if callable(debate_budget_cap):
             try:
                 return _invoke(
@@ -1593,7 +1631,8 @@ class LLMTurnRuntime:
             )
         current = prepared
         traces: list[LLMAttemptTraceV1] = []
-        while current.attempt_no <= LLM_MAX_ATTEMPTS:
+        max_attempts = self._effective_max_attempts(prepared)
+        while current.attempt_no <= max_attempts:
             operation: object | None = current.operation
             operation_id = current.operation_id
             try:
@@ -1695,7 +1734,7 @@ class LLMTurnRuntime:
                             "provider_not_sent",
                         )
                     )
-                    if current.attempt_no == 1:
+                    if current.attempt_no == 1 and max_attempts >= 2:
                         current = self._attempt_two(current)
                         continue
                     return LLMRunOutcomeV1(
@@ -1745,7 +1784,7 @@ class LLMTurnRuntime:
                             "provider_not_sent",
                         )
                     )
-                    if current.attempt_no == 1:
+                    if current.attempt_no == 1 and max_attempts >= 2:
                         current = self._attempt_two(current)
                         continue
                     return LLMRunOutcomeV1(
@@ -1797,7 +1836,7 @@ class LLMTurnRuntime:
                         code,
                     )
                 )
-                if current.attempt_no == 1:
+                if current.attempt_no == 1 and max_attempts >= 2:
                     current = self._attempt_two(current)
                     continue
                 return LLMRunOutcomeV1(
@@ -1862,6 +1901,7 @@ class LLMTurnRuntime:
             if (
                 not repairable
                 and current.attempt_no == 1
+                and max_attempts >= 2
                 and _result_value(accepted, "failure_kind") == "structure_invalid"
                 and str(
                     _result_value(accepted, "acceptance", "acceptance_state", default="accepted")
@@ -1875,6 +1915,7 @@ class LLMTurnRuntime:
             if (
                 not repairable
                 and current.attempt_no == 1
+                and max_attempts >= 2
                 and safe_error in {"output_truncated", "json_invalid", "schema_invalid"}
                 and _read(accepted, "schema_valid") is False
             ):
@@ -1912,7 +1953,7 @@ class LLMTurnRuntime:
                         code,
                     )
                 )
-                if current.attempt_no == 1:
+                if current.attempt_no == 1 and max_attempts >= 2:
                     operation = self._fail_operation(operation_id, operation, code)
                     current = self._attempt_two(current, response=accepted)
                     continue
@@ -1979,7 +2020,7 @@ class LLMTurnRuntime:
                         "rule_invalid",
                     )
                 )
-                if current.attempt_no == 1:
+                if current.attempt_no == 1 and max_attempts >= 2:
                     operation = self._fail_operation(operation_id, operation, "rule_invalid")
                     current = self._attempt_two(current, response=accepted)
                     continue

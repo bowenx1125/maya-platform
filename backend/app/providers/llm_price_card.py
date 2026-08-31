@@ -26,6 +26,10 @@ LLM_SMALL_DEBATE_MAX_ATTEMPTS: Final = 8
 LLM_SMALL_DEBATE_MAX_COST: Final = Decimal("1.20")
 LLM_FULL_DEBATE_MAX_ATTEMPTS: Final = 20
 LLM_FULL_DEBATE_MAX_COST: Final = Decimal("3.00")
+REAL_CORE_DEMO_AGENT_COUNT: Final = 2
+REAL_CORE_DEMO_ROUND_COUNT: Final = 2
+REAL_CORE_DEMO_LLM_MAX_REQUESTS: Final = 4
+REAL_CORE_DEMO_LLM_MAX_COST: Final = Decimal("0.60")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MICRO_CNY = Decimal("0.000001")
 
@@ -290,6 +294,27 @@ def debate_budget_cap(agent_count: int, *, round_count: int = 2) -> LLMBudgetCap
     raise LLMPriceCardError("debate exceeds the LLM-A Agent cap")
 
 
+def real_core_demo_budget_cap(
+    agent_count: int,
+    *,
+    round_count: int = REAL_CORE_DEMO_ROUND_COUNT,
+) -> LLMBudgetCapV1:
+    """Return the one-shot four-turn LLM cap for the Real-Core Demo.
+
+    The Demo fixes two Agents and two rounds.  Its one request per turn rule
+    is intentionally separate from the general LLM-A repair budget so a
+    production/recovery allowance cannot silently authorize a seventh LLM
+    request.
+    """
+
+    if agent_count != REAL_CORE_DEMO_AGENT_COUNT or round_count != REAL_CORE_DEMO_ROUND_COUNT:
+        raise LLMPriceCardError("Real-Core Demo LLM budget is fixed to two Agents and two rounds")
+    return LLMBudgetCapV1(
+        max_requests=REAL_CORE_DEMO_LLM_MAX_REQUESTS,
+        max_cost_cny=REAL_CORE_DEMO_LLM_MAX_COST,
+    )
+
+
 # Common alternate names used by ledger/runtime callers.
 ceil_6 = ceil_cny
 reservation_cost_cny = reservation_cost
@@ -311,6 +336,10 @@ __all__ = [
     "LLM_RESERVED_OUTPUT_TOKEN_CAP",
     "LLM_SMALL_DEBATE_MAX_ATTEMPTS",
     "LLM_SMALL_DEBATE_MAX_COST",
+    "REAL_CORE_DEMO_AGENT_COUNT",
+    "REAL_CORE_DEMO_LLM_MAX_COST",
+    "REAL_CORE_DEMO_LLM_MAX_REQUESTS",
+    "REAL_CORE_DEMO_ROUND_COUNT",
     "LLMBudgetCapV1",
     "LLMPriceCardError",
     "LLMPriceCardV1",
@@ -320,6 +349,7 @@ __all__ = [
     "ceil_6",
     "ceil_cny",
     "debate_budget_cap",
+    "real_core_demo_budget_cap",
     "reservation_cost",
     "reservation_cost_cny",
 ]
