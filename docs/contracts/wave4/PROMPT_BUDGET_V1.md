@@ -74,6 +74,9 @@ two-attempt maximum and full worst-case cost. It is allowed only for:
 `LLM_A_RUNTIME_V1.md` is authoritative for the exact transport classification table.
 Any HTTP status is accepted/charged; only a pre-byte DNS/TCP/TLS/connect failure is
 `not_sent`. Write/read/protocol uncertainty is `acceptance_unknown` and never retries.
+The pre-confirmed export manifest includes the closed
+`server_authored_structure_repair_feedback` class and `repair_feedback_v1` policy hash.
+Attempt 2 is rescanned before send; failed values/messages are never copied into it.
 
 Retrieval may run a second time only when the first retrieval ended in a technical
 failure before any LLM request. That is a retrieval retry, not a structure repair.

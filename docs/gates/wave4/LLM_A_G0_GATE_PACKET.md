@@ -35,6 +35,14 @@ ambiguities. The current contract additionally freezes:
    cached-token fallback, upward CNY rounding, usage overrun handling and permanent
    worst-case allocation for every accepted/unknown attempt.
 
+The next re-audit found one final P1: structure-repair feedback was not part of the
+ProviderDataCall allowlist or teacher-confirmed manifest. The current candidate adds a
+closed `server_authored_structure_repair_feedback` class and binds the finite
+`repair_feedback_v1` grammar/hash
+`d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b` before
+attempt 1. Attempt 2 adds only that field, receives its own request hash and is
+rescanned; rejected values and messages can never be copied.
+
 ## Repair authority
 
 The current candidate freezes the missing decisions in:
@@ -42,6 +50,8 @@ The current candidate freezes the missing decisions in:
 - `docs/contracts/wave4/LLM_A_RUNTIME_V1.md`;
 - `docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json` with SHA-256
   `1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c`;
+- `docs/contracts/wave4/LLM_REPAIR_FEEDBACK_V1.json` with SHA-256
+  `d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b`;
 - revised `PROVIDER_DATA_CALL_V1.md` and `PROMPT_BUDGET_V1.md` cross-references.
 
 The exact request is one no-redirect Beijing Chat Completion using

@@ -30,3 +30,5 @@ W4-LLM-A design is additionally specified by:
   confirmation and atomic publication rules;
 - `LLM_TURN_OUTPUT_SCHEMA_V1.json` — the complete strict Provider-output schema whose
   references are mapped to server-owned IDs after validation.
+- `LLM_REPAIR_FEEDBACK_V1.json` — the only server-authored code/pointer grammar allowed
+  to alter the canonical user message on a confirmed structure-repair attempt.

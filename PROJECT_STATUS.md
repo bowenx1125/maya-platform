@@ -45,8 +45,17 @@ to the fixed DashScope-native dialect while generic/OpenAI-compatible responses 
 require exact model. Incremental Sol then found one P1 conflict case where a correct
 top-level model could mask a wrong `output.model`; commit `48da2a7` now validates both
 locations independently and rejects every conflicting explicit declaration. Fake tests
-cover the repair; a final incremental Sol audit is still required. No CI run has
+cover the repair; Sol High returned `EMBED_DELTA PASS / P0=0 / P1=0 / P2=0` on exact
+SHA `af0bd19`. The real preflight remains FAILED and cannot be retried. No CI run has
 occurred.
+
+W4-LLM-A G0-S began `CHANGES_REQUIRED / P1=6`; wire/schema, atomic publication, budget,
+ownership, privacy and tokenizer contracts closed those findings. Re-audits closed
+finish/usage, sentinel, retry and 1,510-Token reservation semantics, then found one P1:
+repair feedback lacked a confirmed outbound class. The current candidate adds a finite
+server-authored code/JSON-Pointer grammar and policy hash to the confirmed manifest.
+Luna migration/implementation and every real LLM call remain unauthorized pending final
+G0-S PASS.
 
 ## Source and remote
 
@@ -173,9 +182,9 @@ code`, not the full historical monolith.
 
 ## Next Gate
 
-Submit the isolated DashScope response-dialect repair to incremental Sol High; do not
-repeat the exhausted 1024 preflight. In parallel, obtain Sol High G0-S PASS on the new
-W4-LLM-A wire/schema/runtime/budget/disclosure contracts before any Luna LLM coding.
+Do not repeat the exhausted 1024 preflight. Obtain Sol High G0-S PASS on the final
+W4-LLM-A wire/schema/runtime/budget/disclosure/repair-feedback contracts before any Luna
+LLM coding.
 W4-EMBED remains unsigned because the real preflight and empty-runtime browser
 publication/query/retrieval/Evidence/restart chain have not passed. GitHub CI remains
 deferred to the final integrated Wave 4 PR.

@@ -59,9 +59,10 @@ Schema for the Qwen3.7-Plus family.
 The request hash is SHA-256 over canonical JSON containing method, exact resolved
 endpoint, the complete Provider-visible body, prompt contract version, schema hash,
 tokenizer ID/hash, rule/persona/transcript/receipt hashes, turn ID, generation fence,
-policy hash and export-manifest hash. Authorization is excluded. The resolved endpoint
-participates ephemerally in the hash input, but the workspace value and raw endpoint are
-never persisted or exposed; only the resulting request hash is stored.
+policy hash, export-manifest hash and repair-policy hash. Authorization is excluded. The
+resolved endpoint participates ephemerally in the hash input, but the workspace value
+and raw endpoint are never persisted or exposed; only the resulting request hash is
+stored.
 
 Official references checked 2026-08-31:
 
@@ -185,6 +186,24 @@ attempt 1 reaches either:
   RuleSet/output-structure failure, in which case only the frozen safe code and JSON
   pointer list are added as `repair_feedback`.
 
+`repair_feedback_v1` is the exact repository file `LLM_REPAIR_FEEDBACK_V1.json`,
+SHA-256 `d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b`.
+It has the shape
+`{"code": <enum>, "json_pointers": <array>}`. The code is one of
+`output_truncated`, `json_invalid`, `schema_invalid` or `rule_invalid`. Pointers are
+sorted, unique RFC 6901 paths into `LLM_TURN_OUTPUT_SCHEMA_V1`, at most 12 values and at
+most 160 ASCII characters each. An invalid-JSON response uses an empty pointer list.
+The object contains no failed value, excerpt, supplier message or local exception text.
+
+The export manifest created before attempt 1 includes the
+`server_authored_structure_repair_feedback` field class and the canonical
+repair-policy version/hash. Teacher confirmation binds that policy, the two-attempt
+maximum and full cost. Attempt 1 sends no feedback. Attempt 2 may add exactly this one
+field to the canonical user object; the system message and every base user field remain
+byte-identical. The exact attempt-2 request receives its own request hash and is scanned
+again against the same manifest allowlist immediately before send. A feedback code or
+pointer outside the closed policy is a zero-call terminal failure.
+
 Attempt 2 is never pre-created and cannot be triggered by missing confirmation, budget,
 privacy, wrong model, refusal/content filter, usage failure, HTTP rejection or
 acceptance-unknown. It is the final attempt regardless of its outcome.
@@ -283,11 +302,12 @@ teacher-only pending DTO is:
 It contains no provider, model, endpoint, policy, prompt, Persona, transcript, evidence
 text or usage. Authorization uses the exact Debate course. Student/other-course access
 is 403 and missing Debate/Turn is 404. The teacher opens the existing exact disclosure
-screen, where the disclosure includes `max_attempts=2` and the full two-attempt maximum,
-confirms by policy/manifest/revision CAS, then explicitly retries the pending non-terminal
-turn. That click starts attempt 1; the two narrowly classified attempt-2 paths above are
-automatic under the confirmed cap. Confirmation-required and proven-not-sent exhaustion
-leave the Debate running; ordinary WS carries only the safe code.
+screen, where the disclosure includes `max_attempts=2`, the full two-attempt maximum,
+the optional server-authored repair field class and repair-policy hash, confirms by
+policy/manifest/revision CAS, then explicitly retries the pending non-terminal turn.
+That click starts attempt 1; the two narrowly classified attempt-2 paths above are
+automatic under the confirmed cap. Confirmation-required and proven-not-sent
+exhaustion leave the Debate running; ordinary WS carries only the safe code.
 
 ## Tokenizer and retry continuity
 

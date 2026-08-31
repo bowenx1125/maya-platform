@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "maya://schemas/repair_feedback_v1",
+  "title": "RepairFeedbackV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "json_pointers"],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "output_truncated",
+        "json_invalid",
+        "schema_invalid",
+        "rule_invalid"
+      ]
+    },
+    "json_pointers": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^/(?:[^~/]|~0|~1)*(?:/(?:[^~/]|~0|~1)*)*$"
+      }
+    }
+  }
+}

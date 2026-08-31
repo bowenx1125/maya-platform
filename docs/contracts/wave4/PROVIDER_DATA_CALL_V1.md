@@ -87,18 +87,19 @@ and legal release Gate.
 
 ## External data matrix
 
-| Data                                  |            LLM |      Embedding |                 TTS | Rule                                   |
-| ------------------------------------- | -------------: | -------------: | ------------------: | -------------------------------------- |
-| topic and platform rules              |            yes |     query only |                  no | no user identity                       |
-| confirmed structured current Persona  |            yes |             no |                  no | raw `AGENT.md` never sent              |
-| complete RuleSet-visible prior speech |            yes |             no | current speech only | mutual learning excludes same round    |
-| current evidence excerpt/query        |            yes |            yes |                  no | only confirmed exportable snapshot     |
-| opaque evidence/query/turn IDs        |            yes |             no |                  no | supplier cannot resolve local identity |
-| source filename/absolute path         |             no |             no |                  no | server resolves display metadata       |
-| teacher note                          |             no |             no |                  no | internal only                          |
-| student name/user ID/nickname         |             no |             no |                  no | forbidden                              |
-| audio/voice sample                    |             no |             no |    speech text only | enrollment is separate Gate            |
-| API key/workspace ID                  | transport only | transport only |      transport only | server secret; never prompt/log/DTO    |
+| Data                                  |             LLM |      Embedding |                 TTS | Rule                                   |
+| ------------------------------------- | --------------: | -------------: | ------------------: | -------------------------------------- |
+| topic and platform rules              |             yes |     query only |                  no | no user identity                       |
+| confirmed structured current Persona  |             yes |             no |                  no | raw `AGENT.md` never sent              |
+| complete RuleSet-visible prior speech |             yes |             no | current speech only | mutual learning excludes same round    |
+| current evidence excerpt/query        |             yes |            yes |                  no | only confirmed exportable snapshot     |
+| opaque evidence/query/turn IDs        |             yes |             no |                  no | supplier cannot resolve local identity |
+| server-authored repair code/pointers  | retry attempt 2 |             no |                  no | closed policy; never failed values     |
+| source filename/absolute path         |              no |             no |                  no | server resolves display metadata       |
+| teacher note                          |              no |             no |                  no | internal only                          |
+| student name/user ID/nickname         |              no |             no |                  no | forbidden                              |
+| audio/voice sample                    |              no |             no |    speech text only | enrollment is separate Gate            |
+| API key/workspace ID                  |  transport only | transport only |      transport only | server secret; never prompt/log/DTO    |
 
 Before real LLM/Embedding, a teacher confirms an exact export manifest by CAS. The
 manifest binds the PersonaSpec hash, the immutable SnapshotBuild candidate described
@@ -107,6 +108,15 @@ declaration that no field contains a secret, credential, student identity/name,
 nickname, private audio transcript or unrelated personal data. Any hash/revision or
 policy change invalidates confirmation. Published immutable snapshots are never
 modified in place.
+
+For LLM structure repair, the exact manifest also binds the version/hash of the closed
+`repair_feedback_v1` policy and declares the
+`server_authored_structure_repair_feedback` field class. That class contains only a
+stable code and bounded JSON Pointers; it never contains the rejected Provider value,
+response text, exception message or identity-bearing input. The teacher disclosure
+shows that optional retry class and the two-attempt maximum before confirmation. The
+canonical grammar is `LLM_REPAIR_FEEDBACK_V1.json`, SHA-256
+`d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b`.
 
 ## Pre-provider SnapshotBuild lifecycle
 
