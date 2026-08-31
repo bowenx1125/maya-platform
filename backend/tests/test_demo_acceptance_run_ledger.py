@@ -16,17 +16,21 @@ from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
     AgentVersion,
+    DemoAcceptanceRun,
     KnowledgeSnapshot,
     ProviderExportManifest,
     ProviderOperation,
     StoredFile,
 )
+from app.modules.debates.models import Debate, DebateParticipant
 from app.modules.demo_acceptance.schemas import (
     DemoAcceptanceCallRequest,
+    DemoAcceptanceRunBindDebateRequest,
     DemoAcceptanceRunCreateRequest,
 )
 from app.modules.demo_acceptance.service import (
     attach_acceptance_call,
+    bind_acceptance_run_debate,
     create_acceptance_run,
     get_acceptance_run,
 )
@@ -250,6 +254,173 @@ def _snapshot_binding_fixture(database: Database) -> tuple[str, ProviderReservat
         ),
     )
     return run_id, request
+
+
+def _complete_snapshot_call1(database: Database) -> tuple[str, str]:
+    run_id, request = _snapshot_binding_fixture(database)
+    repository = ProviderRepository(database)
+    operation = repository.create_snapshot_prepared(
+        request,
+        acceptance_run_id=run_id,
+        call_no=1,
+        target_agent_id=TARGET_AGENT_ID,
+        target_version_id=TARGET_VERSION_ID,
+    )
+    repository.reserve(operation.id)
+    repository.transition(operation.id, expected="reserved", state="sending")
+    repository.mark_accepted(operation.id, response_hash=HASH_A)
+    repository.mark_succeeded(operation.id)
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE agent_versions SET state='published', knowledge_snapshot_id=:snapshot_id "
+                "WHERE id=:version_id"
+            ),
+            {"snapshot_id": TARGET_SNAPSHOT_ID, "version_id": TARGET_VERSION_ID},
+        )
+    debate_id = str(uuid4())
+    participant_id = str(uuid4())
+    now = _now()
+    with database.session() as session:
+        session.add(
+            Debate(
+                id=debate_id,
+                course_id=COURSE_ID,
+                topic="How should a classroom share cultural knowledge responsibly?",
+                rule_set_id="ordered_multi_expert_mutual_learning_v1",
+                rule_snapshot_json="{}",
+                status="draft",
+                revision=0,
+                last_sequence=0,
+                cancellation_generation=0,
+                created_by=TEACHER_ID,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            DebateParticipant(
+                id=participant_id,
+                debate_id=debate_id,
+                course_id=COURSE_ID,
+                group_id=GROUP_BOWEN_ID,
+                agent_id=TARGET_AGENT_ID,
+                agent_version_id=TARGET_VERSION_ID,
+                knowledge_snapshot_id=TARGET_SNAPSHOT_ID,
+                slot="B",
+                order_index=1,
+                agent_name="Target Guide",
+                version_label="V1.0",
+                avatar_config_json="{}",
+                effective_voice_kind="mock_sentinel",
+                voice_fallback_active=False,
+                stance_mode="open",
+                initial_stance=None,
+                current_stance=None,
+                teacher_note="",
+                initial_position_summary="",
+                current_position_summary="",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    return run_id, debate_id
+
+
+def test_completed_snapshot_call1_allows_debate_binding_and_keeps_run_executing(
+    tmp_path: Path,
+) -> None:
+    database = _database(tmp_path)
+    try:
+        run_id, debate_id = _complete_snapshot_call1(database)
+        with database.session() as session:
+            result = bind_acceptance_run_debate(
+                session,
+                actor_user_id=TEACHER_ID,
+                run_id=run_id,
+                request=DemoAcceptanceRunBindDebateRequest(debate_id=UUID(debate_id)),
+            )
+            assert result.debate_id == UUID(debate_id)
+            assert result.state == "executing"
+            run = session.get(DemoAcceptanceRun, run_id)
+            assert run is not None and run.state == "executing"
+    finally:
+        database.dispose()
+
+
+@pytest.mark.parametrize("mutation", ("unbound", "foreign", "extra"))
+def test_debate_binding_rejects_unbound_foreign_or_extra_target_history(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    database = _database(tmp_path / mutation)
+    try:
+        run_id, debate_id = _complete_snapshot_call1(database)
+        repository = ProviderRepository(database, require_export_confirmation=False)
+        operation = repository.operations(scope_id="snapshot-build")[0]
+        if mutation == "unbound":
+            with database.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "UPDATE provider_operations SET acceptance_run_id=NULL, call_no=NULL "
+                        "WHERE id=:operation_id"
+                    ),
+                    {"operation_id": operation.id},
+                )
+        elif mutation == "foreign":
+            foreign_run_id = str(uuid4())
+            now = _now()
+            with database.session() as session:
+                session.add(
+                    DemoAcceptanceRun(
+                        id=foreign_run_id,
+                        plan_version="real_core_demo_v2",
+                        fixture_hash=FIXTURE_HASH,
+                        baseline_agent_id=BASELINE_AGENT_ID,
+                        baseline_version_id=BASELINE_VERSION_ID,
+                        baseline_snapshot_id=BASELINE_SNAPSHOT_ID,
+                        target_agent_id=TARGET_AGENT_ID,
+                        target_version_id=TARGET_VERSION_ID,
+                        state="executing",
+                        starting_charged_requests=0,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            with database.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "UPDATE provider_operations SET acceptance_run_id=:run_id, call_no=1 "
+                        "WHERE id=:operation_id"
+                    ),
+                    {"run_id": foreign_run_id, "operation_id": operation.id},
+                )
+        else:
+            repository.create_prepared(
+                ProviderReservationRequestV1(
+                    scope_id=TARGET_VERSION_ID,
+                    provider_operation="embedding",
+                    logical_item_id="extra-call",
+                    attempt_no=1,
+                    request_hash=HASH_A,
+                    max_tokens=1,
+                    max_cost_cny=0.001,
+                    policy_hash=HASH_A,
+                    export_manifest_hash=_manifest_hash("extra-call"),
+                )
+            )
+        with database.session() as session:
+            with pytest.raises(PlatformError):
+                bind_acceptance_run_debate(
+                    session,
+                    actor_user_id=TEACHER_ID,
+                    run_id=run_id,
+                    request=DemoAcceptanceRunBindDebateRequest(debate_id=UUID(debate_id)),
+                )
+            run = session.get(DemoAcceptanceRun, run_id)
+            assert run is not None and run.debate_id is None
+    finally:
+        database.dispose()
 
 
 def test_snapshot_call1_is_bound_before_reservation_and_rejects_preflight_drift(

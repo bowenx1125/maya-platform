@@ -259,6 +259,86 @@ def _operation_belongs_to_run(
     return run.debate_id is not None and manifest.debate_id == run.debate_id
 
 
+def _assert_snapshot_call1_history_for_debate_bind(
+    db: Session,
+    *,
+    run: DemoAcceptanceRun,
+    debate_id: str,
+) -> None:
+    """Allow only this run's completed Snapshot Call1 before Debate binding."""
+
+    target_manifests = list(
+        db.scalars(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.agent_version_id == run.target_version_id
+            )
+        ).all()
+    )
+    target_operations = list(
+        db.scalars(
+            select(ProviderOperation).where(
+                or_(
+                    ProviderOperation.scope_id == run.target_version_id,
+                    ProviderOperation.export_manifest_hash.in_(
+                        _manifest_hashes_for_version(run.target_version_id)
+                    ),
+                )
+            )
+        ).all()
+    )
+    if len(target_manifests) != 1 or len(target_operations) != 1:
+        _raise_conflict(
+            "demo_acceptance_target_not_clean",
+            "The Demo target has provider history outside its Snapshot Call1.",
+        )
+    operation = target_operations[0]
+    manifest = target_manifests[0]
+    run_operations = list(
+        db.scalars(
+            select(ProviderOperation).where(
+                ProviderOperation.acceptance_run_id == run.id
+            )
+        ).all()
+    )
+    if (
+        len(run_operations) != 1
+        or run_operations[0].id != operation.id
+        or manifest.manifest_hash != operation.export_manifest_hash
+        or manifest.agent_version_id != run.target_version_id
+        or operation.acceptance_run_id != run.id
+        or operation.call_no != 1
+        or operation.provider_operation != "embedding"
+        or operation.state != "succeeded"
+        or operation.request_count != 1
+        or operation.charged_request_count != 1
+    ):
+        _raise_conflict(
+            "demo_acceptance_target_not_clean",
+            "The Demo target Snapshot Call1 is not a valid completed operation.",
+        )
+
+    debate_manifest = db.scalar(
+        select(ProviderExportManifest.id)
+        .where(ProviderExportManifest.debate_id == debate_id)
+        .limit(1)
+    )
+    debate_operation = db.scalar(
+        select(ProviderOperation.id)
+        .where(
+            or_(
+                ProviderOperation.scope_id == debate_id,
+                ProviderOperation.export_manifest_hash.in_(_manifest_hashes_for_debate(debate_id)),
+            )
+        )
+        .limit(1)
+    )
+    if debate_manifest is not None or debate_operation is not None:
+        _raise_conflict(
+            "demo_acceptance_debate_not_clean",
+            "The Demo Debate already has provider history.",
+        )
+
+
 def _resolve_acceptance_operation(
     db: Session,
     *,
@@ -506,11 +586,7 @@ def bind_acceptance_run_debate(
             "demo_acceptance_debate_already_registered",
             "The Debate is already registered.",
         )
-    _assert_no_provider_history(
-        db,
-        target_version_id=run.target_version_id,
-        debate_id=debate_id,
-    )
+    _assert_snapshot_call1_history_for_debate_bind(db, run=run, debate_id=debate_id)
     run.debate_id = debate_id
     run.updated_at = _now()
     db.flush()

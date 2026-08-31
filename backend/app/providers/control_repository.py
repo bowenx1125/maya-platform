@@ -849,6 +849,17 @@ class ProviderRepository:
                     updated_at=now,
                 )
             )
+            if run_row["state"] == "prepared":
+                changed = connection.execute(
+                    update(run_table)
+                    .where(
+                        run_table.c.id == acceptance_run_id,
+                        run_table.c.state == "prepared",
+                    )
+                    .values(state="executing", updated_at=now)
+                )
+                if changed.rowcount != 1:
+                    raise ProviderRepositoryError("Demo acceptance run state CAS failed")
         return self.operation(operation_id)
 
     # Keep naming discoverable for callers that describe this as a bound
