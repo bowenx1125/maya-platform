@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import stat
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ from acceptance import (
     load_fixture,
     main,
     read_checkpoint,
+    verify,
     write_checkpoint,
 )
 
@@ -25,11 +27,27 @@ from acceptance import (
 def checkpoint(fixture_hash: str) -> dict[str, object]:
     values: dict[str, object] = {
         "version": "real-embed-checkpoint-v1",
+        "state": "prepared",
         "fixture_hash": fixture_hash,
         "target_revision": 2,
+        "snapshot_id": None,
+        "debate_id": None,
+        "turn_id": None,
     }
     for index, name in enumerate(
-        sorted(CHECKPOINT_FIELDS - {"version", "fixture_hash", "target_revision"}), start=1
+        sorted(
+            CHECKPOINT_FIELDS
+            - {
+                "version",
+                "state",
+                "fixture_hash",
+                "target_revision",
+                "snapshot_id",
+                "debate_id",
+                "turn_id",
+            }
+        ),
+        start=1,
     ):
         values[name] = f"00000000-0000-4000-8000-{index:012d}"
     return values
@@ -100,3 +118,89 @@ def test_execute_requires_explicit_cap_before_any_password_or_http(
             ]
         )
     assert raised.value.code == 2
+
+
+def test_offline_verify_requires_exact_sql_ledger_and_evidence(tmp_path: Path) -> None:
+    fixture = load_fixture()
+    path = tmp_path / "checkpoint.json"
+    value = checkpoint(fixture.fixture_hash)
+    value.update(
+        {
+            "state": "executed",
+            "snapshot_id": "10000000-0000-4000-8000-000000000001",
+            "debate_id": "10000000-0000-4000-8000-000000000002",
+            "turn_id": "10000000-0000-4000-8000-000000000003",
+        }
+    )
+    write_checkpoint(path, value)
+    database_path = tmp_path / "verify.sqlite3"
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE knowledge_snapshots (
+              id TEXT, agent_version_id TEXT, embedding_provider TEXT,
+              embedding_model_key TEXT, embedding_region TEXT,
+              embedding_dimension INTEGER, embedding_policy_version TEXT);
+            CREATE TABLE provider_export_manifests (
+              scope_id TEXT, agent_version_id TEXT, provider_operation TEXT);
+            CREATE TABLE provider_operations (
+              scope_id TEXT, provider_operation TEXT, state TEXT,
+              request_count INTEGER, charged_request_count INTEGER);
+            CREATE TABLE debate_turns (
+              id TEXT, debate_id TEXT, generation_status TEXT, retrieval_status TEXT,
+              evidence_trace_json TEXT, retrieval_receipts_json TEXT);
+            CREATE TABLE turn_sources (
+              turn_id TEXT, snapshot_id TEXT, source_filename TEXT, rank INTEGER);
+            """
+        )
+        connection.execute(
+            "INSERT INTO knowledge_snapshots VALUES (?,?,?,?,?,?,?)",
+            (
+                value["snapshot_id"],
+                value["target_version_id"],
+                "dashscope",
+                "text-embedding-v4",
+                "cn-beijing",
+                1024,
+                "w4-embed-v1",
+            ),
+        )
+        connection.execute(
+            "INSERT INTO provider_export_manifests VALUES (?,?,?)",
+            ("build-1", value["target_version_id"], "embedding"),
+        )
+        connection.executemany(
+            "INSERT INTO provider_operations VALUES (?,?,?,?,?)",
+            (
+                ("build-1", "embedding_snapshot", "succeeded", 1, 1),
+                (value["debate_id"], "embedding_query", "succeeded", 1, 1),
+            ),
+        )
+        connection.execute(
+            "INSERT INTO debate_turns VALUES (?,?,?,?,?,?)",
+            (
+                value["turn_id"],
+                value["debate_id"],
+                "final_ready",
+                "matched",
+                '[{"evidence_id":"e1"}]',
+                '[{"chunk_id":"c1"}]',
+            ),
+        )
+        connection.execute(
+            "INSERT INTO turn_sources VALUES (?,?,?,?)",
+            (
+                value["turn_id"],
+                value["snapshot_id"],
+                "maya-cultural-knowledge-zh.md",
+                1,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    result = verify(f"sqlite:///{database_path}", path)
+    assert result["status"] == "REAL_EMBED_E2E_PASS"
+    assert result["total_calls"] == 2
+    assert read_checkpoint(path, fixture)["state"] == "verified"

@@ -18,10 +18,14 @@ uv run --project backend pytest -q manual-tests/real-core-embedding-zh/scripts/t
    checkpoint。
 2. 停止服务；单独运行 `scripts/import_provider_policy.py` 导入已人工审核 Policy；
    只把 Embedding 切为 DashScope，其他 Provider 保持 Mock；使用同一数据库重启。
-3. 运行 `execute`。目标 Agent 首次 publish 必须在 0 调用处返回确认要求；教师确认
+3. 运行 `execute`。脚本先把 checkpoint 持久化为 `executing`，因此中断后不能重跑。
+   目标 Agent 首次 publish 必须在 0 调用处返回确认要求；教师确认
    exact manifest 后，重复同一幂等 publish，最多产生 1 次 Snapshot 请求。创建两
    Agent、两轮 Debate 后，query 也必须先确认，再显式 retry，最多产生 1 次 query
-   请求。第一个 Turn 出现 matched source 与 Evidence Trace 后立即停止，不点 Next。
+   请求。当前 Turn ready 后立即停止服务，不点 Next。
+4. 服务停止后运行 `verify`。它只读同一 SQLite，要求持久化 Provider ledger 中
+   Snapshot/Query 各恰好 1 次 accepted charge，并验证 final-ready Turn 的中文
+   Snapshot/chunk、Receipt、TurnSource 与 Evidence Trace。只有此步可以输出 PASS。
 
 ```text
 # Phase 1: server is all-Mock
@@ -39,6 +43,11 @@ MAYA_TEACHER_PASSWORD='provided-out-of-band' \
 uv run --project backend python manual-tests/real-core-embedding-zh/scripts/acceptance.py \
   execute --checkpoint /tmp/maya-real-embed-checkpoint.json \
   --policy-hash <64-lowercase-hex> --confirm-two-call-cap
+
+# Stop the service before this read-only durable verification.
+uv run --project backend python manual-tests/real-core-embedding-zh/scripts/acceptance.py \
+  verify --checkpoint /tmp/maya-real-embed-checkpoint.json \
+  --database-url sqlite:////absolute/path/to/maya.sqlite3
 ```
 
 脚本不执行 shell/Policy importer，不接受第二个 base URL，不自动重试，不输出密码、
