@@ -48,6 +48,7 @@ from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
     LLM_REQUEST_COST_CAP,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
+    LLMBudgetCapV1,
     LLMPriceCardV1,
     debate_budget_cap,
 )
@@ -536,9 +537,13 @@ class LLMTurnRuntime:
             outbound_manifest=manifest,
         )
         try:
-            cap = self.budget_cap or debate_budget_cap(
-                self.agent_count,
-                round_count=self.round_count,
+            cap = (
+                cast(LLMBudgetCapV1, self.budget_cap)
+                if self.budget_cap is not None
+                else debate_budget_cap(
+                    self.agent_count,
+                    round_count=self.round_count,
+                )
             )
             class_hashes = {
                 "topic_and_platform_rules": prompt.request.rule_set_hash,
