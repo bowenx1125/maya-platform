@@ -1,9 +1,9 @@
-"""Bounded dual-Real-Core product acceptance driver.
+"""Bounded Real-Core Demo acceptance driver.
 
-The driver deliberately keeps product HTTP and Provider accounting separate:
-the product performs each real request only after the teacher confirms its
-exact disclosure, while this process records a local seven-call fence before
-the request which may cross that boundary.  It never retries a Provider call.
+The active command is the provider-free full-Mock preparation boundary.  The
+superseded seven-call execute/verify implementation remains gated until the
+replacement Real plan is frozen, so this process currently makes no Provider
+request and records only opaque checkpoint metadata.
 """
 
 from __future__ import annotations
@@ -38,16 +38,32 @@ SECRET_RE = re.compile(
 )
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 BASE_URL_RE = re.compile(r"http://(?P<host>127\.0\.0\.1|localhost):(?P<port>[0-9]{1,5})/?")
+REAL_PLAN_FROZEN = False
+BASELINE_FIELDS = {
+    "agent_id",
+    "version_id",
+    "snapshot_id",
+    "group_id",
+    "system_baseline",
+    "immutable",
+    "usable",
+}
 CHECKPOINT_FIELDS = {
     "version",
     "state",
+    "acceptance_run_id",
     "fixture_hash",
     "course_id",
     "group_id",
     "real_agent_id",
     "real_version_id",
-    "mock_agent_id",
+    "baseline_agent_id",
+    "baseline_version_id",
+    "baseline_snapshot_id",
     "real_revision",
+    "dirty_agents",
+    "dirty_debates",
+    "dirty_interactions",
     "snapshot_id",
     "debate_id",
     "current_turn_id",
@@ -73,12 +89,23 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _validated_baseline(value: Mapping[str, Any]) -> Mapping[str, Any]:
+    require(set(value) == BASELINE_FIELDS, "baseline_shape")
+    identifiers = tuple(opaque(value[field], f"baseline_{field}") for field in (
+        "agent_id", "version_id", "snapshot_id", "group_id"
+    ))
+    require(len(set(identifiers)) == len(identifiers), "baseline_identity")
+    require(value["system_baseline"] is True, "baseline_not_system")
+    require(value["immutable"] is True, "baseline_not_immutable")
+    require(value["usable"] is True, "baseline_not_usable")
+    return value
+
+
 @dataclass(frozen=True)
 class Fixture:
     manifest: Mapping[str, Any]
     knowledge: bytes
     real_persona: str
-    mock_persona: str
     topic: str
     fixture_hash: str
     real_persona_hash: str
@@ -94,7 +121,11 @@ def load_fixture() -> Fixture:
     from app.modules.debates.generation import GenerationContext, MutualLearningPolicy
     from app.modules.debates.generation.retrieval import build_turn_subqueries
     from app.modules.debates.generation.types import ParticipantContext
-    from app.modules.knowledge.markdown import TOKEN_RE, build_chunks, normalize_markdown
+    from app.modules.knowledge.markdown import (
+        TOKEN_RE,
+        build_chunks,
+        normalize_markdown,
+    )
 
     manifest = json.loads((PACKET / "fixture-manifest.json").read_text(encoding="utf-8"))
     require(isinstance(manifest, dict), "manifest_invalid")
@@ -103,7 +134,6 @@ def load_fixture() -> Fixture:
         "language",
         "knowledge_path",
         "real_persona_path",
-        "mock_persona_path",
         "topic_path",
         "expected_terms_path",
         "chunking_version",
@@ -120,7 +150,7 @@ def load_fixture() -> Fixture:
         manifest["call_cap"] == {"snapshot": 1, "real_query": 2, "llm_turn": 4, "total": 7},
         "call_cap",
     )
-    require(manifest["real_participant_slot"] == "A", "real_slot")
+    require(manifest["real_participant_slot"] == "B", "real_slot")
 
     hashes: dict[str, str] = {}
     for line in (PACKET / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
@@ -138,7 +168,6 @@ def load_fixture() -> Fixture:
     expected = {
         "fixture-manifest.json",
         str(manifest["real_persona_path"]),
-        str(manifest["mock_persona_path"]),
         str(manifest["knowledge_path"]),
         str(manifest["topic_path"]),
         str(manifest["expected_terms_path"]),
@@ -149,8 +178,8 @@ def load_fixture() -> Fixture:
 
     knowledge = (PACKET / str(manifest["knowledge_path"])).read_bytes()
     real_persona = (PACKET / str(manifest["real_persona_path"])).read_text(encoding="utf-8")
-    mock_persona = (PACKET / str(manifest["mock_persona_path"])).read_text(encoding="utf-8")
     topic = (PACKET / str(manifest["topic_path"])).read_text(encoding="utf-8").strip()
+    require(CJK_RE.search(topic) is not None, "topic_not_chinese")
     terms = tuple(
         item.strip()
         for item in (PACKET / str(manifest["expected_terms_path"]))
@@ -158,7 +187,7 @@ def load_fixture() -> Fixture:
         .splitlines()
         if item.strip()
     )
-    for value in (knowledge.decode("utf-8"), real_persona, mock_persona, topic, "\n".join(terms)):
+    for value in (knowledge.decode("utf-8"), real_persona, topic, "\n".join(terms)):
         require(SECRET_RE.search(value) is None, "fixture_secret_like")
         require("@" not in value and UUID_RE.search(value) is None, "fixture_identity_like")
     knowledge_text = knowledge.decode("utf-8")
@@ -170,39 +199,35 @@ def load_fixture() -> Fixture:
     require(len(tuple(build_chunks(normalized))) == 1, "fixture_not_one_chunk")
 
     real_compiled = compile_persona(real_persona, expected_name="河流与种子守护者")
-    mock_compiled = compile_persona(mock_persona, expected_name="Stone Listener")
     require(
         real_compiled.compiled
         and real_compiled.spec is not None
         and real_compiled.persona_spec_hash is not None,
         "real_persona_compile",
     )
-    require(mock_compiled.compiled and mock_compiled.spec is not None, "mock_persona_compile")
     participants = (
+        ParticipantContext(
+            "fixture-baseline",
+            "fixture-baseline-agent",
+            "baseline",
+            "A",
+            0,
+            "fixture-baseline-snapshot",
+        ),
         ParticipantContext(
             "fixture-real",
             "fixture-real-agent",
             "河流与种子守护者",
-            "A",
-            0,
+            "B",
+            1,
             "fixture-real-snapshot",
             persona=provider_view(real_compiled.spec),
             persona_spec_hash=real_compiled.persona_spec_hash,
         ),
-        ParticipantContext(
-            "fixture-mock",
-            "fixture-mock-agent",
-            "Stone Listener",
-            "B",
-            1,
-            "fixture-mock-snapshot",
-            persona=provider_view(mock_compiled.spec),
-            persona_spec_hash=mock_compiled.persona_spec_hash,
-        ),
     )
-    turn = MutualLearningPolicy().plan(participants, round_count=2)[0]
+    turn = MutualLearningPolicy().plan(participants, round_count=2)[1]
     query = build_turn_subqueries(
-        GenerationContext("fixture-debate", topic, turn, participants[0], participants)
+        GenerationContext("fixture-debate", topic, turn, participants[1], participants)
     )[0].text
     require(any(term in query for term in terms), "opening_query_not_chinese")
     fixture_hash = hashlib.sha256(
@@ -212,7 +237,6 @@ def load_fixture() -> Fixture:
         manifest,
         knowledge,
         real_persona,
-        mock_persona,
         topic,
         fixture_hash,
         real_compiled.persona_spec_hash,
@@ -344,6 +368,25 @@ class Api:
         require(isinstance(user, dict), "user_missing")
         return user
 
+    def demo_baseline(self) -> Mapping[str, Any]:
+        _status, value = self.request("GET", "/api/v1/demo/baseline", expected={200})
+        return _validated_baseline(value)
+
+    def demo_status(self) -> Mapping[str, Any]:
+        _status, value = self.request("GET", "/api/v1/demo/status", expected={200})
+        require(set(value) == {
+            "baseline", "composition", "dirty_agents", "dirty_debates", "dirty_interactions"
+        }, "status_shape")
+        baseline = value.get("baseline")
+        require(isinstance(baseline, dict), "status_baseline")
+        _validated_baseline(baseline)
+        require(isinstance(value["composition"], dict), "status_composition")
+        for field in ("dirty_agents", "dirty_debates", "dirty_interactions"):
+            count = value[field]
+            require(isinstance(count, int) and not isinstance(count, bool) and count >= 0,
+                    f"status_{field}")
+        return value
+
 
 def opaque(value: Any, code: str) -> str:
     require(isinstance(value, str) and UUID_RE.fullmatch(value) is not None, code)
@@ -453,11 +496,28 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
         raise AcceptanceError("checkpoint_invalid") from exc
     require(mode == 0o600, "checkpoint_mode")
     require(isinstance(value, dict) and set(value) == CHECKPOINT_FIELDS, "checkpoint_invalid")
-    require(value["version"] == "real-core-demo-checkpoint-v1", "checkpoint_version")
+    require(value["version"] == "real-core-demo-checkpoint-v3", "checkpoint_version")
     require(value["fixture_hash"] == fixture.fixture_hash, "checkpoint_fixture")
     require(value["state"] in CHECKPOINT_STATES, "checkpoint_state")
-    for field in ("course_id", "group_id", "real_agent_id", "real_version_id", "mock_agent_id"):
+    opaque(value["acceptance_run_id"], "checkpoint_acceptance_run_id")
+    for field in (
+        "course_id",
+        "group_id",
+        "real_agent_id",
+        "real_version_id",
+        "baseline_agent_id",
+        "baseline_version_id",
+        "baseline_snapshot_id",
+    ):
         opaque(value[field], f"checkpoint_{field}")
+    require(
+        len({value["real_agent_id"], value["baseline_agent_id"]}) == 2,
+        "checkpoint_agent_identity",
+    )
+    require(
+        len({value["real_version_id"], value["baseline_version_id"]}) == 2,
+        "checkpoint_version_identity",
+    )
     for field in ("snapshot_id", "debate_id", "current_turn_id"):
         require(
             value[field] is None or UUID_RE.fullmatch(str(value[field])) is not None,
@@ -466,6 +526,18 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
     require(
         isinstance(value["real_revision"], int) and value["real_revision"] >= 0,
         "checkpoint_revision",
+    )
+    for field in ("dirty_agents", "dirty_debates", "dirty_interactions"):
+        require(
+            isinstance(value[field], int)
+            and not isinstance(value[field], bool)
+            and value[field] >= 0,
+            f"checkpoint_{field}",
+        )
+    require(
+        (value["dirty_agents"], value["dirty_debates"], value["dirty_interactions"])
+        == (1, 0, 0),
+        "checkpoint_dirty_counts",
     )
     for field in ("snapshot_calls", "real_query_calls", "llm_calls"):
         require(isinstance(value[field], int) and value[field] >= 0, f"checkpoint_{field}")
@@ -481,23 +553,32 @@ def read_checkpoint(path: Path, fixture: Fixture) -> Mapping[str, Any]:
 def _base_checkpoint(
     fixture: Fixture,
     *,
+    acceptance_run_id: str,
     course_id: str,
     group_id: str,
     real_agent_id: str,
     real_version_id: str,
-    mock_agent_id: str,
+    baseline_agent_id: str,
+    baseline_version_id: str,
+    baseline_snapshot_id: str,
     real_revision: int,
 ) -> dict[str, Any]:
     return {
-        "version": "real-core-demo-checkpoint-v1",
+        "version": "real-core-demo-checkpoint-v3",
         "state": "prepared",
+        "acceptance_run_id": acceptance_run_id,
         "fixture_hash": fixture.fixture_hash,
         "course_id": course_id,
         "group_id": group_id,
         "real_agent_id": real_agent_id,
         "real_version_id": real_version_id,
-        "mock_agent_id": mock_agent_id,
+        "baseline_agent_id": baseline_agent_id,
+        "baseline_version_id": baseline_version_id,
+        "baseline_snapshot_id": baseline_snapshot_id,
         "real_revision": real_revision,
+        "dirty_agents": 1,
+        "dirty_debates": 0,
+        "dirty_interactions": 0,
         "snapshot_id": None,
         "debate_id": None,
         "current_turn_id": None,
@@ -510,9 +591,10 @@ def _base_checkpoint(
 
 
 def prepare(base_url: str, checkpoint_path: Path, student_password: str) -> Mapping[str, Any]:
-    """Create the two confirmed Agents with Mock provider publication."""
+    """Create only target Agent B and reuse the immutable server baseline as A."""
 
     fixture = load_fixture()
+    require(not checkpoint_path.exists(), "checkpoint_exists")
     api = Api(base_url)
     try:
         user = api.login(
@@ -522,24 +604,32 @@ def prepare(base_url: str, checkpoint_path: Path, student_password: str) -> Mapp
         courses, groups = user.get("courses"), user.get("groups")
         require(isinstance(courses, list) and courses, "scope_missing")
         require(isinstance(groups, list) and groups, "scope_missing")
+        baseline = api.demo_baseline()
+        require(baseline == api.demo_baseline(), "baseline_not_stable")
+        initial_status = api.demo_status()
+        require(initial_status["baseline"] == baseline, "baseline_changed")
+        require(
+            (
+                initial_status["dirty_agents"],
+                initial_status["dirty_debates"],
+                initial_status["dirty_interactions"],
+            )
+            == (0, 0, 0),
+            "dirty_runtime",
+        )
+        components = initial_status["composition"].get("components")
+        require(
+            isinstance(components, list)
+            and components
+            and all(isinstance(item, dict) and item.get("mode") == "mock" for item in components),
+            "prepare_not_mock",
+        )
         course_id = opaque(courses[0].get("course_id"), "course_id")
-        group_id = opaque(groups[0].get("group_id"), "group_id")
-        mock_agent, mock_version, mock_revision = setup_agent(
-            api,
-            group_id,
-            "Stone Listener",
-            fixture.mock_persona,
-            fixture.knowledge,
-            key_prefix="mock",
+        group_id = opaque(baseline["group_id"], "group_id")
+        require(
+            any(isinstance(item, dict) and item.get("group_id") == group_id for item in groups),
+            "baseline_group",
         )
-        _status, published = api.request(
-            "POST",
-            f"/api/v1/agent-versions/{mock_version}/publish",
-            expected={200},
-            body={"expected_revision": mock_revision},
-            key=f"real-core-demo-mock-publish-{mock_version}",
-        )
-        require(published.get("state") == "published", "mock_publish")
         real_agent, real_version, real_revision = setup_agent(
             api,
             group_id,
@@ -550,13 +640,26 @@ def prepare(base_url: str, checkpoint_path: Path, student_password: str) -> Mapp
         )
         checkpoint = _base_checkpoint(
             fixture,
+            acceptance_run_id=str(uuid4()),
             course_id=course_id,
             group_id=group_id,
             real_agent_id=real_agent,
             real_version_id=real_version,
-            mock_agent_id=mock_agent,
+            baseline_agent_id=str(baseline["agent_id"]),
+            baseline_version_id=str(baseline["version_id"]),
+            baseline_snapshot_id=str(baseline["snapshot_id"]),
             real_revision=real_revision,
         )
+        status = api.demo_status()
+        require(status["baseline"] == baseline, "baseline_changed")
+        require(
+            (status["dirty_agents"], status["dirty_debates"], status["dirty_interactions"])
+            == (1, 0, 0),
+            "dirty_counts",
+        )
+        checkpoint["dirty_agents"] = status["dirty_agents"]
+        checkpoint["dirty_debates"] = status["dirty_debates"]
+        checkpoint["dirty_interactions"] = status["dirty_interactions"]
         write_checkpoint(checkpoint_path, checkpoint)
         return checkpoint
     finally:
@@ -612,6 +715,25 @@ def _confirm_manifest(
             "manifest_hash": manifest_hash,
             "expected_revision": expected_revision,
         },
+    )
+
+
+def _assert_checkpoint_baseline(api: Api, checkpoint: Mapping[str, Any]) -> None:
+    baseline = api.demo_baseline()
+    require(
+        (
+            baseline["agent_id"],
+            baseline["version_id"],
+            baseline["snapshot_id"],
+            baseline["group_id"],
+        )
+        == (
+            checkpoint["baseline_agent_id"],
+            checkpoint["baseline_version_id"],
+            checkpoint["baseline_snapshot_id"],
+            checkpoint["group_id"],
+        ),
+        "baseline_changed",
     )
 
 
@@ -946,7 +1068,9 @@ def execute(
     student_password: str,
     teacher_password: str,
 ) -> Mapping[str, Any]:
-    """Run the fixed seven-call product path exactly once."""
+    """Reject the superseded seven-call path until the Real plan is frozen."""
+
+    require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
 
     require(HASH_RE.fullmatch(embedding_policy_hash) is not None, "embedding_policy_hash")
     require(HASH_RE.fullmatch(llm_policy_hash) is not None, "llm_policy_hash")
@@ -970,6 +1094,7 @@ def execute(
             os.environ.get("MAYA_STUDENT_USERNAME", "student-bowen-1"), student_password
         )
         teacher.login(os.environ.get("MAYA_TEACHER_USERNAME", "teacher-demo"), teacher_password)
+        _assert_checkpoint_baseline(teacher, checkpoint)
         real_version_id = str(checkpoint["real_version_id"])
         publish_key = f"real-core-demo-real-publish-{real_version_id}"
 
@@ -1009,8 +1134,8 @@ def execute(
         checkpoint["snapshot_id"] = snapshot_id
         write_checkpoint(checkpoint_path, checkpoint)
 
-        # The mock participant was published during prepare(), so only the
-        # target participant's immutable Snapshot can consume real queries.
+        # The server-owned baseline is Mock and immutable; only target B's
+        # published real Snapshot can consume real query calls.
         _status, debate = teacher.request(
             "POST",
             f"/api/v1/courses/{checkpoint['course_id']}/debates",
@@ -1018,8 +1143,8 @@ def execute(
             body={
                 "topic": fixture.topic,
                 "participants": [
+                    {"agent_id": checkpoint["baseline_agent_id"], "stance_mode": "open"},
                     {"agent_id": checkpoint["real_agent_id"], "stance_mode": "open"},
-                    {"agent_id": checkpoint["mock_agent_id"], "stance_mode": "open"},
                 ],
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
                 "round_count": 2,
@@ -1048,9 +1173,9 @@ def execute(
         epoch = socket.acquire(expected_control_version)
 
         for turn_index in range(4):
-            # The frozen mutual-learning order is A, B, A, B. Slot A is the
+            # The frozen mutual-learning order is A, B, A, B. Slot B is the
             # sole real Snapshot participant, hence exactly two real queries.
-            if turn_index in {0, 2}:
+            if turn_index in {1, 3}:
                 detail = _debate_detail(teacher, debate_id)
                 turn_id = opaque(detail["playback"].get("current_turn_id"), "turn_id")
                 checkpoint["current_turn_id"] = turn_id
@@ -1196,7 +1321,9 @@ def verify(
     embedding_policy_hash: str,
     llm_policy_hash: str,
 ) -> Mapping[str, Any]:
-    """Verify exact durable seven-call evidence after the product run."""
+    """Reject verification until the replacement Real plan is frozen."""
+
+    require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
 
     require(database_url.startswith("sqlite:"), "database_url")
     require(HASH_RE.fullmatch(embedding_policy_hash) is not None, "embedding_policy_hash")
@@ -1205,6 +1332,10 @@ def verify(
     checkpoint = dict(read_checkpoint(checkpoint_path, fixture))
     require(checkpoint["state"] == "executed", "checkpoint_not_executed")
     require(checkpoint["snapshot_id"] and checkpoint["debate_id"], "checkpoint_ids")
+    require(
+        checkpoint["snapshot_id"] != checkpoint["baseline_snapshot_id"],
+        "snapshot_baseline_collision",
+    )
     require(checkpoint["snapshot_calls"] == 1, "checkpoint_snapshot_calls")
     require(checkpoint["real_query_calls"] == 2, "checkpoint_query_calls")
     require(checkpoint["llm_calls"] == 4, "checkpoint_llm_calls")
@@ -1232,6 +1363,61 @@ def verify(
                 == ("dashscope", "text-embedding-v4", "cn-beijing", 1024, "w4-embed-v1"),
                 "snapshot_identity",
             )
+            baseline_row = connection.execute(
+                text(
+                    "SELECT a.current_published_version_id,av.state,av.knowledge_snapshot_id "
+                    "FROM agents a JOIN agent_versions av ON av.id=a.current_published_version_id "
+                    "WHERE a.id=:agent_id"
+                ),
+                {"agent_id": checkpoint["baseline_agent_id"]},
+            ).one_or_none()
+            require(
+                baseline_row
+                == (
+                    checkpoint["baseline_version_id"],
+                    "published",
+                    checkpoint["baseline_snapshot_id"],
+                ),
+                "baseline_binding",
+            )
+            participants = connection.execute(
+                text(
+                    "SELECT agent_id,agent_version_id,knowledge_snapshot_id,slot,order_index "
+                    "FROM debate_participants WHERE debate_id=:debate_id ORDER BY order_index"
+                ),
+                {"debate_id": checkpoint["debate_id"]},
+            ).all()
+            require(
+                participants
+                == [
+                    (
+                        checkpoint["baseline_agent_id"],
+                        checkpoint["baseline_version_id"],
+                        checkpoint["baseline_snapshot_id"],
+                        "A",
+                        0,
+                    ),
+                    (
+                        checkpoint["real_agent_id"],
+                        checkpoint["real_version_id"],
+                        checkpoint["snapshot_id"],
+                        "B",
+                        1,
+                    ),
+                ],
+                "participant_bindings",
+            )
+            dirty_counts = (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM agents WHERE id != :agent_id"),
+                    {"agent_id": checkpoint["baseline_agent_id"]},
+                ).scalar_one(),
+                connection.execute(text("SELECT COUNT(*) FROM debates")).scalar_one(),
+                connection.execute(
+                    text("SELECT COUNT(*) FROM classroom_interaction_windows")
+                ).scalar_one(),
+            )
+            require(tuple(map(int, dirty_counts)) == (1, 1, 1), "dirty_counts")
             snapshot_ops = connection.execute(
                 text(
                     "SELECT po.state,po.request_count,po.charged_request_count,po.attempt_no "
@@ -1322,7 +1508,7 @@ def verify(
             real_participant_ids = connection.execute(
                 text(
                     "SELECT participant_id FROM debate_turns WHERE debate_id=:debate_id "
-                    "AND turn_index IN (0,2) ORDER BY turn_index"
+                    "AND turn_index IN (1,3) ORDER BY turn_index"
                 ),
                 {"debate_id": checkpoint["debate_id"]},
             ).all()
@@ -1402,6 +1588,7 @@ def main(argv: list[str] | None = None) -> int:
                 require(bool(student_password), "student_password_missing")
                 value = prepare(base_url, args.checkpoint, student_password)
             elif args.command == "execute":
+                require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
                 student_password = os.environ.get("MAYA_STUDENT_PASSWORD", "")
                 teacher_password = os.environ.get("MAYA_TEACHER_PASSWORD", "")
                 require(
@@ -1419,6 +1606,7 @@ def main(argv: list[str] | None = None) -> int:
                     teacher_password,
                 )
             else:
+                require(REAL_PLAN_FROZEN, "real_plan_not_frozen")
                 value = verify(
                     args.database_url,
                     args.checkpoint,

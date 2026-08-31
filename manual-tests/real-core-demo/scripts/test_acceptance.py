@@ -16,8 +16,10 @@ acceptance = importlib.import_module("acceptance")
 AcceptanceError = acceptance.AcceptanceError
 Api = acceptance.Api
 CHECKPOINT_FIELDS = acceptance.CHECKPOINT_FIELDS
+BASELINE_FIELDS = acceptance.BASELINE_FIELDS
 SevenCallGate = acceptance.SevenCallGate
 verify_turn_evidence = acceptance._verify_turn_evidence
+validated_baseline = acceptance._validated_baseline
 load_fixture = acceptance.load_fixture
 main = acceptance.main
 read_checkpoint = acceptance.read_checkpoint
@@ -26,10 +28,17 @@ write_checkpoint = acceptance.write_checkpoint
 
 def checkpoint(fixture_hash: str) -> dict[str, object]:
     values: dict[str, object] = {
-        "version": "real-core-demo-checkpoint-v1",
+        "version": "real-core-demo-checkpoint-v3",
         "state": "prepared",
+        "acceptance_run_id": "00000000-0000-4000-8000-000000000008",
         "fixture_hash": fixture_hash,
+        "dirty_agents": 1,
+        "dirty_debates": 0,
+        "dirty_interactions": 0,
         "real_revision": 3,
+        "baseline_agent_id": "00000000-0000-4000-8000-000000000001",
+        "baseline_version_id": "00000000-0000-4000-8000-000000000002",
+        "baseline_snapshot_id": "00000000-0000-4000-8000-000000000003",
         "snapshot_id": None,
         "debate_id": None,
         "current_turn_id": None,
@@ -45,8 +54,15 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
             - {
                 "version",
                 "state",
+                "acceptance_run_id",
                 "fixture_hash",
+                "dirty_agents",
+                "dirty_debates",
+                "dirty_interactions",
                 "real_revision",
+                "baseline_agent_id",
+                "baseline_version_id",
+                "baseline_snapshot_id",
                 "snapshot_id",
                 "debate_id",
                 "current_turn_id",
@@ -65,10 +81,13 @@ def checkpoint(fixture_hash: str) -> dict[str, object]:
 
 def test_fixture_is_one_chunk_and_query_is_chinese() -> None:
     fixture = load_fixture()
+    assert "mock_persona_path" not in fixture.manifest
+    assert fixture.manifest["real_participant_slot"] == "B"
     assert fixture.real_persona_hash
     assert "文化知识" in fixture.query_text
     assert "上下文" in fixture.query_text
     assert fixture.topic.startswith("How should")
+    assert "课堂" in fixture.topic
 
 
 def test_checkpoint_is_closed_and_private(tmp_path: Path) -> None:
@@ -85,46 +104,6 @@ def test_checkpoint_is_closed_and_private(tmp_path: Path) -> None:
     path.chmod(0o600)
     with pytest.raises(AcceptanceError, match="checkpoint_fixture"):
         read_checkpoint(path, fixture)
-
-
-def test_seven_call_gate_requires_confirmations_and_forbids_excess() -> None:
-    gate = SevenCallGate()
-    with pytest.raises(AcceptanceError, match="snapshot_call_forbidden"):
-        gate.call_snapshot()
-    gate.confirm_snapshot()
-    gate.call_snapshot()
-    with pytest.raises(AcceptanceError, match="snapshot_call_forbidden"):
-        gate.call_snapshot()
-    gate.confirm_query()
-    gate.call_query()
-    gate.call_query()
-    with pytest.raises(AcceptanceError, match="query_call_forbidden"):
-        gate.call_query()
-    gate.confirm_llm()
-    for _ in range(4):
-        gate.call_llm()
-    with pytest.raises(AcceptanceError, match="llm_call_forbidden"):
-        gate.call_llm()
-    assert gate.result() == {
-        "snapshot_calls": 1,
-        "real_query_calls": 2,
-        "llm_calls": 4,
-        "total_calls": 7,
-    }
-
-
-def test_seven_call_gate_rejects_attempt_two_without_provider_call() -> None:
-    gate = SevenCallGate()
-    gate.confirm_snapshot()
-    gate.call_snapshot()
-    gate.confirm_query()
-    gate.call_query()
-    gate.confirm_llm()
-    for _ in range(4):
-        gate.call_llm()
-    with pytest.raises(AcceptanceError, match="llm_call_forbidden"):
-        gate.call_llm()
-    assert gate.llm_calls == 4
 
 
 def test_default_check_is_provider_free(capsys: pytest.CaptureFixture[str]) -> None:
@@ -182,6 +161,146 @@ def test_api_uses_exact_same_origin(
     assert observed[1]["X-CSRF-Token"] == "csrf-token"
 
 
+def test_demo_baseline_requires_stable_usable_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    baseline = {
+        "agent_id": "00000000-0000-4000-8000-000000000001",
+        "version_id": "00000000-0000-4000-8000-000000000002",
+        "snapshot_id": "00000000-0000-4000-8000-000000000003",
+        "group_id": "00000000-0000-4000-8000-000000000004",
+        "system_baseline": True,
+        "immutable": True,
+        "usable": True,
+    }
+    status = {
+        "baseline": baseline,
+        "composition": {"components": []},
+        "dirty_agents": 1,
+        "dirty_debates": 0,
+        "dirty_interactions": 0,
+    }
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, payload: dict[str, object]) -> None:
+            self.payload = payload
+
+        def json(self) -> dict[str, object]:
+            return self.payload
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.responses = iter((baseline, baseline, status))
+
+        def request(self, *_args: object, **_kwargs: object) -> Response:
+            return Response(next(self.responses))
+
+        @staticmethod
+        def close() -> None:
+            pass
+
+    monkeypatch.setattr("acceptance.httpx.Client", Client)
+    api = Api("http://127.0.0.1:18080")
+    try:
+        first = api.demo_baseline()
+        assert set(first) == BASELINE_FIELDS
+        assert first == api.demo_baseline()
+        assert api.demo_status()["dirty_agents"] == 1
+    finally:
+        api.close()
+
+
+def test_demo_baseline_rejects_unusable_or_incomplete_response() -> None:
+    baseline = {
+        "agent_id": "00000000-0000-4000-8000-000000000001",
+        "version_id": "00000000-0000-4000-8000-000000000002",
+        "snapshot_id": "00000000-0000-4000-8000-000000000003",
+        "group_id": "00000000-0000-4000-8000-000000000004",
+        "system_baseline": True,
+        "immutable": True,
+        "usable": False,
+    }
+    with pytest.raises(AcceptanceError, match="baseline_not_usable"):
+        validated_baseline(baseline)
+    del baseline["snapshot_id"]
+    with pytest.raises(AcceptanceError, match="baseline_shape"):
+        validated_baseline(baseline)
+
+
+def test_prepare_reuses_server_baseline_and_creates_only_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baseline = {
+        "agent_id": "00000000-0000-4000-8000-000000000001",
+        "version_id": "00000000-0000-4000-8000-000000000002",
+        "snapshot_id": "00000000-0000-4000-8000-000000000003",
+        "group_id": "00000000-0000-4000-8000-000000000004",
+        "system_baseline": True,
+        "immutable": True,
+        "usable": True,
+    }
+    created: list[str] = []
+
+    class FakeApi:
+        def __init__(self, _base_url: str) -> None:
+            self.status_calls = 0
+
+        def login(self, _username: str, _password: str) -> dict[str, object]:
+            return {
+                "courses": [{"course_id": "00000000-0000-4000-8000-000000000005"}],
+                "groups": [{"group_id": baseline["group_id"]}],
+            }
+
+        @staticmethod
+        def demo_baseline() -> dict[str, object]:
+            return baseline
+
+        def demo_status(self) -> dict[str, object]:
+            self.status_calls += 1
+            counts = (0, 0, 0) if self.status_calls == 1 else (1, 0, 0)
+            return {
+                "baseline": baseline,
+                "composition": {"components": [{"mode": "mock"}]},
+                "dirty_agents": counts[0],
+                "dirty_debates": counts[1],
+                "dirty_interactions": counts[2],
+            }
+
+        @staticmethod
+        def close() -> None:
+            pass
+
+    def fake_setup(
+        _api: object,
+        _group_id: str,
+        name: str,
+        _persona: str,
+        _knowledge: bytes,
+        *,
+        key_prefix: str,
+    ) -> tuple[str, str, int]:
+        created.append(f"{name}:{key_prefix}")
+        return (
+            "00000000-0000-4000-8000-000000000006",
+            "00000000-0000-4000-8000-000000000007",
+            3,
+        )
+
+    monkeypatch.setattr("acceptance.Api", FakeApi)
+    monkeypatch.setattr("acceptance.setup_agent", fake_setup)
+    checkpoint_path = tmp_path / "checkpoint.json"
+    result = acceptance.prepare("http://127.0.0.1:18080", checkpoint_path, "fixture-password")
+
+    assert created == ["河流与种子守护者:real"]
+    assert result["baseline_agent_id"] == baseline["agent_id"]
+    assert result["baseline_version_id"] == baseline["version_id"]
+    assert result["baseline_snapshot_id"] == baseline["snapshot_id"]
+    assert result["acceptance_run_id"]
+    assert result["snapshot_calls"] == result["real_query_calls"] == result["llm_calls"] == 0
+    assert result["dirty_agents"] == 1
+    assert result["dirty_debates"] == result["dirty_interactions"] == 0
+
+
 @pytest.mark.parametrize(
     "base_url",
     [
@@ -201,16 +320,14 @@ def test_api_rejects_base_url_outside_loopback_allowlist(base_url: str) -> None:
         Api(base_url)
 
 
-def test_execute_requires_explicit_cap_before_password_or_http(
+def test_execute_is_gated_until_real_plan_is_frozen(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     fixture = load_fixture()
     path = tmp_path / "checkpoint.json"
     write_checkpoint(path, checkpoint(fixture.fixture_hash))
-    monkeypatch.setenv("MAYA_STUDENT_PASSWORD", "fixture-password")
-    monkeypatch.setenv("MAYA_TEACHER_PASSWORD", "fixture-password")
-    with pytest.raises(SystemExit) as raised:
+    assert (
         main(
             [
                 "execute",
@@ -220,9 +337,15 @@ def test_execute_requires_explicit_cap_before_password_or_http(
                 "a" * 64,
                 "--llm-policy-hash",
                 "b" * 64,
+                "--confirm-seven-call-cap",
             ]
         )
-    assert raised.value.code == 2
+        == 2
+    )
+    assert json.loads(capsys.readouterr().err) == {
+        "status": "FAILED",
+        "safe_error_code": "real_plan_not_frozen",
+    }
 
 
 def test_turn_evidence_rejects_mismatched_source_lineage() -> None:

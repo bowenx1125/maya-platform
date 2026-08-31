@@ -3,7 +3,6 @@
   "language": "zh-CN",
   "knowledge_path": "knowledge.md",
   "real_persona_path": "AGENT_REAL.md",
-  "mock_persona_path": "AGENT_MOCK.md",
   "topic_path": "topic.txt",
   "expected_terms_path": "expected-terms.txt",
   "chunking_version": "markdown-chunk-v1",
@@ -15,5 +14,5 @@
     "total": 7
   },
   "snapshot_document_filename": "maya-real-core-demo.md",
-  "real_participant_slot": "A"
+  "real_participant_slot": "B"
 }

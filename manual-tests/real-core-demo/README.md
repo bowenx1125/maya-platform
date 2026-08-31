@@ -1,8 +1,8 @@
 # Real-Core Demo
 
-This isolated packet exercises one fixed product path:
+This isolated packet currently covers the full-Mock preparation boundary:
 
-`Mock setup -> one real 1024 Snapshot -> two real query batches for slot A -> four one-shot real LLM turns -> complete two-round Debate`.
+`Bowen baseline A + one student target B -> zero Provider calls`.
 
 TTS, Voice, Translation and Report remain Mock. The packet contains only
 fictional, identity-free text. It never prints a credential, raw Provider
@@ -15,9 +15,12 @@ uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.p
 uv run --project backend pytest -q manual-tests/real-core-demo/scripts/test_acceptance.py
 ```
 
-Prepare the fixed Agents while the application is in its all-Mock startup
-composition. The command stores a mode-0600 checkpoint and leaves the target
-version unpublished:
+The application startup creates and verifies the immutable Bowen Demo baseline.
+Prepare only the student target Agent B while the application is in its all-Mock
+composition; the driver reads `/api/v1/demo/baseline`, verifies its usable
+stable IDs and uses that published version as participant A. It does not create
+or mutate a second control Agent. The command stores a mode-0600 checkpoint and
+leaves the target version unpublished:
 
 ```bash
 MAYA_BASE_URL=http://127.0.0.1:18080 \
@@ -25,6 +28,12 @@ MAYA_STUDENT_PASSWORD='...' \
 uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.py \
   prepare --checkpoint /private/path/real-core-demo.json
 ```
+
+`prepare` is fail-closed unless `/api/v1/demo/status` reports the same usable
+baseline, zero dirty Agents/Debates/interactions, and an all-Mock composition.
+It writes a new `real-core-demo-checkpoint-v3` with one opaque
+`acceptance_run_id`; an existing checkpoint path is rejected so a run cannot be
+silently reused.
 
 On a fresh database, import the two separately reviewed, endpoint-bound policy
 files in this order, one command at a time, before enabling either real
@@ -74,30 +83,8 @@ embedded in the application; supply them from the approved price-card source.
 The timestamp must include a timezone, and the configured worst-case request
 must remain within the fixed CNY 0.15 single-request cap.
 
-Then restart the isolated application with `docker compose up -d --build` and
-execute once. The explicit flag is an operator confirmation of the
-seven-request cap; the teacher confirmations for every exact manifest still
-occur through the product API:
-
-```bash
-MAYA_BASE_URL=http://127.0.0.1:18080 \
-MAYA_STUDENT_PASSWORD='...' MAYA_TEACHER_PASSWORD='...' \
-uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.py \
-  execute --checkpoint /private/path/real-core-demo.json \
-  --embedding-policy-hash <sha256> --llm-policy-hash <sha256> \
-  --confirm-seven-call-cap
-```
-
-Finally verify the immutable Snapshot, the two query ledger rows, four LLM
-rows, one-shot manifest settings, full Evidence traces and the four-turn
-finished Debate through the local SQLite API-owned runtime:
-
-```bash
-uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.py \
-  verify --checkpoint /private/path/real-core-demo.json \
-  --database-url sqlite:////private/path/maya.sqlite3
-```
-
-The driver has no automatic retry. A failed or `executing` checkpoint must be
-investigated through the authoritative local ledger and a fresh identity-free
-runtime; it is never reused to spend another real request.
+The prior seven-request `execute`/`verify` path is intentionally disabled:
+the replacement Real plan (including Call 2 and Report) is not frozen, so these
+commands return `real_plan_not_frozen` and make no Provider request. Do not
+reuse this checkpoint for a later Real run; a new plan-specific driver will
+define its own call budget and evidence contract.
