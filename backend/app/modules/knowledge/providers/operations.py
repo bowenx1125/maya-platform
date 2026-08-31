@@ -116,6 +116,8 @@ class EmbeddingOperationV1:
     safe_error_code: str | None = None
     staged_response_hash: str | None = None
     reservation_id: str | None = None
+    acceptance_run_id: str | None = None
+    call_no: int | None = None
 
     @property
     def idempotency_key(self) -> tuple[str, str, str, int]:
@@ -150,6 +152,8 @@ class EmbeddingOperationV1:
             "safe_error_code": self.safe_error_code,
             "staged_response_hash": self.staged_response_hash,
             "reservation_id": self.reservation_id,
+            "acceptance_run_id": self.acceptance_run_id,
+            "call_no": self.call_no,
         }
 
 

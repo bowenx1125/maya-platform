@@ -323,6 +323,11 @@ export type IdempotentMutationOptions = {
   idempotency?: IdempotencyHandle;
 };
 
+export type PublishAgentVersionOptions = IdempotentMutationOptions & {
+  acceptance_run_id?: string;
+  call_no?: 1;
+};
+
 async function commitMutation<T>(
   handle: IdempotencyHandle | undefined,
   operation: (key: string) => Promise<T>,
@@ -851,7 +856,7 @@ export class PlatformApi {
   async publish(
     versionId: string,
     expectedRevision: number,
-    options: IdempotentMutationOptions = {},
+    options: PublishAgentVersionOptions = {},
   ): Promise<AgentVersion> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST(
@@ -864,7 +869,15 @@ export class PlatformApi {
               "X-CSRF-Token": this.csrfToken ?? "",
             },
           },
-          body: { expected_revision: expectedRevision },
+          body: {
+            expected_revision: expectedRevision,
+            ...(options.acceptance_run_id
+              ? {
+                  acceptance_run_id: options.acceptance_run_id,
+                  call_no: options.call_no ?? 1,
+                }
+              : {}),
+          },
         },
       );
       return unwrap(result);

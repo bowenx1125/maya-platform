@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.modules.agents.persona import (
     PERSONA_COMPILER_VERSION,
@@ -121,8 +121,20 @@ class SetDocumentsRequest(BaseModel):
     document_ids: list[UUID]
 
 
-class ExpectedRevisionRequest(BaseModel):
+class PublishAgentVersionRequest(BaseModel):
     expected_revision: int = Field(ge=0)
+    acceptance_run_id: UUID | None = None
+    call_no: int | None = Field(default=None, ge=1, le=1)
+
+    @model_validator(mode="after")
+    def validate_acceptance_binding(self) -> PublishAgentVersionRequest:
+        if (self.acceptance_run_id is None) != (self.call_no is None):
+            raise ValueError("acceptance_run_id and call_no must be supplied together")
+        return self
+
+
+# Kept as an import-compatible alias for existing non-Demo callers.
+ExpectedRevisionRequest = PublishAgentVersionRequest
 
 
 class RagPreview(BaseModel):

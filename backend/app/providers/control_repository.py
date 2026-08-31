@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import cast
 from uuid import uuid4
 
-from sqlalchemy import Engine, Table, select, update
+from sqlalchemy import Engine, Table, func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -27,6 +27,8 @@ from sqlalchemy.sql import Executable
 
 from app.core.db import Database
 from app.core.models import (
+    Agent,
+    AgentVersion,
     DemoAcceptanceRun,
     LlmAcceptedStage,
     LlmRecoveryInput,
@@ -69,6 +71,8 @@ _CONFIRMATION_TABLE = cast(Table, ProviderExportConfirmation.__table__)
 _BUDGET_TABLE = cast(Table, ProviderScopeBudget.__table__)
 _OPERATION_TABLE = cast(Table, ProviderOperation.__table__)
 _ACCEPTANCE_RUN_TABLE = cast(Table, DemoAcceptanceRun.__table__)
+_AGENT_TABLE = cast(Table, Agent.__table__)
+_AGENT_VERSION_TABLE = cast(Table, AgentVersion.__table__)
 _RESERVATION_TABLE = cast(Table, ProviderReservation.__table__)
 _LLM_STAGE_TABLE = cast(Table, LlmAcceptedStage.__table__)
 _LLM_RECOVERY_INPUT_TABLE = cast(Table, LlmRecoveryInput.__table__)
@@ -644,6 +648,212 @@ class ProviderRepository:
         return self.operation(operation_id)
 
     create = create_prepared
+
+    def create_snapshot_prepared(
+        self,
+        request: ProviderReservationRequestV1,
+        *,
+        acceptance_run_id: str,
+        call_no: int,
+        target_agent_id: str,
+        target_version_id: str,
+    ) -> ProviderOperationV1:
+        """Create the bound Snapshot Call1 operation in one guarded transaction.
+
+        Snapshot publication is the only caller of this seam.  The run,
+        publish target, exact export manifest and the zero-use Call1 slot are
+        checked while the same writer transaction is held as the operation
+        insert.  In particular, a failed binding cannot leave a prepared row
+        for a later unbound attach to reuse.
+        """
+
+        validate_demo_acceptance_call_no(call_no)
+        if call_no != 1:
+            raise ProviderRepositoryError("Snapshot acceptance binding requires Call1")
+        if not acceptance_run_id or not target_agent_id or not target_version_id:
+            raise ProviderRepositoryError("Snapshot acceptance binding is incomplete")
+        if request.provider_operation != "embedding":
+            raise ProviderRepositoryError("Snapshot acceptance binding has an invalid operation")
+        if request.attempt_no != 1 or request.logical_item_id != "batch-0":
+            raise ProviderRepositoryError("Snapshot Call1 requires one batch attempt")
+        if not request.scope_id or not request.build_manifest_hash:
+            raise ProviderRepositoryError("Snapshot acceptance binding has an invalid scope")
+        if self.require_export_confirmation:
+            # The full owner check below is intentionally performed on the
+            # same connection so a confirmation cannot drift between the
+            # preflight read and this operation insert.
+            pass
+
+        run_table = _ACCEPTANCE_RUN_TABLE
+        operation_table = _OPERATION_TABLE
+        manifest_table = _MANIFEST_TABLE
+        with self._write_connection() as connection:
+            run_row = (
+                connection.execute(
+                    select(run_table).where(run_table.c.id == acceptance_run_id)
+                )
+                .mappings()
+                .first()
+            )
+            if run_row is None:
+                raise ProviderRepositoryError("Demo acceptance run does not exist")
+            if run_row["plan_version"] != "real_core_demo_v2" or run_row["state"] not in {
+                "prepared",
+                "executing",
+            }:
+                raise ProviderRepositoryError("Demo acceptance run is not open")
+            if (
+                run_row["target_agent_id"] != target_agent_id
+                or run_row["target_version_id"] != target_version_id
+            ):
+                raise ProviderRepositoryError("Demo acceptance run target does not match publish")
+
+            target = (
+                connection.execute(
+                    select(
+                        _AGENT_VERSION_TABLE.c.id,
+                        _AGENT_VERSION_TABLE.c.agent_id,
+                        _AGENT_VERSION_TABLE.c.state,
+                        _AGENT_VERSION_TABLE.c.knowledge_snapshot_id,
+                        _AGENT_TABLE.c.id.label("target_agent_id"),
+                        _AGENT_TABLE.c.status,
+                    )
+                    .join(
+                        _AGENT_TABLE,
+                        _AGENT_TABLE.c.id == _AGENT_VERSION_TABLE.c.agent_id,
+                    )
+                    .where(
+                        _AGENT_VERSION_TABLE.c.id == target_version_id,
+                        _AGENT_TABLE.c.id == target_agent_id,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                target is None
+                or target["state"] != "draft"
+                or target["status"] != "active"
+                or target["knowledge_snapshot_id"] is not None
+            ):
+                raise ProviderRepositoryError("Snapshot publish target is no longer publishable")
+
+            manifest = (
+                connection.execute(
+                    select(manifest_table).where(
+                        manifest_table.c.manifest_hash == request.export_manifest_hash
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                manifest is None
+                or manifest["provider_operation"] != "embedding"
+                or manifest["scope_id"] != request.scope_id
+                or manifest["agent_version_id"] != target_version_id
+                or manifest["policy_hash"] != request.policy_hash
+            ):
+                raise ProviderRepositoryError("Snapshot export manifest owner does not match")
+
+            if self.require_export_confirmation:
+                confirmation = (
+                    connection.execute(
+                        select(
+                            _CONFIRMATION_TABLE.c.manifest_hash,
+                            _CONFIRMATION_TABLE.c.policy_hash,
+                            _CONFIRMATION_TABLE.c.confirmation_revision,
+                            _POLICY_TABLE.c.policy_hash.label("current_policy_hash"),
+                        )
+                        .join(
+                            _CONFIRMATION_TABLE,
+                            _CONFIRMATION_TABLE.c.manifest_id == manifest_table.c.id,
+                        )
+                        .join(
+                            _POLICY_TABLE,
+                            _POLICY_TABLE.c.id == manifest_table.c.policy_snapshot_id,
+                        )
+                        .where(
+                            manifest_table.c.id == manifest["id"],
+                            _CONFIRMATION_TABLE.c.manifest_hash == request.export_manifest_hash,
+                            _CONFIRMATION_TABLE.c.policy_hash == request.policy_hash,
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+                if (
+                    confirmation is None
+                    or confirmation["manifest_hash"] != request.export_manifest_hash
+                    or confirmation["policy_hash"] != request.policy_hash
+                    or confirmation["current_policy_hash"] != request.policy_hash
+                    or confirmation["confirmation_revision"] != manifest["operation_revision"]
+                ):
+                    raise PolicyExportStale("provider policy/export confirmation is stale")
+                if (
+                    manifest["model_key"] != request.model_key
+                    or manifest["build_manifest_hash"] != request.build_manifest_hash
+                ):
+                    raise PolicyExportStale("provider export build or model is stale")
+
+            bound_count = connection.execute(
+                select(func.count()).select_from(operation_table).where(
+                    operation_table.c.acceptance_run_id == acceptance_run_id
+                )
+            ).scalar_one()
+            if int(bound_count) != 0:
+                raise ProviderRepositoryError("Demo acceptance run already has a call")
+            ordinal = connection.execute(
+                select(operation_table.c.id).where(
+                    operation_table.c.acceptance_run_id == acceptance_run_id,
+                    operation_table.c.call_no == 1,
+                )
+            ).first()
+            if ordinal is not None:
+                raise ProviderRepositoryError("Demo acceptance Call1 is already bound")
+            existing = connection.execute(
+                select(operation_table.c.id).where(
+                    operation_table.c.scope_id == request.scope_id,
+                    operation_table.c.provider_operation == request.provider_operation,
+                    operation_table.c.logical_item_id == request.logical_item_id,
+                    operation_table.c.attempt_no == request.attempt_no,
+                )
+            ).first()
+            if existing is not None:
+                raise ProviderRepositoryError("Snapshot operation already exists")
+
+            operation_id = request.operation_id or str(uuid4())
+            now = self._now()
+            connection.execute(
+                operation_table.insert().values(
+                    id=operation_id,
+                    scope_id=request.scope_id,
+                    provider_operation=request.provider_operation,
+                    logical_item_id=request.logical_item_id,
+                    attempt_no=request.attempt_no,
+                    request_hash=request.request_hash,
+                    max_tokens=request.max_tokens,
+                    max_cost_cny=request.max_cost_cny,
+                    policy_hash=request.policy_hash,
+                    export_manifest_hash=request.export_manifest_hash,
+                    build_manifest_hash=request.build_manifest_hash,
+                    model_key=request.model_key,
+                    state="prepared",
+                    request_count=0,
+                    charged_request_count=0,
+                    staged_response_hash=None,
+                    safe_error_code=None,
+                    acceptance_run_id=acceptance_run_id,
+                    call_no=call_no,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        return self.operation(operation_id)
+
+    # Keep naming discoverable for callers that describe this as a bound
+    # prepared operation while retaining one implementation and one seam.
+    create_bound_snapshot_prepared = create_snapshot_prepared
 
     def attach_acceptance_call(
         self,

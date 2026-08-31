@@ -681,6 +681,10 @@ def _run_confirmed(
     cost_cap_cny: Decimal | float | int | str = DEFAULT_EMBEDDING_COST_CAP_CNY,
     idempotency_record_id: str | None = None,
     claim_token: str | None = None,
+    acceptance_run_id: str | None = None,
+    call_no: int | None = None,
+    target_agent_id: str | None = None,
+    target_version_id: str | None = None,
 ) -> SnapshotEmbeddingRunV1:
     fresh_build = prepare_real_snapshot_build(
         db,
@@ -723,6 +727,30 @@ def _run_confirmed(
         agent_version_id=agent_version_id,
     )
     del exact_confirmation
+    if acceptance_run_id is not None:
+        if (
+            call_no != 1
+            or target_agent_id is None
+            or target_version_id is None
+            or target_version_id != agent_version_id
+        ):
+            raise _product_error(
+                "Snapshot acceptance binding is incomplete",
+                "acceptance_binding_invalid",
+            )
+        # Call1 is deliberately a one-shot Snapshot proof.  A multi-batch
+        # build must fail before the bound operation is created, reserved or
+        # sent so it cannot consume a partially bound Demo run.
+        plan = plan_embedding_batches(
+            selected_build,
+            price_cny_per_million=price_cny_per_million,
+            cost_cap_cny=cost_cap_cny,
+        )
+        if len(plan.batches) != 1:
+            raise _product_error(
+                "Snapshot acceptance binding requires one batch",
+                "acceptance_binding_multibatch",
+            )
     if provider is not None and transport is not None:
         raise _product_error("provide a provider or transport, not both", "provider_input_invalid")
     if (idempotency_record_id is None) != (claim_token is None):
@@ -761,6 +789,10 @@ def _run_confirmed(
         export_manifest_hash=selected_manifest.manifest_hash,
         build_manifest_hash=selected_build.manifest_hash,
         model_key=REAL_EMBEDDING_MODEL,
+        acceptance_run_id=acceptance_run_id,
+        call_no=call_no,
+        target_agent_id=target_agent_id,
+        target_version_id=target_version_id,
     )
     stage_store = SqlAlchemyEmbeddingStageStore(database)
     publisher = SqlAlchemySnapshotPublicationStore(
@@ -806,6 +838,11 @@ def _run_confirmed(
         existing_stages = stage_store.values(build_id=selected_build.build_id)
     except Exception:
         existing_stages = None
+    if acceptance_run_id is not None and (existing_operations or existing_stages):
+        raise _product_error(
+            "Snapshot acceptance run already has provider history",
+            "acceptance_binding_invalid",
+        )
     if existing_operations or existing_stages:
         plan = plan_embedding_batches(
             selected_build,
@@ -853,12 +890,21 @@ def _run_confirmed(
             current_build_verifier=current_verifier,
         )
 
-    return runtime.run(
-        selected_build,
-        scope_id=selected_build.build_id,
-        current_build=selected_build,
-        current_build_verifier=current_verifier,
-    )
+    try:
+        return runtime.run(
+            selected_build,
+            scope_id=selected_build.build_id,
+            current_build=selected_build,
+            current_build_verifier=current_verifier,
+        )
+    except Exception as exc:
+        # The bound repository seam rejects all run/manifest/target drift
+        # before creating a prepared operation.  Convert only its safe,
+        # product-facing binding errors here; provider/runtime failures keep
+        # their existing behavior and result handling.
+        if acceptance_run_id is not None:
+            raise _product_error(str(exc), "acceptance_binding_invalid") from exc
+        raise
 
 
 def run_confirmed_real_embedding_publication(
@@ -881,6 +927,10 @@ def run_confirmed_real_embedding_publication(
     cost_cap_cny: Decimal | float | int | str = DEFAULT_EMBEDDING_COST_CAP_CNY,
     idempotency_record_id: str | None = None,
     claim_token: str | None = None,
+    acceptance_run_id: str | None = None,
+    call_no: int | None = None,
+    target_agent_id: str | None = None,
+    target_version_id: str | None = None,
 ) -> SnapshotEmbeddingRunV1:
     """Run one confirmed real publication using only injected provider I/O."""
 
@@ -906,6 +956,10 @@ def run_confirmed_real_embedding_publication(
             cost_cap_cny=cost_cap_cny,
             idempotency_record_id=idempotency_record_id,
             claim_token=claim_token,
+            acceptance_run_id=acceptance_run_id,
+            call_no=call_no,
+            target_agent_id=target_agent_id,
+            target_version_id=target_version_id,
         )
     with _session_for(database) as db:
         return _run_confirmed(
@@ -928,6 +982,10 @@ def run_confirmed_real_embedding_publication(
             cost_cap_cny=cost_cap_cny,
             idempotency_record_id=idempotency_record_id,
             claim_token=claim_token,
+            acceptance_run_id=acceptance_run_id,
+            call_no=call_no,
+            target_agent_id=target_agent_id,
+            target_version_id=target_version_id,
         )
 
 

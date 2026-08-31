@@ -71,6 +71,8 @@ def _operation(value: ProviderOperationV1) -> EmbeddingOperationV1:
         safe_error_code=value.safe_error_code,
         staged_response_hash=value.staged_response_hash,
         reservation_id=value.reservation_id,
+        acceptance_run_id=value.acceptance_run_id,
+        call_no=value.call_no,
     )
 
 
@@ -102,12 +104,20 @@ class SqlAlchemyEmbeddingControlAdapter:
         # run must pass REAL_EMBEDDING_MODEL explicitly and use a matching
         # confirmed export manifest.
         model_key: str = MOCK_EMBEDDING_MODEL,
+        acceptance_run_id: str | None = None,
+        call_no: int | None = None,
+        target_agent_id: str | None = None,
+        target_version_id: str | None = None,
     ) -> None:
         self.repository = ProviderRepository(database)  # type: ignore[arg-type]
         self.policy_hash = policy_hash
         self.export_manifest_hash = export_manifest_hash
         self.build_manifest_hash = build_manifest_hash
         self.model_key = model_key
+        self.acceptance_run_id = acceptance_run_id
+        self.call_no = call_no
+        self.target_agent_id = target_agent_id
+        self.target_version_id = target_version_id
 
     def create_prepared(self, request: ReservationRequestV1) -> EmbeddingOperationV1:
         if (
@@ -125,22 +135,36 @@ class SqlAlchemyEmbeddingControlAdapter:
                 budget_bucket=EMBEDDING_SNAPSHOT_BUCKET,
             ),
         )
-        value = self.repository.create_prepared(
-            ProviderReservationRequestV1(
-                scope_id=request.scope_id,
-                provider_operation=request.provider_operation,
-                logical_item_id=request.logical_item_id,
-                attempt_no=request.attempt_no,
-                request_hash=request.request_hash,
-                max_tokens=request.max_tokens,
-                max_cost_cny=request.max_cost_cny,
-                policy_hash=self.policy_hash,
-                export_manifest_hash=self.export_manifest_hash,
-                build_manifest_hash=request.build_manifest_hash,
-                operation_id=request.operation_id,
-                model_key=self.model_key,
-            )
+        reservation_request = ProviderReservationRequestV1(
+            scope_id=request.scope_id,
+            provider_operation=request.provider_operation,
+            logical_item_id=request.logical_item_id,
+            attempt_no=request.attempt_no,
+            request_hash=request.request_hash,
+            max_tokens=request.max_tokens,
+            max_cost_cny=request.max_cost_cny,
+            policy_hash=self.policy_hash,
+            export_manifest_hash=self.export_manifest_hash,
+            build_manifest_hash=request.build_manifest_hash,
+            operation_id=request.operation_id,
+            model_key=self.model_key,
         )
+        if self.acceptance_run_id is None:
+            value = self.repository.create_prepared(reservation_request)
+        else:
+            if (
+                self.call_no is None
+                or self.target_agent_id is None
+                or self.target_version_id is None
+            ):
+                raise ValueError("Snapshot acceptance binding is incomplete")
+            value = self.repository.create_snapshot_prepared(
+                reservation_request,
+                acceptance_run_id=self.acceptance_run_id,
+                call_no=self.call_no,
+                target_agent_id=self.target_agent_id,
+                target_version_id=self.target_version_id,
+            )
         return _operation(value)
 
     def reserve(self, operation: EmbeddingOperationV1) -> EmbeddingReservationV1:

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from app.core.db import Database
@@ -23,9 +23,13 @@ from app.core.models import (
     KnowledgeDocument,
     KnowledgeSnapshot,
     ProviderExportManifest,
+    ProviderOperation,
     StoredFile,
 )
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
+from app.modules.demo_acceptance.schemas import DemoAcceptanceRunCreateRequest
+from app.modules.demo_acceptance.service import create_acceptance_run
+from app.modules.demo_baseline.service import ensure_demo_baseline
 from app.modules.knowledge.files import write_atomic
 from app.modules.knowledge.markdown import normalize_markdown
 from app.modules.knowledge.providers.adapters import (
@@ -76,8 +80,10 @@ from app.providers.control import (
     sha256_hex,
 )
 from app.providers.control_repository import ProviderRepository
+from app.seed import TEACHER_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import Table, func, select, update
 
 from tests.conftest import login
@@ -269,6 +275,25 @@ class _CaptureTransport:
                     for index, _text in enumerate(texts)
                 ],
             },
+        )
+
+
+def test_snapshot_publish_binding_is_closed_and_call1_only() -> None:
+    from app.modules.agents.schemas import PublishAgentVersionRequest
+
+    assert PublishAgentVersionRequest(expected_revision=2).model_dump(exclude_none=True) == {
+        "expected_revision": 2
+    }
+    with pytest.raises(ValidationError):
+        PublishAgentVersionRequest(
+            expected_revision=2,
+            acceptance_run_id=UUID("00000000-0000-4000-8000-000000000008"),
+        )
+    with pytest.raises(ValidationError):
+        PublishAgentVersionRequest(
+            expected_revision=2,
+            acceptance_run_id=UUID("00000000-0000-4000-8000-000000000008"),
+            call_no=2,
         )
 
 
@@ -688,6 +713,41 @@ def test_partial_accepted_stages_continue_only_not_sent_batches(tmp_path: Path) 
     fixture.database.dispose()
 
 
+def test_bound_snapshot_multibatch_fails_before_operation_or_provider(
+    tmp_path: Path,
+) -> None:
+    source = "\n\n".join(
+        f"# Section {index}\n\n" + "x " * 600 for index in range(11)
+    ).encode()
+    fixture = _make_fixture(tmp_path, source=source)
+    build = _build(fixture)
+    policy = _policy()
+    manifest, confirmation = _confirm(fixture, build, policy)
+    provider = _CountingRealProvider()
+
+    with pytest.raises(ProductPublicationError) as raised:
+        run_confirmed_real_embedding_publication(
+            fixture.database,
+            data_root=fixture.data_root,
+            course_id=fixture.course_id,
+            group_id=fixture.group_id,
+            agent_version_id=fixture.agent_version_id,
+            policy=policy,
+            manifest=manifest,
+            confirmation=confirmation,
+            build=build,
+            provider=provider,
+            acceptance_run_id="00000000-0000-4000-8000-000000000008",
+            call_no=1,
+            target_agent_id="00000000-0000-4000-8000-000000000009",
+            target_version_id=fixture.agent_version_id,
+        )
+    assert raised.value.code == "acceptance_binding_multibatch"
+    assert provider.call_count == 0
+    assert ProviderRepository(fixture.database).operations(scope_id=build.build_id) == ()
+    fixture.database.dispose()
+
+
 def test_endpoint_and_budget_preflight_fail_without_provider_call(tmp_path: Path) -> None:
     fixture = _make_fixture(tmp_path)
     build = _build(fixture)
@@ -828,10 +888,27 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
         csrf,
         **{"Idempotency-Key": "real-route-publish-version-001"},
     )
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        acceptance = create_acceptance_run(
+            db,
+            actor_user_id=TEACHER_ID,
+            request=DemoAcceptanceRunCreateRequest(
+                fixture_hash="a" * 64,
+                target_agent_id=UUID(agent["id"]),
+                target_version_id=UUID(version_id),
+            ),
+        )
+        acceptance_run_id = str(acceptance.id)
+    snapshot_publish_body = {
+        "expected_revision": 2,
+        "acceptance_run_id": acceptance_run_id,
+        "call_no": 1,
+    }
     first = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=publish_headers,
-        json={"expected_revision": 2},
+        json=snapshot_publish_body,
     )
     assert first.status_code == 409, first.text
     first_body = first.json()
@@ -892,7 +969,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
             retry_csrf,
             **{"Idempotency-Key": "real-route-publish-version-001"},
         ),
-        json={"expected_revision": 2},
+        json=snapshot_publish_body,
     )
     assert published.status_code == 200, published.text
     assert len(transport.calls) == 1
@@ -904,13 +981,28 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     assert "dashscope" not in public_body
     assert REAL_EMBEDDING_MODEL not in public_body
 
-    with database.session() as db:
-        snapshot = db.scalar(select(KnowledgeSnapshot).where(KnowledgeSnapshot.id.is_not(None)))
-        assert snapshot is not None
-        assert snapshot.embedding_provider == REAL_EMBEDDING_PROVIDER
-        assert snapshot.embedding_key == REAL_EMBEDDING_MODEL
-        assert snapshot.embedding_region == REAL_EMBEDDING_REGION
-        assert snapshot.embedding_dimension == REAL_EMBEDDING_DIMENSION
+    with database.engine.connect() as connection:
+        bound = connection.execute(
+            select(
+                ProviderOperation.acceptance_run_id,
+                ProviderOperation.call_no,
+                ProviderOperation.request_count,
+                ProviderOperation.charged_request_count,
+            ).where(ProviderOperation.export_manifest_hash == manifest_hash)
+        ).one()
+        assert bound == (acceptance_run_id, 1, 1, 1)
+
+        with database.session() as db:
+            snapshot = db.scalar(
+                select(KnowledgeSnapshot).where(
+                    KnowledgeSnapshot.agent_version_id == version_id
+                )
+            )
+            assert snapshot is not None
+            assert snapshot.embedding_provider == REAL_EMBEDDING_PROVIDER
+            assert snapshot.embedding_key == REAL_EMBEDDING_MODEL
+            assert snapshot.embedding_region == REAL_EMBEDDING_REGION
+            assert snapshot.embedding_dimension == REAL_EMBEDDING_DIMENSION
         assert snapshot.embedding_policy_version == REAL_EMBEDDING_POLICY_VERSION
         version = db.get(AgentVersion, version_id)
         group = db.get(Group, BOWEN_GROUP_ID)

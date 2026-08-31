@@ -4,11 +4,9 @@ The driver keeps the product's natural call semantics: one real Snapshot
 embedding, two real participant queries and four real debate-turn LLM calls.
 The accepted budget is eight calls so the later Report call has a reserved
 ordinal; the debate stage therefore ends at seven without treating seven as a
-terminal plan.  Each provider manifest is attached to a teacher-only
-acceptance run by its manifest hash before the provider continuation. Debate
-manifests are attached before disclosure confirmation; the Report manifest is
-confirmed first and then attached before the Report continuation, as required by
-the Report service contract.
+terminal plan. Snapshot Call1 is bound atomically by both identical publish
+requests; later query/debate/report manifests are attached to the teacher-only
+acceptance run before their continuations.
 """
 
 from __future__ import annotations
@@ -1047,6 +1045,16 @@ def _attach_pending_call(
     return summary
 
 
+def _snapshot_publish_body(*, acceptance_run_id: str, expected_revision: int) -> dict[str, object]:
+    """Return the exact body reused for Snapshot discovery and publish."""
+
+    return {
+        "expected_revision": expected_revision,
+        "acceptance_run_id": acceptance_run_id,
+        "call_no": 1,
+    }
+
+
 def _assert_charged_summary(
     api: Api,
     checkpoint: Mapping[str, Any],
@@ -1681,13 +1689,19 @@ def execute(
         real_version_id = str(checkpoint["real_version_id"])
         publish_key = f"real-core-demo-real-publish-{real_version_id}"
 
-        # The first publish request only stages and exposes the exact Snapshot
-        # manifest. It must not call the Provider until the teacher confirms.
+        # Both publish requests carry the exact same body and idempotency hash.
+        # The first only stages/exposes the Snapshot manifest; Call1 is bound
+        # atomically only after the teacher confirms and the second request
+        # reaches the real runtime.
+        snapshot_publish_body = _snapshot_publish_body(
+            acceptance_run_id=acceptance_run_id,
+            expected_revision=int(checkpoint["real_revision"]),
+        )
         _status, blocked = student.request(
             "POST",
             f"/api/v1/agent-versions/{real_version_id}/publish",
             expected={409},
-            body={"expected_revision": int(checkpoint["real_revision"])},
+            body=snapshot_publish_body,
             key=publish_key,
         )
         require(blocked.get("code") == "provider_confirmation_required", "snapshot_not_blocked")
@@ -1701,24 +1715,19 @@ def execute(
             isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict),
             "snapshot_manifest",
         )
-        _attach_pending_call(
-            teacher,
-            checkpoint,
-            checkpoint_path,
-            fixture,
-            manifest=items[0],
-            kind="snapshot",
-        )
         _confirm_manifest(teacher, items[0], expected_policy_hash=embedding_policy_hash)
         _status, published = student.request(
             "POST",
             f"/api/v1/agent-versions/{real_version_id}/publish",
             expected={200},
-            body={"expected_revision": int(checkpoint["real_revision"])},
+            body=snapshot_publish_body,
             key=publish_key,
         )
         snapshot_id = opaque(published.get("knowledge_snapshot_id"), "snapshot_id")
         checkpoint["snapshot_id"] = snapshot_id
+        checkpoint["bound_manifest_hashes"] = [str(items[0]["manifest_hash"])]
+        checkpoint["snapshot_calls"] = 1
+        checkpoint["next_call"] = "real_query"
         write_checkpoint(checkpoint_path, checkpoint)
         _assert_charged_summary(teacher, checkpoint, fixture, expected_call_count=1)
 

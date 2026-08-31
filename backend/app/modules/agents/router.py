@@ -29,6 +29,7 @@ from app.core.models import (
     AgentVersion,
     AgentVersionDocument,
     CourseMember,
+    DemoAcceptanceRun,
     FileOperation,
     Group,
     GroupMember,
@@ -53,8 +54,8 @@ from app.modules.agents.schemas import (
     AgentSummary,
     CompilePersonaRequest,
     ConfirmPersonaRequest,
-    ExpectedRevisionRequest,
     PersonaCompileResponse,
+    PublishAgentVersionRequest,
     PublishedAgentSummary,
     TestChatRequest,
     TestChatResponse,
@@ -395,10 +396,19 @@ def _raise_embedding_publication_error(
         "provider_confirmation_stale",
         "revision_stale",
         "snapshot_build_drift",
+        "acceptance_binding_invalid",
+        "acceptance_binding_multibatch",
     }:
         raise conflict(
             error.code,
-            "The real Embedding publication inputs changed; prepare and confirm them again.",
+            (
+                "The Demo acceptance binding is invalid; prepare the exact Call1 again."
+                if error.code.startswith("acceptance_binding_")
+                else (
+                    "The real Embedding publication inputs changed; prepare and confirm "
+                    "them again."
+                )
+            ),
         ) from error
     raise PlatformError(
         "provider_preflight_blocked",
@@ -415,6 +425,8 @@ def _publish_real_embedding_snapshot(
     agent: Agent,
     expected_revision: int,
     record: IdempotencyRecord,
+    acceptance_run_id: str | None = None,
+    call_no: int | None = None,
 ) -> None:
     policy_hash = settings.provider_policy_hash_for("embedding")
     if policy_hash is None:
@@ -473,6 +485,10 @@ def _publish_real_embedding_snapshot(
             build=build,
             provider=selected_provider,
             expected_revision=expected_revision,
+            acceptance_run_id=acceptance_run_id,
+            call_no=call_no,
+            target_agent_id=agent.id,
+            target_version_id=version.id,
             idempotency_record_id=record.id,
             claim_token=record.claim_token,
         )
@@ -1178,7 +1194,7 @@ def download_agent_md(
 )
 def publish_agent_version(
     version_id: UUID,
-    payload: ExpectedRevisionRequest,
+    payload: PublishAgentVersionRequest,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
@@ -1190,8 +1206,39 @@ def publish_agent_version(
     # guarded re-read below is the authority for the publish write.
     reject_baseline_version_mutation(str(version_id))
     visible_student_version(db, context, str(version_id))
+
+    open_run_id = db.scalar(
+        select(DemoAcceptanceRun.id).where(
+            DemoAcceptanceRun.target_version_id == str(version_id),
+            DemoAcceptanceRun.state.in_(("prepared", "executing")),
+        )
+    )
+    has_binding = payload.acceptance_run_id is not None
+    if open_run_id is not None and not has_binding:
+        raise conflict(
+            "acceptance_binding_required",
+            "The open Demo acceptance run requires its Call1 binding.",
+        )
+    if has_binding and open_run_id is None:
+        raise conflict(
+            "acceptance_binding_invalid",
+            "The Demo acceptance run is not open for this target.",
+        )
+    if has_binding and payload.call_no != 1:
+        raise conflict(
+            "acceptance_binding_invalid",
+            "Snapshot acceptance binding must use Call1.",
+        )
+    if has_binding and settings.embedding_provider == "mock":
+        raise conflict(
+            "acceptance_binding_provider_invalid",
+            "Demo acceptance binding is available only for the reviewed real Snapshot.",
+        )
     body_hash = parse_json_payload_hash(
-        "publishAgentVersion", context, [str(version_id)], payload.model_dump()
+        "publishAgentVersion",
+        context,
+        [str(version_id)],
+        payload.model_dump(exclude_none=True),
     )
     record, replay = claim_idempotency(
         db,
@@ -1238,6 +1285,12 @@ def publish_agent_version(
                 agent=agent,
                 expected_revision=payload.expected_revision,
                 record=record,
+                acceptance_run_id=(
+                    str(payload.acceptance_run_id)
+                    if payload.acceptance_run_id is not None
+                    else None
+                ),
+                call_no=payload.call_no,
             )
         else:  # pragma: no cover - Settings validates the closed selector.
             raise PlatformError(

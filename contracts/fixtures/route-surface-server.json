@@ -1374,6 +1374,15 @@
                   "expected_revision": {
                     "type": "integer",
                     "minimum": 0
+                  },
+                  "acceptance_run_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "call_no": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1
                   }
                 }
               }

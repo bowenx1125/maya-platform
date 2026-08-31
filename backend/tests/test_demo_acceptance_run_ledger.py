@@ -17,6 +17,8 @@ from app.core.models import (
     Agent,
     AgentVersion,
     KnowledgeSnapshot,
+    ProviderExportManifest,
+    ProviderOperation,
     StoredFile,
 )
 from app.modules.demo_acceptance.schemas import (
@@ -34,11 +36,19 @@ from app.modules.demo_baseline.service import (
     BASELINE_VERSION_ID,
     ensure_demo_baseline,
 )
-from app.providers.control import ProviderReservationRequestV1
-from app.providers.control_repository import ProviderRepository
-from app.seed import GROUP_BOWEN_ID, TEACHER_ID, seed_demo_data
+from app.providers.control import (
+    EMBEDDING_SNAPSHOT_BUCKET,
+    ExportFieldV1,
+    ExportManifestV1,
+    ProviderPolicySnapshotV1,
+    ProviderReservationRequestV1,
+    ProviderScopeBudgetV1,
+    confirm_export_manifest,
+)
+from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
+from app.seed import COURSE_ID, GROUP_BOWEN_ID, TEACHER_ID, seed_demo_data
 from pydantic import ValidationError
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 
 TARGET_AGENT_ID = "11111111-1111-4111-8111-111111111111"
@@ -166,6 +176,155 @@ def _provider_operation(
     return (
         ProviderRepository(database, require_export_confirmation=False).create_prepared(request).id
     )
+
+
+def _snapshot_binding_fixture(database: Database) -> tuple[str, ProviderReservationRequestV1]:
+    """Prepare one fresh draft/run/confirmed manifest for the Snapshot seam."""
+
+    with database.engine.begin() as connection:
+        connection.execute(
+            text("UPDATE agent_versions SET knowledge_snapshot_id=NULL WHERE id=:version_id"),
+            {"version_id": TARGET_VERSION_ID},
+        )
+    run_id = _create_run(database)
+    digest = hashlib.sha256(b"snapshot-binding-policy").hexdigest()
+    policy = ProviderPolicySnapshotV1(
+        privacy_notice_retrieved_at="2026-08-31T00:00:00Z",
+        privacy_notice_sha256=digest,
+        service_terms_retrieved_at="2026-08-31T00:00:00Z",
+        service_terms_sha256=digest,
+        faq_retrieved_at="2026-08-31T00:00:00Z",
+        faq_sha256=digest,
+        no_training_basis="fixture-policy",
+        prompt_response_logging_disabled=True,
+        inference_log_backflow_disabled=True,
+        optional_content_logging_disabled=True,
+        service_improvement_disabled=True,
+        storage_disclosed=True,
+        retention_setting="unknown",
+    )
+    repository = ProviderRepository(database)
+    policy_id = repository.save_policy_snapshot(policy, snapshot_id=str(uuid4()))
+    manifest = ExportManifestV1(
+        scope_id="snapshot-build",
+        provider_operation="embedding",
+        model_key="text-embedding-v4",
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=HASH_B,
+        persona_spec_hash=HASH_A,
+        fields=(ExportFieldV1("current_evidence_excerpt", HASH_A),),
+    )
+    manifest_id = repository.save_export_manifest(
+        manifest,
+        policy_snapshot_id=policy_id,
+        course_id=COURSE_ID,
+        group_id=GROUP_BOWEN_ID,
+        agent_version_id=TARGET_VERSION_ID,
+    )
+    confirmation = confirm_export_manifest(
+        manifest,
+        policy,
+        confirmed_at="2026-08-31T00:00:00Z",
+    )
+    repository.save_export_confirmation(manifest_id, confirmation)
+    request = ProviderReservationRequestV1(
+        scope_id=manifest.scope_id,
+        provider_operation="embedding",
+        logical_item_id="batch-0",
+        attempt_no=1,
+        request_hash=HASH_A,
+        max_tokens=1,
+        max_cost_cny=0.001,
+        policy_hash=policy.policy_hash,
+        export_manifest_hash=manifest.manifest_hash,
+        build_manifest_hash=HASH_B,
+        model_key="text-embedding-v4",
+    )
+    repository.save_scope_budget(
+        request.scope_id,
+        ProviderScopeBudgetV1(
+            max_requests=20,
+            max_total_tokens=120_000,
+            max_cost_cny=0.10,
+            budget_bucket=EMBEDDING_SNAPSHOT_BUCKET,
+        ),
+    )
+    return run_id, request
+
+
+def test_snapshot_call1_is_bound_before_reservation_and_rejects_preflight_drift(
+    tmp_path: Path,
+) -> None:
+    database = _database(tmp_path)
+    try:
+        run_id, request = _snapshot_binding_fixture(database)
+        repository = ProviderRepository(database)
+        operation = repository.create_snapshot_prepared(
+            request,
+            acceptance_run_id=run_id,
+            call_no=1,
+            target_agent_id=TARGET_AGENT_ID,
+            target_version_id=TARGET_VERSION_ID,
+        )
+        assert operation.acceptance_run_id == run_id
+        assert operation.call_no == 1
+        assert operation.state == "prepared"
+        assert operation.request_count == operation.charged_request_count == 0
+        reserved = repository.reserve(operation.id)
+        assert reserved.operation_id == operation.id
+        charged = repository.operation(operation.id)
+        assert charged.state == "reserved"
+        assert charged.request_count == charged.charged_request_count == 1
+
+        with pytest.raises(ProviderRepositoryError, match="already has a call"):
+            repository.create_snapshot_prepared(
+                request,
+                acceptance_run_id=run_id,
+                call_no=1,
+                target_agent_id=TARGET_AGENT_ID,
+                target_version_id=TARGET_VERSION_ID,
+            )
+        with database.engine.connect() as connection:
+            assert connection.execute(
+                select(func.count()).select_from(ProviderExportManifest)
+            ).scalar_one() == 1
+    finally:
+        database.dispose()
+
+
+@pytest.mark.parametrize(
+    ("run_id", "call_no", "target_agent_id", "target_version_id"),
+    (
+        ("00000000-0000-4000-8000-000000000099", 1, TARGET_AGENT_ID, TARGET_VERSION_ID),
+        (None, 2, TARGET_AGENT_ID, TARGET_VERSION_ID),
+        (None, 1, BASELINE_AGENT_ID, TARGET_VERSION_ID),
+        (None, 1, TARGET_AGENT_ID, BASELINE_VERSION_ID),
+    ),
+)
+def test_snapshot_call1_binding_drift_creates_no_operation(
+    tmp_path: Path,
+    run_id: str | None,
+    call_no: int,
+    target_agent_id: str,
+    target_version_id: str,
+) -> None:
+    database = _database(tmp_path / str(call_no) / target_agent_id[-2:])
+    try:
+        actual_run_id, request = _snapshot_binding_fixture(database)
+        with pytest.raises(ProviderRepositoryError):
+            ProviderRepository(database).create_snapshot_prepared(
+                request,
+                acceptance_run_id=run_id or actual_run_id,
+                call_no=call_no,
+                target_agent_id=target_agent_id,
+                target_version_id=target_version_id,
+            )
+        with database.engine.connect() as connection:
+            assert connection.execute(
+                select(func.count()).select_from(ProviderOperation)
+            ).scalar_one() == 0
+    finally:
+        database.dispose()
 
 
 def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(

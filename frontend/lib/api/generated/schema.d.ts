@@ -2906,6 +2906,9 @@ export interface operations {
             content: {
                 "application/json": {
                     expected_revision: number;
+                    /** Format: uuid */
+                    acceptance_run_id?: string;
+                    call_no?: number;
                 };
             };
         };

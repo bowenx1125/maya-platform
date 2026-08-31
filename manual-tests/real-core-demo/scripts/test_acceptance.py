@@ -233,6 +233,22 @@ def test_api_attach_uses_manifest_hash_and_ordinal(monkeypatch: pytest.MonkeyPat
     assert "operation_id" not in observed[0]["json"]
 
 
+def test_snapshot_publish_body_is_identical_for_discovery_and_retry() -> None:
+    first = acceptance._snapshot_publish_body(
+        acceptance_run_id="00000000-0000-4000-8000-000000000008",
+        expected_revision=2,
+    )
+    second = acceptance._snapshot_publish_body(
+        acceptance_run_id="00000000-0000-4000-8000-000000000008",
+        expected_revision=2,
+    )
+    assert first == second == {
+        "expected_revision": 2,
+        "acceptance_run_id": "00000000-0000-4000-8000-000000000008",
+        "call_no": 1,
+    }
+
+
 def test_api_stops_on_acceptance_unknown_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     class Response:
         status_code = 409
