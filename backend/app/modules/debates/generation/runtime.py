@@ -1200,7 +1200,11 @@ class LLMTurnRuntime:
             "repair_policy_hash": _result_value(
                 request, "repair_policy_hash", default=prepared.repair_policy_hash or None
             ),
-            "repair_policy_version": _result_value(response, "repair_policy_version", default=None),
+            "repair_policy_version": _result_value(
+                response,
+                "repair_policy_version",
+                default=_read(prepared.outbound_manifest, "repair_policy_version"),
+            ),
             "estimated_cost_cny": _result_value(response, "estimated_cost_cny", default=0),
             "actual_cost_cny": _result_value(response, "actual_cost_cny", default=None),
         }
