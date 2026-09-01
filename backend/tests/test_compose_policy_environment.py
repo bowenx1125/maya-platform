@@ -73,24 +73,19 @@ def test_compose_forwards_real_core_policy_hashes_to_backend_without_logging(
     assert settings.provider_policy_hash_for("report") == "d" * 64
 
 
-def test_env_example_and_manual_demo_use_compose_variable_names() -> None:
-    assert set(REAL_PROVIDER_POLICY_VARIABLES) <= _env_example_names()
-    assert "PROVIDER_POLICY_HASH" in _env_example_names()
-
-    readme = (PROJECT_ROOT / "manual-tests/real-core-demo/README.md").read_text(encoding="utf-8")
-    for name in (
-        "LLM_PROVIDER=dashscope",
-        "MAYA_REPORT_PROVIDER=dashscope",
-        "EMBEDDING_PROVIDER=dashscope",
-        "TTS_PROVIDER=mock",
-        "VOICE_PROVIDER=mock",
-        "TRANSLATION_PROVIDER=mock",
-        "EMBEDDING_PROVIDER_POLICY_HASH=",
-        "LLM_PROVIDER_POLICY_HASH=",
-        "REPORT_PROVIDER_POLICY_HASH=",
-        "PROVIDER_POLICY_HASH=",
+def test_env_example_declares_every_compose_provider_variable() -> None:
+    names = _env_example_names()
+    assert set(REAL_PROVIDER_POLICY_VARIABLES) <= names
+    assert "PROVIDER_POLICY_HASH" in names
+    for selector in (
+        "LLM_PROVIDER",
+        "MAYA_REPORT_PROVIDER",
+        "EMBEDDING_PROVIDER",
+        "TTS_PROVIDER",
+        "VOICE_PROVIDER",
+        "TRANSLATION_PROVIDER",
     ):
-        assert name in readme
+        assert selector in names
 
 
 @pytest.mark.parametrize("name", REAL_PROVIDER_POLICY_VARIABLES)

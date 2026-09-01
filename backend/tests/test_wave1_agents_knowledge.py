@@ -25,12 +25,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 
-from tests.conftest import login
+from tests.conftest import login, make_foreign_group
 from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-KAIKAI_GROUP_ID = "699112be-780b-5ffd-9a87-3762f596c558"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
 
 
 def _headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -39,7 +38,7 @@ def _headers(csrf: str, **extra: str) -> dict[str, str]:
 
 def _make_agent(client: TestClient, csrf: str) -> tuple[dict[str, Any], str]:
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": "create-wave1-agent-001"}),
         json={"name": "Maya Guide", "description": "A small Demo guide."},
     )
@@ -96,7 +95,7 @@ def _insert_over_limit_document(
     source = b"# oversized\n"
     document_id = str(uuid4())
     stored_file_id = str(uuid4())
-    relative_path = f"groups/{BOWEN_GROUP_ID}/knowledge/{document_id}/source.md"
+    relative_path = f"groups/{GROUP_DEMO_ID}/knowledge/{document_id}/source.md"
     source_path = data_root / relative_path
     source_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_bytes(source)
@@ -119,7 +118,7 @@ def _insert_over_limit_document(
         session.add(
             KnowledgeDocument(
                 id=document_id,
-                group_id=BOWEN_GROUP_ID,
+                group_id=GROUP_DEMO_ID,
                 source_filename="oversized.md",
                 stored_file_id=stored_file_id,
                 char_count=100_001,
@@ -143,8 +142,10 @@ def _insert_over_limit_document(
     return document_id
 
 
-def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+def test_wave1_student_flow_snapshot_teacher_projection_and_404(
+    client: TestClient, database: Any
+) -> None:
+    _user, csrf = login(client, "bowen")
     agent, version_id = _make_agent(client, csrf)
     avatar = agent["versions"][0]["avatar_config"]
 
@@ -161,7 +162,7 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
     assert response.json()["revision"] == 1
 
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-document-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={
@@ -181,7 +182,7 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
     # A completed idempotency key replays the exact original body rather than
     # trying to apply the stale revision a second time.
     replay = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-document-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={
@@ -225,7 +226,7 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
     snapshot_id = published["knowledge_snapshot_id"]
     assert published["state"] == "published"
 
-    teacher, teacher_csrf = login(client, "teacher-demo")
+    teacher, teacher_csrf = login(client, "maya")
     candidates = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
     assert candidates.status_code == 200
     assert any(item["agent"]["id"] == agent["id"] for item in candidates.json())
@@ -236,16 +237,21 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(client: TestClie
     assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}/download").status_code == 200
     assert teacher["user"]["id"] and teacher_csrf
 
-    _student, other_csrf = login(client, "student-kaikai-1")
-    assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 404
-    assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 404
-    assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}").status_code == 404
-    assert client.get(f"/api/v1/groups/{BOWEN_GROUP_ID}/agents").status_code == 404
+    # Agent visibility is group-membership scoped, so another student in the
+    # same group reads the same objects, and a group the student does not
+    # belong to is not found at all. The teacher's pre-publication 404 is
+    # covered by test_wave1_teacher_prepublication_visibility_and_authorized_empty_list.
+    _student, other_csrf = login(client, "kaikai")
+    assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 200
+    assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 200
+    assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}").status_code == 200
+    foreign_group_id = make_foreign_group(database, COURSE_ID)
+    assert client.get(f"/api/v1/groups/{foreign_group_id}/agents").status_code == 404
     assert other_csrf
 
 
 def test_wave1_revision_and_workspace_invariants(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent, version_id = _make_agent(client, csrf)
     stale = client.patch(
         f"/api/v1/agent-versions/{version_id}",
@@ -257,7 +263,7 @@ def test_wave1_revision_and_workspace_invariants(client: TestClient) -> None:
     assert stale.json()["details"]["current_revision"] == 0
 
     invalid = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-invalid-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("lesson.txt", b"not markdown", "text/plain")},
@@ -320,31 +326,32 @@ def test_wave1_mock_vector_is_byte_stable_and_tie_breaks() -> None:
 
 def test_wave1_teacher_prepublication_visibility_and_authorized_empty_list(
     client: TestClient,
+    database: Any,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
-    assert client.get(f"/api/v1/groups/{BOWEN_GROUP_ID}/agents").json() == []
+    _user, csrf = login(client, "bowen")
+    assert client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents").json() == []
     agent, version_id = _make_agent(client, csrf)
 
-    teacher, _teacher_csrf = login(client, "teacher-demo")
+    teacher, _teacher_csrf = login(client, "maya")
     assert teacher["user"]["id"]
-    group_agents = client.get(f"/api/v1/groups/{BOWEN_GROUP_ID}/agents")
+    group_agents = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents")
     assert group_agents.status_code == 200
     assert group_agents.json() == []
     assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 404
     assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
 
-    # An authorized student with no Agent in the other seeded group receives
-    # an ordinary empty list rather than a false 404.
-    _student, _student_csrf = login(client, "student-bowen-1")
-    empty = client.get(f"/api/v1/groups/{KAIKAI_GROUP_ID}/agents")
-    assert empty.status_code == 404  # the student is not authorized for Group B
+    # A group the student is not a member of is not found, rather than being
+    # disclosed as an existing but empty group.
+    _student, _student_csrf = login(client, "bowen")
+    foreign_group_id = make_foreign_group(database, COURSE_ID)
+    assert client.get(f"/api/v1/groups/{foreign_group_id}/agents").status_code == 404
 
 
 def test_wave1_upload_missing_revision_is_scoped_stale_conflict(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     _agent, version_id = _make_agent(client, csrf)
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-missing-revision-001"}),
         data={"target_agent_version_id": version_id},
         files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
@@ -355,17 +362,17 @@ def test_wave1_upload_missing_revision_is_scoped_stale_conflict(client: TestClie
 
 
 def test_wave1_upload_idempotency_includes_raw_source_bytes(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     _agent, version_id = _make_agent(client, csrf)
     first = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-newline-hash-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("lesson.md", b"# Lesson\r\n", "text/markdown")},
     )
     assert first.status_code == 201, first.text
     conflict = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-newline-hash-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("lesson.md", b"# Lesson\n", "text/markdown")},
@@ -387,10 +394,10 @@ def test_wave1_upload_crash_journal_recovers_exact_tree(
 
     monkeypatch.setattr(knowledge_router, "saga_checkpoint", crash)
     with TestClient(app, raise_server_exceptions=False) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         _agent, version_id = _make_agent(client, csrf)
         response = client.post(
-            f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "upload-crash-journal-001"}),
             data={"target_agent_version_id": version_id, "expected_revision": "0"},
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
@@ -422,10 +429,10 @@ def test_wave1_reindex_failure_preserves_previous_complete_index(
     client: TestClient,
     monkeypatch: Any,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     _agent, version_id = _make_agent(client, csrf)
     uploaded = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "reindex-source-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("lesson.md", b"# Lesson\n\nMaya", "text/markdown")},
@@ -453,7 +460,7 @@ def test_wave1_reindex_failure_preserves_previous_complete_index(
 def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> None:
     app, database, _settings = app_factory()
     with TestClient(app) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         agent, version_id = _make_agent(client, csrf)
         client.patch(
             f"/api/v1/agent-versions/{version_id}",
@@ -465,7 +472,7 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
             },
         )
         uploaded = client.post(
-            f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "cross-snapshot-upload-001"}),
             data={"target_agent_version_id": version_id, "expected_revision": "1"},
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
@@ -589,7 +596,7 @@ def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
     document_id = str(uuid4())
     stored_file_id = str(uuid4())
     job_id = str(uuid4())
-    source = settings.resolved_data_root / "groups" / BOWEN_GROUP_ID / "recovery.md"
+    source = settings.resolved_data_root / "groups" / GROUP_DEMO_ID / "recovery.md"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"# recovery")
     with database.session() as session:
@@ -597,7 +604,7 @@ def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
             StoredFile(
                 id=stored_file_id,
                 kind="markdown",
-                relative_path=f"groups/{BOWEN_GROUP_ID}/recovery.md",
+                relative_path=f"groups/{GROUP_DEMO_ID}/recovery.md",
                 sha256="0" * 64,
                 size_bytes=10,
                 state="active",
@@ -609,7 +616,7 @@ def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
         session.add(
             KnowledgeDocument(
                 id=document_id,
-                group_id=BOWEN_GROUP_ID,
+                group_id=GROUP_DEMO_ID,
                 source_filename="recovery.md",
                 stored_file_id=stored_file_id,
                 char_count=10,
@@ -648,7 +655,7 @@ def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
 def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
     client: TestClient,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent, version_id = _make_agent(client, csrf)
     invalid_avatar = {**agent["versions"][0]["avatar_config"], "template_id": "unknown"}
     avatar_error = client.patch(
@@ -659,7 +666,7 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
     _assert_business_error(avatar_error, "avatar_missing")
 
     upload_error = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "business-422-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("lesson.txt", b"not markdown", "text/plain")},
@@ -702,7 +709,7 @@ def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(
 ) -> None:
     app, database, settings = app_factory()
     with TestClient(app) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         agent, version_id = _make_agent(client, csrf)
         updated = client.patch(
             f"/api/v1/agent-versions/{version_id}",
@@ -721,7 +728,7 @@ def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(
         )
 
         upload_error = client.post(
-            f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "over-limit-upload-001"}),
             data={"target_agent_version_id": version_id, "expected_revision": "1"},
             files={"file": ("small.md", b"# Small", "text/markdown")},

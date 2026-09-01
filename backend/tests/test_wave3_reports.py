@@ -50,7 +50,7 @@ from app.modules.reports.service import (
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 
 
 def test_mock_insight_normalizes_exact_duplicates_and_keeps_critical_minorities() -> None:

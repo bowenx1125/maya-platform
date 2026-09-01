@@ -10,11 +10,9 @@ import pytest
 from app.core.db import ALEMBIC_HEAD, Database
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.seed import (
-    BOWEN_STUDENT_IDS,
     COURSE_ID,
-    GROUP_BOWEN_ID,
-    GROUP_KAIKAI_ID,
-    KAIKAI_STUDENT_IDS,
+    GROUP_DEMO_ID,
+    STUDENT_IDS,
     TEACHER_ID,
     SeedConflict,
     row_fingerprint,
@@ -70,11 +68,11 @@ def test_seed_is_exact_and_idempotent(tmp_path: Path) -> None:
     assert before == after
     assert {row[0] for row in before["users"]} == {
         TEACHER_ID,
-        *BOWEN_STUDENT_IDS,
-        *KAIKAI_STUDENT_IDS,
+        *STUDENT_IDS,
+        *STUDENT_IDS,
     }
     assert before["courses"] == [(COURSE_ID, "demo-course-001", "Maya Cultural Exchange Demo")]
-    assert {row[0] for row in before["groups"]} == {GROUP_BOWEN_ID, GROUP_KAIKAI_ID}
+    assert {row[0] for row in before["groups"]} == {GROUP_DEMO_ID, GROUP_DEMO_ID}
 
 
 def test_seed_conflict_rolls_back_everything(tmp_path: Path) -> None:

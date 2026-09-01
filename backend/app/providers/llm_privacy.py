@@ -372,6 +372,25 @@ def _validate_request_key_tree(value: object) -> None:
             _walk_keys(nested, allowed=_REPAIR_KEYS, path="repair_feedback")
 
 
+def _contains_identity_token(folded_text: str, token: str) -> bool:
+    """Whether one course identity appears in already case-folded text.
+
+    Demo usernames and display names are ordinary given names, so a plain
+    substring test rejects unrelated vocabulary: "himalaya" contains "maya"
+    and "jaded" contains "jade", and one such word fails the whole turn
+    closed with a safe code that names no cause. Matching on word boundaries
+    keeps the fence exactly where it belongs - a course member named in the
+    outbound request - while letting normal prose through. High-entropy
+    identifiers (user IDs, emails, phone numbers, bearer tokens, the
+    workspace ID) keep their own unconditional checks below.
+    """
+
+    needle = token.casefold().strip()
+    if not needle:
+        return False
+    return re.search(rf"(?<![0-9a-z]){re.escape(needle)}(?![0-9a-z])", folded_text) is not None
+
+
 def _scan_text(
     text: str,
     *,
@@ -383,7 +402,7 @@ def _scan_text(
     if workspace_id and workspace_id.casefold() in folded:
         _reject()
     for token in identity_tokens:
-        if isinstance(token, str) and token.strip() and token.casefold() in folded:
+        if isinstance(token, str) and token.strip() and _contains_identity_token(folded, token):
             _reject()
     if (
         (not allow_uuid and _UUID_RE.search(text))

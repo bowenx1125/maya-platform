@@ -12,14 +12,14 @@ from alembic.config import Config
 from app.core.db import Database
 from app.core.models import Agent, AgentVersion
 from app.modules.agents.persona import compile_persona, raw_agent_md_hash
-from app.seed import GROUP_BOWEN_ID, seed_demo_data
+from app.seed import GROUP_DEMO_ID, seed_demo_data
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
-from tests.conftest import login
+from tests.conftest import login, make_foreign_group
 
-BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
+COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 
 
 def _headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -67,7 +67,7 @@ def _create_agent(
     client: TestClient, csrf: str, key: str = "persona-api-create-001"
 ) -> dict[str, Any]:
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": key}),
         json={"name": "River Keeper", "description": "Persona API fixture"},
     )
@@ -76,7 +76,7 @@ def _create_agent(
 
 
 def test_compile_confirm_and_raw_edit_clear_persona_atomically(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf)
     version_id = agent["versions"][0]["id"]
     avatar = agent["versions"][0]["avatar_config"]
@@ -155,8 +155,10 @@ def test_compile_confirm_and_raw_edit_clear_persona_atomically(client: TestClien
     assert reloaded.json()["persona_confirmed"] is False
 
 
-def test_compile_and_confirm_enforce_revision_and_membership(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+def test_compile_and_confirm_enforce_revision_and_membership(
+    client: TestClient, database: Database
+) -> None:
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "persona-api-create-002")
     version_id = agent["versions"][0]["id"]
     updated = client.patch(
@@ -177,7 +179,17 @@ def test_compile_and_confirm_enforce_revision_and_membership(client: TestClient)
     assert stale.status_code == 409
     assert stale.json()["code"] == "stale_revision"
 
-    _other, other_csrf = login(client, "student-kaikai-1")
+    # Persona compilation is group-membership scoped. There is one seeded
+    # group, so the out-of-scope branch is exercised by moving the Agent into
+    # a group the caller does not belong to.
+    foreign_group_id = make_foreign_group(database, COURSE_ID)
+    with database.session() as session:
+        moved = session.get(Agent, agent["id"])
+        assert moved is not None
+        moved.group_id = foreign_group_id
+        session.commit()
+
+    _other, other_csrf = login(client, "bowen")
     hidden = client.post(
         f"/api/v1/agent-versions/{version_id}/persona/compile",
         headers=_headers(other_csrf),
@@ -189,7 +201,7 @@ def test_compile_and_confirm_enforce_revision_and_membership(client: TestClient)
 def test_compile_failure_does_not_keep_prior_persona_and_publish_blocks_strict_template(
     client: TestClient,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "persona-api-create-003")
     version_id = agent["versions"][0]["id"]
     raw = _persona_md("River Keeper")
@@ -223,7 +235,7 @@ def test_compile_failure_does_not_keep_prior_persona_and_publish_blocks_strict_t
 def test_publishing_confirmed_persona_rebinds_confirmation_to_immutable_revision(
     client: TestClient,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "persona-api-publish-confirmed")
     version_id = agent["versions"][0]["id"]
     updated = client.patch(
@@ -237,7 +249,7 @@ def test_publishing_confirmed_persona_rebinds_confirmation_to_immutable_revision
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "persona-api-publish-upload"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={"file": ("publish.md", b"# Publish\n\nBounded evidence.", "text/markdown")},
@@ -278,7 +290,7 @@ def test_publishing_confirmed_persona_rebinds_confirmation_to_immutable_revision
 def test_document_revision_cas_preserves_confirmed_persona_without_half_update(
     client: TestClient,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "persona-api-document-revision")
     version_id = agent["versions"][0]["id"]
     updated = client.patch(
@@ -292,7 +304,7 @@ def test_document_revision_cas_preserves_confirmed_persona_without_half_update(
     )
     assert updated.status_code == 200, updated.text
     first = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "persona-doc-one-123456"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={"file": ("one.md", b"# One\n\nFirst evidence.", "text/markdown")},
@@ -320,7 +332,7 @@ def test_document_revision_cas_preserves_confirmed_persona_without_half_update(
     first_document_id = first.json()["document"]["id"]
 
     second = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "persona-doc-two-123456"}),
         data={"target_agent_version_id": version_id, "expected_revision": "2"},
         files={"file": ("two.md", b"# Two\n\nSecond evidence.", "text/markdown")},
@@ -427,7 +439,7 @@ def test_0009_rejects_partial_persona_rows_and_lossy_downgrade(tmp_path: Path) -
         now = datetime.now(UTC)
         agent = Agent(
             id="persona-migration-agent",
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Migration Agent",
             description="",
             metadata_revision=0,
@@ -530,7 +542,7 @@ def test_0009_does_not_backfill_existing_legacy_agent_versions(tmp_path: Path) -
         now = datetime.now(UTC)
         agent = Agent(
             id="legacy-persona-agent",
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Legacy Agent",
             description="",
             metadata_revision=0,

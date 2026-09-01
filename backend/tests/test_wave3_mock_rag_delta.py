@@ -54,8 +54,8 @@ from sqlalchemy import select
 from tests.conftest import login
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-GROUP_KAIKAI_ID = "699112be-780b-5ffd-9a87-3762f596c558"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
 
 
 def _headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -493,7 +493,7 @@ def test_sql_turn_preparer_applies_v2_anchor_and_leaves_persisted_v1_unfiltered(
     with TestClient(app) as client:
         relevant_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Relevant SQL",
             evidence=(
                 "TikTok recommendation algorithm governance affects creator visibility "
@@ -502,13 +502,13 @@ def test_sql_turn_preparer_applies_v2_anchor_and_leaves_persisted_v1_unfiltered(
         )
         mineral_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name="Mineral SQL",
             evidence="Bowenite is a hard green mineral used in carving and geological study.",
         )
         partner_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Partner SQL",
             evidence="Classroom dialogue can compare evidence and general reasoning.",
         )

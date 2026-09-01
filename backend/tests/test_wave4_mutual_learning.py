@@ -234,8 +234,7 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
     from tests.conftest import login
     from tests.test_wave3_mock_rag_delta import (
         COURSE_ID,
-        GROUP_BOWEN_ID,
-        GROUP_KAIKAI_ID,
+        GROUP_DEMO_ID,
         _headers,
         _insert_sql_published_agent,
     )
@@ -255,14 +254,14 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
     with TestClient(app) as client:
         first_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Barrier A",
             evidence="Unrelated mineral carving notes do not answer this classroom topic.",
             confirmed_persona=True,
         )
         second_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name="Barrier B",
             evidence="Another unrelated geological passage for a separate snapshot.",
             confirmed_persona=True,
@@ -352,8 +351,7 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
     from tests.conftest import login
     from tests.test_wave3_mock_rag_delta import (
         COURSE_ID,
-        GROUP_BOWEN_ID,
-        GROUP_KAIKAI_ID,
+        GROUP_DEMO_ID,
         _headers,
         _insert_sql_published_agent,
     )
@@ -362,14 +360,14 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
     with TestClient(app) as client:
         first_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name=f"Projection A {round_count}",
             evidence="A snapshot passage for the projection test.",
             confirmed_persona=True,
         )
         second_agent = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name=f"Projection B {round_count}",
             evidence="A second snapshot passage for the projection test.",
             confirmed_persona=True,
@@ -405,8 +403,7 @@ def test_every_new_debate_requires_confirmed_persona_but_legacy_history_stays_co
     from tests.conftest import login
     from tests.test_wave3_mock_rag_delta import (
         COURSE_ID,
-        GROUP_BOWEN_ID,
-        GROUP_KAIKAI_ID,
+        GROUP_DEMO_ID,
         _headers,
         _insert_sql_published_agent,
     )
@@ -415,14 +412,14 @@ def test_every_new_debate_requires_confirmed_persona_but_legacy_history_stays_co
     with TestClient(app) as client:
         first = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Legacy Persona A",
             evidence="A legacy immutable snapshot.",
             confirmed_persona=False,
         )
         second = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name="Legacy Persona B",
             evidence="A second legacy immutable snapshot.",
             confirmed_persona=False,

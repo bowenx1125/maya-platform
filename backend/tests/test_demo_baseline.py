@@ -24,7 +24,7 @@ from app.modules.demo_baseline.service import (
     dirty_counts,
     ensure_demo_baseline,
 )
-from app.seed import GROUP_BOWEN_ID
+from app.seed import GROUP_DEMO_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -87,7 +87,7 @@ def test_baseline_conflict_fails_closed_without_rewriting_reserved_rows(
                 ensure_demo_baseline(db, settings.resolved_data_root)
             db.rollback()
         with database.session() as db:
-            assert db.get(Agent, BASELINE_AGENT_ID).name == "Maya Demo Guide"
+            assert db.get(Agent, BASELINE_AGENT_ID).name == "Socrates"
 
 
 def test_demo_endpoints_disclose_modes_without_provider_secrets(
@@ -130,7 +130,7 @@ def test_dirty_counts_exclude_only_system_baseline_agent(
             db.add(
                 Agent(
                     id="8e3aa61e-d8cb-4b14-9e3b-75463a9b35cd",
-                    group_id=GROUP_BOWEN_ID,
+                    group_id=GROUP_DEMO_ID,
                     name="Student Agent",
                     description="A user-owned draft.",
                     status="active",

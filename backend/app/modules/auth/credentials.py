@@ -520,15 +520,12 @@ def load_desired_graph(settings: Settings) -> DesiredAccountGraph:
                 key = credential.username
                 if not _ACCOUNT_KEY_RE.fullmatch(key):
                     raise CredentialFileError("legacy demo credentials are malformed")
-                if key == "teacher-demo":
+                if key == "maya":
                     role: AccountRole = "teacher"
                     group_key: str | None = None
-                elif key.startswith("student-bowen-"):
+                elif key in ("bowen", "kaikai", "jade"):
                     role = "student"
-                    group_key = "group-bowen"
-                elif key.startswith("student-kaikai-"):
-                    role = "student"
-                    group_key = "group-kaikai"
+                    group_key = "group-demo"
                 else:
                     # Old YAML has no role/group fields. Unknown identities
                     # are not silently guessed into the desired graph.

@@ -51,8 +51,7 @@ from sqlalchemy import func, select
 from tests.conftest import login
 from tests.test_wave3_mock_rag_delta import (
     COURSE_ID,
-    GROUP_BOWEN_ID,
-    GROUP_KAIKAI_ID,
+    GROUP_DEMO_ID,
     _headers,
     _insert_sql_published_agent,
 )
@@ -120,7 +119,7 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
     with TestClient(app) as client:
         first_agent_id = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Real Query A",
             evidence=(
                 "Accountable recommendation governance needs transparent evidence and public "
@@ -130,7 +129,7 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
         )
         second_agent_id = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name="Real Query B",
             evidence="A complementary classroom governance perspective.",
             confirmed_persona=True,
@@ -248,7 +247,7 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
             capture_build_turn_subqueries,
         )
 
-        _teacher, csrf = login(client, "teacher-demo")
+        _teacher, csrf = login(client, "maya")
         created = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
             headers=_headers(csrf, **{"Idempotency-Key": "real-query-debate-create-001"}),

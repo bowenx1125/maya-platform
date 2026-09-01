@@ -34,14 +34,14 @@ from sqlalchemy import select, text
 from tests.conftest import login
 from tests.test_wave2_playback import (
     COURSE_ID,
-    GROUP_BOWEN_ID,
+    GROUP_DEMO_ID,
     _insert_published_agent,
     _insert_sql_retained_debate,
     _valid_speech,
     _wav_bytes,
 )
 
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 
 
 def _seed_one_turn(app_factory: Any) -> tuple[Database, Any, str, str]:
@@ -49,7 +49,7 @@ def _seed_one_turn(app_factory: Any) -> tuple[Database, Any, str, str]:
     with TestClient(app):
         agent_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="PW3 SQL Bowen",
             evidence="Retained classroom evidence with accountable review and user choice.",
         )
@@ -65,7 +65,7 @@ def test_transcript_route_rejects_early_finished_incomplete_plan(app_factory: An
     with TestClient(app) as client:
         agent_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="PW3 transcript partial",
             evidence="A retained classroom transcript fixture.",
         )

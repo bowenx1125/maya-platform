@@ -27,11 +27,11 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.core.db import ALEMBIC_HEAD, Database  # noqa: E402
 from app.core.models import Course, CourseMember, Group, GroupMember, User  # noqa: E402
 from app.seed import (  # noqa: E402
-    BOWEN_STUDENT_IDS,
+    STUDENT_IDS,
     COURSE_ID,
-    GROUP_BOWEN_ID,
-    GROUP_KAIKAI_ID,
-    KAIKAI_STUDENT_IDS,
+    GROUP_DEMO_ID,
+    GROUP_DEMO_ID,
+    STUDENT_IDS,
     TEACHER_ID,
     row_fingerprint,
     seed_demo_data,
@@ -125,13 +125,13 @@ def assert_seed_shape(snapshot: dict[str, Any]) -> None:
         raise AssertionError("Wave 0 seed user count changed")
     if snapshot["courses"] != [(COURSE_ID, "demo-course-001", "Maya Cultural Exchange Demo")]:
         raise AssertionError("Wave 0 seed course changed")
-    if {row[0] for row in snapshot["groups"]} != {GROUP_BOWEN_ID, GROUP_KAIKAI_ID}:
+    if {row[0] for row in snapshot["groups"]} != {GROUP_DEMO_ID, GROUP_DEMO_ID}:
         raise AssertionError("Wave 0 seed groups changed")
     if len(snapshot["course_members"]) != 7 or len(snapshot["group_members"]) != 6:
         raise AssertionError("Wave 0 seed relationships changed")
     if TEACHER_ID not in {row[1] for row in snapshot["course_members"]}:
         raise AssertionError("Wave 0 teacher membership is missing")
-    expected_students = set(BOWEN_STUDENT_IDS + KAIKAI_STUDENT_IDS)
+    expected_students = set(STUDENT_IDS + STUDENT_IDS)
     if {row[1] for row in snapshot["group_members"]} != expected_students:
         raise AssertionError("Wave 0 group membership is missing a student")
 

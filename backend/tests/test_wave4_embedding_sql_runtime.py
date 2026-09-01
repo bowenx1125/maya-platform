@@ -51,7 +51,7 @@ from sqlalchemy import select
 
 from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
-from tests.test_wave1_agents_knowledge import BOWEN_GROUP_ID, _confirm_persona, _headers
+from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _confirm_persona, _headers
 
 
 def _digest(value: str) -> str:
@@ -240,7 +240,7 @@ def test_provider_publish_lease_renewal_is_bounded_and_exact_token_cas(
     with database.session() as db:
         db.add(
             User(
-                id="student-bowen-1",
+                id="bowen",
                 username="embedding-lease-student",
                 display_name="Embedding Lease Student",
                 status="active",
@@ -251,7 +251,7 @@ def test_provider_publish_lease_renewal_is_bounded_and_exact_token_cas(
         db.add(
             IdempotencyRecord(
                 id="embedding-publish-lease",
-                actor_user_id="student-bowen-1",
+                actor_user_id="bowen",
                 operation="publishAgentVersion",
                 key="embedding-publish-lease-key",
                 request_hash="a" * 64,
@@ -403,9 +403,9 @@ def test_sql_publisher_commits_real_vector_snapshot_and_operation_success_atomic
     database = app.state.database
     settings = app.state.settings
     assert isinstance(database, Database)
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     created = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": "embed-sql-publish-agent-001"}),
         json={"name": "Embedding Publisher", "description": "Runtime publication fixture"},
     )
@@ -424,7 +424,7 @@ def test_sql_publisher_commits_real_vector_snapshot_and_operation_success_atomic
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "embed-sql-publish-doc-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={

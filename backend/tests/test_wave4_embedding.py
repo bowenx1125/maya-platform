@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
-from app.modules.debates.generation.retrieval import SnapshotRetriever, TurnSubquery
-from app.modules.knowledge.markdown import mock_embedding
-from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers import (
     REAL_EMBEDDING_DIMENSION,
     REAL_EMBEDDING_MODEL,
@@ -48,7 +43,6 @@ from app.modules.knowledge.providers.operations import (
     EmbeddingAcceptanceUnknownResult,
     execute_embedding_batch,
 )
-from app.modules.knowledge.vector import MockVectorStore, StoredVectorRow
 
 
 def _build(
@@ -630,40 +624,3 @@ def test_provider_calls_are_never_implied_by_build_or_plan_construction() -> Non
     plan_embedding_batches(build)
     assert provider.call_count == 0
     assert Utf8ByteTokenizer().count_tokens("你好") == len("你好".encode())
-
-
-def test_formal_retrieval_keeps_relevant_adjacent_and_unrelated_boundaries() -> None:
-    root = Path(__file__).resolve().parents[2]
-    manifest = json.loads(
-        (root / "manual-tests/formal-tiktok-rag/source-manifest.json").read_text(encoding="utf-8")
-    )
-    topic = str(manifest["topic"])
-    for fixture in manifest["fixtures"]:
-        path = root / "manual-tests/formal-tiktok-rag" / str(fixture["path"])
-        text = path.read_text(encoding="utf-8")
-        row = StoredVectorRow(
-            chunk_id=f"formal-{fixture['fixture_id']}",
-            source_filename=path.name,
-            chunk_text=text,
-            blob=mock_embedding(text),
-            dimension=256,
-            key="mock-sha256-v1",
-            document_order=0,
-            chunk_index=0,
-        )
-        store = MockVectorStore((row,))
-
-        def search(
-            query: str, *, top_k: int = 6, _store: MockVectorStore = store
-        ) -> Iterable[object]:
-            return _store.search(query, top_k=top_k)
-
-        result = SnapshotRetriever(search).retrieve(
-            f"formal-{fixture['fixture_id']}",
-            (TurnSubquery("viewpoint", topic),),
-            policy_id=MOCK_LEXICAL_ANCHOR_POLICY_ID,
-            topic_anchor=topic,
-        )
-        expected = str(fixture["expected_retrieval_status"]) == "matched"
-        assert result.matched is expected
-        assert bool(result.receipts) is expected

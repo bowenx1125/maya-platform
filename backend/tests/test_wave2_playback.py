@@ -76,8 +76,8 @@ from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-GROUP_KAIKAI_ID = "699112be-780b-5ffd-9a87-3762f596c558"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
 TOPIC = "Should the United States ban TikTok's recommendation algorithm?"
 ACCENTED_NFD_TOPIC = "Should Māori and Cafe\u0301/C\u0327 perspectives shape platform policy?"
 
@@ -276,7 +276,7 @@ def _insert_sql_retained_debate(
                 revision=0,
                 last_sequence=0,
                 cancellation_generation=0,
-                created_by="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                created_by="08b9de2d-bb75-5c71-a64b-231b48f9eb25",
                 created_at=now,
                 updated_at=now,
             )
@@ -407,7 +407,7 @@ def _memory_debate(
             status=status,
             participants=[
                 MemoryParticipant(slot="A", order_index=0, name="Bowen"),
-                MemoryParticipant(slot="B", order_index=1, name="KaiKai"),
+                MemoryParticipant(slot="B", order_index=1, name="Kaikai"),
             ],
         )
     )
@@ -420,7 +420,7 @@ def test_sql_start_prepares_only_current_and_successor_without_public_leak(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Bowen",
             evidence=(
                 "TikTok recommendation algorithm policy should address privacy, national "
@@ -429,8 +429,8 @@ def test_sql_start_prepares_only_current_and_successor_without_public_leak(
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Kaikai",
             evidence="Quartz orchids mineral lattice thermodynamics basalt geometry.",
         )
         _session, csrf = login(client)
@@ -525,14 +525,14 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Legacy Bowen",
             evidence="TikTok transparency, privacy, safeguards, and accountable review.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="Legacy KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Legacy Kaikai",
             evidence="Competition, expression, proportional regulation, and user choice.",
         )
         _session, csrf = login(client)
@@ -645,14 +645,14 @@ def test_sql_next_cross_session_claim_has_one_winner_and_stable_stale_loser(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Cross Session Bowen",
             evidence="TikTok transparency privacy safeguards and accountable review.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="Cross Session KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Cross Session Kaikai",
             evidence="Competition expression proportional policy and user choice.",
         )
         _session, csrf = login(client)
@@ -793,7 +793,7 @@ def test_sql_next_cross_session_claim_has_one_winner_and_stable_stale_loser(
         repository_b.claim_next_playback = synchronized_claim(repository_b)  # type: ignore[method-assign]
 
         teacher_context = SimpleNamespace(
-            user=SimpleNamespace(id="98644172-6bbb-5383-8198-3b78dcd5b9ab")
+            user=SimpleNamespace(id="08b9de2d-bb75-5c71-a64b-231b48f9eb25")
         )
 
         def invoke(service: PlaybackService) -> Any:
@@ -862,14 +862,14 @@ def test_sql_shared_attempt_two_commits_under_the_original_claim(app_factory: An
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Repair Bowen",
             evidence="TikTok transparency privacy safeguards independent review and user choice.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="Repair KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Repair Kaikai",
             evidence=(
                 "Competition expression proportional regulation privacy and security safeguards."
             ),
@@ -934,14 +934,14 @@ def test_sql_concurrent_different_starts_leave_one_running_debate(app_factory: A
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Concurrent Bowen",
             evidence="TikTok transparency privacy safeguards and accountable review.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="Concurrent KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Concurrent Kaikai",
             evidence="Competition expression proportional policy and user choice.",
         )
         _session, csrf = login(client)
@@ -1015,14 +1015,14 @@ def test_sql_state_and_event_share_one_commit_or_rollback(app_factory: Any) -> N
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Atomic Bowen",
             evidence="TikTok transparency safeguards and accountable independent review.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="Atomic KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Atomic Kaikai",
             evidence="Algorithmic speech, competition, proportional policy, and user choice.",
         )
         _session, csrf = login(client)
@@ -1121,7 +1121,7 @@ def test_tts_voice_is_revalidated_custom_then_system_then_mock(app_factory: Any)
                     VoiceProfile(
                         id=custom_id,
                         scope="group",
-                        group_id=GROUP_BOWEN_ID,
+                        group_id=GROUP_DEMO_ID,
                         display_name="Custom ready voice",
                         status="ready",
                         provider_key="mock",
@@ -1210,7 +1210,7 @@ def test_expired_start_claim_recovers_typed_audio_before_token_takeover(
                         revision=0,
                         last_sequence=0,
                         cancellation_generation=0,
-                        created_by="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                        created_by="08b9de2d-bb75-5c71-a64b-231b48f9eb25",
                         created_at=timestamp,
                         updated_at=timestamp,
                     )
@@ -1223,7 +1223,7 @@ def test_expired_start_claim_recovers_typed_audio_before_token_takeover(
             db.add(
                 IdempotencyRecord(
                     id=record_id,
-                    actor_user_id="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                    actor_user_id="08b9de2d-bb75-5c71-a64b-231b48f9eb25",
                     operation="startDebate",
                     key=key,
                     request_hash=body_hash,
@@ -1323,7 +1323,7 @@ async def _memory_ready_service(
             topic=TOPIC,
             participants=[
                 MemoryParticipant(slot="A", order_index=0, name="Bowen"),
-                MemoryParticipant(slot="B", order_index=1, name="KaiKai"),
+                MemoryParticipant(slot="B", order_index=1, name="Kaikai"),
             ],
         )
     )
@@ -1355,7 +1355,7 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Bowen",
             evidence=(
                 (
@@ -1371,8 +1371,8 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Kaikai",
             evidence="Quartz orchid mineral lattice basalt geometry thermodynamics.",
         )
         _session, csrf = login(client)
@@ -1718,14 +1718,14 @@ def test_websocket_sessions_release_small_sqlite_pool_for_http_requests(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Bowen",
             evidence="TikTok recommendation transparency and user choice.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Kaikai",
             evidence="Quartz orchid mineral lattice basalt geometry.",
         )
         _session, csrf = login(client)
@@ -2857,14 +2857,14 @@ def test_websocket_terminal_controller_acquire_is_private_stable_rejection(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Bowen",
             evidence="TikTok recommendation transparency and user choice.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Kaikai",
             evidence="Quartz orchid mineral lattice basalt geometry.",
         )
         _session, csrf = login(client)
@@ -2998,14 +2998,14 @@ def test_sql_restart_fails_the_turn_owned_by_an_interrupted_job(app_factory: Any
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Restart Bowen",
             evidence="Transparent safeguards require accountable review and user choice.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="Restart KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Restart Kaikai",
             evidence="Proportional regulation should preserve expression and competition.",
         )
         _session, csrf = login(client)
@@ -3292,14 +3292,14 @@ def test_websocket_exact_configured_origin_delivers_authorized_snapshot(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Bowen",
             evidence="TikTok recommendation transparency and user choice.",
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="Kaikai",
             evidence="Quartz orchid mineral lattice basalt geometry.",
         )
         _session, csrf = login(client)
@@ -3542,7 +3542,7 @@ async def test_sql_replay_rehydrates_empty_audio_cache_from_stored_file(
         pass
     agent_id = _insert_published_agent(
         database,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         name="Retained Bowen",
         evidence="TikTok transparency, privacy, safeguards, and accountable review.",
     )
@@ -3585,7 +3585,7 @@ async def test_sql_replay_pointer_change_rejects_all_and_turn_without_mutation(
         pass
     agent_id = _insert_published_agent(
         database,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         name="Pointer Bowen",
         evidence="TikTok transparency, privacy, safeguards, and accountable review.",
     )
@@ -3642,7 +3642,7 @@ async def test_sql_replay_rejects_invalid_persisted_audio_facts(
         pass
     agent_id = _insert_published_agent(
         database,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         name="Integrity Bowen",
         evidence="TikTok transparency, privacy, safeguards, and accountable review.",
     )
@@ -3728,7 +3728,7 @@ def _insert_sql_draft_debate(database: Database, *, debate_id: str) -> None:
                 revision=0,
                 last_sequence=0,
                 cancellation_generation=0,
-                created_by="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                created_by="08b9de2d-bb75-5c71-a64b-231b48f9eb25",
                 created_at=now,
                 updated_at=now,
             )
@@ -3794,7 +3794,7 @@ async def test_sql_audio_swap_cleanup_marks_old_files_deleted_and_keeps_turn_aud
         pass
     agent_id = _insert_published_agent(
         database,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         name="Cleanup Bowen",
         evidence="TikTok transparency, privacy, safeguards, and accountable review.",
     )
@@ -3860,7 +3860,7 @@ async def test_sql_audio_swap_recovery_marks_old_files_deleted(
         pass
     agent_id = _insert_published_agent(
         database,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         name="Recovery Bowen",
         evidence="TikTok transparency, privacy, safeguards, and accountable review.",
     )

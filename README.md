@@ -115,9 +115,10 @@ labels that split honestly.
 
 A real run is bounded by an acceptance ledger whose call plan is derived from
 the debate's own shape rather than a fixed number, and no provider request is
-ever retried automatically. The packet and its driver live in
-[manual-tests/real-core-demo/](manual-tests/real-core-demo/); read that README
-before spending a real call.
+ever retried automatically. Every real request is disclosed to the teacher and
+confirmed before it is sent, so a real session is exercised through the product
+itself: log in, create a debate between the seeded Agents, and confirm each
+disclosure as it appears.
 
 ## Logs and shutdown
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from app.core.db import ALEMBIC_HEAD, Database
-from app.seed import GROUP_BOWEN_ID, seed_demo_data
+from app.seed import GROUP_DEMO_ID, seed_demo_data
 from sqlalchemy import inspect, text
 
 
@@ -48,7 +48,7 @@ def test_0012_marks_only_mutable_drafts_and_round_trips(tmp_path: Path) -> None:
                 "VALUES ('activation-agent',:group_id,'Activation Agent','',0,'active',"
                 "'activation-published',:now,:now)"
             ),
-            {"group_id": GROUP_BOWEN_ID, "now": now},
+            {"group_id": GROUP_DEMO_ID, "now": now},
         )
         for version_id, version_seq, state in (
             ("activation-published", 0, "published"),

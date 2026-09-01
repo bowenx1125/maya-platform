@@ -42,7 +42,7 @@ from app.providers.control import (
     validate_demo_acceptance_call_no,
 )
 from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
-from app.seed import GROUP_BOWEN_ID
+from app.seed import GROUP_DEMO_ID
 
 from .schemas import (
     AcceptanceRunState,
@@ -140,7 +140,7 @@ def _verify_baseline(db: Session) -> None:
         agent is None
         or version is None
         or snapshot is None
-        or agent.group_id != GROUP_BOWEN_ID
+        or agent.group_id != GROUP_DEMO_ID
         or version.agent_id != BASELINE_AGENT_ID
         or snapshot.agent_version_id != BASELINE_VERSION_ID
         or not baseline_is_usable(db)

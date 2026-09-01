@@ -33,7 +33,7 @@ from app.providers.control import (
     validate_provider_preflight,
 )
 from app.providers.control_repository import ProviderRepository
-from app.seed import COURSE_ID, GROUP_BOWEN_ID, TEACHER_ID
+from app.seed import COURSE_ID, GROUP_DEMO_ID, TEACHER_ID
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
@@ -689,9 +689,9 @@ def test_sql_manifest_authorization_is_bound_to_exact_owner_course(
 ) -> None:
     app = client.app
     database = app.state.database
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     created = client.post(
-        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers={
             "Origin": "http://testserver",
             "X-CSRF-Token": csrf,
@@ -710,7 +710,7 @@ def test_sql_manifest_authorization_is_bound_to_exact_owner_course(
         manifest,
         policy_snapshot_id=policy_id,
         course_id=COURSE_ID,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         agent_version_id=version_id,
     )
 
@@ -764,9 +764,9 @@ def test_sql_query_manifest_listing_is_owner_bound_and_returns_safe_summary(
 ) -> None:
     app = client.app
     database = app.state.database
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     created = client.post(
-        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers={
             "Origin": "http://testserver",
             "X-CSRF-Token": csrf,
@@ -782,7 +782,7 @@ def test_sql_query_manifest_listing_is_owner_bound_and_returns_safe_summary(
             db.scalar(
                 select(AgentVersion.id)
                 .join(Agent, Agent.id == AgentVersion.agent_id)
-                .where(Agent.group_id == GROUP_BOWEN_ID, AgentVersion.id == version_id)
+                .where(Agent.group_id == GROUP_DEMO_ID, AgentVersion.id == version_id)
             )
             == version_id
         )
@@ -795,7 +795,7 @@ def test_sql_query_manifest_listing_is_owner_bound_and_returns_safe_summary(
         manifest,
         policy_snapshot_id=policy_id,
         course_id=COURSE_ID,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         agent_version_id=version_id,
     )
     with database.session() as db:
@@ -849,9 +849,9 @@ def test_sql_publication_manifest_listing_is_version_and_course_bound_without_op
 ) -> None:
     app = client.app
     database = app.state.database
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     created = client.post(
-        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers={
             "Origin": "http://testserver",
             "X-CSRF-Token": csrf,
@@ -863,7 +863,7 @@ def test_sql_publication_manifest_listing_is_version_and_course_bound_without_op
     version_id = created.json()["versions"][0]["id"]
 
     second = client.post(
-        f"/api/v1/groups/{GROUP_BOWEN_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers={
             "Origin": "http://testserver",
             "X-CSRF-Token": csrf,
@@ -892,14 +892,14 @@ def test_sql_publication_manifest_listing_is_version_and_course_bound_without_op
         first_manifest,
         policy_snapshot_id=policy_id,
         course_id=COURSE_ID,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         agent_version_id=version_id,
     )
     repository.save_export_manifest(
         other_manifest,
         policy_snapshot_id=policy_id,
         course_id=COURSE_ID,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         agent_version_id=other_version_id,
     )
     # A query manifest for the same version must stay on the existing
@@ -908,7 +908,7 @@ def test_sql_publication_manifest_listing_is_version_and_course_bound_without_op
         query_manifest,
         policy_snapshot_id=policy_id,
         course_id=COURSE_ID,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         agent_version_id=version_id,
     )
 

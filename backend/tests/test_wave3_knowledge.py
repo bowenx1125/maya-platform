@@ -12,7 +12,9 @@ import app.modules.knowledge.replacement as replacement_service
 import app.modules.knowledge.router as knowledge_router
 import app.modules.knowledge.services as knowledge_services
 import pytest
+from app.core.db import Database
 from app.core.models import (
+    Agent,
     AgentVersion,
     AgentVersionDocument,
     FileOperation,
@@ -33,10 +35,10 @@ from app.modules.knowledge.files import (
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from tests.conftest import login
+from tests.conftest import login, make_foreign_group
 from tests.persona_fixtures import confirmed_persona_fields
 
-BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 
 
@@ -46,7 +48,7 @@ def _headers(csrf: str, **extra: str) -> dict[str, str]:
 
 def _make_agent(client: TestClient, csrf: str, key: str, name: str) -> tuple[str, str]:
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": f"create-{key}-123456"}),
         json={"name": name},
     )
@@ -65,7 +67,7 @@ def _upload(
     expected_revision: int,
 ) -> dict[str, Any]:
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": f"upload-{key}-123456"}),
         data={
             "target_agent_version_id": version_id,
@@ -299,10 +301,10 @@ def test_frozen_download_names_are_encoded_and_reject_paths() -> None:
 
 
 def test_library_create_does_not_auto_enable_a_draft(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     _agent_id, version_id = _make_agent(client, csrf, "library", "Library Agent")
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "library-create-123456"}),
         files={"file": ("standalone.md", b"# Library", "text/markdown")},
     )
@@ -322,7 +324,7 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
 ) -> None:
     app, database, settings = app_factory()
     with TestClient(app) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         _agent_one, version_one = _make_agent(client, csrf, "replace-one", "One")
         _agent_two, version_two = _make_agent(client, csrf, "replace-two", "Two")
         uploaded = _upload(
@@ -366,7 +368,7 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
         assert new_id != old_id
         assert [
             item["id"]
-            for item in client.get(f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents").json()
+            for item in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents").json()
         ] == [new_id]
 
     with database.session() as session:
@@ -392,9 +394,9 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
 def test_replacement_without_draft_references_becomes_library_document(app_factory: Any) -> None:
     app, database, settings = app_factory()
     with TestClient(app) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         created = client.post(
-            f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "orphan-create-123456"}),
             files={"file": ("old.md", b"# Old", "text/markdown")},
         )
@@ -414,7 +416,7 @@ def test_replacement_without_draft_references_becomes_library_document(app_facto
         new_id = replacement.json()["id"]
         assert [
             item["id"]
-            for item in client.get(f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents").json()
+            for item in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents").json()
         ] == [new_id]
     with database.session() as session:
         old_row = session.get(KnowledgeDocument, old["id"])
@@ -437,7 +439,7 @@ def test_replacement_staged_journal_recovers_after_crash(
 
     monkeypatch.setattr(knowledge_router, "saga_checkpoint", crash)
     with TestClient(app, raise_server_exceptions=False) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         _agent_id, version_id = _make_agent(client, csrf, "crash", "Crash")
         uploaded = _upload(client, csrf, version_id, "crash-old", "old.md", b"# Old", 0)
         old_id = uploaded["document"]["id"]
@@ -476,8 +478,9 @@ def test_replacement_staged_journal_recovers_after_crash(
 
 def test_published_agent_rag_and_sources_use_server_names_and_scope(
     client: TestClient,
+    database: Database,
 ) -> None:
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     agent_id, version_id = _make_agent(client, csrf, "download", "Download Agent")
     detail = client.get(f"/api/v1/agents/{agent_id}")
     assert detail.status_code == 200, detail.text
@@ -555,7 +558,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
             f'attachment; filename="{expected_filename}"'
         )
 
-    _teacher, teacher_csrf = login(client, "teacher-demo")
+    _teacher, teacher_csrf = login(client, "maya")
     del teacher_csrf
     assert client.get(f"/api/v1/agent-versions/{version_id}/agent-md/download").status_code == 200
     assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}/download").status_code == 200
@@ -565,7 +568,17 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
     assert teacher_source.status_code == 200, teacher_source.text
     assert teacher_source.text == "# First\n\nAlpha"
 
-    _other, other_csrf = login(client, "student-kaikai-1")
+    # Downloads are group-membership scoped. There is one seeded group, so the
+    # out-of-scope branch is exercised by moving the Agent into a group the
+    # caller does not belong to.
+    foreign_group_id = make_foreign_group(database, COURSE_ID)
+    with database.session() as session:
+        moved = session.get(Agent, agent_id)
+        assert moved is not None
+        moved.group_id = foreign_group_id
+        session.commit()
+
+    _other, other_csrf = login(client, "bowen")
     del other_csrf
     assert client.get(f"/api/v1/agent-versions/{version_id}/agent-md/download").status_code == 404
     assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}/download").status_code == 404
@@ -591,8 +604,8 @@ def test_two_database_threads_concurrent_replace_have_one_winner(
         TestClient(app_one, raise_server_exceptions=False) as client_one,
         TestClient(app_two, raise_server_exceptions=False) as client_two,
     ):
-        _user_one, csrf_one = login(client_one, "student-bowen-1")
-        _user_two, csrf_two = login(client_two, "student-bowen-1")
+        _user_one, csrf_one = login(client_one, "bowen")
+        _user_two, csrf_two = login(client_two, "bowen")
         _agent_id, _version_id, uploaded = _prepare_publishable_draft(
             client_one, csrf_one, "concurrent-replace", "Concurrent Replace"
         )
@@ -631,7 +644,7 @@ def test_two_database_threads_concurrent_replace_have_one_winner(
         assert sorted(response.status_code for response in results) == [201, 409]
         with database.session() as session:
             documents = session.scalars(
-                select(KnowledgeDocument).where(KnowledgeDocument.group_id == BOWEN_GROUP_ID)
+                select(KnowledgeDocument).where(KnowledgeDocument.group_id == GROUP_DEMO_ID)
             ).all()
             old_row = session.get(KnowledgeDocument, old["id"])
             operations = session.scalars(
@@ -665,8 +678,8 @@ def test_replace_publish_forced_order_has_one_stable_winner(
         TestClient(app_one, raise_server_exceptions=False) as client_one,
         TestClient(app_two, raise_server_exceptions=False) as client_two,
     ):
-        _user_one, csrf_one = login(client_one, "student-bowen-1")
-        _user_two, csrf_two = login(client_two, "student-bowen-1")
+        _user_one, csrf_one = login(client_one, "bowen")
+        _user_two, csrf_two = login(client_two, "bowen")
         agent_id, version_id, uploaded = _prepare_publishable_draft(
             client_one,
             csrf_one,
@@ -827,7 +840,7 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
 ) -> None:
     app, database, settings = app_factory()
     with TestClient(app, raise_server_exceptions=False) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         _agent_one, version_one = _make_agent(client, csrf, "over-limit-one", "Limit One")
         _agent_two, version_two = _make_agent(client, csrf, "over-limit-two", "Limit Two")
         first = _upload(
@@ -940,7 +953,7 @@ def test_replacement_faults_recover_without_active_orphans(
 ) -> None:
     app, database, settings = app_factory()
     with TestClient(app, raise_server_exceptions=False) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         _agent_id, _version_id, uploaded = _prepare_publishable_draft(
             client, csrf, f"replacement-fault-{fault}", f"Fault {fault}"
         )
@@ -1036,7 +1049,7 @@ def test_replacement_checkpoint_faults_recover_after_restart(
 
     monkeypatch.setattr(knowledge_router, "saga_checkpoint", crash)
     with TestClient(app, raise_server_exceptions=False) as client:
-        _user, csrf = login(client, "student-bowen-1")
+        _user, csrf = login(client, "bowen")
         _agent_id, _version_id, uploaded = _prepare_publishable_draft(
             client, csrf, f"checkpoint-{boundary.replace('.', '-')}", "Checkpoint Fault"
         )
@@ -1066,7 +1079,7 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
 ) -> None:
     app, database, settings = app_factory()
     with TestClient(app, raise_server_exceptions=False) as client:
-        _student, csrf = login(client, "student-bowen-1")
+        _student, csrf = login(client, "bowen")
         first_agent, first_version, first_upload = _prepare_publishable_draft(
             client, csrf, "fingerprint-first", "Fingerprint First"
         )
@@ -1114,7 +1127,7 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
         )
         assert other_published.status_code == 200, other_published.text
 
-        _teacher, teacher_csrf = login(client, "teacher-demo")
+        _teacher, teacher_csrf = login(client, "maya")
         debate = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
             headers=_headers(teacher_csrf, **{"Idempotency-Key": "fingerprint-debate"}),
@@ -1133,7 +1146,7 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
         assert {row[3] for row in before["versions"]} == {"published", "superseded"}
         assert before["snapshots"] and before["documents"] and before["chunks"]
         assert before["participants"]
-        _student_again, student_csrf = login(client, "student-bowen-1")
+        _student_again, student_csrf = login(client, "bowen")
         replaced = client.post(
             f"/api/v1/knowledge-documents/{old_document_id}/replace",
             headers=_headers(

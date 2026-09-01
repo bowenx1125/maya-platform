@@ -150,7 +150,7 @@ def test_demo_loopback_origin_reaches_rest_csrf_authorization_layer(
     with TestClient(app) as client:
         payload = client.post(
             "/api/v1/auth/login",
-            json={"username": "teacher-demo", "password": "demo-password"},
+            json={"username": "maya", "password": "demo-password"},
         ).json()
         response = client.post(
             "/api/v1/auth/logout",
@@ -168,7 +168,7 @@ def test_demo_evil_origin_is_rejected_by_rest_csrf(
     with TestClient(app, base_url="http://evil.example:8080") as client:
         login_response = client.post(
             "/api/v1/auth/login",
-            json={"username": "teacher-demo", "password": "demo-password"},
+            json={"username": "maya", "password": "demo-password"},
         )
         assert login_response.status_code == 200
         payload = login_response.json()
@@ -191,7 +191,7 @@ def test_non_demo_loopback_origin_is_rejected_by_rest_csrf(
     with TestClient(app) as client:
         login_response = client.post(
             "/api/v1/auth/login",
-            json={"username": "teacher-demo", "password": "demo-password"},
+            json={"username": "maya", "password": "demo-password"},
         )
         assert login_response.status_code == 200
         response = client.post(

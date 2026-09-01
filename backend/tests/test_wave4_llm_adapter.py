@@ -449,6 +449,26 @@ def test_actual_message_privacy_scan_blocks_identity_and_unknown_fields() -> Non
     assert "River Keeper" not in str(identity_error.value)
 
 
+def test_identity_scan_matches_whole_words_not_substrings() -> None:
+    """A course member's name is blocked; a word that merely contains it is not.
+
+    Demo usernames are ordinary given names, so substring matching would fail
+    a whole turn closed on unrelated vocabulary and leave a safe code that
+    names no cause.
+    """
+
+    blocked = _prompt(topic="How should Jade weigh competing duties?")
+    with pytest.raises(LLMOutboundPrivacyError) as error:
+        scan_llm_outbound_messages(blocked.messages, identity_tokens=("jade",))
+    assert error.value.code == "llm_outbound_data_forbidden"
+
+    for topic in (
+        "How should a jaded reviewer weigh competing duties?",
+        "How should a Himalayan village weigh competing duties?",
+    ):
+        scan_llm_outbound_messages(_prompt(topic=topic).messages, identity_tokens=("jade", "maya"))
+
+
 def test_path_aware_privacy_allows_opaque_uuid_id_paths_but_not_text() -> None:
     prompt = _prompt()
     value = json.loads(prompt.user_message.content)

@@ -17,7 +17,7 @@ Wave 2 must produce a two-person/two-round classroom-debate candidate without en
 3. a versioned deterministic rule set plans exactly `participant_count × 2` turns;
 4. every turn retrieves only its participant snapshot, uses the exact immutable final-ready planned-predecessor prefix, generates a validated English speech and then produces Mock TTS audio;
 5. the teacher starts once, and the server remains authoritative for preparation, publication, playback, controls, replay, WebSocket events and restart recovery;
-6. the default G3 candidate demonstrates Bowen support vs KaiKai oppose on the TikTok recommendation-algorithm question.
+6. the default G3 candidate demonstrates Bowen support vs Kaikai oppose on the TikTok recommendation-algorithm question.
 
 ## 2. Non-goals and hard stop boundary
 
@@ -309,9 +309,9 @@ Required before G2:
 
 G3 Mock runtime uses an isolated data root and must show:
 
-1. published Bowen/KaiKai Agents with placeholder English Markdown and Mock-ready voices;
+1. published Bowen/Kaikai Agents with placeholder English Markdown and Mock-ready voices;
 2. topic `Should the United States ban TikTok's recommendation algorithm?`;
-3. A Bowen assigned support, B KaiKai assigned oppose, exactly A1/B1/A2/B2;
+3. A Bowen assigned support, B Kaikai assigned oppose, exactly A1/B1/A2/B2;
 4. matched citations and an explicit no-match path without fabricated sources;
 5. complete prior-turn context, second-round response/question/update and B2 class reflection;
 6. start/pause/resume/browser play rejection/skip, replay turn/all, refresh and backend restart without new RAG/LLM/TTS on replay/recovery;
@@ -359,7 +359,7 @@ Final main-agent sign-off: `2026-08-28 01:08 Asia/Shanghai`.
 - `M10`, `M11` and `M12` each completed `G1 → G1.5 → independent G2`; the data/setup, generation/RAG and playback/UI auditors returned final `PASS`. The implementation checkpoint before browser hardening is `21252f3 feat: complete audited wave 2 candidate`;
 - the final deterministic tree passes backend `161/161`, frontend `12 files / 64 tests`, Ruff format/check, mypy, ESLint, TypeScript, Prettier and Next production build. Fresh/repeat/populated `0004` migration preserves Wave 0/1/Voice fingerprints with empty foreign-key checks;
 - frozen OpenAPI remains `58 paths / 67 operations` with exact `54 implemented / 13 later-wave placeholders`; Redocly, generated Client, response contract, WS events `29/14`, commands `5/7`, private results `5/6`, WS clean-diff, route positive plus 13 negative cases, repository/secret boundary and Compose configuration pass;
-- isolated Docker G3 runs the exact two-participant, two-round order `A1/B1/A2/B2`. Bowen V1.0 produces matched same-snapshot receipts and visible `bowen-evidence.md`; KaiKai V1.1 follows the explicit no-match/general-reasoning path with zero receipts and no fabricated source. Round 2 preserves the complete predecessor prefix; A asks the next Agent and B answers then asks the class reflection question;
+- isolated Docker G3 runs the exact two-participant, two-round order `A1/B1/A2/B2`. Bowen V1.0 produces matched same-snapshot receipts and visible `bowen-evidence.md`; Kaikai V1.1 follows the explicit no-match/general-reasoning path with zero receipts and no fabricated source. Round 2 preserves the complete predecessor prefix; A asks the next Agent and B answers then asks the class reflection question;
 - teacher start, pause, resume, immediate skip, stop, refresh, backend restart, full replay and single-turn replay were exercised through the real local UI/API. Replay/recovery retain four completed generation jobs and do not call RAG/LLM/TTS again. Prepared speech and sources remain absent before `playback.started`;
 - G3 exposed and closed six material runtime defects before sign-off: default setup-controller render recursion; resume/action leakage across turns and missing public-predecessor fence; full replay stopping after item one; delayed media/control/socket callbacks crossing turn generations; WebSocket lifetime Sessions exhausting SQLite's connection pool; and Start/terminal/replay controller CAS races. Each has a deterministic regression and independent Sol review;
 - the WebSocket now uses short database Sessions for handshake, snapshot, each command and disconnect. Snapshot DTO plus watermark remain one transaction; a constrained two-connection test keeps five sockets open while GET and two-connection create-idempotency replay still succeed and checked-out connections return to baseline;

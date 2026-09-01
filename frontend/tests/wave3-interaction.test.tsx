@@ -26,7 +26,7 @@ afterEach(() => {
 
 const participants = [
   { id: "participant-a", slot: "A" as const, name: "Bowen" },
-  { id: "participant-b", slot: "B" as const, name: "KaiKai" },
+  { id: "participant-b", slot: "B" as const, name: "Kaikai" },
 ];
 
 const openInteraction: TeacherInteraction = {

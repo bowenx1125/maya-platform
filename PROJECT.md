@@ -151,5 +151,5 @@ Each is a deliberate decision, reversible, and scoped to the Demo.
 - [docs/gates/](docs/gates/) — historical acceptance evidence.
 - [docs/requirements/original.md](docs/requirements/original.md) — historical
   source requirements, not the current contract.
-- [manual-tests/real-core-demo/](manual-tests/real-core-demo/) — the bounded
-  real-provider acceptance packet and its driver.
+- [docs/investigations/](docs/investigations/) — open questions with the
+  evidence gathered so far.

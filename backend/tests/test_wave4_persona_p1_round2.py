@@ -330,8 +330,7 @@ def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provide
     from tests.conftest import login
     from tests.test_wave3_mock_rag_delta import (
         COURSE_ID,
-        GROUP_BOWEN_ID,
-        GROUP_KAIKAI_ID,
+        GROUP_DEMO_ID,
         _headers,
         _insert_sql_published_agent,
     )
@@ -340,14 +339,14 @@ def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provide
     with TestClient(app) as client:
         first = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name=f"Pending Legacy A {rule_set_id[-2:]}",
             evidence="A bounded source passage for the migration-era pending run.",
             confirmed_persona=True,
         )
         second = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name=f"Pending Legacy B {rule_set_id[-2:]}",
             evidence="A second bounded source passage for the migration-era pending run.",
             confirmed_persona=True,

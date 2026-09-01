@@ -64,7 +64,7 @@ function setupController(
       .fn()
       .mockResolvedValue([
         candidate("bowen", "Bowen"),
-        candidate("kaikai", "KaiKai"),
+        candidate("kaikai", "Kaikai"),
       ]),
     create: create as unknown as DebateCreateController["create"],
   };
@@ -91,7 +91,7 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
       renderCreate(create);
       await screen.findByRole("button", { name: /Bowen/ });
       fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
-      fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
       fireEvent.change(screen.getByLabelText("Topic (English)"), {
         target: { value: "Should classrooms compare cultural perspectives?" },
       });
@@ -115,7 +115,7 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     const create = renderCreate();
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
-    fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
     fireEvent.change(screen.getByLabelText("Topic (English)"), {
       target: { value: "Should classrooms compare cultural perspectives?" },
     });

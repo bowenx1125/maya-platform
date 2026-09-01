@@ -51,7 +51,7 @@ from app.providers.control import (
     confirm_export_manifest,
 )
 from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
-from app.seed import COURSE_ID, GROUP_BOWEN_ID, TEACHER_ID, seed_demo_data
+from app.seed import COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, seed_demo_data
 from pydantic import ValidationError
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
@@ -91,7 +91,7 @@ def _database(tmp_path: Path) -> Database:
         session.add(
             Agent(
                 id=TARGET_AGENT_ID,
-                group_id=GROUP_BOWEN_ID,
+                group_id=GROUP_DEMO_ID,
                 name="Target Guide",
                 description="Target fixture",
                 status="active",
@@ -223,7 +223,7 @@ def _snapshot_binding_fixture(database: Database) -> tuple[str, ProviderReservat
         manifest,
         policy_snapshot_id=policy_id,
         course_id=COURSE_ID,
-        group_id=GROUP_BOWEN_ID,
+        group_id=GROUP_DEMO_ID,
         agent_version_id=TARGET_VERSION_ID,
     )
     confirmation = confirm_export_manifest(
@@ -304,7 +304,7 @@ def _complete_snapshot_call1(database: Database) -> tuple[str, str]:
                 id=participant_id,
                 debate_id=debate_id,
                 course_id=COURSE_ID,
-                group_id=GROUP_BOWEN_ID,
+                group_id=GROUP_DEMO_ID,
                 agent_id=TARGET_AGENT_ID,
                 agent_version_id=TARGET_VERSION_ID,
                 knowledge_snapshot_id=TARGET_SNAPSHOT_ID,
@@ -850,7 +850,7 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
             session.add(
                 Agent(
                     id=TARGET_AGENT_ID,
-                    group_id=GROUP_BOWEN_ID,
+                    group_id=GROUP_DEMO_ID,
                     name="Target Guide",
                     description="Target fixture",
                     status="active",
@@ -873,7 +873,7 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
             )
         teacher_login = client.post(
             "/api/v1/auth/login",
-            json={"username": "teacher-demo", "password": "demo-password"},
+            json={"username": "maya", "password": "demo-password"},
         )
         assert teacher_login.status_code == 200, teacher_login.text
         csrf = teacher_login.json()["csrf_token"]
@@ -906,7 +906,7 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
         )
         student_login = client.post(
             "/api/v1/auth/login",
-            json={"username": "student-bowen-1", "password": "demo-password"},
+            json={"username": "bowen", "password": "demo-password"},
         )
         student_csrf = student_login.json()["csrf_token"]
         denied = client.get(

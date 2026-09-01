@@ -60,9 +60,9 @@ from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-GROUP_KAIKAI_ID = "699112be-780b-5ffd-9a87-3762f596c558"
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 
 
 def headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -312,10 +312,10 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
 ) -> None:
     _app, database, client = debate_app
     bowen_id, bowen_version, bowen_snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, kaikai_version, kaikai_snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     _session, csrf = login(client)
     body = {
@@ -407,10 +407,10 @@ def test_embedding_only_slice_keeps_mock_voice_fallback(
     app, database, client = debate_app
     app.state.settings.embedding_provider = "dashscope"
     bowen_id, _bowen_version, _bowen_snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Embedding Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Embedding Bowen"
     )
     kaikai_id, _kaikai_version, _kaikai_snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="Embedding KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Embedding Kaikai"
     )
     _session, csrf = login(client)
     response = client.post(
@@ -438,10 +438,10 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
 ) -> None:
     _app, database, client = debate_app
     bowen_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     _session, csrf = login(client)
     participants = [
@@ -505,10 +505,10 @@ def test_each_participant_uses_one_bounded_agent_version_snapshot_join(
 ) -> None:
     _app, database, _client = debate_app
     bowen_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     statements: list[str] = []
 
@@ -573,10 +573,10 @@ def test_create_pointer_state_snapshot_drift_rolls_back_everything(
 ) -> None:
     _app, database, _client = debate_app
     bowen_id, bowen_version, bowen_snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     original = setup_service._resolve_agent_version
     drifted = False
@@ -645,10 +645,10 @@ def test_update_pointer_drift_rolls_back_revision_and_participants(
 ) -> None:
     _app, database, _client = debate_app
     bowen_id, bowen_version, bowen_snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     with database.session() as session:
         created = create_debate_draft(
@@ -710,10 +710,10 @@ def test_create_same_key_concurrency_replays_and_different_hash_conflicts(
 ) -> None:
     _app, database, _client = debate_app
     bowen_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     payload = _create_payload(bowen_id, kaikai_id, topic="Concurrent create")
     barrier = Barrier(2)
@@ -784,10 +784,10 @@ def test_teacher_student_and_outside_course_boundaries(
 ) -> None:
     _app, database, client = debate_app
     bowen_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_BOWEN_ID, name="Bowen"
+        database, group_id=GROUP_DEMO_ID, name="Bowen"
     )
     kaikai_id, _version, _snapshot = _insert_published_agent(
-        database, group_id=GROUP_KAIKAI_ID, name="KaiKai"
+        database, group_id=GROUP_DEMO_ID, name="Kaikai"
     )
     _session, csrf = login(client)
     body = {
@@ -799,7 +799,7 @@ def test_teacher_student_and_outside_course_boundaries(
         "round_count": 2,
         "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
     }
-    student_session, student_csrf = login(client, "student-bowen-1")
+    student_session, student_csrf = login(client, "bowen")
     del student_session
     student_create = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
@@ -817,7 +817,7 @@ def test_teacher_student_and_outside_course_boundaries(
     )
     assert teacher_create.status_code == 201
     debate_id = teacher_create.json()["id"]
-    _student_session, _student_csrf = login(client, "student-bowen-1")
+    _student_session, _student_csrf = login(client, "bowen")
     student_get = client.get(f"/api/v1/debates/{debate_id}")
     assert student_get.status_code == 403
     outside_course = client.get(f"/api/v1/courses/{uuid4()}/debates")
@@ -831,8 +831,8 @@ def test_commit_start_plan_writes_full_predecessor_prefix_without_public_start_s
 ) -> None:
     _app, database, _client = debate_app
     ids = [
-        _insert_published_agent(database, group_id=GROUP_BOWEN_ID, name="Bowen")[0],
-        _insert_published_agent(database, group_id=GROUP_KAIKAI_ID, name="KaiKai")[0],
+        _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Bowen")[0],
+        _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Kaikai")[0],
     ]
     payload = DebateDraftRequest(
         topic="Ordering",

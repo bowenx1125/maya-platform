@@ -88,7 +88,7 @@ from sqlalchemy import Table, func, select, update
 
 from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
-from tests.test_wave1_agents_knowledge import BOWEN_GROUP_ID, _confirm_persona, _headers
+from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _confirm_persona, _headers
 
 
 @dataclass(frozen=True)
@@ -825,9 +825,9 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     app = cast(FastAPI, client.app)
     database = cast(Database, app.state.database)
     settings = app.state.settings
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     created = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": "real-route-agent-create-001"}),
         json={"name": "Real Route Agent", "description": "Exact confirmation fixture"},
     )
@@ -846,7 +846,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "real-route-doc-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={
@@ -918,7 +918,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     assert "endpoint" not in public_error
     assert transport.calls == []
 
-    _teacher, teacher_csrf = login(client, "teacher-demo")
+    _teacher, teacher_csrf = login(client, "maya")
     pending = client.get(f"/api/v1/provider/data-call/pending/agent-versions/{version_id}")
     assert pending.status_code == 200, pending.text
     pending_body = pending.json()
@@ -960,7 +960,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     )
     assert confirmed.status_code == 200, confirmed.text
 
-    _student, retry_csrf = login(client, "student-bowen-1")
+    _student, retry_csrf = login(client, "bowen")
     published = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(
@@ -1001,7 +1001,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
             assert snapshot.embedding_dimension == REAL_EMBEDDING_DIMENSION
         assert snapshot.embedding_policy_version == REAL_EMBEDDING_POLICY_VERSION
         version = db.get(AgentVersion, version_id)
-        group = db.get(Group, BOWEN_GROUP_ID)
+        group = db.get(Group, GROUP_DEMO_ID)
         assert version is not None and version.persona_spec_hash
         assert group is not None
         query_plan = ensure_real_query_export_manifest(

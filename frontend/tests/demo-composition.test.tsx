@@ -21,10 +21,10 @@ describe("Real-Core Demo composition badge", () => {
   it("shows backend component modes and the published Bowen baseline", async () => {
     fixtures.demoStatus.mockResolvedValue({
       baseline: {
-        agent_id: "9f6c9dc8-b4bf-5f9f-98d2-f8e718c1ce0b",
-        version_id: "a7efcb9b-21fb-5d09-9366-3cc44b777d01",
-        snapshot_id: "2572c3ac-4a1b-5bd8-a14a-a194ae7d3c6e",
-        group_id: "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
+        agent_id: "93c04441-1bae-54b2-8037-78622b88d640",
+        version_id: "e792ee07-7f8b-52d2-817b-d315a3d32445",
+        snapshot_id: "49985a15-9633-5190-9982-173c7a21d6e7",
+        group_id: "7813f937-902c-5534-bfb2-ad773a43aeda",
         system_baseline: true,
         immutable: true,
         usable: true,

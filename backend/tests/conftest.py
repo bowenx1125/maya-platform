@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,38 +25,23 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
     credentials = {
         "users": [
             {
-                "user_id": "98644172-6bbb-5383-8198-3b78dcd5b9ab",
-                "username": "teacher-demo",
+                "user_id": "08b9de2d-bb75-5c71-a64b-231b48f9eb25",
+                "username": "maya",
                 "password_hash": password_hash,
             },
             {
-                "user_id": "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7",
-                "username": "student-bowen-1",
+                "user_id": "60541c78-30f1-55c5-b2aa-207b6a766883",
+                "username": "bowen",
                 "password_hash": password_hash,
             },
             {
-                "user_id": "7ff99250-0829-5864-8040-b3133510e7da",
-                "username": "student-bowen-2",
+                "user_id": "bc170f51-45fb-5296-a36d-a2edc8f8d315",
+                "username": "kaikai",
                 "password_hash": password_hash,
             },
             {
-                "user_id": "4d2445fe-7c7b-55ff-8c4c-778ab5098c1d",
-                "username": "student-bowen-3",
-                "password_hash": password_hash,
-            },
-            {
-                "user_id": "0c12d01a-5acf-5430-bc4d-731af768ff46",
-                "username": "student-kaikai-1",
-                "password_hash": password_hash,
-            },
-            {
-                "user_id": "d4465e7b-7b76-5ac1-8f6e-5ce6a6da737d",
-                "username": "student-kaikai-2",
-                "password_hash": password_hash,
-            },
-            {
-                "user_id": "fc2604c6-c760-53e5-b69b-c3a1ef471ea8",
-                "username": "student-kaikai-3",
+                "user_id": "89857c76-2d84-5ecf-b680-990815b98680",
+                "username": "jade",
                 "password_hash": password_hash,
             },
         ]
@@ -90,13 +76,29 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
 
 
 @pytest.fixture
-def client(app_factory: Callable[..., tuple[FastAPI, Database, Settings]]) -> Iterator[TestClient]:
-    app, _database, _settings = app_factory()
+def app_bundle(
+    app_factory: Callable[..., tuple[FastAPI, Database, Settings]],
+) -> tuple[FastAPI, Database, Settings]:
+    """One app/database pair shared by ``client`` and ``database``."""
+
+    return app_factory()
+
+
+@pytest.fixture
+def client(app_bundle: tuple[FastAPI, Database, Settings]) -> Iterator[TestClient]:
+    app, _database, _settings = app_bundle
     with TestClient(app) as test_client:
         yield test_client
 
 
-def login(client: TestClient, username: str = "teacher-demo") -> tuple[dict[str, Any], str]:
+@pytest.fixture
+def database(app_bundle: tuple[FastAPI, Database, Settings]) -> Database:
+    """The database behind ``client``, for tests that must seed extra rows."""
+
+    return app_bundle[1]
+
+
+def login(client: TestClient, username: str = "maya") -> tuple[dict[str, Any], str]:
     response = client.post(
         "/api/v1/auth/login",
         json={"username": username, "password": "demo-password"},
@@ -104,3 +106,28 @@ def login(client: TestClient, username: str = "teacher-demo") -> tuple[dict[str,
     assert response.status_code == 200, response.text
     payload = response.json()
     return payload, payload["csrf_token"]
+
+
+# The product graph has exactly one Demo group, so a group the caller is not a
+# member of cannot be reached through the seed. Access-control tests create one
+# directly; it is never seeded, exported or shipped.
+FOREIGN_GROUP_ID = "1f1b3c2e-0f4d-4a5b-9c6d-7e8f90a1b2c3"
+
+
+def make_foreign_group(database: Any, course_id: str, name: str = "Foreign Group") -> str:
+    """Insert a group in the same course that no seeded user belongs to."""
+
+    from app.core.models import Group
+
+    with database.session() as session:
+        if session.get(Group, FOREIGN_GROUP_ID) is None:
+            session.add(
+                Group(
+                    id=FOREIGN_GROUP_ID,
+                    course_id=course_id,
+                    name=name,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            session.commit()
+    return FOREIGN_GROUP_ID

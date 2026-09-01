@@ -43,7 +43,7 @@ from app.modules.debates.models import Debate
 from app.modules.interactions.models import ClassroomInteractionWindow
 from app.modules.knowledge.files import contained_path, write_atomic
 from app.modules.knowledge.markdown import EMBEDDING_DIMENSION, EMBEDDING_KEY, build_chunks
-from app.seed import GROUP_BOWEN_ID, GROUP_KAIKAI_ID
+from app.seed import GROUP_DEMO_ID
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,9 @@ class BaselineSpec:
 
     @property
     def source_relative_path(self) -> str:
-        return f"groups/{self.group_id}/baseline/source.md"
+        # Every seeded Agent lives in the one Demo group, so the baseline key
+        # — not the group — is what keeps these source files distinct.
+        return f"groups/{self.group_id}/baseline/{self.key}/source.md"
 
     @property
     def snapshot_relative_path(self) -> str:
@@ -82,155 +84,114 @@ class BaselineSpec:
         return f"snapshots/{self.snapshot_id}/documents/{self.snapshot_document_id}.md"
 
 
-BASELINE_A_AGENT_MD = """# Maya Demo Guide
-
-## Identity
-
-- Role: Classroom guide for evidence-aware community exchange
-- Historical or cultural context: A fictional teaching guide for comparing local perspectives.
-
-## Cultural lens
-
-- Shared responsibility
-
-## Core values
-
-- Reciprocity
-- Care
-
-## Initial position
-
-Prefer transparent, evidence-aware choices that leave room for community voice.
-
-## Speaking style
-
-- Tone: Calm and respectful
-- Argument pattern: State the concern, examine evidence, then weigh trade-offs
-- Concession style: Acknowledge a sound point before refining it
-- Question style: Ask one focused question about practical effects
-
-## Debate strategy
-
-- Connect evidence to responsible action without manufacturing certainty
-
-## Boundaries
-
-- Never invent evidence outside the assigned snapshot
-"""
-
-BASELINE_A_KNOWLEDGE = """# Shared community resources
-
-Transparent stewardship can balance access, care, and practical experimentation.
-Communities learn more safely when they name trade-offs, invite affected voices,
-and review decisions against the evidence available in the shared snapshot.
-"""
-
-BASELINE_B_AGENT_MD = """# Maya Demo Companion
-
-## Identity
-
-- Role: Classroom companion for practice-first community exchange
-- Historical or cultural context: A fictional teaching companion for testing ideas in practice.
-
-## Cultural lens
-
-- Learning by doing
-
-## Core values
-
-- Curiosity
-- Craft
-
-## Initial position
-
-Prefer small reversible experiments that let a community learn from its own practice.
-
-## Speaking style
-
-- Tone: Warm and direct
-- Argument pattern: Offer a concrete case, name what it shows, then generalize carefully
-- Concession style: Restate the other position in its strongest form before answering
-- Question style: Ask one focused question about how a claim would be tested
-
-## Debate strategy
-
-- Ground every general claim in an observable practice from the assigned snapshot
-
-## Boundaries
-
-- Never invent evidence outside the assigned snapshot
-"""
-
-BASELINE_B_KNOWLEDGE = """# Shared practice and apprenticeship
-
-Communities keep skills alive by practising them together and revising what fails.
-Short reversible trials expose hidden costs early, and an apprentice who repeats a
-task under guidance learns limits that no summary of the practice can transmit.
-"""
+_AGENT_DIRECTORY = Path(__file__).resolve().parent / "agents"
 
 
-BASELINE_A = BaselineSpec(
-    key="a",
-    group_id=GROUP_BOWEN_ID,
-    agent_id=str(UUID("9f6c9dc8-b4bf-5f9f-98d2-f8e718c1ce0b")),
-    version_id=str(UUID("a7efcb9b-21fb-5d09-9366-3cc44b777d01")),
-    document_id=str(UUID("e40d7ad6-98a7-537d-840b-0b47c1240b5d")),
-    snapshot_id=str(UUID("2572c3ac-4a1b-5bd8-a14a-a194ae7d3c6e")),
-    source_file_id=str(UUID("b57411fa-20e9-5a53-a997-bb5d7cf2c4d4")),
-    snapshot_file_id=str(UUID("c44020ad-8cb0-5e20-8e53-a1ce1de945bd")),
-    frozen_file_id=str(UUID("4a69fa04-ef4b-5a88-b1de-0b98799a1513")),
-    snapshot_document_id=str(UUID("42fc313e-68cd-5d30-9cd1-fdc5e27fcf7f")),
-    chunk_id=str(UUID("ce164c2b-c94b-5dbc-931b-6ee08e329f5e")),
-    snapshot_file_reference_id=str(UUID("f537710d-31ca-51d3-87d0-d4dbcc3a1ca8")),
-    frozen_file_reference_id=str(UUID("c7b9454e-8df6-5fae-875e-738aa00478f3")),
-    confirming_user_id="bad7de3c-0409-5d50-9ad7-bbb641d1f6a7",
-    agent_name="Maya Demo Guide",
-    description="System baseline for the local Real-Core Demo.",
-    agent_md=BASELINE_A_AGENT_MD,
-    knowledge=BASELINE_A_KNOWLEDGE,
+def _agent_asset(name: str) -> str:
+    """Read one seeded Agent's authored text from the package.
+
+    The persona and knowledge are product content, not a test fixture: they
+    ship inside the application package so the container needs no mount, and
+    keeping them as files rather than inlined constants preserves the authored
+    bytes exactly. ``_verify_existing_rows`` still compares every derived hash
+    on startup, so a drifted file fails closed instead of reseeding silently.
+    """
+
+    return (_AGENT_DIRECTORY / name).read_text(encoding="utf-8")
+
+
+SOCRATES_AGENT_MD = _agent_asset("socrates.agent.md")
+SOCRATES_KNOWLEDGE = _agent_asset("socrates.knowledge.md")
+PLATO_AGENT_MD = _agent_asset("plato.agent.md")
+PLATO_KNOWLEDGE = _agent_asset("plato.knowledge.md")
+LAOZI_AGENT_MD = _agent_asset("laozi.agent.md")
+LAOZI_KNOWLEDGE = _agent_asset("laozi.knowledge.md")
+
+
+BASELINE_SOCRATES = BaselineSpec(
+    key="socrates",
+    group_id=GROUP_DEMO_ID,
+    agent_id=str(UUID("93c04441-1bae-54b2-8037-78622b88d640")),
+    version_id=str(UUID("e792ee07-7f8b-52d2-817b-d315a3d32445")),
+    document_id=str(UUID("b3c49aff-9bd2-5106-bb19-df49fefcd57f")),
+    snapshot_id=str(UUID("49985a15-9633-5190-9982-173c7a21d6e7")),
+    source_file_id=str(UUID("85151808-81ad-5c44-87bc-63b7f256ed8b")),
+    snapshot_file_id=str(UUID("e3e14380-5a80-5cfe-911a-c370577ccd6f")),
+    frozen_file_id=str(UUID("f2cf5047-d385-5268-9546-4891cca2e2e2")),
+    snapshot_document_id=str(UUID("46674f4f-7397-56ed-af24-3aca35e54823")),
+    chunk_id=str(UUID("8930b6e8-c664-5f41-a794-a79e7157c71d")),
+    snapshot_file_reference_id=str(UUID("52f7361a-26d9-525a-b995-ac0fc8de2dca")),
+    frozen_file_reference_id=str(UUID("8cd981ac-313c-5123-ad58-92a02dcb7573")),
+    confirming_user_id="60541c78-30f1-55c5-b2aa-207b6a766883",
+    agent_name="Socrates",
+    description="Seeded Demo Agent for the local mutual-learning session.",
+    agent_md=SOCRATES_AGENT_MD,
+    knowledge=SOCRATES_KNOWLEDGE,
 )
 
-BASELINE_B = BaselineSpec(
-    key="b",
-    group_id=GROUP_KAIKAI_ID,
-    agent_id=str(UUID("22f76355-e0da-5a6c-a8cd-36f2fb1b9a59")),
-    version_id=str(UUID("a8106256-df18-5a5e-ac0a-19630adc1468")),
-    document_id=str(UUID("34774092-3a02-5f46-bc17-a78aaa0eea23")),
-    snapshot_id=str(UUID("abd4e8f9-d54d-5879-a519-e8cce4cc7a99")),
-    source_file_id=str(UUID("4bd6f903-3f62-5944-ad35-5020c4d1becf")),
-    snapshot_file_id=str(UUID("da52e25c-73de-559b-b87f-f0cfa280a5a2")),
-    frozen_file_id=str(UUID("e180da8f-440b-5948-b46d-59b7a4d68e42")),
-    snapshot_document_id=str(UUID("ba6da959-7105-5bd5-9ca0-51287bd260aa")),
-    chunk_id=str(UUID("1de97388-f390-5f37-8921-6cdce020ec5c")),
-    snapshot_file_reference_id=str(UUID("a559a397-d1c8-5877-b221-ab491fbe910e")),
-    frozen_file_reference_id=str(UUID("672e5031-e438-5a1f-ad06-612c522ccd5f")),
-    confirming_user_id="0c12d01a-5acf-5430-bc4d-731af768ff46",
-    agent_name="Maya Demo Companion",
-    description="Second system baseline for the local Real-Core Demo.",
-    agent_md=BASELINE_B_AGENT_MD,
-    knowledge=BASELINE_B_KNOWLEDGE,
+BASELINE_PLATO = BaselineSpec(
+    key="plato",
+    group_id=GROUP_DEMO_ID,
+    agent_id=str(UUID("9b5d4adf-d82d-578e-9e70-6adf7713715f")),
+    version_id=str(UUID("632571be-07c9-5da9-98c8-19da1d044ea4")),
+    document_id=str(UUID("07ffd76c-cca8-5d8d-9305-4acf8e291e48")),
+    snapshot_id=str(UUID("4913e647-0750-5d33-8e79-1bdc39a890f2")),
+    source_file_id=str(UUID("c5b28abd-fb52-5364-b5ad-41c0753427af")),
+    snapshot_file_id=str(UUID("34b7bef0-bbd8-5486-b679-a26eed7c90c7")),
+    frozen_file_id=str(UUID("12c57cc1-956c-52f7-93e5-8297b44c854c")),
+    snapshot_document_id=str(UUID("2732aaff-cb74-5cfd-ac92-8123823111dc")),
+    chunk_id=str(UUID("3c5b2d05-a32c-5883-8bac-08d3911694ab")),
+    snapshot_file_reference_id=str(UUID("0843f3b8-d66a-5081-aa42-2dbe81a38118")),
+    frozen_file_reference_id=str(UUID("21fa3a3b-59bd-5960-8297-5d61d4ef5647")),
+    confirming_user_id="bc170f51-45fb-5296-a36d-a2edc8f8d315",
+    agent_name="Plato",
+    description="Seeded Demo Agent for the local mutual-learning session.",
+    agent_md=PLATO_AGENT_MD,
+    knowledge=PLATO_KNOWLEDGE,
 )
 
-BASELINE_SPECS: tuple[BaselineSpec, ...] = (BASELINE_A, BASELINE_B)
+BASELINE_LAOZI = BaselineSpec(
+    key="laozi",
+    group_id=GROUP_DEMO_ID,
+    agent_id=str(UUID("007c71c4-80b8-5168-9721-b8b66a86a1a3")),
+    version_id=str(UUID("5d69d715-e597-50fb-923b-fcffdf1464f2")),
+    document_id=str(UUID("c01f183f-ab7a-5f80-8434-6b55e097d61c")),
+    snapshot_id=str(UUID("4be98d3b-f324-5319-ae47-9021e5a78a76")),
+    source_file_id=str(UUID("b04fc099-9195-5933-8dfa-e41670afc1b6")),
+    snapshot_file_id=str(UUID("708f93ec-e2a1-5240-8ff3-84c4675ec7b2")),
+    frozen_file_id=str(UUID("57472fa4-6cb8-5e15-ad8a-96b2e3c1236e")),
+    snapshot_document_id=str(UUID("6014de16-6223-55b7-a6ae-8ee3f136082a")),
+    chunk_id=str(UUID("7d6f29c5-f446-575c-a83a-c3ebb6b403b4")),
+    snapshot_file_reference_id=str(UUID("11aaa267-682d-54d6-96bd-927498753d88")),
+    frozen_file_reference_id=str(UUID("478f9390-70ac-5702-89b3-1d9d3b92d6b4")),
+    confirming_user_id="89857c76-2d84-5ecf-b680-990815b98680",
+    agent_name="Laozi",
+    description="Seeded Demo Agent for the local mutual-learning session.",
+    agent_md=LAOZI_AGENT_MD,
+    knowledge=LAOZI_KNOWLEDGE,
+)
 
-# The acceptance driver, the agents/knowledge routers and the demo status route
-# still address the primary baseline through these frozen module constants.
-BASELINE_AGENT_ID = BASELINE_A.agent_id
-BASELINE_VERSION_ID = BASELINE_A.version_id
-BASELINE_DOCUMENT_ID = BASELINE_A.document_id
-BASELINE_SNAPSHOT_ID = BASELINE_A.snapshot_id
-BASELINE_SOURCE_FILE_ID = BASELINE_A.source_file_id
-BASELINE_SNAPSHOT_FILE_ID = BASELINE_A.snapshot_file_id
-BASELINE_FROZEN_FILE_ID = BASELINE_A.frozen_file_id
-BASELINE_SNAPSHOT_DOCUMENT_ID = BASELINE_A.snapshot_document_id
-BASELINE_CHUNK_ID = BASELINE_A.chunk_id
-BASELINE_SNAPSHOT_FILE_REFERENCE_ID = BASELINE_A.snapshot_file_reference_id
-BASELINE_FROZEN_FILE_REFERENCE_ID = BASELINE_A.frozen_file_reference_id
-BASELINE_SOURCE_RELATIVE_PATH = BASELINE_A.source_relative_path
-BASELINE_SNAPSHOT_RELATIVE_PATH = BASELINE_A.snapshot_relative_path
-BASELINE_FROZEN_RELATIVE_PATH = BASELINE_A.frozen_relative_path
-BASELINE_AGENT_MD = BASELINE_A.agent_md
-BASELINE_KNOWLEDGE = BASELINE_A.knowledge
+BASELINE_SPECS: tuple[BaselineSpec, ...] = (BASELINE_SOCRATES, BASELINE_PLATO, BASELINE_LAOZI)
+
+# Socrates is the primary baseline.  ``/api/v1/demo/baseline`` returns exactly
+# one baseline object and the acceptance driver asserts that field set, so the
+# other two are reachable only through the ordinary published-Agent routes.
+BASELINE_AGENT_ID = BASELINE_SOCRATES.agent_id
+BASELINE_VERSION_ID = BASELINE_SOCRATES.version_id
+BASELINE_DOCUMENT_ID = BASELINE_SOCRATES.document_id
+BASELINE_SNAPSHOT_ID = BASELINE_SOCRATES.snapshot_id
+BASELINE_SOURCE_FILE_ID = BASELINE_SOCRATES.source_file_id
+BASELINE_SNAPSHOT_FILE_ID = BASELINE_SOCRATES.snapshot_file_id
+BASELINE_FROZEN_FILE_ID = BASELINE_SOCRATES.frozen_file_id
+BASELINE_SNAPSHOT_DOCUMENT_ID = BASELINE_SOCRATES.snapshot_document_id
+BASELINE_CHUNK_ID = BASELINE_SOCRATES.chunk_id
+BASELINE_SNAPSHOT_FILE_REFERENCE_ID = BASELINE_SOCRATES.snapshot_file_reference_id
+BASELINE_FROZEN_FILE_REFERENCE_ID = BASELINE_SOCRATES.frozen_file_reference_id
+BASELINE_SOURCE_RELATIVE_PATH = BASELINE_SOCRATES.source_relative_path
+BASELINE_SNAPSHOT_RELATIVE_PATH = BASELINE_SOCRATES.snapshot_relative_path
+BASELINE_FROZEN_RELATIVE_PATH = BASELINE_SOCRATES.frozen_relative_path
+BASELINE_AGENT_MD = BASELINE_SOCRATES.agent_md
+BASELINE_KNOWLEDGE = BASELINE_SOCRATES.knowledge
 
 BASELINE_AGENT_IDS = frozenset(spec.agent_id for spec in BASELINE_SPECS)
 BASELINE_VERSION_IDS = frozenset(spec.version_id for spec in BASELINE_SPECS)

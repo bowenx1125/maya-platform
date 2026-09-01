@@ -52,8 +52,7 @@ from sqlalchemy import select, text
 from tests.conftest import login
 from tests.test_wave2_playback import (
     COURSE_ID,
-    GROUP_BOWEN_ID,
-    GROUP_KAIKAI_ID,
+    GROUP_DEMO_ID,
     TOPIC,
     _headers,
     _insert_published_agent,
@@ -172,8 +171,8 @@ def _seed_running_product_debate(
     with TestClient(app) as client:
         bowen_id = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
-            name="P1 Product Bowen",
+            group_id=GROUP_DEMO_ID,
+            name="P1 Product Alpha",
             evidence=(
                 f"{TOPIC} A classroom snapshot records transparency, privacy, "
                 "accountability, and meaningful user choice for platform governance."
@@ -181,8 +180,8 @@ def _seed_running_product_debate(
         )
         kaikai_id = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
-            name="P1 Product KaiKai",
+            group_id=GROUP_DEMO_ID,
+            name="P1 Product Beta",
             evidence=(
                 f"{TOPIC} A second snapshot records proportional safeguards, public "
                 "review, and space for responsible innovation."

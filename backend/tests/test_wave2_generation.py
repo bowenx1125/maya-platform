@@ -217,7 +217,7 @@ def test_prompt_freezes_exact_prefix_hash_and_hides_other_persona_private_fields
     )
     second = participant(
         "p2",
-        agent_name="KaiKai",
+        agent_name="Kaikai",
         snapshot_id="snapshot-b",
         slot="B",
         order_index=1,
@@ -242,7 +242,7 @@ def test_prompt_freezes_exact_prefix_hash_and_hides_other_persona_private_fields
     assert "OTHER_PRIVATE_PERSONA_SHOULD_NOT_ENTER" in rendered
     # The current participant's private persona is allowed; the other one is
     # present only as safe schedule metadata.
-    assert "KaiKai" in rendered
+    assert "Kaikai" in rendered
     assert "snapshot-b" in rendered
     assert "snapshot-a" not in rendered
 
@@ -916,8 +916,7 @@ def test_sql_repository_generation_cas_rejects_stale_claim_prefix_hash_cutoff_at
 
     from tests.test_wave2_playback import (
         COURSE_ID,
-        GROUP_BOWEN_ID,
-        GROUP_KAIKAI_ID,
+        GROUP_DEMO_ID,
         _insert_published_agent,
     )
 
@@ -925,13 +924,13 @@ def test_sql_repository_generation_cas_rejects_stale_claim_prefix_hash_cutoff_at
     with TestClient(app):
         first_agent = _insert_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Fence A",
             evidence="A snapshot passage about accountable recommendation systems.",
         )
         second_agent = _insert_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name="Fence B",
             evidence="A separate snapshot passage about user choice and safety.",
         )
@@ -957,7 +956,7 @@ def test_sql_repository_generation_cas_rejects_stale_claim_prefix_hash_cutoff_at
                     revision=0,
                     last_sequence=0,
                     cancellation_generation=0,
-                    created_by="98644172-6bbb-5383-8198-3b78dcd5b9ab",
+                    created_by="08b9de2d-bb75-5c71-a64b-231b48f9eb25",
                     created_at=now,
                     updated_at=now,
                 )

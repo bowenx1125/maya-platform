@@ -6,24 +6,15 @@
 # The runtime file is ignored by git.  Passwords are never stored in SQLite,
 # returned by API routes, or written to logs.
 users:
-  - user_id: 98644172-6bbb-5383-8198-3b78dcd5b9ab
-    username: teacher-demo
+  - user_id: 08b9de2d-bb75-5c71-a64b-231b48f9eb25
+    username: maya
     password_hash: REPLACE_WITH_ARGON2_HASH
-  - user_id: bad7de3c-0409-5d50-9ad7-bbb641d1f6a7
-    username: student-bowen-1
+  - user_id: 60541c78-30f1-55c5-b2aa-207b6a766883
+    username: bowen
     password_hash: REPLACE_WITH_ARGON2_HASH
-  - user_id: 7ff99250-0829-5864-8040-b3133510e7da
-    username: student-bowen-2
+  - user_id: bc170f51-45fb-5296-a36d-a2edc8f8d315
+    username: kaikai
     password_hash: REPLACE_WITH_ARGON2_HASH
-  - user_id: 4d2445fe-7c7b-55ff-8c4c-778ab5098c1d
-    username: student-bowen-3
-    password_hash: REPLACE_WITH_ARGON2_HASH
-  - user_id: 0c12d01a-5acf-5430-bc4d-731af768ff46
-    username: student-kaikai-1
-    password_hash: REPLACE_WITH_ARGON2_HASH
-  - user_id: d4465e7b-7b76-5ac1-8f6e-5ce6a6da737d
-    username: student-kaikai-2
-    password_hash: REPLACE_WITH_ARGON2_HASH
-  - user_id: fc2604c6-c760-53e5-b69b-c3a1ef471ea8
-    username: student-kaikai-3
+  - user_id: 89857c76-2d84-5ecf-b680-990815b98680
+    username: jade
     password_hash: REPLACE_WITH_ARGON2_HASH

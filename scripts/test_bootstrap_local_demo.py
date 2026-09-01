@@ -43,7 +43,7 @@ def main() -> None:
             for line in accounts_path.read_text(encoding="utf-8").splitlines()
             if line.startswith("| ") and "account_key" not in line and "---" not in line
         ]
-        if len(rows) != 7 or not all(f"| {password} |" in row for row in rows):
+        if len(rows) != 4 or not all(f"| {password} |" in row for row in rows):
             raise AssertionError(
                 "all seven fixed identities must share the generated Demo password"
             )

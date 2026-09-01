@@ -36,9 +36,9 @@ from sqlalchemy import select
 ACCOUNT_TABLE = """# private Demo catalog
 | account_key | username | display_name | password | role | group |
 | --- | --- | --- | --- | --- | --- |
-| teacher-demo | teacher-demo | Demo Teacher | demo-password | teacher | |
-| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password | student | group-bowen |
-| student-kaikai-1 | student-kaikai-1 | KaiKai Student 1 | demo-password | student | group-kaikai |
+| maya | maya | Demo Teacher | demo-password | teacher | |
+| bowen | bowen | Bowen Student 1 | demo-password | student | group-demo |
+| kaikai | kaikai | Kaikai Student 1 | demo-password | student | group-demo |
 """
 
 
@@ -74,16 +74,16 @@ def _app(tmp_path: Path, *, quick_login: bool = True) -> tuple[Any, Database, Se
 def test_private_catalog_parser_is_strict_and_never_echoes_secret() -> None:
     graph = parse_accounts_markdown(ACCOUNT_TABLE)
     assert {account.account_key for account in graph.accounts} == {
-        "teacher-demo",
-        "student-bowen-1",
-        "student-kaikai-1",
+        "maya",
+        "bowen",
+        "kaikai",
     }
-    assert account_id("teacher-demo") == "98644172-6bbb-5383-8198-3b78dcd5b9ab"
-    malformed = ACCOUNT_TABLE.replace("student-kaikai-1", "student-bowen-1", 1)
+    assert account_id("maya") == "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
+    malformed = ACCOUNT_TABLE.replace("kaikai", "bowen", 1)
     with pytest.raises(CredentialFileError) as error:
         parse_accounts_markdown(malformed)
     assert "demo-password" not in str(error.value)
-    assert "student-bowen-1" not in str(error.value)
+    assert "bowen" not in str(error.value)
 
 
 @pytest.mark.parametrize("password", ["12345", "x" * 4097])
@@ -247,7 +247,7 @@ def test_anonymous_catalog_and_quick_login_require_both_demo_flags(
         assert {item["display_name"] for item in body} == {
             "Demo Teacher",
             "Bowen Student 1",
-            "KaiKai Student 1",
+            "Kaikai Student 1",
         }
         assert all(set(item) == {"user_id", "display_name", "role"} for item in body)
         assert "account_key" not in identities.text
@@ -279,19 +279,19 @@ def test_sync_rename_remove_readd_preserves_uuid_and_revokes_sessions(
     tmp_path: Path,
 ) -> None:
     app, database, settings, accounts = _app(tmp_path)
-    student_id = account_id("student-bowen-1")
+    student_id = account_id("bowen")
     with TestClient(app) as client:
         password_login = client.post(
             "/api/v1/auth/login",
-            json={"username": "student-bowen-1", "password": "demo-password"},
+            json={"username": "bowen", "password": "demo-password"},
         )
         assert password_login.status_code == 200
         old_cookie = client.cookies.get("maya_session")
         assert old_cookie
 
         renamed = ACCOUNT_TABLE.replace(
-            "| student-bowen-1 | student-bowen-1 | Bowen Student 1 |",
-            "| student-bowen-1 | bowen-renamed | Renamed Bowen |",
+            "| bowen | bowen | Bowen Student 1 |",
+            "| bowen | bowen-renamed | Renamed Bowen |",
         )
         accounts.write_text(renamed, encoding="utf-8")
         accounts.chmod(0o600)
@@ -312,8 +312,7 @@ def test_sync_rename_remove_readd_preserves_uuid_and_revokes_sessions(
             assert old_session is not None and old_session.revoked_at is not None
 
         renamed_row = (
-            "| student-bowen-1 | bowen-renamed | Renamed Bowen | demo-password | "
-            "student | group-bowen |\n"
+            "| bowen | bowen-renamed | Renamed Bowen | demo-password | student | group-demo |\n"
         )
         removed = renamed.replace(renamed_row, "")
         accounts.write_text(removed, encoding="utf-8")
@@ -348,7 +347,7 @@ def test_cross_process_unchanged_and_display_only_catalog_preserve_session(
     tmp_path: Path,
 ) -> None:
     _app_instance, database, settings, accounts = _app(tmp_path)
-    student_id = account_id("student-bowen-1")
+    student_id = account_id("bowen")
     with database.session() as session:
         user = session.get(User, student_id)
         assert user is not None
@@ -391,37 +390,29 @@ def test_cross_process_unchanged_and_display_only_catalog_preserve_session(
 
 @pytest.mark.parametrize(
     ("label", "replacement"),
+    # A "moved to another group" case is deliberately absent: the Demo graph
+    # has exactly one group and the parser rejects a student row with an
+    # empty group, so no valid catalog can express that change. The invalid
+    # target is covered by test_invalid_desired_group_rolls_back_the_complete_graph.
     [
         (
             "password",
             (
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password |",
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | changed-pass |",
+                "| bowen | bowen | Bowen Student 1 | demo-password |",
+                "| bowen | bowen | Bowen Student 1 | changed-pass |",
             ),
         ),
         (
             "role",
             (
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password | "
-                "student | group-bowen |",
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password | "
-                "teacher | |",
-            ),
-        ),
-        (
-            "group",
-            (
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password | "
-                "student | group-bowen |",
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password | "
-                "student | group-kaikai |",
+                "| bowen | bowen | Bowen Student 1 | demo-password | student | group-demo |",
+                "| bowen | bowen | Bowen Student 1 | demo-password | teacher | |",
             ),
         ),
         (
             "active",
             (
-                "| student-bowen-1 | student-bowen-1 | Bowen Student 1 | demo-password | "
-                "student | group-bowen |\n",
+                "| bowen | bowen | Bowen Student 1 | demo-password | student | group-demo |\n",
                 "",
             ),
         ),
@@ -433,7 +424,7 @@ def test_password_role_group_and_removal_revoke_bound_sessions(
     replacement: tuple[str, str],
 ) -> None:
     _app_instance, database, settings, accounts = _app(tmp_path)
-    student_id = account_id("student-bowen-1")
+    student_id = account_id("bowen")
     with database.session() as session:
         user = session.get(User, student_id)
         assert user is not None
@@ -454,20 +445,18 @@ def test_password_role_group_and_removal_revoke_bound_sessions(
 def test_same_process_catalog_edit_is_not_hot_reloaded(tmp_path: Path) -> None:
     _app_instance, database, settings, accounts = _app(tmp_path)
     accounts.write_text(
-        ACCOUNT_TABLE.replace("student-bowen-1 | student-bowen-1", "student-bowen-1 | bowen-new"),
+        ACCOUNT_TABLE.replace("bowen | bowen", "bowen | bowen-new"),
         encoding="utf-8",
     )
     accounts.chmod(0o600)
     # Both password verification and an explicit sync in the same process use
     # the startup snapshot rather than rereading the changed file.
-    assert verify_password(settings, "student-bowen-1", "demo-password") == account_id(
-        "student-bowen-1"
-    )
+    assert verify_password(settings, "bowen", "demo-password") == account_id("bowen")
     assert verify_password(settings, "bowen-new", "demo-password") is None
     sync_demo_accounts(database, settings)
     with database.session() as session:
-        user = session.get(User, account_id("student-bowen-1"))
-        assert user is not None and user.username == "student-bowen-1"
+        user = session.get(User, account_id("bowen"))
+        assert user is not None and user.username == "bowen"
 
 
 def test_nonbinding_user_is_not_disabled_when_catalog_row_is_removed(tmp_path: Path) -> None:
@@ -485,8 +474,7 @@ def test_nonbinding_user_is_not_disabled_when_catalog_row_is_removed(tmp_path: P
         )
     accounts.write_text(
         ACCOUNT_TABLE.replace(
-            "| student-kaikai-1 | student-kaikai-1 | KaiKai Student 1 | demo-password | "
-            "student | group-kaikai |\n",
+            "| bowen | bowen | Kaikai Student 1 | demo-password | student | group-demo |\n",
             "",
         ),
         encoding="utf-8",
@@ -514,7 +502,7 @@ def test_fresh_invalid_bootstrap_rolls_back_seed_and_catalog_graph(tmp_path: Pat
     )
     database = Database(settings.database_url, settings.resolved_data_root)
     database.initialize_schema()
-    invalid = parse_accounts_markdown(ACCOUNT_TABLE.replace("group-bowen", "missing-group"))
+    invalid = parse_accounts_markdown(ACCOUNT_TABLE.replace("group-demo", "missing-group"))
     with pytest.raises(AccountSyncError):
         bootstrap_demo_accounts(database, settings, seed_demo_data, invalid)
     with database.session() as session:
@@ -559,7 +547,7 @@ def test_sync_commit_failure_does_not_publish_catalog_snapshot(tmp_path: Path) -
     with database.session() as session:
         # The failed commit did not apply any account projection or binding.
         assert session.scalars(select(DemoAccountBinding)).all() == []
-        user = session.get(User, account_id("student-bowen-1"))
+        user = session.get(User, account_id("bowen"))
         assert user is not None and user.status == "active"
 
 
@@ -583,7 +571,7 @@ def test_invalid_desired_group_rolls_back_the_complete_graph(tmp_path: Path) -> 
             ).all()
         ]
 
-    invalid = parse_accounts_markdown(ACCOUNT_TABLE.replace("group-bowen", "missing-group"))
+    invalid = parse_accounts_markdown(ACCOUNT_TABLE.replace("group-demo", "missing-group"))
     with pytest.raises(AccountSyncError):
         sync_demo_accounts(database, settings, invalid)
 
@@ -627,8 +615,8 @@ def test_lifespan_seeds_once_then_allows_catalog_rename_on_restart(tmp_path: Pat
 
     accounts.write_text(
         ACCOUNT_TABLE.replace(
-            "| student-bowen-1 | student-bowen-1 | Bowen Student 1 |",
-            "| student-bowen-1 | bowen-renamed | Renamed Bowen |",
+            "| bowen | bowen | Bowen Student 1 |",
+            "| bowen | bowen-renamed | Renamed Bowen |",
         ),
         encoding="utf-8",
     )

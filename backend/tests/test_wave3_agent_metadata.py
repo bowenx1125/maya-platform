@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 import app.modules.agents.router as agents_router
 import pytest
+from app.core.db import Database
 from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
@@ -33,14 +34,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
-from tests.conftest import login
+from tests.conftest import login, make_foreign_group
 from tests.persona_fixtures import confirmed_persona_fields
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-BOWEN_GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-KAIKAI_GROUP_ID = "699112be-780b-5ffd-9a87-3762f596c558"
-STUDENT_BOWEN_ID = "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7"
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+KAIKAI_GROUP_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+STUDENT_BOWEN_ID = "60541c78-30f1-55c5-b2aa-207b6a766883"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 
 
 def _headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -172,7 +173,7 @@ def _create_agent(
     description: str = "",
 ) -> dict[str, Any]:
     response = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/agents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": key}),
         json={"name": "Metadata Agent", "description": description},
     )
@@ -199,7 +200,7 @@ def _prepare_draft_for_publish(
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": f"wave3-race-upload-{key_suffix}"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={"file": ("race.md", b"# Race\n\nEvidence", "text/markdown")},
@@ -229,7 +230,7 @@ def _prepare_draft_for_publish(
 def test_metadata_patch_is_cas_only_and_empty_description_has_no_fallback(
     client: TestClient,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, description="  ")
     agent_id = agent["id"]
 
@@ -267,11 +268,11 @@ def test_metadata_patch_is_cas_only_and_empty_description_has_no_fallback(
 
 
 def test_delete_eligible_agent_removes_only_agent_draft_state(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-delete-agent-001")
     version_id = agent["versions"][0]["id"]
     upload = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-delete-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("shared.md", b"# Shared\n\nPreserve me", "text/markdown")},
@@ -293,11 +294,11 @@ def test_delete_preserves_group_voice_files_audit_and_removes_draft_associations
 ) -> None:
     """The delete boundary removes Agent-owned draft rows, never group data."""
 
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-preserve-resources-001")
     version_id = agent["versions"][0]["id"]
     upload = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-preserve-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("preserve.md", b"# Preserve\n\nShared", "text/markdown")},
@@ -311,7 +312,7 @@ def test_delete_preserves_group_voice_files_audit_and_removes_draft_associations
     voice_id = str(uuid4())
     stored_file_id = str(uuid4())
     operation_id = str(uuid4())
-    relative_path = f"groups/{BOWEN_GROUP_ID}/unrelated/{stored_file_id}.bin"
+    relative_path = f"groups/{GROUP_DEMO_ID}/unrelated/{stored_file_id}.bin"
     stored_path = Path(database.data_root) / relative_path
     stored_path.parent.mkdir(parents=True, exist_ok=True)
     stored_path.write_bytes(b"keep")
@@ -320,7 +321,7 @@ def test_delete_preserves_group_voice_files_audit_and_removes_draft_associations
             VoiceProfile(
                 id=voice_id,
                 scope="group",
-                group_id=BOWEN_GROUP_ID,
+                group_id=GROUP_DEMO_ID,
                 display_name="Preserved voice",
                 status="ready",
                 provider_key="mock",
@@ -402,11 +403,13 @@ def test_delete_preserves_group_voice_files_audit_and_removes_draft_associations
         assert connection.execute(text("SELECT count(*) FROM audit_logs")).scalar_one() == 1
 
 
-def test_delete_rejects_history_teacher_and_cross_group(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+def test_delete_rejects_history_teacher_and_cross_group(
+    client: TestClient, database: Database
+) -> None:
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-delete-reject-001")
 
-    teacher, teacher_csrf = login(client, "teacher-demo")
+    teacher, teacher_csrf = login(client, "maya")
     del teacher
     teacher_delete = client.delete(
         f"/api/v1/agents/{agent['id']}",
@@ -414,7 +417,17 @@ def test_delete_rejects_history_teacher_and_cross_group(client: TestClient) -> N
     )
     assert teacher_delete.status_code == 403, teacher_delete.text
 
-    _other, other_csrf = login(client, "student-kaikai-1")
+    # Delete is group-membership scoped. There is one seeded group, so the
+    # cross-group branch is exercised by moving the Agent into a group the
+    # caller is not a member of; it must then be not found, not forbidden.
+    foreign_group_id = make_foreign_group(database, COURSE_ID)
+    with database.session() as session:
+        moved = session.get(Agent, agent["id"])
+        assert moved is not None
+        moved.group_id = foreign_group_id
+        session.commit()
+
+    _other, other_csrf = login(client, "bowen")
     cross_group = client.delete(
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(other_csrf, **{"Idempotency-Key": "wave3-cross-delete-001"}),
@@ -423,7 +436,7 @@ def test_delete_rejects_history_teacher_and_cross_group(client: TestClient) -> N
 
 
 def test_delete_rejects_published_history_with_stable_code(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-published-agent-001")
     metadata = client.patch(
         f"/api/v1/agents/{agent['id']}",
@@ -441,7 +454,7 @@ def test_delete_rejects_published_history_with_stable_code(client: TestClient) -
     )
     assert updated.status_code == 200, updated.text
     uploaded = client.post(
-        f"/api/v1/groups/{BOWEN_GROUP_ID}/knowledge-documents",
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-publish-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "1"},
         files={"file": ("published.md", b"# Published", "text/markdown")},
@@ -472,14 +485,14 @@ def test_delete_rejects_published_history_with_stable_code(client: TestClient) -
     )
     assert published.status_code == 200, published.text
 
-    _teacher, _teacher_csrf = login(client, "teacher-demo")
+    _teacher, _teacher_csrf = login(client, "maya")
     candidates = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
     assert candidates.status_code == 200, candidates.text
     current = next(item for item in candidates.json() if item["agent"]["id"] == agent["id"])
     assert current["agent"]["description"] == "Current metadata"
     assert current["agent"]["metadata_revision"] == 1
 
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     rejected = client.delete(
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-published-delete-001"}),
@@ -492,7 +505,7 @@ def test_delete_rejects_published_history_with_stable_code(client: TestClient) -
 def test_archived_legacy_agent_without_history_remains_delete_eligible(
     client: TestClient,
 ) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-legacy-archived-001")
     app = cast(Any, client.app)
     database = app.state.database
@@ -501,7 +514,7 @@ def test_archived_legacy_agent_without_history_remains_delete_eligible(
         assert row is not None
         row.status = "archived"
 
-    listed = client.get(f"/api/v1/groups/{BOWEN_GROUP_ID}/agents")
+    listed = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents")
     assert listed.status_code == 200, listed.text
     assert any(item["id"] == agent["id"] for item in listed.json())
     deleted = client.delete(
@@ -512,7 +525,7 @@ def test_archived_legacy_agent_without_history_remains_delete_eligible(
 
 
 def test_delete_idempotent_replay_is_204(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-replay-create-001")
     headers = _headers(csrf, **{"Idempotency-Key": "wave3-replay-delete-001"})
     first = client.delete(f"/api/v1/agents/{agent['id']}", headers=headers)
@@ -522,7 +535,7 @@ def test_delete_idempotent_replay_is_204(client: TestClient) -> None:
 
 
 def test_double_delete_with_a_new_key_is_a_stable_not_found(client: TestClient) -> None:
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-double-delete-001")
     first = client.delete(
         f"/api/v1/agents/{agent['id']}",
@@ -545,12 +558,12 @@ def test_delete_rejects_snapshot_participant_and_formerly_published_draft(
     database = app.state.database
     snapshot_agent_id, snapshot_version_id, snapshot_id = _insert_published_agent(
         database,
-        group_id=BOWEN_GROUP_ID,
+        group_id=GROUP_DEMO_ID,
         name="Snapshot retained",
     )
     formerly_published_id, formerly_published_version_id, _ = _insert_published_agent(
         database,
-        group_id=BOWEN_GROUP_ID,
+        group_id=GROUP_DEMO_ID,
         name="Formerly published",
     )
     now = datetime.now(UTC)
@@ -588,7 +601,7 @@ def test_delete_rejects_snapshot_participant_and_formerly_published_draft(
         session.rollback()
         session.close()
 
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     for index, agent_id in enumerate((snapshot_agent_id, formerly_published_id)):
         response = client.delete(
             f"/api/v1/agents/{agent_id}",
@@ -609,7 +622,7 @@ def test_description_metadata_does_not_mutate_release_or_debate_inputs(
     database = app.state.database
     first_id, first_version_id, first_snapshot_id = _insert_published_agent(
         database,
-        group_id=BOWEN_GROUP_ID,
+        group_id=GROUP_DEMO_ID,
         name="Metadata one",
     )
     second_id, _second_version_id, _second_snapshot_id = _insert_published_agent(
@@ -618,7 +631,7 @@ def test_description_metadata_does_not_mutate_release_or_debate_inputs(
         name="Metadata two",
     )
 
-    _teacher, teacher_csrf = login(client, "teacher-demo")
+    _teacher, teacher_csrf = login(client, "maya")
     debate = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
         headers=_headers(teacher_csrf, **{"Idempotency-Key": "wave3-meta-debate-001"}),
@@ -647,7 +660,7 @@ def test_description_metadata_does_not_mutate_release_or_debate_inputs(
         assert debate_before is not None
         topic_before = debate_before.topic
 
-    _student, student_csrf = login(client, "student-bowen-1")
+    _student, student_csrf = login(client, "bowen")
     changed = client.patch(
         f"/api/v1/agents/{first_id}",
         headers=_headers(student_csrf),
@@ -687,7 +700,7 @@ def test_delete_and_publish_race_has_one_serialized_winner(
 ) -> None:
     """Independent sessions and a start barrier exercise both writer orders."""
 
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     agent_id, version_id = _prepare_draft_for_publish(client, csrf, operation_order)
     database = cast(Any, client.app).state.database
     settings = cast(Any, client.app).state.settings
@@ -753,7 +766,7 @@ def test_delete_and_create_debate_race_is_fk_safe(
     database = cast(Any, client.app).state.database
     first_agent_id, _first_version_id, _first_snapshot_id = _insert_published_agent(
         database,
-        group_id=BOWEN_GROUP_ID,
+        group_id=GROUP_DEMO_ID,
         name=f"Race one {operation_order}",
     )
     second_agent_id, _second_version_id, _second_snapshot_id = _insert_published_agent(
@@ -822,7 +835,7 @@ def test_http_publish_delete_order_has_stable_envelopes_and_terminal_claims(
 ) -> None:
     """Force each commit order through the real HTTP routes and DB sessions."""
 
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     agent_id, version_id = _prepare_draft_for_publish(
         client,
         csrf,
@@ -941,7 +954,7 @@ def test_publish_failure_recovers_guard_and_abandons_pending_claim(
 ) -> None:
     """A post-guard failure leaves no pending writer fence or partial release."""
 
-    _student, csrf = login(client, "student-bowen-1")
+    _student, csrf = login(client, "bowen")
     agent_id, version_id = _prepare_draft_for_publish(client, csrf, "failure-recovery")
     app = cast(Any, client.app)
     database = app.state.database

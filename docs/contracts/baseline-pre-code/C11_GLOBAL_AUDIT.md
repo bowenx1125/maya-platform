@@ -129,7 +129,7 @@ YAML 解析使用系统 Ruby/Psych；本机没有 PyYAML，因此未把缺少 Py
 - 百炼 API Key；
 - 可选 DeepL Key；
 - 真实 `FALLBACK_VOICE_PROFILE_ID`；
-- Bowen/KaiKai 正式 TikTok Markdown；
+- Bowen/Kaikai 正式 TikTok Markdown；
 - 至少 2 个、目标 3 个 TalkingHead 兼容头脸；
 - 真实 Embedding 模型名与基于正式资料测得的 min_score。
 

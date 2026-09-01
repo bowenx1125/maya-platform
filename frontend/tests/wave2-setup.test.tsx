@@ -169,14 +169,14 @@ describe("Wave 2 teacher debate setup", () => {
         .fn()
         .mockResolvedValue([
           candidate("bowen", "Bowen"),
-          candidate("kaikai", "KaiKai"),
+          candidate("kaikai", "Kaikai"),
         ]),
       create,
     };
 
     render(<TeacherDebateCreate controller={controller} />);
     await screen.findByRole("button", { name: /Bowen/ });
-    fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.change(screen.getByLabelText("Topic (English)"), {
       target: {
@@ -204,7 +204,7 @@ describe("Wave 2 teacher debate setup", () => {
       .fn()
       .mockResolvedValue([
         candidate("bowen", "Bowen"),
-        candidate("kaikai", "KaiKai"),
+        candidate("kaikai", "Kaikai"),
       ]);
     useSessionMock.mockReturnValue({
       api: {
@@ -235,7 +235,7 @@ describe("Wave 2 teacher debate setup", () => {
         .fn()
         .mockResolvedValue([
           candidate("bowen", "Bowen"),
-          candidate("kaikai", "KaiKai"),
+          candidate("kaikai", "Kaikai"),
         ]),
       create,
     };
@@ -243,7 +243,7 @@ describe("Wave 2 teacher debate setup", () => {
     render(<TeacherDebateCreate controller={controller} />);
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
-    fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
     fireEvent.change(screen.getByLabelText("Topic (English)"), {
       target: { value: "A stable classroom question" },
     });
@@ -266,7 +266,7 @@ describe("Wave 2 teacher debate setup", () => {
         .fn()
         .mockResolvedValue([
           candidate("bowen", "Bowen"),
-          candidate("kaikai", "KaiKai"),
+          candidate("kaikai", "Kaikai"),
         ]),
       create,
     };
@@ -274,7 +274,7 @@ describe("Wave 2 teacher debate setup", () => {
     render(<TeacherDebateCreate controller={controller} />);
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
-    fireEvent.click(screen.getByRole("button", { name: /KaiKai/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
 
     const input = screen.getByLabelText("Topic (English)");
     const invalidTopic = "Should TikTok be banned? 推荐算法";

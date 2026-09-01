@@ -50,10 +50,10 @@ from sqlalchemy import delete, inspect, select
 from tests.conftest import login
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-GROUP_KAIKAI_ID = "699112be-780b-5ffd-9a87-3762f596c558"
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
-STUDENT_ID = "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
+STUDENT_ID = "60541c78-30f1-55c5-b2aa-207b6a766883"
 
 
 class EventCollector:
@@ -79,8 +79,8 @@ def _seed_finished_debate(database: Database) -> tuple[str, list[str]]:
     now = datetime.now(UTC)
     debate_id = str(uuid4())
     participant_specs = [
-        (GROUP_BOWEN_ID, "Bowen"),
-        (GROUP_KAIKAI_ID, "KaiKai"),
+        (GROUP_DEMO_ID, "Bowen"),
+        (GROUP_DEMO_ID, "Kaikai"),
     ]
     frozen: list[tuple[str, str, str, str, str]] = []
     with database.session() as session:
@@ -644,7 +644,7 @@ def test_teacher_routes_reject_students_and_cross_course_teachers(interaction_ap
     canonical_origin = app.state.settings.classroom_public_base_url
     assert canonical_origin is not None
     debate_id, _participant_ids = _seed_finished_debate(database)
-    _session, student_csrf = login(client, "student-bowen-1")
+    _session, student_csrf = login(client, "bowen")
 
     get_response = client.get(f"/api/v1/debates/{debate_id}/interaction")
     assert get_response.status_code == 403

@@ -256,11 +256,11 @@ describe("M07 avatar canvas failure and cleanup boundary", () => {
       <AvatarCanvas
         config={config}
         assetUrl="/avatars/missing.glb"
-        fallbackLabel="KaiKai"
+        fallbackLabel="Kaikai"
       />,
     );
     await waitFor(() => {
-      expect(screen.getByText("KaiKai · static preview")).toBeTruthy();
+      expect(screen.getByText("Kaikai · static preview")).toBeTruthy();
     });
   });
 

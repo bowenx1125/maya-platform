@@ -49,9 +49,9 @@ WAVE_1B_REVISION = "0003_wave1b_avatar_voice"
 WAVE_2_REVISION = "0004_wave2_debate_playback"
 WAVE_2_MANUAL_ADVANCE_REVISION = "0005_wave2_manual_advance"
 PRE_WAVE_3_POLISH_REVISION = "0006_pre_wave3_polish"
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-GROUP_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
+GROUP_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
 
 
 def database_url(path: Path) -> str:

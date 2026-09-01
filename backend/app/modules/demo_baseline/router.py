@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.modules.auth.dependencies import get_db
-from app.seed import GROUP_BOWEN_ID
+from app.seed import GROUP_DEMO_ID
 
 from .composition import demo_composition
 from .schemas import DemoBaseline, DemoComposition, DemoRuntimeStatus
@@ -35,7 +35,7 @@ def get_demo_baseline(db: Session = Depends(get_db)) -> DemoBaseline:
         agent_id=UUID(BASELINE_AGENT_ID),
         version_id=UUID(BASELINE_VERSION_ID),
         snapshot_id=UUID(BASELINE_SNAPSHOT_ID),
-        group_id=UUID(GROUP_BOWEN_ID),
+        group_id=UUID(GROUP_DEMO_ID),
         usable=baseline_is_usable(db),
     )
 
@@ -51,7 +51,7 @@ def get_demo_status(
             agent_id=UUID(BASELINE_AGENT_ID),
             version_id=UUID(BASELINE_VERSION_ID),
             snapshot_id=UUID(BASELINE_SNAPSHOT_ID),
-            group_id=UUID(GROUP_BOWEN_ID),
+            group_id=UUID(GROUP_DEMO_ID),
             usable=baseline_is_usable(db),
         ),
         composition=demo_composition(settings),

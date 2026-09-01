@@ -109,7 +109,7 @@ function detail(
         slot: "B",
         order_index: 1,
         agent_id: "60000000-0000-4000-8000-000000000002",
-        agent_name: "KaiKai",
+        agent_name: "Kaikai",
         agent_version_id: "70000000-0000-4000-8000-000000000002",
         version_label: "V1.0",
         knowledge_snapshot_id: "80000000-0000-4000-8000-000000000002",

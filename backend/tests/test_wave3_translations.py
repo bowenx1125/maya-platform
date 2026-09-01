@@ -39,7 +39,7 @@ from sqlalchemy import Table, create_engine, text
 from sqlalchemy.exc import IntegrityError
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 
 
 def test_manifest_is_utf8_canonical_and_source_hash_is_exact() -> None:

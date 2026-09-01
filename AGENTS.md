@@ -82,8 +82,6 @@ node scripts/test_repo_boundary.mjs
 pnpm exec redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml
 pnpm exec prettier --check .
 uv run --project backend python scripts/test_reset_demo_runtime.py
-uv run --project backend python manual-tests/real-core-demo/scripts/acceptance.py check
-uv run --project backend pytest -q manual-tests/real-core-demo/scripts/test_acceptance.py
 ```
 
 The route-surface comparison needs the generated server contract first:

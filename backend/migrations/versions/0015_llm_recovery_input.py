@@ -94,8 +94,7 @@ def upgrade() -> None:
             name="ck_llm_recovery_inputs_version",
         ),
         sa.CheckConstraint(
-            "length(CAST(input_json AS BLOB)) > 0 "
-            "AND length(CAST(input_json AS BLOB)) <= 262144",
+            "length(CAST(input_json AS BLOB)) > 0 AND length(CAST(input_json AS BLOB)) <= 262144",
             name="ck_llm_recovery_inputs_size",
         ),
         sa.CheckConstraint(

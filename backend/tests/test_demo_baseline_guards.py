@@ -56,7 +56,7 @@ def test_student_cannot_mutate_any_baseline_agent_or_source_entrypoint(
                 db.get(KnowledgeDocument, BASELINE_DOCUMENT_ID).index_revision,
                 db.get(KnowledgeSnapshot, BASELINE_SNAPSHOT_ID).content_hash,
             )
-        csrf = _login(client, "student-bowen-1")
+        csrf = _login(client, "bowen")
         version_url = f"/api/v1/agent-versions/{BASELINE_VERSION_ID}"
         agent_url = f"/api/v1/agents/{BASELINE_AGENT_ID}"
         document_url = f"/api/v1/knowledge-documents/{BASELINE_DOCUMENT_ID}"
@@ -123,7 +123,7 @@ def test_student_cannot_mutate_any_baseline_agent_or_source_entrypoint(
         )
         _assert_baseline_rejected(
             client.post(
-                "/api/v1/groups/66ee37fb-5772-5c8f-bb63-46d1783c53ae/knowledge-documents",
+                "/api/v1/groups/7813f937-902c-5534-bfb2-ad773a43aeda/knowledge-documents",
                 headers=_headers(csrf, key="baseline-upload-0001"),
                 data={
                     "target_agent_version_id": BASELINE_VERSION_ID,
@@ -180,7 +180,7 @@ def test_teacher_write_attempts_leave_baseline_unchanged(app_factory: Any) -> No
     with TestClient(app) as client:
         with database.session() as db:
             ensure_demo_baseline(db, settings.resolved_data_root)
-        csrf = _login(client, "teacher-demo")
+        csrf = _login(client, "maya")
         response = client.patch(
             f"/api/v1/agents/{BASELINE_AGENT_ID}",
             headers=_headers(csrf),
@@ -189,6 +189,6 @@ def test_teacher_write_attempts_leave_baseline_unchanged(app_factory: Any) -> No
         _assert_baseline_rejected(response)
         with database.session() as db:
             assert db.get(Agent, BASELINE_AGENT_ID).description == (
-                "System baseline for the local Real-Core Demo."
+                "Seeded Demo Agent for the local mutual-learning session."
             )
             assert dirty_counts(db) == (0, 0, 0)

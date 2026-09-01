@@ -30,8 +30,7 @@ from sqlalchemy import select
 from tests.conftest import login
 from tests.test_wave3_mock_rag_delta import (
     COURSE_ID,
-    GROUP_BOWEN_ID,
-    GROUP_KAIKAI_ID,
+    GROUP_DEMO_ID,
     _headers,
     _insert_sql_published_agent,
 )
@@ -163,19 +162,19 @@ def test_sql_defer_restores_pending_job_and_turn_without_failing_debate(
     with TestClient(app) as client:
         first_agent_id = _insert_sql_published_agent(
             database,
-            group_id=GROUP_BOWEN_ID,
+            group_id=GROUP_DEMO_ID,
             name="Deferred A",
             evidence="Evidence for the deferred query.",
             confirmed_persona=True,
         )
         second_agent_id = _insert_sql_published_agent(
             database,
-            group_id=GROUP_KAIKAI_ID,
+            group_id=GROUP_DEMO_ID,
             name="Deferred B",
             evidence="A second view for the deferred query.",
             confirmed_persona=True,
         )
-        _teacher, csrf = login(client, "teacher-demo")
+        _teacher, csrf = login(client, "maya")
         created = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
             headers=_headers(csrf, **{"Idempotency-Key": "defer-query-debate-create-001"}),

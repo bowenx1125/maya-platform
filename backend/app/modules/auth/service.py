@@ -28,6 +28,7 @@ from app.modules.auth.credentials import (
     publish_catalog_snapshot,
 )
 from app.modules.auth.models import DemoAccountBinding
+from app.seed import GROUP_DEMO_ID
 
 SESSION_COOKIE_NAME = "maya_session"
 SESSION_TTL = timedelta(hours=12)
@@ -88,35 +89,24 @@ class AccountSyncResult:
     disabled_count: int
 
 
-# Existing Wave 0 seed group IDs are stable and are used only to resolve the
+# The single seeded Demo group ID is stable and is used only to resolve the
 # human-readable private-file group key. No group key is emitted to the API.
 _GROUP_KEY_ALIASES = {
-    "group-bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "group-a": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "group_a": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "group_bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "bowen-group": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "group-kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
-    "group-b": "699112be-780b-5ffd-9a87-3762f596c558",
-    "group_b": "699112be-780b-5ffd-9a87-3762f596c558",
-    "group_kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
-    "kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
-    "kaikai-group": "699112be-780b-5ffd-9a87-3762f596c558",
+    "group-demo": GROUP_DEMO_ID,
+    "demo": GROUP_DEMO_ID,
+    "demo-group": GROUP_DEMO_ID,
+    "group_demo": GROUP_DEMO_ID,
 }
 
-# These are the historical fixed identities from the Wave 0 seed. They are
-# eligible for first binding by their canonical account key (or by a new key
-# that explicitly names the same unbound seeded username), but an arbitrary
-# existing user is never silently claimed by a catalog row.
+# These are the fixed identities from the Wave 0 seed. They are eligible for
+# first binding by their canonical account key (or by a new key that explicitly
+# names the same unbound seeded username), but an arbitrary existing user is
+# never silently claimed by a catalog row.
 _SEED_ACCOUNT_KEYS = (
-    "teacher-demo",
-    "student-bowen-1",
-    "student-bowen-2",
-    "student-bowen-3",
-    "student-kaikai-1",
-    "student-kaikai-2",
-    "student-kaikai-3",
+    "maya",
+    "bowen",
+    "kaikai",
+    "jade",
 )
 _SEED_USER_IDS = frozenset(account_id(key) for key in _SEED_ACCOUNT_KEYS)
 

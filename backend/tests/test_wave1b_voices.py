@@ -67,10 +67,10 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import Request
 
-from tests.conftest import login
+from tests.conftest import login, make_foreign_group
 
-GROUP_A = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-GROUP_B = "699112be-780b-5ffd-9a87-3762f596c558"
+COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
+GROUP_A = "7813f937-902c-5534-bfb2-ad773a43aeda"
 
 
 @pytest.fixture
@@ -214,7 +214,7 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
     client, database, settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     source = _wav()
     response = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
@@ -267,7 +267,7 @@ def test_agent_draft_avatar_and_voice_binding_tri_state(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
     client, _database, _settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     created = client.post(
         f"/api/v1/groups/{GROUP_A}/agents",
         headers=_headers(csrf, "voice-bind-agent-0001"),
@@ -358,9 +358,10 @@ def test_agent_draft_avatar_and_voice_binding_tri_state(
 def test_voice_scope_and_upload_validation(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
-    client, _database, settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
-    cross_group = client.get(f"/api/v1/groups/{GROUP_B}/voice-profiles")
+    client, database, settings = voice_client
+    _user, csrf = login(client, "bowen")
+    foreign_group_id = make_foreign_group(database, COURSE_ID)
+    cross_group = client.get(f"/api/v1/groups/{foreign_group_id}/voice-profiles")
     assert cross_group.status_code == 404
     invalid = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
@@ -378,7 +379,7 @@ def test_enrollment_generic_provider_error_is_reconciled_before_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, database, settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     provider = MockVoiceCloneProvider()
     provider.next_enroll_error = VoiceProviderError("opaque supplier failure")
     monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
@@ -492,7 +493,7 @@ def test_delete_same_idempotency_key_replays_without_second_provider_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _database, _settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     provider = MockVoiceCloneProvider()
     monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
     monkeypatch.setattr("app.providers.factory.voice_provider", lambda _settings: provider)
@@ -522,7 +523,7 @@ def test_delete_different_idempotency_key_cannot_cross_active_saga_fence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, database, _settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     provider = MockVoiceCloneProvider()
     monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
     monkeypatch.setattr("app.providers.factory.voice_provider", lambda _settings: provider)
@@ -612,8 +613,8 @@ def test_delete_two_live_requests_issue_exactly_one_provider_command(
     first_done = Event()
     second_done = Event()
     with TestClient(app) as first, TestClient(app) as second:
-        _user, first_csrf = login(first, "student-bowen-1")
-        _user, second_csrf = login(second, "student-bowen-1")
+        _user, first_csrf = login(first, "bowen")
+        _user, second_csrf = login(second, "bowen")
         profile = first.post(
             f"/api/v1/groups/{GROUP_A}/voice-profiles",
             headers=_headers(first_csrf, "voice-delete-live-enroll"),
@@ -670,7 +671,7 @@ def test_voice_routes_emit_only_frozen_negative_statuses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, database, _settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     provider = MockVoiceCloneProvider()
     monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
     monkeypatch.setattr("app.providers.factory.voice_provider", lambda _settings: provider)
@@ -829,7 +830,7 @@ def test_voice_permissions_are_same_group_students_only(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
     client, _database, _settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     create = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
         headers=_headers(csrf, "voice-permission-enroll"),
@@ -841,18 +842,14 @@ def test_voice_permissions_are_same_group_students_only(
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 200
 
-    # The other group and a teacher receive the same not-found response; the
-    # profile's existence is not disclosed through list/detail/delete/media.
-    other = login(client, "student-kaikai-1")[1]
-    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
-    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
-    assert (
-        client.delete(
-            f"/api/v1/voice-profiles/{profile_id}", headers=_headers(other, "voice-cross-delete")
-        ).status_code
-        == 404
-    )
-    teacher = login(client, "teacher-demo")[1]
+    # Another student in the same group shares the group-scoped profile.
+    login(client, "kaikai")
+    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 200
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
+
+    # The teacher is not a group member and receives the same not-found
+    # response; the profile is not disclosed through list/detail/delete/media.
+    teacher = login(client, "maya")[1]
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
     assert (
@@ -864,7 +861,7 @@ def test_voice_permissions_are_same_group_students_only(
     )
     # Return to the original same-group session to demonstrate it remains
     # authorized after the denied probes.
-    login(client, "student-bowen-1")
+    login(client, "bowen")
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
 
 
@@ -872,7 +869,7 @@ def test_preview_expiry_revokes_media_and_reclaims_bytes(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
     client, database, settings = voice_client
-    _user, csrf = login(client, "student-bowen-1")
+    _user, csrf = login(client, "bowen")
     profile = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
         headers=_headers(csrf, "voice-preview-expiry-enroll"),
@@ -958,11 +955,11 @@ def test_system_preview_media_is_teacher_only(
 
     media_url = f"/api/v1/voice-previews/{preview_id}/media"
     assert client.get(media_url).status_code == 401
-    login(client, "student-bowen-1")
+    login(client, "bowen")
     assert client.get(media_url).status_code == 404
-    login(client, "student-kaikai-1")
+    login(client, "bowen")
     assert client.get(media_url).status_code == 404
-    login(client, "teacher-demo")
+    login(client, "maya")
     media = client.get(media_url)
     assert media.status_code == 200
     assert media.content == raw

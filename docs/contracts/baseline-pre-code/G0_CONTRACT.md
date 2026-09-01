@@ -86,9 +86,9 @@
 ┌ Topic (English, required) ───────────────────────────────────────────┐
 │ [                                                                  ]│
 ├ Current published agents ────────────────────────────────────────────┤
-│ Click order: [Bowen]→A  [KaiKai]→B  [+ agent]                        │
+│ Click order: [Bowen]→A  [Kaikai]→B  [+ agent]                        │
 │ A. Bowen Agent   [Assigned/Open] [Support/Oppose/Neutral] [note]     │
-│ B. KaiKai Agent  [Assigned/Open] [Support/Oppose/Neutral] [note]     │
+│ B. Kaikai Agent  [Assigned/Open] [Support/Oppose/Neutral] [note]     │
 ├ Fixed demo rules ─────────────────────────────────────────────────────┤
 │ 2 rounds · 80-200 words · estimated duration only · Maya enabled      │
 ├───────────────────────────────────────────────────────────────────────┤
@@ -154,7 +154,7 @@ Step 1: Nickname [____________] [Continue]
 
 Step 2:
 Vote (independent)                 Barrage (independent)
-[A Bowen] [B KaiKai] [Submit]      [raw text________] [Send]
+[A Bowen] [B Kaikai] [Submit]      [raw text________] [Send]
 success/error/loading              success/error/loading
 ```
 
@@ -630,9 +630,9 @@ Report 聚合必须同时返回 `generation_status`、`active_revision_id`、`cu
 - Course：`demo-course-001`。
 - Teacher：1。
 - Group A：3 students，Agent Bowen。
-- Group B：3 students，Agent KaiKai。
+- Group B：3 students，Agent Kaikai。
 - Debate topic：`Should the United States ban TikTok's recommendation algorithm?`
-- Default：A Bowen assigned support；B KaiKai assigned oppose；2 rounds。
+- Default：A Bowen assigned support；B Kaikai assigned oppose；2 rounds。
 - RAG：每组至少一份明确标记的英文占位 MD；正式 RAG Gate 替换为用户公开资料。
 - Maya：系统报告 profile，不是 participant。
 
@@ -754,7 +754,7 @@ Sol audit tier and audit id
 - 百炼 Key/Workspace/北京地域已在本机私有环境配置；不得写入合同、Git、日志或前端；
 - DeepL Key（可选）；
 - `FALLBACK_VOICE_PROFILE_ID` 尚未激活；只有一次性 attempt=3 技术诊断和平台同源试听通过后才允许写入内部 UUID；
-- Bowen/KaiKai 正式 TikTok Markdown；
+- Bowen/Kaikai 正式 TikTok Markdown；
 - 至少 2 个、目标 3 个 TalkingHead 兼容本地头脸资产；
 - 真实 Embedding 模型名和基于正式资料测得的 min_score。
 

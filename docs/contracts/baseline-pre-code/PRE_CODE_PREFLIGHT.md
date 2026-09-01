@@ -41,7 +41,7 @@
 ## 4. 不阻塞 Mock Wave 0 的后置项
 
 - `DASHSCOPE_API_KEY`、可选 `DEEPL_API_KEY` 和真实 `FALLBACK_VOICE_PROFILE_ID`；
-- Bowen/KaiKai 正式 TikTok Markdown 与基于它们锁定的 RAG `min_score`；
+- Bowen/Kaikai 正式 TikTok Markdown 与基于它们锁定的 RAG `min_score`；
 - 真实声音样本和百炼真服务联调；
 - 至少 2 个、目标 3 个 TalkingHead 兼容 GLB；当前只发现 1 个可直接试验的 GLB；
 - 宿主机没有 FFmpeg；实现时放入 backend Docker 镜像，不要求用户安装宿主机依赖；

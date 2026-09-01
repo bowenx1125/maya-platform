@@ -31,15 +31,11 @@ def seed_uuid(seed_key: str) -> str:
 
 SEED_IDS = {
     "demo-course-001": "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b",
-    "group-bowen": "66ee37fb-5772-5c8f-bb63-46d1783c53ae",
-    "group-kaikai": "699112be-780b-5ffd-9a87-3762f596c558",
-    "teacher-demo": "98644172-6bbb-5383-8198-3b78dcd5b9ab",
-    "student-bowen-1": "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7",
-    "student-bowen-2": "7ff99250-0829-5864-8040-b3133510e7da",
-    "student-bowen-3": "4d2445fe-7c7b-55ff-8c4c-778ab5098c1d",
-    "student-kaikai-1": "0c12d01a-5acf-5430-bc4d-731af768ff46",
-    "student-kaikai-2": "d4465e7b-7b76-5ac1-8f6e-5ce6a6da737d",
-    "student-kaikai-3": "fc2604c6-c760-53e5-b69b-c3a1ef471ea8",
+    "group-demo": "7813f937-902c-5534-bfb2-ad773a43aeda",
+    "maya": "08b9de2d-bb75-5c71-a64b-231b48f9eb25",
+    "bowen": "60541c78-30f1-55c5-b2aa-207b6a766883",
+    "kaikai": "bc170f51-45fb-5296-a36d-a2edc8f8d315",
+    "jade": "89857c76-2d84-5ecf-b680-990815b98680",
 }
 
 # Fail fast during module import if a future edit accidentally drifts one of
@@ -48,19 +44,12 @@ if any(seed_uuid(key) != value for key, value in SEED_IDS.items()):
     raise RuntimeError("frozen Wave 0 seed UUIDs are inconsistent")
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
-GROUP_BOWEN_ID = "66ee37fb-5772-5c8f-bb63-46d1783c53ae"
-GROUP_KAIKAI_ID = "699112be-780b-5ffd-9a87-3762f596c558"
-TEACHER_ID = "98644172-6bbb-5383-8198-3b78dcd5b9ab"
-BOWEN_STUDENT_IDS = (
-    "bad7de3c-0409-5d50-9ad7-bbb641d1f6a7",
-    "7ff99250-0829-5864-8040-b3133510e7da",
-    "4d2445fe-7c7b-55ff-8c4c-778ab5098c1d",
-)
-KAIKAI_STUDENT_IDS = (
-    "0c12d01a-5acf-5430-bc4d-731af768ff46",
-    "d4465e7b-7b76-5ac1-8f6e-5ce6a6da737d",
-    "fc2604c6-c760-53e5-b69b-c3a1ef471ea8",
-)
+GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
+TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
+BOWEN_ID = "60541c78-30f1-55c5-b2aa-207b6a766883"
+KAIKAI_ID = "bc170f51-45fb-5296-a36d-a2edc8f8d315"
+JADE_ID = "89857c76-2d84-5ecf-b680-990815b98680"
+STUDENT_IDS = (BOWEN_ID, KAIKAI_ID, JADE_ID)
 
 
 class SeedConflict(RuntimeError):
@@ -93,21 +82,15 @@ class UserSeed:
 
 
 USERS = (
-    UserSeed(TEACHER_ID, "teacher-demo", "Demo Teacher"),
-    UserSeed(BOWEN_STUDENT_IDS[0], "student-bowen-1", "Bowen Student 1"),
-    UserSeed(BOWEN_STUDENT_IDS[1], "student-bowen-2", "Bowen Student 2"),
-    UserSeed(BOWEN_STUDENT_IDS[2], "student-bowen-3", "Bowen Student 3"),
-    UserSeed(KAIKAI_STUDENT_IDS[0], "student-kaikai-1", "KaiKai Student 1"),
-    UserSeed(KAIKAI_STUDENT_IDS[1], "student-kaikai-2", "KaiKai Student 2"),
-    UserSeed(KAIKAI_STUDENT_IDS[2], "student-kaikai-3", "KaiKai Student 3"),
+    UserSeed(TEACHER_ID, "maya", "Maya"),
+    UserSeed(BOWEN_ID, "bowen", "Bowen"),
+    UserSeed(KAIKAI_ID, "kaikai", "Kaikai"),
+    UserSeed(JADE_ID, "jade", "Jade"),
 )
 
 COURSE_CODE = "demo-course-001"
 COURSE_NAME = "Maya Cultural Exchange Demo"
-GROUP_SPECS = (
-    (GROUP_BOWEN_ID, "Group A"),
-    (GROUP_KAIKAI_ID, "Group B"),
-)
+GROUP_SPECS = ((GROUP_DEMO_ID, "Demo Group"),)
 
 
 def _existing_by_id(session: Session, model: Any, object_id: str) -> Any:
@@ -221,13 +204,10 @@ def seed_demo_data(session: Session) -> None:
         _ensure_group(session, group_id, name, now)
 
     _ensure_course_member(session, TEACHER_ID, "teacher", now)
-    for student_id in BOWEN_STUDENT_IDS + KAIKAI_STUDENT_IDS:
+    for student_id in STUDENT_IDS:
         _ensure_course_member(session, student_id, "student", now)
 
-    expected_group_for_user = {
-        **{student_id: GROUP_BOWEN_ID for student_id in BOWEN_STUDENT_IDS},
-        **{student_id: GROUP_KAIKAI_ID for student_id in KAIKAI_STUDENT_IDS},
-    }
+    expected_group_for_user = {student_id: GROUP_DEMO_ID for student_id in STUDENT_IDS}
     for student_id, expected_group_id in expected_group_for_user.items():
         existing_groups = session.scalars(
             select(GroupMember.group_id).where(GroupMember.user_id == student_id)
@@ -237,18 +217,10 @@ def seed_demo_data(session: Session) -> None:
     if session.scalar(select(GroupMember.group_id).where(GroupMember.user_id == TEACHER_ID)):
         raise SeedConflict("fixed teacher group relationship conflicts")
 
-    for index, student_id in enumerate(BOWEN_STUDENT_IDS):
+    for index, student_id in enumerate(STUDENT_IDS):
         _ensure_group_member(
             session,
-            GROUP_BOWEN_ID,
-            student_id,
-            "leader" if index == 0 else "member",
-            now,
-        )
-    for index, student_id in enumerate(KAIKAI_STUDENT_IDS):
-        _ensure_group_member(
-            session,
-            GROUP_KAIKAI_ID,
+            GROUP_DEMO_ID,
             student_id,
             "leader" if index == 0 else "member",
             now,

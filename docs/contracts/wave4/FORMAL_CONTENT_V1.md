@@ -28,7 +28,7 @@ real embedding cannot run earlier.
 
 ## Frozen content evidence
 
-The accepted packet is [`../../../manual-tests/formal-tiktok-rag/`](../../../manual-tests/formal-tiktok-rag/).
+The seeded Demo Agents under `backend/app/modules/demo_baseline/agents/` are the current authored corpus; the earlier standalone review packet was removed once they replaced it.
 
 - corpus SHA-256: `7fab29d2bddc241ea2021284f2766e6e6cecb705b9a56ff041838c1fe606c24a`;
 - source-manifest SHA-256: `9193e384a0c29bf51274055b4cd3a6273fc6276ad14113db4b8398a335648ce5`;
