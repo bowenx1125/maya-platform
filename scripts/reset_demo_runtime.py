@@ -3,6 +3,13 @@
 The operation is intentionally recoverable: the runtime directory is renamed
 to a timestamped sibling and is never recursively deleted. Stop containers
 before invoking this script; the next backend startup recreates the baseline.
+
+Renaming the directory does not move a running container's bind mount, which
+follows the original inode.  A container that is only stopped and started again
+therefore keeps writing into the quarantined copy while host-side tools (the
+policy importers and the offline verifier) act on the freshly created ``data``.
+The two views then diverge silently.  Recreate the containers with
+``docker compose down`` before ``up -d`` after every reset.
 """
 
 from __future__ import annotations
@@ -61,6 +68,11 @@ def quarantine_runtime(root: Path, runtime: Path) -> Path | None:
         destination = root / f"data.quarantine-{stamp}-{suffix}"
         suffix += 1
     shutil.move(str(runtime), str(destination))
+    # Recreate the runtime directory immediately.  An absent ``data`` makes a
+    # host-side policy import fail with an opaque persistence error, and it
+    # hides the fact that a still-existing container is bound to the renamed
+    # inode rather than to this path.
+    runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
     return destination
 
 
@@ -77,6 +89,11 @@ def main() -> None:
     else:
         print(f"Quarantined disposable runtime at {destination.name}.")
         print("Start the Demo again to recreate the stable system baseline.")
+    print(
+        "Recreate the containers before starting: a stopped container keeps its "
+        "bind mount on the renamed directory. Run 'docker compose down' and then "
+        "'docker compose up -d', never 'stop' followed by 'up -d'."
+    )
 
 
 if __name__ == "__main__":

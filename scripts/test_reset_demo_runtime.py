@@ -27,8 +27,20 @@ def main() -> None:
         runtime.mkdir()
         (runtime / "maya.sqlite3").write_bytes(b"disposable")
         valid = _run(script, root, runtime)
-        if valid.returncode != 0 or runtime.exists():
+        if valid.returncode != 0:
             raise AssertionError("the exact product data directory must be quarantined")
+        quarantined = [item for item in root.iterdir() if item.name.startswith("data.quarantine-")]
+        if len(quarantined) != 1:
+            raise AssertionError("exactly one recoverable quarantine copy must exist")
+        if (quarantined[0] / "maya.sqlite3").read_bytes() != b"disposable":
+            raise AssertionError("the quarantine copy must retain the disposable runtime")
+        # The runtime path is recreated empty so a host-side policy import does
+        # not fail opaquely, and so a stale container bind mount on the renamed
+        # inode is visible rather than silently shadowing this directory.
+        if not runtime.is_dir() or any(runtime.iterdir()):
+            raise AssertionError("the reset must leave an empty runtime directory in place")
+        if "docker compose down" not in valid.stdout:
+            raise AssertionError("the reset must tell the operator to recreate the containers")
 
         external = root.parent / "unrelated" / "data"
         external.mkdir(parents=True)
@@ -41,6 +53,8 @@ def main() -> None:
         target = root.parent / "target-data"
         target.mkdir()
         linked = root / "data"
+        if linked.exists():
+            linked.rmdir()
         linked.symlink_to(target, target_is_directory=True)
         result = _run(script, root, linked)
         if result.returncode == 0:

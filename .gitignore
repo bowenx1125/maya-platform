@@ -30,6 +30,10 @@ backend/**/__pycache__/
 # Runtime data must stay outside Git
 data/
 backend/data/
+# reset_demo_runtime.py renames the live runtime instead of deleting it; those
+# quarantined copies hold the same private SQLite, snapshots and group files.
+data.quarantine-*/
+backend/data.quarantine-*/
 *.db
 *.db-*
 *.sqlite
