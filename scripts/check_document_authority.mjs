@@ -17,17 +17,19 @@ function exactCasePathExists(absolute) {
   return true;
 }
 
+// PROJECT.md is the single product and progress authority; AGENTS.md is the
+// single working agreement and CLAUDE.md only points at it. The separate
+// status document, worklog and pre-Wave-4 monolith were removed so progress
+// cannot drift across several files again.
 const required = [
   "PROJECT.md",
-  "PROJECT_STATUS.md",
   "ARCHITECTURE.md",
   "AGENTS.md",
+  "CLAUDE.md",
   "docs/contracts/README.md",
   "docs/adr/README.md",
   "docs/gates/wave4/R0_GATE_PACKET.md",
   "docs/requirements/original.md",
-  "docs/archive/PROJECT_MONOLITH_2026-08-30.md",
-  "docs/archive/PROJECT_MONOLITH_2026-08-30.sha256",
 ];
 
 const failures = [];
@@ -60,25 +62,8 @@ if (exactCasePathExists(resolve(root, "docs/ADR/README.md"))) {
 if (exactCasePathExists(resolve(root, "docs/requirements/Original.md"))) {
   failures.push("case-variant requirements path negative self-test failed");
 }
-if (
-  exactCasePathExists(
-    resolve(root, "docs/archive/project_monolith_2026-08-30.md"),
-  )
-) {
-  failures.push("case-variant archive path negative self-test failed");
-}
-if (
-  exactCasePathExists(
-    resolve(root, "docs/archive/PROJECT_MONOLITH_2026-08-30.SHA256"),
-  )
-) {
-  failures.push("case-variant checksum path negative self-test failed");
-}
 
-const limits = new Map([
-  ["PROJECT.md", 20_000],
-  ["PROJECT_STATUS.md", 12_000],
-]);
+const limits = new Map([["PROJECT.md", 20_000]]);
 for (const [relative, maximum] of limits) {
   const absolute = resolve(root, relative);
   if (
@@ -92,9 +77,9 @@ for (const [relative, maximum] of limits) {
 
 const activeMarkdown = [
   "PROJECT.md",
-  "PROJECT_STATUS.md",
   "ARCHITECTURE.md",
   "AGENTS.md",
+  "CLAUDE.md",
   "README.md",
   "docs/TASK_PACKET_TEMPLATE.md",
   "docs/RELEASE_POLICY.md",
@@ -142,23 +127,6 @@ for (const relative of activeMarkdown) {
       failures.push(`${relative} has missing link target: ${target}`);
     }
   }
-}
-
-const archiveRelative = "docs/archive/PROJECT_MONOLITH_2026-08-30.md";
-const checksumRelative = "docs/archive/PROJECT_MONOLITH_2026-08-30.sha256";
-if (
-  existsSync(resolve(root, archiveRelative)) &&
-  exactCasePathExists(resolve(root, archiveRelative)) &&
-  existsSync(resolve(root, checksumRelative)) &&
-  exactCasePathExists(resolve(root, checksumRelative))
-) {
-  const bytes = readFileSync(resolve(root, archiveRelative));
-  const actual = createHash("sha256").update(bytes).digest("hex");
-  const expected = readFileSync(resolve(root, checksumRelative), "utf8")
-    .trim()
-    .split(/\s+/, 1)[0];
-  if (actual !== expected)
-    failures.push("archived PROJECT monolith checksum mismatch");
 }
 
 if (failures.length) {

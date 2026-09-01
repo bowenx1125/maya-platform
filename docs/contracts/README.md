@@ -6,7 +6,7 @@
 - [`../../contracts/ws-events.v1.schema.json`](../../contracts/ws-events.v1.schema.json)
 - generated frontend client and route/response/schema checks in `scripts/`
 
-These files, the active Gate Packet and `PROJECT_STATUS.md` override historical
+These files and `PROJECT.md` override historical
 pre-code snapshots.
 
 ## Historical baseline

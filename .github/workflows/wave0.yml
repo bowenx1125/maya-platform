@@ -146,11 +146,12 @@ jobs:
       - name: Assert portable project authority
         run: |
           test -f PROJECT.md
-          test -f PROJECT_STATUS.md
+          test -f AGENTS.md
+          test -f CLAUDE.md
           test -f ARCHITECTURE.md
           test -f docs/gates/wave4/R0_GATE_PACKET.md
-          test -f docs/archive/PROJECT_MONOLITH_2026-08-30.sha256
           test ! -e Project.md
+          test ! -e PROJECT_STATUS.md
 
       - name: Frozen JavaScript install
         run: pnpm install --frozen-lockfile

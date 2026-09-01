@@ -15,7 +15,7 @@ content, external data, model, call/cost and failure contracts before implementa
 
 - `docs/contracts/wave4/**`;
 - this Gate Packet;
-- links/status in `docs/contracts/README.md`, `PROJECT_STATUS.md` and named ADRs.
+- links/status in `docs/contracts/README.md`, `PROJECT.md` and named ADRs.
 
 No product code, database migration, OpenAPI, WebSocket schema, public DTO, generated
 client, Provider selector or secret/configuration value is in scope.

@@ -1,9 +1,8 @@
 # Maya Teaching Platform
 
-Development authority starts at [PROJECT.md](PROJECT.md). Read
-[PROJECT_STATUS.md](PROJECT_STATUS.md) for the current SHA, active Gate, real-provider
-state and next action. Historical worklogs and the archived pre-Wave-4 monolith are not
-default task inputs.
+[PROJECT.md](PROJECT.md) is the authority for what the product is and where it
+stands, including the real-provider state and what is still open.
+[AGENTS.md](AGENTS.md) is the working agreement for changing this repository.
 
 > **Private local Demo:** Git contains source and non-secret fixtures only. The
 > ignored mode-0600 `.env` and

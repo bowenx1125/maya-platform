@@ -24,7 +24,7 @@ context, and restore a full-source private development branch with tests and CI.
 
 1. `a235c29` remains recoverable from a verified local bundle and protected tag.
 2. Runtime-only `2fd8078` remains recoverable from remote protection refs.
-3. `PROJECT.md` is the only portable authority entry; `PROJECT_STATUS.md` owns current
+3. `PROJECT.md` is the only portable authority entry; it owns current
    facts; archive/worklog are excluded from default context.
 4. Wave 3 G3 evidence and product semantics remain unchanged.
 5. Tests, CI, migrations, contracts and Gate evidence remain in the development tree.
@@ -34,7 +34,7 @@ context, and restore a full-source private development branch with tests and CI.
 
 ## Acceptance
 
-- root `PROJECT.md`, `PROJECT_STATUS.md` and `ARCHITECTURE.md` are present and concise;
+- root `PROJECT.md` and `ARCHITECTURE.md` are present and concise;
 - exact old monolith is archived with a verified SHA-256;
 - current authority contains no Pause/Continue, live-only Replay waiting, M13–M15
   pending, `53+13`, or completed-cleanup-as-next-step drift;

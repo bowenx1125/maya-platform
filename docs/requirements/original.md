@@ -3,7 +3,7 @@
 `HISTORICAL SOURCE ONLY — NOT THE CURRENT IMPLEMENTATION CONTRACT`
 
 This file preserves the original request and the later scope-replacement table. Use
-`PROJECT.md`, `PROJECT_STATUS.md` and the active Gate for implementation decisions.
+`PROJECT.md` and the current contracts for implementation decisions.
 
 ## 12. 原始业务需求完整副本
 

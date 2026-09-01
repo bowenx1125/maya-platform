@@ -1,155 +1,155 @@
 # Maya Platform
 
-This file is the portable authority index for Maya Platform. It is intentionally
-short. Current facts live in [PROJECT_STATUS.md](PROJECT_STATUS.md); historical
-discussion is never a default implementation input.
+Maya is a local-first teaching platform. Student groups build culture-focused
+Agents from an authored persona and an immutable Markdown knowledge snapshot. A
+teacher picks 2–5 published Agents in click order, runs a versioned 2–5-round
+English mutual-learning session, opens anonymous classroom interaction, and
+generates a civilization mutual-learning report.
 
-## 1. Product goal
+This file is the authority for what the product is and where it stands.
+[AGENTS.md](AGENTS.md) is the authority for how to work on it. When two sources
+disagree, use the user's latest explicit decision, then this file, then the
+contracts under [contracts/](contracts/) and [docs/contracts/](docs/contracts/),
+then the ADRs under [docs/adr/](docs/adr/), then
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-Maya is a local-first teaching platform where student groups build culture-focused
-Agents from an authored persona, an immutable Markdown RAG snapshot, a constrained
-3D avatar and an optional voice. A teacher selects 2–5 published Agents in click
-order, runs a versioned 2–5-round English mutual-learning session, opens anonymous
-classroom interaction, and generates a civilization mutual-learning report.
+## Product boundaries
 
-The Demo principle is: complete interfaces, simple internals, and one demonstrable
-main flow. Mock evidence, real-provider evidence and human acceptance must always be
-reported separately.
+These are settled decisions, not open questions.
 
-During Real-Core Demo work, every task is explicitly classified as `DEMO-BLOCKER` or
-`POST-DEMO-HARDENING`. Only work that directly affects the frozen Demo acceptance chain
-may block or consume implementation budget; deferred production work is recorded in
-[Wave 4.1 Post-Demo Hardening](docs/requirements/WAVE_4_1_POST_DEMO_HARDENING.md).
+- **Organization.** One seeded course, one teacher, two three-student groups.
+  Course and group membership are read-only.
+- **Authorization.** Students are scoped to their group. Teachers see published
+  immutable history, never drafts. Cross-group objects return not found.
+- **Agent versions.** Published and superseded versions and their knowledge
+  snapshots are immutable. New persona or knowledge needs a new version.
+- **Knowledge.** Markdown only. A draft enables group documents explicitly;
+  publishing freezes source bytes, chunks, vector metadata and lineage.
+- **Debate.** A new Debate is always `ordered_multi_expert_mutual_learning_v1`
+  with 2–5 Agents in slots A–E and 2–5 rounds. The two legacy demo RuleSets
+  stay readable so existing Debates keep working, but no surface creates them.
+  The rules engine, not the model, chooses the order.
+- **Context.** A mutual-learning turn receives the complete text of every
+  public turn from earlier rounds, exactly once, and never a same-round turn.
+  Visible speech is never summarized.
+- **Evidence.** Only server-selected receipts actually used by a validated turn
+  become public sources. `no_match` uses general reasoning with no source.
+- **Playback.** The teacher surface is Start / Next / Replay. Replay reuses
+  retained immutable content and never calls a provider.
+- **Interaction.** Public vote and named raw barrage are independent. Maya
+  receives no nickname and no raw barrage list; counts are computed from frozen
+  rows.
+- **Language.** Authoritative speech and reports are English. Chinese is an
+  on-demand derived representation and never re-enters generation.
+- **Runtime.** Next.js, FastAPI, SQLite and local files behind one Caddy
+  origin. No Redis, Celery, PostgreSQL or cloud storage.
 
-## 2. Authority order
+## Demo composition
 
-When two sources conflict, use this order:
+| Component                           | Mode                                                |
+| ----------------------------------- | --------------------------------------------------- |
+| Snapshot embedding, retrieval query | Real DashScope `text-embedding-v4`, 1024 dimensions |
+| Debate LLM                          | Real fixed Qwen structured output                   |
+| Maya Report                         | Real fixed Qwen structured output                   |
+| TTS, Voice, Translation             | Mock                                                |
 
-1. the user's latest explicit decision;
-2. [PROJECT_STATUS.md](PROJECT_STATUS.md);
-3. the active Issue and Gate Packet named by `PROJECT_STATUS.md`;
-4. current machine contracts under [contracts/](contracts/) and active human
-   contracts under [docs/contracts/](docs/contracts/);
-5. accepted ADRs under [docs/adr/](docs/adr/);
-6. [ARCHITECTURE.md](ARCHITECTURE.md);
-7. historical Gate packets, worklogs, original requirements and archives.
+Every delivery surface must label this Real/Mock split honestly.
 
-Historical files preserve evidence. They never override a later active Gate.
+The provider call count is derived from the Debate's own shape, not fixed:
 
-## 3. Required reading
+```
+calls = 1 snapshot
+      + (Agents with a real Snapshot) × rounds   retrieval queries
+      + Agents × rounds                          debate LLM turns
+      + 1 report
+```
 
-The main integration window reads this file and `PROJECT_STATUS.md`, then opens only
-the active Gate and directly relevant contracts/code.
+A 2-Agent, 2-round Demo is 8 calls; 3 Agents over 2 rounds is 10. Each turn may
+additionally spend one structure-repair attempt. `demo_acceptance_expected_calls`
+in `app/providers/control.py` is the single definition.
 
-An implementation or audit worker reads only:
+## Where the product stands
 
-1. `PROJECT_STATUS.md`;
-2. its Issue or Task Packet;
-3. the ADRs/contracts named by that packet;
-4. its assigned files or candidate diff.
+### Working, verified by running it
 
-Workers do not read `docs/worklog/` or `docs/archive/` unless the task explicitly
-requires historical evidence.
+- Student agent, version, knowledge, voice and publish surfaces; teacher
+  debate setup, playback control, interaction, provider approvals and
+  disclosures; classroom page; Real/Mock composition strip.
+- Two seeded demo Agents — `Maya Demo Guide` in Group A and
+  `Maya Demo Companion` in Group B — so a teacher can open a two-Agent Debate
+  from an empty runtime with no setup.
+- The complete all-Mock chain end to end: two-Agent, two-round mutual learning,
+  four public turns with evidence traces, transcript, interaction open and
+  close, insight, and a 600–900 word English report that names no winner.
+- Real Snapshot embedding and real Debate LLM turns against DashScope,
+  including a structure-repair attempt that recovers a turn whose first reply
+  missed a rule.
 
-## 4. Frozen Demo boundaries
+### In progress
 
-- Organization: one seeded course, one teacher and two three-student groups. Course
-  and group membership are read-only in the Demo.
-- Authorization: students are scoped to their group; teachers see published
-  immutable history but never drafts; cross-group objects are returned as not found.
-- Agent versions: published/superseded versions and their KnowledgeSnapshots are
-  immutable. A new version is required for new persona or knowledge.
-- Knowledge: RAG accepts Markdown only. A draft explicitly enables group documents;
-  publishing freezes source bytes, chunks, vector metadata and source lineage.
-- Debate: 2–5 current published Agents receive slots A–E in teacher click order.
-  Legacy RuleSets retain exactly two rounds; the versioned mutual-learning RuleSet
-  supports 2–5 rounds. The rules engine, not the model, chooses the order.
-- Context: visibility is RuleSet-versioned. A mutual-learning turn receives the
-  complete text of every public/final-ready turn from earlier rounds, exactly once,
-  and never receives a same-round turn. Legacy RuleSets retain their frozen
-  lower-turn-index behavior. Wave 4 may remove duplicate serialization and reuse
-  stable retrieval on a structural retry, but it must not summarize visible speech.
-- Evidence: only server-selected receipts actually used by a validated turn may be
-  public sources. `no_match` uses general reasoning with no source.
-- Playback: the ordinary teacher surface is Start / Next / Replay. Pause/resume is a
-  hidden recovery primitive. Replay uses retained immutable content and never calls
-  RAG, LLM, Translation or TTS generation.
-- Interaction: public vote and named raw barrage are independent. Maya receives no
-  nickname or raw barrage list; counts are computed by code from frozen rows.
-- Language: authoritative debate speech and reports are English. Chinese is an
-  on-demand derived test representation and never re-enters RAG, debate, TTS or
-  report inputs.
-- Runtime: Next.js + FastAPI + SQLite/local files + WebSocket behind one Caddy origin.
-  No Redis, Celery, PostgreSQL or cloud storage is part of the local Demo.
+- **Real-Core acceptance run.** The 8-call chain reaches the debate LLM and
+  publishes a turn, but the model's first reply does not yet satisfy the
+  mutual-learning validator reliably. The repair attempt fixes it sometimes and
+  not always, because repair feedback carries the safe code without the
+  validator's failure position.
+- **Browser end-to-end** against the real composition.
+- **Demo package**: fixed assets, one startup entry, reset and recovery
+  instructions, Real/Mock disclosure.
 
-## 5. Wave 4 decisions
+### Not started
 
-- `AGENT.md` remains the student's immutable raw authorship. New versions will also
-  carry a student-confirmed, extraction-only structured Persona; the compiler must
-  not invent, improve or silently discard persona content.
-- Claim-level Evidence Trace is provenance, not automatic fact verification. The
-  server derives speech spans and binds claims to immutable `TurnSource` rows.
-- Prompt work keeps the complete RuleSet-visible transcript: all earlier-round speech
-  for mutual learning and the frozen legacy predecessor set for legacy RuleSets. It
-  removes known duplicate persona/rules and reuses valid frozen retrieval receipts for
-  structure-only retry.
-- A numeric Token-reduction KPI and a teacher/operator cost-display feature are not
-  Wave 4 tasks.
-- Real Provider work remains separated by Gate. A valid key, voice enrollment,
-  synthesis, model output and human acceptance are distinct evidence.
+Production hardening: multi-process recovery, classroom-scale load, public
+deployment, monitoring, backup and restore, production TTS and Voice, real
+translation, data-governance and licensing review. None of these may block the
+Demo.
 
-## 6. Engineering workflow
+## Real provider call ledger
 
-Intermediate Wave 4 coding changes follow:
+Every charged request, including failed ones, is counted here.
 
-`Issue -> local branch -> independent worktree -> one implementation owner -> local checks -> Sol High read-only audit -> fix/retest loop -> main-window integration`
+- Snapshot embedding: several, across repeated acceptance attempts.
+- Retrieval query embedding: 1 historical.
+- Debate LLM: several, across repeated acceptance attempts, including
+  structure-repair attempts.
+- TTS: 3 historical failures. Voice: 1 historical enrolment.
+- Automatic retries: 0. Every repeat was a deliberate fresh run.
 
-Only the complete Wave 4 integration candidate is pushed as a Pull Request. That exact
-head runs one GitHub CI through the `pull_request` workflow; after PASS the same audited
-head fast-forwards canonical `main`. Intermediate branches are not pushed and do not
-consume duplicate push/PR CI runs.
+## Recorded deviations from the frozen Wave 4 contracts
 
-Shared files such as models, migrations, OpenAPI, WebSocket schemas, provider factory,
-generated clients and root status are owned by the main window or an explicitly named
-integrator. A worker never approves its own Gate.
+Each is a deliberate decision, reversible, and scoped to the Demo.
 
-Gate order is:
+1. **Supplier-tokenizer gate removed.** `LLM_A_RUNTIME_V1` and
+   `PROMPT_BUDGET_V1` required a reviewed supplier tokenizer before a real LLM
+   request, but none was ever pinned into the runtime, which made the real
+   Debate LLM and real Report unreachable. The conservative UTF-8 counter
+   over-counts, so it can only reject an over-large request; its exact id and
+   asset hash are still recorded with every request. Pinning a real supplier
+   tokenizer is deferred.
+2. **Derived call budget.** The fixed seven/eight-call plan is replaced by the
+   shape-derived plan above, which is what allows a structure repair.
+3. **Structure repair enabled for the real composition.** A repair inherits its
+   first attempt's acceptance run and takes the next ordinal, so a charged
+   repair can never escape the ledger.
+4. **Provider dialect projection.** The supplier rejects a `response_format`
+   schema that constrains an array with `uniqueItems`, so the wire copy drops
+   those keywords. The frozen schema stays the hash-checked authority for
+   validating the response, and local validation still enforces them.
+5. **`position_update_reason` may be empty.** The frozen schema required it
+   non-empty in every phase while the domain validator only requires it for
+   exchange and final integration. The schema now matches the domain rule.
+6. **Configuration faults stay terminal.** `llm_tokenizer_unauthorized` and
+   `provider_preflight_blocked` remain outside the safe generation codes, so a
+   misconfiguration fails a Debate closed rather than parking it.
 
-`G0 contract -> G0-S design challenge -> G1 implementation -> G1.5 deterministic checks -> G2 independent audit -> G3 module runtime -> G4 integration -> G5 real-service/human acceptance`
+## Document map
 
-Problems are debugged and retested inside the current Gate until its frozen acceptance
-criteria pass. Tests or contracts are never weakened to manufacture a pass.
-
-## 7. Safety and scope
-
-- Never commit API keys, `.env`, private accounts, student audio, runtime databases,
-  generated media or private reference code.
-- The browser uses platform DTOs only. Ordinary product DTOs remain provider-neutral.
-  The dedicated teacher-only ProviderDataCallV1 disclosure may show the approved
-  supplier display name, region, purpose, outbound data classes and storage/privacy
-  facts plus exact policy/manifest/revision CAS. Model IDs, endpoints, workspace or
-  resource IDs, credentials, private paths, raw ledgers and raw responses remain
-  server-side.
-- Do not copy source fragments from reference repositories. References are read-only
-  design and test inputs.
-- Real calls must satisfy the active Provider Gate's model, input, call-count, cost,
-  timeout, privacy, retry and stop conditions before the first request.
-- Docker and SQLite must not open the same live bind-mounted WAL from both host and
-  container. Inspect through the API/container while the backend is running.
-
-## 8. Document map
-
-- [PROJECT_STATUS.md](PROJECT_STATUS.md): current phase, last signed baseline, active
-  branch/PR, evidence and next Gate. Git/PR/CI owns the exact candidate SHA so the
-  document does not make a self-referential SHA claim.
-- [ARCHITECTURE.md](ARCHITECTURE.md): stable system and data boundaries.
-- [contracts/](contracts/): current machine-readable OpenAPI/WebSocket contracts.
-- [docs/contracts/](docs/contracts/): human contracts and baseline provenance.
-- [docs/adr/](docs/adr/): one durable decision per file.
-- [docs/gates/](docs/gates/): Gate packets and acceptance evidence.
-- [docs/requirements/original.md](docs/requirements/original.md): historical source
-  requirements only; not the current implementation contract.
-- [docs/worklog/](docs/worklog/): historical execution record, excluded from normal
-  task context.
-- [docs/archive/PROJECT_MONOLITH_2026-08-30.md](docs/archive/PROJECT_MONOLITH_2026-08-30.md):
-  exact pre-Wave-4 continuity monolith. Its checksum is stored beside it.
+- [AGENTS.md](AGENTS.md) — how to work on this repository.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — stable system and data boundaries.
+- [contracts/](contracts/) — machine-readable OpenAPI and WebSocket contracts.
+- [docs/contracts/](docs/contracts/) — human contracts and provenance.
+- [docs/adr/](docs/adr/) — one durable decision per file.
+- [docs/gates/](docs/gates/) — historical acceptance evidence.
+- [docs/requirements/original.md](docs/requirements/original.md) — historical
+  source requirements, not the current contract.
+- [manual-tests/real-core-demo/](manual-tests/real-core-demo/) — the bounded
+  real-provider acceptance packet and its driver.
