@@ -1242,16 +1242,21 @@ class PlaybackSocket:
             proxy=None,
             open_timeout=20,
         )
+        self.api = api
         self.debate_id = debate_id
 
     def close(self) -> None:
         self._socket.close()
 
-    def _receive(self, timeout: float = 2.0) -> Mapping[str, Any]:
+    def _receive(self, timeout: float = 2.0) -> Mapping[str, Any] | None:
+        # A quiet socket is not a failure.  The caller owns the real deadline,
+        # and the real composition is quiet for long stretches while a teacher
+        # confirms a manifest or the provider answers, so raising on the first
+        # short gap ended runs that were merely waiting.
         try:
             raw = self._socket.recv(timeout=timeout)
-        except TimeoutError as exc:
-            raise AcceptanceError("websocket_timeout") from exc
+        except TimeoutError:
+            return None
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8")
         require(isinstance(raw, str), "websocket_message")
@@ -1273,6 +1278,8 @@ class PlaybackSocket:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             event = self._receive(timeout=min(2.0, max(0.1, deadline - time.monotonic())))
+            if event is None:
+                continue
             if event_type is not None and event.get("event_type") != event_type:
                 continue
             if event_types is not None and event.get("event_type") not in event_types:
@@ -1370,7 +1377,23 @@ class PlaybackSocket:
         )
         # The final turn of the last round completes playback and finishes the
         # Debate server-side; only earlier turns return to waiting_next.
-        self._wait(event_types=TERMINAL_OR_WAITING_EVENTS)
+        #
+        # The event is a notification, not the fact.  A dropped or already-past
+        # frame left the driver waiting while the server had moved on, so
+        # confirm the acknowledged transition against the playback state and
+        # only fail when the state itself never reaches it.
+        try:
+            self._wait(event_types=TERMINAL_OR_WAITING_EVENTS)
+            return
+        except AcceptanceError:
+            pass
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            status = _debate_detail(self.api, self.debate_id)["playback"].get("status")
+            if status in {"waiting_next", "completed"}:
+                return
+            time.sleep(0.3)
+        raise AcceptanceError("playback_ack_not_observed")
 
 
 def _fetch_audio(api: Api, media_url: str) -> None:
