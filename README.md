@@ -1,78 +1,35 @@
 # Maya Teaching Platform
 
-[PROJECT.md](PROJECT.md) is the authority for what the product is and where it
-stands, including the real-provider state and what is still open.
-[AGENTS.md](AGENTS.md) is the working agreement for changing this repository.
+Maya is a local-first classroom platform. Student groups build culture-focused
+agents from an authored persona and an immutable Markdown knowledge snapshot. A
+teacher picks 2–5 published agents, runs a structured multi-round English
+mutual-learning debate with claim-level evidence, opens anonymous classroom
+interaction, and generates a mutual-learning report.
 
-> **Private local Demo:** Git contains source and non-secret fixtures only. The
-> ignored mode-0600 `.env` and
-> `backend/config/demo-accounts/accounts.private.md` are the only retained
-> private runtime materials. Runtime `data/` is disposable and is not part of
-> the repository or handoff.
+- [PROJECT.md](PROJECT.md) — what the product is and where it stands, including
+  the real-provider state and what is still open.
+- [AGENTS.md](AGENTS.md) — the working agreement for changing this repository.
 
-Maya is a local-first classroom platform for building culture-focused agents and running a structured, evidence-aware debate.
+> **Private local Demo.** Git holds source and non-secret fixtures only. The
+> ignored mode-0600 `.env` and `backend/config/demo-accounts/accounts.private.md`
+> are the only private runtime materials. The runtime `data/` directory is
+> disposable and never part of the repository.
 
-The current private Demo provides:
+## What runs
 
-- `gateway`: Caddy single-origin proxy on port `8080`;
-- `frontend`: Next.js student, teacher and classroom interfaces using the frozen V2 visual language;
-- `backend`: FastAPI image boundary with Python 3.12, FFmpeg, and a real readiness probe.
+| Service    | Role                                                                  |
+| ---------- | --------------------------------------------------------------------- |
+| `gateway`  | Caddy single origin on port `8080`; `/api/*` and `/ws/*` to FastAPI   |
+| `frontend` | Next.js student, teacher and classroom interfaces                     |
+| `backend`  | FastAPI on Python 3.12 with SQLite, FFmpeg and a real readiness probe |
 
-The Wave 3 Mock Demo includes Demo quick login, Agent/version workflows,
-Markdown RAG and immutable snapshots, teacher inspection, 3D avatar previews,
-two-round Mock debate generation, teacher-paced classroom playback, anonymous
-QR interaction, named raw barrages, anonymous voting, Mock Maya reports,
-read-only history, and on-demand Mock Chinese test representation. Wave 3 now
-has independent G2 approval (`P0=0 / P1=0`) and main-window real-browser G3
-approval. Its final delta adds cause-specific disconnect handling, manual-only
-Reconnect, locale-only controls, the simple `ready / in progress / waiting /
-finished` classroom phase, waiting-only Finish, a dedicated
-classroom-interaction page, single-view translation, retained-catalog Replay
-with on-demand controller acquisition, and a versioned Mock lexical RAG guard.
-Pause/Continue are no longer ordinary teacher controls. Wave 4 has not started; real
-LLM/Embedding/TTS, formal content quality, classroom load and public deployment
-still require separate gates.
-
-## Development workflow
-
-The private development repository contains product source, tests, migrations,
-machine contracts, Gate evidence and CI. Wave 4 coding changes use one GitHub Issue,
-one branch, one independent worktree and one implementation owner. CI and independent
-Sol review apply to an exact candidate SHA; the main integration window reruns checks
-on a different merge SHA before signing it.
-
-Runtime handoffs are produced from a passing full-source SHA as a Release/Docker
-artifact. A reduced runtime tree is not used as the development main branch. See
-[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md).
-
-The frontend follows the Wave 0 frozen dependency set: TypeScript `5.9.3`, ESLint `9.39.1`, Next.js `16.3.3`, React `19.2.8`, Vitest `4.1.11`, Vite `8.2.2`, jsdom `29.0.1`, and the pinned type/test tooling listed in the gate packet. ESLint 9 is the approved compatibility override because ESLint 10 currently crashes inside the Next.js 16.3.3 transitive parser/plugin before linting source files; the lint command still covers TypeScript and TSX with the full Next ruleset. TypeScript 5.9.3 is required by openapi-typescript 7.13.0, and jsdom 29.0.1 matches the frozen Node 24.14 runtime.
-
-## Daily start on this Mac
-
-1. Start Docker Desktop and wait until the engine is running.
-2. In Terminal:
-
-   ```sh
-   cd /Users/xubosmell/Desktop/Maya/maya-platform
-   docker compose up -d
-   docker compose ps
-   ```
-
-3. Confirm `backend` and `frontend` are `healthy`.
-4. For ordinary single-computer work, open `http://localhost:8080`. For QR,
-   phone, or live WebSocket classroom checks, set `CLASSROOM_PUBLIC_BASE_URL`
-   in the ignored `.env` to this Mac's current private-LAN origin, rebuild or
-   restart the stack. The QR keeps using that LAN origin. In private Demo mode,
-   the teacher page may use either the configured LAN address or same-port
-   `localhost` / `127.0.0.1`; other origin, protocol, and port mismatches remain
-   rejected.
-
-Use `docker compose up -d --build` instead when application code, dependencies,
-Dockerfiles or build-time settings changed.
+The browser only ever calls platform-owned `/api/v1` routes on the same origin.
+Supplier names, model ids, external voice ids, API keys and absolute paths stay
+server-side; the teacher-only provider disclosure is the single exception and
+shows only the reviewed supplier display name, region, purpose, outbound field
+classes and the exact policy hashes.
 
 ## First start on a new machine
-
-From the repository root:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -81,45 +38,86 @@ docker compose up -d --build
 docker compose ps
 ```
 
-`pnpm bootstrap:local` asks once for the shared local Demo password, creates a
-random session secret, and writes only the ignored mode-0600 `.env` and
-`backend/config/demo-accounts/accounts.private.md`. It refuses to overwrite
-existing local credentials unless an operator explicitly requests replacement.
-Do not rerun it during an ordinary daily start.
+`pnpm bootstrap:local` asks once for a shared local Demo password, generates a
+session secret, and writes only the two ignored mode-0600 private files. It
+refuses to overwrite existing credentials, so it is not part of a daily start.
 
-The backend applies the checked-in Alembic migration, verifies/creates the exact
-Demo seed, and then becomes ready. The private account catalog is mounted
-read-only at runtime and is excluded from Git and Docker build contexts. Without
-that local file the health endpoints still work, but Demo login intentionally
-fails closed.
-`LLM_PROVIDER`, `EMBEDDING_PROVIDER`, `TTS_PROVIDER`, and `VOICE_PROVIDER`
-default to `mock`; real supplier keys remain optional and must stay local.
+The backend applies the checked-in Alembic migrations, verifies or creates the
+Demo seed, and only then reports ready. All six provider selectors default to
+`mock`; real supplier keys are optional and stay local.
+
+Two demo agents are seeded automatically — a guide in Group A and a companion
+in Group B — so a teacher can open a two-agent debate immediately, with no
+student setup.
+
+## Daily start
+
+```sh
+cd /Users/xubosmell/Desktop/Maya/maya-platform
+docker compose up -d
+docker compose ps
+```
+
+Wait for `backend` and `frontend` to report `healthy`, then open
+`http://localhost:8080`.
+
+Use `docker compose up -d --build` when application code, dependencies,
+Dockerfiles or build-time settings changed.
+
+For QR, phone or live classroom checks, set `CLASSROOM_PUBLIC_BASE_URL` in the
+ignored `.env` to this machine's private-LAN origin and restart. That value has
+to satisfy two rules at once: the QR code rejects loopback and needs a
+private-LAN address, while the CSRF origin check compares the port. Use the LAN
+address with the port the stack actually publishes.
+
+## Resetting the runtime
+
+```sh
+docker compose down
+uv run --project backend python scripts/reset_demo_runtime.py
+docker compose up -d
+```
+
+The reset renames the runtime directory instead of deleting it. **Always
+`down` before `up -d` across a reset**: a bind mount follows the original
+inode, so a container that was only stopped keeps writing into the quarantined
+copy while host-side tools act on the new `data`.
 
 ## Local checks
 
-From this directory:
+```sh
+cd backend && uv run pytest -p no:warnings && uv run ruff check . && uv run mypy app
+```
 
-```text
-pnpm install --frozen-lockfile
+```sh
+pnpm -C frontend test --run && pnpm frontend:typecheck && pnpm frontend:lint
+```
+
+```sh
 pnpm docs:check
-pnpm --filter @maya/frontend lint
-pnpm --filter @maya/frontend typecheck
-pnpm --filter @maya/frontend test
-uv run --directory backend pytest -q
-uv run --directory backend python ../scripts/test_wave3_migration.py
-docker compose config
+pnpm exec prettier --check .
+node scripts/check_frozen_openapi.mjs
+node scripts/check_generated_contracts.mjs
+node scripts/check_repo_boundary.mjs --probe-generated
 ```
 
-For a local browser shell without containers:
+Run backend tests from `backend/`. The application reads `.env` relative to the
+working directory, so running them from the repository root loads the real
+`.env` and fails CSRF-sensitive tests for reasons unrelated to your change.
+[AGENTS.md](AGENTS.md) lists the complete battery and the contract-change
+procedure.
 
-```text
-pnpm --filter @maya/frontend dev
-```
+## Real provider runs
 
-The complete local stack is exposed at `http://localhost:8080`. In ordinary
-development, keep `.env`, `backend/config/demo-accounts/accounts.private.md`,
-supplier credentials, and runtime data local. Do not add any of them to Git or
-to a source handoff.
+The Demo composition is real DashScope embedding, real Qwen debate turns and a
+real Qwen report, with Mock TTS, Voice and Translation. Every delivery surface
+labels that split honestly.
+
+A real run is bounded by an acceptance ledger whose call plan is derived from
+the debate's own shape rather than a fixed number, and no provider request is
+ever retried automatically. The packet and its driver live in
+[manual-tests/real-core-demo/](manual-tests/real-core-demo/); read that README
+before spending a real call.
 
 ## Logs and shutdown
 
@@ -128,11 +126,14 @@ docker compose logs -f --tail=100
 docker compose stop
 ```
 
-`docker compose stop` preserves the local SQLite database and files. Avoid
-`docker compose down -v` unless you deliberately intend to remove Docker
-volumes; Maya's normal runtime data is bind-mounted under the ignored local
-`data/` directory.
+`stop` preserves the local SQLite database and files. Avoid
+`docker compose down -v`, which removes Docker volumes; ordinary runtime data
+is bind-mounted under the ignored `data/` directory.
 
-## Runtime boundary
+## Frozen frontend toolchain
 
-The browser calls platform-owned `/api/v1` routes through the same origin. Supplier names, model IDs, external voice IDs, API keys, and absolute storage paths stay on the server side. Caddy sends `/api/*` and `/ws/*` to FastAPI and all other paths to Next.js.
+TypeScript `5.9.3`, ESLint `9.39.1`, Next.js `16.3.3`, React `19.2.8`, Vitest
+`4.1.11`, Vite `8.2.2`, jsdom `29.0.1`. ESLint 9 is a deliberate override:
+ESLint 10 crashes inside the Next.js 16.3.3 transitive parser before it lints
+any source. TypeScript 5.9.3 is required by openapi-typescript 7.13.0, and
+jsdom 29.0.1 matches the frozen Node 24.14 runtime.
