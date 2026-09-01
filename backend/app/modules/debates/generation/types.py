@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -58,11 +58,26 @@ EvidenceTraceSupportMode = Literal["direct", "contextual", "general_reasoning", 
 
 
 class TurnValidationError(ValueError):
-    """A closed structured-result or evidence contract was violated."""
+    """A closed structured-result or evidence contract was violated.
 
-    def __init__(self, message: str, *, code: str = "turn_generation_failed") -> None:
+    ``json_pointers`` names the positions in the turn result that failed. The
+    structure-repair attempt forwards them, and they are the only way a second
+    attempt can know which field to change: without them a repair sees the bare
+    safe code and has to guess, which is how a recoverable turn became a coin
+    flip. Pointers are server-authored positions in our own schema and never
+    echo model output.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "turn_generation_failed",
+        json_pointers: Sequence[str] = (),
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.json_pointers = tuple(dict.fromkeys(str(item) for item in json_pointers))[:12]
 
 
 class GenerationProviderError(RuntimeError):

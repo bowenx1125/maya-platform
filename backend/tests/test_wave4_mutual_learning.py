@@ -799,3 +799,41 @@ def test_memory_playback_plan_respects_frozen_mutual_round_count() -> None:
     assert [turn.round_no for turn in turns] == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
     assert turns[2].predecessor_turn_ids == ("turn-0", "turn-1")
     assert turns[4].predecessor_turn_ids == tuple(f"turn-{index}" for index in range(4))
+
+
+def test_mutual_rule_failures_carry_the_position_a_repair_must_change() -> None:
+    """A structure repair can only fix what the feedback names.
+
+    The validator raises for a rule, not for a schema shape, so its failing
+    position lives on the exception rather than on the mapped response. When it
+    was missing, a second attempt received the bare ``rule_invalid`` code and
+    had to guess which of several fields to change.
+    """
+
+    import re
+    from pathlib import Path
+
+    from app.modules.debates.generation.prompt_request import PromptRepairFeedbackV1
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "app/modules/debates/generation/mutual_learning_validator.py"
+    ).read_text(encoding="utf-8")
+
+    total = source.count("raise TurnValidationError(")
+    annotated = source.count("json_pointers=")
+    # Every rule a model can satisfy must name its position. The one exception
+    # is the internal round-barrier invariant, which reports a server bug that
+    # no provider reply could fix.
+    assert total - annotated <= 1, "a mutual-learning rule has no failing position"
+
+    pointers = {
+        pointer
+        for group in re.findall(r"json_pointers=\(([^)]*)\)", source)
+        for pointer in re.findall(r'"([^"]+)"', group)
+    }
+    assert pointers, "no repair pointers were declared"
+    for pointer in pointers:
+        # An unusable pointer is silently replaced by the root, which loses the
+        # whole benefit, so every declared position must survive the contract.
+        PromptRepairFeedbackV1(safe_error_code="rule_invalid", json_pointers=(pointer,))

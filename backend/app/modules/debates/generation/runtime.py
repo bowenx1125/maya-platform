@@ -1488,16 +1488,30 @@ class LLMTurnRuntime:
                 return candidate
         raise LLMRuntimeError(code="llm_output_invalid")
 
-    def _repair_request(self, prepared: LLMPreparedAttemptV1, response: object) -> object:
-        code = _safe_code(
-            _result_value(
-                response, "safe_error_code", "error_code", "code", default="schema_invalid"
-            ),
-            "schema_invalid",
-        )
+    def _repair_request(
+        self,
+        prepared: LLMPreparedAttemptV1,
+        response: object,
+        *,
+        override: tuple[str, Sequence[str]] | None = None,
+    ) -> object:
+        # A rule failure is raised by the validator, so its position lives on
+        # the exception rather than on the mapped response.  Without the
+        # override the repair carried a bare safe code and the second attempt
+        # had to guess which field to change.
+        if override is not None:
+            code = _safe_code(override[0], "schema_invalid")
+            pointers_value: object = tuple(override[1])
+        else:
+            code = _safe_code(
+                _result_value(
+                    response, "safe_error_code", "error_code", "code", default="schema_invalid"
+                ),
+                "schema_invalid",
+            )
+            pointers_value = _result_value(response, "json_pointers", "pointers", default=())
         if code not in REPAIR_CODES:
             code = "schema_invalid"
-        pointers_value = _result_value(response, "json_pointers", "pointers", default=())
         pointers = tuple(str(item) for item in _sequence(pointers_value))[:12]
         try:
             # PromptRequestV1 owns the immutable identity check.  The provider
@@ -1522,7 +1536,11 @@ class LLMTurnRuntime:
             raise LLMRuntimeError(code="llm_repair_policy_invalid") from exc
 
     def _attempt_two(
-        self, prepared: LLMPreparedAttemptV1, *, response: object | None = None
+        self,
+        prepared: LLMPreparedAttemptV1,
+        *,
+        response: object | None = None,
+        repair_override: tuple[str, Sequence[str]] | None = None,
     ) -> LLMPreparedAttemptV1:
         request = prepared.request
         if response is None:
@@ -1531,7 +1549,7 @@ class LLMTurnRuntime:
             # attempt number changes; the adapter owns its wire idempotency.
             prompt = prepared.prompt
         else:
-            request = self._repair_request(prepared, response)
+            request = self._repair_request(prepared, response, override=repair_override)
             builder = _method(self.adapter, "prompt_from_request", "provider_prompt_from_request")
             if builder is not None:
                 try:
@@ -2060,7 +2078,11 @@ class LLMTurnRuntime:
                 )
                 if current.attempt_no == 1 and max_attempts >= 2:
                     operation = self._fail_operation(operation_id, operation, "rule_invalid")
-                    current = self._attempt_two(current, response=accepted)
+                    current = self._attempt_two(
+                        current,
+                        response=accepted,
+                        repair_override=("rule_invalid", getattr(exc, "json_pointers", ())),
+                    )
                     continue
                 return LLMRunOutcomeV1(
                     "failed",
