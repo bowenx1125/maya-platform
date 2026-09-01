@@ -29,8 +29,10 @@ from app.core.models import (
 from app.modules.debates.models import Debate, DebateParticipant
 from app.modules.demo_baseline.service import (
     BASELINE_AGENT_ID,
+    BASELINE_AGENT_IDS,
     BASELINE_SNAPSHOT_ID,
     BASELINE_VERSION_ID,
+    BASELINE_VERSION_IDS,
     baseline_is_usable,
 )
 from app.modules.reports.models import CivilizationReportRevision
@@ -345,13 +347,20 @@ def _resolve_acceptance_operation(
     run: DemoAcceptanceRun,
     manifest_hash: str,
 ) -> ProviderOperation:
-    """Resolve the one pre-send operation disclosed by a manifest hash.
+    """Resolve the one operation for this manifest that still needs an ordinal.
 
-    The disclosure intentionally omits the server-only operation id.  A
-    manifest may be referenced by more than one provider attempt, so accepting
-    anything other than one exact operation is unsafe and must fail closed.
-    The repository repeats the state checks inside its write transaction; the
-    checks here keep the public lookup from selecting an ineligible operation.
+    The disclosure intentionally omits the server-only operation id, so a
+    manifest hash is the only handle the teacher-facing driver holds. One
+    manifest legitimately covers more than one attempt: a structure repair is
+    the same authorized request sent once more with frozen feedback, and it
+    creates its own operation row. Selecting every row for the hash therefore
+    made a repairable turn permanently unattachable.
+
+    The unambiguous handle is the operation that is still pre-send and not yet
+    bound to any ordinal. An earlier attempt already carries its ordinal, so at
+    most one row can match. The repository repeats these state checks inside
+    its write transaction; the checks here keep the public lookup from
+    selecting an ineligible operation.
     """
 
     if _SHA256_RE.fullmatch(manifest_hash) is None:
@@ -361,7 +370,12 @@ def _resolve_acceptance_operation(
         )
     operations = db.scalars(
         select(ProviderOperation)
-        .where(ProviderOperation.export_manifest_hash == manifest_hash)
+        .where(
+            ProviderOperation.export_manifest_hash == manifest_hash,
+            ProviderOperation.acceptance_run_id.is_(None),
+            ProviderOperation.call_no.is_(None),
+            ProviderOperation.state == "prepared",
+        )
         .order_by(ProviderOperation.created_at, ProviderOperation.id)
     ).all()
     if len(operations) != 1:
@@ -387,6 +401,23 @@ def _resolve_acceptance_operation(
     return operation
 
 
+def _require_opaque_operation_id(value: str) -> None:
+    """Accept the exact opaque identities the control ledger actually mints.
+
+    ``create_prepared`` mints a UUID when a caller supplies none, but the LLM
+    turn and Report seams pass a deterministic content hash so one operation
+    survives a restart and a second attempt without being duplicated. Both
+    forms are opaque server-side identities and neither appears in a
+    browser-facing DTO. Requiring a UUID here rejected every real LLM call.
+    """
+
+    if not isinstance(value, str):
+        raise ValueError("provider operation id must be text")
+    if _SHA256_RE.fullmatch(value) is not None:
+        return
+    UUID(value)
+
+
 def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
     run = db.get(DemoAcceptanceRun, run_id)
     if run is None:
@@ -409,7 +440,7 @@ def _run_response(db: Session, run_id: str) -> DemoAcceptanceRunResponse:
             )
         try:
             validate_demo_acceptance_call_no(call_no)
-            UUID(operation.id)
+            _require_opaque_operation_id(operation.id)
         except (ProviderControlError, ValueError):
             _raise_conflict(
                 "demo_acceptance_ledger_invalid",
@@ -461,7 +492,7 @@ def create_acceptance_run(
         agent_id=target_agent_id,
         version_id=target_version_id,
     )
-    if agent.id == BASELINE_AGENT_ID or version.id == BASELINE_VERSION_ID:
+    if agent.id in BASELINE_AGENT_IDS or version.id in BASELINE_VERSION_IDS:
         _raise_conflict(
             "demo_acceptance_target_invalid",
             "The system baseline cannot be the Demo target.",

@@ -95,9 +95,6 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
       fireEvent.change(screen.getByLabelText("Topic (English)"), {
         target: { value: "Should classrooms compare cultural perspectives?" },
       });
-      fireEvent.change(screen.getByLabelText("Protocol"), {
-        target: { value: mutualRuleSet },
-      });
       fireEvent.change(screen.getByLabelText("Rounds"), {
         target: { value: String(roundCount) },
       });
@@ -112,7 +109,9 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     },
   );
 
-  it("keeps the legacy setup default at two rounds", async () => {
+  it("offers only mutual learning and defaults to two rounds", async () => {
+    // The legacy demo RuleSets stay readable on existing Debates but can no
+    // longer be created, so the setup surface has no protocol choice at all.
     const create = renderCreate();
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
@@ -120,15 +119,17 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     fireEvent.change(screen.getByLabelText("Topic (English)"), {
       target: { value: "Should classrooms compare cultural perspectives?" },
     });
+    expect(screen.queryByRole("option", { name: /legacy/i })).toBeNull();
+    expect(screen.getByTestId("debate-rule-set")).toBeTruthy();
+    expect(screen.getByLabelText("Rounds")).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Create debate draft" }),
     );
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[1]).toMatchObject({
-      rule_set_id: "ordered_multi_agent_rounds_demo_v2",
+      rule_set_id: mutualRuleSet,
       round_count: 2,
     });
-    expect(screen.queryByLabelText("Rounds")).toBeNull();
   });
 
   it("resolves opening, exchange, and final integration from explicit markers", () => {

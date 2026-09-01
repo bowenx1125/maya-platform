@@ -1563,7 +1563,7 @@ export interface components {
             topic: string;
             participants: components["schemas"]["DebateParticipantInput"][];
             /**
-             * @default ordered_multi_agent_rounds_demo_v2
+             * @default ordered_multi_expert_mutual_learning_v1
              * @enum {string}
              */
             rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
@@ -2906,9 +2906,8 @@ export interface operations {
             content: {
                 "application/json": {
                     expected_revision: number;
-                    /** Format: uuid */
-                    acceptance_run_id?: string;
-                    call_no?: number;
+                    acceptance_run_id?: components["schemas"]["Uuid"] | null;
+                    call_no?: number | null;
                 };
             };
         };

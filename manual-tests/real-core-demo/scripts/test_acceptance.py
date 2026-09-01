@@ -96,15 +96,33 @@ def test_fixture_has_english_topic_and_chinese_query_terms() -> None:
     assert "共同责任" in fixture.query_text
     assert fixture.topic.startswith("How should")
     assert not acceptance.CJK_RE.search(fixture.topic)
-    assert fixture.manifest["call_cap"] == {
+    # The packet no longer fixes a call count: it declares the Debate shape and
+    # the plan is derived, so a 3-Agent or 3-round Demo needs no packet edit.
+    assert fixture.manifest["debate_shape"] == {
+        "agent_count": 2,
+        "round_count": 2,
+        "real_snapshot_agents": 1,
+        "real_participant_index": 1,
+    }
+    assert fixture.plan == {
         "snapshot": 1,
         "real_query": 2,
         "llm_turn": 4,
         "report": 1,
         "debate_stage": 7,
         "expected_happy_path": 8,
-        "max_ceiling": 8,
-        "total": 8,
+        "turns": 4,
+    }
+    assert acceptance.expected_call_plan(
+        agent_count=3, round_count=3, real_snapshot_agents=2
+    ) == {
+        "snapshot": 1,
+        "real_query": 6,
+        "llm_turn": 9,
+        "report": 1,
+        "debate_stage": 16,
+        "expected_happy_path": 17,
+        "turns": 9,
     }
 
 
@@ -431,6 +449,16 @@ def test_attach_pending_call_binds_once_and_advances_bounded_summary(
     captured: list[dict[str, object]] = []
 
     class FakeApi:
+        def __init__(self) -> None:
+            # The ledger, not the driver's own list, owns the next ordinal so a
+            # charged structure repair cannot silently reuse one.
+            self.call_count = 0
+
+        def acceptance_summary(self, run_id: str) -> dict[str, object]:
+            result = run_summary(value, call_count=self.call_count)
+            result["charged_request_count"] = self.call_count
+            return result
+
         def attach_acceptance_call(
             self,
             run_id: str,
@@ -441,8 +469,9 @@ def test_attach_pending_call_binds_once_and_advances_bounded_summary(
             captured.append(
                 {"run_id": run_id, "manifest_hash": manifest_hash, "call_no": call_no}
             )
+            self.call_count = call_no
             result = run_summary(value, call_count=call_no)
-            result["charged_request_count"] = 0
+            result["charged_request_count"] = call_no - 1
             return result
 
     path = tmp_path / "checkpoint.json"
@@ -696,6 +725,7 @@ def test_report_policy_binding_sql_uses_scope_and_call_eight() -> None:
             report_manifest_hash=manifest_hash,
             acceptance_run_id=run_id,
             expected_policy_hash=policy_hash,
+            report_call_no=8,
         )
     engine.dispose()
 

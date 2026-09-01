@@ -325,6 +325,7 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
             {"agent_id": kaikai_id, "stance_mode": "assigned", "assigned_stance": "oppose"},
         ],
         "round_count": 2,
+        "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
     }
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
@@ -384,6 +385,7 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
             {"agent_id": bowen_id, "stance_mode": "assigned", "assigned_stance": "neutral"},
         ],
         "round_count": 2,
+        "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
         "expected_revision": 0,
     }
     updated = client.patch(f"/api/v1/debates/{debate_id}", headers=headers(csrf), json=update_body)
@@ -421,6 +423,7 @@ def test_embedding_only_slice_keeps_mock_voice_fallback(
                 {"agent_id": kaikai_id, "stance_mode": "open"},
             ],
             "round_count": 2,
+            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
         },
     )
     assert response.status_code == 201, response.text
@@ -471,6 +474,7 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
             "topic": "A valid English topic",
             "participants": participants,
             "round_count": 2,
+            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
         },
     )
     assert created.status_code == 201, created.text
@@ -483,6 +487,7 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
             "topic": "Запрет TikTok",
             "participants": participants,
             "round_count": 2,
+            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             "expected_revision": before["revision"],
         },
     )
@@ -792,6 +797,7 @@ def test_teacher_student_and_outside_course_boundaries(
             {"agent_id": kaikai_id, "stance_mode": "open"},
         ],
         "round_count": 2,
+        "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
     }
     student_session, student_csrf = login(client, "student-bowen-1")
     del student_session
@@ -831,6 +837,9 @@ def test_commit_start_plan_writes_full_predecessor_prefix_without_public_start_s
     payload = DebateDraftRequest(
         topic="Ordering",
         round_count=2,
+        # This asserts the frozen legacy full-prefix predecessor plan, so it
+        # names that RuleSet rather than taking the mutual-learning default.
+        rule_set_id="ordered_multi_agent_rounds_demo_v2",
         participants=[
             DebateParticipantInput(agent_id=UUID(ids[0]), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(ids[1]), stance_mode="open"),

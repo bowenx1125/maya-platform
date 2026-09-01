@@ -548,6 +548,7 @@ def test_sql_turn_preparer_applies_v2_anchor_and_leaves_persisted_v1_unfiltered(
                         {"agent_id": partner_agent, "stance_mode": "open"},
                     ],
                     "round_count": 2,
+                    "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
                 },
             )
             assert response.status_code == 201, response.text

@@ -359,10 +359,13 @@ class SqlTurnPreparer:
             )
         try:
             dual_real = _dual_real(self.settings)
+            # The Debate carries its own round count, so the budget scales with
+            # the actual 2-5 Agent x 2-5 round shape instead of assuming two.
+            debate_rounds = int(getattr(debate, "round_count", 2) or 2)
             cap = (
-                real_core_demo_budget_cap(len(participants), round_count=2)
+                real_core_demo_budget_cap(len(participants), round_count=debate_rounds)
                 if dual_real
-                else debate_budget_cap(len(participants), round_count=2)
+                else debate_budget_cap(len(participants), round_count=debate_rounds)
             )
             repository.ensure_scope_budget(
                 str(debate.id),
@@ -383,28 +386,22 @@ class SqlTurnPreparer:
         if outbound_manifest is None:
             from app.providers.llm_privacy import LLMOutboundManifestV1
 
-            # The dual Real-Core Demo has a fixed seven-request envelope:
-            # one Snapshot, two real queries and four LLM turns.  Each LLM
-            # turn is one-shot; structure/transport repair is deliberately
-            # disabled for this bounded product run.
-            dual_real = _dual_real(self.settings)
-            outbound_manifest = (
-                LLMOutboundManifestV1(max_attempts=1) if dual_real else LLMOutboundManifestV1()
-            )
+            # The Real-Core Demo used to force a one-shot envelope so a fixed
+            # seven-request budget could never be exceeded.  The acceptance
+            # budget is now derived from the Debate's own shape, so the standard
+            # two-attempt envelope applies here too: a structure repair is the
+            # same authorized request sent once more with frozen feedback, and
+            # it is what lets a real provider turn recover from a first reply
+            # that misses a phase field instead of failing the whole Debate.
+            outbound_manifest = LLMOutboundManifestV1()
             self.llm.outbound_manifest = outbound_manifest
-        if _dual_real(self.settings) and int(getattr(outbound_manifest, "max_attempts", 0)) != 1:
-            raise PlatformError(
-                "provider_preflight_blocked",
-                "The dual Real-Core LLM manifest must permit exactly one attempt.",
-                503,
-            )
         runtime = LLMTurnRuntime(
             ledger=repository,
             adapter=self.llm,
             stage_store=publication,
             manifest_store=repository,
             agent_count=len(participants),
-            round_count=2,
+            round_count=debate_rounds,
             defer_publication=True,
             budget_cap=cap,
         )

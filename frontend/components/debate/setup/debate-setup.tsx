@@ -164,10 +164,9 @@ export function TeacherDebateList({
 }
 
 type StanceValue = "support" | "oppose" | "neutral";
-type DebateRuleSetId =
-  | "ordered_multi_agent_rounds_demo_v1"
-  | "ordered_multi_agent_rounds_demo_v2"
-  | "ordered_multi_expert_mutual_learning_v1";
+// A new Debate is always ordered multi-expert mutual learning. The legacy demo
+// RuleSets remain readable on existing Debates but can no longer be created.
+type DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
 type MutualRoundCount = 2 | 3 | 4 | 5;
 type SetupDraftPayload = Omit<
   DebateDraftRequest,
@@ -215,9 +214,7 @@ export function TeacherDebateCreate({
     Record<string, ParticipantDraft>
   >({});
   const [topic, setTopic] = useState("");
-  const [ruleSetId, setRuleSetId] = useState<DebateRuleSetId>(
-    "ordered_multi_agent_rounds_demo_v2",
-  );
+  const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
   const [roundCount, setRoundCount] = useState<MutualRoundCount>(2);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -574,36 +571,14 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        <SectionCard
-          title={
-            ruleSetId === "ordered_multi_expert_mutual_learning_v1"
-              ? copy(t, "debateRuleSet")
-              : copy(t, "debateFixedRules")
-          }
-        >
+        <SectionCard title={copy(t, "debateRuleSet")}>
           <div className={styles.fixedRule}>
-            <label className="stack-form">
-              <span>{copy(t, "debateRuleSet")}</span>
-              <select
-                aria-label={copy(t, "debateRuleSet")}
-                disabled={busy}
-                onChange={(event) => {
-                  const next = event.target.value as DebateRuleSetId;
-                  setRuleSetId(next);
-                  if (next !== "ordered_multi_expert_mutual_learning_v1") {
-                    setRoundCount(2);
-                  }
-                }}
-                value={ruleSetId}
-              >
-                <option value="ordered_multi_agent_rounds_demo_v2">
-                  {copy(t, "debateLegacyRuleSet")}
-                </option>
-                <option value="ordered_multi_expert_mutual_learning_v1">
-                  {copy(t, "debateMutualLearningRuleSet")}
-                </option>
-              </select>
-            </label>
+            <p
+              aria-label={copy(t, "debateRuleSet")}
+              data-testid="debate-rule-set"
+            >
+              {copy(t, "debateMutualLearningRuleSet")}
+            </p>
             {ruleSetId === "ordered_multi_expert_mutual_learning_v1" ? (
               <label className="stack-form">
                 <span>{copy(t, "debateRoundCount")}</span>

@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.core.db import Database
+from app.core.db import ALEMBIC_HEAD, Database
 from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
@@ -41,6 +41,7 @@ from app.modules.demo_baseline.service import (
     ensure_demo_baseline,
 )
 from app.providers.control import (
+    DEMO_ACCEPTANCE_MAX_CALLS,
     EMBEDDING_SNAPSHOT_BUCKET,
     ExportFieldV1,
     ExportManifestV1,
@@ -526,8 +527,9 @@ def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
                 "FROM provider_operations WHERE id='legacy-operation'"
             )
         ).one() == (None, None, 0, 0)
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0016_real_core_acceptance_run"
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == ALEMBIC_HEAD
         )
     command.downgrade(config, "0015_llm_recovery_input")
     inspector = inspect(Database(database_url).engine)
@@ -739,7 +741,7 @@ def test_attach_manifest_resolution_fails_closed_for_missing_cross_run_and_multi
         database.dispose()
 
 
-def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
+def test_attach_accepts_an_explainable_extra_call_but_rejects_the_ceiling_and_duplicate(
     tmp_path: Path,
 ) -> None:
     database = _database(tmp_path)
@@ -789,8 +791,14 @@ def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
             assert response.call_count == 2
             assert response.charged_request_count == 0
             assert "calls" not in response.model_dump()
+        # The ordinal ceiling is no longer the old fixed eight: the plan is
+        # derived from the Debate shape, so only an ordinal past the absolute
+        # ceiling for the widest supported shape is rejected here.
+        DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=9)
         with pytest.raises(ValidationError):
-            DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=9)
+            DemoAcceptanceCallRequest(
+                manifest_hash=second_manifest, call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1
+            )
         with database.engine.begin() as connection:
             connection.execute(
                 text(
@@ -798,14 +806,22 @@ def test_attach_accepts_explainable_eighth_but_rejects_ninth_and_duplicate(
                 ),
                 {"id": second},
             )
+        # An operation that already left ``prepared`` has been sent, so it can
+        # never take a fresh ordinal. Resolution now selects only the pre-send
+        # operation still missing one, which is what lets a structure repair
+        # reuse the same manifest; a reserved row therefore matches nothing.
         with database.session() as session:
-            with pytest.raises(PlatformError, match="could not be attached"):
+            with pytest.raises(PlatformError) as rejected:
                 attach_acceptance_call(
                     session,
                     actor_user_id=TEACHER_ID,
                     run_id=run_id,
                     request=DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=2),
                 )
+            assert rejected.value.code in {
+                "demo_acceptance_call_conflict",
+                "demo_acceptance_manifest_ambiguous",
+            }
     finally:
         database.dispose()
 
@@ -895,3 +911,51 @@ def test_api_safe_response_and_student_authorization(app_factory: Any) -> None:
         )
         assert denied.status_code == 403
     database.dispose()
+
+
+def test_run_summary_accepts_a_hash_identified_provider_operation(tmp_path: Path) -> None:
+    """The LLM and Report seams mint a deterministic hash operation id.
+
+    ``create_prepared`` only falls back to a UUID when the caller supplies no
+    id. The real Debate LLM path passes a content hash so one operation
+    survives a restart and a second attempt, so a run summary that required a
+    UUID rejected every real LLM call with ``demo_acceptance_ledger_invalid``.
+    """
+
+    database = _database(tmp_path)
+    try:
+        run_id = _create_run(database)
+        manifest_hash = _manifest_hash("hash-identified")
+        hashed_operation_id = hashlib.sha256(b"deterministic-llm-operation").hexdigest()
+        request = ProviderReservationRequestV1(
+            scope_id=TARGET_VERSION_ID,
+            provider_operation="llm_debate_turn",
+            logical_item_id="hash-identified",
+            attempt_no=1,
+            request_hash=HASH_A,
+            max_tokens=1,
+            max_cost_cny=0.001,
+            policy_hash=HASH_A,
+            export_manifest_hash=manifest_hash,
+            operation_id=hashed_operation_id,
+        )
+        created = ProviderRepository(database, require_export_confirmation=False).create_prepared(
+            request
+        )
+        assert created.id == hashed_operation_id
+
+        with database.session() as session:
+            attached = attach_acceptance_call(
+                session,
+                actor_user_id=TEACHER_ID,
+                run_id=run_id,
+                request=DemoAcceptanceCallRequest(manifest_hash=manifest_hash, call_no=1),
+            )
+            assert attached.call_count == 1
+            assert attached.charged_request_count == 0
+        with database.session() as session:
+            summary = get_acceptance_run(session, actor_user_id=TEACHER_ID, run_id=run_id)
+            assert summary.call_count == 1
+            assert summary.charged_request_count == 0
+    finally:
+        database.dispose()

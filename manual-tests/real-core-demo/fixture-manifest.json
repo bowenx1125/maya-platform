@@ -7,15 +7,11 @@
   "expected_terms_path": "expected-terms.txt",
   "chunking_version": "markdown-chunk-v1",
   "expected_chunk_count": 1,
-  "call_cap": {
-    "snapshot": 1,
-    "real_query": 2,
-    "llm_turn": 4,
-    "report": 1,
-    "debate_stage": 7,
-    "expected_happy_path": 8,
-    "max_ceiling": 8,
-    "total": 8
+  "debate_shape": {
+    "agent_count": 2,
+    "round_count": 2,
+    "real_snapshot_agents": 1,
+    "real_participant_index": 1
   },
   "snapshot_document_filename": "maya-real-core-demo.md",
   "real_participant_slot": "B"

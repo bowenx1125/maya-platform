@@ -26,6 +26,51 @@ uv run --project backend pytest -q manual-tests/real-core-demo/scripts/test_acce
 uv run --project backend ruff check manual-tests/real-core-demo/scripts/acceptance.py manual-tests/real-core-demo/scripts/test_acceptance.py
 ```
 
+## Recreate the containers after every reset
+
+`scripts/reset_demo_runtime.py` renames the runtime directory instead of
+deleting it. A container bind mount follows the original inode, so a container
+that is only stopped and started again keeps reading and writing the
+**quarantined** copy while `import_provider_policy.py`, `import_llm_policy.py`
+and the offline `verify` act on the newly created `data`. The application then
+cannot see an imported policy, and a real run fails after it has already been
+charged for earlier calls.
+
+Always recreate the containers after a reset:
+
+```bash
+COMPOSE_PROJECT_NAME=<project> docker compose -f docker-compose.yml \
+  -f <override> down
+python3 scripts/reset_demo_runtime.py
+COMPOSE_PROJECT_NAME=<project> docker compose -f docker-compose.yml \
+  -f <override> up -d
+```
+
+Never use `stop` followed by `up -d` across a reset. To confirm the mount is
+correct, write a probe inside the container and check where it lands on the
+host:
+
+```bash
+docker exec <project>-backend-1 sh -c 'echo probe > /app/data/.mount-probe'
+find . -maxdepth 2 -name .mount-probe
+```
+
+The external Compose override must also replace the committed port list rather
+than extend it. Compose merges sequences by default, so the mapping needs the
+`!override` tag or the container keeps publishing `8080` as well:
+
+```yaml
+services:
+  gateway:
+    ports: !override
+      - "127.0.0.1:18080:8080"
+```
+
+`CLASSROOM_PUBLIC_BASE_URL` must satisfy two independent rules at once: the
+classroom QR code rejects loopback and needs a private-LAN address, while the
+CSRF origin check compares the port. Use the host's private-LAN address with the
+isolated port, for example `http://10.0.0.5:18080`.
+
 ## Prepare a fresh target
 
 The application startup creates and verifies the immutable Bowen Demo baseline.

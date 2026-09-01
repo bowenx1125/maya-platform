@@ -1376,13 +1376,26 @@
                     "minimum": 0
                   },
                   "acceptance_run_id": {
-                    "type": "string",
-                    "format": "uuid"
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/Uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "call_no": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 1
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -5298,7 +5311,7 @@
           },
           "rule_set_id": {
             "type": "string",
-            "default": "ordered_multi_agent_rounds_demo_v2",
+            "default": "ordered_multi_expert_mutual_learning_v1",
             "enum": [
               "ordered_multi_agent_rounds_demo_v1",
               "ordered_multi_agent_rounds_demo_v2",

@@ -626,8 +626,15 @@ paths:
               required: [expected_revision]
               properties:
                 expected_revision: { type: integer, minimum: 0 }
-                acceptance_run_id: { type: string, format: uuid }
-                call_no: { type: integer, minimum: 1, maximum: 1 }
+                acceptance_run_id:
+                  oneOf:
+                    [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+                call_no:
+                  oneOf:
+                    [
+                      { type: integer, minimum: 1, maximum: 1 },
+                      { type: "null" },
+                    ]
       responses:
         "200":
           description: Immutable version and KnowledgeSnapshot published atomically.
@@ -2357,9 +2364,13 @@ components:
           minItems: 2
           maxItems: 5
           items: { $ref: "#/components/schemas/DebateParticipantInput" }
+        # Ordered multi-expert mutual learning is the only protocol the product
+        # surface offers and the default for a new Debate. The two legacy demo
+        # RuleSets stay accepted here so their frozen behaviour and existing
+        # immutable Debates remain exercisable, but no UI can select them.
         rule_set_id:
           type: string
-          default: ordered_multi_agent_rounds_demo_v2
+          default: ordered_multi_expert_mutual_learning_v1
           enum:
             [
               ordered_multi_agent_rounds_demo_v1,

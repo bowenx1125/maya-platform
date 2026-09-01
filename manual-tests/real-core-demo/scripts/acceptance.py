@@ -42,9 +42,41 @@ SECRET_RE = re.compile(
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 BASE_URL_RE = re.compile(r"http://(?P<host>127\.0\.0\.1|localhost):(?P<port>[0-9]{1,5})/?")
 CHECKPOINT_VERSION = "real-core-demo-checkpoint-v4"
-DEBATE_STAGE_CALLS = 7
-EXPECTED_HAPPY_PATH_CALLS = 8
-MAX_ACCEPTANCE_CALLS = 8
+TERMINAL_OR_WAITING_EVENTS = frozenset({"playback.waiting_next", "playback.completed"})
+AUTO_FINISHED_DEBATE_STATUSES = frozenset({"debate_finished", "completed"})
+# The mutual-learning protocol admits 2-5 Agents over 2-5 rounds, so the packet
+# has no fixed call count.  Every count below is derived from the fixture's own
+# Debate shape; only the absolute ordinal ceiling is a constant.
+SLOTS = ("A", "B", "C", "D", "E")
+MIN_AGENTS, MAX_AGENTS = 2, 5
+MIN_ROUNDS, MAX_ROUNDS = 2, 5
+
+
+def expected_call_plan(
+    *, agent_count: int, round_count: int, real_snapshot_agents: int
+) -> dict[str, int]:
+    """Mirror the server's happy-path plan for one Debate shape."""
+
+    turns = agent_count * round_count
+    queries = real_snapshot_agents * round_count
+    return {
+        "snapshot": 1,
+        "real_query": queries,
+        "llm_turn": turns,
+        "report": 1,
+        "debate_stage": 1 + queries + turns,
+        "expected_happy_path": 1 + queries + turns + 1,
+        "turns": turns,
+    }
+
+
+MAX_ACCEPTANCE_CALLS = (
+    1
+    + MAX_AGENTS * MAX_ROUNDS
+    + MAX_AGENTS * MAX_ROUNDS
+    + 1
+    + MAX_AGENTS * MAX_ROUNDS
+)
 REPORT_READY_WORDS = range(600, 901)
 REPORT_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['\u2019\-][A-Za-z0-9]+)*")
 REPORT_CITATION_RE = re.compile(
@@ -139,6 +171,7 @@ def _validated_baseline(value: Mapping[str, Any]) -> Mapping[str, Any]:
 
 @dataclass(frozen=True)
 class Fixture:
+    plan: Mapping[str, int]
     manifest: Mapping[str, Any]
     knowledge: bytes
     real_persona: str
@@ -178,7 +211,7 @@ def load_fixture() -> Fixture:
         "expected_terms_path",
         "chunking_version",
         "expected_chunk_count",
-        "call_cap",
+        "debate_shape",
         "snapshot_document_filename",
         "real_participant_slot",
     }
@@ -186,21 +219,34 @@ def load_fixture() -> Fixture:
     require(manifest["manifest_version"] == "real-core-demo-v1", "manifest_version")
     require(manifest["language"] == "zh-CN", "manifest_language")
     require(manifest["expected_chunk_count"] == 1, "manifest_chunk_count")
+    shape = manifest["debate_shape"]
+    require(isinstance(shape, dict), "debate_shape")
     require(
-        manifest["call_cap"]
-        == {
-            "snapshot": 1,
-            "real_query": 2,
-            "llm_turn": 4,
-            "report": 1,
-            "debate_stage": DEBATE_STAGE_CALLS,
-            "expected_happy_path": EXPECTED_HAPPY_PATH_CALLS,
-            "max_ceiling": MAX_ACCEPTANCE_CALLS,
-            "total": EXPECTED_HAPPY_PATH_CALLS,
-        },
-        "call_cap",
+        set(shape)
+        == {"agent_count", "round_count", "real_snapshot_agents", "real_participant_index"},
+        "debate_shape",
     )
-    require(manifest["real_participant_slot"] == "B", "real_slot")
+    require(
+        all(
+            isinstance(shape[key], int) and not isinstance(shape[key], bool)
+            for key in shape
+        ),
+        "debate_shape",
+    )
+    require(MIN_AGENTS <= int(shape["agent_count"]) <= MAX_AGENTS, "debate_shape_agents")
+    require(MIN_ROUNDS <= int(shape["round_count"]) <= MAX_ROUNDS, "debate_shape_rounds")
+    require(
+        0 <= int(shape["real_snapshot_agents"]) <= int(shape["agent_count"]),
+        "debate_shape_real_agents",
+    )
+    require(
+        0 <= int(shape["real_participant_index"]) < int(shape["agent_count"]),
+        "debate_shape_real_index",
+    )
+    require(
+        manifest["real_participant_slot"] == SLOTS[int(shape["real_participant_index"])],
+        "real_slot",
+    )
 
     hashes: dict[str, str] = {}
     for line in (PACKET / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
@@ -284,10 +330,16 @@ def load_fixture() -> Fixture:
         GenerationContext("fixture-debate", topic, turn, participants[1], participants)
     )[0].text
     require(any(term in query for term in terms), "opening_query_not_chinese")
+    plan = expected_call_plan(
+        agent_count=int(shape["agent_count"]),
+        round_count=int(shape["round_count"]),
+        real_snapshot_agents=int(shape["real_snapshot_agents"]),
+    )
     fixture_hash = hashlib.sha256(
         json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return Fixture(
+        plan,
         manifest,
         knowledge,
         real_persona,
@@ -1023,7 +1075,12 @@ def _attach_pending_call(
     bound_hashes = checkpoint.get("bound_manifest_hashes")
     require(isinstance(bound_hashes, list), "checkpoint_bound_manifests")
     require(manifest_hash not in bound_hashes, "acceptance_operation_duplicate")
-    call_no = len(bound_hashes) + 1
+    # A structure repair is a second charged attempt on an already-authorized
+    # manifest.  The server binds it to this run and takes the next ordinal, so
+    # the driver's own list of confirmed manifests is no longer the ordinal
+    # source; ask the ledger what the next ordinal actually is.
+    ledger = api.acceptance_summary(str(run_id))
+    call_no = int(ledger["call_count"]) + 1
     require(call_no <= MAX_ACCEPTANCE_CALLS, "acceptance_budget_exceeded")
     expected_kind = {"snapshot", "real_query", "llm", "report"}
     require(kind in expected_kind, "call_kind")
@@ -1038,7 +1095,14 @@ def _attach_pending_call(
         checkpoint=checkpoint,
         expected_call_count=call_no,
     )
-    require(summary["charged_request_count"] == 0, "acceptance_call_already_charged")
+    # Every earlier call must already be charged exactly once, and the call
+    # just attached must not be charged yet.  Requiring a run-wide zero held
+    # only while call 1 was the sole ordinal, so no second call could ever be
+    # attached: the Snapshot charge made this fail before the first LLM turn.
+    require(
+        summary["charged_request_count"] == call_no - 1,
+        "acceptance_call_already_charged",
+    )
     bound_hashes.append(manifest_hash)
     if kind == "snapshot":
         checkpoint["snapshot_calls"] = int(checkpoint["snapshot_calls"]) + 1
@@ -1201,6 +1265,7 @@ class PlaybackSocket:
         self,
         *,
         event_type: str | None = None,
+        event_types: frozenset[str] | None = None,
         message_type: str | None = None,
         turn_id: str | None = None,
         timeout_seconds: float = 30.0,
@@ -1209,6 +1274,8 @@ class PlaybackSocket:
         while time.monotonic() < deadline:
             event = self._receive(timeout=min(2.0, max(0.1, deadline - time.monotonic())))
             if event_type is not None and event.get("event_type") != event_type:
+                continue
+            if event_types is not None and event.get("event_type") not in event_types:
                 continue
             if message_type is not None and event.get("message_type") != message_type:
                 continue
@@ -1301,7 +1368,9 @@ class PlaybackSocket:
                 "turn_id": turn_id,
             }
         )
-        self._wait(event_type="playback.waiting_next")
+        # The final turn of the last round completes playback and finishes the
+        # Debate server-side; only earlier turns return to waiting_next.
+        self._wait(event_types=TERMINAL_OR_WAITING_EVENTS)
 
 
 def _fetch_audio(api: Api, media_url: str) -> None:
@@ -1515,6 +1584,7 @@ def _verify_report_policy_binding(
     report_manifest_hash: str,
     acceptance_run_id: str,
     expected_policy_hash: str,
+    report_call_no: int,
 ) -> None:
     """Verify the Report manifest through its scope and bound call 8."""
 
@@ -1540,7 +1610,7 @@ def _verify_report_policy_binding(
             "manifest_hash": report_manifest_hash,
             "revision_id": revision_id,
             "run_id": acceptance_run_id,
-            "call_no": EXPECTED_HAPPY_PATH_CALLS,
+            "call_no": report_call_no,
         },
     ).all()
     require(report_policy == [(expected_policy_hash,)], "report_policy_binding")
@@ -1562,7 +1632,7 @@ def report_acceptance_adapter(
     require(isinstance(debate_id, str), "acceptance_debate_missing")
     require(HASH_RE.fullmatch(report_policy_hash) is not None, "report_policy_hash")
     require(checkpoint["report_calls"] == 0, "report_call_already_bound")
-    require(len(checkpoint["bound_manifest_hashes"]) == DEBATE_STAGE_CALLS, "report_call_order")
+    require(len(checkpoint["bound_manifest_hashes"]) == fixture.plan["debate_stage"], "report_call_order")
 
     opened = api.open_interaction(debate_id)
     require(opened.get("status") == "open", "interaction_not_open")
@@ -1573,7 +1643,7 @@ def report_acceptance_adapter(
         api,
         checkpoint,
         fixture,
-        expected_call_count=DEBATE_STAGE_CALLS,
+        expected_call_count=fixture.plan["debate_stage"],
     )
     pending = _wait_report_pending(api, debate_id)
     revision_id = opaque(pending.get("report_revision_id"), "report_revision_id")
@@ -1585,7 +1655,7 @@ def report_acceptance_adapter(
         api,
         checkpoint,
         fixture,
-        expected_call_count=DEBATE_STAGE_CALLS,
+        expected_call_count=fixture.plan["debate_stage"],
     )
 
     # Preserve the exact disclosure CAS before associating the revision with
@@ -1596,7 +1666,7 @@ def report_acceptance_adapter(
         bound_report,
         fixture=fixture,
         checkpoint=checkpoint,
-        expected_call_count=DEBATE_STAGE_CALLS,
+        expected_call_count=fixture.plan["debate_stage"],
         expected_debate_id=debate_id,
     )
     _attach_pending_call(
@@ -1611,7 +1681,7 @@ def report_acceptance_adapter(
         debate_id,
         revision_id,
         manifest_hash=str(pending["manifest_hash"]),
-        call_no=EXPECTED_HAPPY_PATH_CALLS,
+        call_no=fixture.plan["expected_happy_path"],
     )
     failure = _report_failure_code(continued)
     if failure is not None:
@@ -1636,7 +1706,7 @@ def report_acceptance_adapter(
         api,
         checkpoint,
         fixture,
-        expected_call_count=EXPECTED_HAPPY_PATH_CALLS,
+        expected_call_count=fixture.plan["expected_happy_path"],
     )
     return {
         "status": "REAL_CORE_DEMO_REPORT_PASS",
@@ -1752,7 +1822,7 @@ def execute(
                     {"agent_id": checkpoint["real_agent_id"], "stance_mode": "open"},
                 ],
                 "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-                "round_count": 2,
+                "round_count": int(fixture.manifest["debate_shape"]["round_count"]),
             },
             key="real-core-demo-create-debate-0001",
         )
@@ -1785,10 +1855,13 @@ def execute(
         require(isinstance(expected_control_version, int), "control_version")
         epoch = socket.acquire(expected_control_version)
 
-        for turn_index in range(4):
-            # The mutual-learning order is A, B, A, B. Slot B is the sole real
-            # Snapshot participant, hence two independent real queries.
-            if turn_index in {1, 3}:
+        agent_count = int(fixture.manifest["debate_shape"]["agent_count"])
+        real_index = int(fixture.manifest["debate_shape"]["real_participant_index"])
+        for turn_index in range(fixture.plan["turns"]):
+            # Turns cycle through the slots in click order, so a participant
+            # speaks once per round.  Only a participant whose Snapshot carries
+            # the real embedding identity charges a retrieval query.
+            if turn_index % agent_count == real_index:
                 detail = _debate_detail(teacher, debate_id)
                 turn_id = opaque(detail["playback"].get("current_turn_id"), "turn_id")
                 checkpoint["current_turn_id"] = turn_id
@@ -1894,7 +1967,7 @@ def execute(
             checkpoint["current_turn_id"] = turn_id
             write_checkpoint(checkpoint_path, checkpoint)
 
-            if turn_index < 3:
+            if turn_index < fixture.plan["turns"] - 1:
                 after_end = _debate_detail(teacher, debate_id)
                 after_playback = after_end["playback"]
                 require(after_playback.get("status") == "waiting_next", "waiting_next")
@@ -1915,15 +1988,26 @@ def execute(
         finished_playback = finished["playback"]
         finish_version = finished_playback.get("control_version")
         require(isinstance(finish_version, int), "control_version")
-        teacher.request(
-            "POST",
-            f"/api/v1/debates/{debate_id}/finish",
-            expected={200},
-            body={
-                "expected_control_version": finish_version,
-                "expected_current_turn_id": finished_playback.get("current_turn_id"),
-            },
-            key="real-core-demo-finish-0001",
+        # Acknowledging the last turn of the last round already transitions the
+        # Debate to debate_finished with completed playback.  The explicit
+        # Finish command is the teacher's early-termination path and is only
+        # accepted while playback is still waiting for Next, so issuing it here
+        # would fail closed on the complete happy path.
+        if str(finished.get("status")) not in AUTO_FINISHED_DEBATE_STATUSES:
+            teacher.request(
+                "POST",
+                f"/api/v1/debates/{debate_id}/finish",
+                expected={200},
+                body={
+                    "expected_control_version": finish_version,
+                    "expected_current_turn_id": finished_playback.get("current_turn_id"),
+                },
+                key="real-core-demo-finish-0001",
+            )
+            finished = _debate_detail(teacher, debate_id)
+        require(
+            str(finished.get("status")) in AUTO_FINISHED_DEBATE_STATUSES,
+            "debate_not_finished",
         )
         transcript = teacher.transcript(debate_id)
         turns = transcript.get("turns")
@@ -1932,14 +2016,14 @@ def execute(
             checkpoint["snapshot_calls"] == 1
             and checkpoint["real_query_calls"] == 2
             and checkpoint["llm_calls"] == 4
-            and len(checkpoint["bound_manifest_hashes"]) == DEBATE_STAGE_CALLS,
+            and len(checkpoint["bound_manifest_hashes"]) == fixture.plan["debate_stage"],
             "debate_stage_call_counts",
         )
         _assert_charged_summary(
             teacher,
             checkpoint,
             fixture,
-            expected_call_count=DEBATE_STAGE_CALLS,
+            expected_call_count=fixture.plan["debate_stage"],
         )
         report_result = report_acceptance_adapter(
             api=teacher,
@@ -1957,8 +2041,8 @@ def execute(
             "snapshot_calls": checkpoint["snapshot_calls"],
             "real_query_calls": checkpoint["real_query_calls"],
             "llm_calls": checkpoint["llm_calls"],
-            "debate_stage_calls": DEBATE_STAGE_CALLS,
-            "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
+            "debate_stage_calls": fixture.plan["debate_stage"],
+            "expected_happy_path_calls": fixture.plan["expected_happy_path"],
             "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
             "total_calls": len(checkpoint["bound_manifest_hashes"]),
         }
@@ -2000,7 +2084,7 @@ def verify(
     require(checkpoint["llm_calls"] == 4, "checkpoint_llm_calls")
     require(checkpoint["report_calls"] == 1, "checkpoint_report_calls")
     require(
-        len(checkpoint["bound_manifest_hashes"]) == EXPECTED_HAPPY_PATH_CALLS,
+        len(checkpoint["bound_manifest_hashes"]) == fixture.plan["expected_happy_path"],
         "checkpoint_total_calls",
     )
     if str(BACKEND) not in sys.path:
@@ -2230,6 +2314,7 @@ def verify(
                 report_manifest_hash=str(checkpoint["bound_manifest_hashes"][-1]),
                 acceptance_run_id=str(checkpoint["acceptance_run_id"]),
                 expected_policy_hash=report_policy_hash,
+                report_call_no=fixture.plan["expected_happy_path"],
             )
             run_counts = connection.execute(
                 text(
@@ -2238,7 +2323,7 @@ def verify(
                 ),
                 {"run_id": checkpoint["acceptance_run_id"]},
             ).one()
-            require(tuple(map(int, run_counts)) == (EXPECTED_HAPPY_PATH_CALLS, EXPECTED_HAPPY_PATH_CALLS), "run_charge_count")
+            require(tuple(map(int, run_counts)) == (fixture.plan["expected_happy_path"], fixture.plan["expected_happy_path"]), "run_charge_count")
     finally:
         database.dispose()
     checkpoint["state"] = "verified"
@@ -2251,10 +2336,10 @@ def verify(
         "real_query_calls": 2,
         "llm_calls": 4,
         "report_calls": 1,
-        "debate_stage_calls": DEBATE_STAGE_CALLS,
-        "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
+        "debate_stage_calls": fixture.plan["debate_stage"],
+        "expected_happy_path_calls": fixture.plan["expected_happy_path"],
         "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
-        "total_calls": EXPECTED_HAPPY_PATH_CALLS,
+        "total_calls": fixture.plan["expected_happy_path"],
     }
 
 
@@ -2291,7 +2376,7 @@ def main(argv: list[str] | None = None) -> int:
                 "real_query_calls": 0,
                 "llm_calls": 0,
                 "debate_stage_calls": 0,
-                "expected_happy_path_calls": EXPECTED_HAPPY_PATH_CALLS,
+                "expected_happy_path_calls": fixture.plan["expected_happy_path"],
                 "max_acceptance_calls": MAX_ACCEPTANCE_CALLS,
                 "total_calls": 0,
             }

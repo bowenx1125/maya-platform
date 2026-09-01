@@ -452,6 +452,7 @@ def test_sql_start_prepares_only_current_and_successor_without_public_leak(
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -546,6 +547,7 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
                 "topic": "A valid English topic",
                 "participants": participants,
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -609,6 +611,7 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
                 "topic": TOPIC,
                 "participants": participants,
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
                 "expected_revision": 0,
             },
         )
@@ -671,6 +674,7 @@ def test_sql_next_cross_session_claim_has_one_winner_and_stable_stale_loser(
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -891,6 +895,7 @@ def test_sql_shared_attempt_two_commits_under_the_original_claim(app_factory: An
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -963,6 +968,7 @@ def test_sql_concurrent_different_starts_leave_one_running_debate(app_factory: A
                         },
                     ],
                     "round_count": 2,
+                    "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
                 },
             )
             assert created.status_code == 201, created.text
@@ -1038,6 +1044,7 @@ def test_sql_state_and_event_share_one_commit_or_rollback(app_factory: Any) -> N
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -1387,6 +1394,7 @@ def test_websocket_drives_four_public_turns_and_replay_without_regeneration(
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -1736,6 +1744,7 @@ def test_websocket_sessions_release_small_sqlite_pool_for_http_requests(
                 },
             ],
             "round_count": 2,
+            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
         }
         create_headers = _headers(csrf, **{"Idempotency-Key": "wave2-pool-create-0001"})
         created = client.post(
@@ -2874,6 +2883,7 @@ def test_websocket_terminal_controller_acquire_is_private_stable_rejection(
                 },
             ],
             "round_count": 2,
+            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
         }
         created = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
@@ -3017,6 +3027,7 @@ def test_sql_restart_fails_the_turn_owned_by_an_interrupted_job(app_factory: Any
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text
@@ -3310,6 +3321,7 @@ def test_websocket_exact_configured_origin_delivers_authorized_snapshot(
                     },
                 ],
                 "round_count": 2,
+                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
         assert created.status_code == 201, created.text

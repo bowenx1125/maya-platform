@@ -28,12 +28,19 @@ RULE_SET_ID_V2: Literal["ordered_multi_agent_rounds_demo_v2"] = "ordered_multi_a
 RULE_SET_ID_MUTUAL_LEARNING: Literal["ordered_multi_expert_mutual_learning_v1"] = (
     "ordered_multi_expert_mutual_learning_v1"
 )
+# Read models keep every RuleSet an immutable Debate may already carry.
 RuleSetId = Literal[
     "ordered_multi_agent_rounds_demo_v1",
     "ordered_multi_agent_rounds_demo_v2",
     "ordered_multi_expert_mutual_learning_v1",
 ]
 RULE_SET_ID: Literal["ordered_multi_agent_rounds_demo_v2"] = RULE_SET_ID_V2
+# A new Debate created through the API is always ordered multi-expert mutual
+# learning.  The legacy RuleSets keep their frozen planner behaviour above and
+# stay readable, but no product surface offers them any more.
+NEW_DEBATE_RULE_SET_ID: Literal["ordered_multi_expert_mutual_learning_v1"] = (
+    RULE_SET_ID_MUTUAL_LEARNING
+)
 MOCK_RETRIEVAL_POLICY_ID: Literal["mock_lexical_anchor_v2"] = "mock_lexical_anchor_v2"
 
 
@@ -69,7 +76,7 @@ class DebateDraftRequest(_ClosedModel):
     )
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: int = Field(ge=2, le=5)
-    rule_set_id: RuleSetId = RULE_SET_ID
+    rule_set_id: RuleSetId = NEW_DEBATE_RULE_SET_ID
     total_duration_seconds: None = None
     turn_duration_seconds: None = None
 

@@ -16,10 +16,10 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
-from sqlalchemy import Engine, Table, func, select, update
+from sqlalchemy import Engine, Table, func, select, text, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -608,6 +608,49 @@ class ProviderRepository:
             budget_bucket=str(row["budget_bucket"]),
         )
 
+    def _inherit_acceptance_binding(
+        self,
+        connection: Any,
+        request: ProviderReservationRequestV1,
+    ) -> tuple[str, int] | None:
+        """Bind a structure-repair attempt to its first attempt's run ordinal.
+
+        A repair is not a new teacher decision: it re-sends the same authorized
+        manifest once with frozen feedback. Requiring a separate confirmation
+        would be impossible mid-turn, and leaving the attempt unbound would hide
+        a charged request from the acceptance ledger. So attempt two inherits
+        the run of the attempt that the teacher already confirmed and takes the
+        next free ordinal, which keeps the derived budget honest.
+        """
+
+        if request.attempt_no <= 1:
+            return None
+        row = connection.execute(
+            text(
+                "SELECT acceptance_run_id FROM provider_operations "
+                "WHERE export_manifest_hash=:manifest_hash AND scope_id=:scope_id "
+                "AND logical_item_id=:logical_item_id AND attempt_no=:previous_attempt "
+                "AND acceptance_run_id IS NOT NULL"
+            ),
+            {
+                "manifest_hash": request.export_manifest_hash,
+                "scope_id": request.scope_id,
+                "logical_item_id": request.logical_item_id,
+                "previous_attempt": request.attempt_no - 1,
+            },
+        ).first()
+        if row is None or row[0] is None:
+            return None
+        run_id = str(row[0])
+        highest = connection.execute(
+            text(
+                "SELECT COALESCE(MAX(call_no), 0) FROM provider_operations "
+                "WHERE acceptance_run_id=:run_id"
+            ),
+            {"run_id": run_id},
+        ).scalar_one()
+        return run_id, int(highest or 0) + 1
+
     def create_prepared(self, request: ProviderReservationRequestV1) -> ProviderOperationV1:
         if request.provider_operation == "llm_debate":
             raise ProviderRepositoryError(
@@ -642,6 +685,9 @@ class ProviderRepository:
         }
         try:
             with self._write_connection() as connection:
+                inherited = self._inherit_acceptance_binding(connection, request)
+                if inherited is not None:
+                    values["acceptance_run_id"], values["call_no"] = inherited
                 connection.execute(_OPERATION_TABLE.insert().values(**values))
         except IntegrityError as exc:
             raise DuplicateOperation("provider attempt already exists") from exc
