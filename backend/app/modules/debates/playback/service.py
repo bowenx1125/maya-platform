@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 import re
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
@@ -47,6 +48,7 @@ from .schemas import (
     RetrievalSourceDTO,
 )
 
+LOGGER = logging.getLogger(__name__)
 _WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*")
 _SAFE_GENERATION_CODES = {
     "turn_generation_failed",
@@ -1265,6 +1267,20 @@ class PlaybackService:
         return {"phase": phase, "round_count": round_count}
 
     @staticmethod
+    def _mutual_phase_only(debate: Any, turn: Any) -> dict[str, Any]:
+        """Return just the phase for closed REST read models.
+
+        The WebSocket event schema carries ``round_count`` beside ``phase``,
+        but ``DebateTurn`` is a closed model that permits only ``phase``.
+        Splatting the full WS payload into a transcript turn therefore makes
+        every mutual-learning transcript fail response validation.
+        """
+
+        payload = PlaybackService._mutual_phase_payload(debate, turn)
+        phase = payload.get("phase")
+        return {"phase": phase} if phase is not None else {}
+
+    @staticmethod
     def _mutual_round_count(debate: Any) -> int | None:
         if (
             str(PlaybackService._get(debate, "rule_set_id", default=""))
@@ -1957,6 +1973,17 @@ class PlaybackService:
             raise
         except Exception as exc:
             last_error = exc
+            # Record only the exception type.  The message can carry provider
+            # or student data, but without this line a turn that dies before
+            # its provider manifest leaves nothing but the generic
+            # ``turn_generation_failed`` safe code and is undiagnosable.
+            LOGGER.error(
+                "Turn preparation failed debate_id=%s turn_id=%s error_type=%s",
+                debate_id,
+                turn_id,
+                type(exc).__name__,
+                exc_info=False,
+            )
             # The final Turn/source/job writes and the LLM operation CAS share
             # this transaction.  Roll back before either the recoverable or
             # terminal handler starts a new state transition.
@@ -4656,7 +4683,7 @@ class PlaybackService:
                     "id": str(turn.id),
                     "participant_id": str(turn.participant_id),
                     "round_no": self._round(turn),
-                    **self._mutual_phase_payload(debate, turn),
+                    **self._mutual_phase_only(debate, turn),
                     "turn_index": int(self._get(turn, "turn_index", default=0) or 0),
                     "speech": speech,
                     "retrieval_status": str(

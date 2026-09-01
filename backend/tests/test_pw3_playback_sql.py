@@ -1031,3 +1031,163 @@ async def test_sql_replay_next_rollback_cas_returns_successor_to_waiting_gate(
             assert playback.audio_duration_ms == 0
     finally:
         database.dispose()
+
+
+def _add_mutual_round_two_successor(
+    database: Database, debate_id: str, first_turn_id: str
+) -> tuple[str, str]:
+    """Complete round 1 and stage the first round-2 turn of a mutual Debate.
+
+    The round-boundary Next claim compares the successor's visible predecessor
+    set against a counted prefix.  Both sides must be scoped to the successor's
+    round; scoping the count to the current turn's round makes every mutual
+    round boundary permanently unclaimable.
+    """
+
+    now = datetime.now(UTC)
+    peer_id, successor_id = str(uuid4()), str(uuid4())
+    with database.session() as db:
+        debate = db.get(Debate, debate_id)
+        first = db.get(DebateTurn, first_turn_id)
+        assert debate is not None and first is not None
+        participant = db.get(DebateParticipant, first.participant_id)
+        assert participant is not None
+        debate.rule_set_id = "ordered_multi_expert_mutual_learning_v1"
+        debate.round_count = 2
+        debate.status = "running"
+        first.round_no = 1
+        first.turn_index = 0
+        first.publication_status = "public"
+        first.public_at = now
+        first.predecessor_turn_ids_json = "[]"
+        first.cutoff_turn_index = -1
+
+        store = AudioStore(database.data_root or Path("/tmp"))
+        for turn_id, turn_index, round_no, predecessors, cutoff in (
+            (peer_id, 1, 1, [], -1),
+            (successor_id, 2, 2, [first_turn_id, peer_id], 1),
+        ):
+            file_id = str(uuid4())
+            metadata = store.store_bytes(
+                course_id=COURSE_ID,
+                debate_id=debate_id,
+                turn_id=turn_id,
+                raw=_wav_bytes(),
+            )
+            db.add(
+                StoredFile(
+                    id=file_id,
+                    kind="debate_audio",
+                    relative_path=metadata.relative_path,
+                    sha256=metadata.sha256,
+                    size_bytes=metadata.size_bytes,
+                    state="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            db.add(
+                DebateTurn(
+                    id=turn_id,
+                    debate_id=debate_id,
+                    participant_id=participant.id,
+                    knowledge_snapshot_id=participant.knowledge_snapshot_id,
+                    round_no=round_no,
+                    turn_index=turn_index,
+                    generation_status="final_ready",
+                    publication_status="public" if round_no == 1 else "unpublished",
+                    preparation_stage="ready",
+                    speech=_valid_speech(),
+                    structured_json='{"position_summary":"A mutual position."}',
+                    predecessor_turn_ids_json=json.dumps(predecessors, separators=(",", ":")),
+                    transcript_hash="c" * 64,
+                    cutoff_turn_index=cutoff,
+                    retrieval_status="no_match",
+                    grounding_mode="general_reasoning",
+                    retrieval_receipts_json="[]",
+                    word_count=80,
+                    attempt=1,
+                    audio_file_id=file_id,
+                    audio_duration_ms=metadata.duration_ms,
+                    actual_tts_voice_kind="mock_sentinel",
+                    actual_tts_voice_profile_id=None,
+                    safe_error_code=None,
+                    created_at=now,
+                    updated_at=now,
+                    public_at=now if round_no == 1 else None,
+                )
+            )
+            db.flush()
+            db.add(
+                Job(
+                    id=str(uuid4()),
+                    document_id=None,
+                    debate_id=debate_id,
+                    turn_id=turn_id,
+                    idempotency_key=f"{debate_id}:{turn_id}",
+                    claim_token=str(uuid4()),
+                    cancellation_generation=0,
+                    operation="debate_turn_prepare",
+                    state="completed",
+                    safe_error_code=None,
+                    attempt=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        playback = db.scalar(
+            select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+        )
+        assert playback is not None
+        playback.status = "waiting_next"
+        playback.mode = "live"
+        playback.current_turn_id = peer_id
+        playback.control_version = 8
+        playback.controller_epoch = None
+        playback.controller_owner_connection = None
+        playback.replay_scope = None
+        playback.replay_index = None
+        playback.pending_action = None
+        playback.pending_ticket_hash = None
+        playback.pending_media_command_id = None
+    return peer_id, successor_id
+
+
+def test_mutual_learning_next_claim_crosses_a_round_boundary(app_factory: Any) -> None:
+    database, _settings, debate_id, first_turn_id = _seed_one_turn(app_factory)
+    try:
+        peer_id, successor_id = _add_mutual_round_two_successor(
+            database, debate_id, first_turn_id
+        )
+        repository = SqlPlaybackRepository(session_factory=database.session_factory)
+        claimed = repository.claim_next_playback(
+            debate_id=debate_id,
+            expected_control_version=8,
+            expected_current_turn_id=peer_id,
+            successor_turn_id=successor_id,
+            teacher_user_id=TEACHER_ID,
+        )
+        assert claimed is True
+        with database.session() as db:
+            playback = db.scalar(
+                select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+            )
+            assert playback is not None
+            assert playback.current_turn_id == successor_id
+            assert playback.status == "ready"
+            assert playback.control_version == 9
+    finally:
+        database.dispose()
+
+
+def test_mutual_learning_transcript_turn_omits_round_count(app_factory: Any) -> None:
+    """``DebateTurn`` is closed, so the WS-only round_count must not leak in."""
+
+    debate = SimpleNamespace(
+        rule_set_id="ordered_multi_expert_mutual_learning_v1", round_count=2
+    )
+    turn = SimpleNamespace(round_no=2)
+    ws_payload = PlaybackService._mutual_phase_payload(debate, turn)
+    rest_payload = PlaybackService._mutual_phase_only(debate, turn)
+    assert ws_payload == {"phase": "final_integration", "round_count": 2}
+    assert rest_payload == {"phase": "final_integration"}

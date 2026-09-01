@@ -836,8 +836,12 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND prefix_count.turn_index < CASE "
                     "WHEN d.rule_set_id=:mutual_rule_set_id THEN successor.turn_index "
                     "ELSE current_turn.turn_index END "
+                    # The mutual-learning visible set belongs to the successor's
+                    # round, exactly like the cutoff and predecessor checks
+                    # below.  Counting against the current turn's round makes
+                    # every round boundary unclaimable.
                     "AND (d.rule_set_id <> :mutual_rule_set_id "
-                    "OR prefix_count.round_no < current_turn.round_no)) "
+                    "OR prefix_count.round_no < successor.round_no)) "
                     "= CASE WHEN d.rule_set_id=:mutual_rule_set_id "
                     "THEN json_array_length(successor.predecessor_turn_ids_json) "
                     "ELSE current_turn.turn_index END "
