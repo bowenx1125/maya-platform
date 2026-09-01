@@ -28,7 +28,6 @@ from app.providers.llm_price_card import (
 from app.providers.llm_tokenizer import (
     LLMTokenizerError,
     tokenizer_asset_hash_valid,
-    tokenizer_authorized,
 )
 
 from .real_schema import (
@@ -113,8 +112,8 @@ def _safe_policy_hash(value: str | None, config: DashScopeLLMConfig) -> str:
 
 
 def _tokenizer_identity(tokenizer: object) -> tuple[str, str]:
-    if not tokenizer_authorized(tokenizer):
-        raise ReportBoundaryError("report_tokenizer_unapproved")
+    # Demo V1 removed the supplier-tokenizer authorization gate; the exact ID
+    # and asset hash below stay mandatory so the Report request records them.
     tokenizer_id = getattr(tokenizer, "tokenizer_id", None)
     asset_hash = getattr(tokenizer, "asset_hash", None)
     if (

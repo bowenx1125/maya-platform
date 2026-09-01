@@ -1265,11 +1265,18 @@ class ProviderExportManifest(Base):
             "(debate_id IS NOT NULL AND turn_id IS NOT NULL)",
             name="ck_provider_export_manifests_llm_owner",
         ),
+        # An LLM turn manifest is either the ordinary two-attempt envelope that
+        # discloses the exact repair-feedback policy, or the bounded Real-Core
+        # Demo one-shot envelope that has no repair attempt and therefore must
+        # not disclose a repair policy at all.  ``ExportManifestV1`` enforces
+        # the same pair, so a one-shot row can never carry repair fields.
         CheckConstraint(
             "provider_operation <> 'llm_debate_turn' OR "
             "(max_attempts = 2 AND repair_policy_version = 'repair_feedback_v1' "
             "AND repair_policy_hash = "
-            "'d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b')",
+            "'d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b') OR "
+            "(max_attempts = 1 AND repair_policy_version IS NULL "
+            "AND repair_policy_hash IS NULL)",
             name="ck_provider_export_manifests_llm_retry_policy",
         ),
         CheckConstraint(

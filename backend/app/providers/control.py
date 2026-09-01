@@ -59,15 +59,70 @@ TTS_SYNTHESIS_BUCKET = "tts_synthesis"
 VOICE_ENROLLMENT_BUCKET = "voice_enrollment"
 REPAIR_FEEDBACK_POLICY_VERSION = "repair_feedback_v1"
 REPAIR_FEEDBACK_POLICY_HASH = "d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b"
-LLM_TURN_OUTPUT_SCHEMA_HASH = "1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c"
+LLM_TURN_OUTPUT_SCHEMA_HASH = "77769a5fdc0e6ef368c048a6e2b28891c1702a2d904da2471bcf7b2ed9df253f"
 LLM_RECOVERY_INPUT_VERSION = "llm_recovery_input_v1"
 LLM_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 DEMO_ACCEPTANCE_PLAN_VERSION: Literal["real_core_demo_v2"] = "real_core_demo_v2"
-# Seven calls is the expected count for the current 2-agent x 2-round fixture,
-# not a runtime invariant.  The eighth ordinal is a deliberately small safety
-# ceiling for a semantically necessary extra operation such as a fresh query.
-DEMO_ACCEPTANCE_EXPECTED_CALLS = 7
-DEMO_ACCEPTANCE_MAX_CALLS = 8
+# The mutual-learning protocol admits 2-5 Agents over 2-5 rounds, so a Demo run
+# has no single call count.  The expected count is computed from the Debate's
+# own shape; only the absolute ceiling below is a constant, and it exists to
+# bound a runaway ordinal rather than to describe any particular run.
+DEMO_ACCEPTANCE_MIN_AGENTS = 2
+DEMO_ACCEPTANCE_MAX_AGENTS = 5
+DEMO_ACCEPTANCE_MIN_ROUNDS = 2
+DEMO_ACCEPTANCE_MAX_ROUNDS = 5
+
+
+def demo_acceptance_expected_calls(
+    *,
+    agent_count: int,
+    round_count: int,
+    real_snapshot_agents: int = 1,
+    include_report: bool = True,
+) -> int:
+    """Return the happy-path provider call count for one Debate shape.
+
+    One immutable Snapshot embedding is charged once for the run. Every turn
+    spoken by an Agent whose Snapshot carries the real embedding identity also
+    charges one retrieval query, every turn charges one debate-LLM call, and the
+    Maya Report charges one more. A structure-repair attempt is an extra call
+    that this happy-path count deliberately excludes; the ceiling covers it.
+    """
+
+    if not DEMO_ACCEPTANCE_MIN_AGENTS <= agent_count <= DEMO_ACCEPTANCE_MAX_AGENTS:
+        raise ProviderControlError("Demo acceptance agent count is out of range")
+    if not DEMO_ACCEPTANCE_MIN_ROUNDS <= round_count <= DEMO_ACCEPTANCE_MAX_ROUNDS:
+        raise ProviderControlError("Demo acceptance round count is out of range")
+    if not 0 <= real_snapshot_agents <= agent_count:
+        raise ProviderControlError("Demo acceptance real Snapshot count is out of range")
+    turns = agent_count * round_count
+    queries = real_snapshot_agents * round_count
+    return 1 + queries + turns + (1 if include_report else 0)
+
+
+def demo_acceptance_max_calls(
+    *,
+    agent_count: int,
+    round_count: int,
+    real_snapshot_agents: int = 1,
+) -> int:
+    """Return the ceiling for one Debate shape, allowing one repair per turn."""
+
+    happy = demo_acceptance_expected_calls(
+        agent_count=agent_count,
+        round_count=round_count,
+        real_snapshot_agents=real_snapshot_agents,
+    )
+    return happy + agent_count * round_count
+
+
+# Absolute ordinal ceiling across every supported shape.  It is a safety bound
+# for the wire DTO, never the plan for a particular run.
+DEMO_ACCEPTANCE_MAX_CALLS = demo_acceptance_max_calls(
+    agent_count=DEMO_ACCEPTANCE_MAX_AGENTS,
+    round_count=DEMO_ACCEPTANCE_MAX_ROUNDS,
+    real_snapshot_agents=DEMO_ACCEPTANCE_MAX_AGENTS,
+)
 # Descriptive aliases keep the bounded Demo contract discoverable to callers.
 REAL_CORE_DEMO_PLAN_VERSION = DEMO_ACCEPTANCE_PLAN_VERSION
 REAL_CORE_DEMO_CALL_LIMIT = DEMO_ACCEPTANCE_MAX_CALLS

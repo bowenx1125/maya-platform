@@ -8,7 +8,11 @@ from typing import Literal, Protocol
 
 import httpx
 
-LLM_CONNECT_TIMEOUT_SECONDS = 5.0
+# Measured TLS handshakes to the fixed Beijing endpoint take 2.0-2.7s from
+# a developer network, so a 5s connect budget classified a healthy endpoint
+# as unreachable and burned an acceptance call. The total request timeout and
+# the no-retry rule are unchanged; only the connect budget is widened.
+LLM_CONNECT_TIMEOUT_SECONDS = 15.0
 LLM_TOTAL_TIMEOUT_SECONDS = 120.0
 LLM_ACCEPTED_HTTP_STATUS = 200
 

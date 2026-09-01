@@ -49,7 +49,7 @@ The current candidate freezes the missing decisions in:
 
 - `docs/contracts/wave4/LLM_A_RUNTIME_V1.md`;
 - `docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json` with SHA-256
-  `1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c`;
+  `77769a5fdc0e6ef368c048a6e2b28891c1702a2d904da2471bcf7b2ed9df253f`;
 - `docs/contracts/wave4/LLM_REPAIR_FEEDBACK_V1.json` with SHA-256
   `d5b81d460ecd713f4b3d52b5732efc935b63455c2a29b5a5ab2471b17d00050b`;
 - revised `PROVIDER_DATA_CALL_V1.md` and `PROMPT_BUDGET_V1.md` cross-references.

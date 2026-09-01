@@ -47,7 +47,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0016_real_core_acceptance_run"
+    assert ALEMBIC_HEAD == "0017_one_shot_llm_turn_manifest"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (

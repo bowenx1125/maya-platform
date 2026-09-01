@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
 
@@ -276,7 +277,28 @@ def test_request_hash_does_not_change_with_authorization_secret() -> None:
     ("tokenizer", "price_card", "expected"),
     (
         (None, _price_card(), "report_tokenizer_required"),
-        (ConservativeLLMTokenizer(), _price_card(), "report_tokenizer_unapproved"),
+        # Demo V1 removed the supplier-tokenizer authorization gate, so the
+        # conservative counter is accepted.  An exact ID and a well-formed
+        # asset hash stay mandatory because both are persisted with the
+        # request; a tokenizer that cannot name itself is still refused.
+        (
+            SimpleNamespace(
+                tokenizer_id="   ",
+                asset_hash="b" * 64,
+                count_tokens=lambda value: len(value.split()),
+            ),
+            _price_card(),
+            "report_tokenizer_invalid",
+        ),
+        (
+            SimpleNamespace(
+                tokenizer_id="unhashed-tokenizer",
+                asset_hash="not-a-sha256",
+                count_tokens=lambda value: len(value.split()),
+            ),
+            _price_card(),
+            "report_tokenizer_invalid",
+        ),
         (_tokenizer(), None, "report_price_card_required"),
         (_tokenizer(), LLMPriceCardV1(), "llm_price_card_unreviewed"),
     ),
@@ -432,3 +454,23 @@ def test_response_shape_and_private_or_provider_fields_fail_closed() -> None:
     with pytest.raises(ReportProviderError, match="report_message_shape"):
         _provider(transport).execute(_request())
     assert transport.calls == 1
+
+
+def test_conservative_tokenizer_backs_a_real_report_request() -> None:
+    """Demo V1 removed the supplier-tokenizer authorization gate.
+
+    The UTF-8 counter over-counts, so it can only reject an over-large request,
+    never authorize an under-counted one.  The request must still record that
+    counter's exact ID and asset hash so the ledger names it.
+    """
+
+    tokenizer = ConservativeLLMTokenizer()
+    provider = RealReportProvider(
+        config=DashScopeLLMConfig(workspace_id="workspace123"),
+        transport=FakeTransport(_response()),
+        tokenizer=tokenizer,
+        price_card=_price_card(),
+    )
+    prepared = provider.build_request(_request())
+    assert prepared.tokenizer_id == tokenizer.tokenizer_id
+    assert prepared.tokenizer_asset_hash == tokenizer.asset_hash

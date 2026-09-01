@@ -105,3 +105,40 @@ product budget.
 Distributed recovery, repeated restarts, broad recall evaluation, multiple real
 Snapshots/queries, corruption repair and generic Provider frameworks are explicitly
 `POST-DEMO-HARDENING`.
+
+## Demo V1 amendments (user decisions, 2026-09-01)
+
+These are recorded deviations from the frozen Wave 4 contracts, not silent drift. Each
+is reversible and is scoped to Demo V1.
+
+1. `SUPPLIER-TOKENIZER-GATE-REMOVED`. `LLM_A_RUNTIME_V1` and `PROMPT_BUDGET_V1` required a
+   reviewed supplier tokenizer before a real LLM request. W4-LLM-A never pinned one into
+   the product runtime, so both the real Debate LLM and the real Maya Report were
+   unreachable: `factory.llm_provider` passes no tokenizer, `main.py` passed the
+   conservative counter explicitly, and the gate refused both. The gate is removed. The
+   conservative UTF-8 counter over-counts, so it can only reject an over-large request.
+   The exact tokenizer ID and asset hash are still persisted with every request. Pinning
+   a real supplier tokenizer is Wave 4.1 work.
+2. `LLM-TURN-SCHEMA-MOUNT`. `docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json` is read
+   at runtime but the backend image is built from `./backend` alone, so the file was
+   absent in the container and every real turn failed with `schema_unavailable`. The
+   loader now accepts the repository layout or a sibling `docs` directory, and Compose
+   mounts the frozen contract directory read-only. The exact content hash is still
+   verified on load.
+3. `CONFIG-FAILURE-STAYS-TERMINAL`. `llm_tokenizer_unauthorized` and
+   `provider_preflight_blocked` remain outside `_SAFE_GENERATION_CODES`, so a
+   configuration fault still fails the Debate closed rather than parking it. The user
+   chose to keep the stricter semantics.
+
+## Operational corrections found by running the chain
+
+- `reset_demo_runtime.py` renames the runtime directory. A container that is only
+  stopped keeps its bind mount on the original inode, so the application and the
+  host-side importers silently diverge. Containers must be recreated with
+  `docker compose down` before `up -d`. The script now recreates an empty runtime
+  directory and prints this instruction.
+- An external Compose override must tag the port list `!override`; Compose merges
+  sequences by default and the container keeps publishing the shared `8080`.
+- `CLASSROOM_PUBLIC_BASE_URL` must be a private-LAN address (the classroom QR rejects
+  loopback) whose port matches the isolated gateway port (the CSRF origin check compares
+  ports).

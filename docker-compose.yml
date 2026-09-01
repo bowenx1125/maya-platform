@@ -83,6 +83,11 @@ services:
     volumes:
       - ./data:/app/data
       - ./backend/config:/app/config:ro
+      # The real LLM turn schema is a frozen repository contract that the
+      # backend image cannot COPY: its build context is ./backend. The loader
+      # verifies the exact content hash, so mounting it read-only here is the
+      # narrowest way to make the real Debate LLM path runnable in a container.
+      - ./docs/contracts/wave4:/app/docs/contracts/wave4:ro
     healthcheck:
       test:
         - CMD

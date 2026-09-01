@@ -46,11 +46,13 @@ For `llm_debate_turn_v1`:
 - any count or estimate over the limit fails before network I/O with a safe budget
   code; the turn remains unpublished and Mock is not mislabeled as real output.
 
-W4-LLM-A must pin the supplier-compatible local tokenizer and its asset hash. Before
-that tokenizer can authorize a request, a conservative fallback counts each UTF-8 byte
-as one token; it may reject an otherwise valid request but cannot authorize a real LLM
-request. The Provider's returned usage is evidence after send, never the only budget
-guard. Attempt 1 and 2 use the same tokenizer object identity, ID and asset hash.
+**Demo V1 amendment (user decision, 2026-09-01).** Pinning a supplier-compatible
+tokenizer moves to Wave 4.1, and the authorization gate that blocked the conservative
+fallback is removed. The conservative counter treats each UTF-8 byte as one token, so it
+over-estimates and can only reject an over-large request; it may therefore back a real
+request. Its exact ID and asset hash are still recorded with every request. The
+Provider's returned usage remains evidence after send, never the only budget guard.
+Attempt 1 and 2 still use the same tokenizer object identity, ID and asset hash.
 
 There is deliberately no percentage-reduction KPI. Acceptance measures the serialized
 baseline and final request, proves the duplicate classes are absent, and enforces the

@@ -40,9 +40,9 @@ from .llm_output import (
     LLMOutputError,
     MappedLLMTurnV1,
     RepairFeedbackV1,
-    load_llm_turn_output_schema,
     map_provider_output,
     parse_llm_output_json,
+    provider_wire_output_schema,
     validate_llm_output,
 )
 from .llm_price_card import (
@@ -68,7 +68,6 @@ from .llm_tokenizer import (
     LLMTokenizerError,
     LLMTokenizerPort,
     tokenizer_asset_hash_valid,
-    tokenizer_authorized,
 )
 from .llm_transport import (
     HttpxLLMTransport,
@@ -83,7 +82,7 @@ LLM_ENDPOINT_PATH: Final = "/compatible-mode/v1/chat/completions"
 DEFAULT_DASHSCOPE_LLM_ENDPOINT_PATH: Final = LLM_ENDPOINT_PATH
 LLM_PROVIDER_OPERATION: Final = "llm_debate_turn"
 LLM_PROMPT_CONTRACT_VERSION: Final = "prompt_request_v1"
-LLM_CONNECT_TIMEOUT: Final = 5.0
+LLM_CONNECT_TIMEOUT: Final = 15.0
 LLM_TOTAL_TIMEOUT: Final = 120.0
 LLM_RESERVED_OUTPUT_TOKENS: Final = LLM_RESERVED_OUTPUT_TOKEN_CAP
 REAL_LLM_MODEL: Final = LLM_MODEL_KEY
@@ -902,11 +901,9 @@ class DashScopeLLMAdapter:
         self.outbound_manifest = outbound_manifest
 
     def _validate_tokenizer(self) -> None:
-        if not tokenizer_authorized(self.tokenizer):
-            raise LLMAdapterError(
-                "a reviewed supplier-compatible tokenizer is required",
-                code="llm_tokenizer_unapproved",
-            )
+        # Demo V1 removed the supplier-tokenizer authorization gate.  The exact
+        # ID and asset hash are still mandatory because both are persisted with
+        # every request, so the ledger names the counter behind each estimate.
         tokenizer_id = getattr(self.tokenizer, "tokenizer_id", None)
         asset_hash = getattr(self.tokenizer, "asset_hash", None)
         if (
@@ -978,7 +975,9 @@ class DashScopeLLMAdapter:
         # Attempt two is also the proven-not-sent transport retry.  In that
         # case the caller deliberately supplies the unchanged base request;
         # structure repair supplies the optional closed feedback field.
-        schema = load_llm_turn_output_schema()
+        # Send the supplier-dialect projection.  ``LLM_TURN_OUTPUT_SCHEMA_HASH``
+        # still identifies the frozen contract that validates the response.
+        schema = provider_wire_output_schema()
         if not isinstance(schema, dict):  # defensive typing for the body below
             raise LLMAdapterError(code="llm_schema_invalid")
         payload = _request_user_payload(prompt)

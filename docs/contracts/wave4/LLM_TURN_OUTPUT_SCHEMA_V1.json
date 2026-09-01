@@ -141,7 +141,6 @@
     },
     "position_update_reason": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 1200
     },
     "remaining_uncertainty": {

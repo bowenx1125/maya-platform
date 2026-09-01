@@ -43,6 +43,44 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "request; discussing another Agent's claim never transfers that Agent's evidence.",
     "No receipt means honest general reasoning/no_match. Concrete quantities and named "
     "study, expert, survey, report, or source claims require a current receipt.",
+    # The server fails a turn closed when a retrieval hit is never represented
+    # by a claim, and that requirement was previously only enforced, never said.
+    "When this request supplies retrieval receipts, at least one key claim must cite one "
+    "of them in used_evidence_refs, using the 0-based index of that receipt in this "
+    "request's evidence catalog. Cite a receipt only where it genuinely supports the "
+    "claim; when the request supplies no receipt, leave every used_evidence_refs empty.",
+    # The server binds every claim to a span of the turn's own speech, so a
+    # paraphrased claim_text fails closed.  The rule was enforced but never
+    # stated, which made the first real provider turn reject itself.
+    "Every key_claims[].claim_text must be copied verbatim from this turn's own speech: "
+    "an exact character-for-character substring of it. Never paraphrase, shorten, "
+    "re-punctuate, translate or merge sentences when filling claim_text.",
+    # Every key below is required by the closed schema, so a phase-absent value
+    # has an exact written form.  The supplier's strict mode enforces shape but
+    # not minimum length, and these forms were previously never stated.
+    "position_summary and position_update_reason are always non-empty. "
+    "change_from_opening, unresolved_issue and final_recommendation use the empty "
+    "string '' as the explicit 'not applicable in this phase' value. Every list may be "
+    "empty, but a list entry is never an empty string.",
+    "The question object has exactly two legal forms. To ask nothing use mode='none' "
+    "with target_participant_ref=-1 and text='' (an empty string). To ask, use "
+    "mode='ask' with non-empty text that also appears in the speech, and "
+    "target_participant_ref as a 0-based index into this request's question targets; "
+    "never invent an index.",
+    "Opening must return: 2 to 4 key_claims; empty engagements; "
+    "answered_required_question=false; empty learned_from_others; "
+    "position_update='unchanged'; non-empty missing_information and "
+    "remaining_uncertainty; question mode='none'; and the empty string for "
+    "change_from_opening and final_recommendation with empty final_consensus and "
+    "final_disagreements. Its speech never addresses or evaluates another expert.",
+    "Exchange must return at least one key claim and at least one engagement targeting a "
+    "visible earlier-round claim by another expert, a non-empty position_update_reason, "
+    "and at most one question.",
+    "Final integration must return non-empty learned_from_others and "
+    "remaining_uncertainty, non-empty change_from_opening and final_recommendation, "
+    "question mode='none', and every final_disagreements category from "
+    "different_persona_or_framework, different_evidence, evidence_conflict, "
+    "insufficient_information or value_tradeoff.",
 )
 
 

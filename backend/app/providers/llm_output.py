@@ -21,7 +21,7 @@ from app.modules.debates.generation.types import (
 )
 
 LLM_TURN_OUTPUT_SCHEMA_HASH: Final = (
-    "1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c"
+    "77769a5fdc0e6ef368c048a6e2b28891c1702a2d904da2471bcf7b2ed9df253f"
 )
 LLM_TURN_OUTPUT_SCHEMA_NAME: Final = "maya_llm_turn_output_v1"
 LLM_TURN_OUTPUT_SCHEMA_VERSION: Final = "llm_turn_output_v1"
@@ -115,11 +115,31 @@ class MappedLLMTurnV1:
         return self.provider_output_hash
 
 
-def _schema_path() -> Path:
-    # ``providers`` -> ``app`` -> ``backend`` -> repository root.
+_SCHEMA_RELATIVE_PATH = "docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json"
+
+
+def _schema_candidates() -> tuple[Path, ...]:
+    """Return every layout that can hold the frozen wire schema.
+
+    A repository checkout keeps the file three levels above ``providers``
+    (``providers`` -> ``app`` -> ``backend`` -> repository root).  The backend
+    image is built from the ``backend`` directory alone, so the same file is
+    mounted beside the application package instead.  ``load`` still verifies the
+    exact content hash, so accepting either layout cannot widen the boundary.
+    """
+
+    module = Path(__file__).resolve()
     return (
-        Path(__file__).resolve().parents[3] / "docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json"
+        module.parents[3] / _SCHEMA_RELATIVE_PATH,
+        module.parents[2] / _SCHEMA_RELATIVE_PATH,
     )
+
+
+def _schema_path() -> Path:
+    for candidate in _schema_candidates():
+        if candidate.is_file():
+            return candidate
+    return _schema_candidates()[0]
 
 
 def load_llm_turn_output_schema() -> dict[str, object]:
@@ -134,6 +154,37 @@ def load_llm_turn_output_schema() -> dict[str, object]:
     if digest != LLM_TURN_OUTPUT_SCHEMA_HASH or not isinstance(value, dict):
         raise LLMOutputError("LLM output schema hash is stale", code="schema_hash_changed")
     return cast(dict[str, object], value)
+
+
+# The supplier's structured-output validator rejects an array that also carries
+# any of these keywords.  They are ordinary JSON Schema, so the frozen contract
+# keeps them and local validation keeps enforcing them; only the wire copy drops
+# them.  Removing a constraint from the request cannot widen what we accept back.
+_PROVIDER_UNSUPPORTED_ARRAY_KEYWORDS = frozenset(
+    {"uniqueItems", "contains", "minContains", "maxContains"}
+)
+
+
+def _provider_dialect(node: object) -> object:
+    if isinstance(node, dict):
+        drop = _PROVIDER_UNSUPPORTED_ARRAY_KEYWORDS if node.get("type") == "array" else frozenset()
+        return {key: _provider_dialect(item) for key, item in node.items() if key not in drop}
+    if isinstance(node, list):
+        return [_provider_dialect(item) for item in node]
+    return node
+
+
+def provider_wire_output_schema() -> dict[str, object]:
+    """Return the frozen schema projected into the supplier's dialect.
+
+    The repository schema stays the hash-checked authority for validating a
+    response.  This projection exists only because the supplier refuses a
+    request whose ``response_format`` schema constrains an array with
+    ``uniqueItems``; sending the frozen copy fails closed with HTTP 400 before
+    the model ever runs.
+    """
+
+    return cast(dict[str, object], _provider_dialect(load_llm_turn_output_schema()))
 
 
 def _canonical(value: object) -> str:
@@ -585,6 +636,7 @@ __all__ = [
     "RepairFeedbackV1",
     "canonical_repair_feedback",
     "load_llm_turn_output_schema",
+    "provider_wire_output_schema",
     "map_llm_output",
     "map_provider_output",
     "map_provider_turn_output",

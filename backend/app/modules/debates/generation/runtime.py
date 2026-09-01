@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -53,7 +54,6 @@ from app.providers.llm_price_card import (
     debate_budget_cap,
 )
 from app.providers.llm_privacy import LLMOutboundManifestV1, scan_llm_outbound_messages
-from app.providers.llm_tokenizer import tokenizer_authorized
 
 from .evidence_trace import (
     align_mutual_learning_claim_ids,
@@ -82,7 +82,8 @@ LLM_DEBATE_BUCKET = "llm_debate_turn"
 LLM_MAX_ATTEMPTS = 2
 LLM_MODEL_KEY = "qwen3.7-plus-2026-05-26"
 LLM_REGION = "cn-beijing"
-LLM_CONNECT_TIMEOUT_SECONDS = 5.0
+LOGGER = logging.getLogger(__name__)
+LLM_CONNECT_TIMEOUT_SECONDS = 15.0
 LLM_TOTAL_TIMEOUT_SECONDS = 120.0
 
 
@@ -752,8 +753,12 @@ class LLMTurnRuntime:
 
         if not isinstance(self.adapter, DashScopeLLMAdapter):
             return
+        # Demo V1 has no supplier-tokenizer authorization gate.  A counter must
+        # exist so the request records an exact tokenizer ID and asset hash, but
+        # the conservative UTF-8 estimate may back a real request: it
+        # over-counts, and the acceptance-run ledger is the real call cap.
         tokenizer = self.tokenizer or getattr(self.adapter, "tokenizer", None)
-        if tokenizer is None or not tokenizer_authorized(tokenizer):
+        if tokenizer is None:
             raise LLMRuntimeError(code="llm_tokenizer_unauthorized")
         card = cast(
             LLMPriceCardV1 | None,
@@ -800,13 +805,6 @@ class LLMTurnRuntime:
             raise LLMRuntimeError(
                 code=_safe_code(_read(exc, "code"), "export_data_forbidden")
             ) from exc
-        if self.tokenizer is not None and callable(tokenizer_authorized):
-            try:
-                authorized = bool(tokenizer_authorized(self.tokenizer))
-            except Exception:
-                authorized = False
-            if not authorized:
-                raise LLMRuntimeError(code="llm_tokenizer_unauthorized")
 
     def _build_request(
         self,
@@ -1241,9 +1239,14 @@ class LLMTurnRuntime:
             "generation_fence": _result_value(
                 request, "generation_fence", default=prepared.generation_fence_hash
             ),
+            # A one-shot envelope carries no repair policy, and the request
+            # then holds the empty string rather than ``None``.  The stage DTO
+            # accepts an absent policy but rejects an empty digest, so collapse
+            # the empty string back to "absent" here.
             "repair_policy_hash": _result_value(
                 request, "repair_policy_hash", default=prepared.repair_policy_hash or None
-            ),
+            )
+            or None,
             "repair_policy_version": _result_value(
                 response,
                 "repair_policy_version",
@@ -1334,6 +1337,14 @@ class LLMTurnRuntime:
             except TypeError:
                 return _invoke(validator, accepted)
         except LLMOutputError as exc:
+            # Safe code plus server-authored JSON pointers only: both name a
+            # position in our own schema and never echo the provider's text.
+            LOGGER.warning(
+                "LLM output rejected turn_id=%s code=%s pointers=%s",
+                prepared.turn_id,
+                exc.code,
+                ",".join(getattr(exc, "json_pointers", ()) or ()),
+            )
             request = _read(accepted, "request", default=prepared.request)
             usage = _read(accepted, "usage")
             safe_code = str(exc.code)
@@ -1927,6 +1938,22 @@ class LLMTurnRuntime:
                 repairable = True
             if safe_error and not repairable:
                 code = _safe_code(safe_error)
+                # Safe code and server-authored JSON pointers only: neither
+                # echoes provider text, and without them a terminal turn leaves
+                # nothing to diagnose but a generic failure.
+                LOGGER.warning(
+                    "LLM attempt rejected turn_id=%s attempt=%s code=%s pointers=%s",
+                    prepared.turn_id,
+                    current.attempt_no,
+                    code,
+                    ",".join(
+                        str(item)
+                        for item in cast(
+                            Sequence[object],
+                            _result_value(accepted, "json_pointers", default=()) or (),
+                        )
+                    ),
+                )
                 if operation_id is not None:
                     operation = self._transition(operation_id, "mark_failed", code=code)
                 traces.append(
@@ -2012,7 +2039,15 @@ class LLMTurnRuntime:
                     deferred_publication = publication_result
                 elif publication_result is not None:
                     operation = publication_result
-            except TurnValidationError:
+            except TurnValidationError as exc:
+                # The validator authors this message; it never contains model
+                # output.  Without it a rule failure is indistinguishable from
+                # any other generic turn failure.
+                LOGGER.warning(
+                    "Mutual-learning rule rejected a turn turn_id=%s reason=%s",
+                    prepared.turn_id,
+                    exc,
+                )
                 traces.append(
                     LLMAttemptTraceV1(
                         current.attempt_no,

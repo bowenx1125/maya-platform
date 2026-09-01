@@ -74,7 +74,7 @@ Official references checked 2026-08-31:
 
 The supplier schema is the exact repository file
 `LLM_TURN_OUTPUT_SCHEMA_V1.json`, SHA-256
-`1c401df76683a38aaa2206ea49df181d37aaf470e57b37f05c534f543f8eff7c`.
+`77769a5fdc0e6ef368c048a6e2b28891c1702a2d904da2471bcf7b2ed9df253f`.
 The schema name is `maya_llm_turn_output_v1`; `strict=true` and every object has
 `additionalProperties=false`.
 
@@ -311,9 +311,23 @@ exhaustion leave the Debate running; ordinary WS carries only the safe code.
 
 ## Tokenizer and retry continuity
 
-The first real LLM attempt requires a reviewed supplier-compatible local tokenizer with
+**Demo V1 amendment (user decision, 2026-09-01).** The supplier-tokenizer
+authorization gate is removed. W4-LLM-A never pinned a supplier tokenizer into the
+product runtime, so this clause made the real Debate LLM and real Maya Report paths
+unreachable: `factory.llm_provider` builds the adapter with no tokenizer and the adapter
+falls back to the conservative counter, which the gate then refused. Demo V1 accepts the
+conservative UTF-8 counter for a real request. It over-counts rather than under-counts,
+so it can only reject an over-large request, never authorize an under-counted one. An
+exact tokenizer ID and asset hash remain mandatory and are persisted with every request,
+so the ledger always names the counter behind an estimate. The bounded acceptance-run
+ledger, not this estimate, is what caps how many real requests may occur. Pinning a real
+supplier tokenizer is Wave 4.1 work.
+
+The original clause is retained below as the pre-Demo-V1 contract:
+
+~~The first real LLM attempt requires a reviewed supplier-compatible local tokenizer with
 immutable ID and asset hash. UTF-8 conservative counting may reject preparation but
-cannot authorize a real request. Attempt 2 must use the same tokenizer object identity,
+cannot authorize a real request.~~ Attempt 2 must use the same tokenizer object identity,
 ID/hash, exact base request, retrieval receipts, rule/persona/transcript hashes and model
 configuration. Structure repair may add only the frozen safe code and JSON pointer list.
 No retrieval or identity-bearing text is added.

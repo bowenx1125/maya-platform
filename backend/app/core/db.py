@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-ALEMBIC_HEAD = "0016_real_core_acceptance_run"
+ALEMBIC_HEAD = "0017_one_shot_llm_turn_manifest"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

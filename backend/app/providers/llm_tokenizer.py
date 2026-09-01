@@ -1,10 +1,14 @@
 """Supplier-tokenizer ports for the fixed Wave 4 LLM adapter.
 
 The adapter never downloads a tokenizer and never asks the supplier to count
-tokens.  A reviewed tokenizer is injected by the runtime with an immutable
-identifier and asset digest.  The conservative UTF-8 fallback is useful for
-rejecting over-large requests, but is deliberately marked unauthorized for a
-real request.
+tokens.  A tokenizer is injected by the runtime with an immutable identifier
+and asset digest, and both are recorded with every request so the ledger always
+states which counter produced an estimate.
+
+Demo V1 deliberately has no supplier-tokenizer authorization gate.  The
+conservative UTF-8 counter over-counts rather than under-counts, so it may back
+the pre-flight estimate directly.  The bounded acceptance-run ledger, not this
+estimate, is what caps how many real requests may occur.
 """
 
 from __future__ import annotations
@@ -44,11 +48,10 @@ class LLMTokenizerPort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ConservativeLLMTokenizer:
-    """Count one UTF-8 byte as one token and never authorize a real call."""
+    """Count one UTF-8 byte as one token: a deliberate over-estimate."""
 
     tokenizer_id: str = LLM_TOKENIZER_FALLBACK_ID
     asset_hash: str = LLM_TOKENIZER_FALLBACK_ASSET_HASH
-    authorized: bool = False
 
     def count_tokens(self, text: str) -> int:
         if not isinstance(text, str):
@@ -61,12 +64,11 @@ class ConservativeLLMTokenizer:
 
 @dataclass(frozen=True, slots=True)
 class PinnedLLMTokenizer:
-    """An explicitly reviewed tokenizer callable and immutable asset hash."""
+    """A pinned tokenizer callable and its immutable asset hash."""
 
     tokenizer_id: str
     asset_hash: str
     counter: Callable[[str], int]
-    authorized: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.tokenizer_id, str) or not self.tokenizer_id.strip():
@@ -122,26 +124,6 @@ def count_llm_tokens(text: str, tokenizer: LLMTokenizerPort | object | None = No
     return value
 
 
-def tokenizer_authorized(tokenizer: object) -> bool:
-    """Return whether a tokenizer may authorize a real LLM request.
-
-    Objects from older prompt/embedding ports do not expose ``authorized``;
-    they are accepted as reviewed injected ports unless they are the explicit
-    conservative fallback.  This keeps the adapter composable while ensuring
-    the byte fallback can never silently cross the real-provider boundary.
-    """
-
-    if isinstance(tokenizer, ConservativeLLMTokenizer):
-        return False
-    identifier = getattr(tokenizer, "tokenizer_id", "")
-    if identifier == LLM_TOKENIZER_FALLBACK_ID:
-        return False
-    # Authorization is an explicit reviewed-provider decision.  A missing
-    # marker is false; injected fakes must opt in rather than silently using
-    # the conservative or an unreviewed tokenizer.
-    return getattr(tokenizer, "authorized", False) is True
-
-
 def tokenizer_asset_hash_valid(value: object) -> bool:
     """Return whether an asset identity is exactly lowercase SHA-256 hex."""
 
@@ -161,6 +143,5 @@ __all__ = [
     "PinnedTokenizerV1",
     "Utf8ByteLLMTokenizer",
     "count_llm_tokens",
-    "tokenizer_authorized",
     "tokenizer_asset_hash_valid",
 ]
