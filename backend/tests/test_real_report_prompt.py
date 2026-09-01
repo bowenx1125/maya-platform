@@ -203,9 +203,7 @@ def test_request_hash_is_stable_when_allowlisted_arrays_are_reordered() -> None:
         ("topic", "The winner should decide."),
     ),
 )
-def test_request_rejects_cjk_markdown_and_unsafe_winner_language(
-    field: str, value: str
-) -> None:
+def test_request_rejects_cjk_markdown_and_unsafe_winner_language(field: str, value: str) -> None:
     payload = _raw_request()
     payload[field] = value
     with pytest.raises(ReportBoundaryError):

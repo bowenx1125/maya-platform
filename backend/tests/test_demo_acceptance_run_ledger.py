@@ -457,9 +457,12 @@ def test_snapshot_call1_is_bound_before_reservation_and_rejects_preflight_drift(
                 target_version_id=TARGET_VERSION_ID,
             )
         with database.engine.connect() as connection:
-            assert connection.execute(
-                select(func.count()).select_from(ProviderExportManifest)
-            ).scalar_one() == 1
+            assert (
+                connection.execute(
+                    select(func.count()).select_from(ProviderExportManifest)
+                ).scalar_one()
+                == 1
+            )
     finally:
         database.dispose()
 
@@ -492,9 +495,10 @@ def test_snapshot_call1_binding_drift_creates_no_operation(
                 target_version_id=target_version_id,
             )
         with database.engine.connect() as connection:
-            assert connection.execute(
-                select(func.count()).select_from(ProviderOperation)
-            ).scalar_one() == 0
+            assert (
+                connection.execute(select(func.count()).select_from(ProviderOperation)).scalar_one()
+                == 0
+            )
     finally:
         database.dispose()
 

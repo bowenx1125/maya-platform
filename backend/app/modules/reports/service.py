@@ -1626,9 +1626,7 @@ def _report_provider_policy_hash(provider: RealReportProviderPort) -> str:
 
 
 def _report_field_hash(value: object) -> str:
-    return _sha256(
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    )
+    return _sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
 
 
 def _report_manifest(
@@ -1646,8 +1644,7 @@ def _report_manifest(
     if policy is None:
         raise ReportProviderError("report_policy_unavailable")
     source_projection = [
-        {"evidence_id": source.evidence_id, "excerpt": source.excerpt}
-        for source in request.sources
+        {"evidence_id": source.evidence_id, "excerpt": source.excerpt} for source in request.sources
     ]
     fields = (
         ExportFieldV1(

@@ -297,9 +297,7 @@ def _assert_snapshot_call1_history_for_debate_bind(
     manifest = target_manifests[0]
     run_operations = list(
         db.scalars(
-            select(ProviderOperation).where(
-                ProviderOperation.acceptance_run_id == run.id
-            )
+            select(ProviderOperation).where(ProviderOperation.acceptance_run_id == run.id)
         ).all()
     )
     if (

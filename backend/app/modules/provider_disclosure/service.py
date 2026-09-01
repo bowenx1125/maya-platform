@@ -1067,8 +1067,7 @@ class InMemoryProviderDisclosureStore:
             for item in candidates
             if item.provider_operation == LLM_REPORT_OPERATION
             and (
-                item.scope_id == debate_id
-                or getattr(item, "debate_id", None) in {None, debate_id}
+                item.scope_id == debate_id or getattr(item, "debate_id", None) in {None, debate_id}
             )
         )
 

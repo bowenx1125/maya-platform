@@ -78,11 +78,13 @@ def _context(debate_id: str) -> service.ReportContext:
             turn_id=item.turn_id,
             participant_id=item.participant_id,
             participant_name=(
-                f"Agent {next(
-                    participant.slot
-                    for participant in participants
-                    if participant.participant_id == item.participant_id
-                )}"
+                f"Agent {
+                    next(
+                        participant.slot
+                        for participant in participants
+                        if participant.participant_id == item.participant_id
+                    )
+                }"
             ),
             round_no=item.round_no,
             turn_index=item.turn_index,
@@ -340,7 +342,9 @@ def test_prepare_persists_manifest_and_prepared_operation_without_transport(
     monkeypatch.setattr(service, "_report_context", lambda *_args, **_kwargs: context)
 
     prepared = service.prepare_real_report_operation(
-        database, revision.id, runtime=service.RealReportRuntime(provider, repository)  # type: ignore[arg-type]
+        database,
+        revision.id,
+        runtime=service.RealReportRuntime(provider, repository),  # type: ignore[arg-type]
     )
 
     assert prepared.manifest_hash and prepared.operation_id == "operation-id"
@@ -348,13 +352,9 @@ def test_prepare_persists_manifest_and_prepared_operation_without_transport(
     assert provider.build_calls == 1
     manifest = cast(
         ExportManifestV1,
-        next(
-            item for item in repository.created if getattr(item, "provider_operation", None)
-        ),
+        next(item for item in repository.created if getattr(item, "provider_operation", None)),
     )
-    assert {
-        field.field_class for field in manifest.fields
-    } == {
+    assert {field.field_class for field in manifest.fields} == {
         "topic_and_platform_rules",
         "public_agent_name",
         "public_predecessor_speech",

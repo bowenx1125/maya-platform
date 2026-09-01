@@ -405,8 +405,7 @@ def _raise_embedding_publication_error(
                 "The Demo acceptance binding is invalid; prepare the exact Call1 again."
                 if error.code.startswith("acceptance_binding_")
                 else (
-                    "The real Embedding publication inputs changed; prepare and confirm "
-                    "them again."
+                    "The real Embedding publication inputs changed; prepare and confirm them again."
                 )
             ),
         ) from error

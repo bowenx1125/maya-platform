@@ -224,9 +224,7 @@ def _text_error(value: str, *, output: bool = False) -> str | None:
 def _validate_request_semantics(request: ReportRequest) -> None:
     text_values = [request.topic]
     text_values.extend(
-        value
-        for participant in request.participants
-        for value in (participant.agent_name,)
+        value for participant in request.participants for value in (participant.agent_name,)
     )
     text_values.extend(speech.speech for speech in request.speeches)
     text_values.extend(source.excerpt for source in request.sources)
@@ -249,9 +247,7 @@ def _validate_request_semantics(request: ReportRequest) -> None:
     if len(set(source_ids)) != len(source_ids):
         raise ReportBoundaryError("report_duplicate_evidence")
     used_ids = [
-        str(evidence_id)
-        for speech in request.speeches
-        for evidence_id in speech.used_evidence_ids
+        str(evidence_id) for speech in request.speeches for evidence_id in speech.used_evidence_ids
     ]
     if any(used_id not in set(source_ids) for used_id in used_ids):
         raise ReportBoundaryError("report_evidence_not_available")

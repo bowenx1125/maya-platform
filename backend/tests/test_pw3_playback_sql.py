@@ -1156,9 +1156,7 @@ def _add_mutual_round_two_successor(
 def test_mutual_learning_next_claim_crosses_a_round_boundary(app_factory: Any) -> None:
     database, _settings, debate_id, first_turn_id = _seed_one_turn(app_factory)
     try:
-        peer_id, successor_id = _add_mutual_round_two_successor(
-            database, debate_id, first_turn_id
-        )
+        peer_id, successor_id = _add_mutual_round_two_successor(database, debate_id, first_turn_id)
         repository = SqlPlaybackRepository(session_factory=database.session_factory)
         claimed = repository.claim_next_playback(
             debate_id=debate_id,
@@ -1183,9 +1181,7 @@ def test_mutual_learning_next_claim_crosses_a_round_boundary(app_factory: Any) -
 def test_mutual_learning_transcript_turn_omits_round_count(app_factory: Any) -> None:
     """``DebateTurn`` is closed, so the WS-only round_count must not leak in."""
 
-    debate = SimpleNamespace(
-        rule_set_id="ordered_multi_expert_mutual_learning_v1", round_count=2
-    )
+    debate = SimpleNamespace(rule_set_id="ordered_multi_expert_mutual_learning_v1", round_count=2)
     turn = SimpleNamespace(round_no=2)
     ws_payload = PlaybackService._mutual_phase_payload(debate, turn)
     rest_payload = PlaybackService._mutual_phase_only(debate, turn)

@@ -716,9 +716,7 @@ def test_partial_accepted_stages_continue_only_not_sent_batches(tmp_path: Path) 
 def test_bound_snapshot_multibatch_fails_before_operation_or_provider(
     tmp_path: Path,
 ) -> None:
-    source = "\n\n".join(
-        f"# Section {index}\n\n" + "x " * 600 for index in range(11)
-    ).encode()
+    source = "\n\n".join(f"# Section {index}\n\n" + "x " * 600 for index in range(11)).encode()
     fixture = _make_fixture(tmp_path, source=source)
     build = _build(fixture)
     policy = _policy()
@@ -994,9 +992,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
 
         with database.session() as db:
             snapshot = db.scalar(
-                select(KnowledgeSnapshot).where(
-                    KnowledgeSnapshot.agent_version_id == version_id
-                )
+                select(KnowledgeSnapshot).where(KnowledgeSnapshot.agent_version_id == version_id)
             )
             assert snapshot is not None
             assert snapshot.embedding_provider == REAL_EMBEDDING_PROVIDER

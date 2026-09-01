@@ -38,14 +38,14 @@ def _request() -> ReportRequest:
         {
             "topic": "How can classrooms share cultural knowledge responsibly?",
             "participants": [
-            {
-                "slot": "A",
-                "agent_name": "River Keeper",
-            },
-            {
-                "slot": "B",
-                "agent_name": "Community Gardener",
-            },
+                {
+                    "slot": "A",
+                    "agent_name": "River Keeper",
+                },
+                {
+                    "slot": "B",
+                    "agent_name": "Community Gardener",
+                },
             ],
             "speeches": [
                 {
@@ -128,8 +128,7 @@ def _response(
                 "finish_reason": finish_reason,
             }
         ],
-        "usage": usage
-        or {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 200},
+        "usage": usage or {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 200},
     }
 
 
@@ -204,8 +203,7 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
     assert isinstance(result, ServiceReportSectionOutput)
     assert transport.calls == 1
     assert transport.last_url == (
-        "https://workspace123.cn-beijing.maas.aliyuncs.com/"
-        "compatible-mode/v1/chat/completions"
+        "https://workspace123.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
     )
     assert transport.last_headers["Authorization"] == "Bearer fixture-secret"
     assert "fixture-secret" not in json.dumps(transport.last_json)

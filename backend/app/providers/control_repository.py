@@ -735,9 +735,7 @@ class ProviderRepository:
         manifest_table = _MANIFEST_TABLE
         with self._write_connection() as connection:
             run_row = (
-                connection.execute(
-                    select(run_table).where(run_table.c.id == acceptance_run_id)
-                )
+                connection.execute(select(run_table).where(run_table.c.id == acceptance_run_id))
                 .mappings()
                 .first()
             )
@@ -843,9 +841,9 @@ class ProviderRepository:
                     raise PolicyExportStale("provider export build or model is stale")
 
             bound_count = connection.execute(
-                select(func.count()).select_from(operation_table).where(
-                    operation_table.c.acceptance_run_id == acceptance_run_id
-                )
+                select(func.count())
+                .select_from(operation_table)
+                .where(operation_table.c.acceptance_run_id == acceptance_run_id)
             ).scalar_one()
             if int(bound_count) != 0:
                 raise ProviderRepositoryError("Demo acceptance run already has a call")
@@ -928,9 +926,7 @@ class ProviderRepository:
         run_table = _ACCEPTANCE_RUN_TABLE
         with self._write_connection() as connection:
             run_row = (
-                connection.execute(
-                    select(run_table).where(run_table.c.id == acceptance_run_id)
-                )
+                connection.execute(select(run_table).where(run_table.c.id == acceptance_run_id))
                 .mappings()
                 .first()
             )
@@ -964,8 +960,7 @@ class ProviderRepository:
             owner_manifest = (
                 connection.execute(
                     select(_MANIFEST_TABLE).where(
-                        _MANIFEST_TABLE.c.manifest_hash
-                        == operation_row["export_manifest_hash"]
+                        _MANIFEST_TABLE.c.manifest_hash == operation_row["export_manifest_hash"]
                     )
                 )
                 .mappings()
@@ -992,15 +987,12 @@ class ProviderRepository:
                 or debate_manifest_matches
             ):
                 raise ProviderRepositoryError("provider operation does not belong to Demo run")
-            duplicate = (
-                connection.execute(
-                    select(operation_table.c.id).where(
-                        operation_table.c.acceptance_run_id == acceptance_run_id,
-                        operation_table.c.call_no == call_no,
-                    )
+            duplicate = connection.execute(
+                select(operation_table.c.id).where(
+                    operation_table.c.acceptance_run_id == acceptance_run_id,
+                    operation_table.c.call_no == call_no,
                 )
-                .first()
-            )
+            ).first()
             if duplicate is not None:
                 raise ProviderRepositoryError("Demo acceptance call ordinal is already bound")
             now = self._now()

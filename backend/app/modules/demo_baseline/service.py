@@ -406,9 +406,7 @@ def _create_baseline(db: Session, data_root: Path, spec: BaselineSpec) -> None:
 
     group = db.get(Group, spec.group_id)
     if group is None:
-        raise DemoBaselineConflict(
-            f"group {spec.group_id} must be seeded before the Demo baseline"
-        )
+        raise DemoBaselineConflict(f"group {spec.group_id} must be seeded before the Demo baseline")
     now = _now()
     source_bytes = spec.knowledge.encode("utf-8")
     source_hash = _sha256(source_bytes)

@@ -172,11 +172,7 @@ def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
         if not isinstance(details, Mapping) or set(details) - {"cached_tokens"}:
             raise ReportProviderError("report_usage_shape")
         cached_value = details.get("cached_tokens")
-        if (
-            isinstance(cached_value, bool)
-            or not isinstance(cached_value, int)
-            or cached_value < 0
-        ):
+        if isinstance(cached_value, bool) or not isinstance(cached_value, int) or cached_value < 0:
             raise ReportProviderError("report_usage_invalid")
         cached = cached_value
     prompt_tokens, completion_tokens, total_tokens = values
@@ -261,9 +257,7 @@ class RealReportProvider:
         if self.transport is None:
             self.transport = HttpxLLMTransport()
 
-    def build_request(
-        self, value: ReportRequest | Mapping[str, object]
-    ) -> ReportWireRequest:
+    def build_request(self, value: ReportRequest | Mapping[str, object]) -> ReportWireRequest:
         """Build and validate the exact request without network I/O."""
 
         if not isinstance(self.config, DashScopeLLMConfig):
