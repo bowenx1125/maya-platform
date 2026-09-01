@@ -1973,15 +1973,19 @@ class PlaybackService:
             raise
         except Exception as exc:
             last_error = exc
-            # Record only the exception type.  The message can carry provider
-            # or student data, but without this line a turn that dies before
-            # its provider manifest leaves nothing but the generic
-            # ``turn_generation_failed`` safe code and is undiagnosable.
+            # Record the exception type and its safe code, never the message:
+            # the message can carry provider or student data. Without this
+            # line a turn that dies before its provider manifest leaves
+            # nothing but the generic ``turn_generation_failed`` code.
             LOGGER.error(
-                "Turn preparation failed debate_id=%s turn_id=%s error_type=%s",
+                "Turn preparation failed debate_id=%s turn_id=%s error_type=%s safe_code=%s",
                 debate_id,
                 turn_id,
                 type(exc).__name__,
+                # A safe code is the same string the browser already receives,
+                # so recording it leaks nothing and is often the only thing
+                # that distinguishes a missing policy from a refused request.
+                getattr(exc, "code", "-"),
                 exc_info=False,
             )
             # The final Turn/source/job writes and the LLM operation CAS share

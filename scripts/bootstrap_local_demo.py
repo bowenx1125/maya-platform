@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import ipaddress
 import os
 import secrets
+import socket
 import stat
 import tempfile
 from pathlib import Path
@@ -71,13 +73,74 @@ def write_private(path: Path, content: str, force: bool) -> None:
             temporary.unlink()
 
 
+GATEWAY_PORT = 8080
+
+# A classroom LAN is an RFC1918 network. Wider "private" ranges - CGNAT,
+# link-local, and the 198.18/15 benchmarking block a VPN often installs - are
+# reachable from this host but not from a student's phone, so a QR code built
+# on one leads nowhere.
+_LAN_BLOCKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
+def _is_classroom_lan(address: str) -> bool:
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    return any(parsed in block for block in _LAN_BLOCKS)
+
+
+def _route_probe_address() -> str:
+    """The local address the routing table would use for off-host traffic."""
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # No packet is sent; this only consults the routing table.
+        probe.connect(("192.0.2.1", 9))
+        return str(probe.getsockname()[0])
+    except OSError:
+        return ""
+    finally:
+        probe.close()
+
+
+def detect_private_lan_origin() -> str:
+    """This machine's classroom-LAN origin on the Compose gateway port.
+
+    An empty ``CLASSROOM_PUBLIC_BASE_URL`` allows no origin at all, so every
+    mutation on a freshly bootstrapped Demo fails the CSRF origin check and
+    the UI reports only that the form expired. The value also has to satisfy
+    two rules at once: the classroom QR code rejects loopback and needs a
+    private-LAN address, while the CSRF check compares the port. Loopback on
+    the same port is then accepted too, so ``http://localhost:8080`` keeps
+    working for local use.
+
+    An empty result is returned rather than a guess when no classroom LAN is
+    found; ``docs/`` explains how to set the value by hand.
+    """
+
+    candidates = [_route_probe_address()]
+    try:
+        candidates.extend(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    for address in candidates:
+        if address and _is_classroom_lan(address):
+            return f"http://{address}:{GATEWAY_PORT}"
+    return ""
+
+
 def build_env(session_secret: str) -> str:
     values = {
         "NODE_ENV": "development",
         "DEMO_MODE": "true",
         "DEMO_QUICK_LOGIN": "true",
         "SESSION_SECRET": session_secret,
-        "CLASSROOM_PUBLIC_BASE_URL": "",
+        "CLASSROOM_PUBLIC_BASE_URL": detect_private_lan_origin(),
         "DASHSCOPE_API_KEY": "",
         "DASHSCOPE_WORKSPACE_ID": "",
         "DASHSCOPE_REGION": "",

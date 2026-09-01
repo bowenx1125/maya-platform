@@ -11,14 +11,15 @@ This file is the authority for what the product is and where it stands.
 disagree, use the user's latest explicit decision, then this file, then the
 contracts under [contracts/](contracts/) and [docs/contracts/](docs/contracts/),
 then the ADRs under [docs/adr/](docs/adr/), then
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Product boundaries
 
 These are settled decisions, not open questions.
 
-- **Organization.** One seeded course, one teacher, two three-student groups.
-  Course and group membership are read-only.
+- **Organization.** One seeded course, one teacher (Maya) and one group of
+  three students (Bowen, Kaikai, Jade). Course and group membership are
+  read-only.
 - **Authorization.** Students are scoped to their group. Teachers see published
   immutable history, never drafts. Cross-group objects return not found.
 - **Agent versions.** Published and superseded versions and their knowledge
@@ -75,12 +76,12 @@ in `app/providers/control.py` is the single definition.
 - Student agent, version, knowledge, voice and publish surfaces; teacher
   debate setup, playback control, interaction, provider approvals and
   disclosures; classroom page; Real/Mock composition strip.
-- Two seeded demo Agents — `Maya Demo Guide` in Group A and
-  `Maya Demo Companion` in Group B — so a teacher can open a two-Agent Debate
-  from an empty runtime with no setup.
-- The complete all-Mock chain end to end: two-Agent, two-round mutual learning,
-  four public turns with evidence traces, transcript, interaction open and
-  close, insight, and a 600–900 word English report that names no winner.
+- Three seeded demo Agents — Socrates, Plato and Laozi, one confirmed by each
+  student — so a teacher can open a multi-Agent Debate from an empty runtime
+  with no setup.
+- The complete all-Mock chain end to end: multi-Agent, two-round mutual
+  learning with an evidence trace per public turn, transcript, interaction open
+  and close, insight, and a 600–900 word English report that names no winner.
 - Real Snapshot embedding and real Debate LLM turns against DashScope,
   including a structure-repair attempt that recovers a turn whose first reply
   missed a rule.
@@ -144,7 +145,7 @@ Each is a deliberate decision, reversible, and scoped to the Demo.
 ## Document map
 
 - [AGENTS.md](AGENTS.md) — how to work on this repository.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — stable system and data boundaries.
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — stable system and data boundaries.
 - [contracts/](contracts/) — machine-readable OpenAPI and WebSocket contracts.
 - [docs/contracts/](docs/contracts/) — human contracts and provenance.
 - [docs/adr/](docs/adr/) — one durable decision per file.

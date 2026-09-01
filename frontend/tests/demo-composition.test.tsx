@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe("Real-Core Demo composition badge", () => {
-  it("shows backend component modes and the published Bowen baseline", async () => {
+  it("shows backend component modes and the published Demo baseline", async () => {
     fixtures.demoStatus.mockResolvedValue({
       baseline: {
         agent_id: "93c04441-1bae-54b2-8037-78622b88d640",
@@ -52,7 +52,7 @@ describe("Real-Core Demo composition badge", () => {
 
     await screen.findByTestId("demo-composition");
     expect(screen.getByText("Published Demo Agent")).toBeTruthy();
-    expect(screen.getByText("Bowen baseline ready")).toBeTruthy();
+    expect(screen.getByText("Demo baseline ready")).toBeTruthy();
     expect(screen.getByText("System baseline")).toBeTruthy();
     expect(screen.getByTestId("demo-composition").textContent).toContain(
       "Embedding",

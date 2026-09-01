@@ -18,7 +18,12 @@ del _debate_models, _interaction_models, _report_models, _translation_models
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Migrations run inside the application process at startup, after the
+    # application has installed its stdout log handler. The default
+    # ``disable_existing_loggers=True`` would silently disable that handler,
+    # so every later application log — including the only record of why a
+    # provider turn failed — would be dropped inside the container.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

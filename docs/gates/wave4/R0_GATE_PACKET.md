@@ -34,7 +34,7 @@ context, and restore a full-source private development branch with tests and CI.
 
 ## Acceptance
 
-- root `PROJECT.md` and `ARCHITECTURE.md` are present and concise;
+- root `PROJECT.md` and `docs/ARCHITECTURE.md` are present and concise;
 - exact old monolith is archived with a verified SHA-256;
 - current authority contains no Pause/Continue, live-only Replay waiting, M13–M15
   pending, `53+13`, or completed-cleanup-as-next-step drift;

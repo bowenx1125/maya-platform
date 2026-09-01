@@ -46,9 +46,14 @@ The backend applies the checked-in Alembic migrations, verifies or creates the
 Demo seed, and only then reports ready. All six provider selectors default to
 `mock`; real supplier keys are optional and stay local.
 
-Two demo agents are seeded automatically — a guide in Group A and a companion
-in Group B — so a teacher can open a two-agent debate immediately, with no
-student setup.
+Switching a selector to `dashscope` also needs a reviewed provider policy
+imported into the runtime database — a key alone is not enough, and deleting
+`data/` deletes the import. See [docs/REAL_PROVIDER_SETUP.md](docs/REAL_PROVIDER_SETUP.md).
+
+The seed creates one course, one teacher (Maya) and one group of three
+students (Bowen, Kaikai and Jade), plus three published demo agents — Socrates,
+Plato and Laozi, one confirmed by each student. A teacher can therefore open a
+multi-agent debate immediately, with no student setup.
 
 ## Daily start
 

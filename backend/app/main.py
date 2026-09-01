@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -26,6 +25,7 @@ from app.core.errors import (
     request_id_for,
     request_validation_handler,
 )
+from app.core.logging import configure_application_logging
 from app.core.models import Course
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.dependencies import get_db
@@ -84,27 +84,6 @@ from app.seed import COURSE_ID, seed_demo_data
 logger = logging.getLogger("maya.backend")
 
 
-def _configure_application_logging() -> None:
-    """Give application loggers a stdout handler exactly once.
-
-    Uvicorn configures only its own loggers, so the root logger has no handler
-    and every application warning is silently dropped inside the container.
-    Safe failure codes then leave no trace at all, which is what made a real
-    provider turn undiagnosable. Nothing here changes what may be logged: the
-    call sites remain responsible for keeping provider and student data out.
-    """
-
-    root = logging.getLogger()
-    if any(getattr(handler, "_maya_stdout", False) for handler in root.handlers):
-        return
-    handler = logging.StreamHandler(stream=sys.stdout)
-    handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))
-    handler._maya_stdout = True  # type: ignore[attr-defined]
-    root.addHandler(handler)
-    if root.level > logging.INFO or root.level == logging.NOTSET:
-        root.setLevel(logging.INFO)
-
-
 def create_app(
     settings: Settings | None = None,
     database: Database | None = None,
@@ -116,7 +95,7 @@ def create_app(
     environment configuration and the configured SQLite file.
     """
 
-    _configure_application_logging()
+    configure_application_logging()
     runtime_settings = settings or get_settings()
     runtime_database = database or Database(
         runtime_settings.database_url,

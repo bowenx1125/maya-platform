@@ -11,9 +11,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.logging import configure_application_logging
 from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
+
 ALEMBIC_HEAD = "0017_one_shot_llm_turn_manifest"
 
 
@@ -97,6 +99,11 @@ class Database:
         config.set_main_option("sqlalchemy.url", self.database_url)
         config.attributes["database_url"] = self.database_url
         command.upgrade(config, "head")
+        # Alembic's fileConfig rewrites the root logger from alembic.ini,
+        # which drops the application's stdout handler and forces the root
+        # level back to WARN. Re-assert the application configuration so
+        # later application logs still leave the container.
+        configure_application_logging()
         self.using_migrations = True
 
     @contextmanager

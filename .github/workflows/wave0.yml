@@ -146,7 +146,7 @@ jobs:
           test -f PROJECT.md
           test -f AGENTS.md
           test -f CLAUDE.md
-          test -f ARCHITECTURE.md
+          test -f docs/ARCHITECTURE.md
           test -f docs/gates/wave4/R0_GATE_PACKET.md
           test ! -e Project.md
           test ! -e PROJECT_STATUS.md
