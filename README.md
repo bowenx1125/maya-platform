@@ -112,11 +112,86 @@ working directory, so running them from the repository root loads the real
 [AGENTS.md](AGENTS.md) lists the complete battery and the contract-change
 procedure.
 
-## Real provider runs
+## Switching between Mock and real providers
 
-The Demo composition is real DashScope embedding, real Qwen debate turns and a
-real Qwen report, with Mock TTS, Voice and Translation. Every delivery surface
-labels that split honestly.
+Six selectors decide what is real. They all ship as `mock`, and the whole Demo
+runs that way — nothing below is needed to give a class.
+
+Three can run against DashScope: `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
+`EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
+Demo. `TRANSLATION_PROVIDER` needs a DeepL key.
+
+### Check what is running now
+
+```sh
+curl -s http://localhost:8080/api/v1/demo/composition | python3 -m json.tool
+```
+
+The teacher home shows the same split in its composition strip, so a class can
+never be misled about which pieces are real.
+
+### Mock to real
+
+Setting a selector to `dashscope` is **not** enough. Each real slice needs a
+reviewed provider policy snapshot in the runtime database. Without it every
+turn fails closed with `provider_preflight_blocked`.
+
+**1. Write the policy file.** Copy a template and replace every
+`REPLACE_WITH_...` with what you actually read:
+
+```sh
+cp docs/templates/llm-policy.template.json my-llm-policy.json
+```
+
+`*_retrieved_at` is the UTC time you opened the page; `*_sha256` is the hash of
+the page as you read it:
+
+```sh
+curl -s https://help.aliyun.com/zh/model-studio/privacy-notice | shasum -a 256
+```
+
+**2. Compute the policy hash.** The importer refuses a document whose hash does
+not match its own fields:
+
+```sh
+python scripts/compute_provider_policy_hash.py my-llm-policy.json --write
+```
+
+Put the printed value into `.env` as `LLM_PROVIDER_POLICY_HASH` and
+`REPORT_PROVIDER_POLICY_HASH` — one LLM policy covers both.
+
+**3. Import it.** `--acknowledge-reviewed` is your statement that you read the
+documents the file names; it exists so nobody can make that claim for you:
+
+```sh
+python scripts/import_llm_policy.py --policy-file my-llm-policy.json --database-url "sqlite:///$(pwd)/data/maya.sqlite3" --acknowledge-reviewed
+```
+
+Repeat both steps for embedding with
+`docs/templates/embedding-policy.template.json`,
+`scripts/import_provider_policy.py`, and `EMBEDDING_PROVIDER_POLICY_HASH`.
+
+**4. Turn the selectors on and restart:**
+
+```sh
+sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=dashscope/; s/^MAYA_REPORT_PROVIDER=.*/MAYA_REPORT_PROVIDER=dashscope/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=dashscope/' .env && docker compose up -d
+```
+
+On Linux use `sed -i` without the `''`.
+
+**5. Confirm** that Embedding, Debate LLM and Maya Report now report `real`
+using the check command above.
+
+### Real back to Mock
+
+```sh
+sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=mock/; s/^MAYA_REPORT_PROVIDER=.*/MAYA_REPORT_PROVIDER=mock/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=mock/' .env && docker compose up -d
+```
+
+The imported policy rows stay in the database and are simply unused, so
+switching back to real later needs only step 4.
+
+### What a real run costs you in attention
 
 A real run is bounded by an acceptance ledger whose call plan is derived from
 the debate's own shape rather than a fixed number, and no provider request is
@@ -124,6 +199,10 @@ ever retried automatically. Every real request is disclosed to the teacher and
 confirmed before it is sent, so a real session is exercised through the product
 itself: log in, create a debate between the seeded Agents, and confirm each
 disclosure as it appears.
+
+Deleting `data/` deletes the imported policies along with the runtime, so keep
+your policy JSON outside the repository. `docs/REAL_PROVIDER_SETUP.md` has the
+full detail.
 
 ## Logs and shutdown
 
