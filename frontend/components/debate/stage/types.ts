@@ -99,6 +99,8 @@ export type PlaybackStageLabels = {
   controllerWaiting?: string;
   controlBusy?: string;
   retryReason?: string;
+  /** Turns a server safe code into a sentence a teacher can read. */
+  localizeCode?: (code: string) => string;
   providerSetupIncomplete?: string;
   providerGateTitle?: string;
   providerGateLoading?: string;

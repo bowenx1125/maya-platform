@@ -1226,7 +1226,13 @@ export function DebateStage({
           if (message.current_control_version !== undefined) {
             controlVersionRef.current = message.current_control_version;
           }
-          setControlError(message.code ?? labelsRef.current.connectionError);
+          // A raw safe code is an internal identifier, not a message. Show the
+          // teacher a sentence and keep the code for the logs.
+          setControlError(
+            message.code
+              ? (labelsRef.current.localizeCode?.(message.code) ?? message.code)
+              : (labelsRef.current.connectionError ?? null),
+          );
           if (message.recoverable) {
             setFailure(labelsRef.current.retryReason);
           }

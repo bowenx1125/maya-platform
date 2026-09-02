@@ -22,7 +22,7 @@ import {
   type IdempotencyHandle,
 } from "../../../../../lib/api";
 import { useLocale, useT } from "../../../../../components/locale";
-import type { Locale } from "../../../../../lib/i18n";
+import { localizeError, type Locale } from "../../../../../lib/i18n";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
   connection: "connecting",
@@ -164,6 +164,7 @@ export default function TeacherDebateControlPage() {
       controllerWaiting: t("debateControllerWaiting"),
       controlBusy: t("debateControlBusy"),
       retryReason: t("debateRetryReason"),
+      localizeCode: (code: string) => localizeError({ code }, locale),
       providerSetupIncomplete: t("debateProviderSetupIncomplete"),
       providerGateTitle: t("debateProviderGateTitle"),
       providerGateLoading: t("debateProviderGateLoading"),
