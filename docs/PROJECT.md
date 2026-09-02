@@ -149,7 +149,6 @@ Each is a deliberate decision, reversible, and scoped to the Demo.
 - [contracts/](contracts/) — machine-readable OpenAPI and WebSocket contracts.
 - [docs/contracts/](docs/contracts/) — human contracts and provenance.
 - [docs/adr/](docs/adr/) — one durable decision per file.
-- [docs/gates/](docs/gates/) — historical acceptance evidence.
 - [docs/requirements/original.md](docs/requirements/original.md) — historical
   source requirements, not the current contract.
 - [docs/investigations/](docs/investigations/) — open questions with the

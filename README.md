@@ -6,7 +6,7 @@ teacher picks 2–5 published agents, runs a structured multi-round English
 mutual-learning debate with claim-level evidence, opens anonymous classroom
 interaction, and generates a mutual-learning report.
 
-- [PROJECT.md](PROJECT.md) — what the product is and where it stands, including
+- [PROJECT.md](docs/PROJECT.md) — what the product is and where it stands, including
   the real-provider state and what is still open.
 - [AGENTS.md](AGENTS.md) — the working agreement for changing this repository.
 

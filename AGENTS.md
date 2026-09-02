@@ -1,16 +1,16 @@
 # Working on Maya Platform
 
 This is the single working agreement for everyone who changes this repository,
-human or agent. `PROJECT.md` says what the product is and where it stands;
+human or agent. `docs/PROJECT.md` says what the product is and where it stands;
 this file says how to work on it. When the two disagree, the user's latest
-explicit decision wins, then `PROJECT.md`, then this file.
+explicit decision wins, then `docs/PROJECT.md`, then this file.
 
 `CLAUDE.md` exists only so Claude Code loads this file. Do not maintain a
 second copy of these rules anywhere.
 
 ## 1. Before you change anything
 
-Read `PROJECT.md`. Read the code you are about to touch. That is usually
+Read `docs/PROJECT.md`. Read the code you are about to touch. That is usually
 enough — this repository has no task-packet ceremony any more.
 
 Work on a branch. Never commit directly to `main` unless the user says so.
@@ -117,7 +117,7 @@ Express a single-value enum as `const`, not a one-entry `enum`: Pydantic emits
 `const` for a one-value `Literal` and the route comparator compares them
 literally.
 
-`docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json` is hash-pinned in
+`contracts/llm-turn-output.v1.schema.json` is hash-pinned in
 `app/providers/control.py` and `app/providers/llm_output.py`. Editing it means
 updating both constants and the documents that quote the digest.
 
@@ -177,7 +177,7 @@ find . -maxdepth 2 -name .mount-probe
 
 ## 7. Recording progress
 
-`PROJECT.md` is the only place project progress lives. Update it in the same
+`docs/PROJECT.md` is the only place project progress lives. Update it in the same
 commit as the work it describes, and only with facts you have observed:
 
 - move an item between **Working**, **In progress** and **Not started** when a
@@ -188,7 +188,7 @@ commit as the work it describes, and only with facts you have observed:
   than letting the code and the document drift apart.
 
 Do not create status files, handoff notes or worklogs beside it. If something
-is worth keeping, it belongs in `PROJECT.md`, an ADR under `docs/adr/`, or a
+is worth keeping, it belongs in `docs/PROJECT.md`, an ADR under `docs/adr/`, or a
 contract under `docs/contracts/`.
 
 ## 8. Commits

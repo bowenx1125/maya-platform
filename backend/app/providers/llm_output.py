@@ -115,7 +115,7 @@ class MappedLLMTurnV1:
         return self.provider_output_hash
 
 
-_SCHEMA_RELATIVE_PATH = "docs/contracts/wave4/LLM_TURN_OUTPUT_SCHEMA_V1.json"
+_SCHEMA_RELATIVE_PATH = "contracts/llm-turn-output.v1.schema.json"
 
 
 def _schema_candidates() -> tuple[Path, ...]:
@@ -126,6 +126,9 @@ def _schema_candidates() -> tuple[Path, ...]:
     image is built from the ``backend`` directory alone, so the same file is
     mounted beside the application package instead.  ``load`` still verifies the
     exact content hash, so accepting either layout cannot widen the boundary.
+
+    The schema lives in ``contracts/`` beside the frozen OpenAPI and WebSocket
+    schemas because it is a runtime asset the wire depends on, not prose.
     """
 
     module = Path(__file__).resolve()

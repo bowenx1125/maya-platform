@@ -260,7 +260,7 @@ const enMessages = {
   statusPreviewReady: "preview ready",
   statusPartial: "partial",
   statusInterrupted: "interrupted",
-  studentHome: "STUDENT HOME",
+  studentHome: "Student home",
   welcomeBack: "Welcome back",
   studentHomeLede:
     "Build an Agent with a clear identity, a selected evidence set, and a release that a teacher can inspect.",
@@ -301,7 +301,7 @@ const enMessages = {
   members: "Members",
   membersLede:
     "Demo membership is read-only. All members share this group workspace.",
-  newAgent: "NEW AGENT",
+  newAgent: "New agent",
   newAgentTitle: "Give your Agent a point of view.",
   newAgentLede:
     "Start with a stable identity. You can shape the prompt and evidence in the draft workbench.",
@@ -336,13 +336,13 @@ const enMessages = {
   shareDisclosureWithTeacher:
     "Ask the course teacher to review this Agent version, then publish again after confirmation.",
   openProviderDisclosure: "Open teacher approval page",
-  agentWorkbench: "AGENT WORKBENCH",
+  agentWorkbench: "Agent workbench",
   groundingRag: "RAG grounded",
   groundingGeneral: "General reasoning",
   groundingMixed: "Mixed grounding",
   defineIdentity: "Define an identity and evidence set.",
   noDescriptionProvided: "No description provided.",
-  agentWorkspace: "AGENT WORKSPACE",
+  agentWorkspace: "Agent workspace",
   studentAgentLede:
     "A student-owned cultural perspective with a versioned evidence boundary.",
   archiveConfirm:
@@ -431,7 +431,7 @@ const enMessages = {
   whatTeachesPublish:
     "freezes both so another person can inspect the same release later.",
   testChatMessage: "Test chat message",
-  publishedSnapshot: "PUBLISHED SNAPSHOT",
+  publishedSnapshot: "Published snapshot",
   publishedSnapshotLede:
     "This release is immutable. Teacher views expose the same frozen Agent prompt and source set without draft controls.",
   readOnlyRelease: "Read-only release content.",
@@ -444,7 +444,7 @@ const enMessages = {
   snapshotLede: "Published snapshots preserve source bytes for later review.",
   loadingSnapshot: "Loading snapshot…",
   downloadRag: "Download frozen RAG.md",
-  teacherCourse: "TEACHER COURSE",
+  teacherCourse: "Teacher course",
   teacherCourseLede:
     "Inspect published Agents, create debates, control classroom playback, and review history. Student drafts cannot be viewed or edited here.",
   publishedWork: "Published work",
@@ -474,7 +474,7 @@ const enMessages = {
   producingGroupLede: "The group that published this Agent.",
   teacherAvatarLede: "Read-only preview of the published avatar configuration.",
   teacherEffectiveVoice: "The published Agent uses its selected custom voice.",
-  publishedAgent: "PUBLISHED AGENT",
+  publishedAgent: "Published agent",
   teacherReadOnly:
     "Teacher read-only view. Draft fields and unbound group files are intentionally absent.",
   backPublished: "Back to published list",
@@ -502,7 +502,7 @@ const enMessages = {
   edit: "Edit",
   reindex: "Reindex",
   hide: "Hide",
-  knowledgePage: "KNOWLEDGE LIBRARY",
+  knowledgePage: "Knowledge library",
   knowledgePageTitle: "Group Markdown",
   knowledgePageLede:
     "Files are immutable source records. Hide removes a file from the workspace only; published snapshots are never rewritten.",
@@ -753,7 +753,7 @@ const enMessages = {
   avatarStateSpeaking: "speaking",
   avatarStateThinking: "thinking",
   avatarStateNodYes: "nod yes",
-  voiceProfilesEyebrow: "VOICE PROFILES",
+  voiceProfilesEyebrow: "Voice profiles",
   voiceProfilesTitle: "A voice your group can reuse",
   voiceProfilesLede:
     "Upload one clear 10–20 second English recording. The sample is processed temporarily and deleted after the enrollment request.",
