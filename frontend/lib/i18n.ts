@@ -1640,4 +1640,3 @@ export function roleLabel(role: string, locale: Locale = "en"): string {
   const key = roleKeys[role];
   return key ? t(key, locale) : role;
 }
-

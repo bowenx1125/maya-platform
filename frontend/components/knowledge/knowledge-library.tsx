@@ -378,4 +378,3 @@ function downloadText(content: string, filename: string) {
   anchor.click();
   URL.revokeObjectURL(url);
 }
-

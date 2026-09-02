@@ -16,7 +16,8 @@
     "frontend:dev": "pnpm --filter @maya/frontend dev",
     "frontend:lint": "pnpm --filter @maya/frontend lint",
     "frontend:typecheck": "pnpm --filter @maya/frontend typecheck",
-    "frontend:test": "pnpm --filter @maya/frontend test"
+    "frontend:test": "pnpm --filter @maya/frontend test",
+    "check": "bash scripts/check_all.sh"
   },
   "devDependencies": {
     "@redocly/cli": "2.48.0",

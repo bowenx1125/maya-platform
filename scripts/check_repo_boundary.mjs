@@ -171,10 +171,14 @@ function walk(directory) {
       relativePath === "backend/tests/test_wave4_llm_adapter.py" ||
       relativePath === "backend/tests/test_wave4_llm_runtime.py" ||
       relativePath === "backend/tests/test_real_report_provider.py" ||
-      relativePath === "docs/contracts/wave4/LLM_A_RUNTIME_V1.md";
+      relativePath === "docs/contracts/DEBATE_GENERATION_CONTRACTS.md" ||
+      // The operator has to record the exact endpoint they reviewed, so the
+      // policy templates name it on purpose.
+      relativePath === "docs/templates/llm-policy.template.json" ||
+      relativePath === "docs/templates/embedding-policy.template.json";
     if (!supplierUrlAllowed && supplierUrlPattern.test(text))
       boundaryFailures.push(
-        `possible secret assignment/token in ${relativePath}`,
+        `supplier endpoint outside its allow-list in ${relativePath}`,
       );
   }
 }
