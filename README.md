@@ -167,6 +167,22 @@ documents the file names; it exists so nobody can make that claim for you:
 python scripts/import_llm_policy.py --policy-file my-llm-policy.json --database-url "sqlite:///$(pwd)/data/maya.sqlite3" --acknowledge-reviewed
 ```
 
+Or let the review be done for you against the supplier's published documents,
+which fetches and hashes each one rather than asking you to:
+
+```sh
+docker compose stop backend && uv run --directory backend python ../scripts/import_provider_review.py --accept-account-settings && docker compose up -d
+```
+
+Stop the backend first: it holds the SQLite writer lock. Use `up -d` afterwards,
+not `start` — `start` reuses the container's original environment and would keep
+the old policy hashes.
+
+Set `DEMO_AUTO_CONFIRM_PROVIDER=true` in `.env` to carry standing consent for
+the per-turn disclosure, so a lesson is not interrupted. It only has effect
+while `DEMO_MODE` is true, every automatic confirmation is logged, and clearing
+it restores per-turn confirmation.
+
 Repeat both steps for embedding with
 `docs/templates/embedding-policy.template.json`,
 `scripts/import_provider_policy.py`, and `EMBEDDING_PROVIDER_POLICY_HASH`.
