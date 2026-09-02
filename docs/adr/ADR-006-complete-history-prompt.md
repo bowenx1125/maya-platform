@@ -7,4 +7,4 @@ duplicate raw persona and duplicate provider-visible rule blocks. A structure-on
 repair reuses the exact successful retrieval result; only a retrieval technical failure
 may search again. There is no numeric Token-reduction KPI or cost-display product task.
 The request, retry and hard-limit rules are frozen in
-[`../contracts/wave4/PROMPT_BUDGET_V1.md`](../contracts/wave4/PROMPT_BUDGET_V1.md).
+[`../contracts/DEBATE_GENERATION_CONTRACTS.md`](../contracts/DEBATE_GENERATION_CONTRACTS.md#prompt-budget-and-request).

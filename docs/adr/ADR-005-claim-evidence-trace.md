@@ -7,4 +7,4 @@ reasoning/no-match. The server validates exact claim text, derives speech spans 
 source locations, and rejects cross-snapshot or unused evidence. This is provenance and
 teaching explanation, not automatic factual verification. The closed record and
 support rules are frozen in
-[`../contracts/wave4/EVIDENCE_TRACE_V1.md`](../contracts/wave4/EVIDENCE_TRACE_V1.md).
+[`../contracts/DEBATE_GENERATION_CONTRACTS.md`](../contracts/DEBATE_GENERATION_CONTRACTS.md#evidence-trace).

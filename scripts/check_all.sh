@@ -26,13 +26,31 @@ pnpm frontend:typecheck
 step "frontend tests"
 pnpm frontend:test
 
+step "documents"
+pnpm docs:check
+pnpm latin-script:check
+
 step "contracts"
 pnpm exec redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml
+node scripts/check_generated_contracts.mjs
+node scripts/check_generated_ws.mjs
+node scripts/check_frozen_openapi.mjs
+node scripts/check_openapi_responses.mjs
+node scripts/check_repo_boundary.mjs
 node scripts/test_frozen_openapi.mjs
 node scripts/test_openapi_responses.mjs
 node scripts/test_ws_events.mjs
 node scripts/test_ws_commands.mjs
 node scripts/test_repo_boundary.mjs
+
+step "migrations and scripts"
+uv run --directory backend python ../scripts/test_wave1_migration.py
+uv run --directory backend python ../scripts/test_wave2_migration.py
+uv run --directory backend python ../scripts/test_wave3_migration.py
+uv run --directory backend python ../scripts/test_wave4_migration.py
+uv run --directory backend python ../scripts/test_wave4_evidence_migration.py
+uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
+uv run --directory backend python ../scripts/test_reset_demo_runtime.py
 
 step "route surface"
 uv run --directory backend python ../scripts/export_fastapi_openapi.py /tmp/maya-openapi.json

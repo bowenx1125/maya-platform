@@ -9,4 +9,4 @@ Legacy versions remain readable with no Persona backfill.
 
 The closed schema, compiler behavior, unrecognized-content handling, revision/CAS and
 Mock acceptance are frozen in
-[`../contracts/wave4/PERSONA_SPEC_V1.md`](../contracts/wave4/PERSONA_SPEC_V1.md).
+[`../contracts/DEBATE_GENERATION_CONTRACTS.md`](../contracts/DEBATE_GENERATION_CONTRACTS.md#persona).

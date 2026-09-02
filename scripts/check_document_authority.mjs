@@ -17,18 +17,20 @@ function exactCasePathExists(absolute) {
   return true;
 }
 
-// PROJECT.md is the single product and progress authority; AGENTS.md is the
-// single working agreement and CLAUDE.md only points at it. The separate
+// docs/PROJECT.md is the single product and progress authority; AGENTS.md is
+// the single working agreement and CLAUDE.md only points at it. The separate
 // status document, worklog and pre-Wave-4 monolith were removed so progress
-// cannot drift across several files again.
+// cannot drift across several files again. The repository root deliberately
+// holds only README.md, AGENTS.md and CLAUDE.md; every other document is
+// under docs/.
 const required = [
-  "PROJECT.md",
-  "ARCHITECTURE.md",
+  "README.md",
   "AGENTS.md",
   "CLAUDE.md",
+  "docs/PROJECT.md",
+  "docs/ARCHITECTURE.md",
   "docs/contracts/README.md",
   "docs/adr/README.md",
-  "docs/gates/wave4/R0_GATE_PACKET.md",
   "docs/requirements/original.md",
 ];
 
@@ -38,7 +40,7 @@ for (const relative of required) {
   if (!existsSync(absolute) || !exactCasePathExists(absolute))
     failures.push(`missing required file: ${relative}`);
 }
-const projectCaseVariants = readdirSync(root).filter(
+const projectCaseVariants = readdirSync(resolve(root, "docs")).filter(
   (name) => name.toLocaleLowerCase("en-US") === "project.md",
 );
 if (
@@ -46,15 +48,19 @@ if (
   projectCaseVariants[0] !== "PROJECT.md"
 ) {
   failures.push(
-    `root authority must be exactly PROJECT.md; found: ${projectCaseVariants.join(", ") || "none"}`,
+    `authority must be exactly docs/PROJECT.md; found: ${projectCaseVariants.join(", ") || "none"}`,
   );
 }
 
-if (!exactCasePathExists(resolve(root, "PROJECT.md"))) {
-  failures.push("exact-case PROJECT.md self-test failed");
+if (!exactCasePathExists(resolve(root, "docs/PROJECT.md"))) {
+  failures.push("exact-case docs/PROJECT.md self-test failed");
 }
-if (exactCasePathExists(resolve(root, "Project.md"))) {
-  failures.push("case-variant Project.md negative self-test failed");
+if (exactCasePathExists(resolve(root, "docs/Project.md"))) {
+  failures.push("case-variant docs/Project.md negative self-test failed");
+}
+// The root must not regrow a second authority.
+if (exactCasePathExists(resolve(root, "PROJECT.md"))) {
+  failures.push("PROJECT.md must live under docs/, not the repository root");
 }
 if (exactCasePathExists(resolve(root, "docs/ADR/README.md"))) {
   failures.push("case-variant nested path negative self-test failed");
@@ -63,7 +69,7 @@ if (exactCasePathExists(resolve(root, "docs/requirements/Original.md"))) {
   failures.push("case-variant requirements path negative self-test failed");
 }
 
-const limits = new Map([["PROJECT.md", 20_000]]);
+const limits = new Map([["docs/PROJECT.md", 20_000]]);
 for (const [relative, maximum] of limits) {
   const absolute = resolve(root, relative);
   if (
@@ -76,8 +82,10 @@ for (const [relative, maximum] of limits) {
 }
 
 const activeMarkdown = [
-  "PROJECT.md",
-  "ARCHITECTURE.md",
+  "docs/PROJECT.md",
+  "docs/ARCHITECTURE.md",
+  "docs/REAL_PROVIDER_SETUP.md",
+  "docs/contracts/DEBATE_GENERATION_CONTRACTS.md",
   "AGENTS.md",
   "CLAUDE.md",
   "README.md",
@@ -91,7 +99,6 @@ const activeMarkdown = [
   "docs/adr/ADR-004-structured-persona.md",
   "docs/adr/ADR-005-claim-evidence-trace.md",
   "docs/adr/ADR-006-complete-history-prompt.md",
-  "docs/gates/wave4/R0_GATE_PACKET.md",
   "docs/requirements/README.md",
 ];
 

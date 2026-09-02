@@ -15,16 +15,13 @@ outside the product repository. They explain the baseline but contain dated stat
 and paths. They are not the current machine contract and must not override later Wave
 Gate packets.
 
-## Wave 4 contracts
+## Debate generation contracts
 
-The active W4-G0 contract set is under [`wave4/`](wave4/):
+[`DEBATE_GENERATION_CONTRACTS.md`](DEBATE_GENERATION_CONTRACTS.md) is the frozen
+behaviour of the real Debate path — Persona, formal content, embedding identity,
+evidence trace, the mutual-learning RuleSet, the prompt budget, the provider
+control ledger and the LLM turn runtime. It was ten files in a `wave4/`
+directory; splitting one subject across a directory only made it harder to read.
 
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/PERSONA_SPEC_V1.md)
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/EVIDENCE_TRACE_V1.md)
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/PROMPT_BUDGET_V1.md)
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/PROVIDER_DATA_CALL_V1.md)
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/FORMAL_CONTENT_V1.md)
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/G0_DECISIONS.md)
-- [`docs/contracts/DEBATE_GENERATION_CONTRACTS.md`](wave4/MUTUAL_LEARNING_RULESET_V1.md)
-
-They remain unimplemented until the active Wave 4 Gate Packet passes Sol High G0-S.
+The machine-readable schemas it describes live in `contracts/` beside the frozen
+OpenAPI, because they are runtime assets rather than prose.

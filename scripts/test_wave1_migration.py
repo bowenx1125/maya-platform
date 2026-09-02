@@ -27,9 +27,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.core.db import ALEMBIC_HEAD, Database  # noqa: E402
 from app.core.models import Course, CourseMember, Group, GroupMember, User  # noqa: E402
 from app.seed import (  # noqa: E402
-    STUDENT_IDS,
     COURSE_ID,
-    GROUP_DEMO_ID,
     GROUP_DEMO_ID,
     STUDENT_IDS,
     TEACHER_ID,
@@ -74,12 +72,10 @@ def fixed_rows(database: Database) -> dict[str, Any]:
             for row in session.scalars(select(User)).all()
         )
         courses = sorted(
-            (row.id, row.code, row.name)
-            for row in session.scalars(select(Course)).all()
+            (row.id, row.code, row.name) for row in session.scalars(select(Course)).all()
         )
         groups = sorted(
-            (row.id, row.course_id, row.name)
-            for row in session.scalars(select(Group)).all()
+            (row.id, row.course_id, row.name) for row in session.scalars(select(Group)).all()
         )
         course_members = sorted(
             (row.course_id, row.user_id, row.role)
@@ -91,9 +87,7 @@ def fixed_rows(database: Database) -> dict[str, Any]:
         )
         fingerprints = {
             **{
-                f"user:{row.id}": row_fingerprint(
-                    row, ("username", "display_name", "status")
-                )
+                f"user:{row.id}": row_fingerprint(row, ("username", "display_name", "status"))
                 for row in session.scalars(select(User)).all()
             },
             **{
@@ -121,18 +115,18 @@ def digest(value: dict[str, Any]) -> str:
 
 
 def assert_seed_shape(snapshot: dict[str, Any]) -> None:
-    if len(snapshot["users"]) != 7:
+    # One course, one teacher, one group of three students.
+    if len(snapshot["users"]) != 4:
         raise AssertionError("Wave 0 seed user count changed")
     if snapshot["courses"] != [(COURSE_ID, "demo-course-001", "Maya Cultural Exchange Demo")]:
         raise AssertionError("Wave 0 seed course changed")
-    if {row[0] for row in snapshot["groups"]} != {GROUP_DEMO_ID, GROUP_DEMO_ID}:
+    if {row[0] for row in snapshot["groups"]} != {GROUP_DEMO_ID}:
         raise AssertionError("Wave 0 seed groups changed")
-    if len(snapshot["course_members"]) != 7 or len(snapshot["group_members"]) != 6:
+    if len(snapshot["course_members"]) != 4 or len(snapshot["group_members"]) != 3:
         raise AssertionError("Wave 0 seed relationships changed")
     if TEACHER_ID not in {row[1] for row in snapshot["course_members"]}:
         raise AssertionError("Wave 0 teacher membership is missing")
-    expected_students = set(STUDENT_IDS + STUDENT_IDS)
-    if {row[1] for row in snapshot["group_members"]} != expected_students:
+    if {row[1] for row in snapshot["group_members"]} != set(STUDENT_IDS):
         raise AssertionError("Wave 0 group membership is missing a student")
 
 
@@ -267,7 +261,12 @@ def main() -> None:
             print(
                 "populated migration evidence passed: "
                 "Wave 0 seed preserved "
-                "(7 users/1 course/7 course members/2 groups/6 group members), "
+                # Counted, not asserted in prose: a hard-coded evidence line
+                # kept reporting the old seed shape after it changed.
+                f"({len(before['users'])} users/{len(before['courses'])} course/"
+                f"{len(before['course_members'])} course members/"
+                f"{len(before['groups'])} groups/"
+                f"{len(before['group_members'])} group members), "
                 f"fingerprint={before_digest}, head={ALEMBIC_HEAD}, "
                 f"new_tables={table_count}, checked_constraints={constraint_count}"
             )

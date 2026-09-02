@@ -7,11 +7,11 @@ English mutual-learning session, opens anonymous classroom interaction, and
 generates a civilization mutual-learning report.
 
 This file is the authority for what the product is and where it stands.
-[AGENTS.md](AGENTS.md) is the authority for how to work on it. When two sources
+[AGENTS.md](../AGENTS.md) is the authority for how to work on it. When two sources
 disagree, use the user's latest explicit decision, then this file, then the
-contracts under [contracts/](contracts/) and [docs/contracts/](docs/contracts/),
-then the ADRs under [docs/adr/](docs/adr/), then
-[ARCHITECTURE.md](docs/ARCHITECTURE.md).
+contracts under [contracts/](contracts/) and [docs/contracts/](contracts/),
+then the ADRs under [docs/adr/](adr/), then
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Product boundaries
 
@@ -144,12 +144,12 @@ Each is a deliberate decision, reversible, and scoped to the Demo.
 
 ## Document map
 
-- [AGENTS.md](AGENTS.md) — how to work on this repository.
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — stable system and data boundaries.
-- [contracts/](contracts/) — machine-readable OpenAPI and WebSocket contracts.
-- [docs/contracts/](docs/contracts/) — human contracts and provenance.
-- [docs/adr/](docs/adr/) — one durable decision per file.
-- [docs/requirements/original.md](docs/requirements/original.md) — historical
+- [AGENTS.md](../AGENTS.md) — how to work on this repository.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — stable system and data boundaries.
+- [contracts/](../contracts/) — machine-readable OpenAPI and WebSocket contracts.
+- [docs/contracts/](contracts/) — human contracts and provenance.
+- [docs/adr/](adr/) — one durable decision per file.
+- [docs/requirements/original.md](requirements/original.md) — historical
   source requirements, not the current contract.
-- [docs/investigations/](docs/investigations/) — open questions with the
+- [docs/investigations/](investigations/) — open questions with the
   evidence gathered so far.
