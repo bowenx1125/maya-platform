@@ -2146,7 +2146,15 @@ export function DebateStage({
           controllerAcquireBlockedRef.current = true;
           markControllerReady(false);
           applyPlayback({ status: "stopped", current_turn_id: null }, "failed");
-          setFailure(labelsRef.current.debateFailed);
+          // "Needs attention" alone leaves a teacher with nowhere to go. When
+          // the server names a cause it is a safe code the browser already
+          // receives elsewhere, so say it.
+          setFailure(
+            payload.safe_error_code === "provider_preflight_blocked"
+              ? (labelsRef.current.providerSetupIncomplete ??
+                  labelsRef.current.debateFailed)
+              : labelsRef.current.debateFailed,
+          );
           break;
         case "debate.stopped": {
           setProviderGate(null);
@@ -2172,7 +2180,15 @@ export function DebateStage({
           break;
         }
         case "error":
-          setFailure(labelsRef.current.retryReason);
+          // A blocked preflight is an operator problem, not a transient one:
+          // telling a teacher mid-class to retry something that cannot
+          // succeed is worse than saying nothing.
+          setFailure(
+            payload.code === "provider_preflight_blocked"
+              ? (labelsRef.current.providerSetupIncomplete ??
+                  labelsRef.current.retryReason)
+              : labelsRef.current.retryReason,
+          );
           if (
             payload.code === "provider_confirmation_required" ||
             payload.code === "provider_not_sent"

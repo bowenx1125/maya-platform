@@ -99,6 +99,7 @@ export type PlaybackStageLabels = {
   controllerWaiting?: string;
   controlBusy?: string;
   retryReason?: string;
+  providerSetupIncomplete?: string;
   providerGateTitle?: string;
   providerGateLoading?: string;
   providerGateEmpty?: string;

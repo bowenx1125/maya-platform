@@ -50,6 +50,8 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   controllerWaiting: "Waiting for the teacher controller…",
   controlBusy: "Updating classroom playback…",
   retryReason: "Playback did not start. You can retry this turn.",
+  providerSetupIncomplete:
+    "A real provider is selected but its reviewed policy is not installed. Retrying cannot help; an operator has to import it.",
   providerGateTitle: "External query confirmation is required.",
   providerGateLoading: "Loading the exact disclosure…",
   providerGateEmpty: "No retryable external query is currently pending.",

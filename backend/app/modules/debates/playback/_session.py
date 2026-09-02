@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -29,29 +28,6 @@ from .schemas import (
 )
 
 LOGGER = logging.getLogger(__name__)
-_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*")
-_SAFE_GENERATION_CODES = {
-    "turn_generation_failed",
-    "provider_unavailable",
-    "persona_confirmation_required",
-    "provider_confirmation_required",
-    "provider_not_sent",
-    "acceptance_unknown",
-    "debate_stopped",
-    "audio_invalid",
-}
-_RECOVERABLE_PROVIDER_GENERATION_CODES = {
-    "provider_confirmation_required",
-    "provider_not_sent",
-    "acceptance_unknown",
-    "tts_timeout",
-    "tts_http_rejected",
-    "tts_response_invalid",
-    "tts_result_url_rejected",
-    "tts_result_dns_failed",
-    "tts_result_download_failed",
-    "tts_audio_invalid",
-}
 
 
 class PlaybackSessionMixin(PlaybackCore):

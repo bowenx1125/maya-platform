@@ -47,6 +47,11 @@ _WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*")
 _SAFE_GENERATION_CODES = {
     "turn_generation_failed",
     "provider_unavailable",
+    # The same code the HTTP path already returns to a browser. Without it a
+    # missing provider policy collapsed into the generic failure, so a teacher
+    # was told a turn failed with no way to learn that a real selector was on
+    # and its reviewed policy was never imported.
+    "provider_preflight_blocked",
     "persona_confirmation_required",
     "provider_confirmation_required",
     "provider_not_sent",

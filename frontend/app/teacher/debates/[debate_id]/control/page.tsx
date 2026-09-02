@@ -164,6 +164,7 @@ export default function TeacherDebateControlPage() {
       controllerWaiting: t("debateControllerWaiting"),
       controlBusy: t("debateControlBusy"),
       retryReason: t("debateRetryReason"),
+      providerSetupIncomplete: t("debateProviderSetupIncomplete"),
       providerGateTitle: t("debateProviderGateTitle"),
       providerGateLoading: t("debateProviderGateLoading"),
       providerGateEmpty: t("debateProviderGateEmpty"),

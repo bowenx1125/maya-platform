@@ -201,6 +201,8 @@ const enMessages = {
   debateControllerWaiting: "Waiting for the teacher controller…",
   debateControlBusy: "Updating classroom playback…",
   debateRetryReason: "Playback did not start. You can retry this turn.",
+  debateProviderSetupIncomplete:
+    "A real provider is selected but its reviewed policy is not installed. Retrying cannot help; an operator has to import it.",
   debateProviderGateTitle: "External query confirmation is required.",
   debateProviderGateLoading: "Loading the exact disclosure…",
   debateProviderGateEmpty: "No retryable external query is currently pending.",
@@ -905,6 +907,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateControllerWaiting: "正在等待教师控制权…",
   debateControlBusy: "正在更新课堂播放…",
   debateRetryReason: "播放未能开始，可以重试当前发言。",
+  debateProviderSetupIncomplete:
+    "已选择真实供应商，但其已审阅策略尚未导入。重试无法解决，需要先导入策略。",
   debateProviderGateTitle: "需要确认本轮外部检索请求。",
   debateProviderGateLoading: "正在读取精确数据外发说明…",
   debateProviderGateEmpty: "当前没有等待重试的外部检索请求。",
@@ -1512,6 +1516,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   not_found: "errorNotFound",
   csrf_failed: "errorCsrfFailed",
   invalid_state: "errorInvalidState",
+  provider_preflight_blocked: "debateProviderSetupIncomplete",
   version_immutable: "errorVersionImmutable",
   stale_revision: "errorStaleRevision",
   stale_control_version: "errorStaleControlVersion",
