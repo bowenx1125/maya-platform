@@ -132,62 +132,7 @@ never be misled about which pieces are real.
 
 ### Mock to real
 
-Setting a selector to `dashscope` is **not** enough. Each real slice needs a
-reviewed provider policy snapshot in the runtime database. Without it every
-turn fails closed with `provider_preflight_blocked`.
-
-**1. Write the policy file.** Copy a template and replace every
-`REPLACE_WITH_...` with what you actually read:
-
-```sh
-cp docs/templates/llm-policy.template.json my-llm-policy.json
-```
-
-`*_retrieved_at` is the UTC time you opened the page; `*_sha256` is the hash of
-the page as you read it:
-
-```sh
-curl -s https://help.aliyun.com/zh/model-studio/privacy-notice | shasum -a 256
-```
-
-**2. Compute the policy hash.** The importer refuses a document whose hash does
-not match its own fields:
-
-```sh
-python scripts/compute_provider_policy_hash.py my-llm-policy.json --write
-```
-
-Put the printed value into `.env` as `LLM_PROVIDER_POLICY_HASH` and
-`REPORT_PROVIDER_POLICY_HASH` — one LLM policy covers both.
-
-**3. Import it.** `--acknowledge-reviewed` is your statement that you read the
-documents the file names; it exists so nobody can make that claim for you:
-
-```sh
-python scripts/import_llm_policy.py --policy-file my-llm-policy.json --database-url "sqlite:///$(pwd)/data/maya.sqlite3" --acknowledge-reviewed
-```
-
-Or let the review be done for you against the supplier's published documents,
-which fetches and hashes each one rather than asking you to:
-
-```sh
-docker compose stop backend && uv run --directory backend python ../scripts/import_provider_review.py --accept-account-settings && docker compose up -d
-```
-
-Stop the backend first: it holds the SQLite writer lock. Use `up -d` afterwards,
-not `start` — `start` reuses the container's original environment and would keep
-the old policy hashes.
-
-Set `DEMO_AUTO_CONFIRM_PROVIDER=true` in `.env` to carry standing consent for
-the per-turn disclosure, so a lesson is not interrupted. It only has effect
-while `DEMO_MODE` is true, every automatic confirmation is logged, and clearing
-it restores per-turn confirmation.
-
-Repeat both steps for embedding with
-`docs/templates/embedding-policy.template.json`,
-`scripts/import_provider_policy.py`, and `EMBEDDING_PROVIDER_POLICY_HASH`.
-
-**4. Turn the selectors on and restart:**
+**1. Turn the selectors on and restart:**
 
 ```sh
 sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=dashscope/; s/^MAYA_REPORT_PROVIDER=.*/MAYA_REPORT_PROVIDER=dashscope/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=dashscope/' .env && docker compose up -d
@@ -195,7 +140,7 @@ sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=dashscope/; s/^MAYA_REPORT_PROVIDER=.
 
 On Linux use `sed -i` without the `''`.
 
-**5. Confirm** that Embedding, Debate LLM and Maya Report now report `real`
+**2. Confirm** that Embedding, Debate LLM and Maya Report now report `real`
 using the check command above.
 
 ### Real back to Mock
