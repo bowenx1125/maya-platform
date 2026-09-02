@@ -39,6 +39,11 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "and disagreement, and gives a recommendation. It asks no question.",
     "The round barrier is strict: only public/final-ready turns from rounds before the "
     "current round are visible. Same-round and future turns are never context.",
+    # MutualLearningValidator counts the speech and its question and fails the
+    # turn closed outside this band. It was enforced without ever being stated,
+    # so a real turn could only satisfy it by accident.
+    "The speech must contain between 80 and 200 words, counting the question text "
+    "when the turn asks one. A turn outside that range is rejected.",
     "Evidence is snapshot-scoped. Use only server-assigned receipt IDs from this "
     "request; discussing another Agent's claim never transfers that Agent's evidence.",
     "No receipt means honest general reasoning/no_match. Concrete quantities and named "

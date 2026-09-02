@@ -46,7 +46,11 @@ PROMPT_OUTPUT_SCHEMA_ID: Literal["mutual_learning_turn_result_v1"] = (
 )
 PROMPT_EVIDENCE_TRACE_SCHEMA_ID: Literal["evidence_trace_v1"] = "evidence_trace_v1"
 
-_POINTER_RE = re.compile(r"^/(?:[^~/]|~[01])*$|^$")
+# Matches contracts/llm-repair-feedback.v1.schema.json, which is the frozen
+# grammar these pointers are serialized into. A narrower rule here does not make
+# the wire safer: it makes the runtime discard a precise pointer and fall back
+# to "/", which is the whole information the second attempt had to work with.
+_POINTER_RE = re.compile(r"^/(?:[^~/]|~[01])*(?:/(?:[^~/]|~[01])*)*$|^$")
 
 
 class PromptRequestError(ValueError):

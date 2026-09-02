@@ -26,6 +26,12 @@ from uuid import uuid4
 
 PROVIDER_DATA_CALL_VERSION = "ProviderDataCallV1"
 FIXED_REGION = "cn-beijing"
+# A policy row whose policy_id starts with this prefix was derived from local
+# configuration in DEMO_MODE, not from a person reading the supplier's
+# documents. Each real slice gets its own row, so the ids are suffixed. Anything
+# showing Real/Mock composition must show that difference; nothing may treat
+# such a row as an audited policy.
+DEMO_UNREVIEWED_POLICY_PREFIX = "demo-unreviewed"
 FIXED_MODELS: Mapping[str, str] = MappingProxyType(
     {
         "embedding": "text-embedding-v4",
@@ -2357,6 +2363,7 @@ __all__ = [
     "OperationState",
     "OperationStateError",
     "PolicyValidationError",
+    "DEMO_UNREVIEWED_POLICY_PREFIX",
     "PROVIDER_DATA_CALL_VERSION",
     "ProviderAcceptanceUnknownError",
     "ProviderAcceptanceUnknownResultV1",

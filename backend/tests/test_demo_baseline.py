@@ -108,7 +108,12 @@ def test_demo_endpoints_disclose_modes_without_provider_secrets(
             ("translation", "mock"),
             ("report", "mock"),
         ]
-        assert all(set(item) <= {"key", "label", "mode"} for item in body["components"])
+        # The boundary is the point of this assertion: a component may say
+        # what it is and whether its policy was reviewed, and nothing else.
+        assert all(
+            set(item) <= {"key", "label", "mode", "policy_unreviewed"}
+            for item in body["components"]
+        )
 
         baseline = client.get("/api/v1/demo/baseline")
         assert baseline.status_code == 200, baseline.text

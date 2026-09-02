@@ -2076,12 +2076,23 @@ class LLMTurnRuntime:
                         "rule_invalid",
                     )
                 )
+                pointers = tuple(getattr(exc, "json_pointers", ()))
+                # The rule's own positions and its server-authored sentence.
+                # Neither is model output; without them a rule_invalid is
+                # indistinguishable from any other and the repair that follows
+                # cannot be judged.
+                LOGGER.warning(
+                    "Turn rejected by a domain rule attempt=%s pointers=%s rule=%s",
+                    current.attempt_no,
+                    ",".join(pointers) or "-",
+                    str(exc)[:160],
+                )
                 if current.attempt_no == 1 and max_attempts >= 2:
                     operation = self._fail_operation(operation_id, operation, "rule_invalid")
                     current = self._attempt_two(
                         current,
                         response=accepted,
-                        repair_override=("rule_invalid", getattr(exc, "json_pointers", ())),
+                        repair_override=("rule_invalid", pointers),
                     )
                     continue
                 return LLMRunOutcomeV1(

@@ -19,6 +19,10 @@ class DemoComponent(DemoSchema):
     key: Literal["embedding", "llm", "tts", "voice", "translation", "report"]
     label: str = Field(min_length=1)
     mode: DemoComponentMode
+    # True when this component is real but its provider policy was derived from
+    # local configuration instead of a reviewed supplier document. A Demo may
+    # run that way; it may not present it as audited.
+    policy_unreviewed: bool = False
 
 
 class DemoComposition(DemoSchema):

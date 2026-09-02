@@ -114,6 +114,17 @@ export function DemoCompositionBadge() {
             >
               {component.mode === "real" ? t("demoReal") : t("demoMock")}
             </strong>
+            {component.policy_unreviewed ? (
+              // A real component whose provider policy was derived locally
+              // rather than reviewed. Never let it read as audited.
+              <span
+                className="demo-mode-unreviewed"
+                data-demo-policy="unreviewed"
+                title={t("demoPolicyUnreviewedHint")}
+              >
+                {t("demoPolicyUnreviewed")}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>

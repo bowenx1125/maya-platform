@@ -115,6 +115,8 @@ export type DemoComponentKey =
   "embedding" | "llm" | "tts" | "voice" | "translation" | "report";
 export type DemoComponent = {
   key: DemoComponentKey;
+  /** Real, but under a policy derived locally rather than reviewed. */
+  policy_unreviewed?: boolean;
   label: string;
   mode: "real" | "mock";
 };

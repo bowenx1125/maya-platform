@@ -462,7 +462,10 @@ class MutualLearningValidator:
             if typed_receipts:
                 raise TurnValidationError(
                     "A retrieval hit must be represented by a claim receipt.",
-                    json_pointers=("/key_claims",),
+                    # Name the array to fill, not just the field that is wrong:
+                    # "/key_claims" alone left a repair attempt guessing which
+                    # of several rules about key claims it had broken.
+                    json_pointers=("/key_claims/0/used_evidence_refs",),
                 )
             if has_explicit_source_claim(result.speech) or any(
                 has_explicit_source_claim(claim.claim_text)

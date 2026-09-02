@@ -25,8 +25,11 @@ router = APIRouter(tags=["Demo"], include_in_schema=False)
 
 
 @router.get("/demo/composition", response_model=DemoComposition)
-def get_demo_composition(settings: Settings = Depends(get_settings)) -> DemoComposition:
-    return demo_composition(settings)
+def get_demo_composition(
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DemoComposition:
+    return demo_composition(settings, db)
 
 
 @router.get("/demo/baseline", response_model=DemoBaseline)
@@ -54,7 +57,7 @@ def get_demo_status(
             group_id=UUID(GROUP_DEMO_ID),
             usable=baseline_is_usable(db),
         ),
-        composition=demo_composition(settings),
+        composition=demo_composition(settings, db),
         dirty_agents=agents,
         dirty_debates=debates,
         dirty_interactions=interactions,

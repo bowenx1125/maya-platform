@@ -567,6 +567,9 @@ const enMessages = {
   checking: "Checking",
   unavailable: "Unavailable",
   demoComposition: "Demo composition",
+  demoPolicyUnreviewed: "unreviewed policy",
+  demoPolicyUnreviewedHint:
+    "This component calls a real supplier under a policy derived from local configuration. No supplier document was reviewed.",
   demoCompositionLede:
     "A live view of which platform pieces are real and which are Mock.",
   demoBaseline: "Published Demo Agent",
@@ -1232,6 +1235,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   checking: "检查中",
   unavailable: "不可用",
   demoComposition: "演示组成",
+  demoPolicyUnreviewed: "策略未审阅",
+  demoPolicyUnreviewedHint:
+    "该组件正在调用真实供应商，但所用策略由本地配置推导，未审阅任何供应商文档。",
   demoCompositionLede: "实时展示哪些平台组件为真实、哪些组件为 Mock。",
   demoBaseline: "已发布演示智能体",
   demoBaselineReady: "Bowen 基线已就绪",
