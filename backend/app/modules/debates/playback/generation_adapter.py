@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -91,7 +93,11 @@ from app.modules.knowledge.providers.tokenizer import TokenizerError, count_toke
 from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
+    ExportConfirmationV1,
+    ExportManifestV1,
+    ProviderPolicySnapshotV1,
     ProviderScopeBudgetV1,
+    confirm_export_manifest,
 )
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import (
@@ -107,6 +113,8 @@ from app.providers.llm_price_card import debate_budget_cap, real_core_demo_budge
 from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _provider_policy_hash(settings: object | None, slice_name: str) -> str | None:
@@ -132,11 +140,89 @@ def _provider_policy_hash(settings: object | None, slice_name: str) -> str | Non
     return None
 
 
+def _debate_round_count(debate: object) -> int:
+    """The Debate's own round count, from its frozen rule snapshot.
+
+    ``round_count`` is not a column; it is a field of ``rule_snapshot_json``.
+    Anything outside the RuleSet's 2-5 range falls back to two rather than
+    sizing a budget from a value the product would not have accepted.
+    """
+
+    direct = getattr(debate, "round_count", None)
+    if isinstance(direct, int) and not isinstance(direct, bool) and 2 <= direct <= 5:
+        return direct
+    try:
+        snapshot = json.loads(str(getattr(debate, "rule_snapshot_json", "{}") or "{}"))
+    except (TypeError, ValueError):
+        return 2
+    value = snapshot.get("round_count") if isinstance(snapshot, dict) else None
+    if isinstance(value, int) and not isinstance(value, bool) and 2 <= value <= 5:
+        return value
+    return 2
+
+
 def _dual_real(settings: object | None) -> bool:
     return (
         getattr(settings, "llm_provider", "mock") == "dashscope"
         and getattr(settings, "embedding_provider", "mock") == "dashscope"
     )
+
+
+def _standing_provider_consent(
+    repository: ProviderRepository,
+    manifest: ExportManifestV1,
+    policy: ProviderPolicySnapshotV1,
+    settings: object,
+) -> bool:
+    """Apply the operator's standing consent to one provider disclosure.
+
+    Owner decision (2026-09-03), recorded through DEMO_AUTO_CONFIRM_PROVIDER
+    and effective only while DEMO_MODE is on. In a local Demo the teacher is
+    the same person who installed the policy, and confirming once per turn
+    stops the lesson rather than informing anyone.
+
+    Every check that guards a hand confirmation still runs here:
+    ``confirm_export_manifest`` re-derives the manifest and policy binding, and
+    the repository refuses a stale hash. A refusal still parks the turn, so
+    standing consent can never turn a rejected disclosure into a sent request.
+    It is standing consent, not an absence of consent: what the disclosure
+    covers is unchanged, and the teacher can withdraw it by clearing the flag.
+    """
+
+    if not getattr(settings, "demo_mode", False):
+        return False
+    if not getattr(settings, "demo_auto_confirm_provider", False):
+        return False
+    try:
+        revision = int(manifest.operation_revision)
+        confirmation = confirm_export_manifest(
+            manifest,
+            policy,
+            confirmed_at=datetime.now(UTC).isoformat(),
+            expected_manifest_hash=manifest.manifest_hash,
+            expected_policy_hash=policy.policy_hash,
+        )
+        identifier = repository.get_export_manifest_id(manifest.manifest_hash)
+        if identifier is None:
+            return False
+        repository.save_export_confirmation(
+            identifier,
+            ExportConfirmationV1(
+                manifest_hash=confirmation.manifest_hash,
+                policy_hash=confirmation.policy_hash,
+                confirmed_at=confirmation.confirmed_at,
+                confirmation_revision=revision,
+            ),
+        )
+    except Exception:
+        return False
+    # The operational record says which confirmations were standing rather than
+    # hand-given, so an audit can tell them apart.
+    LOGGER.warning(
+        "Provider disclosure confirmed by standing Demo consent manifest=%s",
+        manifest.manifest_hash,
+    )
+    return True
 
 
 def _assert_llm_provider_endpoint(
@@ -357,9 +443,10 @@ class SqlTurnPreparer:
             )
         try:
             dual_real = _dual_real(self.settings)
-            # The Debate carries its own round count, so the budget scales with
-            # the actual 2-5 Agent x 2-5 round shape instead of assuming two.
-            debate_rounds = int(getattr(debate, "round_count", 2) or 2)
+            # The Debate row has no round_count column: the count lives in the
+            # frozen rule snapshot. Reading the attribute silently fell back to
+            # two, so a four-round debate was budgeted for two and ran out.
+            debate_rounds = _debate_round_count(debate)
             cap = (
                 real_core_demo_budget_cap(len(participants), round_count=debate_rounds)
                 if dual_real
@@ -491,6 +578,7 @@ class SqlTurnPreparer:
                     "provider_confirmation_stale",
                 }:
                     raise
+                confirmed = _standing_provider_consent(repository, persisted, policy, self.settings)
             else:
                 confirmed = True
             return {

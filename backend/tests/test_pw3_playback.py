@@ -257,9 +257,17 @@ async def test_valid_trace_projection_matches_replay_history_projection(
 
 
 @pytest.mark.asyncio
-async def test_finish_is_rejected_until_live_playback_waits_for_next(
+async def test_finish_is_available_from_any_live_state_but_not_a_terminal_one(
     tmp_path: Path,
 ) -> None:
+    """Finish is the teacher's way out, so it must not depend on one state.
+
+    It used to be rejected unless playback was exactly waiting_next, which
+    trapped a debate whose turn was prepared but never played: it could not be
+    started and could not be ended, and it held the course's single running
+    slot until an operator reset.
+    """
+
     service, repository, debate, first_id, _second_id = await _replay_fixture(tmp_path)
     debate.status = "running"
     state = repository.playback_state(None, debate)
@@ -268,16 +276,26 @@ async def test_finish_is_rejected_until_live_playback_waits_for_next(
     state.current_turn_id = first_id
     state.control_version = 2
 
+    await service.finish(
+        None,
+        debate.id,
+        expected_control_version=2,
+        expected_current_turn_id=first_id,
+    )
+    assert debate.status == "debate_finished"
+
+    # A terminal playback is still refused: there is nothing left to finish.
+    state = repository.playback_state(None, debate)
+    debate.status = "running"
+    state.status = "stopped"
+    state.control_version += 1
     with pytest.raises(PlatformError) as raised:
         await service.finish(
             None,
             debate.id,
-            expected_control_version=2,
-            expected_current_turn_id=first_id,
+            expected_control_version=state.control_version,
         )
-
     assert raised.value.code == "invalid_state"
-    assert debate.status == "running"
 
 
 @pytest.mark.asyncio

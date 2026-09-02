@@ -129,6 +129,9 @@ const enMessages = {
   debateLegacyRuleSet: "Demo two-round",
   debateMutualLearningRuleSet: "Multi-round mutual learning",
   debateRoundCount: "Rounds",
+  debateRoundOption: "{count} rounds",
+  debateRoundCountHint:
+    "Each expert speaks once per round, so this debate runs {turns} turns.",
   debateMutualLearningRules:
     "Opening → exchange → final integration · 80–200 English words per turn.",
   debatePhaseOpening: "Opening",
@@ -841,6 +844,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateLegacyRuleSet: "Demo 两轮",
   debateMutualLearningRuleSet: "多轮专家互鉴",
   debateRoundCount: "轮数",
+  debateRoundOption: "{count} 轮",
+  debateRoundCountHint: "每位专家每轮发言一次，本场共 {turns} 次发言。",
   debateMutualLearningRules:
     "Opening → exchange → final integration · 每次 80—200 个英文单词。",
   debatePhaseOpening: "Opening（开场）",

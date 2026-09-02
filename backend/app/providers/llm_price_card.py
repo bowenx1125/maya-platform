@@ -280,18 +280,30 @@ def actual_cost(
     )
 
 
-def debate_budget_cap(agent_count: int, *, round_count: int = 2) -> LLMBudgetCapV1:
-    """Return the frozen cap for a 2- or 5-Agent, two-round fixture."""
+# The RuleSet accepts 2-5 Agents over 2-5 rounds, so the cap is derived from
+# the debate's own shape. It used to recognise only the two fixture shapes the
+# original acceptance run used, which rejected a 3-Agent debate while allowing a
+# 5-Agent one and refused every round count but two.
+LLM_TURN_MAX_ATTEMPTS: Final = LLM_ATTEMPT_CAP
+LLM_TURN_MAX_COST: Final = Decimal("0.30")
 
-    if isinstance(agent_count, bool) or not isinstance(agent_count, int) or agent_count < 2:
-        raise LLMPriceCardError("agent count is invalid")
-    if round_count != 2:
-        raise LLMPriceCardError("the LLM-A cap is frozen for two rounds")
-    if agent_count == 2:
-        return LLMBudgetCapV1(LLM_SMALL_DEBATE_MAX_ATTEMPTS, LLM_SMALL_DEBATE_MAX_COST)
-    if agent_count == 5:
-        return LLMBudgetCapV1(LLM_FULL_DEBATE_MAX_ATTEMPTS, LLM_FULL_DEBATE_MAX_COST)
-    raise LLMPriceCardError("debate exceeds the LLM-A Agent cap")
+
+def debate_budget_cap(agent_count: int, *, round_count: int = 2) -> LLMBudgetCapV1:
+    """Return the worst-case cap for one Debate of this exact shape.
+
+    One turn per Agent per round, at most ``LLM_ATTEMPT_CAP`` attempts each. The
+    two frozen fixture values are reproduced exactly by this derivation, which
+    is what ``test_debate_budget_cap_matches_the_frozen_fixtures`` pins.
+    """
+
+    for name, value, ceiling in (
+        ("agent count", agent_count, 5),
+        ("round count", round_count, 5),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or not 2 <= value <= ceiling:
+            raise LLMPriceCardError(f"{name} is invalid")
+    turns = agent_count * round_count
+    return LLMBudgetCapV1(turns * LLM_TURN_MAX_ATTEMPTS, LLM_TURN_MAX_COST * turns)
 
 
 def real_core_demo_budget_cap(
@@ -299,19 +311,30 @@ def real_core_demo_budget_cap(
     *,
     round_count: int = REAL_CORE_DEMO_ROUND_COUNT,
 ) -> LLMBudgetCapV1:
-    """Return the one-shot four-turn LLM cap for the Real-Core Demo.
+    """Return the one-request-per-turn LLM cap for a fully real Demo.
 
-    The Demo fixes two Agents and two rounds.  Its one request per turn rule
-    is intentionally separate from the general LLM-A repair budget so a
-    production/recovery allowance cannot silently authorize a seventh LLM
-    request.
+    The one request per turn rule is intentionally separate from the general
+    LLM-A repair budget so a production/recovery allowance cannot silently
+    authorize an extra LLM request. That rule is unchanged; only the size now
+    follows the Debate's own 2-5 Agent x 2-5 round shape. It used to be fixed
+    at two Agents and two rounds, so a fully real Demo refused every other
+    shape the product lets a teacher create - and blamed the provider policy
+    when it did.
     """
 
-    if agent_count != REAL_CORE_DEMO_AGENT_COUNT or round_count != REAL_CORE_DEMO_ROUND_COUNT:
-        raise LLMPriceCardError("Real-Core Demo LLM budget is fixed to two Agents and two rounds")
+    for name, value in (("agent count", agent_count), ("round count", round_count)):
+        if isinstance(value, bool) or not isinstance(value, int) or not 2 <= value <= 5:
+            raise LLMPriceCardError(f"{name} is invalid")
+    turns = agent_count * round_count
+    per_turn_requests = REAL_CORE_DEMO_LLM_MAX_REQUESTS // (
+        REAL_CORE_DEMO_AGENT_COUNT * REAL_CORE_DEMO_ROUND_COUNT
+    )
+    per_turn_cost = REAL_CORE_DEMO_LLM_MAX_COST / (
+        REAL_CORE_DEMO_AGENT_COUNT * REAL_CORE_DEMO_ROUND_COUNT
+    )
     return LLMBudgetCapV1(
-        max_requests=REAL_CORE_DEMO_LLM_MAX_REQUESTS,
-        max_cost_cny=REAL_CORE_DEMO_LLM_MAX_COST,
+        max_requests=turns * per_turn_requests,
+        max_cost_cny=per_turn_cost * turns,
     )
 
 
@@ -324,6 +347,8 @@ PriceCardV1 = LLMPriceCardV1
 
 __all__ = [
     "LLM_ATTEMPT_CAP",
+    "LLM_TURN_MAX_ATTEMPTS",
+    "LLM_TURN_MAX_COST",
     "LLM_CURRENCY",
     "LLM_FULL_DEBATE_MAX_ATTEMPTS",
     "LLM_FULL_DEBATE_MAX_COST",

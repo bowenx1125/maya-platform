@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # Passwordless identity selection is intentionally a separate explicit
     # Demo-only capability: either flag being off must hide the route.
     demo_quick_login: bool = Field(default=False, validation_alias="DEMO_QUICK_LOGIN")
+    # Standing consent for the provider data-call disclosure, recorded here
+    # rather than implied by DEMO_MODE so the decision is visible in .env and
+    # has to be taken deliberately. It only has effect while DEMO_MODE is on.
+    # With it off, a person confirms each disclosure exactly as before.
+    demo_auto_confirm_provider: bool = Field(
+        default=False, validation_alias="DEMO_AUTO_CONFIRM_PROVIDER"
+    )
     session_secret: str | None = Field(default=None, validation_alias="SESSION_SECRET")
     classroom_public_base_url: str | None = Field(
         default=None,

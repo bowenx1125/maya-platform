@@ -364,6 +364,13 @@ class ProviderRepository:
         )
         return _manifest_from_row(row) if row is not None else None
 
+    def get_export_manifest_id(self, manifest_hash: str) -> str | None:
+        """Resolve a stored manifest's row id, which save_export_confirmation needs."""
+
+        table = _MANIFEST_TABLE
+        row = self._read_one(select(table).where(table.c.manifest_hash == manifest_hash))
+        return str(row["id"]) if row is not None else None
+
     def get_export_confirmation(self, manifest_hash: str) -> ExportConfirmationV1 | None:
         row = self._read_one(
             select(_CONFIRMATION_TABLE).where(_CONFIRMATION_TABLE.c.manifest_hash == manifest_hash)

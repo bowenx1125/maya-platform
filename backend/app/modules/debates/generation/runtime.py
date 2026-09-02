@@ -465,10 +465,13 @@ class LLMTurnRuntime:
         max_attempts: int = LLM_MAX_ATTEMPTS,
         budget_cap: object | None = None,
     ) -> None:
-        if isinstance(agent_count, bool) or not isinstance(agent_count, int) or agent_count < 2:
-            raise ValueError("agent_count must be at least two")
-        if round_count != 2:
-            raise ValueError("LLM-A runtime is frozen to two rounds")
+        # The RuleSet accepts 2-5 Agents over 2-5 rounds and the runtime only
+        # uses these to size the budget, so it accepts the same range. It used
+        # to refuse every round count but two, which made the product offer a
+        # shape its own runtime rejected.
+        for name, value in (("agent_count", agent_count), ("round_count", round_count)):
+            if isinstance(value, bool) or not isinstance(value, int) or not 2 <= value <= 5:
+                raise ValueError(f"{name} must be between two and five")
         if (
             isinstance(max_attempts, bool)
             or not isinstance(max_attempts, int)

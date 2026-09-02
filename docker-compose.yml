@@ -49,6 +49,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       DEMO_MODE: ${DEMO_MODE:-true}
       DEMO_QUICK_LOGIN: ${DEMO_QUICK_LOGIN:-true}
+      DEMO_AUTO_CONFIRM_PROVIDER: ${DEMO_AUTO_CONFIRM_PROVIDER:-false}
       SESSION_SECRET: ${SESSION_SECRET:-}
       CLASSROOM_PUBLIC_BASE_URL: ${CLASSROOM_PUBLIC_BASE_URL:-}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/maya.sqlite3}

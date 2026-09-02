@@ -766,10 +766,17 @@ class PlaybackControlMixin(PlaybackCore):
                 )
             if str(self._get(debate, "status", default="")) != "running":
                 raise invalid_state("Only a running debate can be finished.")
-            if state.status != "waiting_next" or state.mode != "live":
-                raise invalid_state(
-                    "A debate can be finished only while waiting for the teacher's next command."
-                )
+            if state.mode != "live":
+                raise invalid_state("Only live playback can be finished.")
+            if state.status in {"completed", "stopped"}:
+                raise invalid_state("This debate has already reached a terminal state.")
+            # Finish is the teacher's way out of a lesson, so it is available
+            # from any live, non-terminal state. Allowing it only from
+            # waiting_next trapped a debate whose turn was prepared but never
+            # played: it could not be started and could not be ended, and it
+            # held the course's single running slot until an operator reset.
+            # A finish before every turn is public is already representable as
+            # the partial finish computed below.
 
             turns = self._turns(db, debate)
             total = len(turns)

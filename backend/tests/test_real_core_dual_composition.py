@@ -147,8 +147,20 @@ def test_dual_demo_caps_llm_and_query_requests(tmp_path: Path) -> None:
     cap = real_core_demo_budget_cap(2, round_count=2)
     assert cap.max_requests == REAL_CORE_DEMO_LLM_MAX_REQUESTS == 4
     assert REAL_CORE_DEMO_QUERY_MAX_REQUESTS == 2
-    with pytest.raises(ValueError):
-        real_core_demo_budget_cap(2, round_count=3)
+
+    # One request per turn is the rule; the shape is not. This used to assert
+    # that any round count but two raised, which pinned a fixture's shape as
+    # if it were the policy and made a fully real Demo refuse every debate the
+    # product lets a teacher create.
+    for agents in range(2, 6):
+        for rounds in range(2, 6):
+            assert (
+                real_core_demo_budget_cap(agents, round_count=rounds).max_requests
+                == agents * rounds
+            )
+    for agents, rounds in ((1, 2), (6, 2), (2, 1), (2, 6)):
+        with pytest.raises(ValueError):
+            real_core_demo_budget_cap(agents, round_count=rounds)
 
 
 def test_hash_validators_reject_non_sha256_slice_values(tmp_path: Path) -> None:

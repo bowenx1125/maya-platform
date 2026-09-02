@@ -1130,3 +1130,54 @@ def test_outbound_identity_tokens_withhold_user_ids_but_not_names(
         "kaikai",
         "jade",
     }
+
+
+def test_standing_consent_needs_both_flags_and_never_invents_a_confirmation() -> None:
+    """Standing consent is opt-in, Demo-only, and cannot fabricate a record.
+
+    Owner decision (2026-09-03): a local Demo may carry standing consent for
+    the provider disclosure so a lesson is not interrupted once per turn. It
+    applies only when DEMO_MODE and DEMO_AUTO_CONFIRM_PROVIDER are both on, and
+    a store that refuses the write still leaves the turn unconfirmed.
+    """
+
+    from types import SimpleNamespace
+
+    from app.modules.debates.playback.generation_adapter import _standing_provider_consent
+
+    class _RefusingRepository:
+        def get_export_manifest_id(self, manifest_hash: str) -> str:
+            del manifest_hash
+            return "manifest-row"
+
+        def save_export_confirmation(self, *args: object, **kwargs: object) -> str:
+            del args, kwargs
+            raise RuntimeError("the store refused this confirmation")
+
+    manifest = SimpleNamespace(manifest_hash="a" * 64, operation_revision=1)
+    policy = SimpleNamespace(policy_hash="b" * 64)
+
+    for demo_mode, auto_confirm in ((False, True), (True, False), (False, False)):
+        settings = SimpleNamespace(demo_mode=demo_mode, demo_auto_confirm_provider=auto_confirm)
+        assert (
+            _standing_provider_consent(
+                _RefusingRepository(),  # type: ignore[arg-type]
+                manifest,  # type: ignore[arg-type]
+                policy,  # type: ignore[arg-type]
+                settings,
+            )
+            is False
+        )
+
+    # Both flags on, but the store refuses: the turn stays unconfirmed rather
+    # than proceeding as though a person had agreed.
+    both_on = SimpleNamespace(demo_mode=True, demo_auto_confirm_provider=True)
+    assert (
+        _standing_provider_consent(
+            _RefusingRepository(),  # type: ignore[arg-type]
+            manifest,  # type: ignore[arg-type]
+            policy,  # type: ignore[arg-type]
+            both_on,
+        )
+        is False
+    )

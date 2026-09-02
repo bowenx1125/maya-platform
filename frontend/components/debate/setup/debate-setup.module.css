@@ -320,3 +320,18 @@
     justify-self: start;
   }
 }
+
+/* The round control follows the same label/control/hint rhythm as every other
+   field in this form; it previously borrowed a global utility class and
+   repeated its own value in a line underneath. */
+.roundField {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.roundLabel {
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 640;
+}

@@ -579,9 +579,20 @@ export function TeacherDebateCreate({
             >
               {copy(t, "debateMutualLearningRuleSet")}
             </p>
+            <strong>
+              {ruleSetId === "ordered_multi_expert_mutual_learning_v1"
+                ? copy(t, "debateMutualLearningRules")
+                : copy(t, "debateFixedRulesLede")}
+            </strong>
             {ruleSetId === "ordered_multi_expert_mutual_learning_v1" ? (
-              <label className="stack-form">
-                <span>{copy(t, "debateRoundCount")}</span>
+              // Label, control, hint - the shape every other field in this
+              // form uses. The chosen value used to be repeated in a line
+              // below the select, which said nothing the control did not, and
+              // the label reached for a global utility class inside a module.
+              <label className={styles.roundField}>
+                <span className={styles.roundLabel}>
+                  {copy(t, "debateRoundCount")}
+                </span>
                 <select
                   aria-label={copy(t, "debateRoundCount")}
                   disabled={busy}
@@ -594,22 +605,23 @@ export function TeacherDebateCreate({
                 >
                   {[2, 3, 4, 5].map((value) => (
                     <option key={value} value={value}>
-                      {value}
+                      {copy(t, "debateRoundOption").replace(
+                        "{count}",
+                        String(value),
+                      )}
                     </option>
                   ))}
                 </select>
+                <span className={styles.fieldHint}>
+                  {copy(t, "debateRoundCountHint").replace(
+                    "{turns}",
+                    String(selectedIds.length * roundCount),
+                  )}
+                </span>
               </label>
-            ) : null}
-            <strong>
-              {ruleSetId === "ordered_multi_expert_mutual_learning_v1"
-                ? copy(t, "debateMutualLearningRules")
-                : copy(t, "debateFixedRulesLede")}
-            </strong>
-            <span>
-              {ruleSetId === "ordered_multi_expert_mutual_learning_v1"
-                ? `${copy(t, "debateRoundCount")}: ${roundCount}`
-                : copy(t, "debateFlow")}
-            </span>
+            ) : (
+              <span className={styles.fieldHint}>{copy(t, "debateFlow")}</span>
+            )}
           </div>
           {formError ? (
             <div className="form-error" role="alert">

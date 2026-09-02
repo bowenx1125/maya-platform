@@ -38,7 +38,10 @@ function canFinishWithAuthority(
   return (
     detail.status === "running" &&
     detail.playback.mode === "live" &&
-    detail.playback.status === "waiting_next" &&
+    // Any live, non-terminal state. Offering Finish only from waiting_next
+    // trapped a debate whose turn was prepared but never played.
+    detail.playback.status !== "completed" &&
+    detail.playback.status !== "stopped" &&
     authority.commandBusy !== true &&
     authority.connection === "connected" &&
     authority.connectionIssue === null &&
@@ -81,11 +84,12 @@ function finishBlockedCopy(
       if (
         authority.commandBusy === true ||
         detail.playback.mode !== "live" ||
-        detail.playback.status !== "waiting_next"
+        detail.playback.status === "completed" ||
+        detail.playback.status === "stopped"
       ) {
         return zh
-          ? "只有课堂状态为等待中时才能结束辩论"
-          : "Finish is available only while the classroom status is Waiting.";
+          ? "本场辩论已结束或已停止"
+          : "This debate has already ended or been stopped.";
       }
       return zh
         ? "当前页面取得教师控制权后才能结束辩论"
