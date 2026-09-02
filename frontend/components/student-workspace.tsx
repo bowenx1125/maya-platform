@@ -144,28 +144,6 @@ export function StudentDashboard() {
           ))}
         </div>
       )}
-      <SectionCard
-        title={t("teachingNote")}
-        description={t("teachingNoteLede")}
-      >
-        <div className="teaching-note-grid">
-          <div>
-            <span className="feature-index">01</span>
-            <h3>{t("promptTeaching")}</h3>
-            <p>{t("promptTeachingLede")}</p>
-          </div>
-          <div>
-            <span className="feature-index">02</span>
-            <h3>{t("ragTeaching")}</h3>
-            <p>{t("ragTeachingLede")}</p>
-          </div>
-          <div>
-            <span className="feature-index">03</span>
-            <h3>{t("releaseTeaching")}</h3>
-            <p>{t("releaseTeachingLede")}</p>
-          </div>
-        </div>
-      </SectionCard>
     </>
   );
 }

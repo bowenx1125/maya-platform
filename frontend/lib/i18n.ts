@@ -270,18 +270,6 @@ const enMessages = {
   publishedCount: "published",
   noDescription: "No description yet",
   createFirstAgent: "Create your first Agent to begin.",
-  teachingNote: "A small teaching note",
-  teachingNoteLede:
-    "Maya keeps the moving parts visible so students can reason about them.",
-  promptTeaching: "Agent prompt",
-  promptTeachingLede:
-    "AGENT.md tells the Agent who it is and how it should speak.",
-  ragTeaching: "RAG evidence",
-  ragTeachingLede:
-    "Only Markdown files you explicitly enable can support a draft answer.",
-  releaseTeaching: "Immutable release",
-  releaseTeachingLede:
-    "Publishing freezes the text and evidence snapshot for teacher review.",
   groupMembers: "members",
   privateGroup: "private group boundary",
   openWorkspace: "Open workspace →",
@@ -450,24 +438,6 @@ const enMessages = {
   publishedWork: "Published work",
   currentAgents: "current Agents",
   noPublishedAgents: "No published Agents are visible in this course yet.",
-  teacherCapabilities: "Teacher capabilities",
-  teacherCapabilitiesLede:
-    "Inspect published releases, create debates, control classroom playback, and review immutable history. Student drafts cannot be viewed or edited here.",
-  inspectPublished: "Inspect published releases",
-  inspectPublishedLede:
-    "Review the current Agent prompt, avatar, voice state, and evidence snapshot.",
-  createDebate: "Create a classroom debate",
-  createDebateLede:
-    "Choose current published Agents and set their speaking order.",
-  controlClassroom: "Control classroom playback",
-  controlClassroomLede:
-    "Use Start, Next, Finish, and Replay to lead the classroom stage.",
-  reviewHistory: "Review immutable history",
-  reviewHistoryLede:
-    "Return to prior published versions and completed classroom debates.",
-  studentDraftBoundary: "Student draft boundary",
-  studentDraftBoundaryLede:
-    "Teacher views never expose or edit unpublished Agent drafts.",
   platformVoiceFallback: "Platform voice fallback",
   customVoiceReady: "Custom voice ready",
   producingGroup: "Producing group",
@@ -548,7 +518,7 @@ const enMessages = {
   markdownUploadedNotice: "Markdown uploaded and enabled for this draft.",
   editor: "editor",
   navigation: "navigation",
-  heroEyebrow: "MAYA · CULTURAL EXCHANGE CLASSROOM",
+  heroEyebrow: "Maya · Cultural exchange classroom",
   heroTitle: "Build a point of view. Keep the evidence clear.",
   heroLede:
     "A calm workspace for building a cultural Agent, checking its Markdown evidence, and sharing an immutable release with a teacher.",
@@ -569,7 +539,7 @@ const enMessages = {
   languageChinese: "中文",
   switchToEnglish: "Switch to English",
   switchToChinese: "Switch to Chinese",
-  runtimeEnvironment: "MAYA · ENVIRONMENT",
+  runtimeEnvironment: "Maya · Environment",
   runtimeHealth: "Runtime health",
   runtimeHealthLede: "A small, honest view of the local platform boundary.",
   checkingApiBoundary: "Checking the same-origin API boundary…",
@@ -582,7 +552,7 @@ const enMessages = {
   frontendDetail: "Next.js shell is serving this page.",
   backendReachable: "Platform API is reachable.",
   backendUnreachable: "The platform API could not be reached.",
-  nonSecretBuildContext: "NON-SECRET BUILD CONTEXT",
+  nonSecretBuildContext: "Non-secret build context",
   environment: "Environment",
   checkAgain: "Check again",
   runtimeMode: "Runtime mode",
@@ -594,7 +564,7 @@ const enMessages = {
   ready: "Ready",
   checking: "Checking",
   unavailable: "Unavailable",
-  demoComposition: "DEMO COMPOSITION",
+  demoComposition: "Demo composition",
   demoCompositionLede:
     "A live view of which platform pieces are real and which are Mock.",
   demoBaseline: "Published Demo Agent",
@@ -1002,14 +972,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   noDescription: "还没有简介",
   defineIdentity: "定义身份和证据集。",
   createFirstAgent: "创建你的第一个智能体。",
-  teachingNote: "教学提示",
-  teachingNoteLede: "Maya 将关键环节展示出来，帮助学生理解它们。",
-  promptTeaching: "智能体提示词",
-  promptTeachingLede: "AGENT.md 说明智能体是谁以及应该如何表达。",
-  ragTeaching: "RAG 证据",
-  ragTeachingLede: "只有你明确启用的 Markdown 文件才能支持草稿回答。",
-  releaseTeaching: "不可变发布",
-  releaseTeachingLede: "发布会冻结文本和证据快照，供教师复核。",
   groupMembers: "名成员",
   privateGroup: "小组内容边界",
   openWorkspace: "打开工作台 →",
@@ -1156,19 +1118,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   publishedWork: "已发布成果",
   currentAgents: "个当前智能体",
   noPublishedAgents: "这个课程还没有可见的已发布智能体。",
-  teacherCapabilities: "教师能力",
-  teacherCapabilitiesLede:
-    "查看已发布版本、创建辩论、控制课堂播放并查看不可变历史。教师视图不能查看或编辑学生草稿。",
-  inspectPublished: "查看已发布版本",
-  inspectPublishedLede: "查看当前 Agent 提示词、形象、音色状态和证据快照。",
-  createDebate: "创建课堂辩论",
-  createDebateLede: "选择当前已发布 Agent 并设置发言顺序。",
-  controlClassroom: "控制课堂播放",
-  controlClassroomLede: "使用开始、下一步、结束和重播带领课堂舞台。",
-  reviewHistory: "查看不可变历史",
-  reviewHistoryLede: "返回以前的已发布版本和已完成课堂辩论。",
-  studentDraftBoundary: "学生草稿边界",
-  studentDraftBoundaryLede: "教师视图不会暴露或编辑未发布的 Agent 草稿。",
   platformVoiceFallback: "平台兜底音色",
   customVoiceReady: "自定义音色就绪",
   producingGroup: "产出小组",
@@ -1692,6 +1641,3 @@ export function roleLabel(role: string, locale: Locale = "en"): string {
   return key ? t(key, locale) : role;
 }
 
-export function localeLabel(locale: Locale): string {
-  return locale === "zh" ? "中文" : "English";
-}

@@ -8,8 +8,6 @@ import re
 import secrets
 import threading
 import wave
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -17,9 +15,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from fastapi import HTTPException
-
-from app.modules.knowledge.files import contained_path, ensure_private_dir, write_atomic
+from app.modules.knowledge.files import contained_path, write_atomic
 from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError
 
 MEDIA_TICKET_TTL = timedelta(minutes=5)
@@ -801,23 +797,3 @@ class MediaTicketStore:
                     self._tickets.pop(key, None)
                     removed += 1
         return removed
-
-
-@contextmanager
-def private_audio_root(data_root: Path) -> Iterator[Path]:
-    """Create the exact private audio root for callers that need a lease."""
-
-    root = data_root / "courses"
-    ensure_private_dir(root)
-    try:
-        yield root
-    finally:
-        # Never recursively remove data here; lifecycle cleanup is owned by
-        # the audio swap journal/service.
-        pass
-
-
-def http_audio_error(status_code: int, code: str) -> HTTPException:
-    """Small adapter for routes that need framework-native status handling."""
-
-    return HTTPException(status_code=status_code, detail=code)

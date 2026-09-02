@@ -8,13 +8,11 @@ from dataclasses import dataclass
 
 from fastapi import Depends, Request, Security
 from fastapi.security import APIKeyCookie
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import Database
-from app.core.errors import csrf_failed, forbidden, not_found, unauthenticated
-from app.core.models import CourseMember, GroupMember
+from app.core.errors import csrf_failed, not_found, unauthenticated
 from app.core.origin import origin_allowed, origin_tuple
 from app.modules.auth.service import AuthContext, get_auth_context
 
@@ -126,25 +124,6 @@ class CourseScope:
     role: str
 
 
-def course_scope(db: Session, context: AuthContext, course_id: str) -> CourseScope | None:
-    role = db.scalar(
-        select(CourseMember.role).where(
-            CourseMember.course_id == course_id,
-            CourseMember.user_id == context.user.id,
-        )
-    )
-    return CourseScope(course_id, role) if role is not None else None
-
-
-def group_scope(db: Session, context: AuthContext, group_id: str) -> str | None:
-    return db.scalar(
-        select(GroupMember.role).where(
-            GroupMember.group_id == group_id,
-            GroupMember.user_id == context.user.id,
-        )
-    )
-
-
 def require_demo_mode(settings: Settings) -> None:
     if not settings.demo_mode:
         raise not_found()
@@ -158,11 +137,3 @@ def require_demo_quick_login(settings: Settings = Depends(get_settings)) -> Sett
         # anonymous request, so the feature is not discoverable when off.
         raise not_found()
     return settings
-
-
-def require_teacher(scope: CourseScope | None) -> CourseScope:
-    if scope is None:
-        raise not_found()
-    if scope.role != "teacher":
-        raise forbidden()
-    return scope

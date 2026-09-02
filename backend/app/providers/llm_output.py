@@ -357,10 +357,6 @@ def _integer_ref(value: object, *, label: str, maximum: int) -> int:
     return value
 
 
-def _repair_normalized(value: object) -> RepairFeedbackV1:
-    return RepairFeedbackV1.from_value(value)
-
-
 def validate_repair_feedback(value: object) -> RepairFeedbackV1:
     """Validate the exact public ``repair_feedback_v1`` grammar."""
 

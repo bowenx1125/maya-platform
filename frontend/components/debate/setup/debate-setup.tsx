@@ -635,5 +635,3 @@ export function TeacherDebateCreate({
 }
 
 // Keep the existing name available for the page-level integration point.
-export const DebateSetupList = TeacherDebateList;
-export const DebateSetupCreate = TeacherDebateCreate;

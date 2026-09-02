@@ -160,7 +160,3 @@ def validation_failure(
     """
 
     return PlatformError(code, message, 422, details or {})
-
-
-def uuid_string(value: UUID | str) -> str:
-    return str(value)

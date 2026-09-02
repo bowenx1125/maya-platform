@@ -411,23 +411,6 @@ def _final_barrage_rows(
     )
 
 
-def _final_barrage_dtos(
-    session: Session,
-    debate_id: str,
-    window_id: str,
-) -> list[BarrageMessageDTO]:
-    return [
-        BarrageMessageDTO(
-            id=_as_uuid(row.id),
-            nickname=row.nickname,
-            raw_text=row.raw_text,
-            sequence=row.sequence,
-            submitted_at=row.submitted_at,
-        )
-        for row in _final_barrage_rows(session, debate_id, window_id)
-    ]
-
-
 def _verify_final_projection(
     window: ClassroomInteractionWindow,
     votes: list[VoteAggregate],

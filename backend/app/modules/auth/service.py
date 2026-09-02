@@ -538,17 +538,6 @@ synchronize_demo_accounts = sync_demo_accounts
 sync_demo_account_catalog = sync_demo_accounts
 
 
-def synchronize_seed_and_demo_accounts(
-    target: Database,
-    settings: Settings,
-    seed_callback: Callable[[Session], None],
-    graph: DesiredAccountGraph | None = None,
-) -> AccountSyncResult:
-    """Compatibility name for the composition-root startup seam."""
-
-    return bootstrap_demo_accounts(target, settings, seed_callback, graph)
-
-
 def revoke_cookie_session(db: Session, raw_token: str | None, now: datetime | None = None) -> None:
     if not raw_token:
         return

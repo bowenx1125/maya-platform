@@ -23,7 +23,7 @@ from starlette.websockets import WebSocketState
 
 from app.core.config import Settings
 from app.core.errors import Error, PlatformError, forbidden, not_found
-from app.core.origin import origin_allowed, origin_tuple
+from app.core.origin import origin_allowed
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext, get_auth_context, session_hash
 from app.modules.debates.schemas import (
@@ -57,12 +57,6 @@ from .sql_repository import SqlEventStore, SqlPlaybackRepository
 
 router = APIRouter(tags=["Debates"])
 LOGGER = logging.getLogger(__name__)
-
-
-def _origin_tuple(value: str | None) -> tuple[str, str, int | None] | None:
-    """Keep the playback module's parsing seam backed by the shared helper."""
-
-    return origin_tuple(value)
 
 
 def get_playback_service(request: Request) -> PlaybackService:

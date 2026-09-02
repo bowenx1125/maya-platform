@@ -379,6 +379,3 @@ function downloadText(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function knowledgeErrorMessage(error: unknown): string {
-  return apiErrorMessage(error);
-}

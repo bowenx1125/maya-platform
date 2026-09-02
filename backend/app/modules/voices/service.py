@@ -22,7 +22,6 @@ from app.core.models import (
     CourseMember,
     Group,
     GroupMember,
-    VoicePreview,
     VoiceProfile,
     VoiceProviderOperation,
 )
@@ -841,18 +840,6 @@ def confirm_voice_profile(
     from app.modules.voices.preview import confirm_voice_profile as implementation
 
     return implementation(db, context, profile_id, settings)
-
-
-def _delete_preview_bytes(db: Session, data_root: Path, preview: VoicePreview) -> None:
-    from app.modules.voices.preview import delete_preview_bytes as implementation
-
-    implementation(db, data_root, preview)
-
-
-def _expire_profile_previews(db: Session, data_root: Path, profile_id: str) -> None:
-    from app.modules.voices.preview import expire_profile_previews as implementation
-
-    implementation(db, data_root, profile_id)
 
 
 def _tts_external_id(profile: VoiceProfile, settings: Settings) -> str:

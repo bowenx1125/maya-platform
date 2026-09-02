@@ -87,38 +87,6 @@ export function TeacherDashboard() {
           ))}
         </div>
       )}
-      <SectionCard
-        title={t("teacherCapabilities")}
-        description={t("teacherCapabilitiesLede")}
-      >
-        <div className="teaching-note-grid">
-          <div>
-            <span className="feature-index">01</span>
-            <h3>{t("inspectPublished")}</h3>
-            <p>{t("inspectPublishedLede")}</p>
-          </div>
-          <div>
-            <span className="feature-index">02</span>
-            <h3>{t("createDebate")}</h3>
-            <p>{t("createDebateLede")}</p>
-          </div>
-          <div>
-            <span className="feature-index">03</span>
-            <h3>{t("controlClassroom")}</h3>
-            <p>{t("controlClassroomLede")}</p>
-          </div>
-          <div>
-            <span className="feature-index">04</span>
-            <h3>{t("reviewHistory")}</h3>
-            <p>{t("reviewHistoryLede")}</p>
-          </div>
-          <div>
-            <span className="feature-index">05</span>
-            <h3>{t("studentDraftBoundary")}</h3>
-            <p>{t("studentDraftBoundaryLede")}</p>
-          </div>
-        </div>
-      </SectionCard>
     </>
   );
 }

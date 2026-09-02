@@ -82,13 +82,11 @@ from app.modules.knowledge.files import (
     read_contained,
     stage_atomic,
     verify_staged,
-    write_atomic,
 )
 from app.modules.knowledge.markdown import (
     EMBEDDING_DIMENSION,
     EMBEDDING_KEY,
     MAX_RAG_CHARS,
-    build_chunks,
     normalize_markdown,
     query_embedding,
 )
@@ -219,26 +217,6 @@ def visible_version(db: Session, context: AuthContext, version_id: str) -> Scope
     if row is None:
         raise not_found()
     return ScopedVersion(row[0], row[1], "teacher" if row[2] == "teacher" else "student")
-
-
-def visible_document(db: Session, context: AuthContext, document_id: str) -> ScopedDocument:
-    row = db.execute(
-        select(KnowledgeDocument, CourseMember.role)
-        .join(Group, Group.id == KnowledgeDocument.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .outerjoin(
-            GroupMember,
-            and_(GroupMember.group_id == Group.id, GroupMember.user_id == context.user.id),
-        )
-        .where(
-            KnowledgeDocument.id == document_id,
-            CourseMember.user_id == context.user.id,
-            or_(CourseMember.role == "teacher", GroupMember.user_id.is_not(None)),
-        )
-    ).first()
-    if row is None:
-        raise not_found()
-    return ScopedDocument(row[0], "teacher" if row[1] == "teacher" else "student")
 
 
 def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> ScopedSnapshot:
@@ -1021,31 +999,6 @@ def rag_preview(db: Session, version: AgentVersion, data_root: Path) -> RagPrevi
     )
 
 
-def _write_stored_file(
-    db: Session,
-    data_root: Any,
-    relative_path: str,
-    content: bytes,
-    *,
-    file_id: str | None = None,
-    now: datetime | None = None,
-) -> StoredFile:
-    digest, size = write_atomic(data_root, relative_path, content)
-    timestamp = now or now_utc()
-    stored = StoredFile(
-        id=file_id or str(uuid4()),
-        relative_path=relative_path,
-        sha256=digest,
-        size_bytes=size,
-        state="active",
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    db.add(stored)
-    db.flush()
-    return stored
-
-
 def replace_document_chunks(db: Session, document: KnowledgeDocument, chunks: Any) -> None:
     """Atomically swap a complete, already-computed chunk replacement."""
 
@@ -1066,12 +1019,6 @@ def replace_document_chunks(db: Session, document: KnowledgeDocument, chunks: An
                 embedding_key=EMBEDDING_KEY,
             )
         )
-
-
-def persist_document_chunks(db: Session, document: KnowledgeDocument, text: str) -> None:
-    """Compatibility wrapper that computes before mutating the old index."""
-
-    replace_document_chunks(db, document, build_chunks(text))
 
 
 def document_file_content(data_root: Any, document: KnowledgeDocument) -> bytes:

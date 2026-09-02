@@ -125,30 +125,14 @@ describe("PW3-E teacher shell and responsive contract", () => {
   it.each([
     {
       locale: "en" as const,
-      title: "Teacher capabilities",
-      copy: [
-        "Inspect published releases",
-        "Create a classroom debate",
-        "Control classroom playback",
-        "Review immutable history",
-        "Student draft boundary",
-      ],
       boundary: "Student drafts cannot be viewed or edited here.",
     },
     {
       locale: "zh" as const,
-      title: "教师能力",
-      copy: [
-        "查看已发布版本",
-        "创建课堂辩论",
-        "控制课堂播放",
-        "查看不可变历史",
-        "学生草稿边界",
-      ],
       boundary: "教师视图不能查看或编辑学生草稿。",
     },
   ])(
-    "explains teacher capabilities and the student-draft boundary ($locale)",
+    "states the student-draft boundary once and loads the course ($locale)",
     async (caseData) => {
       const api = apiForTeacher();
       mockedUseSession.mockReturnValue({
@@ -161,14 +145,14 @@ describe("PW3-E teacher shell and responsive contract", () => {
         </LocaleProvider>,
       );
 
+      // The boundary is stated in the page lede. It used to be repeated in a
+      // capabilities section and again in five explainer cards; exactly one
+      // statement is the contract now.
       await waitFor(() =>
-        expect(screen.getByText(caseData.title)).toBeTruthy(),
+        expect(
+          screen.getAllByText((content) => content.includes(caseData.boundary)),
+        ).toHaveLength(1),
       );
-      for (const copy of caseData.copy)
-        expect(screen.getByText(copy)).toBeTruthy();
-      expect(
-        screen.getAllByText((content) => content.includes(caseData.boundary)),
-      ).not.toHaveLength(0);
       expect(api.courses).toHaveBeenCalledTimes(1);
       expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
     },

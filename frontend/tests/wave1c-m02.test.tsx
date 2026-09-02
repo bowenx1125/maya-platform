@@ -55,7 +55,7 @@ describe("Wave 1C presentation locale", () => {
     expect(screen.getByTestId("locale").textContent).toBe("en");
     expect(document.documentElement.lang).toBe("en-US");
     expect(document.cookie).toContain("maya_ui_locale=en");
-    expect(screen.getByText("STUDENT HOME")).toBeTruthy();
+    expect(screen.getByText("Student home")).toBeTruthy();
     expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe(
       "unsaved draft",
     );

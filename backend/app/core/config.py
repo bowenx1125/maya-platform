@@ -591,9 +591,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-
-
-def clear_settings_cache() -> None:
-    """Test/support hook for environment-isolated app instances."""
-
-    get_settings.cache_clear()

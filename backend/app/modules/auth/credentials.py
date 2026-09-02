@@ -231,14 +231,6 @@ def discard_pending_catalog(settings: Settings) -> None:
             _CATALOG_SNAPSHOTS.pop(id(settings), None)
 
 
-def clear_catalog_snapshot(settings: Settings) -> None:
-    """Test/support hook; production never hot-reloads catalog state."""
-
-    if _CATALOG_SNAPSHOTS.get(id(settings), (None, None))[0] is settings:
-        _CATALOG_SNAPSHOTS.pop(id(settings), None)
-    discard_pending_catalog(settings)
-
-
 def _safe_text(value: object, field: str) -> str:
     if not isinstance(value, str):
         raise CredentialFileError("demo account catalog is malformed")
@@ -545,24 +537,6 @@ def load_desired_graph(settings: Settings) -> DesiredAccountGraph:
     raise CredentialFileError("demo account catalog is not configured")
 
 
-def load_demo_accounts(settings: Settings) -> tuple[DemoAccount, ...]:
-    return load_desired_graph(settings).accounts
-
-
-def load_credentials(settings: Settings) -> tuple[DemoCredential, ...]:
-    """Return a legacy hash-shaped view without making it the source of truth."""
-
-    snapshot = active_catalog_snapshot(settings)
-    hasher = PasswordHash.recommended()
-    credentials: list[DemoCredential] = []
-    for account in snapshot.accounts:
-        password_hash = account.password_hash or hasher.hash(account.password)
-        credentials.append(
-            DemoCredential(snapshot.user_id_for(account), account.username, password_hash)
-        )
-    return tuple(credentials)
-
-
 def verify_password(settings: Settings, username: str, password: str) -> str | None:
     """Return the configured active-catalog User UUID for a valid password."""
 
@@ -588,12 +562,6 @@ def verify_password(settings: Settings, username: str, password: str) -> str | N
     except CredentialFileError:
         return None
     return None
-
-
-def private_catalog_path(settings: Settings) -> Path:
-    """Expose the path to startup wiring without exposing it in DTOs."""
-
-    return settings.resolved_demo_accounts_file
 
 
 # Naming aliases keep the startup seam easy to discover for callers while all

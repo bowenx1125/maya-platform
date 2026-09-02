@@ -8,7 +8,6 @@ inside the server-side database model.  The API projections in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -1849,5 +1848,3 @@ class ProviderReservation(Base):
 
 # Keep a small helper available to fingerprint/serialization code without
 # exposing ORM internals in route modules.
-def model_dict(instance: Any, *fields: str) -> dict[str, Any]:
-    return {field: getattr(instance, field) for field in fields}
