@@ -29,7 +29,6 @@ from app.core.models import (
     KnowledgeSnapshot,
     ProviderPolicySnapshot,
     SnapshotDocument,
-    User,
 )
 from app.modules.agents.persona_service import (
     PERSONA_CONFIRMATION_REQUIRED,
@@ -286,14 +285,13 @@ class SqlTurnPreparer:
         ).all()
         for member_id in member_ids:
             add(str(member_id))
-            user = db.get(User, str(member_id))
-            if user is not None:
-                add(user.username)
-                add(user.display_name)
+        # Only the stable authenticated identifier is withheld. Usernames and
+        # display names are deliberately not treated as identity here (owner
+        # decision, 2026-09-02): they are ordinary given names a teacher may
+        # legitimately put in a topic or an Agent name, and blocking them
+        # failed the whole turn closed behind a code that named no cause.
         # Agent names are fictional or cultural labels and are an intentional
-        # field of PersonaProviderViewV1.  Treating them as student identity
-        # would reject every normal Persona before the provider manifest is
-        # created.  Authenticated course-user identifiers remain forbidden.
+        # field of PersonaProviderViewV1 for the same reason.
         del group_id, participants
         return tuple(
             dict.fromkeys(

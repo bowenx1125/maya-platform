@@ -1096,3 +1096,37 @@ def test_router_lists_publication_manifests_by_agent_version() -> None:
 
         missing = client.get("/provider/data-call/pending/agent-versions/agent-version-missing")
     assert missing.status_code == 404
+
+
+def test_outbound_identity_tokens_withhold_user_ids_but_not_names(
+    client: TestClient, database: Database
+) -> None:
+    """Owner decision (2026-09-02): a classmate's name may reach the provider.
+
+    The names in this classroom are ordinary given words — "maya" is inside
+    "himalaya", "jade" inside "jaded" — so withholding them failed whole turns
+    closed on unrelated vocabulary. The stable authenticated identifier is
+    still withheld, and the separate UUID, email, phone, bearer-token and
+    workspace checks are untouched.
+    """
+
+    from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
+    from app.seed import BOWEN_ID, COURSE_ID, GROUP_DEMO_ID, TEACHER_ID
+
+    del client  # the fixture only guarantees the seed has been applied
+    with database.session() as session:
+        tokens = SqlTurnPreparer._authoritative_identity_tokens(
+            session,
+            course_id=COURSE_ID,
+            group_id=GROUP_DEMO_ID,
+            participants=(),
+        )
+
+    assert TEACHER_ID in tokens
+    assert BOWEN_ID in tokens
+    assert not {token.casefold() for token in tokens} & {
+        "maya",
+        "bowen",
+        "kaikai",
+        "jade",
+    }

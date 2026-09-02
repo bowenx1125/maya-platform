@@ -373,16 +373,17 @@ def _validate_request_key_tree(value: object) -> None:
 
 
 def _contains_identity_token(folded_text: str, token: str) -> bool:
-    """Whether one course identity appears in already case-folded text.
+    """Whether one supplied identity token appears in already case-folded text.
 
-    Demo usernames and display names are ordinary given names, so a plain
-    substring test rejects unrelated vocabulary: "himalaya" contains "maya"
-    and "jaded" contains "jade", and one such word fails the whole turn
-    closed with a safe code that names no cause. Matching on word boundaries
-    keeps the fence exactly where it belongs - a course member named in the
-    outbound request - while letting normal prose through. High-entropy
-    identifiers (user IDs, emails, phone numbers, bearer tokens, the
-    workspace ID) keep their own unconditional checks below.
+    Matching is on word boundaries, not substrings, because a short token
+    otherwise rejects unrelated vocabulary - "himalaya" contains "maya",
+    "jaded" contains "jade" - and one such word fails a whole turn closed
+    behind a safe code that names no cause.
+
+    The Debate path supplies only authenticated user IDs here. Callers may
+    still pass any token they need withheld. High-entropy identifiers (UUIDs,
+    emails, phone numbers, bearer tokens, the workspace ID) keep their own
+    unconditional checks below and do not depend on this list.
     """
 
     needle = token.casefold().strip()
