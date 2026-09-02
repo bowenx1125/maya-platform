@@ -27,6 +27,27 @@ from .types import (
 MUTUAL_LEARNING_PLATFORM_RULES = (
     "This is the ordered multi-expert mutual-learning protocol. Apply these platform "
     "rules before any persona text.",
+    # These four are checked mechanically and are the ones a real model breaks,
+    # so they lead and stay terse: a rule buried in a long list is a rule the
+    # model weighs against everything after it, and every extra word here is
+    # charged against the same pre-send token budget as the transcript.
+    "REQUIREMENT 1. If the evidence catalog is non-empty, at least one key_claims entry "
+    "must cite a receipt in used_evidence_refs by its 0-based catalog index, and only "
+    "where it genuinely supports that claim. All-empty used_evidence_refs with a "
+    "non-empty catalog is rejected. Empty catalog: leave them all empty.",
+    "REQUIREMENT 2. The speech must be 80-200 words, counting the question text when "
+    "the turn asks one. Outside that range the turn is rejected.",
+    "REQUIREMENT 3. An exchange or final turn must have at least one engagement of "
+    "another expert's EARLIER-round turn; empty engagements is rejected. An opening turn "
+    "must leave engagements empty. target_turn_ref is that turn's 0-based index in the "
+    "visible transcript. Use target_claim_ref -1, meaning the turn as a whole and always "
+    "valid, unless quoting one numbered claim of it.",
+    "REQUIREMENT 4. Write the speech first, then fill key_claims by copying whole "
+    "sentences out of it. Each claim_text must be an exact character-for-character "
+    "substring of the speech: never rephrase, shorten, re-punctuate, translate or join. "
+    "If a claim is not word-for-word in the speech, change the speech.",
+    "Evidence is snapshot-scoped: use only this request's server-assigned receipt IDs; "
+    "discussing another Agent's claim never transfers that Agent's evidence.",
     "Authoritative speech is English only and must remain respectful; never solicit a vote.",
     "Opening is independent: do not engage another Agent, answer a question, evaluate "
     "another Agent, claim consensus, or ask a targeted question.",
@@ -39,27 +60,8 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "and disagreement, and gives a recommendation. It asks no question.",
     "The round barrier is strict: only public/final-ready turns from rounds before the "
     "current round are visible. Same-round and future turns are never context.",
-    # MutualLearningValidator counts the speech and its question and fails the
-    # turn closed outside this band. It was enforced without ever being stated,
-    # so a real turn could only satisfy it by accident.
-    "The speech must contain between 80 and 200 words, counting the question text "
-    "when the turn asks one. A turn outside that range is rejected.",
-    "Evidence is snapshot-scoped. Use only server-assigned receipt IDs from this "
-    "request; discussing another Agent's claim never transfers that Agent's evidence.",
     "No receipt means honest general reasoning/no_match. Concrete quantities and named "
     "study, expert, survey, report, or source claims require a current receipt.",
-    # The server fails a turn closed when a retrieval hit is never represented
-    # by a claim, and that requirement was previously only enforced, never said.
-    "When this request supplies retrieval receipts, at least one key claim must cite one "
-    "of them in used_evidence_refs, using the 0-based index of that receipt in this "
-    "request's evidence catalog. Cite a receipt only where it genuinely supports the "
-    "claim; when the request supplies no receipt, leave every used_evidence_refs empty.",
-    # The server binds every claim to a span of the turn's own speech, so a
-    # paraphrased claim_text fails closed.  The rule was enforced but never
-    # stated, which made the first real provider turn reject itself.
-    "Every key_claims[].claim_text must be copied verbatim from this turn's own speech: "
-    "an exact character-for-character substring of it. Never paraphrase, shorten, "
-    "re-punctuate, translate or merge sentences when filling claim_text.",
     # Every key below is required by the closed schema, so a phase-absent value
     # has an exact written form.  The supplier's strict mode enforces shape but
     # not minimum length, and these forms were previously never stated.
@@ -80,12 +82,19 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "final_disagreements. Its speech never addresses or evaluates another expert.",
     "Exchange must return at least one key claim and at least one engagement targeting a "
     "visible earlier-round claim by another expert, a non-empty position_update_reason, "
-    "and at most one question.",
+    "and at most one question. When this request carries a pending question addressed to "
+    "this expert, the speech must answer it and answered_required_question must be true; "
+    "when no question is pending it must be false.",
     "Final integration must return non-empty learned_from_others and "
     "remaining_uncertainty, non-empty change_from_opening and final_recommendation, "
     "question mode='none', and every final_disagreements category from "
     "different_persona_or_framework, different_evidence, evidence_conflict, "
     "insufficient_information or value_tradeoff.",
+    # A closing checklist repeats only what the server checks mechanically. It
+    # costs a few tokens and is the last thing the model reads before writing.
+    "BEFORE ANSWERING, CHECK requirements 1-4, that answered_required_question "
+    "matches whether a question was pending, and that the phase's required fields "
+    "are filled and its forbidden fields empty.",
 )
 
 
