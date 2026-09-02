@@ -1,0 +1,34 @@
+{
+  "reviewed": true,
+  "provider": "dashscope",
+  "model": "text-embedding-v4",
+  "contract_version": "provider_data_call_v1",
+  "policy_hash": "REPLACE_WITH_COMPUTED_HASH",
+
+  "policy_id": "real-embedding-demo-policy",
+  "supplier": "Alibaba Cloud Model Studio",
+  "region": "cn-beijing",
+  "account_product": "payg_api",
+  "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+
+  "privacy_notice_url": "https://help.aliyun.com/zh/model-studio/privacy-notice",
+  "privacy_notice_retrieved_at": "REPLACE_WITH_UTC_TIMESTAMP",
+  "privacy_notice_sha256": "REPLACE_WITH_SHA256_OF_THE_PAGE_YOU_READ",
+
+  "service_terms_url": "https://help.aliyun.com/zh/model-studio/service-terms",
+  "service_terms_retrieved_at": "REPLACE_WITH_UTC_TIMESTAMP",
+  "service_terms_sha256": "REPLACE_WITH_SHA256_OF_THE_PAGE_YOU_READ",
+
+  "faq_url": "https://help.aliyun.com/zh/model-studio/faq",
+  "faq_retrieved_at": "REPLACE_WITH_UTC_TIMESTAMP",
+  "faq_sha256": "REPLACE_WITH_SHA256_OF_THE_PAGE_YOU_READ",
+
+  "no_training_basis": "REPLACE_WITH_THE_CLAUSE_YOU_RELIED_ON",
+  "prompt_response_logging_disabled": true,
+  "inference_log_backflow_disabled": true,
+  "optional_content_logging_disabled": true,
+  "service_improvement_disabled": true,
+  "storage_disclosed": true,
+  "retention_setting": "REPLACE_WITH_THE_RETENTION_YOU_CONFIRMED",
+  "snapshot_revision": 1
+}

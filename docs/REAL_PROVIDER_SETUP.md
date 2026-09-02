@@ -26,6 +26,31 @@ imported again.
 
 Keep your reviewed policy JSON outside the repository and back it up.
 
+## Writing the policy file
+
+Start from a template and replace every `REPLACE_WITH_...` with what you
+actually read:
+
+- `docs/templates/llm-policy.template.json`
+- `docs/templates/embedding-policy.template.json`
+
+The `*_retrieved_at` fields are the UTC timestamps when you opened those pages,
+and the `*_sha256` fields are the SHA-256 of the pages as you read them
+(`curl -s <url> | shasum -a 256`). `no_training_basis` and `retention_setting`
+record the clause and the setting you relied on.
+
+The importer refuses a document whose `policy_hash` does not match its own
+fields, so compute it once the values are final:
+
+```bash
+python scripts/compute_provider_policy_hash.py my-llm-policy.json --write
+```
+
+That helper reviews nothing — it only hashes what you wrote. Put the value it
+prints into `.env` as `LLM_PROVIDER_POLICY_HASH` (and
+`REPORT_PROVIDER_POLICY_HASH`, which uses the same LLM policy), or
+`EMBEDDING_PROVIDER_POLICY_HASH` for the embedding policy.
+
 ## Importing
 
 Two separate entry points, one per real slice:
