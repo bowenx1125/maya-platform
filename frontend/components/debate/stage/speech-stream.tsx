@@ -30,9 +30,23 @@ type SpeechStreamProps = {
   replayAllDisabled?: boolean;
 };
 
-/** How fast a newly published speech types out, in characters per tick. */
-const TYPE_CHARS_PER_TICK = 3;
+/**
+ * How long a newly published speech takes to type out, end to end.
+ *
+ * A fixed characters-per-tick rate made the reveal as long as the speech: an
+ * 800-character turn took over four seconds to finish appearing, so the room
+ * waited on an animation after the words were already available. Budgeting a
+ * duration instead keeps a short turn from flashing past and a long one from
+ * outstaying the moment it is meant to mark.
+ */
+const TYPE_TOTAL_MS = 1200;
 const TYPE_TICK_MS = 16;
+const TYPE_MIN_CHARS_PER_TICK = 2;
+
+function charsPerTick(length: number): number {
+  const ticks = Math.max(1, Math.round(TYPE_TOTAL_MS / TYPE_TICK_MS));
+  return Math.max(TYPE_MIN_CHARS_PER_TICK, Math.ceil(length / ticks));
+}
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
@@ -59,8 +73,9 @@ function useTypedSpeech(speech: string, animate: boolean): string {
     // so this effect never sets state on a render it did not cause.
     if (!shouldType) return;
     let index = 0;
+    const step = charsPerTick(speech.length);
     const timer = window.setInterval(() => {
-      index += TYPE_CHARS_PER_TICK;
+      index += step;
       if (index >= speech.length) {
         setTyped(speech);
         window.clearInterval(timer);

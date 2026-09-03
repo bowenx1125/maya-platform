@@ -2960,15 +2960,10 @@ export function DebateStage({
       data-classroom-phase={phase}
       aria-label={labels.stageTitle}
     >
-      {/* The eyebrow and description used to repeat the page heading directly
-          above them, so the same words appeared twice before any content. The
-          status they belonged with now leads the row that also carries every
-          control, and nothing sits below the two columns. */}
-      <div className={styles.stageHeader}>
-        <div className={styles.stageHeadline}>
-          <h1>{detailState.topic}</h1>
-        </div>
-      </div>
+      {/* No heading of its own: the page already titles this stage with the
+          same topic, and the status it used to carry now sits with the
+          controls under the face. A second copy of the title told a reader
+          nothing and pushed the debate itself further down. */}
 
       {!suppressConnectionUi && connection !== "connected" ? (
         <div className={styles.connectionOverlay} role="status">

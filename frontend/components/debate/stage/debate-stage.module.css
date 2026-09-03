@@ -295,10 +295,6 @@
 
 /* Controls lead the stage instead of trailing it, on the row that also carries
    the page's own Finish. */
-.stageHeadline h1 {
-  margin: 0;
-}
-
 .speechColumn,
 .transcriptCard,
 .controlsArea {

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -16,6 +17,7 @@ from ._core import (
     _SAFE_GENERATION_CODES,
     PlaybackCore,
 )
+from .audio import AudioMetadata
 from .events import EventRecord
 from .protocols import (
     PreparedGenerationFence,
@@ -80,7 +82,8 @@ class PlaybackPreparationMixin(PlaybackCore):
                     evidence_trace=tuple(self._evidence_trace(turn)),
                 )
             return self._default_prepared(debate, turn, participant)
-        result = self.turn_preparer(
+        call = functools.partial(
+            self.turn_preparer,
             db,
             debate,
             turn,
@@ -89,6 +92,19 @@ class PlaybackPreparationMixin(PlaybackCore):
                 self._get(debate, "cancellation_generation", default=0) or 0
             ),
         )
+        # The SQL preparer is synchronous and spends most of a turn inside one
+        # blocking provider HTTP call.  Run directly, that call sat on the
+        # event loop: uvicorn served nothing for its whole duration, so every
+        # page load, poll and stage event in the room stalled for as long as
+        # the model took.  A measured probe saw an unrelated request wait 24s.
+        #
+        # A thread is safe here rather than merely convenient: the session is
+        # handed over, not shared.  This coroutine awaits the thread and
+        # touches ``db`` neither before the handover nor until it returns, and
+        # the SQLite connections are built with ``check_same_thread=False``.
+        # An async preparer is only constructed in the thread and is still
+        # awaited on the loop, so a test double keeps its own semantics.
+        result = await asyncio.to_thread(call)
         if inspect.isawaitable(result):
             result = await result
         if isinstance(result, PreparedTurn):
@@ -398,7 +414,7 @@ class PlaybackPreparationMixin(PlaybackCore):
         ready_events: list[EventRecord] = []
         next_turn_to_enqueue: Any | None = None
         last_error: Exception | None = None
-        audio: Any | None = None
+        audio: AudioMetadata | None = None
         prepared: PreparedTurn | None = None
         try:
             # M11 owns the single shared attempt 1|2 repair budget.  Playback
@@ -427,13 +443,19 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if root is None:
                     raise TTSProviderError("audio store is not configured")
                 self.audio_store = AudioStore(root, tts_provider=self.tts_provider)
-            audio = self.audio_store.synthesize_and_store(
+            # Same reason as the preparer above: a real TTS provider is one
+            # more blocking HTTP call, and the audio store writes a file. Mock
+            # TTS returns fast enough to hide this, so leaving it on the loop
+            # would put the freeze back the moment the voice slice goes real.
+            synthesize: Callable[[], AudioMetadata] = functools.partial(
+                self.audio_store.synthesize_and_store,
                 course_id=self._course_id(debate),
                 debate_id=debate_id,
                 turn_id=turn_id,
                 speech=prepared.speech,
                 voice_token=voice_token,
             )
+            audio = await asyncio.to_thread(synthesize)
             async with self._lock:
                 fresh_debate = self._get_debate(db, debate_id)
                 fresh_turn = next(
