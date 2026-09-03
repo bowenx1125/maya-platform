@@ -236,7 +236,10 @@
   display: grid;
   grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.6fr);
   gap: 18px;
-  align-items: start;
+  /* Stretch, not start: the face and the panel beneath it fill the same
+     height as the speeches, so the stage reads as two rectangles that end on
+     the same line instead of a tall column beside a short one. */
+  align-items: stretch;
 }
 
 @media (max-width: 900px) {
@@ -247,16 +250,51 @@
 
 .avatarColumn {
   display: grid;
+  /* The face keeps its natural size; the panel takes the rest, which is what
+     makes the column bottom meet the speech column's. */
+  grid-template-rows: auto 1fr;
   gap: 12px;
   min-width: 0;
 }
 
-/* Controls lead the stage instead of trailing it, on the row that also carries
-   the page's own Finish. */
-.headerControls {
-  margin-bottom: 14px;
+/* Everything a teacher drives the lesson with, in the space the face leaves. */
+.stagePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
 }
 
+.stagePanel .statusCluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.stagePanel .controlsArea {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.stagePanel .controlButtons {
+  display: grid;
+  gap: 8px;
+}
+
+.stagePanel .controlButtons button {
+  width: 100%;
+}
+
+/* Controls lead the stage instead of trailing it, on the row that also carries
+   the page's own Finish. */
 .stageHeadline h1 {
   margin: 0;
 }

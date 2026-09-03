@@ -2968,77 +2968,6 @@ export function DebateStage({
         <div className={styles.stageHeadline}>
           <h1>{detailState.topic}</h1>
         </div>
-        <div className={styles.statusCluster}>
-          {showConnectionPill ? (
-            <span
-              className={styles.connectionPill}
-              data-state={connection}
-              role="status"
-            >
-              {connectionCopy}
-            </span>
-          ) : null}
-          <span className={styles.playbackStatus} data-phase={phase}>
-            {visibleStatus}
-          </span>
-          {headerActions ?? null}
-        </div>
-      </div>
-
-      <div className={styles.headerControls}>
-        {!readOnly ? (
-          <div className={styles.controlsArea}>
-            <div
-              className={styles.controlButtons}
-              role="group"
-              aria-label={labels.stageTitle}
-            >
-              <button
-                className="primary-action"
-                type="button"
-                disabled={busyAction !== null || detailState.status !== "draft"}
-                onClick={() => void runControl("start")}
-              >
-                {labels.start}
-              </button>
-              <button
-                className="primary-action"
-                type="button"
-                disabled={!canAdvance}
-                onClick={() => void runControl("next")}
-              >
-                {labels.next}
-              </button>
-            </div>
-            {busyAction ? (
-              <p className={styles.busyMessage} role="status">
-                {labels.controlBusy}
-              </p>
-            ) : null}
-            {!controllerReady &&
-            detailState.status !== "draft" &&
-            detailState.status !== "stopped" &&
-            detailState.status !== "failed" &&
-            !isProductTerminalDetail(detailState) &&
-            connectionIssue !== "superseded" &&
-            connectionIssue !== "terminal" &&
-            connectionIssue !== "session_expired" &&
-            connectionIssue !== "origin_mismatch" ? (
-              <p className={styles.controllerMessage} role="status">
-                {labels.controllerWaiting}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        <audio
-          ref={audioRef}
-          aria-label={labels.audioLabel}
-          preload="auto"
-          onEnded={onAudioEnded}
-          onError={onAudioError}
-          onTimeUpdate={onAudioTimeUpdate}
-        />
       </div>
 
       {!suppressConnectionUi && connection !== "connected" ? (
@@ -3110,6 +3039,82 @@ export function DebateStage({
               </article>
             );
           })}
+
+          {/* Controls and status sit in the blank space under the face
+              instead of in bands of their own above the columns, so the
+              stage reads as two rectangles ending on the same line. */}
+          <div className={styles.stagePanel}>
+            <div className={styles.statusCluster}>
+              {showConnectionPill ? (
+                <span
+                  className={styles.connectionPill}
+                  data-state={connection}
+                  role="status"
+                >
+                  {connectionCopy}
+                </span>
+              ) : null}
+              <span className={styles.playbackStatus} data-phase={phase}>
+                {visibleStatus}
+              </span>
+              {headerActions ?? null}
+            </div>
+            {!readOnly ? (
+              <div className={styles.controlsArea}>
+                <div
+                  className={styles.controlButtons}
+                  role="group"
+                  aria-label={labels.stageTitle}
+                >
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={
+                      busyAction !== null || detailState.status !== "draft"
+                    }
+                    onClick={() => void runControl("start")}
+                  >
+                    {labels.start}
+                  </button>
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={!canAdvance}
+                    onClick={() => void runControl("next")}
+                  >
+                    {labels.next}
+                  </button>
+                </div>
+                {busyAction ? (
+                  <p className={styles.busyMessage} role="status">
+                    {labels.controlBusy}
+                  </p>
+                ) : null}
+                {!controllerReady &&
+                detailState.status !== "draft" &&
+                detailState.status !== "stopped" &&
+                detailState.status !== "failed" &&
+                !isProductTerminalDetail(detailState) &&
+                connectionIssue !== "superseded" &&
+                connectionIssue !== "terminal" &&
+                connectionIssue !== "session_expired" &&
+                connectionIssue !== "origin_mismatch" ? (
+                  <p className={styles.controllerMessage} role="status">
+                    {labels.controllerWaiting}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <audio
+              ref={audioRef}
+              aria-label={labels.audioLabel}
+              preload="auto"
+              onEnded={onAudioEnded}
+              onError={onAudioError}
+              onTimeUpdate={onAudioTimeUpdate}
+            />
+          </div>
         </div>
 
         <div className={styles.speechColumn}>
