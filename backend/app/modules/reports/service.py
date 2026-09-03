@@ -41,6 +41,7 @@ from app.core.models import (
 )
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, TurnSource
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
+from app.modules.debates.round_count import expected_turn_count as planned_turn_count
 from app.providers.control import (
     LLM_MAYA_REPORT_BUCKET,
     ExportFieldV1,
@@ -991,7 +992,7 @@ def _report_context(
     )
     if not turns:
         raise invalid_state("A report requires public final-ready debate turns.")
-    expected_turn_count = len(participants) * 2
+    expected_turn_count = planned_turn_count(debate, len(participants))
     if len(turns) != expected_turn_count:
         raise invalid_state("The public final-ready turn set is incomplete.")
 

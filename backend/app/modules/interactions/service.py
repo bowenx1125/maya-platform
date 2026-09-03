@@ -42,6 +42,12 @@ from app.modules.debates.models import (
     PlaybackState,
 )
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
+from app.modules.debates.round_count import (
+    debate_round_count as planned_round_count,
+)
+from app.modules.debates.round_count import (
+    expected_turn_count as planned_turn_count,
+)
 
 from .models import (
     BarrageMessage,
@@ -677,12 +683,17 @@ def _open_eligibility(session: Session, debate: Debate) -> None:
         ).all()
     )
     participants = _participants(session, debate.id)
-    expected_turn_count = len(participants) * 2
+    expected_turn_count = planned_turn_count(debate, len(participants))
     expected_indexes = list(range(expected_turn_count))
     participant_ids = {row.id for row in participants}
     participant_rounds = {(row.participant_id, row.round_no) for row in turns}
+    # Every round the Debate plans, not the two the fixtures used. This sat
+    # right beside a turn count that had already been generalised, so a
+    # four-round debate passed the count and failed here instead.
     expected_rounds = {
-        (participant.id, round_no) for participant in participants for round_no in (1, 2)
+        (participant.id, round_no)
+        for participant in participants
+        for round_no in range(1, planned_round_count(debate) + 1)
     }
     if (
         len(participants) < 2

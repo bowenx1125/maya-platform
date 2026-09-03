@@ -229,11 +229,36 @@
   white-space: nowrap;
 }
 
+/* Two columns and nothing beneath them: the speaking face on the left, every
+   speech on the right. The speeches get the larger share because they are what
+   a classroom reads. */
 .stageColumns {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr);
-  gap: 16px;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.6fr);
+  gap: 18px;
   align-items: start;
+}
+
+@media (max-width: 900px) {
+  .stageColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.avatarColumn {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Controls lead the stage instead of trailing it, on the row that also carries
+   the page's own Finish. */
+.headerControls {
+  margin-bottom: 14px;
+}
+
+.stageHeadline h1 {
+  margin: 0;
 }
 
 .speechColumn,
@@ -603,7 +628,7 @@
      hidden pane - made min() resolve to 0 and the list became an invisible,
      unscrollable strip with its content overflowing. The floor keeps it
      usable whatever the viewport claims. */
-  max-height: clamp(320px, 58vh, 640px);
+  max-height: clamp(380px, 66vh, 760px);
   padding-right: 6px;
   overflow-y: auto;
   scroll-behavior: smooth;
@@ -663,8 +688,8 @@
 .streamSpeech {
   margin: 0;
   color: var(--ink);
-  font-size: 1.2rem;
-  line-height: 1.68;
+  font-size: 1.35rem;
+  line-height: 1.62;
   white-space: pre-wrap;
 }
 

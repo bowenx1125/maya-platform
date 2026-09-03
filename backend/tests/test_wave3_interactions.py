@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -75,7 +76,7 @@ def interaction_app(
         yield app, database, client
 
 
-def _seed_finished_debate(database: Database) -> tuple[str, list[str]]:
+def _seed_finished_debate(database: Database, *, rounds: int = 2) -> tuple[str, list[str]]:
     now = datetime.now(UTC)
     debate_id = str(uuid4())
     participant_specs = [
@@ -145,7 +146,7 @@ def _seed_finished_debate(database: Database) -> tuple[str, list[str]]:
             course_id=COURSE_ID,
             topic="Should a classroom use anonymous questions?",
             rule_set_id="ordered_multi_agent_rounds_demo_v1",
-            rule_snapshot_json="{}",
+            rule_snapshot_json=json.dumps({"round_count": rounds}),
             status="debate_finished",
             revision=0,
             last_sequence=0,
@@ -190,9 +191,12 @@ def _seed_finished_debate(database: Database) -> tuple[str, list[str]]:
                 )
             )
         session.flush()
-        for turn_index, participant_id in enumerate(
-            [participant_ids[0], participant_ids[1], participant_ids[0], participant_ids[1]]
-        ):
+        plan = [
+            participant_ids[index]
+            for _round in range(rounds)
+            for index in range(len(participant_ids))
+        ]
+        for turn_index, participant_id in enumerate(plan):
             snapshot_id = frozen[0 if participant_id == participant_ids[0] else 1][2]
             session.add(
                 DebateTurn(
@@ -200,7 +204,7 @@ def _seed_finished_debate(database: Database) -> tuple[str, list[str]]:
                     debate_id=debate_id,
                     participant_id=participant_id,
                     knowledge_snapshot_id=snapshot_id,
-                    round_no=1 if turn_index < 2 else 2,
+                    round_no=turn_index // len(participant_ids) + 1,
                     turn_index=turn_index,
                     generation_status="final_ready",
                     publication_status="public",
@@ -735,3 +739,60 @@ def test_finalized_snapshot_tampering_fails_closed(interaction_app: Any) -> None
             debate_id=debate_id,
         )
     assert tampered.value.code == "invalid_state"
+
+
+def test_downstream_eligibility_uses_the_debate_s_own_round_count() -> None:
+    """A four-round debate is complete at four rounds, not at two.
+
+    Three places sized the expected turn count as participants x 2 — the shape
+    the original fixtures used. A three-Agent four-round debate therefore looked
+    incomplete to all of them: classroom interaction answered 404, the report
+    refused to generate, and the teacher's interaction button vanished.
+    """
+
+    import json
+    from types import SimpleNamespace
+
+    from app.modules.debates.round_count import debate_round_count, expected_turn_count
+
+    for rounds in range(2, 6):
+        debate = SimpleNamespace(
+            round_count=None,
+            rule_snapshot_json=json.dumps({"round_count": rounds}),
+        )
+        assert debate_round_count(debate) == rounds
+        assert expected_turn_count(debate, 3) == 3 * rounds
+
+    # A shape the product would never have accepted falls back rather than
+    # sizing a completeness check from it.
+    for bad in (0, 1, 6, "3", None, True):
+        debate = SimpleNamespace(
+            round_count=None, rule_snapshot_json=json.dumps({"round_count": bad})
+        )
+        assert debate_round_count(debate) == 2
+
+    # The column wins when a caller supplies one, and malformed JSON never raises.
+    assert debate_round_count(SimpleNamespace(round_count=4, rule_snapshot_json="{}")) == 4
+    assert debate_round_count(SimpleNamespace(round_count=None, rule_snapshot_json="{")) == 2
+
+
+def test_every_offered_round_count_is_eligible_for_classroom_interaction(
+    interaction_app: Any,
+) -> None:
+    """The completeness gates accept every shape the RuleSet offers.
+
+    A four-round debate used to fail two separate checks in the same function:
+    a turn count sized as participants x 2, and a set of expected rounds built
+    as (1, 2). The first made classroom interaction answer 404; fixing only it
+    moved the failure to the second, which answered invalid_state instead.
+    """
+
+    from app.modules.debates.playback.eligibility import has_complete_finished_playback
+
+    _app, database, _client = interaction_app
+    for rounds in (2, 3, 4, 5):
+        debate_id, _participant_ids = _seed_finished_debate(database, rounds=rounds)
+        with database.session() as session:
+            assert has_complete_finished_playback(session, debate_id), (
+                f"a {rounds}-round debate must be eligible"
+            )

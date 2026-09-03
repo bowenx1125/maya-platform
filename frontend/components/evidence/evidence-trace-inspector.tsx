@@ -155,12 +155,31 @@ export function EvidenceTraceInspector({
   trace?: unknown;
 }) {
   const { locale } = useLocale();
-  const rows = normaliseEvidenceTrace(trace).filter(
+  const all = normaliseEvidenceTrace(trace);
+  // A span that does not reproduce its claim is not shown as lineage: an
+  // unverifiable highlight is worse than none. But dropping every row used to
+  // render nothing at all, which left a teacher unable to tell "this turn cited
+  // no evidence" from "its lineage no longer lines up with the speech".
+  const rows = all.filter(
     (row) =>
       row.speech_span.end_utf16 <= speech.length &&
       speechSpanText(speech, row.speech_span) === row.claim_text,
   );
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    return (
+      <p className={styles.absent} data-testid="evidence-trace-absent">
+        {all.length === 0
+          ? label(locale, {
+              en: "No snapshot evidence was cited in this turn.",
+              zh: "本轮发言没有引用快照证据。",
+            })
+          : label(locale, {
+              en: `Evidence lineage recorded (${all.length}) but it no longer aligns with this speech.`,
+              zh: `记录了 ${all.length} 条证据链，但与本段发言对不上。`,
+            })}
+      </p>
+    );
+  }
 
   return (
     <details

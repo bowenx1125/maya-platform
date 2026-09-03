@@ -19,6 +19,7 @@ import type {
 import { createIdempotencyHandle } from "../../../lib/api";
 import { EvidenceTraceInspector, normaliseEvidenceTrace } from "../../evidence";
 import { SpeechStream, type StreamTurn } from "./speech-stream";
+import { expectedTurnCount } from "../../../lib/debate-rounds";
 import {
   AvatarPreview,
   AVATAR_EXPRESSIONS,
@@ -498,6 +499,7 @@ export function DebateStage({
   onCurrentAudioDebateIdChange,
   actionInFlight = false,
   className,
+  headerActions,
 }: DebateStageProps) {
   const labels = useMemo(
     () => resolvePlaybackStageLabels(suppliedLabels),
@@ -2045,7 +2047,7 @@ export function DebateStage({
           if (
             playbackRef.current.mode === "live" &&
             publicTurnsRef.current.length >=
-              detailRef.current.participants.length * 2
+              expectedTurnCount(detailRef.current)
           ) {
             pendingActionRef.current = "start";
             setActiveParticipant(null);
@@ -2876,6 +2878,17 @@ export function DebateStage({
       ? visibleTurn
       : null;
   const activeRoundPhase = visibleRoundPhase(activeVisibleTurn, detailState);
+  // Only whoever is speaking. Three idle faces beside the speeches told a
+  // classroom nothing and took the width the speeches needed; before anyone
+  // speaks the first participant stands in so the column is never empty.
+  const speakingParticipants = (() => {
+    const current = detailState.participants.find(
+      (participant) => participant.id === currentParticipantId,
+    );
+    if (current) return [current];
+    return detailState.participants.slice(0, 1);
+  })();
+
   const replayAudioUnavailable =
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
@@ -2947,11 +2960,13 @@ export function DebateStage({
       data-classroom-phase={phase}
       aria-label={labels.stageTitle}
     >
+      {/* The eyebrow and description used to repeat the page heading directly
+          above them, so the same words appeared twice before any content. The
+          status they belonged with now leads the row that also carries every
+          control, and nothing sits below the two columns. */}
       <div className={styles.stageHeader}>
-        <div>
-          <span className={styles.eyebrow}>{labels.stageTitle}</span>
+        <div className={styles.stageHeadline}>
           <h1>{detailState.topic}</h1>
-          <p>{labels.stageDescription}</p>
         </div>
         <div className={styles.statusCluster}>
           {showConnectionPill ? (
@@ -2966,7 +2981,64 @@ export function DebateStage({
           <span className={styles.playbackStatus} data-phase={phase}>
             {visibleStatus}
           </span>
+          {headerActions ?? null}
         </div>
+      </div>
+
+      <div className={styles.headerControls}>
+        {!readOnly ? (
+          <div className={styles.controlsArea}>
+            <div
+              className={styles.controlButtons}
+              role="group"
+              aria-label={labels.stageTitle}
+            >
+              <button
+                className="primary-action"
+                type="button"
+                disabled={busyAction !== null || detailState.status !== "draft"}
+                onClick={() => void runControl("start")}
+              >
+                {labels.start}
+              </button>
+              <button
+                className="primary-action"
+                type="button"
+                disabled={!canAdvance}
+                onClick={() => void runControl("next")}
+              >
+                {labels.next}
+              </button>
+            </div>
+            {busyAction ? (
+              <p className={styles.busyMessage} role="status">
+                {labels.controlBusy}
+              </p>
+            ) : null}
+            {!controllerReady &&
+            detailState.status !== "draft" &&
+            detailState.status !== "stopped" &&
+            detailState.status !== "failed" &&
+            !isProductTerminalDetail(detailState) &&
+            connectionIssue !== "superseded" &&
+            connectionIssue !== "terminal" &&
+            connectionIssue !== "session_expired" &&
+            connectionIssue !== "origin_mismatch" ? (
+              <p className={styles.controllerMessage} role="status">
+                {labels.controllerWaiting}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <audio
+          ref={audioRef}
+          aria-label={labels.audioLabel}
+          preload="auto"
+          onEnded={onAudioEnded}
+          onError={onAudioError}
+          onTimeUpdate={onAudioTimeUpdate}
+        />
       </div>
 
       {!suppressConnectionUi && connection !== "connected" ? (
@@ -2991,55 +3063,55 @@ export function DebateStage({
         </div>
       ) : null}
 
-      <div
-        className={styles.avatarGrid}
-        role="list"
-        aria-label={labels.stageTitle}
-      >
-        {detailState.participants.map((participant) => {
-          const visual =
-            derivedAvatars.find(
-              (item) => item.participant_id === participant.id,
-            ) ??
-            deriveAvatarStates(
-              [participant],
-              playback,
-              [],
-              currentParticipantId === participant.id ? participant.id : null,
-            )[0];
-          const isCurrent = participant.id === currentParticipantId;
-          return (
-            <article
-              className={`${styles.avatarCard}${isCurrent ? ` ${styles.avatarCardCurrent}` : ""}`}
-              data-current={isCurrent ? "true" : "false"}
-              data-motion-state={visual?.motion_state ?? "idle"}
-              data-expression={visual?.expression ?? "neutral"}
-              key={participant.id}
-              role="listitem"
-              aria-label={`${participant.agent_name} ${visual?.motion_state ?? "idle"}`}
-            >
-              <div className={styles.avatarCardTop}>
-                <span className={styles.slotMark}>{participant.slot}</span>
-                {isCurrent ? (
-                  <span className={styles.currentMark}>{labels.current}</span>
-                ) : null}
-              </div>
-              <AvatarPreview
-                className={styles.avatar}
-                config={participant.avatar_config}
-                fallbackLabel={participant.agent_name}
-                state={visual?.motion_state ?? "idle"}
-              />
-              <div className={styles.avatarIdentity}>
-                <h2>{participant.agent_name}</h2>
-                <span>{participant.version_label}</span>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-
       <div className={styles.stageColumns}>
+        <div
+          className={styles.avatarColumn}
+          role="list"
+          aria-label={labels.stageTitle}
+        >
+          {speakingParticipants.map((participant) => {
+            const visual =
+              derivedAvatars.find(
+                (item) => item.participant_id === participant.id,
+              ) ??
+              deriveAvatarStates(
+                [participant],
+                playback,
+                [],
+                currentParticipantId === participant.id ? participant.id : null,
+              )[0];
+            const isCurrent = participant.id === currentParticipantId;
+            return (
+              <article
+                className={`${styles.avatarCard}${isCurrent ? ` ${styles.avatarCardCurrent}` : ""}`}
+                data-current={isCurrent ? "true" : "false"}
+                data-motion-state={visual?.motion_state ?? "idle"}
+                data-expression={visual?.expression ?? "neutral"}
+                key={participant.id}
+                role="listitem"
+                aria-label={`${participant.agent_name} ${visual?.motion_state ?? "idle"}`}
+              >
+                <div className={styles.avatarCardTop}>
+                  <span className={styles.slotMark}>{participant.slot}</span>
+                  {isCurrent ? (
+                    <span className={styles.currentMark}>{labels.current}</span>
+                  ) : null}
+                </div>
+                <AvatarPreview
+                  className={styles.avatar}
+                  config={participant.avatar_config}
+                  fallbackLabel={participant.agent_name}
+                  state={visual?.motion_state ?? "idle"}
+                />
+                <div className={styles.avatarIdentity}>
+                  <h2>{participant.agent_name}</h2>
+                  <span>{participant.version_label}</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
         <div className={styles.speechColumn}>
           {failure ? (
             <div className={styles.failureCard} role="alert">
@@ -3172,60 +3244,6 @@ export function DebateStage({
           />
         </div>
       </div>
-
-      {!readOnly ? (
-        <div className={styles.controlsArea}>
-          <div
-            className={styles.controlButtons}
-            role="group"
-            aria-label={labels.stageTitle}
-          >
-            <button
-              className="primary-action"
-              type="button"
-              disabled={busyAction !== null || detailState.status !== "draft"}
-              onClick={() => void runControl("start")}
-            >
-              {labels.start}
-            </button>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={!canAdvance}
-              onClick={() => void runControl("next")}
-            >
-              {labels.next}
-            </button>
-          </div>
-          {busyAction ? (
-            <p className={styles.busyMessage} role="status">
-              {labels.controlBusy}
-            </p>
-          ) : null}
-          {!controllerReady &&
-          detailState.status !== "draft" &&
-          detailState.status !== "stopped" &&
-          detailState.status !== "failed" &&
-          !isProductTerminalDetail(detailState) &&
-          connectionIssue !== "superseded" &&
-          connectionIssue !== "terminal" &&
-          connectionIssue !== "session_expired" &&
-          connectionIssue !== "origin_mismatch" ? (
-            <p className={styles.controllerMessage} role="status">
-              {labels.controllerWaiting}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <audio
-        ref={audioRef}
-        aria-label={labels.audioLabel}
-        preload="auto"
-        onEnded={onAudioEnded}
-        onError={onAudioError}
-        onTimeUpdate={onAudioTimeUpdate}
-      />
     </section>
   );
 }

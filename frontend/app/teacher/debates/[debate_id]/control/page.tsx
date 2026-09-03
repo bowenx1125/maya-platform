@@ -23,6 +23,7 @@ import {
 } from "../../../../../lib/api";
 import { useLocale, useT } from "../../../../../components/locale";
 import { localizeError, type Locale } from "../../../../../lib/i18n";
+import { expectedTurnCount } from "../../../../../lib/debate-rounds";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
   connection: "connecting",
@@ -98,20 +99,8 @@ function finishBlockedCopy(
 }
 
 function hasCompletePublicPlan(detail: DebateDetail): boolean {
-  const configuredRoundCount = (
-    detail as DebateDetail & {
-      round_count?: unknown;
-    }
-  ).round_count;
-  const roundCount =
-    typeof configuredRoundCount === "number" &&
-    Number.isInteger(configuredRoundCount) &&
-    configuredRoundCount >= 2 &&
-    configuredRoundCount <= 5
-      ? configuredRoundCount
-      : 2;
   return (
-    detail.public_turns.length === detail.participants.length * roundCount &&
+    detail.public_turns.length === expectedTurnCount(detail) &&
     detail.participants.length >= 2 &&
     detail.playback.status === "completed"
   );
@@ -315,24 +304,6 @@ export default function TeacherDebateControlPage() {
                     {t("debateBackToList")}
                   </Link>
                   {detail.status === "running" &&
-                  detail.playback.mode === "live" ? (
-                    <button
-                      className="primary-action"
-                      type="button"
-                      onClick={() => void finish()}
-                      disabled={finishBusy || !finishAllowed}
-                      aria-describedby={
-                        finishAllowed ? undefined : "finish-authority-message"
-                      }
-                    >
-                      {finishBusy
-                        ? locale === "zh"
-                          ? "正在结束…"
-                          : "Finishing…"
-                        : stageLabels.finish}
-                    </button>
-                  ) : null}
-                  {detail.status === "running" &&
                   detail.playback.mode === "live" &&
                   !finishAllowed ? (
                     <span id="finish-authority-message" role="status">
@@ -359,6 +330,26 @@ export default function TeacherDebateControlPage() {
               />
             ) : null}
             <DebateStage
+              headerActions={
+                detail.status === "running" &&
+                detail.playback.mode === "live" ? (
+                  <button
+                    aria-describedby={
+                      finishAllowed ? undefined : "finish-authority-message"
+                    }
+                    className="primary-action"
+                    disabled={finishBusy || !finishAllowed}
+                    onClick={() => void finish()}
+                    type="button"
+                  >
+                    {finishBusy
+                      ? locale === "zh"
+                        ? "正在结束…"
+                        : "Finishing…"
+                      : stageLabels.finish}
+                  </button>
+                ) : null
+              }
               api={api}
               debateId={debateId}
               detail={detail}

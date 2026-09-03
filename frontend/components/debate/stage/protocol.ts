@@ -1,3 +1,4 @@
+import { normaliseEvidenceTrace } from "../../evidence";
 import type { DebateParticipant, DebatePlaybackState } from "../../../lib/api";
 import {
   AVATAR_EXPRESSIONS,
@@ -422,6 +423,15 @@ export function visibleTurnFromPlaybackStarted(
     turn_index: turnIndex,
     speech: payload.speech,
     sources: sourceList(payload.sources),
+    // The started event carries the claim lineage and this builder used to
+    // drop it, so the turn rebuilt from the event replaced the one that had
+    // it and the evidence chain vanished the moment a speech went public.
+    // Falling back to the existing turn keeps a client whose event omits it.
+    ...(() => {
+      const fromEvent = normaliseEvidenceTrace(payload.evidence_trace);
+      const trace = fromEvent.length > 0 ? fromEvent : existing?.evidence_trace;
+      return trace && trace.length > 0 ? { evidence_trace: trace } : {};
+    })(),
     ...(payload.phase === "opening" ||
     payload.phase === "exchange" ||
     payload.phase === "final_integration"

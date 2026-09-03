@@ -2,8 +2,8 @@
 
 An early teacher Finish intentionally uses ``Debate.status=debate_finished``
 while its playback remains ``stopped``.  Downstream modules must therefore
-check the immutable two-round public plan and the terminal playback state,
-not the Debate status alone.
+check the complete public plan for the Debate's own round count and the
+terminal playback state, not the Debate status alone.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
+from app.modules.debates.round_count import expected_turn_count
 
 
 def has_complete_finished_playback(db: Session, debate_id: str) -> bool:
@@ -42,7 +43,7 @@ def has_complete_finished_playback(db: Session, debate_id: str) -> bool:
             .order_by(DebateTurn.turn_index, DebateTurn.id)
         ).all()
     )
-    expected_count = len(participants) * 2
+    expected_count = expected_turn_count(debate, len(participants))
     if len(turns) != expected_count or [row.turn_index for row in turns] != list(
         range(expected_count)
     ):

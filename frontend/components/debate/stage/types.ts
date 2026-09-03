@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   DebateDetail,
   DebatePlaybackState,
@@ -224,6 +226,9 @@ export type PlaybackSocket = {
 export type PlaybackSocketFactory = (url: string) => PlaybackSocket;
 
 export type DebateStageProps = {
+  /** Page-owned actions rendered in the stage's own header row, so a
+   *  teacher's Finish sits with Start and Next instead of a row apart. */
+  headerActions?: ReactNode;
   debateId: string;
   detail: DebateDetail;
   api: DebatePlaybackApi;
