@@ -51,7 +51,25 @@ prints into `.env` as `LLM_PROVIDER_POLICY_HASH` (and
 `REPORT_PROVIDER_POLICY_HASH`, which uses the same LLM policy), or
 `EMBEDDING_PROVIDER_POLICY_HASH` for the embedding policy.
 
-## Importing
+## The reviewing importer
+
+`scripts/import_provider_review.py` does the reading for you: it fetches each
+published supplier document, records its SHA-256 and the UTC time it was read,
+and stores the supplier's own statements as the recorded basis. Those are
+evidence — the supplier editing a page changes the hash.
+
+```sh
+docker compose stop backend && uv run --directory backend python ../scripts/import_provider_review.py --accept-account-settings && docker compose up -d
+```
+
+It cannot inspect your supplier console, so the four account switches stay an
+explicit assertion behind `--accept-account-settings`.
+
+The reviewed documents are written to `backend/config/provider-policies/`
+(git-ignored, mode 0600) and reinstalled on startup whenever their row is
+missing, so resetting the runtime no longer removes the review.
+
+## Importing a policy you wrote yourself
 
 Two separate entry points, one per real slice:
 

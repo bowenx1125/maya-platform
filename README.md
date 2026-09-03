@@ -132,7 +132,26 @@ never be misled about which pieces are real.
 
 ### Mock to real
 
-**1. Turn the selectors on and restart:**
+**1. Install the reviewed provider policy — once per machine.** A supplier key
+is not enough: without a policy row every turn fails closed with
+`provider_preflight_blocked`. This reads each published supplier document,
+records its SHA-256 and the time it was read, and saves the result outside
+`data/` so a runtime reset no longer destroys it.
+
+```sh
+docker compose stop backend && uv run --directory backend python ../scripts/import_provider_review.py --accept-account-settings && docker compose up -d
+```
+
+Stop the backend first: it holds the SQLite writer lock. Use `up -d` afterwards,
+not `start` — `start` reuses the container's old environment and would keep the
+previous policy hashes.
+
+Optionally set `DEMO_AUTO_CONFIRM_PROVIDER=true` in `.env` to carry standing
+consent for the per-turn disclosure so a lesson is not interrupted. It has
+effect only while `DEMO_MODE` is true, every automatic confirmation is logged,
+and clearing it restores per-turn confirmation.
+
+**2. Turn the selectors on and restart:**
 
 ```sh
 sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=dashscope/; s/^MAYA_REPORT_PROVIDER=.*/MAYA_REPORT_PROVIDER=dashscope/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=dashscope/' .env && docker compose up -d
@@ -140,7 +159,7 @@ sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=dashscope/; s/^MAYA_REPORT_PROVIDER=.
 
 On Linux use `sed -i` without the `''`.
 
-**2. Confirm** that Embedding, Debate LLM and Maya Report now report `real`
+**3. Confirm** that Embedding, Debate LLM and Maya Report now report `real`
 using the check command above.
 
 ### Real back to Mock
