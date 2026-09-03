@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import sys
 import urllib.request
 from datetime import UTC, datetime
@@ -230,6 +231,22 @@ def main() -> None:
                 repository.save_policy_snapshot(policy)
         session.commit()
 
+    # Persist the reviewed document outside data/ so a runtime reset no longer
+    # destroys the review. Startup reinstalls from here when the row is absent.
+    policy_dir = root / "backend" / "config" / "provider-policies"
+    policy_dir.mkdir(parents=True, exist_ok=True)
+    policy_dir.chmod(0o700)
+    for name, policy in (("llm", llm), ("embedding", embedding)):
+        document = dict(policy.canonical_dict())
+        document.pop("version", None)
+        document["policy_hash"] = policy.policy_hash
+        target = policy_dir / f"reviewed-{name}.json"
+        target.write_text(
+            json.dumps(document, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        target.chmod(0o600)
+
     _write_env_hashes(
         env_path,
         {
@@ -242,6 +259,8 @@ def main() -> None:
         print(f"replaced {replaced} earlier reviewed policies")
     print(f"installed reviewed LLM and embedding policies in {region}")
     print("updated LLM/REPORT/EMBEDDING policy hashes in .env")
+    print(f"saved the reviewed documents to {policy_dir.relative_to(root)}")
+    print("a runtime reset no longer removes them; startup reinstalls them")
 
 
 if __name__ == "__main__":

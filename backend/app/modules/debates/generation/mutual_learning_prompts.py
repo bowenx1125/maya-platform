@@ -27,10 +27,13 @@ from .types import (
 MUTUAL_LEARNING_PLATFORM_RULES = (
     "This is the ordered multi-expert mutual-learning protocol. Apply these platform "
     "rules before any persona text.",
-    # These four are checked mechanically and are the ones a real model breaks,
-    # so they lead and stay terse: a rule buried in a long list is a rule the
-    # model weighs against everything after it, and every extra word here is
-    # charged against the same pre-send token budget as the transcript.
+    # These six are checked mechanically and are the ones a real model breaks,
+    # so they lead, stay in order and stay terse: a rule buried in a long list
+    # is a rule the model weighs against everything after it, and every extra
+    # word here is charged against the same pre-send token budget as the
+    # transcript. Each names a field the request actually carries - an earlier
+    # draft pointed at a "question targets" catalog and a pending_question
+    # value that are not in the serialized request at all.
     "REQUIREMENT 1. If the evidence catalog is non-empty, at least one key_claims entry "
     "must cite a receipt in used_evidence_refs by its 0-based catalog index, and only "
     "where it genuinely supports that claim. All-empty used_evidence_refs with a "
@@ -46,6 +49,15 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "sentences out of it. Each claim_text must be an exact character-for-character "
     "substring of the speech: never rephrase, shorten, re-punctuate, translate or join. "
     "If a claim is not word-for-word in the speech, change the speech.",
+    "REQUIREMENT 5. An exchange turn must ask exactly one question: mode='ask', "
+    "target_participant_ref=0, and non-empty text that also appears in the speech. The "
+    "server already chose who is asked, so 0 is the only accepted reference. Opening and "
+    "final-integration turns must instead use mode='none' with "
+    "target_participant_ref=-1 and text=''.",
+    "REQUIREMENT 6. answered_required_question is true only when this request carries a "
+    "pending_question, and then the speech must answer it. When the request has no "
+    "pending_question at all - every opening turn, and every exchange turn that was "
+    "asked nothing in the previous round - it must be false.",
     "Evidence is snapshot-scoped: use only this request's server-assigned receipt IDs; "
     "discussing another Agent's claim never transfers that Agent's evidence.",
     "Authoritative speech is English only and must remain respectful; never solicit a vote.",
@@ -53,8 +65,8 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "another Agent, claim consensus, or ask a targeted question.",
     "Exchange answers its assigned pending question when present, faithfully engages a "
     "public claim from an earlier round, rechecks the current Agent's snapshot, updates "
-    "its position, records uncertainty, and may ask at most one other Agent for the next "
-    "round.",
+    "its position, records uncertainty, and asks exactly one other Agent a question for "
+    "the next round.",
     "Final integration answers remaining questions, engages an earlier-round claim, "
     "states what was learned, compares opening and final positions, preserves consensus "
     "and disagreement, and gives a recommendation. It asks no question.",
@@ -82,9 +94,7 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "final_disagreements. Its speech never addresses or evaluates another expert.",
     "Exchange must return at least one key claim and at least one engagement targeting a "
     "visible earlier-round claim by another expert, a non-empty position_update_reason, "
-    "and at most one question. When this request carries a pending question addressed to "
-    "this expert, the speech must answer it and answered_required_question must be true; "
-    "when no question is pending it must be false.",
+    "and at most one question.",
     "Final integration must return non-empty learned_from_others and "
     "remaining_uncertainty, non-empty change_from_opening and final_recommendation, "
     "question mode='none', and every final_disagreements category from "
@@ -92,9 +102,8 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "insufficient_information or value_tradeoff.",
     # A closing checklist repeats only what the server checks mechanically. It
     # costs a few tokens and is the last thing the model reads before writing.
-    "BEFORE ANSWERING, CHECK requirements 1-4, that answered_required_question "
-    "matches whether a question was pending, and that the phase's required fields "
-    "are filled and its forbidden fields empty.",
+    "BEFORE ANSWERING, CHECK requirements 1-6, and that the phase's required "
+    "fields are filled and its forbidden fields empty.",
 )
 
 

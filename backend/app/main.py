@@ -79,6 +79,7 @@ from app.providers.llm_adapter import DashScopeLLMConfig
 from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_recovery import recover_llm_startup
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer
+from app.providers.policy_store import ensure_reviewed_policies
 from app.seed import COURSE_ID, seed_demo_data
 
 logger = logging.getLogger("maya.backend")
@@ -209,6 +210,16 @@ def create_app(
             if not runtime_settings.is_test:
                 with runtime_database.session() as session:
                     ensure_demo_baseline(session, runtime_settings.resolved_data_root)
+                # A reviewed provider policy is operator evidence, not runtime
+                # state. Reinstalling it here is what keeps "reset the runtime"
+                # from also meaning "real providers stop working".
+                with runtime_database.session() as session:
+                    restored = ensure_reviewed_policies(
+                        session, runtime_settings.resolved_config_root
+                    )
+                    if restored:
+                        session.commit()
+                        logger.info("Reinstalled %s reviewed provider policies", restored)
             recover_embedding_provider_startup(runtime_database)
             recover_llm_startup(ProviderRepository(runtime_database))
             with runtime_database.session() as session:

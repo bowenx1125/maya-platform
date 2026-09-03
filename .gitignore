@@ -49,3 +49,4 @@ backend/data.quarantine-*/
 # Local Docker/coverage artifacts
 docker-compose.override.yml
 htmlcov/
+backend/config/provider-policies/

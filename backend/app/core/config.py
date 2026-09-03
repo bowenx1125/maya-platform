@@ -557,6 +557,16 @@ class Settings(BaseSettings):
             return path
         return Path(__file__).resolve().parents[2] / path
 
+    @property
+    def resolved_config_root(self) -> Path:
+        """Where private operator files live, outside the disposable runtime.
+
+        Derived from the accounts file so a container mounting ``/app/config``
+        and a host checkout both resolve to the same directory.
+        """
+
+        return self.resolved_demo_accounts_file.parent.parent
+
     def ensure_data_root(self) -> None:
         root = self.resolved_data_root
         root.mkdir(parents=True, exist_ok=True)

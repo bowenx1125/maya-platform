@@ -231,7 +231,8 @@ def _validate_question(
         return
     if question.type != "agent":
         raise TurnValidationError(
-            "An exchange may ask one other expert question.", json_pointers=("/question",)
+            "An exchange turn must ask exactly one other expert a question.",
+            json_pointers=("/question",),
         )
     if (
         question.target_participant_id is None
