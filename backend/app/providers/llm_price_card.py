@@ -326,15 +326,17 @@ def real_core_demo_budget_cap(
         if isinstance(value, bool) or not isinstance(value, int) or not 2 <= value <= 5:
             raise LLMPriceCardError(f"{name} is invalid")
     turns = agent_count * round_count
-    per_turn_requests = REAL_CORE_DEMO_LLM_MAX_REQUESTS // (
-        REAL_CORE_DEMO_AGENT_COUNT * REAL_CORE_DEMO_ROUND_COUNT
-    )
-    per_turn_cost = REAL_CORE_DEMO_LLM_MAX_COST / (
-        REAL_CORE_DEMO_AGENT_COUNT * REAL_CORE_DEMO_ROUND_COUNT
-    )
+    # Fund what the runtime is configured to attempt. This used to allow one
+    # request per turn while the runtime allowed two, so the first turn that
+    # needed a structure repair borrowed a later turn's allowance and the last
+    # turn of the debate failed for want of budget - reliably, on every debate
+    # long enough for a repair to occur. A budget that cannot pay for the
+    # behaviour it governs is not a safety limit, it is a delayed failure.
+    per_request_cost = REAL_CORE_DEMO_LLM_MAX_COST / REAL_CORE_DEMO_LLM_MAX_REQUESTS
+    requests = turns * LLM_ATTEMPT_CAP
     return LLMBudgetCapV1(
-        max_requests=turns * per_turn_requests,
-        max_cost_cny=per_turn_cost * turns,
+        max_requests=requests,
+        max_cost_cny=per_request_cost * requests,
     )
 
 

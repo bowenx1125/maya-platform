@@ -18,6 +18,7 @@ import type {
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
 import { EvidenceTraceInspector, normaliseEvidenceTrace } from "../../evidence";
+import { SpeechStream, type StreamTurn } from "./speech-stream";
 import {
   AvatarPreview,
   AVATAR_EXPRESSIONS,
@@ -3040,64 +3041,6 @@ export function DebateStage({
 
       <div className={styles.stageColumns}>
         <div className={styles.speechColumn}>
-          {activeVisibleTurn ? (
-            <section className={styles.speechCard} aria-live="polite">
-              <div className={styles.speechHeader}>
-                <div>
-                  <span className={styles.eyebrow}>{labels.current}</span>
-                  <h2>
-                    {participantById.get(activeVisibleTurn.participant_id)
-                      ?.agent_name ?? activeVisibleTurn.participant_id}
-                  </h2>
-                </div>
-                <span className={styles.roundMark}>
-                  {labels.round} {activeVisibleTurn.round_no}
-                  {activeRoundPhase
-                    ? ` · ${phaseLabel(activeRoundPhase, labels)}`
-                    : ""}
-                </span>
-              </div>
-              <p className={styles.speechText}>{activeVisibleTurn.speech}</p>
-              <EvidenceTraceInspector
-                speech={activeVisibleTurn.speech}
-                trace={activeVisibleTurn.evidence_trace}
-              />
-              <div className={styles.sourceBlock}>
-                <h3>{labels.sources}</h3>
-                {activeVisibleTurn.sources.length > 0 ? (
-                  <ul>
-                    {activeVisibleTurn.sources.map((source) => (
-                      <li
-                        key={`${activeVisibleTurn.id}:${source.source_filename}:${source.chunk_id ?? ""}`}
-                      >
-                        {source.source_filename}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>{labels.noSources}</p>
-                )}
-              </div>
-            </section>
-          ) : (
-            <section className={styles.waitingCard} role="status">
-              {isTerminal
-                ? detailState.status === "failed"
-                  ? labels.debateFailed
-                  : detailState.status === "stopped"
-                    ? labels.debateStopped
-                    : playback.status === "completed"
-                      ? labels.debateComplete
-                      : labels.phaseFinished
-                : playback.status === "waiting_next"
-                  ? labels.waitingNext
-                  : playback.status === "ready" ||
-                      playback.status === "preparing"
-                    ? labels.waitingForAudio
-                    : labels.noPublishedSpeech}
-            </section>
-          )}
-
           {failure ? (
             <div className={styles.failureCard} role="alert">
               <span>{failure}</span>
@@ -3182,47 +3125,52 @@ export function DebateStage({
               <span>{labels.audioNotRetained}</span>
             </div>
           ) : null}
-        </div>
+          {isTerminal ||
+          playback.status === "waiting_next" ||
+          playback.status === "ready" ||
+          playback.status === "preparing" ? (
+            <p className={styles.stageStatus} role="status">
+              {isTerminal
+                ? detailState.status === "failed"
+                  ? publicTurns.length
+                    ? // Some turns are published and readable; only the rest
+                      // of the debate stopped. Saying the whole debate needs
+                      // attention here contradicts what is on screen.
+                      labels.debatePartial
+                    : labels.debateFailed
+                  : detailState.status === "stopped"
+                    ? labels.debateStopped
+                    : playback.status === "completed"
+                      ? labels.debateComplete
+                      : labels.phaseFinished
+                : playback.status === "waiting_next"
+                  ? labels.waitingNext
+                  : labels.waitingForAudio}
+            </p>
+          ) : null}
 
-        <section className={styles.transcriptCard}>
-          <div className={styles.transcriptHeader}>
-            <div>
-              <span className={styles.eyebrow}>{labels.transcript}</span>
-              <h2>{labels.transcript}</h2>
-            </div>
-            {publicTurns.length ? <span>{publicTurns.length}</span> : null}
-          </div>
-          {publicTurns.length === 0 ? (
-            <p className={styles.emptyTranscript}>{labels.noPublishedSpeech}</p>
-          ) : (
-            <div className={styles.transcriptList}>
-              {publicTurns.map((turn) => {
-                const owner = participantById.get(turn.participant_id);
-                return (
-                  <article className={styles.transcriptItem} key={turn.id}>
-                    <div className={styles.transcriptItemTop}>
-                      <span>
-                        {owner?.slot ?? ""} ·{" "}
-                        {owner?.agent_name ?? turn.participant_id}
-                      </span>
-                      <span>
-                        {labels.round} {turn.round_no}
-                        {visibleRoundPhase(turn, detailState)
-                          ? ` · ${phaseLabel(visibleRoundPhase(turn, detailState)!, labels)}`
-                          : ""}
-                      </span>
-                    </div>
-                    <p>{turn.speech}</p>
-                    <EvidenceTraceInspector
-                      speech={turn.speech}
-                      trace={turn.evidence_trace}
-                    />
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+          <SpeechStream
+            describe={(participantId) => {
+              const owner = participantById.get(participantId);
+              return {
+                slot: owner?.slot ?? "",
+                name: owner?.agent_name ?? participantId,
+              };
+            }}
+            emptyMessage={labels.noPublishedSpeech ?? ""}
+            labels={labels}
+            phaseOf={(turn) => {
+              const phase = visibleRoundPhase(
+                turn as unknown as VisiblePlaybackTurn,
+                detailState,
+              );
+              return phase ? phaseLabel(phase, labels) : null;
+            }}
+            onReplayAll={readOnly ? undefined : () => void runControl("replay")}
+            replayAllDisabled={busyAction !== null || !canReplay}
+            turns={publicTurns as unknown as StreamTurn[]}
+          />
+        </div>
       </div>
 
       {!readOnly ? (
@@ -3247,14 +3195,6 @@ export function DebateStage({
               onClick={() => void runControl("next")}
             >
               {labels.next}
-            </button>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={busyAction !== null || !canReplay}
-              onClick={() => void runControl("replay")}
-            >
-              {labels.replayAll}
             </button>
           </div>
           {busyAction ? (

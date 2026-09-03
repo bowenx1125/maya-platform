@@ -14,6 +14,7 @@ from app.providers.factory import llm_provider
 from app.providers.llm import MockLLMProvider
 from app.providers.llm_adapter import DashScopeLLMAdapter, DashScopeLLMConfig
 from app.providers.llm_price_card import (
+    LLM_ATTEMPT_CAP,
     REAL_CORE_DEMO_LLM_MAX_REQUESTS,
     real_core_demo_budget_cap,
 )
@@ -144,8 +145,12 @@ def test_dual_pair_rejects_real_companions(tmp_path: Path, field: str, value: st
 
 
 def test_dual_demo_caps_llm_and_query_requests(tmp_path: Path) -> None:
+    # The cap funds what the runtime may attempt: one request per turn plus its
+    # one structure repair. Funding a single request per turn meant the first
+    # repair borrowed a later turn's allowance and the debate's last turn failed
+    # for want of budget.
     cap = real_core_demo_budget_cap(2, round_count=2)
-    assert cap.max_requests == REAL_CORE_DEMO_LLM_MAX_REQUESTS == 4
+    assert cap.max_requests == REAL_CORE_DEMO_LLM_MAX_REQUESTS * LLM_ATTEMPT_CAP == 8
     assert REAL_CORE_DEMO_QUERY_MAX_REQUESTS == 2
 
     # One request per turn is the rule; the shape is not. This used to assert
@@ -156,7 +161,7 @@ def test_dual_demo_caps_llm_and_query_requests(tmp_path: Path) -> None:
         for rounds in range(2, 6):
             assert (
                 real_core_demo_budget_cap(agents, round_count=rounds).max_requests
-                == agents * rounds
+                == agents * rounds * LLM_ATTEMPT_CAP
             )
     for agents, rounds in ((1, 2), (6, 2), (2, 1), (2, 6)):
         with pytest.raises(ValueError):

@@ -49,15 +49,15 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "sentences out of it. Each claim_text must be an exact character-for-character "
     "substring of the speech: never rephrase, shorten, re-punctuate, translate or join. "
     "If a claim is not word-for-word in the speech, change the speech.",
-    "REQUIREMENT 5. An exchange turn must ask exactly one question: mode='ask', "
-    "target_participant_ref=0, and non-empty text that also appears in the speech. The "
-    "server already chose who is asked, so 0 is the only accepted reference. Opening and "
+    "REQUIREMENT 5. An exchange turn must ask exactly one question: mode='ask' with "
+    "question.text a non-empty sentence that also appears word-for-word in the speech. "
+    "An empty question.text is rejected, and its words count toward requirement 2. The "
+    "server chooses who is asked, so send target_participant_ref=0. Opening and "
     "final-integration turns must instead use mode='none' with "
     "target_participant_ref=-1 and text=''.",
-    "REQUIREMENT 6. answered_required_question is true only when this request carries a "
-    "pending_question, and then the speech must answer it. When the request has no "
-    "pending_question at all - every opening turn, and every exchange turn that was "
-    "asked nothing in the previous round - it must be false.",
+    "REQUIREMENT 6. When this request carries a pending_question, answer it in the "
+    "speech. The server sets answered_required_question itself, so its value in your "
+    "output is ignored.",
     "Evidence is snapshot-scoped: use only this request's server-assigned receipt IDs; "
     "discussing another Agent's claim never transfers that Agent's evidence.",
     "Authoritative speech is English only and must remain respectful; never solicit a vote.",

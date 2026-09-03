@@ -175,7 +175,12 @@ function walk(directory) {
       // The operator has to record the exact endpoint they reviewed, so the
       // policy templates name it on purpose.
       relativePath === "docs/templates/llm-policy.template.json" ||
-      relativePath === "docs/templates/embedding-policy.template.json";
+      relativePath === "docs/templates/embedding-policy.template.json" ||
+      // A reviewed policy records the exact endpoint it was reviewed for.
+      // These files are the operator's, git-ignored and mode 0600; the scan
+      // still reads them for credentials, it just does not treat the endpoint
+      // they exist to record as a leak.
+      relativePath.startsWith("backend/config/provider-policies/");
     if (!supplierUrlAllowed && supplierUrlPattern.test(text))
       boundaryFailures.push(
         `supplier endpoint outside its allow-list in ${relativePath}`,

@@ -352,7 +352,22 @@ def preflight_prompt_budget(
         tokenizer_id=tokenizer_id or CONSERVATIVE_TOKENIZER_ID,
         tokenizer_asset_hash=tokenizer_asset_hash or CONSERVATIVE_TOKENIZER_ASSET_HASH,
     )
-    if input_tokens > input_token_limit:
+    # The conservative counter returns UTF-8 bytes, not model tokens. Comparing
+    # its output to a token limit is a unit error: it made the real ceiling
+    # 32,000 bytes rather than the 96 KiB the contract allows, so a debate the
+    # product offers - three Agents over four rounds - could not reach its last
+    # round even though its prompt was about 6,000 actual tokens. English text
+    # is roughly four bytes per token, so a request within the byte allowance is
+    # comfortably within the token allowance, and speech is English by rule.
+    # A pinned supplier tokenizer reports real tokens and is checked as such.
+    counting_bytes = (
+        budget.tokenizer_id == CONSERVATIVE_TOKENIZER_ID
+        and budget.tokenizer_asset_hash == CONSERVATIVE_TOKENIZER_ASSET_HASH
+    )
+    effective_input_limit = (
+        max(input_token_limit, request_bytes_limit) if counting_bytes else input_token_limit
+    )
+    if input_tokens > effective_input_limit:
         raise PromptBudgetError(
             "Prompt input exceeds the pre-send token budget.",
             code="prompt_input_tokens_exceeded",

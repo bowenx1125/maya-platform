@@ -562,3 +562,188 @@
     flex-basis: 100%;
   }
 }
+
+/* The merged speech stream.
+   The stage used to show the current speech in one panel and the published
+   transcript in another: the newest turn appeared twice, and the panel sat
+   blank whenever nothing was playing. One stream that grows downward gives a
+   classroom a single place to look, at a size that reads from the back. */
+.streamCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.streamHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.streamHeader h2 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.streamCount {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.streamList {
+  display: grid;
+  gap: 18px;
+  /* clamp, not min(): a viewport that reports zero height - an embedded or
+     hidden pane - made min() resolve to 0 and the list became an invisible,
+     unscrollable strip with its content overflowing. The floor keeps it
+     usable whatever the viewport claims. */
+  max-height: clamp(320px, 58vh, 640px);
+  padding-right: 6px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.streamItem {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.streamItem:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.streamItemTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.streamWho {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 680;
+}
+
+.streamMeta {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.streamReplay {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.streamReplay:hover {
+  border-color: var(--indigo);
+  color: var(--indigo);
+}
+
+/* Deliberately larger than the old transcript text: this is now the only
+   place the speech appears, and it is read from across a room. */
+.streamSpeech {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.2rem;
+  line-height: 1.68;
+  white-space: pre-wrap;
+}
+
+.streamEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.stageStatus {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+/* The caret only marks a speech still being revealed. */
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  background: var(--indigo);
+  vertical-align: text-bottom;
+  animation: caretBlink 1s steps(2, start) infinite;
+}
+
+@keyframes caretBlink {
+  to {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+  .streamList {
+    scroll-behavior: auto;
+  }
+}
+
+/* Whole-session replay is a review action; it belongs with the speeches, not
+   in the row of controls that drive a live lesson. */
+.streamReplayAll {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.streamReplayAll:hover:not(:disabled) {
+  border-color: var(--indigo);
+  color: var(--indigo);
+}
+
+.streamReplayAll:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.streamSources {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.streamSources h3 {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.streamSources ul {
+  margin: 0;
+  padding-left: 16px;
+}

@@ -1874,9 +1874,15 @@ describe("Wave 2 M12 playback stage", () => {
     );
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
     socket.emit("open");
+    // Exactly these three actions and no strays. Order is not asserted:
+    // replaying the whole session now sits with the speeches it replays
+    // rather than in the row that drives a live lesson.
     expect(
-      screen.getAllByRole("button").map((button) => button.textContent),
-    ).toEqual(["Start debate", "Next", "Replay whole debate"]);
+      screen
+        .getAllByRole("button")
+        .map((button) => button.textContent)
+        .sort(),
+    ).toEqual(["Next", "Replay whole debate", "Start debate"]);
     socket.emit(
       "message",
       envelope("playback.started", 2, {

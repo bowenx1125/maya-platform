@@ -501,9 +501,13 @@ def map_provider_output(
     answered = payload.get("answered_required_question")
     if not isinstance(answered, bool):
         raise LLMOutputError(code="schema_invalid", json_pointers=("/answered_required_question",))
-    answered_ids = [pending.question_id] if answered and pending is not None else []
-    if answered and pending is None:
-        raise LLMOutputError(code="rule_invalid", json_pointers=("/answered_required_question",))
+    # Derived, not taken from the model. Whether a question is pending is the
+    # server's own fact, and the boolean never carried anything else: the only
+    # way a turn could pass was to report true exactly when pending existed, so
+    # the field could reject a good turn and never accept a bad one. Deriving it
+    # removes that failure class without weakening a check that never held.
+    del answered
+    answered_ids = [pending.question_id] if pending is not None else []
 
     question_raw = payload.get("question")
     if not isinstance(question_raw, Mapping):
@@ -523,8 +527,21 @@ def map_provider_output(
         targets = tuple(question_target_ids)
         if not targets and request.next_participant_id:
             targets = (request.next_participant_id,)
-        if target_ref >= len(targets) or not isinstance(text, str) or not text:
-            raise LLMOutputError(code="reference_invalid", json_pointers=("/question",))
+        # With a single legal target the server already knows who is asked, and
+        # the model's index carries nothing: it can only be 0 or wrong. Taking
+        # the target removes a way for an otherwise good turn to be rejected.
+        # A future RuleSet offering a real choice still has its index checked.
+        # Separate pointers matter for that case: "/question" alone could not
+        # tell a repair attempt whether the reference or the text was wrong.
+        if len(targets) > 1 and target_ref >= len(targets):
+            raise LLMOutputError(
+                code="reference_invalid",
+                json_pointers=("/question/target_participant_ref",),
+            )
+        if len(targets) == 1:
+            target_ref = 0
+        if not isinstance(text, str) or not text:
+            raise LLMOutputError(code="reference_invalid", json_pointers=("/question/text",))
         question = TurnQuestion(type="agent", target_participant_id=targets[target_ref], text=text)
     else:
         raise LLMOutputError(code="schema_invalid", json_pointers=("/question/mode",))

@@ -229,7 +229,11 @@ def test_conservative_preflight_rejects_before_any_provider_boundary() -> None:
     with pytest.raises(PromptBudgetError) as error:
         from app.modules.debates.generation import preflight_prompt_budget
 
-        preflight_prompt_budget(("x" * 32_001,), request_bytes=1)
+        # The conservative counter reports UTF-8 bytes, so its ceiling is the
+        # contract's byte allowance. Comparing that byte count to the 32,000
+        # model-token limit was a unit error that cut the real ceiling to a
+        # quarter and stopped a four-round debate reaching its last round.
+        preflight_prompt_budget(("x" * (96 * 1024 + 1),), request_bytes=1)
     assert error.value.code == "prompt_input_tokens_exceeded"
     with pytest.raises(PromptBudgetError) as error:
         preflight_prompt_budget(("ok",), request_bytes=96 * 1024 + 1)
