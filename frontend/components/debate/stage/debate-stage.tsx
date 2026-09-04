@@ -18,6 +18,7 @@ import type {
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
 import { EvidenceTraceInspector, normaliseEvidenceTrace } from "../../evidence";
+import { ReleaseButton } from "../release-button";
 import { SpeechStream, type StreamTurn } from "./speech-stream";
 import { expectedTurnCount } from "../../../lib/debate-rounds";
 import {
@@ -401,6 +402,19 @@ function derivePendingPlaybackAction(
   return "start";
 }
 
+/** The debate holding the course's running slot, if that is what failed. */
+function blockingDebate(cause: unknown): { id: string; topic: string } | null {
+  if (!isRecord(cause) || cause.code !== "debate_already_running") return null;
+  const details = cause.details;
+  if (!isRecord(details)) return null;
+  const blocking = details.blocking_debate;
+  if (!isRecord(blocking) || !isNonEmptyString(blocking.id)) return null;
+  return {
+    id: blocking.id,
+    topic: isNonEmptyString(blocking.topic) ? blocking.topic : blocking.id,
+  };
+}
+
 function errorText(cause: unknown, fallback: string): string {
   if (cause instanceof Error && cause.message.trim()) return cause.message;
   if (isRecord(cause) && isNonEmptyString(cause.message)) return cause.message;
@@ -530,6 +544,13 @@ export function DebateStage({
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
+  // Which debate is holding this course's running slot, when that is why a
+  // command failed. Naming it here is what lets the recovery live beside the
+  // failure instead of on a screen the teacher has to go find.
+  const [blockedBy, setBlockedBy] = useState<{
+    id: string;
+    topic: string;
+  } | null>(null);
   const [providerGate, setProviderGate] = useState<ProviderGateState | null>(
     null,
   );
@@ -2575,6 +2596,12 @@ export function DebateStage({
     [],
   );
 
+  // Which turn a Regenerate would act on: the one playback is parked at.
+  const retryableTurnId =
+    failure !== null && playback.current_turn_id
+      ? playback.current_turn_id
+      : null;
+
   const runControl = useCallback(
     async (action: ControlAction) => {
       if (readOnly || busyAction !== null || controlRequestRef.current !== null)
@@ -2781,6 +2808,7 @@ export function DebateStage({
       } catch (cause) {
         if (controlRequestRef.current === requestToken) {
           setControlError(errorText(cause, labelsRef.current.connectionError));
+          setBlockedBy(blockingDebate(cause));
         }
       } finally {
         if (controlRequestRef.current === requestToken) {
@@ -2945,6 +2973,20 @@ export function DebateStage({
     !readOnly &&
     connection === "disconnected" &&
     (connectionIssue === "network" || connectionIssue === "sequence_gap");
+  // Every cause named an issue but only two of them offered anything to press,
+  // so a teacher read an accurate diagnosis and had no way to act on it. Each
+  // cause gets the one action that actually resolves it.
+  const connectionRecovery: {
+    label: string;
+    kind: "sign-in" | "reload";
+  } | null = readOnly
+    ? null
+    : connectionIssue === "session_expired"
+      ? { label: labels.connectionSignIn ?? "", kind: "sign-in" }
+      : connectionIssue === "superseded" ||
+          connectionIssue === "origin_mismatch"
+        ? { label: labels.connectionReload ?? "", kind: "reload" }
+        : null;
   const showConnectionPill =
     !suppressConnectionUi &&
     (connectionIssue === null || connectionIssue === "network");
@@ -2982,6 +3024,20 @@ export function DebateStage({
               disabled={reconnectBusy}
             >
               {reconnectBusy ? labels.connectionReconnecting : labels.reconnect}
+            </button>
+          ) : connectionRecovery ? (
+            <button
+              className={styles.reconnectButton}
+              onClick={() => {
+                if (connectionRecovery.kind === "sign-in") {
+                  window.location.href = "/";
+                } else {
+                  window.location.reload();
+                }
+              }}
+              type="button"
+            >
+              {connectionRecovery.label}
             </button>
           ) : null}
         </div>
@@ -3123,6 +3179,19 @@ export function DebateStage({
           {failure ? (
             <div className={styles.failureCard} role="alert">
               <span>{failure}</span>
+              {/* A turn whose generation died used to say "you can retry this
+                  turn" and offer nothing to press. The retry endpoint has
+                  existed all along; this is the button that reaches it. */}
+              {!readOnly && retryableTurnId ? (
+                <button
+                  className="secondary-action"
+                  disabled={providerRetryBusy}
+                  onClick={() => void retryProviderPreparation(retryableTurnId)}
+                  type="button"
+                >
+                  {labels.regenerate}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -3197,6 +3266,20 @@ export function DebateStage({
           {controlError ? (
             <div className={styles.failureCard} role="alert">
               <span>{controlError}</span>
+              {blockedBy ? (
+                <>
+                  <span className={styles.blockingTopic}>
+                    {blockedBy.topic}
+                  </span>
+                  <ReleaseButton
+                    debateId={blockedBy.id}
+                    onReleased={() => {
+                      setBlockedBy(null);
+                      setControlError(null);
+                    }}
+                  />
+                </>
+              ) : null}
             </div>
           ) : null}
           {replayAudioUnavailable ? (

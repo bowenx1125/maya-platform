@@ -47,9 +47,12 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
     "The classroom address does not match the server configuration.",
   connectionSuperseded: "Another teacher page has taken control.",
   connectionError: "The classroom connection needs attention.",
+  connectionSignIn: "Sign in",
+  connectionReload: "Reload",
   controllerWaiting: "Waiting for the teacher controller…",
   controlBusy: "Updating classroom playback…",
   retryReason: "Playback did not start. You can retry this turn.",
+  regenerate: "Regenerate",
   replayTurn: "Replay this speech",
   debatePartial: "The debate stopped early. Published speeches remain below.",
   // Defaults show the code itself; the app supplies a real translator.

@@ -70,6 +70,7 @@ const implemented = new Set([
   "pauseDebate",
   "resumeDebate",
   "finishDebate",
+  "releaseDebate",
   "replayDebate",
   "connectDebateEvents",
   "getDebateTranscript",

@@ -26,6 +26,7 @@ import { validateDebateTopic } from "../../../lib/debate-topic";
 import { turnsForShape } from "../../../lib/debate-rounds";
 import { useT } from "../../locale";
 import { useSession } from "../../session-provider";
+import { ReleaseButton } from "../release-button";
 import {
   EmptyCard,
   ErrorNotice,
@@ -134,22 +135,32 @@ export function TeacherDebateList({
         ) : (
           <div className={styles.list}>
             {debates.map((debate) => (
-              <Link
-                className={styles.debateCard}
-                href={`/teacher/debates/${debate.id}/control`}
-                key={debate.id}
-              >
-                <div>
-                  <h2>{debate.topic}</h2>
-                  <div className={styles.metaRow}>
-                    <span>{copy(t, "debateRounds")}</span>
-                    <span>
-                      {new Date(debate.created_at).toLocaleDateString()}
-                    </span>
+              <div className={styles.debateRow} key={debate.id}>
+                <Link
+                  className={styles.debateCard}
+                  href={`/teacher/debates/${debate.id}/control`}
+                >
+                  <div>
+                    <h2>{debate.topic}</h2>
+                    <div className={styles.metaRow}>
+                      <span>{copy(t, "debateRounds")}</span>
+                      <span>
+                        {new Date(debate.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <StatusBadge status={debate.status} />
-              </Link>
+                  <StatusBadge status={debate.status} />
+                </Link>
+                {/* A lesson left running blocks every later debate on this
+                    course, and clearing it used to need a shell on the server.
+                    The recovery belongs beside the thing that needs it. */}
+                {debate.status === "running" ? (
+                  <ReleaseButton
+                    debateId={debate.id}
+                    onReleased={() => void load()}
+                  />
+                ) : null}
+              </div>
             ))}
           </div>
         )}

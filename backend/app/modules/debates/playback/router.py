@@ -34,6 +34,7 @@ from app.modules.debates.schemas import (
     PlaybackCommandRequest,
     PlaybackControlRequest,
     PlaybackState,
+    ReleaseDebateRequest,
     RetryPreparationRequest,
     Transcript,
 )
@@ -238,6 +239,42 @@ async def resume_debate_route(
         expected_control_version=payload.expected_control_version,
         context=context,
         idempotency_key=idempotency_key,
+    )
+
+
+@router.post(
+    "/debates/{debate_id}/release",
+    operation_id="releaseDebate",
+    response_model=PlaybackState,
+    responses={
+        200: {"description": "Authoritative playback state after recovery."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def release_debate_route(
+    debate_id: UUID,
+    payload: ReleaseDebateRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    """Recover one stuck playback so the course is not blocked by it.
+
+    Deliberately reachable from a browser. The guards that matter are all
+    still here -- a teacher of this course, an explicit confirmation, an audit
+    entry, and the same service lock that serializes this against Next -- but
+    needing a shell on the server to clear a stuck lesson was not one of them.
+    """
+
+    return await service.operator_reset(
+        db,
+        str(debate_id),
+        confirm=payload.confirm_release,
+        context=context,
     )
 
 

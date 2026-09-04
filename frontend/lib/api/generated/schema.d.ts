@@ -803,6 +803,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recover one stuck classroom playback so its course is not blocked. */
+        post: operations["releaseDebate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/replay": {
         parameters: {
             query?: never;
@@ -1577,6 +1594,13 @@ export interface components {
         AdvancePlaybackRequest: {
             expected_control_version: number;
             expected_current_turn_id: components["schemas"]["Uuid"];
+        };
+        ReleaseDebateRequest: {
+            /**
+             * @description Explicit teacher confirmation; recovery is never implicit.
+             * @constant
+             */
+            confirm_release: true;
         };
         PlaybackControlRequest: {
             expected_control_version: number;
@@ -3488,6 +3512,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DebateDetail"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    releaseDebate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseDebateRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative playback state after recovery. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackState"];
                 };
             };
             401: components["responses"]["Error"];

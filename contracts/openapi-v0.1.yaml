@@ -1021,6 +1021,29 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/release:
+    post:
+      tags: [Debates]
+      operationId: releaseDebate
+      summary: Recover one stuck classroom playback so its course is not blocked.
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReleaseDebateRequest" }
+      responses:
+        "200":
+          description: Authoritative playback state after recovery.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaybackState" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /debates/{debate_id}/replay:
     post:
       tags: [Debates]
@@ -2394,6 +2417,14 @@ components:
       properties:
         expected_control_version: { type: integer, minimum: 0 }
         expected_current_turn_id: { $ref: "#/components/schemas/Uuid" }
+    ReleaseDebateRequest:
+      type: object
+      additionalProperties: false
+      required: [confirm_release]
+      properties:
+        confirm_release:
+          const: true
+          description: Explicit teacher confirmation; recovery is never implicit.
     PlaybackControlRequest:
       type: object
       additionalProperties: false

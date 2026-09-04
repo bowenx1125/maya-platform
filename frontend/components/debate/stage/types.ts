@@ -98,9 +98,12 @@ export type PlaybackStageLabels = {
   connectionOriginMismatch?: string;
   connectionSuperseded?: string;
   connectionError?: string;
+  connectionSignIn?: string;
+  connectionReload?: string;
   controllerWaiting?: string;
   controlBusy?: string;
   retryReason?: string;
+  regenerate?: string;
   replayTurn?: string;
   debatePartial?: string;
   /** Turns a server safe code into a sentence a teacher can read. */

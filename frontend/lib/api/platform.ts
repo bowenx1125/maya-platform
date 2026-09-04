@@ -1329,6 +1329,25 @@ export class PlatformApi {
     );
   }
 
+  /**
+   * Recover one stuck classroom playback so its course is not blocked by it.
+   *
+   * The confirmation is a literal `true` in the body rather than a flag the
+   * caller can forget: recovery is deliberate, and the server refuses anything
+   * else.
+   */
+  async releaseDebate(debateId: string): Promise<DebatePlaybackState> {
+    return unwrap(
+      await this.client.POST("/debates/{debate_id}/release", {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { confirm_release: true },
+      }),
+    );
+  }
+
   async replayDebate(
     debateId: string,
     expectedControlVersion: number,

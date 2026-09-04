@@ -2491,6 +2491,27 @@ class SqlPlaybackRepository(PlaybackRepository):
             is not None
         )
 
+    def running_debate(self, db: Any, course_id: str, except_debate_id: str | None = None) -> Any:
+        """Which debate holds this course's running slot, so the UI can name it.
+
+        ``course_running`` answers only yes/no, so a teacher who could not
+        start a debate was told something else was running and left to find it
+        themselves. Recovery is only usable if the thing to recover is named
+        where the failure happened.
+        """
+
+        if not self._has_table(db, "debates"):
+            return None
+        where = "course_id=:course_id AND status IN ('running','paused')"
+        params: dict[str, Any] = {"course_id": course_id}
+        if except_debate_id is not None:
+            where += " AND id!=:except_id"
+            params["except_id"] = except_debate_id
+        row = db.execute(
+            text(f"SELECT id, topic FROM debates WHERE {where} LIMIT 1"), params
+        ).first()
+        return None if row is None else {"id": str(row[0]), "topic": str(row[1] or "")}
+
     def current_audio_debate_id(self, db: Any, course_id: str) -> str | None:
         try:
             value = db.execute(

@@ -122,6 +122,20 @@ class PlaybackControlRequest(_ClosedModel):
 FinishDebateRequest = PlaybackControlRequest
 
 
+class ReleaseDebateRequest(_ClosedModel):
+    """Explicit confirmation for recovering one stuck classroom playback.
+
+    Recovery used to be a CLI with a literal ``--confirm RESET`` token, so a
+    stuck debate could only be cleared by someone with a shell on the server.
+    That made an ordinary classroom accident -- a lesson left running -- into
+    something no teacher could undo, and it blocked every later debate on that
+    course. The guard the token provided is kept: this must be asked for
+    deliberately, by a teacher of this course, and it is audited.
+    """
+
+    confirm_release: Literal[True]
+
+
 class AdvancePlaybackRequest(_ClosedModel):
     expected_control_version: int = Field(ge=0)
     expected_current_turn_id: UUID
@@ -304,6 +318,7 @@ __all__ = [
     "PlaybackControlRequest",
     "RetryPreparationRequest",
     "FinishDebateRequest",
+    "ReleaseDebateRequest",
     "RetrievalSource",
     "RULE_SET_ID",
     "RULE_SET_ID_V1",

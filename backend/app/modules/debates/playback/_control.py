@@ -207,8 +207,17 @@ class PlaybackControlMixin(PlaybackCore):
                     "Confirm removal of the previous retained audio before starting.",
                 )
             if self.repository.course_running(db, course_id, except_debate_id=debate_id):
+                # Name the debate holding the slot. Without it a teacher was
+                # told something else was running and had to go looking, and
+                # the recovery they needed was on a screen they had left.
+                blocking = None
+                describe = getattr(self.repository, "running_debate", None)
+                if callable(describe):
+                    blocking = describe(db, course_id, except_debate_id=debate_id)
                 raise conflict(
-                    "debate_already_running", "Another debate is already running for this course."
+                    "debate_already_running",
+                    "Another debate is already running for this course.",
+                    {"blocking_debate": blocking} if blocking else None,
                 )
             swap = None
             if current_pointer and confirm_previous_audio_cleanup:

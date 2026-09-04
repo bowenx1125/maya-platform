@@ -817,3 +817,8 @@
   width: 100%;
   text-align: center;
 }
+
+/* Which debate is holding the slot, next to the failure that named it. */
+.blockingTopic {
+  font-weight: 640;
+}
