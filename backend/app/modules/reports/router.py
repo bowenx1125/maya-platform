@@ -61,6 +61,11 @@ def regenerate_report_route(
         debate_id=str(debate_id),
         idempotency_key=idempotency_key,
     )
+    # The Job has to be durable before anything is told to look for it.
+    # get_db commits only after this handler returns, so waking here left the
+    # scheduler reading its own connection and finding nothing pending -- the
+    # request succeeded, the Job sat there, and Regenerate looked inert.
+    db.commit()
     manager = getattr(request.app.state, "report_task_manager", None)
     wake = getattr(manager, "wake", None)
     if callable(wake):

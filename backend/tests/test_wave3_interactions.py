@@ -796,3 +796,32 @@ def test_every_offered_round_count_is_eligible_for_classroom_interaction(
             assert has_complete_finished_playback(session, debate_id), (
                 f"a {rounds}-round debate must be eligible"
             )
+
+
+def test_a_finished_debate_stays_reviewable_after_its_playback_is_stopped(
+    interaction_app: Any,
+) -> None:
+    """Starting the next lesson must not erase this one's history.
+
+    Publication only happens by playing a turn, so an all-public plan already
+    proves the run completed. Playback status is transient: starting another
+    debate revokes this one, an operator reset stops it, a restart re-fences
+    it. The gate used to require ``completed`` there, so a lesson that ran
+    perfectly lost its classroom-interaction entry as soon as the teacher
+    started the next debate.
+    """
+
+    from app.modules.debates.playback.eligibility import has_complete_finished_playback
+
+    _app, database, _client = interaction_app
+    debate_id, _participant_ids = _seed_finished_debate(database)
+    with database.session() as session:
+        assert has_complete_finished_playback(session, debate_id)
+        playback = session.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
+        assert playback is not None
+        playback.status = "stopped"
+        session.commit()
+    with database.session() as session:
+        assert has_complete_finished_playback(session, debate_id), (
+            "a completed run stays reviewable once its playback is stopped"
+        )

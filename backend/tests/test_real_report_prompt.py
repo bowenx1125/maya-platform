@@ -294,3 +294,49 @@ def test_canonical_payload_does_not_add_private_or_provider_fields() -> None:
     assert "fixture-secret" not in serialized
     assert "workspace123" not in serialized
     assert "provider" not in serialized.lower()
+
+
+def test_the_outbound_guard_reads_identity_not_vocabulary() -> None:
+    """Classroom prose must cross the boundary; provider identity must not.
+
+    The guard used to match the bare words "model", "provider", "endpoint" and
+    "workspace". A seeded Agent's own evidence file says "a well-built model
+    could become harder to revise than the practice it described", so that one
+    ordinary sentence made every real report on that debate impossible.
+    """
+
+    from app.modules.reports.real_schema import _text_error
+
+    for allowed in (
+        "a well-built model could become harder to revise",
+        "the provider of local knowledge",
+        "each endpoint of the argument",
+        "a shared workspace for students",
+    ):
+        assert _text_error(allowed) is None, allowed
+
+    for blocked in (
+        "model=qwen3.7-plus",
+        "endpoint: something",
+        "workspace_id abc",
+        "https://ws-abc.example.com/v1",
+        "ws-t5imcyzsu4d6rd1b",
+        "we used dashscope",
+    ):
+        assert _text_error(blocked) == "report_input_internal", blocked
+
+
+def test_markdown_evidence_can_be_quoted_into_a_report_request() -> None:
+    """Every source this platform carries is a Markdown file.
+
+    Excerpts used to be passed through raw, so a heading or a bullet in the
+    evidence failed the outbound Markdown check and no real report could be
+    built at all.
+    """
+
+    from app.modules.reports.real_schema import _text_error
+    from app.modules.reports.service import _safe_fragment
+
+    markdown = "# A heading\n\n- a bullet\n- **bold** and ~~struck~~ text\n"
+    assert _text_error(markdown) is not None
+    assert _text_error(_safe_fragment(markdown, limit=2400)) is None

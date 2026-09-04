@@ -98,11 +98,21 @@ function finishBlockedCopy(
   }
 }
 
+/**
+ * Whether this debate ran its whole plan, and so has history worth reviewing.
+ *
+ * The twin of `has_complete_finished_playback` on the server, and it must
+ * agree with it: a turn is only public because it was played, so the counts
+ * below already prove the run completed. Playback status is not consulted —
+ * it is transient, and starting the next debate or resetting a stuck one
+ * moves it, which used to take the classroom-interaction entry away from a
+ * lesson that had finished perfectly well.
+ */
 function hasCompletePublicPlan(detail: DebateDetail): boolean {
   return (
     detail.public_turns.length === expectedTurnCount(detail) &&
     detail.participants.length >= 2 &&
-    detail.playback.status === "completed"
+    detail.playback.mode === "live"
   );
 }
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from sqlalchemy import delete, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.errors import (
     PlatformError,
     conflict,
@@ -36,6 +38,7 @@ from app.core.models import (
     IdempotencyRecord,
     Job,
     KnowledgeChunk,
+    ProviderExportManifest,
     ProviderOperation,
     ProviderPolicySnapshot,
 )
@@ -44,6 +47,7 @@ from app.modules.debates.playback.eligibility import has_complete_finished_playb
 from app.modules.debates.round_count import expected_turn_count as planned_turn_count
 from app.providers.control import (
     LLM_MAYA_REPORT_BUCKET,
+    ExportConfirmationV1,
     ExportFieldV1,
     ExportManifestV1,
     ProviderReservationRequestV1,
@@ -99,8 +103,15 @@ from .schemas import (
     BarrageInsightItem as BarrageInsightItemDTO,
 )
 
+LOGGER = logging.getLogger(__name__)
+
 WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*")
 REPORT_GENERATE_OPERATION = "report.generate"
+# How many times a teacher may ask for a report on one Debate, and how many
+# provider calls one of those asks may make. The scope budget is sized from
+# these so the buttons the product shows can all actually be pressed.
+REPORT_REGENERATION_CAP = 5
+REPORT_ATTEMPT_CAP = 2
 REPORT_HEADINGS = (
     "# Civilization Mutual Learning Report",
     "## Debate Overview",
@@ -1178,7 +1189,11 @@ def build_real_report_request(context: ReportContext) -> ReportRequest:
     sources = tuple(
         ReportSource(
             evidence_id=str(source.turn_source_id),
-            excerpt=source.chunk_text[:2400],
+            # Quoted source text, not report syntax. Every excerpt comes from a
+            # Markdown evidence file, so passing chunk_text through raw meant a
+            # heading or a list bullet failed the outbound boundary check and
+            # no real report could be generated at all.
+            excerpt=_safe_fragment(source.chunk_text, limit=2400),
         )
         for source in context.sources
     )
@@ -1220,6 +1235,11 @@ def _safe_fragment(value: str, *, limit: int = 260) -> str:
         .replace(">", ")")
         .replace("`", "'")
     )
+    # Emphasis runs are the other half of the same job. Every source this
+    # platform carries is a Markdown file, so bold and strikethrough reach here
+    # routinely; leaving them made an excerpt read as report syntax and the
+    # boundary check reject it.
+    text_value = text_value.replace("**", "").replace("__", "").replace("~~", "")
     return _UNSAFE_REPORT_TERMS_RE.sub("outcome", text_value)
 
 
@@ -1521,6 +1541,25 @@ def generate_mock_report(context: ReportContext) -> tuple[str, int]:
     return markdown, count
 
 
+def _resume_parked_report_job(db: Session, revision_id: str) -> None:
+    """Return a parked or stranded report Job to the queue, if there is one."""
+
+    job = db.scalar(
+        select(Job).where(
+            Job.operation == REPORT_GENERATE_OPERATION,
+            Job.report_revision_id == revision_id,
+        )
+    )
+    if job is None or job.state == "pending":
+        return
+    # ``running`` is deliberately included: a process that died mid-report
+    # leaves one behind, and only a restart fence would otherwise clear it.
+    if job.state in {"interrupted", "running"}:
+        job.state = "pending"
+        job.safe_error_code = None
+        job.updated_at = utc_now()
+
+
 def _create_report_revision_for_insight(
     db: Session,
     snapshot: BarrageInsightSnapshot,
@@ -1557,6 +1596,13 @@ def _create_report_revision_for_insight(
         .order_by(CivilizationReportRevision.revision_no.desc())
     )
     if active is not None:
+        # An in-flight revision is reused rather than duplicated, but reuse is
+        # only honest if it can still run. A revision whose Job was parked
+        # awaiting a provider confirmation used to make Regenerate a permanent
+        # no-op: the button returned this same revision every time and nothing
+        # would ever pick its Job up again. Pressing Regenerate is a request to
+        # continue, so resume the parked Job here.
+        _resume_parked_report_job(db, active.id)
         return active
     context = _report_context(db, snapshot.debate_id, insight_snapshot_id=snapshot.id)
     manifest_json = context.manifest.canonical_json()
@@ -1756,12 +1802,21 @@ def prepare_real_report_operation(
     )
     if policy_row_id is None:
         raise ReportProviderError("report_policy_unavailable")
-    runtime.repository.ensure_scope_budget(
+    # One request funded exactly one report for the whole life of a Debate.
+    # The product offers a repair attempt and a Regenerate button, so the first
+    # failure spent the entire allowance and every later attempt died with
+    # BudgetExceeded -- a control sized below the actions it governs is not a
+    # control, it is a dead end. Fund the attempts the product actually
+    # permits, the way the debate-turn bucket already does.
+    budget_ceiling = REPORT_REGENERATION_CAP * REPORT_ATTEMPT_CAP
+    raise_budget = getattr(runtime.repository, "raise_scope_budget", None)
+    ensure_budget = raise_budget or runtime.repository.ensure_scope_budget
+    ensure_budget(
         context.debate.id,
         ProviderScopeBudgetV1(
-            max_requests=1,
-            max_total_tokens=manifest.max_total_tokens,
-            max_cost_cny=manifest.max_cost_cny,
+            max_requests=budget_ceiling,
+            max_total_tokens=manifest.max_total_tokens * budget_ceiling,
+            max_cost_cny=manifest.max_cost_cny * budget_ceiling,
             budget_bucket=LLM_MAYA_REPORT_BUCKET,
         ),
     )
@@ -1818,6 +1873,89 @@ def prepare_real_report_operation(
         wire=wire,
         context=context,
     )
+
+
+def _standing_report_consent(
+    db: Session,
+    *,
+    prepared: RealReportPreparedOperation,
+    runtime: RealReportRuntime,
+) -> bool:
+    """Confirm one report disclosure under the operator's standing consent.
+
+    The same owner decision recorded for debate turns, and the same limits: it
+    only applies while DEMO_MODE and DEMO_AUTO_CONFIRM_PROVIDER are both on,
+    every check that guards a hand confirmation still runs, and a refusal still
+    parks the report. It is standing consent, not an absence of consent.
+    """
+
+    settings = get_settings()
+    if not getattr(settings, "demo_mode", False):
+        return False
+    if not getattr(settings, "demo_auto_confirm_provider", False):
+        return False
+    manifest_row_id = runtime.repository.get_export_manifest_id(prepared.manifest_hash)
+    if manifest_row_id is None:
+        return False
+    # The same report inputs hash to the same manifest, so a retry re-derives a
+    # manifest that already carries a confirmation. That confirmation is the
+    # consent; re-recording it only violates the ledger's uniqueness.
+    if runtime.repository.get_export_confirmation(prepared.manifest_hash) is not None:
+        return True
+    manifest = db.get(ProviderExportManifest, manifest_row_id)
+    if manifest is None:
+        return False
+    try:
+        runtime.repository.save_export_confirmation(
+            manifest_row_id,
+            ExportConfirmationV1(
+                manifest_hash=prepared.manifest_hash,
+                policy_hash=str(manifest.policy_hash),
+                confirmed_at=utc_now().isoformat(),
+                confirmation_revision=int(getattr(manifest, "operation_revision", 1) or 1),
+            ),
+        )
+    except Exception:
+        LOGGER.exception("Standing consent could not confirm a report disclosure")
+        return False
+    # Say which confirmations were standing rather than hand-given, so an audit
+    # can tell them apart.
+    LOGGER.warning(
+        "Report disclosure confirmed by standing Demo consent manifest=%s",
+        prepared.manifest_hash,
+    )
+    return True
+
+
+def _report_operation_for_call(
+    db: Session,
+    *,
+    prepared: RealReportPreparedOperation,
+    manifest_hash: str,
+    call_no: int | None,
+) -> ProviderOperation:
+    """Resolve the exact prepared operation this call is allowed to send.
+
+    ``call_no`` is the scripted acceptance harness's cursor. A teacher pressing
+    Regenerate has no acceptance run, so under standing consent the harness
+    binding is skipped -- it is a test-plan concern, not a disclosure control.
+    Every hash and identity check still applies either way.
+    """
+
+    if call_no is not None:
+        operation, _run = _bound_report_operation(
+            db,
+            prepared=prepared,
+            manifest_hash=manifest_hash,
+            call_no=call_no,
+        )
+        return operation
+    if manifest_hash != prepared.manifest_hash:
+        raise ReportProviderError("report_manifest_stale")
+    prepared_operation = db.get(ProviderOperation, prepared.operation_id)
+    if prepared_operation is None or prepared_operation.export_manifest_hash != manifest_hash:
+        raise ReportProviderError("report_operation_missing")
+    return prepared_operation
 
 
 def _pause_real_report_job(db: Session, revision_id: str) -> None:
@@ -1949,11 +2087,22 @@ def _process_real_report_revision(
         _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
         return revision
     if manifest_hash is None or call_no is None:
-        _pause_real_report_job(db, revision.id)
-        db.flush()
-        return revision
+        # The operator's standing Demo consent, already recorded for debate
+        # turns in generation_adapter._standing_provider_consent. A report is
+        # the same situation: the teacher installed the policy and is the
+        # person who would confirm, and parking here stops the lesson rather
+        # than informing anyone. Without this the real report could never
+        # finish from the teacher's screen at all -- it waited for a
+        # /continue that only the scripted acceptance harness can send.
+        consented = _standing_report_consent(db, prepared=prepared, runtime=runtime)
+        if not consented:
+            _pause_real_report_job(db, revision.id)
+            db.flush()
+            return revision
+        manifest_hash = prepared.manifest_hash
+        call_no = None
     try:
-        operation, _run = _bound_report_operation(
+        operation = _report_operation_for_call(
             db,
             prepared=prepared,
             manifest_hash=manifest_hash,
@@ -1997,7 +2146,11 @@ def _process_real_report_revision(
     except ReportProviderError as exc:
         _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
         return revision
-    except Exception:
+    except Exception as exc:
+        # Record the exception type, never its message: a provider message can
+        # carry endpoint or request detail. Without this line a report that
+        # died here left only a generic code and no way to tell what broke.
+        LOGGER.warning("Real report generation failed: %s", type(exc).__name__)
         _mark_real_report_failed(
             db,
             revision=revision,
@@ -2027,6 +2180,13 @@ def _process_real_report_revision(
         report.generation_status = "ready"
         report.latest_attempt_status = "ready"
         report.updated_at = utc_now()
+        # The current-success pointer carries a composite foreign key that
+        # includes the revision's status, so the revision has to be 'ready' in
+        # the database before the pointer row is written. Left to one flush,
+        # the child insert can be emitted before the parent update and the
+        # whole publication fails on a foreign key -- after the provider call
+        # was already made and paid for.
+        db.flush()
         pointer = db.scalar(
             select(CivilizationReportCurrentSuccess).where(
                 CivilizationReportCurrentSuccess.report_id == report.id
@@ -2059,8 +2219,15 @@ def _process_real_report_revision(
     except ReportProviderError as exc:
         db.rollback()
         _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        # Type only, never the message: publication touches provider ledger
+        # rows whose errors can quote request detail.
+        LOGGER.warning(
+            "Real report publication failed: %s %s",
+            type(exc).__name__,
+            getattr(getattr(exc, "orig", None), "args", ("",))[0],
+        )
         _mark_real_report_failed(
             db,
             revision=revision,

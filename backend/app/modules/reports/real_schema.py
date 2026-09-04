@@ -83,9 +83,22 @@ _SECRET_RE = re.compile(
 _PRIVATE_ID_RE = re.compile(
     r"(?i)\b(?:user|student|member|author|nickname)[ _-]?(?:id|uuid|email|phone|name)\b"
 )
+# What must never cross the boundary is *our* provider identity: the endpoint,
+# the workspace, the model key, a credential.  Matching the bare English words
+# "model", "provider", "endpoint" and "workspace" did not do that -- it failed
+# ordinary classroom prose.  A seeded Agent's own evidence file says "a
+# well-built model could become harder to revise than the practice it
+# described", and that one sentence made every real report on that debate
+# impossible to generate.  So match identifier shapes, not vocabulary: a URL,
+# the supplier and model-family names, a workspace token, or one of those words
+# used as a key rather than a noun.
 _PROVIDER_INTERNAL_RE = re.compile(
-    r"(?i)(?:https?://|(?:^|\W)(?:dashscope|qwen|provider|endpoint|workspace|model)"
-    r"(?:$|\W))"
+    r"(?i)(?:https?://"
+    r"|(?:^|\W)(?:dashscope|qwen)(?:$|\W)"
+    r"|(?:^|\W)ws-[a-z0-9]{8,}(?:$|\W)"
+    r"|\b(?:model|endpoint|workspace|provider)[ _-]?(?:id|key|name|url|host)\b"
+    r"|\b(?:model|endpoint|workspace|provider)\s*[:=]"
+    r")"
 )
 _ABSOLUTE_PATH_RE = re.compile(
     r"(?:^|\s)/(?:Users|private|var|tmp|home|etc|opt|workspace)(?:/|\s|$)|"

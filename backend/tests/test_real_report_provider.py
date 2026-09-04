@@ -385,8 +385,8 @@ def test_output_extra_field_and_malformed_json_fail_once() -> None:
             "report_usage_overrun",
         ),
         (
-            {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 200, "extra": 1},
-            "report_usage_shape",
+            {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": "200"},
+            "report_usage_invalid",
         ),
     ),
 )
@@ -435,23 +435,50 @@ def test_http_rejection_wrong_model_and_finish_reason_are_one_call_terminal_fail
 
 
 def test_response_shape_and_private_or_provider_fields_fail_closed() -> None:
-    response = _response()
-    response["extra"] = "provider internals"
-    transport = FakeTransport(response)
-    with pytest.raises(ReportProviderError, match="report_response_shape"):
-        _provider(transport).execute(_request())
-    assert transport.calls == 1
+    """A missing field this parser reads is terminal; a documented extra is not.
+
+    Requiring the envelope to contain nothing beyond the four fields read here
+    rejected every genuine DashScope reply, which returns ``id`` and
+    ``created`` as well -- so no real report could ever be produced. Nothing
+    from the envelope is echoed anywhere, and the checks that matter are the
+    ones below: model identity, one choice, a stop finish, and the usage caps.
+    """
+
+    for missing in ("object", "model", "choices", "usage"):
+        response = _response()
+        response.pop(missing)
+        transport = FakeTransport(response)
+        with pytest.raises(ReportProviderError, match="report_response_shape"):
+            _provider(transport).execute(_request())
+        assert transport.calls == 1
 
     response = _response()
     message = cast(
         dict[str, object],
         cast(list[dict[str, object]], response["choices"])[0]["message"],
     )
-    message["teacher_note"] = "private"
+    message.pop("content")
     transport = FakeTransport(response)
     with pytest.raises(ReportProviderError, match="report_message_shape"):
         _provider(transport).execute(_request())
     assert transport.calls == 1
+
+
+def test_a_genuine_provider_envelope_is_accepted() -> None:
+    """The shape a real reply actually has, extra documented fields and all."""
+
+    response = _response()
+    response["id"] = "chatcmpl-abc123"
+    response["created"] = 1_759_000_000
+    response["system_fingerprint"] = "fp_local"
+    usage = cast(dict[str, object], response["usage"])
+    usage["prompt_tokens_details"] = {"cached_tokens": 0, "text_tokens": 80}
+    choice = cast(list[dict[str, object]], response["choices"])[0]
+    choice["logprobs"] = None
+    transport = FakeTransport(response)
+    sections = _provider(transport).execute(_request())
+    assert transport.calls == 1
+    assert sections is not None
 
 
 def test_conservative_tokenizer_backs_a_real_report_request() -> None:

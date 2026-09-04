@@ -49,12 +49,6 @@ REAL_REPORT_SCHEMA_NAME: Final = "maya_real_report_sections_v1"
 REAL_REPORT_OUTPUT_TOKEN_CAP: Final = LLM_RESERVED_OUTPUT_TOKEN_CAP
 _EXPECTED_ENVELOPE_FIELDS: Final = frozenset({"object", "model", "choices", "usage"})
 _EXPECTED_CHOICE_FIELDS: Final = frozenset({"index", "message", "finish_reason"})
-_EXPECTED_MESSAGE_FIELDS: Final = frozenset(
-    {"role", "content", "refusal", "reasoning_content", "tool_calls", "function_call"}
-)
-_EXPECTED_USAGE_FIELDS: Final = frozenset(
-    {"prompt_tokens", "completion_tokens", "total_tokens", "prompt_tokens_details"}
-)
 
 
 class ReportProviderError(ReportBoundaryError):
@@ -158,8 +152,10 @@ def _response_parts(response: object) -> tuple[int, object]:
 
 
 def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
-    if set(payload) - _EXPECTED_USAGE_FIELDS:
-        raise ReportProviderError("report_usage_shape")
+    # Read the counters this function needs and ignore anything else the
+    # supplier reports alongside them. Rejecting an unknown field failed every
+    # genuine response without protecting anything: none of it is echoed, and
+    # the arithmetic and cap checks below are what actually bound the spend.
     values: list[int] = []
     for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = payload.get(field)
@@ -169,7 +165,7 @@ def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
     details = payload.get("prompt_tokens_details")
     cached = 0
     if details is not None:
-        if not isinstance(details, Mapping) or set(details) - {"cached_tokens"}:
+        if not isinstance(details, Mapping):
             raise ReportProviderError("report_usage_shape")
         cached_value = details.get("cached_tokens")
         if isinstance(cached_value, bool) or not isinstance(cached_value, int) or cached_value < 0:
@@ -192,7 +188,14 @@ def _response_sections(
     price_card: LLMPriceCardV1,
     prepared: ReportWireRequest,
 ) -> ReportSectionOutput:
-    if not isinstance(payload, Mapping) or set(payload) != _EXPECTED_ENVELOPE_FIELDS:
+    # Require the fields this parser reads, not an envelope that carries
+    # nothing else. A real DashScope response also returns ``id`` and
+    # ``created``, so demanding exact equality rejected every genuine reply --
+    # the debate adapter, which has worked against this same endpoint all
+    # along, checks presence rather than exact shape. Nothing here echoes the
+    # envelope, so an extra documented field is not a boundary risk; the model
+    # identity, single choice, finish reason and usage caps below are.
+    if not isinstance(payload, Mapping) or _EXPECTED_ENVELOPE_FIELDS - set(payload):
         raise ReportProviderError("report_response_shape")
     if payload.get("object") != "chat.completion" or payload.get("model") != REAL_REPORT_MODEL:
         raise ReportProviderError("report_response_resource")
@@ -200,12 +203,12 @@ def _response_sections(
     if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], Mapping):
         raise ReportProviderError("report_choices_shape")
     choice = choices[0]
-    if set(choice) != _EXPECTED_CHOICE_FIELDS or choice.get("index") != 0:
+    if _EXPECTED_CHOICE_FIELDS - set(choice) or choice.get("index") != 0:
         raise ReportProviderError("report_choice_shape")
     if choice.get("finish_reason") != "stop":
         raise ReportProviderError("report_finish_reason")
     message = choice.get("message")
-    if not isinstance(message, Mapping) or set(message) - _EXPECTED_MESSAGE_FIELDS:
+    if not isinstance(message, Mapping) or "content" not in message:
         raise ReportProviderError("report_message_shape")
     if message.get("role") != "assistant":
         raise ReportProviderError("report_message_role")

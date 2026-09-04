@@ -585,6 +585,67 @@ class ProviderRepository:
                 )
             )
 
+    def raise_scope_budget(self, scope_id: str, budget: ProviderScopeBudgetV1) -> None:
+        """Create a scope budget, or widen an existing one to these caps.
+
+        A budget row is written once and never grows, which is right for a cap
+        the product never exceeds. It is wrong for a row an earlier release
+        sized too small: the Maya report bucket allowed a single request per
+        Debate, so the second attempt -- and every use of Regenerate after it
+        -- failed with BudgetExceeded and no report could ever be produced for
+        that Debate again.
+
+        Caps only ever move up, and only to the value the current code derives.
+        Nothing here can lower a cap or spend past one.
+        """
+
+        table = _BUDGET_TABLE
+        validate_budget_bucket(budget.budget_bucket)
+        with self._write_connection() as connection:
+            existing = (
+                connection.execute(
+                    select(table).where(
+                        table.c.scope_id == scope_id,
+                        table.c.budget_bucket == budget.budget_bucket,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if existing is None:
+                connection.execute(
+                    table.insert().values(
+                        scope_id=scope_id,
+                        budget_bucket=budget.budget_bucket,
+                        max_requests=budget.max_requests,
+                        max_total_tokens=budget.max_total_tokens,
+                        max_cost_cny=budget.max_cost_cny,
+                        allocated_requests=0,
+                        allocated_total_tokens=0,
+                        allocated_cost_cny=0,
+                        created_at=self._now(),
+                        updated_at=self._now(),
+                    )
+                )
+                return
+            widened = {
+                "max_requests": max(_as_int(existing["max_requests"]), budget.max_requests),
+                "max_total_tokens": max(
+                    _as_int(existing["max_total_tokens"]), budget.max_total_tokens
+                ),
+                "max_cost_cny": max(
+                    _as_float(existing["max_cost_cny"]), float(budget.max_cost_cny)
+                ),
+            }
+            connection.execute(
+                update(table)
+                .where(
+                    table.c.scope_id == scope_id,
+                    table.c.budget_bucket == budget.budget_bucket,
+                )
+                .values(updated_at=self._now(), **widened)
+            )
+
     ensure_scope_budget = save_scope_budget
 
     def get_scope_budget(

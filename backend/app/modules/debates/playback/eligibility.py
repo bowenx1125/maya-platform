@@ -57,7 +57,17 @@ def has_complete_finished_playback(db: Session, debate_id: str) -> bool:
     ):
         return False
     playback = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
-    if playback is None or playback.status != "completed" or playback.mode != "live":
+    if playback is None:
+        return False
+    # Deliberately not ``playback.status == "completed"``.  A turn only becomes
+    # public by being played, so the loop above already proves this debate ran
+    # its whole plan.  Playback status is transient and later, unrelated
+    # actions legitimately move it: starting the next debate revokes this one,
+    # an operator reset stops it, a restart re-fences it.  Reading it here made
+    # a finished lesson lose its classroom-interaction entry because a
+    # different debate had since been started -- history stopped being
+    # reviewable for a reason that had nothing to do with this debate.
+    if playback.mode != "live":
         return False
     return not any(
         getattr(playback, field, None) is not None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -17,6 +18,8 @@ from .models import (
     CivilizationReportRevision,
 )
 from .service import RealReportRuntime, process_insight_job, process_report_job
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ReportTaskManager:
@@ -34,6 +37,8 @@ class ReportTaskManager:
         self.real_runtime = real_runtime
         self._loop: asyncio.AbstractEventLoop | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        # A wake that arrives while a chain is draining must not be dropped.
+        self._rewake: set[str] = set()
         self._closed = False
 
     def bind_running_loop(self) -> None:
@@ -48,10 +53,25 @@ class ReportTaskManager:
     def _schedule(self, debate_id: str) -> None:
         current = self._tasks.get(debate_id)
         if current is not None and not current.done():
+            # The running chain may already be past its last _next_job read, so
+            # it cannot be relied on to notice this new Job. Remember the wake
+            # and re-schedule when it finishes: otherwise a report requested in
+            # that window sat pending forever and Regenerate looked broken for
+            # no reason a teacher could see.
+            self._rewake.add(debate_id)
             return
         task = asyncio.create_task(self._run(debate_id), name=f"maya-report-{debate_id}")
         self._tasks[debate_id] = task
-        task.add_done_callback(lambda _task: self._tasks.pop(debate_id, None))
+        task.add_done_callback(lambda _task: self._finished(debate_id))
+
+    def _finished(self, debate_id: str) -> None:
+        self._tasks.pop(debate_id, None)
+        if self._closed:
+            self._rewake.discard(debate_id)
+            return
+        if debate_id in self._rewake:
+            self._rewake.discard(debate_id)
+            self._schedule(debate_id)
 
     async def _run(self, debate_id: str) -> None:
         await asyncio.to_thread(self._run_chain, debate_id)
@@ -81,10 +101,86 @@ class ReportTaskManager:
             if pending is None:
                 return
             operation, owner_id = pending
-            if operation == "barrage_insight.generate":
-                self._run_insight(debate_id, owner_id)
-            else:
-                self._run_report(debate_id, owner_id)
+            try:
+                if operation == "barrage_insight.generate":
+                    self._run_insight(debate_id, owner_id)
+                else:
+                    self._run_report(debate_id, owner_id)
+            except Exception:
+                # An unexpected failure used to escape into the asyncio task
+                # and die there as "Task exception was never retrieved". The
+                # Job stayed ``running`` and the revision ``generating``
+                # forever, so the panel showed a spinner nothing would ever
+                # resolve and Regenerate only added another stuck revision.
+                # A failure has to be recorded where the teacher can see it and
+                # act on it; the loop stops so a broken job cannot spin.
+                LOGGER.exception("Report chain failed for debate %s", debate_id)
+                self._fail_stuck_job(debate_id, operation, owner_id)
+                return
+
+    def _fail_stuck_job(self, debate_id: str, operation: str, owner_id: str) -> None:
+        """Record an unexpected failure so the teacher can retry it."""
+
+        payload: dict[str, Any]
+        try:
+            with self.session_factory() as db:
+                job = db.scalar(
+                    select(Job).where(
+                        Job.debate_id == debate_id,
+                        Job.operation == operation,
+                        (
+                            Job.report_revision_id == owner_id
+                            if operation == "report.generate"
+                            else Job.insight_snapshot_id == owner_id
+                        ),
+                    )
+                )
+                if job is not None:
+                    job.state = "failed"
+                    job.safe_error_code = "report_generation_failed"
+                revision = None
+                snapshot = None
+                if operation == "report.generate":
+                    revision = db.get(CivilizationReportRevision, owner_id)
+                    if revision is not None and revision.status == "generating":
+                        revision.status = "failed"
+                        revision.safe_error_code = "report_generation_failed"
+                else:
+                    snapshot = db.get(BarrageInsightSnapshot, owner_id)
+                    if snapshot is not None and snapshot.status == "generating":
+                        snapshot.status = "failed"
+                        snapshot.safe_error_code = "insight_generation_failed"
+                if operation == "report.generate":
+                    pointer = (
+                        db.scalar(
+                            select(CivilizationReportCurrentSuccess).where(
+                                CivilizationReportCurrentSuccess.report_id == revision.report_id
+                            )
+                        )
+                        if revision is not None
+                        else None
+                    )
+                    event_type = "report.failed"
+                    payload = {
+                        "revision_id": owner_id,
+                        "revision_no": revision.revision_no if revision is not None else 1,
+                        "status": "failed",
+                        "current_success_revision_id": (pointer.revision_id if pointer else None),
+                        "latest_attempt_status": "failed",
+                        "safe_error_code": "report_generation_failed",
+                    }
+                else:
+                    event_type = "barrage_insight.failed"
+                    payload = {
+                        "revision": snapshot.revision_no if snapshot is not None else 1,
+                        "status": "failed",
+                        "safe_error_code": "insight_generation_failed",
+                    }
+                db.commit()
+        except Exception:
+            LOGGER.exception("Could not record the failure of a stuck report job")
+            return
+        self.event_publisher(debate_id, event_type, payload)
 
     def _run_insight(self, debate_id: str, snapshot_id: str) -> None:
         with self.session_factory() as db:
@@ -144,13 +240,16 @@ class ReportTaskManager:
                 }
                 event_type = "report.completed"
             elif status == "generating":
-                payload = {
-                    "revision_id": revision.id,
-                    "revision_no": revision.revision_no,
-                    "status": "generating",
-                    "safe_error_code": "provider_confirmation_required",
-                }
-                event_type = "report.pending"
+                # Parked awaiting a provider confirmation. This used to publish
+                # a "report.pending" event, which is not a registered type, so
+                # the whole chain died with "unsupported playback event type"
+                # and left the Job running forever. The revision row already
+                # carries this state and the panel reads it.
+                LOGGER.info(
+                    "Report revision %s is waiting for a provider confirmation",
+                    revision.id,
+                )
+                return
             else:
                 payload = {
                     "revision_id": revision.id,
