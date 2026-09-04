@@ -94,15 +94,12 @@ jobs:
           test -f backend/migrations/versions/0007_wave3_interaction_report.py
           test -f backend/tests/test_wave3_interactions.py
           test -f backend/tests/test_wave3_reports.py
-          test -f backend/tests/test_wave3_translations.py
           test -f backend/tests/test_wave3_playback_controls.py
           test -f scripts/test_wave3_migration.py
           test -d backend/app/modules/interactions
           test -d backend/app/modules/reports
-          test -d backend/app/modules/translations
           test -f frontend/tests/wave3-interaction.test.tsx
           test -f frontend/tests/wave3-report.test.tsx
-          test -f frontend/tests/wave3-history-translation.test.tsx
 
       - name: Assert Wave 4 inputs
         run: |
