@@ -1144,7 +1144,8 @@ details > summary {
 }
 
 .published-card h2 {
-  margin: 12px 0 5px;
+  margin: 0 0 5px;
+  font-size: 1.28rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1167,10 +1168,7 @@ details > summary {
   font-weight: 700;
 }
 
-.published-card-meta span + span::before {
-  margin-right: 7px;
-  content: "·";
-}
+/* The pills are two facts, not one sentence: no separator between them. */
 
 .workbench-grid {
   grid-template-columns: minmax(0, 1.52fr) minmax(300px, 0.88fr);

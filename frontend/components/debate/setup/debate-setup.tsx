@@ -464,14 +464,6 @@ export function TeacherDebateCreate({
         </SectionCard>
 
         <SectionCard title={copy(t, "debateSelected")}>
-          <div className={styles.selectedSummary}>
-            <span className={styles.summaryPill}>
-              {interpolate(copy(t, "debateSelectCount"), {
-                count: selectedCandidates.length,
-              })}
-            </span>
-            <span className={styles.fixedPill}>{copy(t, "debateRounds")}</span>
-          </div>
           {selectedCandidates.length ? (
             <div className={styles.selectedList}>
               {selectedCandidates.map((candidate, index) => {

@@ -94,7 +94,6 @@ export function AppShell({
           ))}
         </nav>
         <div className="nav-account">
-          <span className="account-name">{user?.display_name ?? ""}</span>
           <LanguageSwitcher />
           <button
             className="nav-logout"

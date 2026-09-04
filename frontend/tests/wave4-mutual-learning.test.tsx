@@ -93,7 +93,7 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
       await screen.findByRole("button", { name: /Bowen/ });
       fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
       fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
-      fireEvent.change(screen.getByLabelText("Topic (English)"), {
+      fireEvent.change(screen.getByLabelText("Topic"), {
         target: { value: "Should classrooms compare cultural perspectives?" },
       });
       // The rounds control is a segmented radiogroup now, not a select: the
@@ -122,7 +122,7 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
-    fireEvent.change(screen.getByLabelText("Topic (English)"), {
+    fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "Should classrooms compare cultural perspectives?" },
     });
     expect(screen.queryByRole("option", { name: /legacy/i })).toBeNull();

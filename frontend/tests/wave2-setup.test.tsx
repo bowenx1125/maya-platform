@@ -178,7 +178,7 @@ describe("Wave 2 teacher debate setup", () => {
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
-    fireEvent.change(screen.getByLabelText("Topic (English)"), {
+    fireEvent.change(screen.getByLabelText("Topic"), {
       target: {
         value:
           "Should the United States ban TikTok's recommendation algorithm?",
@@ -244,7 +244,7 @@ describe("Wave 2 teacher debate setup", () => {
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
-    fireEvent.change(screen.getByLabelText("Topic (English)"), {
+    fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "A stable classroom question" },
     });
     fireEvent.click(
@@ -276,7 +276,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
 
-    const input = screen.getByLabelText("Topic (English)");
+    const input = screen.getByLabelText("Topic");
     const invalidTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: invalidTopic } });
     fireEvent.click(
