@@ -200,6 +200,11 @@ class DebateSummary(_ClosedModel):
         "stopped",
     ]
     created_at: datetime
+    # How much of this Debate's plan is already generated. A draft warms in the
+    # background, so the list can say how ready it is rather than only that it
+    # is a draft.
+    prepared_turns: int = Field(default=0, ge=0)
+    expected_turns: int = Field(default=0, ge=0)
 
 
 class PlaybackState(_ClosedModel):

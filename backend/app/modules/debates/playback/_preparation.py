@@ -309,38 +309,93 @@ class PlaybackPreparationMixin(PlaybackCore):
                 "provider_unavailable", "The service is temporarily unavailable.", 503
             )
 
+    def _release_claim(
+        self,
+        db: Any,
+        debate: Any,
+        turn: Any,
+        claim_token: str | None,
+    ) -> None:
+        """Hand a claimed job back when preparation cannot continue.
+
+        A claim that is taken and never released leaves the Job ``running``
+        forever, and every later attempt is refused because it looks like work
+        already in flight. That is how a draft can stop warming without
+        anything visible going wrong.
+        """
+
+        del debate
+        release = getattr(self.repository, "reset_prewarm_turn", None)
+        if not callable(release) or claim_token is None:
+            return
+        try:
+            release(db, turn, claim_token=claim_token)
+            self._commit(db)
+        except Exception:
+            LOGGER.exception("Could not release a turn claim for %s", getattr(turn, "id", "?"))
+
     async def prepare_turn(self, db: Any, debate_id: str, turn_id: str) -> None:
-        """Generate/TTS one current or immediate successor with CAS fencing."""
+        """Generate/TTS one turn: the current one, its successor, or a pre-warm.
+
+        A running Debate keeps the CAS fence it always had -- only the playing
+        turn and the one after it may be prepared, and the successor only once
+        the current turn is ready. That fence governs who may advance playback
+        and is untouched.
+
+        A draft is a different question with a different answer. Nothing is
+        playing, so there is nothing to fence against; the turns are prepared
+        strictly in order so each one sees the speeches before it, exactly as
+        it would during the lesson. The rows are the same rows, so when the
+        teacher starts the debate the work is simply already done.
+        """
 
         async with self._lock:
             debate = self._get_debate(db, debate_id)
             state = self._state(db, debate)
             turns = self._turns(db, debate)
             turn = next((item for item in turns if str(getattr(item, "id", "")) == turn_id), None)
-            if turn is None or str(getattr(debate, "status", "")) != "running":
+            if turn is None:
                 return
-            if state.current_turn_id is None:
+            status = str(getattr(debate, "status", ""))
+            prewarming = status == "draft"
+            if status != "running" and not prewarming:
                 return
-            current_index = next(
-                (
-                    index
-                    for index, item in enumerate(turns)
-                    if str(getattr(item, "id", "")) == state.current_turn_id
-                ),
-                -1,
-            )
-            if current_index < 0:
-                return
-            turn_index = int(self._get(turn, "turn_index", default=current_index) or current_index)
-            if turn_index not in {current_index, current_index + 1}:
-                return
-            if turn_index == current_index + 1:
-                previous = turns[current_index]
-                previous_generation = str(
-                    self._get(previous, "generation_status", default="pending")
-                )
-                if previous_generation not in {"final_ready", "ready", "completed"}:
+            if prewarming:
+                current_index = -1
+                turn_index = int(self._get(turn, "turn_index", default=0) or 0)
+                # Strictly the next unprepared turn. Preparing out of order
+                # would give a turn predecessors it will not have in the room.
+                if any(
+                    not self._turn_ready(item)
+                    for item in turns
+                    if int(self._get(item, "turn_index", default=0) or 0) < turn_index
+                ):
                     return
+            else:
+                if state.current_turn_id is None:
+                    return
+                current_index = next(
+                    (
+                        index
+                        for index, item in enumerate(turns)
+                        if str(getattr(item, "id", "")) == state.current_turn_id
+                    ),
+                    -1,
+                )
+                if current_index < 0:
+                    return
+                turn_index = int(
+                    self._get(turn, "turn_index", default=current_index) or current_index
+                )
+                if turn_index not in {current_index, current_index + 1}:
+                    return
+                if turn_index == current_index + 1:
+                    previous = turns[current_index]
+                    previous_generation = str(
+                        self._get(previous, "generation_status", default="pending")
+                    )
+                    if previous_generation not in {"final_ready", "ready", "completed"}:
+                        return
             cancellation_generation = int(
                 self._get(debate, "cancellation_generation", default=0) or 0
             )
@@ -365,7 +420,16 @@ class PlaybackPreparationMixin(PlaybackCore):
                     attempt=1,
                     cancellation_generation=cancellation_generation,
                 )
-                mark_running = getattr(self.repository, "mark_turn_running", None)
+                mark_running = getattr(
+                    self.repository,
+                    "mark_turn_prewarming" if prewarming else "mark_turn_running",
+                    None,
+                )
+                if mark_running is None and prewarming:
+                    # A repository double without the draft statement simply
+                    # does not pre-warm; it must not fall back to the live one.
+                    self._release_claim(db, debate, turn, claim_token)
+                    return
                 if not callable(mark_running):
                     return
                 mark_kwargs: dict[str, Any] = {
@@ -386,6 +450,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if accepts_fence:
                     mark_kwargs["fence"] = generation_fence
                 if not mark_running(db, turn, **mark_kwargs):
+                    self._release_claim(db, debate, turn, claim_token)
                     return
             else:
                 turn.generation_status = "running"
@@ -476,9 +541,10 @@ class PlaybackPreparationMixin(PlaybackCore):
                     ),
                     None,
                 )
+                expected_status = "draft" if prewarming else "running"
                 if (
                     fresh_turn is None
-                    or str(getattr(fresh_debate, "status", "")) != "running"
+                    or str(getattr(fresh_debate, "status", "")) != expected_status
                     or int(self._get(fresh_debate, "cancellation_generation", default=0) or 0)
                     != cancellation_generation
                     or self._get(fresh_turn, "generation_status", default="")
@@ -492,6 +558,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                     prepared,
                     audio,
                     generation=cancellation_generation,
+                    debate_status=expected_status,
                     attempt=prepared.generation_attempt,
                     claim_token=claim_token,
                 )
@@ -624,6 +691,20 @@ class PlaybackPreparationMixin(PlaybackCore):
             claim_token=claim_token,
             code=str(error_code),
         ):
+            return
+        if prewarming:
+            # A draft that fails to warm returns its turn to the queue rather
+            # than failing the Debate. Warming ahead is an optimisation; the
+            # teacher has not started this lesson, and marking it failed for a
+            # turn nobody has seen would be a worse answer than generating it
+            # live when they do.
+            async with self._lock:
+                debate = self._get_debate(db, debate_id)
+                turns = self._turns(db, debate)
+                current = next(
+                    (item for item in turns if str(getattr(item, "id", "")) == turn_id), turn
+                )
+                self._release_claim(db, debate, current, claim_token)
             return
         failed_event: EventRecord | None = None
         failed_epoch: str | None = None

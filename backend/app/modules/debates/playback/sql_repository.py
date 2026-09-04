@@ -1812,7 +1812,14 @@ class SqlPlaybackRepository(PlaybackRepository):
         generation: int,
         attempt: int,
         claim_token: str | None = None,
+        debate_status: str = "running",
     ) -> bool:
+        # The Debate this turn belongs to has to be in the state the caller
+        # prepared it for: ``running`` for a live lesson, ``draft`` for one
+        # warming ahead of its lesson. Naming it rather than assuming it is
+        # what keeps a pre-warm from ever writing into a running Debate.
+        if debate_status not in {"running", "draft"}:
+            return False
         predecessor_json = json.dumps(prepared.predecessor_turn_ids, separators=(",", ":"))
         if (
             prepared.transcript_hash is None
@@ -1931,6 +1938,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         filtered.update(
             {
                 "generation": generation,
+                "debate_status": debate_status,
                 "claim_token": claim_token,
                 "claimed_attempt": 1,
                 "expected_predecessors": predecessor_json,
@@ -1945,13 +1953,27 @@ class SqlPlaybackRepository(PlaybackRepository):
             "AND transcript_hash=:expected_transcript_hash "
             "AND cutoff_turn_index=:expected_cutoff "
             "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
-            "AND debates.status='running' "
+            "AND debates.status=:debate_status "
             "AND debates.cancellation_generation=:generation) "
-            "AND EXISTS (SELECT 1 FROM playback_states "
-            "JOIN debate_turns AS current_turn ON current_turn.id=playback_states.current_turn_id "
-            "WHERE playback_states.debate_id=debate_turns.debate_id "
-            "AND debate_turns.turn_index IN (current_turn.turn_index,current_turn.turn_index+1)) "
-            "AND EXISTS (SELECT 1 FROM jobs WHERE jobs.debate_id=debate_turns.debate_id "
+            # A live lesson may only ready the playing turn or the one after
+            # it. A draft has no playing turn, so its ordering is the fact that
+            # every earlier turn is already made -- the same rule, stated for a
+            # Debate that nothing is advancing through.
+            + (
+                "AND EXISTS (SELECT 1 FROM playback_states "
+                "JOIN debate_turns AS current_turn "
+                "ON current_turn.id=playback_states.current_turn_id "
+                "WHERE playback_states.debate_id=debate_turns.debate_id "
+                "AND debate_turns.turn_index IN "
+                "(current_turn.turn_index,current_turn.turn_index+1)) "
+                if debate_status == "running"
+                else "AND NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
+                "WHERE earlier.debate_id=debate_turns.debate_id "
+                "AND earlier.turn_index < debate_turns.turn_index "
+                "AND earlier.generation_status NOT IN "
+                "('final_ready','ready','completed')) "
+            )
+            + "AND EXISTS (SELECT 1 FROM jobs WHERE jobs.debate_id=debate_turns.debate_id "
             "AND jobs.turn_id=debate_turns.id AND jobs.state='running' "
             "AND jobs.claim_token=:claim_token "
             "AND jobs.cancellation_generation=:generation "
@@ -1964,6 +1986,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             not in {
                 "id",
                 "generation",
+                "debate_status",
                 "claim_token",
                 "claimed_attempt",
                 "expected_predecessors",
@@ -2141,6 +2164,80 @@ class SqlPlaybackRepository(PlaybackRepository):
         )
         return token if int(getattr(changed, "rowcount", 0)) == 1 else None
 
+    def mark_turn_prewarming(
+        self,
+        db: Any,
+        turn: SqlRow,
+        *,
+        cancellation_generation: int,
+        claim_token: str | None,
+        fence: PreparedGenerationFence | None = None,
+    ) -> bool:
+        """Claim one turn of a draft that is warming ahead of its lesson.
+
+        Deliberately a separate statement from ``mark_turn_running`` rather
+        than a relaxed version of it. That one encodes the live fence -- the
+        Debate is running and this turn is adjacent to the playing one -- and
+        that fence governs who may advance playback. A draft has no playing
+        turn to be adjacent to, so widening the live condition to cover it
+        would quietly weaken the rule it exists to state. Every other guard is
+        identical: the same prefix fence, the same attempt, and the same
+        durable job claim.
+        """
+
+        if claim_token is None or fence is None or fence.attempt not in {1, 2}:
+            return False
+        predecessor_json = json.dumps(fence.predecessor_turn_ids, separators=(",", ":"))
+        changed = db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='running', "
+                "preparation_stage='generation', transcript_hash=:transcript_hash, "
+                "attempt=:attempt, safe_error_code=NULL, updated_at=:updated_at "
+                "WHERE id=:turn_id AND generation_status='pending' "
+                "AND transcript_hash IS NULL AND attempt=:attempt "
+                "AND predecessor_turn_ids_json=:predecessors "
+                "AND cutoff_turn_index=:cutoff "
+                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                "AND debates.status='draft' "
+                "AND debates.cancellation_generation=:generation) "
+                "AND NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
+                "WHERE earlier.debate_id=debate_turns.debate_id "
+                "AND earlier.turn_index < debate_turns.turn_index "
+                "AND earlier.generation_status NOT IN ('final_ready','ready','completed')) "
+                "AND EXISTS (SELECT 1 FROM jobs WHERE turn_id=:turn_id AND state='running' "
+                "AND claim_token=:claim_token AND cancellation_generation=:generation)"
+            ),
+            {
+                "updated_at": _now(),
+                "turn_id": str(turn.id),
+                "claim_token": claim_token,
+                "generation": cancellation_generation,
+                "transcript_hash": fence.transcript_hash,
+                "attempt": fence.attempt,
+                "predecessors": predecessor_json,
+                "cutoff": fence.cutoff_turn_index,
+            },
+        )
+        accepted = int(getattr(changed, "rowcount", 0)) == 1
+        if accepted:
+            job = db.execute(
+                text(
+                    "UPDATE jobs SET attempt=:attempt, updated_at=:updated_at "
+                    "WHERE turn_id=:turn_id AND state='running' "
+                    "AND claim_token=:claim_token AND cancellation_generation=:generation"
+                ),
+                {
+                    "attempt": fence.attempt,
+                    "updated_at": _now(),
+                    "turn_id": str(turn.id),
+                    "claim_token": claim_token,
+                    "generation": cancellation_generation,
+                },
+            )
+            if int(getattr(job, "rowcount", 0)) != 1:
+                raise RuntimeError("turn claim lost its durable job fence")
+        return accepted
+
     def mark_turn_running(
         self,
         db: Any,
@@ -2204,6 +2301,39 @@ class SqlPlaybackRepository(PlaybackRepository):
             if int(getattr(job, "rowcount", 0)) != 1:
                 raise RuntimeError("turn claim lost its durable job fence")
         return accepted
+
+    def reset_prewarm_turn(self, db: Any, turn: SqlRow, *, claim_token: str | None) -> bool:
+        """Return a draft's turn to pending after a failed warm-up.
+
+        Warming ahead is an optimisation: if it does not work the lesson must
+        still be startable, and the turn generated live as it always was. A
+        turn left ``running`` would instead block both the next warm-up and the
+        lesson itself, so a failure here undoes its own claim.
+
+        Scoped to a draft, so this can never touch a turn of a running lesson.
+        """
+
+        if claim_token is None:
+            return False
+        changed = db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='pending', "
+                "transcript_hash=NULL, safe_error_code=NULL, updated_at=:updated_at "
+                "WHERE id=:turn_id AND generation_status='running' "
+                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                "AND debates.status='draft')"
+            ),
+            {"updated_at": _now(), "turn_id": str(turn.id)},
+        )
+        db.execute(
+            text(
+                "UPDATE jobs SET state='pending', claim_token=NULL, updated_at=:updated_at "
+                "WHERE turn_id=:turn_id AND operation='debate_turn_prepare' "
+                "AND state='running' AND claim_token=:claim_token"
+            ),
+            {"updated_at": _now(), "turn_id": str(turn.id), "claim_token": claim_token},
+        )
+        return int(getattr(changed, "rowcount", 0)) == 1
 
     def defer_turn_job(
         self,

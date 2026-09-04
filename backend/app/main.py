@@ -35,6 +35,7 @@ from app.modules.avatars.router import router as avatars_router
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.events import DebateEventHub
 from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
+from app.modules.debates.playback.prewarm import PrewarmScheduler
 from app.modules.debates.playback.router import router as debate_playback_router
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlEventStore, SqlPlaybackRepository
@@ -158,6 +159,53 @@ def create_app(
         snapshot_projector=wave3_snapshot_projection,
     )
 
+    def _prewarm_plan(debate_id: str) -> list[tuple[str, bool]]:
+        """This Debate's turns in order, and whether each is already made."""
+
+        with runtime_database.session() as session:
+            debate = playback_repository.get_debate(session, debate_id)
+            if debate is None or str(getattr(debate, "status", "")) != "draft":
+                return []
+            # A draft that cannot be started must not be warmed: every turn
+            # would be a real provider call spent on a lesson the teacher will
+            # be told to fix before it can run.
+            from app.modules.debates.topic_language import validate_english_topic
+
+            try:
+                validate_english_topic(str(getattr(debate, "topic", "")))
+            except Exception:
+                return []
+            turns = playback_repository.turns(session, debate)
+            if not turns:
+                # A draft has no plan until something asks for one. Warming is
+                # the only asker before Start, and Start stops warming before
+                # it runs, so the two never write this at the same time.
+                ensure = getattr(playback_repository, "ensure_turn_plan", None)
+                if callable(ensure):
+                    turns = ensure(session, debate)
+                    session.commit()
+            return [
+                (
+                    str(getattr(turn, "id", "")),
+                    str(getattr(turn, "generation_status", ""))
+                    in {"final_ready", "ready", "completed"},
+                )
+                for turn in sorted(turns, key=lambda item: int(getattr(item, "turn_index", 0) or 0))
+            ]
+
+    async def _prewarm_prepare(debate_id: str, turn_id: str) -> None:
+        with runtime_database.session() as session:
+            await playback_service.prepare_turn(session, debate_id, turn_id)
+            session.commit()
+
+    prewarm = PrewarmScheduler(plan=_prewarm_plan, prepare=_prewarm_prepare)
+    if runtime_settings.is_test:
+        # Warming is a runtime behaviour, not part of any request's contract.
+        # Left armed under a test client it writes turns between a test's own
+        # statements, which is a race no assertion can be written against. The
+        # scheduler's own rules are tested by driving it directly.
+        prewarm.disable()
+
     def publish_interaction_event(event: Any) -> None:
         wave3_events.publish_interaction(event)
         if event.event_type == "interaction.closed":
@@ -174,6 +222,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
+        prewarm.bind_running_loop()
         runtime_settings.validate_runtime()
         runtime_settings.ensure_data_root()
         if initialize_database:
@@ -224,6 +273,7 @@ def create_app(
         try:
             yield
         finally:
+            await prewarm.close()
             await report_tasks.close()
             await playback_tasks.close()
             runtime_database.dispose()
@@ -240,6 +290,7 @@ def create_app(
     app.state.interaction_event_publisher = publish_interaction_event
     app.state.insight_enqueuer = interaction_service.insight_enqueuer
     app.state.wave3_event_publisher = wave3_events
+    app.state.prewarm_scheduler = prewarm
     app.state.report_task_manager = report_tasks
     app.state.report_runtime = report_runtime
     if settings is not None:

@@ -2459,6 +2459,16 @@ components:
             enum: [draft, running, debate_finished, completed, failed, stopped],
           }
         created_at: { $ref: "#/components/schemas/IsoTime" }
+        prepared_turns:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Turns already generated, including a draft warming in the background.
+        expected_turns:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Turns this debate's plan contains, from its own agent and round counts.
     DebateDetail:
       allOf:
         - $ref: "#/components/schemas/DebateSummary"

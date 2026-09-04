@@ -1619,6 +1619,16 @@ export interface components {
             /** @enum {string} */
             status: "draft" | "running" | "debate_finished" | "completed" | "failed" | "stopped";
             created_at: components["schemas"]["IsoTime"];
+            /**
+             * @description Turns already generated, including a draft warming in the background.
+             * @default 0
+             */
+            prepared_turns: number;
+            /**
+             * @description Turns this debate's plan contains, from its own agent and round counts.
+             * @default 0
+             */
+            expected_turns: number;
         };
         DebateDetail: components["schemas"]["DebateSummary"] & {
             revision: number;

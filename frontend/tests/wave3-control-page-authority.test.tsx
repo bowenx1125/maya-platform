@@ -67,6 +67,8 @@ function runningDetail(): DebateDetail {
     topic: "Should classrooms compare cultural perspectives?",
     status: "running",
     created_at: "2026-08-30T00:00:00Z",
+    prepared_turns: 0,
+    expected_turns: 0,
     revision: 1,
     last_sequence: 0,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",

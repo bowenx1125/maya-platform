@@ -876,3 +876,70 @@ def test_a_complete_finish_releases_its_audio_and_a_partial_one_keeps_it(
         assert released == [], "a partial finish keeps its audio"
         service._release_completed_audio(session, complete_id)
         assert released == [complete_id, f"marked:{complete_id}"]
+
+
+def test_prewarm_yields_at_a_turn_boundary_and_never_resumes_an_ended_debate() -> None:
+    """One draft warms at a time, and yielding never discards finished work."""
+
+    import asyncio
+
+    from app.modules.debates.playback.prewarm import PrewarmScheduler, prewarm_progress
+
+    made: list[tuple[str, str]] = []
+    plans = {
+        "a": ["a1", "a2", "a3"],
+        "b": ["b1", "b2"],
+    }
+    ready: set[str] = set()
+    switch_after: list[str] = ["a1"]
+
+    def plan(debate_id: str) -> list[tuple[str, bool]]:
+        return [(turn, turn in ready) for turn in plans.get(debate_id, [])]
+
+    async def prepare(debate_id: str, turn_id: str) -> None:
+        made.append((debate_id, turn_id))
+        ready.add(turn_id)
+        # The teacher opens the other debate while this turn is being made.
+        if switch_after and turn_id == switch_after[0]:
+            switch_after.pop()
+            scheduler._focus("b")
+
+    scheduler = PrewarmScheduler(plan=plan, prepare=prepare)
+
+    async def run() -> None:
+        scheduler.bind_running_loop()
+        scheduler.focus("a")
+        await asyncio.sleep(0)
+        for _ in range(40):
+            await asyncio.sleep(0)
+            if scheduler._task is None or scheduler._task.done():
+                break
+        task = scheduler._task
+        if task is not None:
+            await task
+        await scheduler.close()
+
+    asyncio.run(run())
+
+    # The turn already in flight finished, and its output was kept.
+    assert ("a", "a1") in made
+    assert "a1" in ready
+    # Then the bandwidth went to the debate the teacher opened, and the
+    # yielding draft did not keep spending it.
+    assert [debate for debate, _turn in made].count("a") == 1
+    assert ("b", "b1") in made
+
+    # An ended debate never warms again, however much of it is missing.
+    scheduler_two = PrewarmScheduler(plan=plan, prepare=prepare)
+    scheduler_two.release("a")
+    before = len(made)
+    scheduler_two.focus("a")
+    assert len(made) == before
+
+    # Progress is read from the plan the RuleSet produced, not a fixed shape.
+    class _Turn:
+        def __init__(self, status: str) -> None:
+            self.generation_status = status
+
+    assert prewarm_progress([_Turn("final_ready"), _Turn("pending")], 4) == (1, 4)
+    assert prewarm_progress([], 12) == (0, 12)

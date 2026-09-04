@@ -411,3 +411,46 @@ treating it as a regression.
 
 Phases 1 and 2 touch no contract and land first. Phases 3 and 4 each re-freeze
 the hash once.
+
+---
+
+## What shipped, and where it differs from this plan
+
+Written after the work, so the next reader learns from the differences rather
+than re-deriving them.
+
+**§3 classroom address.** Recovering a changed LAN address is one command
+(`scripts/refresh_classroom_address.py`), not zero touches. Widening the origin
+check to accept any private address was implemented and reverted: a test pins
+that other private addresses are rejected, and `_websocket_origin_allowed`
+states why a Host-derived allow-list must never exist. That control is doing
+its job; the chore is the price.
+
+**§4.1 pre-warm.** Start remains the only writer of a turn plan. Creating the
+plan when the draft is created was implemented and reverted — three tests seed
+their own turn rows for a debate they created through the API, and a plan that
+already exists collides with them. Warming materialises the plan instead, and
+Start stops warming before it runs, so the two are never writers at once.
+
+Warming is disabled under `settings.is_test`. That is scoping, not a workaround:
+armed under a test client it writes turns between a test's own statements, which
+is a race no assertion can be written against. The scheduler's rules — one owner
+at a time, yield at a turn boundary keeping finished work, End is terminal — are
+tested by driving it directly.
+
+The draft path needed its own claim (`mark_turn_prewarming`) and its own ready
+condition rather than a relaxed version of the live ones. `mark_turn_running`
+encodes the live fence: the Debate is running and this turn is adjacent to the
+playing one. A draft has no playing turn, so widening that condition to cover it
+would have quietly weakened the rule it exists to state. The draft states its own
+ordering instead: every earlier turn is already made.
+
+A warm-up that fails returns its turn to `pending` rather than failing the
+Debate. Warming ahead is an optimisation; the teacher has not started the lesson,
+and marking it failed for a turn nobody has seen is a worse answer than
+generating it live when they do.
+
+**§4.2 language.** Chinese generation works and is more failure-prone than
+English, because the structural rules (claim text must be an exact substring of
+the speech; a retrieval hit must be represented by a claim receipt) were tuned
+against English output. That is prompt quality, not an unfinished lock.

@@ -149,7 +149,17 @@ export function TeacherDebateList({
                       </span>
                     </div>
                   </div>
-                  <StatusBadge status={debate.status} />
+                  {/* A draft is not idle: it is warming its turns in the
+                      background, so the list says how far along it is rather
+                      than only that it is a draft. */}
+                  {debate.status === "draft" ? (
+                    <PrewarmBadge
+                      expected={debate.expected_turns ?? 0}
+                      prepared={debate.prepared_turns ?? 0}
+                    />
+                  ) : (
+                    <StatusBadge status={debate.status} />
+                  )}
                 </Link>
                 {/* A lesson left running blocks every later debate on this
                     course, and clearing it used to need a shell on the server.
@@ -166,6 +176,37 @@ export function TeacherDebateList({
         )}
       </SectionCard>
     </div>
+  );
+}
+
+/**
+ * How ready a draft is, in the words the teacher acts on.
+ *
+ * "Thinking" while it warms, with the share done, and "Ready" once every turn
+ * is generated. Either way the debate can be started: an unwarmed turn simply
+ * waits where it always did.
+ */
+function PrewarmBadge({
+  prepared,
+  expected,
+}: {
+  prepared: number;
+  expected: number;
+}) {
+  const t = useT();
+  const complete = expected > 0 && prepared >= expected;
+  const percent =
+    expected > 0 ? Math.min(100, Math.round((prepared / expected) * 100)) : 0;
+  return (
+    <span
+      className={`status-badge ${complete ? "status-good" : "status-warn"}`}
+      data-prewarm={complete ? "ready" : "thinking"}
+    >
+      <span aria-hidden="true" />
+      {complete
+        ? t("debatePrewarmReady")
+        : `${t("debatePrewarming")} ${percent}%`}
+    </span>
   );
 }
 

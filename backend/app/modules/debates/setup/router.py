@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
@@ -64,18 +64,29 @@ def list_debates_route(
 def create_debate_route(
     course_id: UUID,
     payload: DebateDraftRequest,
+    request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> DebateDetail:
-    return create_debate_draft(
+    detail = create_debate_draft(
         db,
         actor_user_id=context.user.id,
         course_id=str(course_id),
         payload=payload,
         idempotency_key=idempotency_key,
     )
+    # A new draft is the one the teacher is about to run, so it starts warming
+    # the moment they land back on the list. The Job rows have to be durable
+    # before the scheduler looks for them, and get_db commits after this
+    # handler returns.
+    db.commit()
+    scheduler = getattr(request.app.state, "prewarm_scheduler", None)
+    focus = getattr(scheduler, "focus", None)
+    if callable(focus):
+        focus(str(detail.id))
+    return detail
 
 
 @router.get(
@@ -90,10 +101,19 @@ def create_debate_route(
 )
 def get_debate_route(
     debate_id: UUID,
+    request: Request,
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> DebateDetail:
-    return get_debate(db, actor_user_id=context.user.id, debate_id=str(debate_id))
+    detail = get_debate(db, actor_user_id=context.user.id, debate_id=str(debate_id))
+    # Opening a debate is what says which one the teacher is about to run, so
+    # it takes the pre-warm bandwidth and whatever held it yields at its next
+    # turn boundary.
+    scheduler = getattr(request.app.state, "prewarm_scheduler", None)
+    focus = getattr(scheduler, "focus", None)
+    if callable(focus):
+        focus(str(debate_id))
+    return detail
 
 
 @router.patch(

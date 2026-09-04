@@ -179,6 +179,7 @@ class PlaybackRepository(Protocol):
         generation: int,
         attempt: int,
         claim_token: str | None = None,
+        debate_status: str = "running",
     ) -> bool: ...
 
     def publish_turn(self, db: Any, turn: Any) -> bool: ...
@@ -361,8 +362,9 @@ class MemoryPlaybackRepository:
         generation: int,
         attempt: int,
         claim_token: str | None = None,
+        debate_status: str = "running",
     ) -> bool:
-        del db, generation, claim_token
+        del db, generation, claim_token, debate_status
         if turn.generation_status not in {"pending", "running", "final_ready"}:
             return False
         turn.generation_status = "final_ready"

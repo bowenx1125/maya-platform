@@ -108,6 +108,15 @@ def _session_hash(context: AuthContext) -> str:
     return session_hash(context.raw_session_token)
 
 
+def _release_prewarm(request: Request, debate_id: str) -> None:
+    """Stop warming a debate that has started or ended."""
+
+    scheduler = getattr(request.app.state, "prewarm_scheduler", None)
+    release = getattr(scheduler, "release", None)
+    if callable(release):
+        release(debate_id)
+
+
 @router.post(
     "/debates/{debate_id}/start",
     operation_id="startDebate",
@@ -137,6 +146,9 @@ async def start_debate_route(
         else None
     )
     confirm = payload.confirm_previous_audio_cleanup
+    # Stop warming before starting, so the warm-up cannot take a claim the
+    # start path is about to need.
+    _release_prewarm(request, str(debate_id))
     state = await service.start(
         db,
         str(debate_id),
@@ -293,12 +305,15 @@ async def release_debate_route(
 async def finish_debate_route(
     debate_id: UUID,
     payload: FinishDebateRequest,
+    request: Request,
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
 ) -> Any:
+    # An ended debate never warms again, whatever it is missing.
+    _release_prewarm(request, str(debate_id))
     state = await service.finish(
         db,
         str(debate_id),

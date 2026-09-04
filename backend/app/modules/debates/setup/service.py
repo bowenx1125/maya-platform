@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,7 @@ from app.core.models import (
 from app.modules.agents.persona_service import is_persona_confirmed
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
+from app.modules.debates.round_count import expected_turn_count
 from app.modules.debates.schemas import (
     RULE_SET_ID_MUTUAL_LEARNING,
     DebateDetail,
@@ -844,7 +845,12 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
     )
 
 
-def debate_summary(debate: Debate) -> DebateSummary:
+def debate_summary(
+    debate: Debate,
+    *,
+    prepared_turns: int = 0,
+    expected_turns: int = 0,
+) -> DebateSummary:
     return DebateSummary.model_validate(
         {
             "id": _as_uuid(debate.id),
@@ -852,6 +858,8 @@ def debate_summary(debate: Debate) -> DebateSummary:
             "topic": debate.topic,
             "status": debate.status,
             "created_at": debate.created_at,
+            "prepared_turns": prepared_turns,
+            "expected_turns": expected_turns,
         }
     )
 
@@ -975,7 +983,37 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     rows = db.scalars(
         select(Debate).where(Debate.course_id == course_id).order_by(Debate.created_at.desc())
     ).all()
-    return [debate_summary(row) for row in rows]
+    # One query for every Debate's turns rather than one per row: the list is
+    # the screen a teacher watches while a draft warms, and it is polled.
+    summaries: list[DebateSummary] = []
+    ready_by_debate: dict[str, int] = {}
+    participants_by_debate: dict[str, int] = {}
+    if rows:
+        ids = [row.id for row in rows]
+        for debate_id, ready in db.execute(
+            select(DebateTurn.debate_id, func.count())
+            .where(
+                DebateTurn.debate_id.in_(ids),
+                DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
+            )
+            .group_by(DebateTurn.debate_id)
+        ):
+            ready_by_debate[str(debate_id)] = int(ready)
+        for debate_id, count in db.execute(
+            select(DebateParticipant.debate_id, func.count())
+            .where(DebateParticipant.debate_id.in_(ids))
+            .group_by(DebateParticipant.debate_id)
+        ):
+            participants_by_debate[str(debate_id)] = int(count)
+    for row in rows:
+        summaries.append(
+            debate_summary(
+                row,
+                prepared_turns=ready_by_debate.get(str(row.id), 0),
+                expected_turns=expected_turn_count(row, participants_by_debate.get(str(row.id), 0)),
+            )
+        )
+    return summaries
 
 
 def get_debate(db: Session, *, actor_user_id: str, debate_id: str) -> DebateDetail:
@@ -984,6 +1022,23 @@ def get_debate(db: Session, *, actor_user_id: str, debate_id: str) -> DebateDeta
         raise not_found()
     require_teacher_course(db, actor_user_id, debate.course_id)
     return _detail(db, debate)
+
+
+def _discard_prewarmed_plan(db: Session, debate_id: str) -> None:
+    """Throw away a draft's warmed turns so an edit cannot outlive them."""
+
+    from app.modules.debates.models import TurnSource
+
+    turn_ids = [
+        row
+        for row in db.scalars(select(DebateTurn.id).where(DebateTurn.debate_id == debate_id)).all()
+    ]
+    if not turn_ids:
+        return
+    db.execute(delete(Job).where(Job.turn_id.in_(turn_ids)))
+    db.execute(delete(TurnSource).where(TurnSource.turn_id.in_(turn_ids)))
+    db.execute(delete(DebateTurn).where(DebateTurn.debate_id == debate_id))
+    db.flush()
 
 
 def update_debate_draft(
@@ -1004,6 +1059,12 @@ def update_debate_draft(
     topic = _validated_topic(payload.topic)
     _ensure_payload(payload)
     timestamp = utc_now()
+    # A draft warms its turns in the background, so an edit has to discard
+    # them: the plan freezes the speaking order and every turn's predecessor
+    # prefix, and changing the participants or the round count makes both
+    # wrong. Turns generated against the old shape would otherwise survive
+    # into a lesson that no longer matches them.
+    _discard_prewarmed_plan(db, debate.id)
     changed = db.execute(
         update(Debate)
         .where(
@@ -1084,6 +1145,19 @@ def commit_start_plan(
             "The Debate draft revision is stale.",
             {"current_revision": debate.revision},
         )
+    # A draft warming in the background materialises this same plan, so two
+    # callers can arrive here for one Debate. The plan is deterministic and its
+    # rows carry a unique (debate, turn_index), so the second caller must reuse
+    # the first one's rows rather than insert a duplicate set.
+    existing = list(
+        db.scalars(
+            select(DebateTurn)
+            .where(DebateTurn.debate_id == debate.id)
+            .order_by(DebateTurn.turn_index)
+        ).all()
+    )
+    if existing:
+        return existing
     participants = db.scalars(
         select(DebateParticipant)
         .where(DebateParticipant.debate_id == debate.id)
