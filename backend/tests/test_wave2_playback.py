@@ -1765,7 +1765,19 @@ def test_websocket_sessions_release_small_sqlite_pool_for_http_requests(
         )
         assert started.status_code == 200, started.text
         _wait_for_ready(client, debate_id)
+        # Playback being ready does not mean the task that prepared it has
+        # already handed its connection back. Taking the baseline in that
+        # window recorded a checkout that later disappeared, and every
+        # assertion below then compared against a number the pool would never
+        # return again. Let it settle first; the equality checks that follow
+        # are the point of this test and are unchanged.
         baseline_checked_out = pool.checkedout()
+        for _attempt in range(200):
+            time.sleep(0.05)
+            settled = pool.checkedout()
+            if settled == baseline_checked_out:
+                break
+            baseline_checked_out = settled
 
         with ExitStack() as sockets:
             opened: list[Any] = []
