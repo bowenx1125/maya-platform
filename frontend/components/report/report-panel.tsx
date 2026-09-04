@@ -38,7 +38,7 @@ export type ReportPanelApi = {
   ) => Promise<ReportRevision>;
   downloadCurrentReport: (
     debateId: string,
-    language?: "en" | "zh-Hans",
+    language?: "en",
   ) => Promise<ReportDownload>;
 };
 
@@ -111,7 +111,6 @@ export function ReportPanel({
             mock: "Mock 流程表示，不代表真实 LLM 质量",
             generating: "Maya 正在整理辩论与匿名课堂洞察。",
             failed: "这次报告生成失败；既有成功修订仍会保留。",
-            translated: "中文测试表示由翻译模块按需生成。",
             included: "已纳入",
             filtered: "已筛除",
             words: "词",
@@ -137,8 +136,6 @@ export function ReportPanel({
               "Maya is organizing the debate and anonymous classroom insight.",
             failed:
               "This report attempt failed; earlier successful revisions remain available.",
-            translated:
-              "A Chinese test representation is generated on demand by the translation module.",
             included: "included",
             filtered: "filtered",
             words: "words",
@@ -333,9 +330,6 @@ export function ReportPanel({
       <div className={styles.history}>
         <div className={styles.cardHeading}>
           <h3>{copy.history}</h3>
-          {current?.translated_markdown ? (
-            <small>{copy.translated}</small>
-          ) : null}
         </div>
         {revisions.length === 0 ? (
           <p className={styles.empty}>{copy.noHistory}</p>

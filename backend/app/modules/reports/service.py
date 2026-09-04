@@ -2268,32 +2268,6 @@ def _latest_insight(db: Session, debate_id: str) -> BarrageInsightSnapshot | Non
     )
 
 
-def _translated_markdown(
-    db: Session,
-    revision: CivilizationReportRevision,
-) -> str | None:
-    """Read only an exact-hash ready translation created by M15, if present."""
-
-    if not _has_table(db, "translation_entries"):
-        return None
-    try:
-        value = db.execute(
-            text(
-                "SELECT translated_text FROM translation_entries "
-                "WHERE report_revision_id=:revision_id "
-                "AND source_text_hash=:source_hash AND target_language='zh-Hans' "
-                "AND policy_key='mock_translation_v1' AND quality_key='test_representation' "
-                "AND status='ready' "
-                "AND translated_text IS NOT NULL ORDER BY id LIMIT 1"
-            ),
-            {"revision_id": revision.id, "source_hash": _sha256(revision.english_markdown or "")},
-        ).scalar_one_or_none()
-    except Exception:
-        # M15 may not yet have installed its table in an isolated test DB.
-        return None
-    return str(value) if value is not None else None
-
-
 def _insight_dto(db: Session, debate_id: str) -> BarrageInsight:
     snapshot = _latest_insight(db, debate_id)
     if snapshot is None:
@@ -2364,7 +2338,6 @@ def _revision_dto(
                 **common,
                 "english_markdown": revision.english_markdown or "",
                 "word_count": revision.word_count,
-                "translated_markdown": _translated_markdown(db, revision),
                 "safe_error_code": None,
             }
         )
@@ -2804,14 +2777,9 @@ def download_current_report(
     revision = db.get(CivilizationReportRevision, pointer.revision_id)
     if revision is None or revision.status != "ready" or not revision.english_markdown:
         raise not_found()
-    if language == "en":
-        return revision.english_markdown, f"civilization-mutual-learning-report--{debate_id}.md"
-    if language != "zh-Hans":
+    if language != "en":
         raise not_found()
-    translated = _translated_markdown(db, revision)
-    if translated is None:
-        raise not_found()
-    return translated, f"civilization-mutual-learning-report--{debate_id}--zh-Hans.md"
+    return revision.english_markdown, f"civilization-mutual-learning-report--{debate_id}.md"
 
 
 def recover_report_jobs(db: Session) -> int:

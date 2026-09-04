@@ -44,7 +44,6 @@ def test_compose_forwards_real_core_policy_hashes_to_backend_without_logging(
         "EMBEDDING_PROVIDER": "dashscope",
         "TTS_PROVIDER": "mock",
         "VOICE_PROVIDER": "mock",
-        "TRANSLATION_PROVIDER": "mock",
         "DASHSCOPE_API_KEY": "fixture-key",
         "DASHSCOPE_WORKSPACE_ID": "fixture-workspace",
         "DASHSCOPE_REGION": "cn-beijing",
@@ -83,7 +82,6 @@ def test_env_example_declares_every_compose_provider_variable() -> None:
         "EMBEDDING_PROVIDER",
         "TTS_PROVIDER",
         "VOICE_PROVIDER",
-        "TRANSLATION_PROVIDER",
     ):
         assert selector in names
 

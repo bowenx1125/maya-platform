@@ -119,7 +119,7 @@ runs that way — nothing below is needed to give a class.
 
 Three can run against DashScope: `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
 `EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
-Demo. `TRANSLATION_PROVIDER` needs a DeepL key.
+Demo.
 
 ### Check what is running now
 

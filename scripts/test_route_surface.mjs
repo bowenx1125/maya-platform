@@ -72,10 +72,10 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // 80 since releaseDebate: recovering a stuck classroom playback moved out of
-  // a CLI and into the product, so a teacher can clear the debate blocking
-  // their course without a shell on the server.
-  if (platformOperationCount !== 80 || placeholderCount !== 0) {
+  // 78: +1 for releaseDebate, which moved recovering a stuck classroom
+  // playback out of a CLI and into the product, and -2 for the translation
+  // routes, deleted with the feature they served.
+  if (platformOperationCount !== 78 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

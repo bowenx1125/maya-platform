@@ -105,7 +105,6 @@ def test_demo_endpoints_disclose_modes_without_provider_secrets(
             ("llm", "mock"),
             ("tts", "mock"),
             ("voice", "mock"),
-            ("translation", "mock"),
             ("report", "mock"),
         ]
         # The boundary is the point of this assertion: a component may say
@@ -163,7 +162,6 @@ def test_non_test_startup_rebuilds_baseline_in_an_empty_runtime(
         embedding_provider="mock",
         tts_provider="mock",
         voice_provider="mock",
-        translation_provider=None,
     )
     database = Database(settings.database_url, settings.data_root)
     app = create_app(settings, database)

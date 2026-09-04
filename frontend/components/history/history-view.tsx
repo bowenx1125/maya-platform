@@ -39,10 +39,8 @@ function Status({ status }: { status: string }) {
 
 export function TranscriptHistory({
   transcript,
-  showTranslated = false,
 }: {
   transcript: HistoryTranscript;
-  showTranslated?: boolean;
 }) {
   const { locale } = useLocale();
   return (
@@ -91,23 +89,11 @@ export function TranscriptHistory({
                       })}
                 </span>
               </div>
-              <p className={styles.speech}>
-                {showTranslated && turn.translated_text
-                  ? turn.translated_text
-                  : turn.speech}
-              </p>
+              <p className={styles.speech}>{turn.speech}</p>
               <EvidenceTraceInspector
                 speech={turn.speech}
                 trace={turn.evidence_trace}
               />
-              {showTranslated && turn.translated_text ? (
-                <span className={styles.muted}>
-                  {label(locale, {
-                    en: "English source remains authoritative.",
-                    zh: "英文原文仍是权威来源。",
-                  })}
-                </span>
-              ) : null}
               {turn.sources.length > 0 ? (
                 <ul
                   className={styles.sources}
@@ -321,14 +307,12 @@ export function HistoryView({
   interaction,
   report,
   translation,
-  showTranslated = false,
 }: {
   topic?: string;
   transcript: HistoryTranscript;
   interaction?: HistoryInteraction;
   report?: HistoryReport;
   translation?: ReactNode;
-  showTranslated?: boolean;
 }) {
   const { locale } = useLocale();
   return (
@@ -347,10 +331,7 @@ export function HistoryView({
           </span>
         </div>
       ) : null}
-      <TranscriptHistory
-        transcript={transcript}
-        showTranslated={showTranslated}
-      />
+      <TranscriptHistory transcript={transcript} />
       {interaction ? <InteractionHistory interaction={interaction} /> : null}
       {report ? <ReportHistory report={report} /> : null}
       {translation}

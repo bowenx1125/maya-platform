@@ -24,7 +24,6 @@ def _settings(tmp_path: Path, **updates: object) -> Settings:
         "voice_provider": "mock",
         "llm_provider": "mock",
         "embedding_provider": "mock",
-        "translation_provider": None,
         "provider_policy_hash": "a" * 64,
     }
     values.update(updates)
@@ -151,7 +150,6 @@ def test_tts_dashscope_requires_beijing_credentials(
     [
         ("llm_provider", "dashscope"),
         ("voice_provider", "dashscope"),
-        ("translation_provider", "deepl"),
     ],
 )
 def test_other_non_mock_selectors_remain_fail_closed(

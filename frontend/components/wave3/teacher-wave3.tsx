@@ -9,7 +9,6 @@ import type {
   PlatformApi,
   ReportRevisionSummary,
   TeacherInteraction,
-  TranslationBatch,
 } from "../../lib/api";
 import {
   apiErrorMessage,
@@ -19,7 +18,6 @@ import {
 import { HistoryView, type HistoryReport } from "../history";
 import { TeacherInteractionPanel } from "../interaction";
 import { ReportPanel } from "../report";
-import { TranslationPanel } from "../translation";
 import { useLocale } from "../locale";
 import { connectionIssueFromCloseCode } from "../debate/stage/protocol";
 
@@ -46,8 +44,6 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
   const [transcript, setTranscript] = useState<DebateTranscript | null>(null);
   const [report, setReport] = useState<CivilizationReport | null>(null);
   const [revisions, setRevisions] = useState<ReportRevisionSummary[]>([]);
-  const [batches, setBatches] = useState<TranslationBatch[]>([]);
-  const [translationVisible, setTranslationVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +56,6 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const openKey = useRef<IdempotencyHandle | null>(null);
   const closeKey = useRef<IdempotencyHandle | null>(null);
-  const translationKey = useRef<IdempotencyHandle | null>(null);
   const refreshVersion = useRef(0);
 
   const participants = useMemo(
@@ -82,32 +77,24 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
       setTranscript(null);
       setReport(null);
       setRevisions([]);
-      setBatches([]);
       setLoading(false);
       return;
     }
     const version = refreshVersion.current + 1;
     refreshVersion.current = version;
     try {
-      const [
-        nextInteraction,
-        nextTranscript,
-        nextReport,
-        nextRevisions,
-        nextBatches,
-      ] = await Promise.all([
-        api.teacherInteraction(debateId),
-        api.debateTranscript(debateId),
-        api.getCurrentReport(debateId),
-        api.listReportRevisions(debateId),
-        api.listTranslationBatches(debateId),
-      ]);
+      const [nextInteraction, nextTranscript, nextReport, nextRevisions] =
+        await Promise.all([
+          api.teacherInteraction(debateId),
+          api.debateTranscript(debateId),
+          api.getCurrentReport(debateId),
+          api.listReportRevisions(debateId),
+        ]);
       if (refreshVersion.current !== version) return;
       setInteraction(nextInteraction);
       setTranscript(nextTranscript);
       setReport(nextReport);
       setRevisions(nextRevisions);
-      setBatches(nextBatches);
       setError(null);
     } catch (cause) {
       if (refreshVersion.current === version) setError(apiErrorMessage(cause));
@@ -152,8 +139,7 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
             event.event_type === "snapshot" ||
             event.event_type?.startsWith("interaction.") ||
             event.event_type?.startsWith("barrage_insight.") ||
-            event.event_type?.startsWith("report.") ||
-            event.event_type?.startsWith("translation.")
+            event.event_type?.startsWith("report.")
           ) {
             void load();
           }
@@ -287,26 +273,12 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
             canRegenerate={interaction?.status === "finalized"}
           />
 
-          <TranslationPanel
-            batches={batches}
-            busy={busy}
-            error={error}
-            translatedVisible={translationVisible}
-            onToggleDisplay={() => setTranslationVisible((value) => !value)}
-            onTranslate={() =>
-              mutate(translationKey, (idempotency) =>
-                api.translateCurrentPublishedContent(debateId, { idempotency }),
-              ).then(() => setTranslationVisible(true))
-            }
-          />
-
           {transcript ? (
             <HistoryView
               topic={detail.topic}
               transcript={transcript}
               interaction={interaction ?? undefined}
               report={historyReport}
-              showTranslated={translationVisible}
             />
           ) : null}
         </>

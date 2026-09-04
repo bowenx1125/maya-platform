@@ -20,7 +20,6 @@ tags:
   - name: Debates
   - name: Interaction
   - name: Reports
-  - name: Translation
   - name: Provider
 paths:
   /auth/login:
@@ -1081,7 +1080,7 @@ paths:
         - $ref: "#/components/parameters/DebateId"
       responses:
         "200":
-          description: Published English turns, sources, optional translations, and retained playback resources.
+          description: Published English turns, sources, and retained playback resources.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transcript" }
@@ -1314,7 +1313,7 @@ paths:
         - $ref: "#/components/parameters/DebateId"
         - name: language
           in: query
-          schema: { type: string, enum: [en, zh-Hans], default: en }
+          schema: { type: string, enum: [en], default: en }
       responses:
         "200":
           description: Markdown file; Chinese exists only after on-demand translation.
@@ -1331,40 +1330,6 @@ paths:
               schema: { type: string }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
-  /debates/{debate_id}/translations:
-    get:
-      tags: [Translation]
-      operationId: listTranslationBatches
-      parameters:
-        - $ref: "#/components/parameters/DebateId"
-      responses:
-        "200":
-          description: Existing on-demand translation batches.
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/TranslationBatch" }
-        "403": { $ref: "#/components/responses/Error" }
-        "404": { $ref: "#/components/responses/Error" }
-    post:
-      tags: [Translation]
-      operationId: translateCurrentPublishedContent
-      parameters:
-        - $ref: "#/components/parameters/DebateId"
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/CsrfToken"
-      responses:
-        "202":
-          description: Batch translates only current published English items not already valid.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TranslationBatch" }
-        "403": { $ref: "#/components/responses/Error" }
-        "404": { $ref: "#/components/responses/Error" }
-        "409": { $ref: "#/components/responses/Error" }
-        "422": { $ref: "#/components/responses/Error" }
-
   /debates/{debate_id}/audio/{turn_id}:
     get:
       tags: [Debates]
@@ -1882,7 +1847,6 @@ components:
         status: { type: string, const: generating }
         english_markdown: { type: "null" }
         word_count: { type: "null" }
-        translated_markdown: { type: "null" }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ContinueReadyReportRevision:
@@ -1895,7 +1859,6 @@ components:
         status: { type: string, const: ready }
         english_markdown: { type: string, minLength: 1 }
         word_count: { type: integer, minimum: 600, maximum: 900 }
-        translated_markdown: { type: [string, "null"] }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ContinueFailedReportRevision:
@@ -1908,7 +1871,6 @@ components:
         status: { type: string, const: failed }
         english_markdown: { type: "null" }
         word_count: { type: "null" }
-        translated_markdown: { type: "null" }
         safe_error_code: { type: string, minLength: 1 }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     LoginRequest:
@@ -2597,7 +2559,6 @@ components:
         sources:
           type: array
           items: { $ref: "#/components/schemas/RetrievalSource" }
-        translated_text: { type: [string, "null"] }
         playback_resource:
           {
             oneOf:
@@ -2965,7 +2926,6 @@ components:
           status,
           english_markdown,
           word_count,
-          translated_markdown,
           safe_error_code,
           created_at,
         ]
@@ -2975,7 +2935,6 @@ components:
         status: { type: string, const: generating }
         english_markdown: { type: "null" }
         word_count: { type: "null" }
-        translated_markdown: { type: "null" }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ReadyReportRevision:
@@ -2988,7 +2947,6 @@ components:
           status,
           english_markdown,
           word_count,
-          translated_markdown,
           safe_error_code,
           created_at,
         ]
@@ -2998,7 +2956,6 @@ components:
         status: { type: string, const: ready }
         english_markdown: { type: string, minLength: 1 }
         word_count: { type: integer, minimum: 600, maximum: 900 }
-        translated_markdown: { type: [string, "null"] }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     FailedReportRevision:
@@ -3011,7 +2968,6 @@ components:
           status,
           english_markdown,
           word_count,
-          translated_markdown,
           safe_error_code,
           created_at,
         ]
@@ -3021,7 +2977,6 @@ components:
         status: { type: string, const: failed }
         english_markdown: { type: "null" }
         word_count: { type: "null" }
-        translated_markdown: { type: "null" }
         safe_error_code: { type: string, minLength: 1 }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     Report:
@@ -3045,61 +3000,6 @@ components:
                 { type: "null" },
               ],
           }
-    TranslationItemSummary:
-      type: object
-      additionalProperties: false
-      required:
-        [
-          content_type,
-          content_id,
-          source_text_hash,
-          status,
-          reused,
-          safe_error_code,
-        ]
-      properties:
-        content_type: { type: string, enum: [turn, report_revision] }
-        content_id: { $ref: "#/components/schemas/Uuid" }
-        source_text_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
-        status: { type: string, enum: [pending, running, ready, failed] }
-        reused: { type: boolean }
-        safe_error_code: { type: [string, "null"] }
-    TranslationBatch:
-      type: object
-      additionalProperties: false
-      required:
-        [
-          id,
-          debate_id,
-          input_hash,
-          status,
-          target_language,
-          quality,
-          total_items,
-          succeeded_items,
-          failed_items,
-          items,
-          created_at,
-          updated_at,
-        ]
-      properties:
-        id: { $ref: "#/components/schemas/Uuid" }
-        debate_id: { $ref: "#/components/schemas/Uuid" }
-        input_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
-        status:
-          { type: string, enum: [pending, running, completed, partial, failed] }
-        target_language: { type: string, const: zh-Hans }
-        quality: { type: string, const: test_representation }
-        total_items: { type: integer, minimum: 0 }
-        succeeded_items: { type: integer, minimum: 0 }
-        failed_items: { type: integer, minimum: 0 }
-        items:
-          {
-            type: array,
-            items: { $ref: "#/components/schemas/TranslationItemSummary" },
-          }
-        created_at: { $ref: "#/components/schemas/IsoTime" }
-        updated_at: { $ref: "#/components/schemas/IsoTime" }
     JobStatus:
       type: object
       required: [id, kind, status]

@@ -16,7 +16,7 @@ DemoComponentMode = Literal["real", "mock"]
 
 
 class DemoComponent(DemoSchema):
-    key: Literal["embedding", "llm", "tts", "voice", "translation", "report"]
+    key: Literal["embedding", "llm", "tts", "voice", "report"]
     label: str = Field(min_length=1)
     mode: DemoComponentMode
     # True when this component is real but its provider policy was derived from

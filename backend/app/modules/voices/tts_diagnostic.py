@@ -216,8 +216,6 @@ def _validate_operator_selectors(settings: Settings, *, allow_real: bool) -> Non
         raise TTSGateError("tts_response_invalid")
     if settings.llm_provider != "mock" or settings.embedding_provider != "mock":
         raise TTSGateError("tts_response_invalid")
-    if settings.translation_provider not in {None, "", "mock"}:
-        raise TTSGateError("tts_response_invalid")
 
 
 def _system_profile(session: Session) -> VoiceProfile:

@@ -43,7 +43,6 @@ def _set_dual_llm_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "EMBEDDING_PROVIDER": "mock",
         "TTS_PROVIDER": "mock",
         "VOICE_PROVIDER": "mock",
-        "TRANSLATION_PROVIDER": "mock",
         "DASHSCOPE_API_KEY": "fixture-key",
         "DASHSCOPE_WORKSPACE_ID": "fixture-workspace",
         "DASHSCOPE_REGION": "cn-beijing",

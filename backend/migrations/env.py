@@ -11,10 +11,9 @@ from app.core.models import Base
 from app.modules.debates import models as _debate_models
 from app.modules.interactions import models as _interaction_models
 from app.modules.reports import models as _report_models
-from app.modules.translations import models as _translation_models
 from sqlalchemy import engine_from_config, event, pool
 
-del _debate_models, _interaction_models, _report_models, _translation_models
+del _debate_models, _interaction_models, _report_models
 
 config = context.config
 if config.config_file_name is not None:

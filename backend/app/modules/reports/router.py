@@ -171,7 +171,7 @@ def get_report_revision_route(
 )
 def download_current_report_route(
     debate_id: UUID,
-    language: Literal["en", "zh-Hans"] = Query(default="en"),
+    language: Literal["en"] = Query(default="en"),
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> Response:

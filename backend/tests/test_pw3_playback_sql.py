@@ -26,7 +26,6 @@ from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 from app.modules.debates.playback.task_manager import TaskManager
 from app.modules.interactions.service import InteractionService
 from app.modules.reports.service import get_current_report
-from app.modules.translations.service import TranslationService
 from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
@@ -78,11 +77,10 @@ def test_transcript_route_rejects_early_finished_incomplete_plan(app_factory: An
         downstream = [
             client.get(f"/api/v1/debates/{debate_id}/interaction"),
             client.get(f"/api/v1/debates/{debate_id}/report"),
-            client.get(f"/api/v1/debates/{debate_id}/translations"),
         ]
 
     assert response.status_code == 404
-    assert [item.status_code for item in downstream] == [404, 404, 404]
+    assert [item.status_code for item in downstream] == [404, 404]
 
 
 def _add_live_successor(database: Database, debate_id: str, first_turn_id: str) -> str:
@@ -428,16 +426,6 @@ async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surf
             with pytest.raises(PlatformError) as report_denied:
                 get_current_report(db, actor_user_id=TEACHER_ID, debate_id=debate_id)
             assert report_denied.value.code == "not_found"
-            with pytest.raises(PlatformError) as translation_denied:
-                TranslationService(
-                    database.session_factory,
-                    settings=settings,
-                ).list_batches(
-                    db,
-                    actor_user_id=TEACHER_ID,
-                    debate_id=debate_id,
-                )
-            assert translation_denied.value.code == "not_found"
         with pytest.raises(PlatformError) as interaction_denied:
             InteractionService(
                 session_factory=database.session_factory,

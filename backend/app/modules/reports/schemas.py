@@ -75,7 +75,6 @@ class GeneratingReportRevision(ClosedModel):
     status: Literal["generating"]
     english_markdown: None = None
     word_count: None = None
-    translated_markdown: None = None
     safe_error_code: None = None
     created_at: datetime
 
@@ -86,7 +85,6 @@ class ReadyReportRevision(ClosedModel):
     status: Literal["ready"]
     english_markdown: str = Field(min_length=1)
     word_count: int = Field(ge=600, le=900)
-    translated_markdown: str | None = None
     safe_error_code: None = None
     created_at: datetime
 
@@ -97,7 +95,6 @@ class FailedReportRevision(ClosedModel):
     status: Literal["failed"]
     english_markdown: None = None
     word_count: None = None
-    translated_markdown: None = None
     safe_error_code: str = Field(min_length=1)
     created_at: datetime
 

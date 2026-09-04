@@ -38,7 +38,6 @@ from app.modules.debates.schemas import (
     RetryPreparationRequest,
     Transcript,
 )
-from app.modules.translations.service import attach_translated_text
 from app.providers.factory import tts_provider
 
 from .audio import AudioStore
@@ -406,11 +405,7 @@ async def transcript_route(
     return Transcript.model_validate(
         {
             "debate_id": str(debate_id),
-            "turns": attach_translated_text(
-                db,
-                debate_id=str(debate_id),
-                turns=snapshot["public_turns"],
-            ),
+            "turns": snapshot["public_turns"],
             "audio_retained": service.audio_retained(db, str(debate_id)),
         }
     )

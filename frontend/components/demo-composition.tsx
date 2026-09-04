@@ -17,7 +17,6 @@ const componentLabelKeys: Record<DemoComponentKey, MessageKey> = {
   llm: "demoLlm",
   tts: "demoTts",
   voice: "demoVoice",
-  translation: "demoTranslation",
   report: "demoReport",
 };
 

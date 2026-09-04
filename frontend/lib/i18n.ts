@@ -563,8 +563,6 @@ const enMessages = {
   demoPolicyUnreviewed: "unreviewed policy",
   demoPolicyUnreviewedHint:
     "This component calls a real supplier under a policy derived from local configuration. No supplier document was reviewed.",
-  demoCompositionLede:
-    "A live view of which platform pieces are real and which are Mock.",
   demoBaseline: "Published Demo Agent",
   demoBaselineReady: "Bowen baseline ready",
   demoBaselineUnavailable: "Bowen baseline unavailable",
@@ -574,7 +572,6 @@ const enMessages = {
   demoLlm: "Debate LLM",
   demoTts: "TTS",
   demoVoice: "Voice",
-  demoTranslation: "Translation",
   demoReport: "Maya Report",
   charactersWord: "characters",
   errorUnauthenticated: "Please sign in before continuing.",
@@ -1222,7 +1219,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   demoPolicyUnreviewed: "策略未审阅",
   demoPolicyUnreviewedHint:
     "该组件正在调用真实供应商，但所用策略由本地配置推导，未审阅任何供应商文档。",
-  demoCompositionLede: "实时展示哪些平台组件为真实、哪些组件为 Mock。",
   demoBaseline: "已发布演示智能体",
   demoBaselineReady: "Bowen 基线已就绪",
   demoBaselineUnavailable: "Bowen 基线不可用",
@@ -1232,7 +1228,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   demoLlm: "辩论 LLM",
   demoTts: "TTS",
   demoVoice: "语音",
-  demoTranslation: "翻译",
   demoReport: "Maya 报告",
   charactersWord: "字符",
   errorUnauthenticated: "请先登录后继续。",

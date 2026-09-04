@@ -220,7 +220,6 @@ class DebateTurn(_ClosedModel):
     retrieval_status: Literal["matched", "no_match"]
     grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"]
     sources: list[RetrievalSource]
-    translated_text: str | None = None
     playback_resource: DebatePlaybackResource | None = None
     mutual_learning: MutualLearningTurnResultV1 | None = None
     evidence_trace: list[EvidenceTraceV1] | None = None

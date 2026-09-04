@@ -2395,7 +2395,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Published English turns, sources, optional translations, and retained playback resources.",
+            "description": "Published English turns, sources, and retained playback resources.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2918,8 +2918,7 @@
             "schema": {
               "type": "string",
               "enum": [
-                "en",
-                "zh-Hans"
+                "en"
               ],
               "default": "en"
             }
@@ -2960,81 +2959,6 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/translations": {
-      "get": {
-        "tags": [
-          "Translation"
-        ],
-        "operationId": "listTranslationBatches",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Existing on-demand translation batches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TranslationBatch"
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Translation"
-        ],
-        "operationId": "translateCurrentPublishedContent",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DebateId"
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          },
-          {
-            "$ref": "#/components/parameters/CsrfToken"
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Batch translates only current published English items not already valid.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TranslationBatch"
-                }
-              }
-            }
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -4045,9 +3969,6 @@
           "word_count": {
             "type": "null"
           },
-          "translated_markdown": {
-            "type": "null"
-          },
           "safe_error_code": {
             "type": "null"
           },
@@ -4088,12 +4009,6 @@
             "minimum": 600,
             "maximum": 900
           },
-          "translated_markdown": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "safe_error_code": {
             "type": "null"
           },
@@ -4128,9 +4043,6 @@
             "type": "null"
           },
           "word_count": {
-            "type": "null"
-          },
-          "translated_markdown": {
             "type": "null"
           },
           "safe_error_code": {
@@ -5815,12 +5727,6 @@
               "$ref": "#/components/schemas/RetrievalSource"
             }
           },
-          "translated_text": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "playback_resource": {
             "oneOf": [
               {
@@ -6735,7 +6641,6 @@
           "status",
           "english_markdown",
           "word_count",
-          "translated_markdown",
           "safe_error_code",
           "created_at"
         ],
@@ -6757,9 +6662,6 @@
           "word_count": {
             "type": "null"
           },
-          "translated_markdown": {
-            "type": "null"
-          },
           "safe_error_code": {
             "type": "null"
           },
@@ -6777,7 +6679,6 @@
           "status",
           "english_markdown",
           "word_count",
-          "translated_markdown",
           "safe_error_code",
           "created_at"
         ],
@@ -6802,12 +6703,6 @@
             "minimum": 600,
             "maximum": 900
           },
-          "translated_markdown": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "safe_error_code": {
             "type": "null"
           },
@@ -6825,7 +6720,6 @@
           "status",
           "english_markdown",
           "word_count",
-          "translated_markdown",
           "safe_error_code",
           "created_at"
         ],
@@ -6845,9 +6739,6 @@
             "type": "null"
           },
           "word_count": {
-            "type": "null"
-          },
-          "translated_markdown": {
             "type": "null"
           },
           "safe_error_code": {
@@ -6912,124 +6803,6 @@
                 "type": "null"
               }
             ]
-          }
-        }
-      },
-      "TranslationItemSummary": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "content_type",
-          "content_id",
-          "source_text_hash",
-          "status",
-          "reused",
-          "safe_error_code"
-        ],
-        "properties": {
-          "content_type": {
-            "type": "string",
-            "enum": [
-              "turn",
-              "report_revision"
-            ]
-          },
-          "content_id": {
-            "$ref": "#/components/schemas/Uuid"
-          },
-          "source_text_hash": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "running",
-              "ready",
-              "failed"
-            ]
-          },
-          "reused": {
-            "type": "boolean"
-          },
-          "safe_error_code": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "TranslationBatch": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "debate_id",
-          "input_hash",
-          "status",
-          "target_language",
-          "quality",
-          "total_items",
-          "succeeded_items",
-          "failed_items",
-          "items",
-          "created_at",
-          "updated_at"
-        ],
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Uuid"
-          },
-          "debate_id": {
-            "$ref": "#/components/schemas/Uuid"
-          },
-          "input_hash": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "running",
-              "completed",
-              "partial",
-              "failed"
-            ]
-          },
-          "target_language": {
-            "type": "string",
-            "const": "zh-Hans"
-          },
-          "quality": {
-            "type": "string",
-            "const": "test_representation"
-          },
-          "total_items": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "succeeded_items": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "failed_items": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TranslationItemSummary"
-            }
-          },
-          "created_at": {
-            "$ref": "#/components/schemas/IsoTime"
-          },
-          "updated_at": {
-            "$ref": "#/components/schemas/IsoTime"
           }
         }
       },

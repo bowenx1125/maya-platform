@@ -289,7 +289,6 @@ class PlaybackPreparationMixin(PlaybackCore):
             blocked_selectors = (
                 getattr(self.settings, "tts_provider", "mock"),
                 getattr(self.settings, "voice_provider", "mock"),
-                getattr(self.settings, "translation_provider", None) or "mock",
             )
             if embedding not in {"mock", "dashscope"} or any(
                 value != "mock" for value in blocked_selectors

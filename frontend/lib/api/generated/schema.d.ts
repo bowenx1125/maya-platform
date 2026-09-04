@@ -1061,22 +1061,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debates/{debate_id}/translations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listTranslationBatches"];
-        put?: never;
-        post: operations["translateCurrentPublishedContent"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debates/{debate_id}/audio/{turn_id}": {
         parameters: {
             query?: never;
@@ -1277,7 +1261,6 @@ export interface components {
             status: "generating";
             english_markdown?: null;
             word_count?: null;
-            translated_markdown?: null;
             safe_error_code?: null;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1288,7 +1271,6 @@ export interface components {
             status: "ready";
             english_markdown: string;
             word_count: number;
-            translated_markdown?: string | null;
             safe_error_code?: null;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1299,7 +1281,6 @@ export interface components {
             status: "failed";
             english_markdown?: null;
             word_count?: null;
-            translated_markdown?: null;
             safe_error_code: string;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1679,7 +1660,6 @@ export interface components {
             /** @enum {string} */
             grounding_mode: "rag_grounded" | "mixed" | "general_reasoning";
             sources: components["schemas"]["RetrievalSource"][];
-            translated_text?: string | null;
             playback_resource?: components["schemas"]["DebatePlaybackResource"] | null;
             /** @enum {string|null} */
             phase?: "opening" | "exchange" | "final_integration" | "rebuttal" | null;
@@ -1875,7 +1855,6 @@ export interface components {
             status: "generating";
             english_markdown: null;
             word_count: null;
-            translated_markdown: null;
             safe_error_code: null;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1886,7 +1865,6 @@ export interface components {
             status: "ready";
             english_markdown: string;
             word_count: number;
-            translated_markdown: string | null;
             safe_error_code: null;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1897,7 +1875,6 @@ export interface components {
             status: "failed";
             english_markdown: null;
             word_count: null;
-            translated_markdown: null;
             safe_error_code: string;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1910,33 +1887,6 @@ export interface components {
             insight: components["schemas"]["BarrageInsight"];
             active_revision_id?: components["schemas"]["Uuid"] | null;
             current_success_revision?: components["schemas"]["ReadyReportRevision"] | null;
-        };
-        TranslationItemSummary: {
-            /** @enum {string} */
-            content_type: "turn" | "report_revision";
-            content_id: components["schemas"]["Uuid"];
-            source_text_hash: string;
-            /** @enum {string} */
-            status: "pending" | "running" | "ready" | "failed";
-            reused: boolean;
-            safe_error_code: string | null;
-        };
-        TranslationBatch: {
-            id: components["schemas"]["Uuid"];
-            debate_id: components["schemas"]["Uuid"];
-            input_hash: string;
-            /** @enum {string} */
-            status: "pending" | "running" | "completed" | "partial" | "failed";
-            /** @constant */
-            target_language: "zh-Hans";
-            /** @constant */
-            quality: "test_representation";
-            total_items: number;
-            succeeded_items: number;
-            failed_items: number;
-            items: components["schemas"]["TranslationItemSummary"][];
-            created_at: components["schemas"]["IsoTime"];
-            updated_at: components["schemas"]["IsoTime"];
         };
         JobStatus: {
             id: components["schemas"]["Uuid"];
@@ -3609,7 +3559,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Published English turns, sources, optional translations, and retained playback resources. */
+            /** @description Published English turns, sources, and retained playback resources. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3942,7 +3892,7 @@ export interface operations {
     downloadCurrentReport: {
         parameters: {
             query?: {
-                language?: "en" | "zh-Hans";
+                language?: "en";
             };
             header?: never;
             path: {
@@ -3967,60 +3917,6 @@ export interface operations {
             };
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
-        };
-    };
-    listTranslationBatches: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Existing on-demand translation batches. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TranslationBatch"][];
-                };
-            };
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-        };
-    };
-    translateCurrentPublishedContent: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Batch translates only current published English items not already valid. */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TranslationBatch"];
-                };
-            };
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-            422: components["responses"]["Error"];
         };
     };
     streamRetainedTurnAudio: {

@@ -28,7 +28,6 @@ def _settings(tmp_path: Path, **updates: object) -> Settings:
         "data_root": tmp_path,
         "tts_provider": "mock",
         "voice_provider": "mock",
-        "translation_provider": None,
         "llm_provider": "mock",
         "embedding_provider": "mock",
         "llm_price_card_version": "fixture-price-card-v1",
@@ -135,7 +134,6 @@ def test_legacy_hash_is_rejected_when_two_real_slices_are_selected(tmp_path: Pat
     (
         ("tts_provider", "dashscope"),
         ("voice_provider", "dashscope"),
-        ("translation_provider", "deepl"),
     ),
 )
 def test_dual_pair_rejects_real_companions(tmp_path: Path, field: str, value: str) -> None:

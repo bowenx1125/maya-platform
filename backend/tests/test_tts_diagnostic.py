@@ -92,7 +92,6 @@ def gate_context(tmp_path: Path) -> Iterator[tuple[Database, Settings, str]]:
         voice_provider="mock",
         llm_provider="mock",
         embedding_provider="mock",
-        translation_provider="mock",
     )
     database = Database(settings.database_url, settings.data_root)
     database.initialize_schema()
@@ -168,7 +167,6 @@ def _file_gate_context(tmp_path: Path) -> tuple[Database, Settings, str]:
         voice_provider="mock",
         llm_provider="mock",
         embedding_provider="mock",
-        translation_provider="mock",
     )
     database = Database(settings.database_url, settings.data_root)
     database.initialize_schema()

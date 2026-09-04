@@ -56,7 +56,6 @@ def demo_composition(settings: Settings, db: Session | None = None) -> DemoCompo
             ),
             DemoComponent(key="tts", label="TTS", mode="mock"),
             DemoComponent(key="voice", label="Voice", mode="mock"),
-            DemoComponent(key="translation", label="Translation", mode="mock"),
             DemoComponent(
                 key="report",
                 label="Maya Report",

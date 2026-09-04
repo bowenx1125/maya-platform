@@ -34,9 +34,6 @@ from .schemas import (
     ReportStartedPayload,
     RoundStartedPayload,
     SnapshotPayload,
-    TranslationBatchCompletedPayload,
-    TranslationBatchFailedPayload,
-    TranslationBatchStartedPayload,
     TurnPreparingPayload,
     TurnReadyPayload,
 )
@@ -100,9 +97,6 @@ _PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "report.started": ReportStartedPayload,
     "report.completed": ReportCompletedPayload,
     "report.failed": ReportFailedPayload,
-    "translation.batch_started": TranslationBatchStartedPayload,
-    "translation.batch_completed": TranslationBatchCompletedPayload,
-    "translation.batch_failed": TranslationBatchFailedPayload,
 }
 
 

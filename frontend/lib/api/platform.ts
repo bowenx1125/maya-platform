@@ -111,8 +111,7 @@ export type DebateDetail = components["schemas"]["DebateDetail"];
  * stay outside the frozen generated client: the endpoint exposes only
  * presentation labels and component modes, never provider configuration.
  */
-export type DemoComponentKey =
-  "embedding" | "llm" | "tts" | "voice" | "translation" | "report";
+export type DemoComponentKey = "embedding" | "llm" | "tts" | "voice" | "report";
 export type DemoComponent = {
   key: DemoComponentKey;
   /** Real, but under a policy derived locally rather than reviewed. */
@@ -164,7 +163,6 @@ export type CivilizationReport = components["schemas"]["Report"];
 export type ReportRevision = components["schemas"]["ReportRevision"];
 export type ReportRevisionSummary =
   components["schemas"]["ReportRevisionSummary"];
-export type TranslationBatch = components["schemas"]["TranslationBatch"];
 export type AvatarTemplate = components["schemas"]["AvatarTemplate"];
 export type VoiceProfile = components["schemas"]["VoiceProfile"];
 export type PlaybackResource =
@@ -1491,7 +1489,7 @@ export class PlatformApi {
 
   async downloadCurrentReport(
     debateId: string,
-    language: "en" | "zh-Hans" = "en",
+    language: "en" = "en",
   ): Promise<MarkdownDownload> {
     const result = await this.client.GET(
       "/debates/{debate_id}/report/download",
@@ -1502,38 +1500,8 @@ export class PlatformApi {
     );
     return {
       content: await unwrap(result),
-      filename: responseDownloadFilename(
-        result.response,
-        language === "en" ? "maya-report.md" : "maya-report--zh-Hans.md",
-      ),
+      filename: responseDownloadFilename(result.response, "maya-report.md"),
     };
-  }
-
-  async listTranslationBatches(debateId: string): Promise<TranslationBatch[]> {
-    return unwrap(
-      await this.client.GET("/debates/{debate_id}/translations", {
-        params: { path: { debate_id: debateId } },
-      }),
-    );
-  }
-
-  async translateCurrentPublishedContent(
-    debateId: string,
-    options: IdempotentMutationOptions = {},
-  ): Promise<TranslationBatch> {
-    return commitMutation(options.idempotency, async (key) =>
-      unwrap(
-        await this.client.POST("/debates/{debate_id}/translations", {
-          params: {
-            path: { debate_id: debateId },
-            header: {
-              "Idempotency-Key": key,
-              "X-CSRF-Token": this.csrfToken ?? "",
-            },
-          },
-        }),
-      ),
-    );
   }
 
   async snapshot(snapshotId: string): Promise<KnowledgeSnapshot> {

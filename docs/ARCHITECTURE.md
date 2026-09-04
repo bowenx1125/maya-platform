@@ -33,7 +33,6 @@ backend.
 - `debates/playback`: authoritative controller/media state, events, recovery and Replay.
 - `interactions`: independent public vote and named raw barrage.
 - `reports`: anonymized insight and immutable Maya report revisions.
-- `translations`: exact-hash derived test translations.
 
 ## Immutable version chain
 
@@ -65,7 +64,7 @@ replace the predecessor transcript with summaries.
 - Playback: preparing, ready, playing, paused, waiting-next, completed or stopped;
   mode is live or replay.
 - Interaction: closed, open or finalized.
-- Insight/report/translation: independent durable attempts and immutable successful
+- Insight/report: independent durable attempts and immutable successful
   revisions.
 
 The browser never advances these state machines by local timers. Database commit occurs

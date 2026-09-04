@@ -35,7 +35,6 @@ describe("Real-Core Demo composition badge", () => {
           { key: "llm", label: "Debate LLM", mode: "real" },
           { key: "tts", label: "TTS", mode: "mock" },
           { key: "voice", label: "Voice", mode: "mock" },
-          { key: "translation", label: "Translation", mode: "mock" },
           { key: "report", label: "Maya Report", mode: "mock" },
         ],
       },
@@ -66,7 +65,7 @@ describe("Real-Core Demo composition badge", () => {
         '[data-demo-component="llm"] [data-demo-mode="real"]',
       ),
     ).toBeTruthy();
-    for (const key of ["tts", "voice", "translation", "report"]) {
+    for (const key of ["tts", "voice", "report"]) {
       expect(
         document.querySelector(
           `[data-demo-component="${key}"] [data-demo-mode="mock"]`,

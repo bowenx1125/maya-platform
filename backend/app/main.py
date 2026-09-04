@@ -69,8 +69,6 @@ from app.modules.reports.service import (
     recover_report_jobs,
 )
 from app.modules.reports.task_manager import ReportTaskManager
-from app.modules.translations.router import router as translations_router
-from app.modules.translations.service import TranslationService, startup_translation_service
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.providers.control_repository import ProviderRepository
@@ -171,11 +169,6 @@ def create_app(
         event_publisher=publish_interaction_event,
         insight_enqueuer=ReportInsightEnqueuer(),
     )
-    translation_service = TranslationService(
-        runtime_database.session_factory,
-        settings=runtime_settings,
-        event_publisher=wave3_events.publish_summary,
-    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -228,11 +221,9 @@ def create_app(
                 await playback_service.recover_startup(session)
                 recover_report_jobs(session)
             report_tasks.schedule_pending()
-            await startup_translation_service(translation_service)
         try:
             yield
         finally:
-            await translation_service.task_manager.close()
             await report_tasks.close()
             await playback_tasks.close()
             runtime_database.dispose()
@@ -248,7 +239,6 @@ def create_app(
     app.state.interaction_service = interaction_service
     app.state.interaction_event_publisher = publish_interaction_event
     app.state.insight_enqueuer = interaction_service.insight_enqueuer
-    app.state.translation_service = translation_service
     app.state.wave3_event_publisher = wave3_events
     app.state.report_task_manager = report_tasks
     app.state.report_runtime = report_runtime
@@ -351,7 +341,6 @@ def create_app(
     app.include_router(debate_playback_router, prefix="/api/v1")
     app.include_router(interaction_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
-    app.include_router(translations_router, prefix="/api/v1")
     app.include_router(provider_disclosure_router, prefix="/api/v1")
     app.include_router(demo_baseline_router, prefix="/api/v1")
     app.include_router(demo_acceptance_router, prefix="/api/v1")

@@ -87,8 +87,6 @@ const implemented = new Set([
   "getReportRevision",
   "continueRealReport",
   "downloadCurrentReport",
-  "listTranslationBatches",
-  "translateCurrentPublishedContent",
   "getProviderDataCallDisclosure",
   "listProviderDataCallManifests",
   "listProviderDataCallDebateManifests",

@@ -592,7 +592,6 @@ def test_llm_selector_is_callable_but_fail_closed_for_real_or_unknown() -> None:
         ("embedding_provider", "dashscope"),
         ("tts_provider", "dashscope"),
         ("voice_provider", "dashscope"),
-        ("translation_provider", "deepl"),
     ),
 )
 def test_startup_allows_only_one_reviewed_real_slice_with_mock_companions(

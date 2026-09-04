@@ -67,7 +67,6 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
             embedding_provider="mock",
             tts_provider="mock",
             voice_provider="mock",
-            translation_provider=None,
         )
         database = Database(settings.database_url, settings.data_root)
         return create_app(settings, database), database, settings

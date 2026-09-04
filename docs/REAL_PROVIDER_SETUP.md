@@ -3,7 +3,7 @@
 All six selectors ship as `mock`, and the Demo runs end to end that way. Three
 of them can run against DashScope: `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
 `EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
-Demo. `TRANSLATION_PROVIDER` needs a DeepL key.
+Demo.
 
 ## A reviewed policy snapshot is required first
 

@@ -58,7 +58,6 @@ def _app(tmp_path: Path, *, quick_login: bool = True) -> tuple[Any, Database, Se
         embedding_provider="mock",
         tts_provider="mock",
         voice_provider="mock",
-        translation_provider=None,
     )
     database = Database(settings.database_url, settings.data_root)
     database.initialize_schema()

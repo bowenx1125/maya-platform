@@ -114,10 +114,6 @@ class Settings(BaseSettings):
     embedding_provider: str = Field(default="mock", validation_alias="EMBEDDING_PROVIDER")
     tts_provider: str = Field(default="mock", validation_alias="TTS_PROVIDER")
     voice_provider: str = Field(default="mock", validation_alias="VOICE_PROVIDER")
-    translation_provider: str | None = Field(
-        default=None,
-        validation_alias="TRANSLATION_PROVIDER",
-    )
     fallback_voice_profile_id: str | None = Field(
         default=None,
         validation_alias="FALLBACK_VOICE_PROFILE_ID",
@@ -211,14 +207,6 @@ class Settings(BaseSettings):
     @classmethod
     def empty_provider_is_mock(cls, value: object) -> object:
         return "mock" if isinstance(value, str) and not value.strip() else value
-
-    @field_validator("translation_provider", mode="before")
-    @classmethod
-    def empty_translation_is_disabled(cls, value: object) -> object:
-        # Compose historically forwards an empty value when translation is
-        # not configured.  Keep that explicit disabled state distinct from a
-        # real provider, while treating the Wave 2 Mock selector uniformly.
-        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator(
         "llm_provider",
@@ -327,14 +315,10 @@ class Settings(BaseSettings):
         )
         if any(value not in {"mock", "dashscope"} for value in selectors):
             raise RuntimeError("provider selector is not supported")
-        if self.translation_provider not in {None, "", "mock", "deepl"}:
-            raise RuntimeError("translation provider is not supported")
 
         non_mock = [
             name for name, value in (("VOICE_PROVIDER", self.voice_provider),) if value != "mock"
         ]
-        if self.translation_provider not in {None, "", "mock"}:
-            non_mock.append("TRANSLATION_PROVIDER")
         if non_mock:
             raise RuntimeError(
                 "runtime provider gate permits only one reviewed DashScope slice with "

@@ -16,7 +16,7 @@ from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
-ALEMBIC_HEAD = "0017_one_shot_llm_turn_manifest"
+ALEMBIC_HEAD = "0018_remove_translation"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
@@ -75,9 +75,8 @@ class Database:
         from app.modules.debates import models as _debate_models
         from app.modules.interactions import models as _interaction_models
         from app.modules.reports import models as _report_models
-        from app.modules.translations import models as _translation_models
 
-        del _debate_models, _interaction_models, _report_models, _translation_models
+        del _debate_models, _interaction_models, _report_models
         if self.engine.url.get_backend_name() == "sqlite":
             database = self.engine.url.database
             if database and database != ":memory:":
