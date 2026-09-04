@@ -15,7 +15,7 @@ import {
   createIdempotencyHandle,
   type IdempotencyHandle,
 } from "../../lib/api";
-import { HistoryView, type HistoryReport } from "../history";
+import { AgentScores } from "./agent-scores";
 import { TeacherInteractionPanel } from "../interaction";
 import { ReportPanel } from "../report";
 import { useLocale } from "../locale";
@@ -204,15 +204,6 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
     }
   }
 
-  const historyReport: HistoryReport | undefined = report
-    ? {
-        generation_status: report.generation_status,
-        latest_attempt_status: report.latest_attempt_status,
-        current_success_revision: report.current_success_revision ?? null,
-        revisions,
-      }
-    : undefined;
-
   return (
     <div
       className={styles.root}
@@ -266,21 +257,22 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
             />
           ) : null}
 
+          {/* Votes and barrages, then how the Agents grounded their speeches,
+              then the report. Nothing below it: the page used to repeat the
+              vote totals, the barrages, the whole transcript and the report
+              history underneath, in a second copy that read as a different
+              screen. */}
+          <AgentScores
+            participants={detail.participants}
+            turns={transcript?.turns ?? []}
+          />
+
           <ReportPanel
             key={`${debateId}-${report?.latest_attempt_status ?? "none"}`}
             debateId={debateId}
             api={api}
             canRegenerate={interaction?.status === "finalized"}
           />
-
-          {transcript ? (
-            <HistoryView
-              topic={detail.topic}
-              transcript={transcript}
-              interaction={interaction ?? undefined}
-              report={historyReport}
-            />
-          ) : null}
         </>
       )}
     </div>

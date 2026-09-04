@@ -75,7 +75,8 @@ describe("M13 teacher interaction panel", () => {
     );
 
     expect(screen.getByRole("img", { name: /^Scan to join:/ })).toBeTruthy();
-    expect(screen.getByText("66.7%")).toBeTruthy();
+    // The totals are a pie now; the legend carries the count and the share.
+    expect(screen.getByText("2 · 67%")).toBeTruthy();
     expect(screen.getByText("Learner")).toBeTruthy();
     const rawHeading = screen.getByText("Raw barrages");
     const voteHeading = screen.getByText("Live vote");

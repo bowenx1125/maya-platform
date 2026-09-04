@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { PieChart } from "../charts";
 import { statusLabel } from "../../lib/i18n";
 import { useLocale } from "../locale";
 import { QrCode } from "./qr-code";
@@ -40,9 +41,7 @@ export function TeacherInteractionPanel({
     >
       <div className={styles.panelHeader}>
         <div>
-          <span className={styles.eyebrow}>{t("interactionEyebrow")}</span>
           <h2>{title}</h2>
-          <p>{t("interactionBoundary")}</p>
         </div>
         <span className={styles.status} data-status={interaction.status}>
           {statusLabel(interaction.status, locale)}
@@ -119,33 +118,30 @@ function InteractionTotals({
   totalVotes: number;
   participantById: Map<string, { name: string; slot: string }>;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  // Names, not the raw participant ids the aggregate carries: the totals used
+  // to render a UUID for every Agent because the vote row has no name to fall
+  // back from, and the page that loads the participants never joined them.
+  const data = votes.map((vote) => {
+    const participant = participantById.get(vote.participant_id);
+    return {
+      id: vote.participant_id,
+      label: participant
+        ? `${participant.slot} · ${participant.name}`
+        : vote.participant_id,
+      value: vote.count,
+    };
+  });
   return (
     <div className={styles.totals}>
       <div className={styles.sectionHeading}>
         <span>{t("interactionLiveVote")}</span>
         <strong>{totalVotes}</strong>
       </div>
-      <div className={styles.voteList}>
-        {votes.map((vote) => {
-          const participant = participantById.get(vote.participant_id);
-          return (
-            <div className={styles.voteRow} key={vote.participant_id}>
-              <div>
-                <strong>
-                  {participant?.slot ?? "?"} ·{" "}
-                  {participant?.name ?? vote.participant_id}
-                </strong>
-                <span>{vote.percentage.toFixed(1)}%</span>
-              </div>
-              <div className={styles.voteTrack}>
-                <span style={{ width: `${Math.min(100, vote.percentage)}%` }} />
-              </div>
-              <b>{vote.count}</b>
-            </div>
-          );
-        })}
-      </div>
+      <PieChart
+        data={data}
+        emptyLabel={locale === "zh" ? "还没有投票。" : "No votes yet."}
+      />
     </div>
   );
 }

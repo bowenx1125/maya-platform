@@ -94,21 +94,18 @@ export function ReportPanel({
     () =>
       locale === "zh"
         ? {
-            eyebrow: "Maya 文明互鉴报告",
-            title: "把辩论变成共同学习记录",
-            lede: "报告只读取已公开发言、实际使用的证据、最终匿名票数和已验证的匿名课堂洞察。",
+            title: "报告",
             insight: "匿名课堂洞察",
             report: "当前报告",
             history: "报告修订历史",
-            refresh: "刷新状态",
-            regenerate: "重新生成报告",
+            refresh: "刷新",
+            regenerate: "重新生成",
             download: "下载英文 Markdown",
             loading: "正在读取报告状态…",
             noReport: "尚未生成报告。结束课堂互动后，Maya 才会开始生成。",
             noHistory: "还没有报告修订。",
             view: "查看修订",
             selected: "当前查看",
-            mock: "Mock 流程表示，不代表真实 LLM 质量",
             generating: "Maya 正在整理辩论与匿名课堂洞察。",
             failed: "这次报告生成失败；既有成功修订仍会保留。",
             included: "已纳入",
@@ -116,14 +113,12 @@ export function ReportPanel({
             words: "词",
           }
         : {
-            eyebrow: "Maya · Civilization Mutual Learning",
-            title: "Turn the debate into a shared learning record",
-            lede: "The report reads only public turns, used evidence, final anonymous votes, and validated anonymous classroom insight.",
+            title: "Report",
             insight: "Anonymous classroom insight",
             report: "Current report",
             history: "Report revision history",
-            refresh: "Refresh status",
-            regenerate: "Regenerate report",
+            refresh: "Refresh",
+            regenerate: "Regenerate",
             download: "Download English Markdown",
             loading: "Reading report status…",
             noReport:
@@ -131,7 +126,6 @@ export function ReportPanel({
             noHistory: "No report revisions yet.",
             view: "View revision",
             selected: "Viewing",
-            mock: "Mock workflow representation; not a claim about real LLM quality",
             generating:
               "Maya is organizing the debate and anonymous classroom insight.",
             failed:
@@ -227,9 +221,7 @@ export function ReportPanel({
     >
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>{copy.eyebrow}</p>
           <h2>{copy.title}</h2>
-          <p className={styles.lede}>{copy.lede}</p>
         </div>
         <div className={styles.actions}>
           <button type="button" onClick={() => void load()} disabled={busy}>
@@ -270,7 +262,6 @@ export function ReportPanel({
               report?.generation_status ?? "not_started",
             )}
           </strong>
-          <small>{copy.mock}</small>
         </div>
       </div>
 

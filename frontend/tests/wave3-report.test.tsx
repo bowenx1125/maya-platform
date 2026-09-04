@@ -81,9 +81,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       </LocaleProvider>,
     );
 
-    expect(
-      await screen.findByText("Turn the debate into a shared learning record"),
-    ).toBeTruthy();
+    expect(await screen.findByText("Report")).toBeTruthy();
     expect(screen.getByText("Shared concern")).toBeTruthy();
     expect(screen.getByLabelText("Current report").textContent).toContain(
       "Civilization Mutual Learning Report",
@@ -106,8 +104,8 @@ describe("Wave 3 M14 ReportPanel", () => {
         <ReportPanel debateId={debateId} api={api} />
       </LocaleProvider>,
     );
-    await screen.findByText("Turn the debate into a shared learning record");
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate report" }));
+    await screen.findByText("Report");
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     await waitFor(() =>
       expect(api.regenerateReport).toHaveBeenCalledWith(
         debateId,
@@ -128,10 +126,10 @@ describe("Wave 3 M14 ReportPanel", () => {
         <ReportPanel debateId={debateId} api={api} />
       </LocaleProvider>,
     );
-    await screen.findByText("Turn the debate into a shared learning record");
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate report" }));
+    await screen.findByText("Report");
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     await waitFor(() => expect(regenerateReport).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     await waitFor(() => expect(regenerateReport).toHaveBeenCalledTimes(2));
     expect(regenerateReport.mock.calls[0][1]?.idempotency).toBe(
       regenerateReport.mock.calls[1][1]?.idempotency,
@@ -148,7 +146,7 @@ describe("Wave 3 M14 ReportPanel", () => {
         <ReportPanel debateId={debateId} api={api} />
       </LocaleProvider>,
     );
-    await screen.findByText("Turn the debate into a shared learning record");
+    await screen.findByText("Report");
     fireEvent.click(
       screen.getByRole("button", { name: "Download English Markdown" }),
     );
