@@ -98,7 +98,6 @@ export function DemoCompositionBadge() {
       <div className="demo-composition-heading">
         <div className="eyebrow">{t("demoComposition")}</div>
         <h2 id="demo-composition-title">{t("demoBaseline")}</h2>
-        <p>{t("demoCompositionLede")}</p>
       </div>
       <div aria-label={t("demoComposition")} className="demo-composition-grid">
         {status.composition.components.map((component) => (

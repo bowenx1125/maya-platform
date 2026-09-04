@@ -154,22 +154,14 @@ function StreamItem({
       />
       {/* Which snapshot files backed this speech. It belongs with the speech
           it justifies, and merging the two panels must not quietly drop it. */}
-      <div className={styles.streamSources}>
-        <h3>{labels.sources}</h3>
-        {turn.sources && turn.sources.length > 0 ? (
-          <ul>
-            {turn.sources.map((source) => (
-              <li
-                key={`${turn.id}:${source.source_filename}:${source.chunk_id ?? ""}`}
-              >
-                {source.source_filename}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>{labels.noSources}</p>
-        )}
-      </div>
+      {/* One line, not a heading over a bullet list: a turn cites one or two
+          files and the list format gave three lines of chrome to two words. */}
+      <p className={styles.streamSources}>
+        <span className={styles.streamSourcesLabel}>{labels.sources}:</span>{" "}
+        {turn.sources && turn.sources.length > 0
+          ? turn.sources.map((source) => source.source_filename).join(", ")
+          : labels.noSources}
+      </p>
       {audioUrl ? <audio preload="none" ref={reviewRef} /> : null}
     </article>
   );

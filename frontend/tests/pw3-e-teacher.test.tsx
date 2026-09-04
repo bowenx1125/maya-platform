@@ -122,17 +122,8 @@ describe("PW3-E teacher shell and responsive contract", () => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    {
-      locale: "en" as const,
-      boundary: "Student drafts cannot be viewed or edited here.",
-    },
-    {
-      locale: "zh" as const,
-      boundary: "教师视图不能查看或编辑学生草稿。",
-    },
-  ])(
-    "states the student-draft boundary once and loads the course ($locale)",
+  it.each([{ locale: "en" as const }, { locale: "zh" as const }])(
+    "loads the course without explaining itself ($locale)",
     async (caseData) => {
       const api = apiForTeacher();
       mockedUseSession.mockReturnValue({
@@ -145,16 +136,20 @@ describe("PW3-E teacher shell and responsive contract", () => {
         </LocaleProvider>,
       );
 
-      // The boundary is stated in the page lede. It used to be repeated in a
-      // capabilities section and again in five explainer cards; exactly one
-      // statement is the contract now.
-      await waitFor(() =>
-        expect(
-          screen.getAllByText((content) => content.includes(caseData.boundary)),
-        ).toHaveLength(1),
-      );
-      expect(api.courses).toHaveBeenCalledTimes(1);
+      // The student-draft boundary used to be stated in a page lede, then in a
+      // capabilities section, then again in five explainer cards. It is a rule
+      // the screen enforces, not a sentence the screen has to say, so the last
+      // statement of it is gone too.
+      await waitFor(() => expect(api.courses).toHaveBeenCalledTimes(1));
       expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
+      for (const boundary of [
+        "Student drafts cannot be viewed or edited here.",
+        "教师视图不能查看或编辑学生草稿。",
+      ]) {
+        expect(
+          screen.queryAllByText((content) => content.includes(boundary)),
+        ).toHaveLength(0);
+      }
     },
   );
 
@@ -172,8 +167,8 @@ describe("PW3-E teacher shell and responsive contract", () => {
     expect(
       screen.getByRole("img", { name: "Published Agent avatar preview" }),
     ).toBeTruthy();
+    // The state is a badge, not a paragraph explaining what the badge means.
     expect(screen.getByText("Platform voice fallback")).toBeTruthy();
-    expect(screen.getByText(/custom voice is optional/i)).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /edit description/i }),
     ).toBeNull();

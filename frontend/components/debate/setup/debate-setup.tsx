@@ -445,7 +445,6 @@ export function TeacherDebateCreate({
                       <span className={styles.orderMark}>
                         {selected ? String.fromCharCode(65 + order) : "＋"}
                       </span>
-                      <StatusBadge status={candidate.agent.status} />
                     </span>
                     <span className={styles.candidateName}>
                       {candidate.agent.name}
@@ -573,15 +572,17 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        <SectionCard title={copy(t, "debateRuleSet")}>
+        {/* The card names the protocol, so the line inside it can be the one
+            fact a teacher needs: the shape of a round. */}
+        <SectionCard title={copy(t, "debateMutualLearningRuleSet")}>
           <div className={styles.fixedRule}>
             <p
               aria-label={copy(t, "debateRuleSet")}
+              className={styles.rulePhases}
               data-testid="debate-rule-set"
             >
-              {copy(t, "debateMutualLearningRuleSet")}
+              {copy(t, "debateMutualLearningRules")}
             </p>
-            <strong>{copy(t, "debateMutualLearningRules")}</strong>
             {/* A segmented row, not a select: four values the teacher should be
                 able to hit in one tap and read at a glance. The legacy branch
                 that used to wrap this is gone - ruleSetId is a const of one

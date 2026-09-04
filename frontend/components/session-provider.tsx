@@ -482,7 +482,7 @@ export function LoginForm() {
                 disabled={busy}
                 onClick={() => void chooseDemoIdentity(identity.user_id)}
               >
-                {identity.display_name} · {roleLabel(identity.role, locale)}
+                {identity.display_name}
               </button>
             ))}
           </div>

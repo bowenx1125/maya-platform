@@ -321,7 +321,9 @@ describe("PW3-D three-control playback", () => {
         ),
     ).toHaveLength(0);
     expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
-    expect(screen.getByText("Debate complete")).toBeTruthy();
+    // The stage's own status pill carries this; the line that repeated it at
+    // the top-left of the speeches is gone.
+    expect(screen.queryByText("Debate complete")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toHaveProperty("disabled", false);
@@ -712,7 +714,9 @@ describe("PW3-D three-control playback", () => {
     await waitFor(() =>
       expect(screen.getByText(speech("Second"))).toBeTruthy(),
     );
-    expect(screen.getByText("Debate complete")).toBeTruthy();
+    // Terminal state reads from the panel's status pill, not from a second
+    // line above the transcript that said the same thing.
+    expect(screen.queryByText("Debate complete")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toBeTruthy();

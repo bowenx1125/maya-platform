@@ -379,11 +379,12 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     mockedUseSession.mockReturnValue({ api: teacherApi } as never);
 
     render(<TeacherAgentDetail agentId={agentId} />);
+    // The description leads the page now, in place of a note about which
+    // fields a teacher cannot see. It no longer needs a labelled card of its
+    // own repeating the same sentence further down.
     await waitFor(() =>
       expect(screen.getByText("Current mutable description")).toBeTruthy(),
     );
-    expect(
-      screen.getByLabelText("Current Agent metadata").textContent,
-    ).toContain("Current mutable description");
+    expect(screen.getAllByText("Current mutable description")).toHaveLength(1);
   });
 });

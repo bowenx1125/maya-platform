@@ -1885,3 +1885,30 @@ dd {
     margin-top: 28px;
   }
 }
+
+/* The version and the group that made it, as two pills a teacher can read at
+   a glance. Amber says a newer draft exists that the class has not released. */
+.agent-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(45, 138, 104, 0.14);
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 640;
+}
+
+.agent-pill[data-pending="true"] {
+  background: var(--gold-soft);
+  color: #8a6a1f;
+}
+
+/* The group's members, alphabetical, under the group's own name. */
+.teacher-group-members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}

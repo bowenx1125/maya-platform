@@ -7,6 +7,7 @@ import {
   type AgentDetail,
   type AgentVersion,
   type Course,
+  type Group,
   type GroupDetail,
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
@@ -28,6 +29,7 @@ export function TeacherDashboard() {
   const { api, user } = useSession();
   const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const load = useCallback(async () => {
@@ -37,10 +39,13 @@ export function TeacherDashboard() {
       const teacherMembership = user?.courses.find(
         (item) => item.role === "teacher",
       );
-      const [courses, nextPublished] = await Promise.all([
+      const [courses, nextPublished, nextGroups] = await Promise.all([
         api.courses(),
         teacherMembership
           ? api.publishedAgents(teacherMembership.course_id)
+          : Promise.resolve([]),
+        teacherMembership
+          ? api.groups(teacherMembership.course_id)
           : Promise.resolve([]),
       ]);
       setCourse(
@@ -49,6 +54,7 @@ export function TeacherDashboard() {
           null,
       );
       setPublished(nextPublished);
+      setGroups(nextGroups);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -69,7 +75,6 @@ export function TeacherDashboard() {
       <PageIntro
         eyebrow={t("teacherCourse")}
         title={course?.name ?? t("publishedAgents")}
-        description={t("teacherCourseLede")}
         action={
           <div className="course-context">
             <span className="section-label">{t("publishedWork")}</span>
@@ -83,7 +88,14 @@ export function TeacherDashboard() {
       ) : (
         <div className="published-grid">
           {published.map((item) => (
-            <PublishedAgentCard item={item} key={item.agent.id} />
+            <PublishedAgentCard
+              groupName={
+                groups.find((group) => group.id === item.agent.group_id)
+                  ?.name ?? null
+              }
+              item={item}
+              key={item.agent.id}
+            />
           ))}
         </div>
       )}
@@ -91,9 +103,21 @@ export function TeacherDashboard() {
   );
 }
 
-function PublishedAgentCard({ item }: { item: PublishedAgentSummary }) {
-  const t = useT();
+function PublishedAgentCard({
+  item,
+  groupName,
+}: {
+  item: PublishedAgentSummary;
+  groupName: string | null;
+}) {
   const version = item.current_version;
+  // A newer draft that has not been published yet. Derived from the Agent's
+  // own pointers rather than a status word, so it stays true for any version
+  // label and any number of releases.
+  const hasUnpublishedWork =
+    Boolean(item.agent.current_draft_version_id) &&
+    item.agent.current_draft_version_id !==
+      item.agent.current_published_version_id;
   return (
     <Link className="published-card" href={`/teacher/agents/${item.agent.id}`}>
       <div className="published-card-top">
@@ -101,10 +125,6 @@ function PublishedAgentCard({ item }: { item: PublishedAgentSummary }) {
           {item.agent.name.slice(0, 1).toUpperCase()}
         </div>
         <div>
-          <div className="chip-row">
-            <StatusBadge status={item.agent.status} />
-            <StatusBadge status={version.state} />
-          </div>
           <h2>{item.agent.name}</h2>
           <p>{item.agent.description}</p>
         </div>
@@ -113,15 +133,16 @@ function PublishedAgentCard({ item }: { item: PublishedAgentSummary }) {
         </span>
       </div>
       <div className="published-card-meta">
-        <span>{version.version_label}</span>
-        <span>
-          {version.enabled_documents?.length ?? 0} {t("evidenceFiles")}
+        {/* The version and the group that made it. Green means the published
+            release is the newest work; amber means a newer draft exists that
+            the class has not released yet. */}
+        <span
+          className="agent-pill"
+          data-pending={hasUnpublishedWork ? "true" : "false"}
+        >
+          {version.version_label}
         </span>
-        <span>
-          {version.voice_fallback_active
-            ? t("platformVoiceFallback")
-            : t("customVoiceReady")}
-        </span>
+        {groupName ? <span className="agent-pill">{groupName}</span> : null}
       </div>
     </Link>
   );
@@ -241,26 +262,32 @@ export function TeacherAgentDetail({
       <PageIntro
         eyebrow={t("publishedAgent")}
         title={agent.name}
-        description={t("teacherReadOnly")}
+        description={agent.description}
         action={
           <Link className="secondary-action" href="/teacher">
-            {t("backPublished")}
+            {t("debateBack")}
           </Link>
         }
       />
       <div className="teacher-agent-context-grid">
-        <SectionCard
-          title={t("producingGroup")}
-          description={t("producingGroupLede")}
-        >
-          <p className="teacher-context-value">
-            {group?.name ?? currentAgent.group_id}
-          </p>
+        <SectionCard title={group?.name ?? t("producingGroup")}>
+          {/* Who made this Agent, by name, in an order a reader can scan. */}
+          {group?.members?.length ? (
+            <ul className="teacher-group-members">
+              {[...group.members]
+                .sort((left, right) =>
+                  left.display_name.localeCompare(right.display_name),
+                )
+                .map((member) => (
+                  <li key={member.user_id}>{member.display_name}</li>
+                ))}
+            </ul>
+          ) : group ? null : (
+            // The group itself did not load; its id is all we can honestly say.
+            <p className="teacher-context-value">{currentAgent.group_id}</p>
+          )}
         </SectionCard>
-        <SectionCard
-          title={t("avatarPreview")}
-          description={t("teacherAvatarLede")}
-        >
+        <SectionCard title={t("avatarPreview")}>
           {currentVersion ? (
             <AvatarPreview
               config={currentVersion.avatar_config}
@@ -270,10 +297,7 @@ export function TeacherAgentDetail({
             <p className="muted-copy">{t("noCurrentPublished")}</p>
           )}
         </SectionCard>
-        <SectionCard
-          title={t("voiceBinding")}
-          description={t("voiceBindingLede")}
-        >
+        <SectionCard title={t("voiceBinding")}>
           {currentVersion ? (
             <div
               className="teacher-voice-state"
@@ -291,26 +315,12 @@ export function TeacherAgentDetail({
                   ? t("platformVoiceFallback")
                   : t("customVoiceReady")}
               </span>
-              <p>
-                {currentVersion.voice_fallback_active
-                  ? t("voiceFallbackHint")
-                  : t("teacherEffectiveVoice")}
-              </p>
             </div>
           ) : (
             <p className="muted-copy">{t("noCurrentPublished")}</p>
           )}
         </SectionCard>
       </div>
-      <SectionCard title={t("description")}>
-        <div
-          className="current-agent-metadata"
-          aria-label={t("currentMetadata")}
-        >
-          <span className="section-label">{t("current")}</span>
-          <p>{agent.description}</p>
-        </div>
-      </SectionCard>
       {agent.status === "archived" ? (
         <div className="notice notice-warning">
           <strong>{t("archivedAgent")}</strong>
@@ -320,10 +330,7 @@ export function TeacherAgentDetail({
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <div className="teacher-detail-grid">
         <div>
-          <SectionCard
-            title={t("currentRelease")}
-            description={t("currentPointerLede")}
-          >
+          <SectionCard title={t("currentRelease")}>
             {currentVersion ? (
               <TeacherVersion
                 version={currentVersion}
@@ -333,10 +340,7 @@ export function TeacherAgentDetail({
               <EmptyCard title={t("noCurrentPublished")} />
             )}
           </SectionCard>
-          <SectionCard
-            title={t("publishedHistory")}
-            description={t("publishedHistoryLede")}
-          >
+          <SectionCard title={t("publishedHistory")}>
             {versions.length === 0 ? (
               <p className="muted-copy">{t("noPublishedHistory")}</p>
             ) : (
@@ -353,10 +357,7 @@ export function TeacherAgentDetail({
           </SectionCard>
         </div>
         <aside>
-          <SectionCard
-            title={t("knowledgeSnapshot")}
-            description={t("snapshotOnlyPublish")}
-          >
+          <SectionCard title={t("knowledgeSnapshot")}>
             {snapshot ? (
               <>
                 <div className="snapshot-summary">
@@ -414,9 +415,6 @@ export function TeacherAgentDetail({
             ) : (
               <p className="muted-copy">{t("selectSnapshot")}</p>
             )}
-          </SectionCard>
-          <SectionCard title={t("whyMatters")}>
-            <p className="teaching-copy">{t("whyMattersCopy")}</p>
           </SectionCard>
         </aside>
       </div>

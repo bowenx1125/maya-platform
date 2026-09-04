@@ -33,6 +33,10 @@ export function AppShell({
   }
 
   const isStudent = role === "student";
+  // Only the landing screen of either role, not every page under it.
+  const isDashboard =
+    pathname === "/teacher" ||
+    /^\/student\/groups\/[^/]+$/.test(pathname ?? "");
   const links = isStudent
     ? [
         { href: "/student", label: t("home") },
@@ -53,7 +57,7 @@ export function AppShell({
           : []),
       ]
     : [
-        { href: "/teacher", label: t("home") },
+        { href: "/teacher", label: t("dashboard") },
         { href: "/teacher/debates", label: t("debates") },
       ];
 
@@ -91,9 +95,6 @@ export function AppShell({
         </nav>
         <div className="nav-account">
           <span className="account-name">{user?.display_name ?? ""}</span>
-          <span className="role-pill">
-            {role === "teacher" ? t("teacher") : t("student")}
-          </span>
           <LanguageSwitcher />
           <button
             className="nav-logout"
@@ -106,7 +107,10 @@ export function AppShell({
         </div>
       </header>
       <main className="app-main">
-        <DemoCompositionBadge />
+        {/* The composition strip belongs to the dashboard, which is where a
+            teacher goes to see what is real and what is Mock. Repeating it
+            above every screen pushed the actual work down the page. */}
+        {isDashboard ? <DemoCompositionBadge /> : null}
         {children}
       </main>
     </div>

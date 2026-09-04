@@ -204,6 +204,7 @@
 }
 
 .fixedRule {
+  gap: 10px;
   display: grid;
   gap: 8px;
   padding: 14px;
@@ -380,4 +381,22 @@
 .releaseSlot {
   display: grid;
   gap: 6px;
+}
+
+/* The round's shape, at the size the protocol name used to occupy. */
+.rulePhases {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 640;
+  color: var(--ink);
+}
+
+.roundLabel {
+  font-size: 1rem;
+}
+
+/* The protocol block reads as one compact unit rather than a stack of rows. */
+.fixedRule {
+  display: grid;
+  gap: 14px;
 }

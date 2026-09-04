@@ -3287,29 +3287,9 @@ export function DebateStage({
               <span>{labels.audioNotRetained}</span>
             </div>
           ) : null}
-          {isTerminal ||
-          playback.status === "waiting_next" ||
-          playback.status === "ready" ||
-          playback.status === "preparing" ? (
-            <p className={styles.stageStatus} role="status">
-              {isTerminal
-                ? detailState.status === "failed"
-                  ? publicTurns.length
-                    ? // Some turns are published and readable; only the rest
-                      // of the debate stopped. Saying the whole debate needs
-                      // attention here contradicts what is on screen.
-                      labels.debatePartial
-                    : labels.debateFailed
-                  : detailState.status === "stopped"
-                    ? labels.debateStopped
-                    : playback.status === "completed"
-                      ? labels.debateComplete
-                      : labels.phaseFinished
-                : playback.status === "waiting_next"
-                  ? labels.waitingNext
-                  : labels.waitingForAudio}
-            </p>
-          ) : null}
+          {/* The panel under the face already carries this state. A second
+              wording of it at the top-left of the speeches said the same
+              thing twice and pushed the first speech down. */}
 
           <SpeechStream
             describe={(participantId) => {
