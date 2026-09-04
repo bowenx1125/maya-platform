@@ -23,6 +23,7 @@ import {
 } from "../../../lib/api";
 import type { MessageKey } from "../../../lib/i18n";
 import { validateDebateTopic } from "../../../lib/debate-topic";
+import { turnsForShape } from "../../../lib/debate-rounds";
 import { useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import {
@@ -115,23 +116,17 @@ export function TeacherDebateList({
   return (
     <div className={styles.pageStack}>
       <PageIntro
-        eyebrow={t("debateList")}
-        title={t("debateList")}
-        description={t("debateListLede")}
+        title={t("debates")}
         action={
           <Link className="primary-action" href="/teacher/debates/new">
             {t("newDebate")}
           </Link>
         }
       />
-      <SectionCard
-        title={t("debateList")}
-        description={t("debateSelectCount", { count: debates.length })}
-      >
+      <SectionCard>
         {debates.length === 0 ? (
           <div className={styles.emptyState}>
             <strong>{t("debateNoDebates")}</strong>
-            <p className={styles.emptyCopy}>{t("newDebateLede")}</p>
             <Link className="secondary-action" href="/teacher/debates/new">
               {t("newDebate")}
             </Link>
@@ -168,6 +163,9 @@ type StanceValue = "support" | "oppose" | "neutral";
 // RuleSets remain readable on existing Debates but can no longer be created.
 type DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
 type MutualRoundCount = 2 | 3 | 4 | 5;
+
+/** The RuleSet's accepted round counts, listed once. */
+const MUTUAL_ROUND_CHOICES: readonly MutualRoundCount[] = [2, 3, 4, 5];
 type SetupDraftPayload = Omit<
   DebateDraftRequest,
   "round_count" | "rule_set_id"
@@ -374,7 +372,6 @@ export function TeacherDebateCreate({
       <PageIntro
         eyebrow={copy(t, "newDebate")}
         title={copy(t, "newDebateTitle")}
-        description={copy(t, "newDebateLede")}
         action={
           <Link className="secondary-action" href="/teacher/debates">
             {copy(t, "debateBack")}
@@ -416,10 +413,7 @@ export function TeacherDebateCreate({
           </label>
         </SectionCard>
 
-        <SectionCard
-          title={copy(t, "debateCandidates")}
-          description={copy(t, "debateCandidatesLede")}
-        >
+        <SectionCard title={copy(t, "debateCandidates")}>
           {candidates.length === 0 ? (
             <EmptyCard title={copy(t, "debateNoCandidates")} />
           ) : (
@@ -459,10 +453,7 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        <SectionCard
-          title={copy(t, "debateSelected")}
-          description={copy(t, "debateSelectedLede")}
-        >
+        <SectionCard title={copy(t, "debateSelected")}>
           <div className={styles.selectedSummary}>
             <span className={styles.summaryPill}>
               {interpolate(copy(t, "debateSelectCount"), {
@@ -579,49 +570,41 @@ export function TeacherDebateCreate({
             >
               {copy(t, "debateMutualLearningRuleSet")}
             </p>
-            <strong>
-              {ruleSetId === "ordered_multi_expert_mutual_learning_v1"
-                ? copy(t, "debateMutualLearningRules")
-                : copy(t, "debateFixedRulesLede")}
-            </strong>
-            {ruleSetId === "ordered_multi_expert_mutual_learning_v1" ? (
-              // Label, control, hint - the shape every other field in this
-              // form uses. The chosen value used to be repeated in a line
-              // below the select, which said nothing the control did not, and
-              // the label reached for a global utility class inside a module.
-              <label className={styles.roundField}>
-                <span className={styles.roundLabel}>
-                  {copy(t, "debateRoundCount")}
-                </span>
-                <select
-                  aria-label={copy(t, "debateRoundCount")}
-                  disabled={busy}
-                  onChange={(event) =>
-                    setRoundCount(
-                      Number(event.target.value) as MutualRoundCount,
-                    )
-                  }
-                  value={roundCount}
-                >
-                  {[2, 3, 4, 5].map((value) => (
-                    <option key={value} value={value}>
-                      {copy(t, "debateRoundOption").replace(
-                        "{count}",
-                        String(value),
-                      )}
-                    </option>
-                  ))}
-                </select>
-                <span className={styles.fieldHint}>
-                  {copy(t, "debateRoundCountHint").replace(
-                    "{turns}",
-                    String(selectedIds.length * roundCount),
-                  )}
-                </span>
-              </label>
-            ) : (
-              <span className={styles.fieldHint}>{copy(t, "debateFlow")}</span>
-            )}
+            <strong>{copy(t, "debateMutualLearningRules")}</strong>
+            {/* A segmented row, not a select: four values the teacher should be
+                able to hit in one tap and read at a glance. The legacy branch
+                that used to wrap this is gone - ruleSetId is a const of one
+                value, so every arm of that ternary but this one was dead. */}
+            <div className={styles.roundField}>
+              <span className={styles.roundLabel}>
+                {copy(t, "debateRoundCount")}
+              </span>
+              <div
+                aria-label={copy(t, "debateRoundCount")}
+                className={styles.roundChoices}
+                role="radiogroup"
+              >
+                {MUTUAL_ROUND_CHOICES.map((value) => (
+                  <button
+                    aria-checked={value === roundCount}
+                    className={styles.roundChoice}
+                    disabled={busy}
+                    key={value}
+                    onClick={() => setRoundCount(value)}
+                    role="radio"
+                    type="button"
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <span className={styles.fieldHint}>
+                {copy(t, "debateRoundCountHint").replace(
+                  "{turns}",
+                  String(turnsForShape(selectedIds.length, roundCount)),
+                )}
+              </span>
+            </div>
           </div>
           {formError ? (
             <div className="form-error" role="alert">
@@ -636,9 +619,6 @@ export function TeacherDebateCreate({
             >
               {busy ? copy(t, "debateCreating") : copy(t, "debateCreateAction")}
             </button>
-            <span className={styles.fieldHint}>
-              {copy(t, "debateSelectedLede")}
-            </span>
           </div>
         </SectionCard>
       </form>

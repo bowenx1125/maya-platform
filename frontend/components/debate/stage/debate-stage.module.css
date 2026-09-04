@@ -806,3 +806,14 @@
   margin: 0;
   padding-left: 16px;
 }
+
+/* The page-owned controls: one row under Start and Next, same width. */
+.panelActions {
+  display: grid;
+  gap: 8px;
+}
+
+.panelActions > * {
+  width: 100%;
+  text-align: center;
+}

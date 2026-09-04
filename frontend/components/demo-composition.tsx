@@ -137,7 +137,6 @@ export function DemoCompositionBadge() {
             ? t("demoBaselineReady")
             : t("demoBaselineUnavailable")}
         </span>
-        <span className="demo-baseline-label">{t("demoSystemBaseline")}</span>
       </div>
     </section>
   );

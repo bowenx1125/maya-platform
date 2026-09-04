@@ -112,3 +112,19 @@
   color: var(--muted);
   font-size: 0.78rem;
 }
+
+/* The exact embedded string, kept reachable but out of the reading path. */
+.rawQuery {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.rawQuery summary {
+  cursor: pointer;
+}
+
+.rawQuery p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}

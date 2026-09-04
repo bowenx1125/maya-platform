@@ -294,35 +294,7 @@ export default function TeacherDebateControlPage() {
         ) : null}
         {detail && debateId ? (
           <>
-            <PageIntro
-              eyebrow={t("debateList")}
-              title={detail.topic}
-              description={t("debateListLede")}
-              action={
-                <div className="button-row">
-                  <Link className="secondary-action" href="/teacher/debates">
-                    {t("debateBackToList")}
-                  </Link>
-                  {detail.status === "running" &&
-                  detail.playback.mode === "live" &&
-                  !finishAllowed ? (
-                    <span id="finish-authority-message" role="status">
-                      {finishBlockedCopy(detail, playbackAuthority, locale)}
-                    </span>
-                  ) : null}
-                  {(detail.status === "debate_finished" ||
-                    detail.status === "completed") &&
-                    hasCompletePublicPlan(detail) && (
-                      <Link
-                        className="primary-action"
-                        href={`/teacher/debates/${debateId}/interaction`}
-                      >
-                        {t("wave3Title")}
-                      </Link>
-                    )}
-                </div>
-              }
-            />
+            <PageIntro eyebrow={t("debateList")} title={detail.topic} />
             {error ? (
               <ErrorNotice
                 error={error}
@@ -331,24 +303,46 @@ export default function TeacherDebateControlPage() {
             ) : null}
             <DebateStage
               headerActions={
-                detail.status === "running" &&
-                detail.playback.mode === "live" ? (
-                  <button
-                    aria-describedby={
-                      finishAllowed ? undefined : "finish-authority-message"
-                    }
-                    className="primary-action"
-                    disabled={finishBusy || !finishAllowed}
-                    onClick={() => void finish()}
-                    type="button"
-                  >
-                    {finishBusy
-                      ? locale === "zh"
-                        ? "正在结束…"
-                        : "Finishing…"
-                      : stageLabels.finish}
-                  </button>
-                ) : null
+                <>
+                  <Link className="secondary-action" href="/teacher/debates">
+                    {t("debateBack")}
+                  </Link>
+                  {detail.status === "running" &&
+                  detail.playback.mode === "live" ? (
+                    <>
+                      <button
+                        aria-describedby={
+                          finishAllowed ? undefined : "finish-authority-message"
+                        }
+                        className="primary-action"
+                        disabled={finishBusy || !finishAllowed}
+                        onClick={() => void finish()}
+                        type="button"
+                      >
+                        {finishBusy
+                          ? locale === "zh"
+                            ? "正在结束…"
+                            : "Finishing…"
+                          : stageLabels.finish}
+                      </button>
+                      {finishAllowed ? null : (
+                        <span id="finish-authority-message" role="status">
+                          {finishBlockedCopy(detail, playbackAuthority, locale)}
+                        </span>
+                      )}
+                    </>
+                  ) : null}
+                  {(detail.status === "debate_finished" ||
+                    detail.status === "completed") &&
+                  hasCompletePublicPlan(detail) ? (
+                    <Link
+                      className="primary-action"
+                      href={`/teacher/debates/${debateId}/interaction`}
+                    >
+                      {t("wave3Title")}
+                    </Link>
+                  ) : null}
+                </>
               }
               api={api}
               debateId={debateId}

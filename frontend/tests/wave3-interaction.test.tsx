@@ -104,9 +104,7 @@ describe("M13 teacher interaction panel", () => {
         onOpen={onOpen}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open classroom interaction" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Interaction" }));
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: /End collection/ })).toBeNull();
   });

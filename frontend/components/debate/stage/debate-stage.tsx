@@ -3052,7 +3052,6 @@ export function DebateStage({
               <span className={styles.playbackStatus} data-phase={phase}>
                 {visibleStatus}
               </span>
-              {headerActions ?? null}
             </div>
             {!readOnly ? (
               <div className={styles.controlsArea}>
@@ -3099,6 +3098,14 @@ export function DebateStage({
                   </p>
                 ) : null}
               </div>
+            ) : null}
+
+            {/* Back, End and the classroom-interaction entry sit under Start
+                and Next rather than up in the page header. They belong with
+                the other things a teacher presses, and the header had grown a
+                row of links that repeated what the stage already offered. */}
+            {headerActions ? (
+              <div className={styles.panelActions}>{headerActions}</div>
             ) : null}
 
             <audio
@@ -3227,6 +3234,7 @@ export function DebateStage({
               return {
                 slot: owner?.slot ?? "",
                 name: owner?.agent_name ?? participantId,
+                position: owner?.current_position_summary ?? undefined,
               };
             }}
             emptyMessage={labels.noPublishedSpeech ?? ""}

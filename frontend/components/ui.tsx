@@ -49,7 +49,7 @@ export function EmptyCard({
   children,
   action,
 }: {
-  title: string;
+  title?: string;
   children?: ReactNode;
   action?: ReactNode;
 }) {
@@ -94,7 +94,7 @@ export function PageIntro({
   description,
   action,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -102,7 +102,7 @@ export function PageIntro({
   return (
     <div className="page-intro">
       <div>
-        <div className="eyebrow">{eyebrow}</div>
+        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1>{title}</h1>
         {description ? <p>{description}</p> : null}
       </div>
@@ -118,21 +118,26 @@ export function SectionCard({
   children,
   className = "",
 }: {
-  title: string;
+  title?: string;
   description?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
+  // A section directly beneath the page title does not need to repeat it, so
+  // the header collapses entirely when there is nothing of its own to say.
+  const header = title || description || action;
   return (
     <section className={`section-card ${className}`}>
-      <div className="section-card-header">
-        <div>
-          <h2>{title}</h2>
-          {description ? <p>{description}</p> : null}
+      {header ? (
+        <div className="section-card-header">
+          <div>
+            {title ? <h2>{title}</h2> : null}
+            {description ? <p>{description}</p> : null}
+          </div>
+          {action ? <div>{action}</div> : null}
         </div>
-        {action ? <div>{action}</div> : null}
-      </div>
+      ) : null}
       {children}
     </section>
   );

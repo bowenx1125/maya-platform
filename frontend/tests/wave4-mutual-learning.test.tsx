@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -95,9 +96,14 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
       fireEvent.change(screen.getByLabelText("Topic (English)"), {
         target: { value: "Should classrooms compare cultural perspectives?" },
       });
-      fireEvent.change(screen.getByLabelText("Rounds"), {
-        target: { value: String(roundCount) },
-      });
+      // The rounds control is a segmented radiogroup now, not a select: the
+      // teacher taps the number instead of opening a dropdown to find it.
+      fireEvent.click(
+        within(screen.getByRole("radiogroup", { name: "Rounds" })).getByRole(
+          "radio",
+          { name: String(roundCount) },
+        ),
+      );
       fireEvent.click(
         screen.getByRole("button", { name: "Create debate draft" }),
       );
@@ -121,7 +127,7 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     });
     expect(screen.queryByRole("option", { name: /legacy/i })).toBeNull();
     expect(screen.getByTestId("debate-rule-set")).toBeTruthy();
-    expect(screen.getByLabelText("Rounds")).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Rounds" })).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Create debate draft" }),
     );

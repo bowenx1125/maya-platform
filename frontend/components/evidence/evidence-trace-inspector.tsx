@@ -1,5 +1,6 @@
 "use client";
 
+import { evidenceGrade } from "../../lib/evidence-grading";
 import { useLocale } from "../locale";
 import styles from "./evidence-trace-inspector.module.css";
 
@@ -119,22 +120,40 @@ function label(locale: string, value: TextPair): string {
 }
 
 function supportLabel(locale: string, mode: EvidenceTraceSupportMode): string {
-  if (mode === "direct") {
-    return label(locale, { en: "Supports directly", zh: "直接支持" });
+  const grade = evidenceGrade(mode);
+  if (grade === "direct") {
+    return label(locale, { en: "Direct evidence", zh: "直接证明" });
   }
-  if (mode === "contextual") {
-    return label(locale, { en: "Used as context", zh: "作为背景使用" });
+  if (grade === "indirect") {
+    return label(locale, { en: "Indirect evidence", zh: "间接证明" });
   }
-  if (mode === "no_match") {
+  // `no_match` and general reasoning share this: retrieval returned nothing
+  // this claim could stand on. Folding it into "indirect" would claim support
+  // the debate never had.
+  return label(locale, { en: "No evidence", zh: "没有证据" });
+}
+
+/**
+ * What the retrieval was asking for.
+ *
+ * The query kind is a stable enum; the query text is the exact string that was
+ * embedded, and it opens with the topic and an instruction, so printing it
+ * whole told a reader almost nothing about which question this row answers.
+ */
+function queryKindLabel(locale: string, kind: string | null | undefined) {
+  if (kind === "pending_question") {
+    return label(locale, { en: "Answering a question", zh: "回应提问" });
+  }
+  if (kind === "rebuttal") {
     return label(locale, {
-      en: "No relevant evidence found; general reasoning",
-      zh: "未找到相关证据；这是一般推理",
+      en: "Engaging an earlier claim",
+      zh: "回应先前主张",
     });
   }
-  return label(locale, {
-    en: "General reasoning",
-    zh: "一般推理",
-  });
+  if (kind === "updated_position") {
+    return label(locale, { en: "Updated position", zh: "更新后的立场" });
+  }
+  return label(locale, { en: "Independent viewpoint", zh: "独立观点" });
 }
 
 function claimTypeLabel(locale: string, type: EvidenceTraceClaimType): string {
@@ -150,9 +169,12 @@ function claimTypeLabel(locale: string, type: EvidenceTraceClaimType): string {
 export function EvidenceTraceInspector({
   speech,
   trace,
+  positionSummary,
 }: {
   speech: string;
   trace?: unknown;
+  /** The speaker's stance, shown as its own row rather than inside the query. */
+  positionSummary?: string;
 }) {
   const { locale } = useLocale();
   const all = normaliseEvidenceTrace(trace);
@@ -187,12 +209,19 @@ export function EvidenceTraceInspector({
       data-testid="evidence-trace-inspector"
     >
       <summary>
-        {label(locale, {
-          en: "Inspect claim evidence lineage",
-          zh: "查看观点证据链",
-        })}{" "}
+        {label(locale, { en: "Check RAG", zh: "查看 RAG" })}{" "}
         <span className={styles.count}>{rows.length}</span>
       </summary>
+      {positionSummary ? (
+        // The stance belongs to the speaker for this whole turn, so it is
+        // stated once above the claims rather than repeated under each one.
+        <p className={styles.detail}>
+          <span className={styles.detailLabel}>
+            {label(locale, { en: "Current position", zh: "当前立场" })}
+          </span>
+          {positionSummary}
+        </p>
+      ) : null}
       <p className={styles.disclaimer}>
         {label(locale, {
           en: "This records generation lineage, not fact checking.",
@@ -225,8 +254,22 @@ export function EvidenceTraceInspector({
                   <span className={styles.detailLabel}>
                     {label(locale, { en: "Retrieval query", zh: "检索问题" })}
                   </span>
-                  {row.query_text}
+                  {queryKindLabel(locale, row.query_kind)}
                 </p>
+              ) : null}
+              {row.query_text ? (
+                // The exact string that was embedded stays reachable: it is the
+                // receipt for this retrieval, and the rows above are a reading
+                // of it, not a replacement.
+                <details className={styles.rawQuery}>
+                  <summary>
+                    {label(locale, {
+                      en: "Actual retrieval text",
+                      zh: "实际检索文本",
+                    })}
+                  </summary>
+                  <p>{row.query_text}</p>
+                </details>
               ) : null}
               {hasSource ? (
                 <dl className={styles.source}>

@@ -20,8 +20,12 @@ export type StreamTurn = {
 type SpeechStreamProps = {
   turns: StreamTurn[];
   labels: PlaybackStageLabels;
-  /** Slot letter and Agent name for a participant id. */
-  describe: (participantId: string) => { slot: string; name: string };
+  /** Slot letter, Agent name and stance for a participant id. */
+  describe: (participantId: string) => {
+    slot: string;
+    name: string;
+    position?: string;
+  };
   /** Phase caption for a turn, or null when the RuleSet has none. */
   phaseOf: (turn: StreamTurn) => string | null;
   emptyMessage: string;
@@ -144,6 +148,7 @@ function StreamItem({
         ) : null}
       </p>
       <EvidenceTraceInspector
+        positionSummary={who.position}
         speech={turn.speech}
         trace={turn.evidence_trace as never}
       />

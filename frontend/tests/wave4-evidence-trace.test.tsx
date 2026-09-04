@@ -43,13 +43,11 @@ describe("Wave 4 EvidenceTrace teaching inspector", () => {
     renderEnglish(
       <EvidenceTraceInspector speech={speech} trace={[directTrace]} />,
     );
-    fireEvent.click(
-      screen.getByText("Inspect claim evidence lineage", { exact: false }),
-    );
+    fireEvent.click(screen.getByText("Check RAG", { exact: false }));
     expect(screen.getByText(claim)).toBeTruthy();
     expect(screen.getByText("community.md")).toBeTruthy();
     expect(screen.getByText("md:document-a:chars:0-32")).toBeTruthy();
-    expect(screen.getByText("Supports directly")).toBeTruthy();
+    expect(screen.getByText("Direct evidence")).toBeTruthy();
     expect(screen.getByText(/not fact checking/)).toBeTruthy();
     expect(screen.queryByText(/verified true|fact-checked/i)).toBeNull();
   });
@@ -71,7 +69,7 @@ describe("Wave 4 EvidenceTrace teaching inspector", () => {
       speech_span: { start_utf16: 0, end_utf16: speech.length },
     };
     renderEnglish(<EvidenceTraceInspector speech={speech} trace={[noMatch]} />);
-    expect(screen.getByText(/No relevant evidence found/)).toBeTruthy();
+    expect(screen.getByText("No evidence")).toBeTruthy();
     expect(screen.queryByText("community.md")).toBeNull();
     expect(screen.queryByText(/md:document-a/)).toBeNull();
   });

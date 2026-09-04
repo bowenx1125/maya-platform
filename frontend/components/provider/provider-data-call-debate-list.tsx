@@ -82,7 +82,6 @@ export function ProviderDataCallDebateList({
       <div className={styles.header}>
         <div>
           <h2 id="debate-turn-approvals-title">{t("debateApprovalTitle")}</h2>
-          <p>{t("debateApprovalLede")}</p>
         </div>
       </div>
 

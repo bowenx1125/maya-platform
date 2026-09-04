@@ -45,7 +45,20 @@ export function debateRoundCount(detail: DebateDetail): number {
   return DEFAULT_ROUND_COUNT;
 }
 
-/** Every participant speaks once per round. */
+/**
+ * Every participant speaks once per round.
+ *
+ * The setup form needs this before a Debate exists, so the arithmetic lives
+ * here in primitive form and `expectedTurnCount` reads a saved Debate through
+ * it. Nowhere else may multiply participants by rounds.
+ */
+export function turnsForShape(
+  participantCount: number,
+  roundCount: number,
+): number {
+  return participantCount * roundCount;
+}
+
 export function expectedTurnCount(detail: DebateDetail): number {
-  return detail.participants.length * debateRoundCount(detail);
+  return turnsForShape(detail.participants.length, debateRoundCount(detail));
 }

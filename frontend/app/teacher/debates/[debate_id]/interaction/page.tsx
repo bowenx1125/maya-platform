@@ -62,19 +62,16 @@ export default function TeacherDebateInteractionPage() {
             <PageIntro
               eyebrow={t("debates")}
               title={t("wave3Title")}
-              description={t("wave3Description")}
               action={
-                <div className="button-row">
-                  <Link
-                    className="secondary-action"
-                    href={`/teacher/debates/${debateId}/control`}
-                  >
-                    {t("wave3BackToPlayback")}
-                  </Link>
-                  <Link className="secondary-action" href="/teacher/debates">
-                    {t("debateBackToList")}
-                  </Link>
-                </div>
+                // One Back, and it returns to the stage this page was opened
+                // from. A second link to the debate list sat beside it saying
+                // the same word for a different destination.
+                <Link
+                  className="secondary-action"
+                  href={`/teacher/debates/${debateId}/control`}
+                >
+                  {t("wave3BackToPlayback")}
+                </Link>
               }
             />
             {error ? (

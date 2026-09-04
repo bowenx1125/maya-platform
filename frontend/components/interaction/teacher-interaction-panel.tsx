@@ -104,9 +104,6 @@ export function TeacherInteractionPanel({
             participantById={participantById}
           />
           <BarrageFeed barrages={interaction.barrages} />
-          <p className={styles.finalizedNote}>
-            {t("interactionFinalizedNote")}
-          </p>
         </div>
       ) : null}
     </section>
