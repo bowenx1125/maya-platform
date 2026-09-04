@@ -514,6 +514,7 @@ export function DebateStage({
   actionInFlight = false,
   className,
   headerActions,
+  outputLanguage = "en",
 }: DebateStageProps) {
   const labels = useMemo(
     () => resolvePlaybackStageLabels(suppliedLabels),
@@ -2685,6 +2686,10 @@ export function DebateStage({
               expected_revision: detailRef.current.revision,
               expected_current_audio_debate_id: audioPointer ?? null,
               confirm_previous_audio_cleanup: Boolean(audioPointer),
+              // The interface language at the moment Start is pressed decides
+              // what the Agents speak. Switching the interface afterwards
+              // translates the chrome, never the lesson.
+              output_language: outputLanguage,
             },
             { idempotency },
           );
@@ -2827,6 +2832,7 @@ export function DebateStage({
       debateId,
       markControllerReady,
       markCurrentAudioDebate,
+      outputLanguage,
       readOnly,
       scheduleControllerAcquire,
       scheduleMediaPrepare,

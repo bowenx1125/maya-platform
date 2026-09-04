@@ -229,6 +229,15 @@ export type PlaybackSocket = {
 export type PlaybackSocketFactory = (url: string) => PlaybackSocket;
 
 export type DebateStageProps = {
+  /**
+   * The language the debate is generated in when Start is pressed.
+   *
+   * Fixed for the whole debate: every later turn's prompt carries the
+   * speeches before it, and turns are prepared ahead of the teacher, so a
+   * change midway would leave a bilingual record whose evidence chain was
+   * embedded in the other language.
+   */
+  outputLanguage?: "en" | "zh";
   /** Page-owned actions rendered in the stage's own header row, so a
    *  teacher's Finish sits with Start and Next instead of a row apart. */
   headerActions?: ReactNode;

@@ -17,6 +17,7 @@ always derived from a public turn or a report revision that both survive.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Sequence
 
 import sqlalchemy as sa
@@ -57,6 +58,13 @@ _TRANSLATION_TABLES = (
 )
 
 
+def _violation_counts(connection: object) -> Counter[tuple[str, str, int]]:
+    """Foreign-key violations by (table, parent table, constraint), not by row."""
+
+    rows = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()  # type: ignore[attr-defined]
+    return Counter((str(row[0]), str(row[2]), int(row[3])) for row in rows)
+
+
 def _fenced(operation: Callable[[], None]) -> None:
     """Run a table rebuild without cascading deletes into unrelated children."""
 
@@ -70,13 +78,12 @@ def _fenced(operation: Callable[[], None]) -> None:
         sqlite.exec_driver_sql("BEGIN IMMEDIATE")
         committed = False
         try:
-            existing_violations = {
-                tuple(row) for row in sqlite.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
-            }
+            # Compare violations by kind, not by rowid. Rebuilding a table
+            # renumbers its rows, so an identical pre-existing violation comes
+            # back with a different rowid and would read as new.
+            existing_violations = _violation_counts(sqlite)
             operation()
-            violations = {
-                tuple(row) for row in sqlite.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
-            }
+            violations = _violation_counts(sqlite)
             new_violations = violations - existing_violations
             if new_violations:
                 raise RuntimeError(f"0018 left new foreign-key violations: {new_violations}")

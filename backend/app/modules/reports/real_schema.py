@@ -173,6 +173,9 @@ class ReportRequest(_ClosedModel):
     sources: tuple[ReportSource, ...] = Field(default=(), max_length=64)
     votes: tuple[ReportVote, ...] = Field(default=(), max_length=5)
     insights: tuple[ReportInsight, ...] = Field(default=(), max_length=32)
+    # The language the debate was generated in. The report is written in
+    # English either way; this only tells the input scan what to expect.
+    source_language: Literal["en", "zh"] = "en"
 
     @model_validator(mode="after")
     def validate_closed_boundary(self) -> ReportRequest:
@@ -183,6 +186,10 @@ class ReportRequest(_ClosedModel):
         """Return deterministic provider-visible data, excluding private IDs."""
 
         payload = cast(dict[str, object], self.model_dump(mode="json"))
+        # The source language tells this class what to expect from the text it
+        # is validating. It is not part of what the provider is asked, so it
+        # stays out of the canonical payload and out of the request hash.
+        payload.pop("source_language", None)
         payload["participants"] = sorted(
             cast(list[dict[str, object]], payload["participants"]),
             key=lambda row: str(row["slot"]),
@@ -216,10 +223,13 @@ class ReportRequest(_ClosedModel):
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
 
-def _text_error(value: str, *, output: bool = False) -> str | None:
+def _text_error(value: str, *, output: bool = False, allow_cjk: bool = False) -> str | None:
     if not value.strip() or any(ord(char) < 32 and char not in "\t\n\r" for char in value):
         return "report_output_text" if output else "report_input_text"
-    if _CJK_RE.search(value):
+    # A Chinese debate's speeches are Chinese, and the report reads them. The
+    # report itself is still written in English; this only stops the input scan
+    # rejecting the lesson it is summarising.
+    if not allow_cjk and _CJK_RE.search(value):
         return "report_output_language" if output else "report_input_language"
     if _SECRET_RE.search(value) or _EMAIL_RE.search(value) or _PHONE_RE.search(value):
         return "report_output_private" if output else "report_input_private"
@@ -242,8 +252,9 @@ def _validate_request_semantics(request: ReportRequest) -> None:
     text_values.extend(speech.speech for speech in request.speeches)
     text_values.extend(source.excerpt for source in request.sources)
     text_values.extend(insight.summary for insight in request.insights)
+    allow_cjk = request.source_language == "zh"
     for value in text_values:
-        error = _text_error(value)
+        error = _text_error(value, allow_cjk=allow_cjk)
         if error is not None:
             raise ReportBoundaryError(error)
 

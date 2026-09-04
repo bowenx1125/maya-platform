@@ -100,6 +100,10 @@ class DebateStartRequest(_ClosedModel):
     expected_revision: int = Field(ge=0)
     expected_current_audio_debate_id: UUID | None
     confirm_previous_audio_cleanup: bool
+    # The language the debate is generated in, fixed from this moment. It is
+    # not the browser's interface language: switching that afterwards
+    # translates the chrome, never the lesson.
+    output_language: Literal["en", "zh"] = "en"
 
 
 class PlaybackCommandRequest(_ClosedModel):

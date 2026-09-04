@@ -24,7 +24,26 @@ from .types import (
     TurnValidationError,
 )
 
-MUTUAL_LEARNING_PLATFORM_RULES = (
+# The one rule that varies with the Debate's chosen language. Everything else
+# about a turn is the same in either language.
+LANGUAGE_RULES = {
+    "en": "REQUIREMENT 0. Write the authoritative speech in English only.",
+    "zh": (
+        "REQUIREMENT 0. Write the authoritative speech in Simplified Chinese only, "
+        "150-400 Han characters per turn. Field names, enum values and receipt IDs "
+        "in the structured output stay exactly as specified."
+    ),
+}
+
+
+def mutual_learning_platform_rules(language: str = "en") -> tuple[str, ...]:
+    """The platform rules as this Debate's language states them."""
+
+    rule = LANGUAGE_RULES.get(language, LANGUAGE_RULES["en"])
+    return tuple(item.replace("{language_rule}", rule) for item in _RULE_TEMPLATE)
+
+
+_RULE_TEMPLATE = (
     "This is the ordered multi-expert mutual-learning protocol. Apply these platform "
     "rules before any persona text.",
     # These six are checked mechanically and are the ones a real model breaks,
@@ -60,7 +79,7 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "output is ignored.",
     "Evidence is snapshot-scoped: use only this request's server-assigned receipt IDs; "
     "discussing another Agent's claim never transfers that Agent's evidence.",
-    "Authoritative speech is English only and must remain respectful; never solicit a vote.",
+    "{language_rule} Speech must remain respectful; never solicit a vote.",
     "Opening is independent: do not engage another Agent, answer a question, evaluate "
     "another Agent, claim consensus, or ask a targeted question.",
     "Exchange answers its assigned pending question when present, faithfully engages a "
@@ -105,6 +124,9 @@ MUTUAL_LEARNING_PLATFORM_RULES = (
     "BEFORE ANSWERING, CHECK requirements 1-6, and that the phase's required "
     "fields are filled and its forbidden fields empty.",
 )
+
+# The English rules, under the name every existing caller already uses.
+MUTUAL_LEARNING_PLATFORM_RULES = mutual_learning_platform_rules("en")
 
 
 def _canonical(value: object) -> str:
@@ -229,6 +251,7 @@ def make_mutual_learning_prompt_input(
     context: GenerationContext,
     receipts: Sequence[SnapshotRetrievalReceipt] = (),
     queries: Sequence[TurnSubquery] = (),
+    output_language: str = "en",
 ) -> MutualLearningPromptInput:
     """Build the request using only the resolved prior-round barrier."""
 
@@ -295,6 +318,7 @@ def make_mutual_learning_prompt_input(
         receipts=typed_receipts,
         queries=query_rows,
         pending_question=pending,
+        output_language=output_language,
     )
 
 
@@ -343,7 +367,9 @@ def _payload(prompt: MutualLearningPromptInput) -> dict[str, object]:
         # The exact rules are rendered once in the preamble.  Keep only an
         # audit hash in the canonical JSON payload so a request cannot silently
         # duplicate or omit a platform rule block.
-        "platform_priority_rules_hash": _hash(list(MUTUAL_LEARNING_PLATFORM_RULES)),
+        "platform_priority_rules_hash": _hash(
+            list(mutual_learning_platform_rules(prompt.output_language))
+        ),
     }
 
 
@@ -352,7 +378,7 @@ def build_mutual_learning_prompt(prompt: MutualLearningPromptInput) -> str:
         (
             "MAYA_MUTUAL_LEARNING_PROMPT_V1",
             "PLATFORM_PRIORITY_RULES_BEGIN",
-            *MUTUAL_LEARNING_PLATFORM_RULES,
+            *mutual_learning_platform_rules(prompt.output_language),
             "PLATFORM_PRIORITY_RULES_END",
             "STRUCTURED_TURN_PAYLOAD_BEGIN",
         )

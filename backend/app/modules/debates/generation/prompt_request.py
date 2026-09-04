@@ -26,7 +26,10 @@ from app.modules.agents.persona import (
 )
 
 from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
-from .mutual_learning_prompts import MUTUAL_LEARNING_PLATFORM_RULES
+from .mutual_learning_prompts import (
+    MUTUAL_LEARNING_PLATFORM_RULES,
+    mutual_learning_platform_rules,
+)
 from .prompt_budget import (
     MAX_OUTPUT_TOKENS,
     PromptBudgetV1,
@@ -1080,11 +1083,19 @@ def build_provider_prompt(
     *,
     token_counter: TokenCounterPort | object | None = None,
     requested_output_tokens: int = MAX_OUTPUT_TOKENS,
-    rules: Sequence[str] = MUTUAL_LEARNING_PLATFORM_RULES,
+    rules: Sequence[str] | None = None,
     **kwargs: Any,
 ) -> ProviderPromptV1:
     """Build two provider messages and run the zero-I/O budget preflight."""
 
+    if rules is None:
+        # The Debate states its own language; only a caller that has no
+        # context to read falls back to the English tuple.
+        rules = (
+            mutual_learning_platform_rules(context.output_language)
+            if context is not None
+            else MUTUAL_LEARNING_PLATFORM_RULES
+        )
     request = build_prompt_request(context, rules=rules, **kwargs)
     system = render_prompt_system_message(
         rule_set_id=request.rule_set_id,
@@ -1116,7 +1127,7 @@ def build_provider_prompt_from_mutual_input(
     persona: PersonaSpecV1 | PersonaProviderViewV1,
     token_counter: TokenCounterPort | object | None = None,
     requested_output_tokens: int = MAX_OUTPUT_TOKENS,
-    rules: Sequence[str] = MUTUAL_LEARNING_PLATFORM_RULES,
+    rules: Sequence[str] | None = None,
     **kwargs: Any,
 ) -> ProviderPromptV1:
     """Adapt the existing pure mutual input to the new two-message seam.
@@ -1134,7 +1145,14 @@ def build_provider_prompt_from_mutual_input(
         participants=prompt.participants,
         predecessors=prompt.predecessors,
         pending_question=prompt.pending_question,
+        output_language=prompt.output_language,
     )
+    # The rules the provider is actually sent must state the language this
+    # Debate chose. Defaulting to the English tuple here meant a Chinese
+    # debate asked the model, in English, for English -- and then rejected the
+    # English it got back.
+    if rules is None:
+        rules = mutual_learning_platform_rules(prompt.output_language)
     return build_provider_prompt(
         context,
         persona=persona,

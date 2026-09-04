@@ -11,6 +11,7 @@ from dataclasses import replace
 from typing import Any
 
 from app.core.errors import PlatformError
+from app.modules.debates.output_language import debate_output_language
 from app.providers.tts import TTSProviderError
 
 from ._core import (
@@ -256,10 +257,17 @@ class PlaybackPreparationMixin(PlaybackCore):
         )
 
     @staticmethod
-    def _validate_prepared(prepared: PreparedTurn) -> PreparedTurn:
+    def _validate_prepared(prepared: PreparedTurn, language: str = "en") -> PreparedTurn:
+        # The same bound the generation validator applies, in the unit the
+        # Debate's language is measured in. Counting Latin words in a Chinese
+        # speech finds none, so every Chinese turn failed here after passing
+        # every rule that had been taught about the language.
+        from app.modules.debates.output_language import speech_units, unit_bounds
+
         speech = prepared.speech.strip()
-        count = PlaybackCore._word_count(speech)
-        if not speech or count < 80 or count > 200:
+        minimum, maximum = unit_bounds(language, 80, 200)  # type: ignore[arg-type]
+        count = speech_units(speech, "zh") if language == "zh" else PlaybackCore._word_count(speech)
+        if not speech or count < minimum or count > maximum:
             raise ValueError("turn speech word count is invalid")
         sources = tuple(prepared.sources)
         if sources:
@@ -419,7 +427,10 @@ class PlaybackPreparationMixin(PlaybackCore):
             # M11 owns the single shared attempt 1|2 repair budget.  Playback
             # invokes that orchestrator once and therefore cannot multiply two
             # generation attempts into four provider calls.
-            prepared = self._validate_prepared(await self._call_preparer(db, debate, turn, 1))
+            prepared = self._validate_prepared(
+                await self._call_preparer(db, debate, turn, 1),
+                debate_output_language(debate),
+            )
             # Accepted LLM stage + its recovery input must survive a process
             # crash before TTS.  Generation deliberately leaves the provider
             # operation ``accepted``; only the final mark_turn_ready

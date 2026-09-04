@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
+from app.modules.debates.playback.eligibility import has_complete_finished_playback
 from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
 
 from ._core import (
@@ -125,6 +126,7 @@ class PlaybackControlMixin(PlaybackCore):
         expected_revision: int,
         expected_current_audio_debate_id: str | None,
         confirm_previous_audio_cleanup: bool,
+        output_language: str = "en",
         context: AuthContext | None = None,
         idempotency_key: str | None = None,
         request_id: str | None = None,
@@ -206,6 +208,13 @@ class PlaybackControlMixin(PlaybackCore):
                     "previous_audio_cleanup_confirmation_required",
                     "Confirm removal of the previous retained audio before starting.",
                 )
+            # The language is fixed here and never afterwards: every later turn
+            # carries the speeches before it, and turns are prepared ahead of
+            # the teacher, so a change midway would leave a bilingual record.
+            debate.output_language = output_language if output_language in {"en", "zh"} else "en"
+            # The row projection only persists through an explicit save, and
+            # nothing later in this method writes the debate row.
+            self.repository.save_debate(db, debate)
             if self.repository.course_running(db, course_id, except_debate_id=debate_id):
                 # Name the debate holding the slot. Without it a teacher was
                 # told something else was running and had to go looking, and
@@ -408,6 +417,35 @@ class PlaybackControlMixin(PlaybackCore):
         first = turns[0]
         await self._enqueue(debate, first)
         return self._state_dto(state, db, debate)
+
+    def _release_completed_audio(self, db: Any, debate_id: str) -> None:
+        """Free the audio of a lesson that ran to the end.
+
+        A finished debate keeps its text, its evidence chains and its classroom
+        interaction; the audio is the largest thing it holds and the least
+        re-read. Only a complete run qualifies -- a partial Finish, a failure
+        and a stop all keep theirs, because those are the runs a teacher is
+        most likely to go back to.
+
+        The turn rows keep their ``audio_file_id`` as a tombstone, so the UI
+        can say the audio was released rather than pretend the turn never had
+        any. This is the same release the audio swap already performs when a
+        new debate replaces the previous retained recording.
+        """
+
+        try:
+            if not has_complete_finished_playback(db, debate_id):
+                return
+            if self.audio_store is not None:
+                self.audio_store.remove_debate(debate_id)
+            mark_deleted = getattr(self.repository, "mark_debate_audio_deleted", None)
+            if callable(mark_deleted):
+                mark_deleted(db, debate_id)
+                self._commit(db)
+        except Exception:
+            # Releasing storage must never fail a finished lesson. The audio
+            # stays until the next swap collects it.
+            LOGGER.exception("Could not release the audio of debate %s", debate_id)
 
     async def retry_preparation(
         self,
@@ -908,6 +946,7 @@ class PlaybackControlMixin(PlaybackCore):
             self.ticket_store.revoke_debate(debate_id)
         else:
             self.ticket_store.revoke_debate(debate_id)
+            self._release_completed_audio(db, debate_id)
         if terminal_epoch is not None:
             self._revoke_epoch(terminal_epoch, debate_id, "debate_terminal")
         if terminal_event is not None:

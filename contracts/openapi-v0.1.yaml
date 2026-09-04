@@ -912,6 +912,14 @@ paths:
                   oneOf:
                     [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
                 confirm_previous_audio_cleanup: { type: boolean }
+                output_language:
+                  type: string
+                  enum: [en, zh]
+                  default: en
+                  description: >-
+                    The language this debate is generated in, fixed at start.
+                    Not the interface language: changing that afterwards
+                    translates the chrome, never the lesson.
       responses:
         "200":
           description: Debate started; prior retained audio swap committed if confirmed.

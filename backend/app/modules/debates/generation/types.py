@@ -535,6 +535,8 @@ class MutualLearningPromptInput:
     # the provider-facing canonical payload.
     queries: tuple[Mapping[str, object], ...] = ()
     pending_question: PendingQuestion | None = None
+    # The language this Debate was started in; see debates/output_language.py.
+    output_language: str = "en"
 
     def __post_init__(self) -> None:
         if self.rule_set_id != "ordered_multi_expert_mutual_learning_v1":
@@ -653,6 +655,8 @@ class GenerationContext:
     participants: tuple[ParticipantContext, ...]
     predecessors: tuple[FinalReadyTurn, ...] = ()
     pending_question: PendingQuestion | None = None
+    # The language this Debate was started in; see debates/output_language.py.
+    output_language: str = "en"
 
     def __post_init__(self) -> None:
         ordered = tuple(sorted(self.predecessors, key=lambda item: item.turn_index))

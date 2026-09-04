@@ -143,6 +143,7 @@ async def start_debate_route(
         expected_revision=expected_revision,
         expected_current_audio_debate_id=expected_pointer,
         confirm_previous_audio_cleanup=confirm,
+        output_language=payload.output_language,
         context=context,
         idempotency_key=idempotency_key,
         request_id=getattr(request.state, "request_id", None),

@@ -43,6 +43,7 @@ from app.core.models import (
     ProviderPolicySnapshot,
 )
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, TurnSource
+from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
 from app.modules.debates.round_count import expected_turn_count as planned_turn_count
 from app.providers.control import (
@@ -1217,6 +1218,7 @@ def build_real_report_request(context: ReportContext) -> ReportRequest:
         sources=sources,
         votes=votes,
         insights=insights,
+        source_language=debate_output_language(context.debate),
     )
 
 

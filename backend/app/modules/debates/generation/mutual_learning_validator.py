@@ -21,8 +21,8 @@ from .types import (
     ValidatedTurn,
 )
 from .validator import (
-    _CJK_RE,
     _contains_semantic_text,
+    assert_speech_language,
     count_turn_words,
     has_direct_vote_solicitation,
     has_explicit_source_claim,
@@ -255,7 +255,18 @@ def _validate_question(
 class MutualLearningValidator:
     """Close the new DTO according to phase, barrier, evidence and queue rules."""
 
-    def __init__(self, *, min_words: int = 80, max_words: int = 200) -> None:
+    def __init__(
+        self,
+        *,
+        min_words: int = 80,
+        max_words: int = 200,
+        language: str = "en",
+    ) -> None:
+        self.language = language
+        if language == "zh":
+            from app.modules.debates.output_language import unit_bounds
+
+            min_words, max_words = unit_bounds("zh", min_words, max_words)
         if min_words < 1 or max_words < min_words:
             raise ValueError("invalid turn word bounds")
         self.min_words = min_words
@@ -290,10 +301,7 @@ class MutualLearningValidator:
                 "The turn phase does not match its explicit final marker.",
                 json_pointers=("/phase",),
             )
-        if _CJK_RE.search(result.speech):
-            raise TurnValidationError(
-                "Authoritative debate speech must be English.", json_pointers=("/speech",)
-            )
+        assert_speech_language(result.speech, self.language)
         if has_direct_vote_solicitation(result.speech):
             raise TurnValidationError(
                 "Direct vote solicitation is not allowed.", json_pointers=("/speech",)
@@ -496,7 +504,7 @@ class MutualLearningValidator:
                 )
                 for receipt in used_receipts
             )
-        word_count = count_turn_words(result.speech, question_text)
+        word_count = count_turn_words(result.speech, question_text, self.language)
         if word_count < self.min_words or word_count > self.max_words:
             raise TurnValidationError(
                 f"Speech must contain {self.min_words}-{self.max_words} words "

@@ -825,3 +825,54 @@ def test_a_finished_debate_stays_reviewable_after_its_playback_is_stopped(
         assert has_complete_finished_playback(session, debate_id), (
             "a completed run stays reviewable once its playback is stopped"
         )
+
+
+def test_a_complete_finish_releases_its_audio_and_a_partial_one_keeps_it(
+    interaction_app: Any,
+) -> None:
+    """Audio is the largest thing a finished lesson holds and the least re-read.
+
+    Only a run that reached the end qualifies. A partial Finish, a failure and
+    a stop keep theirs, because those are the runs a teacher goes back to.
+    """
+
+    from app.modules.debates.playback._control import PlaybackControlMixin
+    from app.modules.debates.playback.eligibility import has_complete_finished_playback
+
+    _app, database, _client = interaction_app
+    complete_id, _ = _seed_finished_debate(database)
+    partial_id, _ = _seed_finished_debate(database)
+    with database.session() as session:
+        # Make the second one a partial finish by unpublishing its last turn.
+        last = session.scalars(
+            select(DebateTurn)
+            .where(DebateTurn.debate_id == partial_id)
+            .order_by(DebateTurn.turn_index.desc())
+        ).first()
+        assert last is not None
+        last.publication_status = "unpublished"
+        session.commit()
+        assert has_complete_finished_playback(session, complete_id)
+        assert not has_complete_finished_playback(session, partial_id)
+
+    released: list[str] = []
+
+    class _Store:
+        def remove_debate(self, debate_id: str) -> None:
+            released.append(debate_id)
+
+    class _Repository:
+        def mark_debate_audio_deleted(self, _db: Any, debate_id: str) -> int:
+            released.append(f"marked:{debate_id}")
+            return 1
+
+    service = PlaybackControlMixin.__new__(PlaybackControlMixin)
+    service.audio_store = _Store()  # type: ignore[attr-defined]
+    service.repository = _Repository()  # type: ignore[attr-defined]
+    service._commit = lambda _db: None  # type: ignore[attr-defined]
+
+    with database.session() as session:
+        service._release_completed_audio(session, partial_id)
+        assert released == [], "a partial finish keeps its audio"
+        service._release_completed_audio(session, complete_id)
+        assert released == [complete_id, f"marked:{complete_id}"]

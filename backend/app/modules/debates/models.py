@@ -104,6 +104,9 @@ class Debate(Base):
     topic: Mapped[str] = mapped_column(Text, nullable=False)
     rule_set_id: Mapped[str] = mapped_column(String(100), nullable=False)
     rule_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    # Chosen when the teacher starts the debate and fixed from then on; see
+    # app/modules/debates/output_language.py for why it cannot change midway.
+    output_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

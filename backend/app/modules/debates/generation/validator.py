@@ -154,22 +154,58 @@ def _contains_semantic_text(speech: str, text: str) -> bool:
     return bool(question) and question in _semantic_text(speech)
 
 
-def count_turn_words(speech: str, question_text: str | None = None) -> int:
+def assert_speech_language(speech: str, language: str) -> None:
+    """Reject a speech written in a language this Debate did not choose.
+
+    The rule was "must be English", asserted separately in two validators. It
+    is now the Debate's own choice, checked in one place: a Chinese debate must
+    contain Han characters, and an English one must contain none.
+    """
+
+    from app.modules.debates.output_language import CJK_RE
+
+    has_cjk = CJK_RE.search(speech) is not None
+    if language == "zh":
+        if not has_cjk:
+            raise TurnValidationError(
+                "This debate is generated in Chinese.", json_pointers=("/speech",)
+            )
+        return
+    if has_cjk:
+        raise TurnValidationError(
+            "Authoritative debate speech must be English.", json_pointers=("/speech",)
+        )
+
+
+def count_turn_words(
+    speech: str,
+    question_text: str | None = None,
+    language: str = "en",
+) -> int:
     """Count speech plus a separate question exactly once.
 
     Providers commonly include their question in the speech body while also
     returning it in the structured field.  If the question is already present
     as a substring it is counted once; otherwise its words are added so a
-    metadata-only question cannot evade the 80–200 rule.
+    metadata-only question cannot evade the length rule.
+
+    A Chinese speech is counted in Han characters: the Latin word pattern finds
+    none at all in one, so every Chinese turn would have measured zero words
+    and failed the minimum.
     """
 
-    count = len(_words(speech))
+    from app.modules.debates.output_language import speech_units
+
+    def measure(value: str) -> int:
+        return speech_units(value, "zh") if language == "zh" else len(_words(value))
+
+    count = measure(speech)
     if (
         question_text
         and question_text.strip()
         and not _contains_semantic_text(speech, question_text)
     ):
-        count += len(_words(question_text))
+        count += measure(question_text)
     return count
 
 
@@ -233,7 +269,18 @@ def _expected_pending(
 class TurnValidator:
     """Server-authoritative validation for one provider result."""
 
-    def __init__(self, *, min_words: int = 80, max_words: int = 200) -> None:
+    def __init__(
+        self,
+        *,
+        min_words: int = 80,
+        max_words: int = 200,
+        language: str = "en",
+    ) -> None:
+        self.language = language
+        if language == "zh":
+            from app.modules.debates.output_language import unit_bounds
+
+            min_words, max_words = unit_bounds("zh", min_words, max_words)
         if min_words < 1 or max_words < min_words:
             raise ValueError("invalid turn word bounds")
         self.min_words = min_words
@@ -272,7 +319,7 @@ class TurnValidator:
         question_text = result.question.text if result.question.type != "none" else None
         if question_text is not None and not _contains_semantic_text(result.speech, question_text):
             raise TurnValidationError("The question text must appear in speech.")
-        word_count = count_turn_words(result.speech, question_text)
+        word_count = count_turn_words(result.speech, question_text, self.language)
         if word_count < self.min_words or word_count > self.max_words:
             raise TurnValidationError(
                 f"Speech must contain {self.min_words}-{self.max_words} words "
@@ -353,16 +400,15 @@ class TurnValidator:
             pending_question=pending_question,
         )
 
-    @staticmethod
     def _validate_base(
+        self,
         result: StructuredTurnResult,
         plan: TurnPlan,
         participant: ParticipantContext,
     ) -> None:
         if plan.participant_id != participant.participant_id:
             raise TurnValidationError("The turn plan and participant do not match.")
-        if _CJK_RE.search(result.speech):
-            raise TurnValidationError("Authoritative debate speech must be English.")
+        assert_speech_language(result.speech, self.language)
         if not result.speech.strip():
             raise TurnValidationError("Speech cannot be blank.")
         if participant.stance_mode == "open" and result.new_stance is not None:

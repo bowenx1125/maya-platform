@@ -128,6 +128,11 @@ class TurnGenerationService:
             else TurnValidator()
         )
         self.fence = fence
+        # A validator is stateless apart from its language and the bound that
+        # follows from it, so one per language is built lazily rather than one
+        # per turn. The injected validator stays authoritative for English so a
+        # test double is never quietly replaced.
+        self._validators_by_language: dict[str, object] = {"en": self.validator}
         self.rule_set_id = rule_set_id
         self.mock_retrieval_policy_id = mock_retrieval_policy_id
         self.llm_runtime = llm_runtime
@@ -268,7 +273,9 @@ class TurnGenerationService:
                 )
             receipts = self._receipts(retrieval)
             first_attempt = replace(first_attempt, retrieval_count=len(receipts))
-            mutual_input = make_mutual_learning_prompt_input(context, receipts)
+            mutual_input = make_mutual_learning_prompt_input(
+                context, receipts, output_language=context.output_language
+            )
             provider_prompt = build_provider_prompt_from_mutual_input(
                 mutual_input,
                 persona=context.participant.persona,  # type: ignore[arg-type]
@@ -545,7 +552,10 @@ class TurnGenerationService:
                 prepared,
                 context=context,
                 confirmed=options.get("confirmed"),
-                validator=cast(MutualLearningValidator, self.validator),
+                validator=cast(
+                    MutualLearningValidator,
+                    self._validator_for(context.output_language),
+                ),
             )
         except GenerationProviderError:
             raise
@@ -614,6 +624,20 @@ class TurnGenerationService:
             attempt=2 if traces and len(traces) > 1 else 1,
         )
 
+    def _validator_for(self, language: str) -> object:
+        """The validator that speaks this Debate's language."""
+
+        existing = self._validators_by_language.get(language)
+        if existing is not None:
+            return existing
+        built: object = (
+            MutualLearningValidator(language=language)
+            if self.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+            else TurnValidator(language=language)
+        )
+        self._validators_by_language[language] = built
+        return built
+
     def _validate_mutual_strict(
         self,
         raw: object,
@@ -622,7 +646,7 @@ class TurnGenerationService:
         receipts: Sequence[SnapshotRetrievalReceipt],
         predecessors: Sequence[FinalReadyTurn],
     ) -> ValidatedTurn:
-        validator = self.validator
+        validator = self._validator_for(context.output_language)
         if not isinstance(validator, MutualLearningValidator):
             raise TurnValidationError("The mutual-learning validator is not configured.")
         return validator.validate(
@@ -747,7 +771,9 @@ class TurnGenerationService:
                     )
                 receipts = self._receipts(retrieval)
                 attempt_record = replace(attempt_record, retrieval_count=len(receipts))
-                prompt = make_mutual_learning_prompt_input(context, receipts, subqueries)
+                prompt = make_mutual_learning_prompt_input(
+                    context, receipts, subqueries, output_language=context.output_language
+                )
                 if self.fence is not None:
                     active_claim = self._claim_for_attempt(
                         context,
@@ -897,7 +923,7 @@ class TurnGenerationService:
         receipts: Sequence[SnapshotRetrievalReceipt],
         predecessors: Sequence[FinalReadyTurn],
     ) -> ValidatedTurn:
-        validator = self.validator
+        validator = self._validator_for(context.output_language)
         if not isinstance(validator, MutualLearningValidator):
             raise TurnValidationError("The mutual-learning validator is not configured.")
         try:

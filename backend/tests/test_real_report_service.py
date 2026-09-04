@@ -370,6 +370,9 @@ def test_real_report_context_projection_uses_opaque_evidence_keys() -> None:
     request = service.build_real_report_request(context)
     assert request.topic == context.manifest.topic
     assert set(request.model_dump()) == {
+        # A validation input, not something the provider is asked; the
+        # canonical payload drops it.
+        "source_language",
         "topic",
         "participants",
         "speeches",

@@ -365,6 +365,7 @@ export default function TeacherDebateControlPage() {
               onAuthorityChange={updatePlaybackAuthority}
               onDetailChange={setDetail}
               onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
+              outputLanguage={locale === "zh" ? "zh" : "en"}
               actionInFlight={finishBusy}
               refreshSnapshot={refreshSnapshot}
             />

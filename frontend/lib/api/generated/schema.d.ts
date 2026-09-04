@@ -3314,6 +3314,12 @@ export interface operations {
                     expected_revision: number;
                     expected_current_audio_debate_id: components["schemas"]["Uuid"] | null;
                     confirm_previous_audio_cleanup: boolean;
+                    /**
+                     * @description The language this debate is generated in, fixed at start. Not the interface language: changing that afterwards translates the chrome, never the lesson.
+                     * @default en
+                     * @enum {string}
+                     */
+                    output_language?: "en" | "zh";
                 };
             };
         };

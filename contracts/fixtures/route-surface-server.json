@@ -1994,6 +1994,15 @@
                   },
                   "confirm_previous_audio_cleanup": {
                     "type": "boolean"
+                  },
+                  "output_language": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "zh"
+                    ],
+                    "default": "en",
+                    "description": "The language this debate is generated in, fixed at start. Not the interface language: changing that afterwards translates the chrome, never the lesson."
                   }
                 }
               }

@@ -61,6 +61,7 @@ from app.modules.debates.generation.runtime import LLMTurnRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
+from app.modules.debates.output_language import debate_output_language
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
@@ -884,6 +885,7 @@ class SqlTurnPreparer:
             participant=participant,
             participants=participants,
             predecessors=predecessors,
+            output_language=debate_output_language(debate),
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
             db,
