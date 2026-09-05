@@ -487,6 +487,67 @@ def test_open_rejects_unfinished_or_missing_private_lan_origin(interaction_app: 
     assert no_lan.value.status_code == 503
 
 
+def test_live_open_needs_the_beta_switch(interaction_app: Any) -> None:
+    """The switch is the only thing that opens a running debate.
+
+    With it off a running debate is refused exactly as before, so the classic
+    Debates surface keeps the after-the-debate rule it has always had.
+    """
+
+    app, database, _client = interaction_app
+    debate_id, _participant_ids = _seed_finished_debate(database)
+    settings = app.state.settings
+    assert settings.debates_beta_live_interaction is False
+    service, _collector = _service(database, settings)
+    with database.session() as session:
+        row = session.get(Debate, debate_id)
+        assert row is not None
+        row.status = "running"
+
+    with pytest.raises(PlatformError) as refused:
+        service.open_interaction(
+            actor_user_id=TEACHER_ID,
+            debate_id=debate_id,
+            idempotency_key="beta-live-off-000001",
+        )
+    assert refused.value.code == "invalid_state"
+
+    settings.debates_beta_live_interaction = True
+    live_service, _live_collector = _service(database, settings)
+    projection = live_service.open_interaction(
+        actor_user_id=TEACHER_ID,
+        debate_id=debate_id,
+        idempotency_key="beta-live-on-0000001",
+    )
+    assert projection.status == "open"
+    assert projection.public_url
+
+
+def test_live_open_needs_two_agents_on_the_bench(interaction_app: Any) -> None:
+    """A join code must not point at an empty stage."""
+
+    app, database, _client = interaction_app
+    debate_id, _participant_ids = _seed_finished_debate(database)
+    settings = app.state.settings
+    settings.debates_beta_live_interaction = True
+    service, _collector = _service(database, settings)
+    with database.session() as session:
+        row = session.get(Debate, debate_id)
+        assert row is not None
+        row.status = "running"
+        session.execute(delete(DebateTurn).where(DebateTurn.debate_id == debate_id))
+        session.flush()
+        session.execute(delete(DebateParticipant).where(DebateParticipant.debate_id == debate_id))
+
+    with pytest.raises(PlatformError) as bare:
+        service.open_interaction(
+            actor_user_id=TEACHER_ID,
+            debate_id=debate_id,
+            idempotency_key="beta-live-bare-00001",
+        )
+    assert bare.value.code == "invalid_state"
+
+
 def test_open_requires_the_complete_two_round_turn_plan(interaction_app: Any) -> None:
     app, database, _client = interaction_app
     debate_id, _participant_ids = _seed_finished_debate(database)

@@ -88,6 +88,16 @@ in `app/providers/control.py` is the single definition.
 
 ### In progress
 
+- **Debates (beta).** A sibling teacher surface at `/teacher/debates-beta`,
+  beside the classic Debates entry and sharing its debates. It replaces the
+  head-only avatar column with one WebGL scene holding every Agent as a full
+  skeletal figure, hangs the speaking Agent's opening line over its head, and
+  flies classroom messages right-to-left across the top third of the stage
+  while the debate is still running. The classic Debates surface is untouched:
+  the beta stage is a fork, the beta copy lives beside it, and the one shared
+  backend change is off by default. Checks pass; **not yet rendered in a
+  browser**, so nothing here is verified by running it.
+
 - **Real-Core acceptance run.** The 8-call chain reaches the debate LLM and
   publishes a turn, but the model's first reply does not yet satisfy the
   mutual-learning validator reliably. The repair attempt fixes it sometimes and
@@ -141,6 +151,20 @@ Each is a deliberate decision, reversible, and scoped to the Demo.
 6. **Configuration faults stay terminal.** `llm_tokenizer_unauthorized` and
    `provider_preflight_blocked` remain outside the safe generation codes, so a
    misconfiguration fails a Debate closed rather than parking it.
+
+7. **The beta stage is a fork, not a refactor.** `components/debate-beta/stage`
+   copies the classic stage rather than parameterising it, so Debates (beta)
+   cannot regress Debates while both are changing. The duplication is the cost
+   of that guarantee and is meant to end when beta either graduates or is
+   dropped; the pure protocol, label and speech-stream modules are imported
+   from the classic stage rather than copied.
+8. **`DEBATES_BETA_LIVE_INTERACTION` splits one gate into two.** Opening
+   classroom interaction required a finished debate and a complete round
+   matrix. Finalising still does. With the switch on, opening also accepts a
+   running debate with at least two Agents, which is what puts the join code on
+   the beta stage. The switch is off by default, so the classic surface keeps
+   the after-the-debate rule. **While it is on the vote is a running tally, not
+   a verdict taken once every Agent has spoken — report it that way.**
 
 ## Document map
 

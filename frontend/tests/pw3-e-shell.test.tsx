@@ -39,14 +39,17 @@ function renderTeacherShell(pathname: string) {
 describe("PW3-E teacher information architecture", () => {
   afterEach(() => cleanup());
 
-  it("exposes exactly Dashboard and Debates as primary navigation links", () => {
+  it("exposes Dashboard, Debates and the beta stage as primary navigation links", () => {
     renderTeacherShell("/teacher");
 
     const primaryNavigation = within(screen.getByRole("navigation"));
     const links = primaryNavigation.getAllByRole("link");
+    // Debates (beta) is a sibling entry, not a replacement: the classic
+    // Debates link stays exactly where it was.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/teacher",
       "/teacher/debates",
+      "/teacher/debates-beta",
     ]);
     expect(
       primaryNavigation.getByRole("link", { name: "Dashboard" }).className,
