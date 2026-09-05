@@ -88,6 +88,31 @@ in `app/providers/control.py` is the single definition.
 
 ### In progress
 
+- **Round two, on `debates-beta-stage`.** Landed and pushed so far:
+  - Every debate state has one word of its own. `stopped` used to read
+    "Finished", so an interrupted lesson and a complete one looked identical;
+    `waiting_next` used to read "Thinking" while nothing was generating at all.
+    Now Stopped / Completed / Running / Waiting.
+  - A draft that stops warming says so. Background warming halts at the first
+    turn that will not generate, logging one line and changing no status, so
+    the list kept reporting a frozen "Thinking 25%" for a draft that had given
+    up. The turn row already carried `generation_status` and
+    `safe_error_code`, so the listing reports the earliest failed turn as a
+    stall — no new column — the badge reads Stalled with the round and the
+    code, and Resume regenerates that one turn.
+  - Claim-in-speech is enforced by meaning, not by bytes. A curly apostrophe,
+    a line break inside a sentence or a repeated sentence used to cost the
+    whole turn, and the repeat rule was never stated in the prompt at all. One
+    matcher now serves both layers, forgives presentation and nothing else,
+    and the prompt says exactly that. Per-turn length widened to 60-320 words.
+
+  Next, in order: `rule_id` in the repair feedback so a repair attempt is told
+  which numbered requirement it broke; then real-provider runs to measure which
+  rules actually fail; then audio retention with Delete | Voice / All; then the
+  two surfaces split (Debates as the preview bench, beta as the classroom);
+  then the face swap and the interface pass. The full work order, including the
+  decisions behind each item, is the round-two artifact.
+
 - **Debates (beta).** A sibling teacher surface at `/teacher/debates-beta`,
   beside the classic Debates entry and sharing its debates. It replaces the
   head-only avatar column with one WebGL scene holding every Agent as a full
