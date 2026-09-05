@@ -59,6 +59,13 @@ go amber then green again without anyone touching code.
 
 ## 2. Phase 2 — the three bugs
 
+> **Do §4.1 first.** Bowen's own pass found something this section assumed
+> worked: a debate could run to completion and display none of its speeches.
+> Pre-warm generated each turn before the lesson reached it, and a turn that
+> was already prepared never announced itself, so playback never started and
+> nothing was published. It is fixed — but check that the speeches appear
+> before checking anything downstream of them.
+
 ### 2.1 Interaction entry survives a finished lesson
 
 Open `Debates` → a debate marked **Finished** that ran to completion → its
@@ -146,7 +153,8 @@ then start it again.
 1. Create a debate. You land back on the list.
 2. Watch its badge.
 
-- **Pass:** it reads **Thinking 25% → 50% → …**, then **Ready** at 100%. Open
+- **Pass:** it reads **Thinking 25% → 50% → …**, then **Ready** at 100%, and
+  **pressing Start makes the first speech appear on screen**. Open
   it before it reaches 100% and press Start — the cached turns play at once and
   only the uncached ones make you wait.
 - **Fail:** it sits on `Draft` and nothing generates until you press Start.
@@ -156,6 +164,13 @@ then start it again.
 - **Pass:** the first stops where it is (keeping what it cached) and the second
   starts warming. Only one warms at a time.
 - **Fail:** both climb at once, or the first loses its cached turns.
+
+**End works the first time.** Press `End` during a running lesson.
+
+- **Pass:** it finishes. No "The classroom state changed. Refresh and try
+  again." That message meant the page held a version one event behind the
+  server; End now re-reads and retries once by itself.
+- **Fail:** you are asked to refresh and press it again.
 
 **And the difference between yielding and ending:** press `End` on a draft.
 
