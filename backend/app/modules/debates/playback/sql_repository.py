@@ -339,6 +339,20 @@ class SqlPlaybackRepository(PlaybackRepository):
                     ).bindparams(bindparam("turn_ids", expanding=True)),
                     {"updated_at": _now(), "turn_ids": tuple(deferred_provider_turns)},
                 )
+        if self._has_table(db, "debate_turns"):
+            # A pending turn holding a transcript_hash cannot be prepared by
+            # anything: mark_turn_running requires that hash to be null, so the
+            # turn reads as ready to start, claims cleanly, and is refused at
+            # the last CAS every time. The pair is contradictory whatever
+            # produced it, so startup clears it rather than leaving a Debate
+            # that can never move.
+            db.execute(
+                text(
+                    "UPDATE debate_turns SET transcript_hash=NULL, updated_at=:updated_at "
+                    "WHERE generation_status='pending' AND transcript_hash IS NOT NULL"
+                ),
+                {"updated_at": _now()},
+            )
         affected: tuple[str, ...] = ()
         if self._has_table(db, "jobs"):
             all_inflight = tuple(
