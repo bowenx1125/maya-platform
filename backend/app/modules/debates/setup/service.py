@@ -690,6 +690,19 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         )
         .order_by(DebateTurn.turn_index)
     ).all()
+    # Generated, not published: during pre-warm nothing is public yet, and
+    # progress is exactly what has been generated so far.
+    prepared_turns = int(
+        db.scalar(
+            select(func.count())
+            .select_from(DebateTurn)
+            .where(
+                DebateTurn.debate_id == debate.id,
+                DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
+            )
+        )
+        or 0
+    )
     playback = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate.id))
     if playback is None:
         playback_dto = PlaybackStateDTO(
@@ -834,6 +847,11 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "last_sequence": debate.last_sequence,
             "rule_set_id": debate.rule_set_id,
             "round_count": _round_count_from_snapshot(debate),
+            # The list projection has carried these since pre-warm landed; the
+            # detail did not, so a debate's own page reported 0/0 and the
+            # language it was generated in came back as null.
+            "prepared_turns": prepared_turns,
+            "expected_turns": expected_turn_count(debate, len(participant_dtos)),
             "participants": participant_dtos,
             "public_turns": turn_dtos,
             "playback": playback_dto,

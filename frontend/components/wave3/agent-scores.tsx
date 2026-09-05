@@ -72,11 +72,6 @@ export function AgentScores({
         data={data}
         emptyLabel={zh ? "还没有公开发言。" : "No public speeches yet."}
       />
-      <p className="muted-copy">
-        {zh
-          ? `直接证明 +${EVIDENCE_GRADE_POINTS.direct}，间接证明 +${EVIDENCE_GRADE_POINTS.indirect}，没有证据不计分。这是发言挂上检索证据的密度，不是论证质量的评判。`
-          : `Direct evidence +${EVIDENCE_GRADE_POINTS.direct}, indirect +${EVIDENCE_GRADE_POINTS.indirect}, no evidence scores nothing. This counts how often a claim was tied to retrieved evidence, not how good an argument was.`}
-      </p>
     </section>
   );
 }

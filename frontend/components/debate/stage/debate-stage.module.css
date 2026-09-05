@@ -646,7 +646,10 @@
 
 .streamHeader h2 {
   margin: 0;
-  font-size: 1.02rem;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 1.32rem;
 }
 
 .streamCount {
@@ -830,4 +833,12 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* The lesson's state reads with the heading, at the heading's weight. */
+.streamState {
+  color: var(--indigo);
+  font-size: 0.72em;
+  font-weight: 640;
+  text-transform: lowercase;
 }

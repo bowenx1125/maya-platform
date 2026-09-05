@@ -128,3 +128,31 @@
   margin: 4px 0 0;
   white-space: pre-wrap;
 }
+
+/* The grade carries its own score: green earns 5, amber 2, plain nothing. */
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.mode[data-grade="direct"] {
+  border-color: transparent;
+  background: rgba(45, 138, 104, 0.14);
+  color: var(--green);
+}
+
+.mode[data-grade="indirect"] {
+  border-color: transparent;
+  background: var(--gold-soft);
+  color: #8a6a1f;
+}
+
+.modeScore {
+  font-weight: 700;
+}

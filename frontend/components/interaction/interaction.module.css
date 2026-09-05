@@ -82,14 +82,18 @@
       0.9fr
     );
   gap: 18px;
-  align-items: start;
+  /* The panels are columns of one row, so they end on the same line rather
+     than each stopping at its own content. The barrage feed grows into the
+     height the votes beside it already take. */
+  align-items: stretch;
 }
 
 .qrColumn,
 .totals,
 .barragePanel,
 .audienceSection {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-width: 0;
   padding: 16px;
@@ -181,7 +185,10 @@
 
 .barrageFeed {
   display: grid;
-  max-height: 280px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  max-height: 320px;
   gap: 9px;
   overflow: auto;
   scrollbar-width: thin;

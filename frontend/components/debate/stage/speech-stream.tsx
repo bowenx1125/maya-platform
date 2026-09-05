@@ -20,15 +20,13 @@ export type StreamTurn = {
 type SpeechStreamProps = {
   turns: StreamTurn[];
   labels: PlaybackStageLabels;
-  /** Slot letter, Agent name and stance for a participant id. */
-  describe: (participantId: string) => {
-    slot: string;
-    name: string;
-    position?: string;
-  };
+  /** Slot letter and Agent name for a participant id. */
+  describe: (participantId: string) => { slot: string; name: string };
   /** Phase caption for a turn, or null when the RuleSet has none. */
   phaseOf: (turn: StreamTurn) => string | null;
   emptyMessage: string;
+  /** The lesson's state, shown with the heading rather than in a pill of its own. */
+  status?: string;
   /** Replay the whole session, when the viewer may control playback. */
   onReplayAll?: () => void;
   replayAllDisabled?: boolean;
@@ -148,7 +146,6 @@ function StreamItem({
         ) : null}
       </p>
       <EvidenceTraceInspector
-        positionSummary={who.position}
         speech={turn.speech}
         trace={turn.evidence_trace as never}
       />
@@ -181,6 +178,7 @@ export function SpeechStream({
   describe,
   phaseOf,
   emptyMessage,
+  status,
   onReplayAll,
   replayAllDisabled,
 }: SpeechStreamProps) {
@@ -211,7 +209,13 @@ export function SpeechStream({
   return (
     <section className={styles.streamCard} aria-live="polite">
       <div className={styles.streamHeader}>
-        <h2>{labels.transcript}</h2>
+        {/* The heading says what this is and where the lesson stands, so the
+            state is read in the place the room is already looking rather than
+            in a separate pill under the face. */}
+        <h2>
+          {labels.transcript}
+          {status ? <span className={styles.streamState}>{status}</span> : null}
+        </h2>
         {turns.length ? (
           <span className={styles.streamCount}>{turns.length}</span>
         ) : null}

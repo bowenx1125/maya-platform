@@ -400,6 +400,55 @@ class PlaybackPreparationMixin(PlaybackCore):
                 self._get(debate, "cancellation_generation", default=0) or 0
             )
             if self._turn_ready(turn):
+                # Pre-warm makes this the normal case rather than a redundant
+                # re-enqueue: the turn was generated before the lesson reached
+                # it. Returning silently meant the classroom never heard
+                # "turn.ready", so playback never started, nothing was ever
+                # published, and a debate whose speeches were finished showed
+                # none of them.
+                #
+                # Only a running lesson standing on this turn may announce it.
+                # Saying it while warming a draft drove that draft's playback
+                # state forward with no teacher present, and it published
+                # itself to the end.
+                if prewarming or turn_index != current_index:
+                    return
+                state.status = "ready"
+                state.cursor_ms = 0
+                state.audio_duration_ms = int(self._get(turn, "audio_duration_ms", default=0) or 0)
+                state.pending_action = None
+                state.pending_ticket_hash = None
+                state.pending_media_command_id = None
+                self._clear_media_results(debate_id)
+                self._save(db, debate, state)
+                ready_now = self._stage_event(
+                    db,
+                    debate_id,
+                    "turn.ready",
+                    {
+                        "turn_id": turn_id,
+                        "slot": self._slot(
+                            self._participant_for_turn(self._participants(db, debate), turn)
+                        ),
+                        "round_no": self._round(turn),
+                        "audio_ready": True,
+                        "retrieval_status": str(
+                            self._get(turn, "retrieval_status", default="no_match")
+                        ),
+                        "grounding_mode": str(
+                            self._get(turn, "grounding_mode", default="general_reasoning")
+                        ),
+                        "audio_duration_ms": state.audio_duration_ms,
+                        **self._mutual_phase_payload(debate, turn),
+                    },
+                )
+                self._commit(db)
+                # Announced while the lock is held, which is safe here and
+                # nowhere else in this method: the commit above already
+                # happened, and publishing only pushes to the event hub, which
+                # never re-enters this lock. The alternative was to carry a
+                # flag past a hundred lines of generation that must not run.
+                await self._publish_events([ready_now])
                 return
             claim_token: str | None = None
             generation_fence: PreparedGenerationFence | None = None

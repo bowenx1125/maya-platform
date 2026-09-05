@@ -225,7 +225,7 @@ async function mountWithController() {
   const socket = ControlPageSocket.instances[0]!;
   socket.emit("open");
   socket.emit("message", acquired());
-  const finish = await screen.findByRole("button", { name: /Finish debate/ });
+  const finish = await screen.findByRole("button", { name: /^End$/ });
   await waitFor(() => expect(finish).toHaveProperty("disabled", false));
   return { api, finish, socket };
 }
@@ -368,7 +368,7 @@ describe("Wave 3 control-page Finish authority gate", () => {
       "disabled",
       false,
     );
-    expect(screen.queryByRole("button", { name: "Finish debate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "End" })).toBeNull();
     expect(
       screen.queryByText(
         "Finish is available only while the classroom status is Waiting.",

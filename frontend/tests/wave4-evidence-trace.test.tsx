@@ -47,8 +47,10 @@ describe("Wave 4 EvidenceTrace teaching inspector", () => {
     expect(screen.getByText(claim)).toBeTruthy();
     expect(screen.getByText("community.md")).toBeTruthy();
     expect(screen.getByText("md:document-a:chars:0-32")).toBeTruthy();
+    // The grade states what it is worth, so the panel needs no sentence
+    // underneath explaining that a lineage record is not a fact check.
     expect(screen.getByText("Direct evidence")).toBeTruthy();
-    expect(screen.getByText(/not fact checking/)).toBeTruthy();
+    expect(screen.getByText("+5")).toBeTruthy();
     expect(screen.queryByText(/verified true|fact-checked/i)).toBeNull();
   });
 

@@ -1,204 +1,250 @@
 # Maya Teaching Platform
 
-Maya is a local-first classroom platform. Student groups build culture-focused
-agents from an authored persona and an immutable Markdown knowledge snapshot. A
-teacher picks 2–5 published agents, runs a structured multi-round English
-mutual-learning debate with claim-level evidence, opens anonymous classroom
-interaction, and generates a mutual-learning report.
+Maya is a classroom tool for teaching how a point of view gets built and
+defended.
 
-- [PROJECT.md](docs/PROJECT.md) — what the product is and where it stands, including
-  the real-provider state and what is still open.
-- [AGENTS.md](AGENTS.md) — the working agreement for changing this repository.
+Students write an **Agent** — a character with a stated persona and a set of
+Markdown files it is allowed to draw on. When the group is happy with it they
+**publish** it, which freezes both the persona and the files so nobody can
+quietly change them later.
 
-> **Private local Demo.** Git holds source and non-secret fixtures only. The
-> ignored mode-0600 `.env` and `backend/config/demo-accounts/accounts.private.md`
-> are the only private runtime materials. The runtime `data/` directory is
-> disposable and never part of the repository.
+The teacher then picks two to five published Agents and runs a **debate**. The
+Agents take turns; each speech is generated from that Agent's own persona and
+its own frozen evidence, and every claim in it can be traced back to the file it
+came from. While the debate runs the class can vote and send messages
+anonymously from their phones. At the end Maya writes a report about what the
+debate covered.
 
-## What runs
+Everything runs on one machine. Nothing is uploaded anywhere unless you
+deliberately turn on a real AI provider, and the platform ships fully working
+without one.
 
-| Service    | Role                                                                  |
-| ---------- | --------------------------------------------------------------------- |
-| `gateway`  | Caddy single origin on port `8080`; `/api/*` and `/ws/*` to FastAPI   |
-| `frontend` | Next.js student, teacher and classroom interfaces                     |
-| `backend`  | FastAPI on Python 3.12 with SQLite, FFmpeg and a real readiness probe |
+---
 
-The browser only ever calls platform-owned `/api/v1` routes on the same origin.
-Supplier names, model ids, external voice ids, API keys and absolute paths stay
-server-side; the teacher-only provider disclosure is the single exception and
-shows only the reviewed supplier display name, region, purpose, outbound field
-classes and the exact policy hashes.
+## Before you start
 
-## First start on a new machine
+You need three things installed:
+
+- **Docker Desktop** — runs the whole platform. <https://docker.com>
+- **Node.js 24** and **pnpm** — build the web interface.
+- **Git** — to download the code.
+
+That is all. You do **not** need Python, an AI provider account, or an API key
+to run a class.
+
+---
+
+## Download and start it, the first time
 
 ```sh
+git clone https://github.com/bowenx1125/maya-platform.git
+cd maya-platform
 pnpm install --frozen-lockfile
 pnpm bootstrap:local
 docker compose up -d --build
+```
+
+`pnpm bootstrap:local` asks you once for a password that everyone in the demo
+will share, and writes it to a private file that is never committed. It refuses
+to overwrite an existing one, so you only ever run it once.
+
+The last command takes a few minutes the first time. When it finishes:
+
+```sh
 docker compose ps
 ```
 
-`pnpm bootstrap:local` asks once for a shared local Demo password, generates a
-session secret, and writes only the two ignored mode-0600 private files. It
-refuses to overwrite existing credentials, so it is not part of a daily start.
+Wait until `backend` and `frontend` both say **healthy**, then open
+**<http://localhost:8080>**.
 
-The backend applies the checked-in Alembic migrations, verifies or creates the
-Demo seed, and only then reports ready. All six provider selectors default to
-`mock`; real supplier keys are optional and stay local.
+Sign in as **Maya** (the teacher). The platform starts with a course already
+set up: one teacher, three students (Bowen, Kaikai, Jade), and three published
+Agents — Socrates, Plato and Laozi — so you can run a debate immediately
+without building anything first.
 
-Switching a selector to `dashscope` also needs a reviewed provider policy
-imported into the runtime database — a key alone is not enough, and deleting
-`data/` deletes the import. See [docs/REAL_PROVIDER_SETUP.md](docs/REAL_PROVIDER_SETUP.md).
+---
 
-The seed creates one course, one teacher (Maya) and one group of three
-students (Bowen, Kaikai and Jade), plus three published demo agents — Socrates,
-Plato and Laozi, one confirmed by each student. A teacher can therefore open a
-multi-agent debate immediately, with no student setup.
-
-## Daily start
+## Starting it again later
 
 ```sh
-cd /Users/xubosmell/Desktop/Maya/maya-platform
-docker compose up -d
-docker compose ps
-```
-
-Wait for `backend` and `frontend` to report `healthy`, then open
-`http://localhost:8080`.
-
-Use `docker compose up -d --build` when application code, dependencies,
-Dockerfiles or build-time settings changed.
-
-For QR, phone or live classroom checks, set `CLASSROOM_PUBLIC_BASE_URL` in the
-ignored `.env` to this machine's private-LAN origin and restart. That value has
-to satisfy two rules at once: the QR code rejects loopback and needs a
-private-LAN address, while the CSRF origin check compares the port. Use the LAN
-address with the port the stack actually publishes.
-
-## Resetting the runtime
-
-```sh
-docker compose down
-uv run --project backend python scripts/reset_demo_runtime.py
+cd maya-platform
 docker compose up -d
 ```
 
-The reset renames the runtime directory instead of deleting it. **Always
-`down` before `up -d` across a reset**: a bind mount follows the original
-inode, so a container that was only stopped keeps writing into the quarantined
-copy while host-side tools act on the new `data`.
+Open <http://localhost:8080> once `docker compose ps` says healthy.
 
-## Local checks
+If you have pulled new code, add `--build`:
 
 ```sh
-cd backend && uv run pytest -p no:warnings && uv run ruff check . && uv run mypy app
+git pull && docker compose up -d --build
 ```
+
+**If the classroom link stops working after you change networks**, your
+machine's address changed. One command fixes it:
 
 ```sh
-pnpm -C frontend test --run && pnpm frontend:typecheck && pnpm frontend:lint
+python3 scripts/refresh_classroom_address.py
+docker compose up -d
 ```
 
-```sh
-pnpm docs:check
-pnpm exec prettier --check .
-node scripts/check_frozen_openapi.mjs
-node scripts/check_generated_contracts.mjs
-node scripts/check_repo_boundary.mjs --probe-generated
-```
+(`up -d`, not `start` — `start` reuses the old settings.)
 
-Run backend tests from `backend/`. The application reads `.env` relative to the
-working directory, so running them from the repository root loads the real
-`.env` and fails CSRF-sensitive tests for reasons unrelated to your change.
-[AGENTS.md](AGENTS.md) lists the complete battery and the contract-change
-procedure.
+---
 
-## Switching between Mock and real providers
+## Using it
 
-Six selectors decide what is real. They all ship as `mock`, and the whole Demo
-runs that way — nothing below is needed to give a class.
+### Run a debate
 
-Three can run against DashScope: `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
-`EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
-Demo.
+1. **Debates → New debate.** Type a question, click two to five Agents in the
+   order you want them to speak, and choose how many rounds (2–5).
+2. **Create.** You land back on the list, and the debate starts preparing
+   itself — the badge counts up, `Thinking 25% → 50% → …`, then `Ready`.
+   You can open it and start before it reaches 100%; the prepared turns play
+   immediately and only the unprepared ones make you wait.
+3. **Open it and press Start.** The first Agent speaks. Press **Next** for each
+   following turn — the room moves when you decide it moves, not on a timer.
+4. Under each speech, **Check RAG** opens the evidence: which claim came from
+   which file, and whether that claim had direct evidence (+5), indirect (+2),
+   or none (+0).
+5. **End** finishes the debate.
 
-### Check what is running now
+Only one debate can run at a time per course. If you left an old one running,
+the platform tells you which one and gives you a **Release** button right
+there — you never need a terminal to get unstuck.
+
+### Let the class join in
+
+From a finished debate, open **Interaction**. Students scan the QR code on
+their phones to vote and send messages. Their votes are anonymous.
+
+When you close the interaction, Maya writes the report. The same page shows,
+top to bottom: the vote, the messages, each Agent's evidence score, and the
+report.
+
+### English or Chinese
+
+The **中文 / English** switch in the top bar changes the interface at any time.
+
+It also decides what language the **debate** is generated in — but only at the
+moment you press Start. After that the debate stays in the language it began
+in, because every turn is written from the turns before it and pre-prepared
+ahead of you. Switching afterwards changes the interface only.
+
+---
+
+## Turning on a real AI provider
+
+**You do not need this.** Maya ships with every AI piece simulated, and a whole
+class runs that way. Turn a real provider on only if you specifically want real
+generated text.
+
+Six switches decide what is real; all of them start as `mock`. Three can use
+DashScope: `LLM_PROVIDER` (the debate), `MAYA_REPORT_PROVIDER` (the report) and
+`EMBEDDING_PROVIDER` (evidence search). Voice and text-to-speech stay simulated.
+
+**See what is real right now:**
 
 ```sh
 curl -s http://localhost:8080/api/v1/demo/composition | python3 -m json.tool
 ```
 
-The teacher home shows the same split in its composition strip, so a class can
-never be misled about which pieces are real.
+The teacher home shows the same thing, so a class is never misled about which
+pieces are real.
 
-### Mock to real
-
-**1. Install the reviewed provider policy — once per machine.** A supplier key
-is not enough: without a policy row every turn fails closed with
-`provider_preflight_blocked`. This reads each published supplier document,
-records its SHA-256 and the time it was read, and saves the result outside
-`data/` so a runtime reset no longer destroys it.
+**Step 1 — install the reviewed provider policy (once per machine).** An API
+key on its own is not enough: without this, every turn stops with
+`provider_preflight_blocked`. This reads each supplier's published document,
+records its hash and when you read it, and stores the result outside `data/` so
+resetting the runtime does not destroy it.
 
 ```sh
-docker compose stop backend && uv run --directory backend python ../scripts/import_provider_review.py --accept-account-settings && docker compose up -d
+docker compose stop backend
+uv run --directory backend python ../scripts/import_provider_review.py --accept-account-settings
+docker compose up -d
 ```
 
-Stop the backend first: it holds the SQLite writer lock. Use `up -d` afterwards,
-not `start` — `start` reuses the container's old environment and would keep the
-previous policy hashes.
+Stop the backend first — it holds the database lock.
 
-Optionally set `DEMO_AUTO_CONFIRM_PROVIDER=true` in `.env` to carry standing
-consent for the per-turn disclosure so a lesson is not interrupted. It has
-effect only while `DEMO_MODE` is true, every automatic confirmation is logged,
-and clearing it restores per-turn confirmation.
-
-**2. Turn the selectors on and restart:**
+**Step 2 — turn the switches on:**
 
 ```sh
 sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=dashscope/; s/^MAYA_REPORT_PROVIDER=.*/MAYA_REPORT_PROVIDER=dashscope/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=dashscope/' .env && docker compose up -d
 ```
 
-On Linux use `sed -i` without the `''`.
+On Linux, `sed -i` without the `''`.
 
-**3. Confirm** that Embedding, Debate LLM and Maya Report now report `real`
-using the check command above.
+**Going back to simulated:** the same command with `mock` instead of
+`dashscope`. Your imported policy stays, so turning it on again later needs
+only step 2.
 
-### Real back to Mock
+Optional: `DEMO_AUTO_CONFIRM_PROVIDER=true` in `.env` confirms the per-turn
+disclosure for you so a lesson is not interrupted. Every automatic confirmation
+is still logged, and removing the line restores confirming by hand.
 
-```sh
-sed -i '' 's/^LLM_PROVIDER=.*/LLM_PROVIDER=mock/; s/^MAYA_REPORT_PROVIDER=.*/MAYA_REPORT_PROVIDER=mock/; s/^EMBEDDING_PROVIDER=.*/EMBEDDING_PROVIDER=mock/' .env && docker compose up -d
-```
+[docs/REAL_PROVIDER_SETUP.md](docs/REAL_PROVIDER_SETUP.md) has the full detail.
 
-The imported policy rows stay in the database and are simply unused, so
-switching back to real later needs only step 4.
+---
 
-### What a real run costs you in attention
-
-A real run is bounded by an acceptance ledger whose call plan is derived from
-the debate's own shape rather than a fixed number, and no provider request is
-ever retried automatically. Every real request is disclosed to the teacher and
-confirmed before it is sent, so a real session is exercised through the product
-itself: log in, create a debate between the seeded Agents, and confirm each
-disclosure as it appears.
-
-Deleting `data/` deletes the imported policies along with the runtime, so keep
-your policy JSON outside the repository. `docs/REAL_PROVIDER_SETUP.md` has the
-full detail.
-
-## Logs and shutdown
+## Stopping, resetting, and looking at logs
 
 ```sh
-docker compose logs -f --tail=100
-docker compose stop
+docker compose stop                    # stop, keeping everything
+docker compose logs -f --tail=100      # watch what the platform is doing
 ```
 
-`stop` preserves the local SQLite database and files. Avoid
-`docker compose down -v`, which removes Docker volumes; ordinary runtime data
-is bind-mounted under the ignored `data/` directory.
+To throw away all debates, reports and recordings and start from a clean seed:
 
-## Frozen frontend toolchain
+```sh
+docker compose down && rm -rf data && docker compose up -d --build
+```
 
-TypeScript `5.9.3`, ESLint `9.39.1`, Next.js `16.3.3`, React `19.2.8`, Vitest
-`4.1.11`, Vite `8.2.2`, jsdom `29.0.1`. ESLint 9 is a deliberate override:
-ESLint 10 crashes inside the Next.js 16.3.3 transitive parser before it lints
-any source. TypeScript 5.9.3 is required by openapi-typescript 7.13.0, and
-jsdom 29.0.1 matches the frozen Node 24.14 runtime.
+That deletes the runtime database. It does **not** delete your `.env` or your
+imported provider policy.
+
+Avoid `docker compose down -v` — it removes Docker volumes, and ordinary runtime
+data lives under `data/`.
+
+---
+
+## For developers
+
+Run every check the way CI does:
+
+```sh
+pnpm check
+```
+
+Backend tests must run from `backend/` — running them from the repository root
+loads the real `.env` and fails origin-sensitive tests for reasons unrelated to
+your change.
+
+- [AGENTS.md](AGENTS.md) — the working agreement for changing this repository,
+  including the four-step procedure for changing the frozen API contract.
+- [docs/PROJECT.md](docs/PROJECT.md) — what the product is and where it stands.
+- [docs/requirements/MANUAL_VERIFICATION.md](docs/requirements/MANUAL_VERIFICATION.md)
+  — how to check the classroom flow by hand.
+
+**What runs:**
+
+| Service    | Role                                                           |
+| ---------- | -------------------------------------------------------------- |
+| `gateway`  | Caddy, one origin on port `8080`, routing `/api/*` and `/ws/*` |
+| `frontend` | Next.js — student, teacher and classroom screens               |
+| `backend`  | FastAPI on Python 3.12 with SQLite and FFmpeg                  |
+
+The browser only ever calls Maya's own `/api/v1` routes on the same origin.
+Supplier names, model ids, API keys and file paths stay on the server; the
+teacher-only provider disclosure is the single exception, and it shows only the
+reviewed supplier name, region, purpose, outbound field classes and policy
+hashes.
+
+**Private files.** Git holds source and non-secret fixtures only. The ignored
+`.env` and `backend/config/demo-accounts/accounts.private.md` are the only
+private runtime materials, and `data/` is disposable.
+
+**Frozen frontend toolchain.** TypeScript `5.9.3`, ESLint `9.39.1`, Next.js
+`16.3.3`, React `19.2.8`, Vitest `4.1.11`, Vite `8.2.2`, jsdom `29.0.1`.
+ESLint 9 is a deliberate override: ESLint 10 crashes inside the Next.js 16.3.3
+parser before it lints anything. TypeScript 5.9.3 is required by
+openapi-typescript 7.13.0, and jsdom 29.0.1 matches the frozen Node 24.14
+runtime.

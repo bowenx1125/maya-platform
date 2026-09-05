@@ -1940,7 +1940,9 @@ export function DebateStage({
               (participant) => participant.slot === payload.slot,
             );
             setActiveParticipant(startedParticipant?.id ?? null);
-            setFailure(labelsRef.current.noPublishedSpeech);
+            // The snapshot has not caught up with the turn that just started.
+            // That is a moment, not a fault: raising an alert for it put a red
+            // card over the transcript during an ordinary lesson.
           }
           setAvatars(normaliseAvatarStates(payload.avatar_states));
           pendingActionRef.current =
@@ -3111,9 +3113,6 @@ export function DebateStage({
                   {connectionCopy}
                 </span>
               ) : null}
-              <span className={styles.playbackStatus} data-phase={phase}>
-                {visibleStatus}
-              </span>
             </div>
             {!readOnly ? (
               <div className={styles.controlsArea}>
@@ -3303,11 +3302,11 @@ export function DebateStage({
               return {
                 slot: owner?.slot ?? "",
                 name: owner?.agent_name ?? participantId,
-                position: owner?.current_position_summary ?? undefined,
               };
             }}
             emptyMessage={labels.noPublishedSpeech ?? ""}
             labels={labels}
+            status={visibleStatus}
             phaseOf={(turn) => {
               const phase = visibleRoundPhase(
                 turn as unknown as VisiblePlaybackTurn,

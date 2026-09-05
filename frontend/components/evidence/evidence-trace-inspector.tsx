@@ -1,6 +1,9 @@
 "use client";
 
-import { evidenceGrade } from "../../lib/evidence-grading";
+import {
+  EVIDENCE_GRADE_POINTS,
+  evidenceGrade,
+} from "../../lib/evidence-grading";
 import { useLocale } from "../locale";
 import styles from "./evidence-trace-inspector.module.css";
 
@@ -169,12 +172,9 @@ function claimTypeLabel(locale: string, type: EvidenceTraceClaimType): string {
 export function EvidenceTraceInspector({
   speech,
   trace,
-  positionSummary,
 }: {
   speech: string;
   trace?: unknown;
-  /** The speaker's stance, shown as its own row rather than inside the query. */
-  positionSummary?: string;
 }) {
   const { locale } = useLocale();
   const all = normaliseEvidenceTrace(trace);
@@ -212,22 +212,6 @@ export function EvidenceTraceInspector({
         {label(locale, { en: "Check RAG", zh: "查看 RAG" })}{" "}
         <span className={styles.count}>{rows.length}</span>
       </summary>
-      {positionSummary ? (
-        // The stance belongs to the speaker for this whole turn, so it is
-        // stated once above the claims rather than repeated under each one.
-        <p className={styles.detail}>
-          <span className={styles.detailLabel}>
-            {label(locale, { en: "Current position", zh: "当前立场" })}
-          </span>
-          {positionSummary}
-        </p>
-      ) : null}
-      <p className={styles.disclaimer}>
-        {label(locale, {
-          en: "This records generation lineage, not fact checking.",
-          zh: "这里记录生成来源链路，不代表事实核验。",
-        })}
-      </p>
       <ol className={styles.claimList}>
         {rows.map((row, index) => {
           const highlighted = speechSpanText(speech, row.speech_span);
@@ -242,8 +226,17 @@ export function EvidenceTraceInspector({
             >
               <div className={styles.claimHeader}>
                 <strong>{claimTypeLabel(locale, row.claim_type)}</strong>
-                <span className={styles.mode}>
+                {/* The grade and what it is worth, in one pill: green for
+                    direct, amber for indirect, plain for no evidence. The
+                    number is the same one the Agent score sums. */}
+                <span
+                  className={styles.mode}
+                  data-grade={evidenceGrade(row.support_mode)}
+                >
                   {supportLabel(locale, row.support_mode)}
+                  <span className={styles.modeScore}>
+                    +{EVIDENCE_GRADE_POINTS[evidenceGrade(row.support_mode)]}
+                  </span>
                 </span>
               </div>
               <p className={styles.highlightedSpeech}>
