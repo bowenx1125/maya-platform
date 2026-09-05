@@ -108,6 +108,15 @@ function finishBlockedCopy(
  * moves it, which used to take the classroom-interaction entry away from a
  * lesson that had finished perfectly well.
  */
+/** Whether a command was refused only because this page held an older version. */
+function isStaleControlVersion(cause: unknown): boolean {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    (cause as { code?: unknown }).code === "stale_control_version"
+  );
+}
+
 function hasCompletePublicPlan(detail: DebateDetail): boolean {
   return (
     detail.public_turns.length === expectedTurnCount(detail) &&
@@ -269,15 +278,31 @@ export default function TeacherDebateControlPage() {
     setError(null);
     const handle = finishKey.current ?? createIdempotencyHandle();
     finishKey.current = handle;
-    try {
-      const next = await api.finishDebate(
+    // The version this page holds can be one event behind the server -- a turn
+    // that became ready while the teacher was reading moves it. Telling them to
+    // refresh and press End again put the work of re-syncing on the person
+    // least able to do it, so the second attempt re-reads and retries once.
+    const attempt = async (from: DebateDetail) =>
+      api.finishDebate(
         debateId,
         {
-          expected_control_version: detail.playback.control_version,
-          expected_current_turn_id: detail.playback.current_turn_id,
+          expected_control_version: from.playback.control_version,
+          expected_current_turn_id: from.playback.current_turn_id,
         },
         { idempotency: handle },
       );
+    try {
+      let next: DebateDetail;
+      try {
+        next = await attempt(detail);
+      } catch (cause) {
+        if (!isStaleControlVersion(cause)) throw cause;
+        const fresh = await api.debate(debateId);
+        setDetail(fresh);
+        // A fresh key: the first attempt was refused, not applied.
+        finishKey.current = createIdempotencyHandle();
+        next = await attempt(fresh);
+      }
       finishKey.current = null;
       setDetail(next);
       await refreshSnapshot();
