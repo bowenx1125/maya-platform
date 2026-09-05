@@ -106,9 +106,27 @@ in `app/providers/control.py` is the single definition.
     matcher now serves both layers, forgives presentation and nothing else,
     and the prompt says exactly that. Per-turn length widened to 60-320 words.
 
-  Next, in order: `rule_id` in the repair feedback so a repair attempt is told
-  which numbered requirement it broke; then real-provider runs to measure which
-  rules actually fail; then audio retention with Delete | Voice / All; then the
+  - **Why real turns were getting stuck, found by reading the runtime.** A
+    real-provider turn is produced in two passes on purpose: the first accepts
+    and stages the reply the supplier was paid for, the second publishes it, so
+    a crash between them cannot lose a charged answer. Nothing was making the
+    second pass. Whether a turn ever became ready depended on whether something
+    else happened to prepare it again, and warming explicitly does not — a turn
+    that "did not advance" is how it recognises a dead one. So a turn could
+    stop one step short of ready with nothing to show for it: money spent,
+    answer staged, `generation_status` still `pending`, no safe error code, and
+    the debate parked at Running with nothing a teacher could act on. Thirteen
+    turns in the runtime were in exactly that state against sixty-seven that
+    published because something happened to touch them twice.
+    `prepare_turn` now makes that pass itself, gated on an accepted unpublished
+    operation so it can only ever publish, never generate. The stall marker and
+    Resume now cover running debates too, not only drafts.
+
+  Next, in order: a real-provider run to see whether generation is now
+  reliable, since the publication gap — not the validator — was the blocker;
+  `rule_id` in the repair feedback is deferred until that run says it is
+  needed, because the repair policy hash is written into a database CHECK
+  constraint and changing it costs a migration. Then audio retention with Delete | Voice / All; then the
   two surfaces split (Debates as the preview bench, beta as the classroom);
   then the face swap and the interface pass. The full work order, including the
   decisions behind each item, is the round-two artifact.
