@@ -353,7 +353,47 @@ class PlaybackCore:
                 )
                 if turn is not None:
                     await self._enqueue(debate, turn)
+        # Fencing an interrupted turn returns it to pending, which is only half
+        # a recovery: a lesson still marked running then had a current turn
+        # nobody was preparing, so it showed no speech, offered no Next and
+        # raised no failure to retry. Drive that turn again.
+        await self._resume_running_debates(db)
         return affected
+
+    async def _resume_running_debates(self, db: Any) -> None:
+        """Re-enqueue the current turn of every lesson still marked running."""
+
+        listing = getattr(self.repository, "running_debate_ids", None)
+        if not callable(listing):
+            return
+        for debate_id in listing(db):
+            debate = self.repository.get_debate(db, debate_id)
+            if debate is None:
+                continue
+            state = self._state(db, debate)
+            if state.current_turn_id is None:
+                continue
+            turn = next(
+                (
+                    item
+                    for item in self._turns(db, debate)
+                    if str(getattr(item, "id", "")) == state.current_turn_id
+                ),
+                None,
+            )
+            if turn is None or self._turn_ready(turn):
+                # A ready turn needs no work; prepare_turn announces it when
+                # the classroom reconnects.
+                continue
+            # Only a turn the fence returned to a clean pending state. Recovery
+            # deliberately parks some turns -- a missing LLM recovery input
+            # leaves one running with its own code, waiting for an operator --
+            # and re-driving those would turn a decision into a failure.
+            if str(self._get(turn, "generation_status", default="")) != "pending":
+                continue
+            if str(self._get(turn, "safe_error_code", default="") or ""):
+                continue
+            await self._enqueue(debate, turn)
 
     # ------------------------------------------------------------------
     # Generic repository/ORM helpers.  The setup and generation workers can

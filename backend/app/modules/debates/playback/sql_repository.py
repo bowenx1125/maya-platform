@@ -2621,6 +2621,18 @@ class SqlPlaybackRepository(PlaybackRepository):
             is not None
         )
 
+    def running_debate_ids(self, db: Any) -> tuple[str, ...]:
+        """Every lesson still marked running, for startup to drive again."""
+
+        if not self._has_table(db, "debates"):
+            return ()
+        return tuple(
+            str(row[0])
+            for row in db.execute(
+                text("SELECT id FROM debates WHERE status IN ('running','paused')")
+            ).all()
+        )
+
     def running_debate(self, db: Any, course_id: str, except_debate_id: str | None = None) -> Any:
         """Which debate holds this course's running slot, so the UI can name it.
 
