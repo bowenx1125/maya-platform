@@ -2985,6 +2985,9 @@ export function BetaDebateStage({
     playback.mode === "live" &&
     playback.status === "completed" &&
     (controllerReady || replayableTerminalSource);
+  // Before anything has been said the only move is Start; afterwards it is
+  // always Next, so the pair collapses into one control.
+  const canStart = detailState.status === "draft";
   const canAdvance =
     playback.status === "waiting_next" &&
     playback.next_turn_ready &&
@@ -3212,23 +3215,17 @@ export function BetaDebateStage({
                   role="group"
                   aria-label={labels.stageTitle}
                 >
+                  {/* One button, because a teacher only ever has one move.
+                      It says Start until the debate has begun and Next after,
+                      so the room advances on a single place to press instead
+                      of a pair where one is always dead. */}
                   <button
                     className="primary-action"
                     type="button"
-                    disabled={
-                      busyAction !== null || detailState.status !== "draft"
-                    }
-                    onClick={() => void runControl("start")}
+                    disabled={canStart ? busyAction !== null : !canAdvance}
+                    onClick={() => void runControl(canStart ? "start" : "next")}
                   >
-                    {labels.start}
-                  </button>
-                  <button
-                    className="primary-action"
-                    type="button"
-                    disabled={!canAdvance}
-                    onClick={() => void runControl("next")}
-                  >
-                    {labels.next}
+                    {canStart ? labels.start : labels.next}
                   </button>
                 </div>
                 {busyAction ? (

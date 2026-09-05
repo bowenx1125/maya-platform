@@ -23,21 +23,23 @@ function teacherCourseId(
 const COPY = {
   en: {
     eyebrow: "Debates (beta)",
-    title: "The 3D bench",
+    title: "Classroom Stage",
     unavailable: "No teacher course is available for this account.",
-    empty: "No debates yet. Create one in Debates, then open it here.",
+    empty:
+      "Nothing ready for class yet. A debate appears here once it has been run to the end in Preview Debates.",
     open: "Open on the bench",
-    classic: "Debates",
-    classicHint: "Create, edit and report on debates in the classic surface.",
+    classic: "Preview Debates",
+    classicHint: "Create, run and check debates before class in",
   },
   zh: {
     eyebrow: "Debates（beta）",
-    title: "3D 讲席",
+    title: "课堂讲席",
     unavailable: "当前账号没有可用的教师课程。",
-    empty: "还没有辩论。先在 Debates 里创建，再回到这里打开。",
+    empty:
+      "还没有可用于上课的辩论。在 Preview Debates 里把一场跑到结束，它就会出现在这里。",
     open: "在讲席上打开",
-    classic: "Debates",
-    classicHint: "创建、编辑和生成报告仍在原来的 Debates 页面。",
+    classic: "Preview Debates",
+    classicHint: "课前的创建、生成与检查在",
   },
 } as const;
 
@@ -59,7 +61,17 @@ export function BetaDebateList() {
     setLoading(true);
     setError(null);
     try {
-      setDebates(await api.debates(courseId));
+      // Only debates that reached the end. Generation, and every way it can
+      // fail, belongs to the preview bench before class; the classroom
+      // replays what is already written and calls no provider at all.
+      const all = await api.debates(courseId);
+      setDebates(
+        all.filter(
+          (debate) =>
+            debate.status === "debate_finished" ||
+            debate.status === "completed",
+        ),
+      );
     } catch (cause) {
       setError(cause);
     } finally {
