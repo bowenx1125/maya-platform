@@ -1,13 +1,19 @@
 import * as THREE from "three";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
-import type { AvatarConfig, AvatarState } from "../avatar";
+import {
+  avatarMotionFrame,
+  expressionForAvatarState,
+  type AvatarConfig,
+  type AvatarExpression,
+  type AvatarState,
+} from "../avatar";
 import {
   STAGE_BASE_ASSET,
-  STAGE_CLIP_ASSETS,
+  STAGE_DECODER_PATH,
   isStageAssetUrl,
-  type StageClipName,
 } from "./assets";
 
 export type StageCharacter = {
@@ -36,52 +42,68 @@ export type ScholarStageOptions = {
   onAnchors?: (anchors: StageAnchor[]) => void;
 };
 
-/**
- * Robe tints, so five copies of one mesh read as five different speakers.
- *
- * The platform avatar themes name skin colours for a head-only crop. Here the
- * same four themes tint the whole figure instead, because the body is what a
- * classroom actually sees from the back row.
- */
-const ROBE_TINTS: Record<AvatarConfig["material_theme"], number> = {
-  demo: 0xffffff,
-  warm_sand: 0xe7c9a6,
-  cool_slate: 0xb9c6d4,
-  civic_olive: 0xc3bd93,
+/** Skin, by the platform's own avatar themes. */
+const SKIN_COLORS: Record<AvatarConfig["material_theme"], string> = {
+  demo: "#d5a27c",
+  warm_sand: "#c88b68",
+  cool_slate: "#a9b9c9",
+  civic_olive: "#a49a75",
 };
+
+/** Clothing, so five copies of one figure read as five different speakers. */
+const OUTFIT_TINTS: Record<AvatarConfig["material_theme"], string> = {
+  demo: "#8e93a8",
+  warm_sand: "#c9a077",
+  cool_slate: "#7f93ab",
+  civic_olive: "#8f9670",
+};
+
+const EYE_COLORS: Record<string, string> = {
+  default: "#72523e",
+  brown: "#5b3726",
+  hazel: "#8a6a3e",
+  blue: "#5d86b2",
+  green: "#5b8968",
+  gray: "#7e8790",
+};
+
+/**
+ * The same expression vocabulary the platform's avatar preview uses, so a
+ * config a student chose in the editor reads the same way on the bench.
+ */
+const EXPRESSION_TARGETS: Record<AvatarExpression, Record<string, number>> = {
+  neutral: {},
+  attentive: { browInnerUp: 0.5, eyeWideLeft: 0.35, eyeWideRight: 0.35 },
+  happy: { mouthSmile: 0.75, mouthSmileLeft: 0.55, mouthSmileRight: 0.55 },
+  serious_angry: { browDownLeft: 0.55, browDownRight: 0.55, mouthPress: 0.25 },
+  sad: { mouthFrownLeft: 0.55, mouthFrownRight: 0.55, browInnerUp: 0.3 },
+};
+
+const EXPRESSION_STRENGTH: Record<AvatarConfig["expression_strength"], number> =
+  { low: 0.35, medium: 0.65, high: 1 };
 
 /** How far the speaker steps out of the line, in model heights. */
 const SPEAKER_STEP_FORWARD = 0.16;
 const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
 
-type MicroMode = "rest" | "listening" | "thinking" | "speaking" | "waving";
+type MorphMesh = THREE.Mesh & {
+  morphTargetDictionary?: Record<string, number>;
+  morphTargetInfluences?: number[];
+};
 
 type Character = {
   spec: StageCharacter;
   root: THREE.Object3D;
-  mixer: THREE.AnimationMixer;
-  actions: Map<string, THREE.AnimationAction>;
-  current: THREE.AnimationAction | null;
-  currentName: string;
+  meshes: MorphMesh[];
   headBone: THREE.Object3D | null;
   neckBone: THREE.Object3D | null;
   torsoBone: THREE.Object3D | null;
-  homeX: number;
   homeZ: number;
-  micro: MicroMode;
-  microBlend: Record<MicroMode, number>;
+  state: AvatarState;
   stateStartedAt: number;
   forward: number;
 };
-
-const MICRO_MODES: MicroMode[] = [
-  "rest",
-  "listening",
-  "thinking",
-  "speaking",
-  "waving",
-];
 
 function findBone(
   root: THREE.Object3D,
@@ -90,21 +112,23 @@ function findBone(
   let found: THREE.Object3D | null = null;
   root.traverse((object) => {
     if (found) return;
-    const name = object.name.toLowerCase();
-    if (names.some((candidate) => name === candidate)) found = object;
+    if (names.includes(object.name.toLowerCase())) found = object;
   });
   return found;
+}
+
+function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
+  return Boolean((object as MorphMesh).isMesh);
 }
 
 function disposeObject(root: THREE.Object3D): void {
   const seen = new Set<THREE.Material>();
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    mesh.geometry.dispose();
-    const materials = Array.isArray(mesh.material)
-      ? mesh.material
-      : [mesh.material];
+    if (!isMorphMesh(object)) return;
+    object.geometry.dispose();
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
     for (const material of materials) {
       if (seen.has(material)) continue;
       seen.add(material);
@@ -117,8 +141,14 @@ function disposeObject(root: THREE.Object3D): void {
  * One WebGL context, one render loop, every speaker in it.
  *
  * A canvas per Agent was the obvious shape and the wrong one: five contexts
- * mean five loops and five copies of an 11 MB skinned mesh. The mesh is loaded
- * once and cloned per speaker, so a five-Agent stage costs one download.
+ * mean five loops and five copies of the same mesh. The figure is loaded once
+ * and cloned per speaker, so a five-Agent bench costs one download.
+ *
+ * There are no animation clips, and that is the trade that matters. A bench of
+ * separately animated bodies could wave and sit but carried no blendshapes at
+ * all, so a speaking Agent could never open its mouth. This figure carries the
+ * full ARKit morph set instead, and a speech that moves the mouth reads as
+ * speech from the back of a room where a gesture does not.
  */
 export class ScholarStage {
   private readonly canvas: HTMLCanvasElement;
@@ -126,13 +156,13 @@ export class ScholarStage {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly loader = new GLTFLoader();
+  private readonly draco = new DRACOLoader();
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
 
   private template: THREE.Object3D | null = null;
   private templateScale = 1;
-  private readonly clips = new Map<string, THREE.AnimationClip>();
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
   private frame: number | null = null;
@@ -158,7 +188,7 @@ export class ScholarStage {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 60);
-    this.camera.position.set(0, 1.45, 4.5);
+    this.camera.position.set(0, 1.42, 4.4);
     this.scene.add(this.camera);
 
     this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x4a5464, 2.1));
@@ -184,9 +214,11 @@ export class ScholarStage {
       ).matches;
     }
 
+    this.draco.setDecoderPath(STAGE_DECODER_PATH);
+    this.loader.setDRACOLoader(this.draco);
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.resize();
-    void this.load();
+    this.load();
   }
 
   setCharacters(specs: StageCharacter[]): void {
@@ -197,26 +229,18 @@ export class ScholarStage {
     this.rebuild(specs);
   }
 
-  /** Before Start, and after the debate ends, the whole bench sits. */
+  /** Before the first turn and after the last, the bench is simply calm. */
   setResting(resting: boolean): void {
-    if (this.resting === resting) return;
     this.resting = resting;
-    for (const character of this.characters) {
-      this.applyAction(character, character.currentName, true);
-    }
   }
 
   setVisual(id: string, state: AvatarState): void {
     const character = this.characters.find((item) => item.spec.id === id);
-    if (!character) return;
-    const action = this.actionForState(state);
-    const micro = this.microForState(state);
-    if (character.currentName !== action) this.applyAction(character, action);
-    if (character.micro !== micro) {
-      character.micro = micro;
-      character.stateStartedAt = performance.now();
-    }
+    if (!character || character.state === state) return;
+    character.state = state;
+    character.stateStartedAt = performance.now();
     character.forward = state === "speaking" ? SPEAKER_STEP_FORWARD : 0;
+    this.applyExpression(character);
   }
 
   dispose(): void {
@@ -226,106 +250,52 @@ export class ScholarStage {
     this.frame = null;
     window.removeEventListener("resize", this.resizeHandler);
     for (const character of this.characters) {
-      character.mixer.stopAllAction();
       this.scene.remove(character.root);
       disposeObject(character.root);
     }
     this.characters.length = 0;
     if (this.template) disposeObject(this.template);
     this.template = null;
+    this.draco.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }
 
-  private actionForState(state: AvatarState): string {
-    if (this.resting) return "sit";
-    if (state === "speaking") return "talk";
-    return "idle";
-  }
-
-  private microForState(state: AvatarState): MicroMode {
-    switch (state) {
-      case "speaking":
-        return "speaking";
-      case "thinking":
-        return "thinking";
-      case "listening":
-        return "listening";
-      case "nod_yes":
-        return "waving";
-      default:
-        return "rest";
+  private load(): void {
+    if (!isStageAssetUrl(STAGE_BASE_ASSET)) {
+      this.onError?.(new Error("stage_asset_rejected"));
+      return;
     }
-  }
-
-  private async load(): Promise<void> {
-    try {
-      if (!isStageAssetUrl(STAGE_BASE_ASSET)) {
-        throw new Error("stage_asset_rejected");
-      }
-      const base = await this.loader.loadAsync(STAGE_BASE_ASSET);
-      if (this.disposed) {
-        disposeObject(base.scene);
-        return;
-      }
-
-      const bounds = new THREE.Box3().setFromObject(base.scene);
-      const size = bounds.getSize(new THREE.Vector3());
-      this.templateScale = size.y > 0 ? NORMALISED_HEIGHT / size.y : 1;
-      this.template = base.scene;
-      for (const clip of base.animations) this.clips.set("idle", clip);
-
-      if (this.pending) {
-        this.rebuild(this.pending);
-        this.pending = null;
-      }
-      this.startLoop();
-      this.onReady?.();
-
-      // The extra clips are small and never block the first frame: the bench
-      // is already standing and breathing while they arrive.
-      await Promise.allSettled(
-        (Object.keys(STAGE_CLIP_ASSETS) as StageClipName[]).map(
-          async (name) => {
-            const url = STAGE_CLIP_ASSETS[name];
-            if (!isStageAssetUrl(url)) return;
-            const gltf = await this.loader.loadAsync(url);
-            const clip = gltf.animations[0];
-            if (!clip || this.disposed) return;
-            this.clips.set(name, clip);
-            for (const character of this.characters)
-              this.bindClip(character, name, clip);
-          },
-        ),
-      );
-
-      if (this.resting) {
-        for (const character of this.characters)
-          this.applyAction(character, "sit", true);
-      }
-    } catch (cause) {
-      if (this.disposed) return;
-      this.onError?.(
-        cause instanceof Error ? cause : new Error("stage_asset_failed"),
-      );
-    }
-  }
-
-  private bindClip(
-    character: Character,
-    name: string,
-    clip: THREE.AnimationClip,
-  ): void {
-    if (character.actions.has(name)) return;
-    character.actions.set(
-      name,
-      character.mixer.clipAction(clip, character.root),
+    this.loader.load(
+      STAGE_BASE_ASSET,
+      (gltf) => {
+        if (this.disposed) {
+          disposeObject(gltf.scene);
+          return;
+        }
+        const bounds = new THREE.Box3().setFromObject(gltf.scene);
+        const size = bounds.getSize(new THREE.Vector3());
+        this.templateScale = size.y > 0 ? NORMALISED_HEIGHT / size.y : 1;
+        this.template = gltf.scene;
+        if (this.pending) {
+          this.rebuild(this.pending);
+          this.pending = null;
+        }
+        this.startLoop();
+        this.onReady?.();
+      },
+      undefined,
+      (cause) => {
+        if (this.disposed) return;
+        this.onError?.(
+          cause instanceof Error ? cause : new Error("stage_asset_failed"),
+        );
+      },
     );
   }
 
   private rebuild(specs: StageCharacter[]): void {
     for (const character of this.characters) {
-      character.mixer.stopAllAction();
       this.scene.remove(character.root);
       disposeObject(character.root);
     }
@@ -335,158 +305,165 @@ export class ScholarStage {
     const count = Math.max(1, specs.length);
     // A gentle arc rather than a straight rank: the far speakers turn a little
     // toward the middle, which is what makes a bench read as a conversation.
-    const spread = count === 1 ? 0 : Math.min(0.82, 2.4 / count);
+    const spread = count === 1 ? 0 : Math.min(0.86, 2.5 / count);
     specs.forEach((spec, index) => {
       const root = cloneSkinned(this.template as THREE.Object3D);
       root.scale.setScalar(this.templateScale);
       const centred = index - (count - 1) / 2;
-      const homeX = centred * spread * 1.35;
-      const homeZ = -Math.abs(centred) * 0.22;
-      root.position.set(homeX, 0, homeZ);
-      root.rotation.y = -centred * 0.16;
+      const homeZ = -Math.abs(centred) * 0.24;
+      root.position.set(centred * spread * 1.4, 0, homeZ);
+      root.rotation.y = -centred * 0.17;
 
-      const tint = new THREE.Color(
-        ROBE_TINTS[spec.config.material_theme] ?? ROBE_TINTS.demo,
-      );
-      root.traverse((object) => {
-        const mesh = object as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        mesh.frustumCulled = false;
-        const materials = Array.isArray(mesh.material)
-          ? mesh.material
-          : [mesh.material];
-        mesh.material = materials.map((source) => {
-          const material = source.clone() as THREE.MeshStandardMaterial;
-          if (material.color) material.color.multiply(tint);
-          return material;
-        });
-        if (!Array.isArray(mesh.material)) return;
-        if (mesh.material.length === 1) mesh.material = mesh.material[0];
-      });
+      const meshes: MorphMesh[] = [];
+      this.styleFigure(root, spec.config, meshes);
 
-      const mixer = new THREE.AnimationMixer(root);
       const character: Character = {
         spec,
         root,
-        mixer,
-        actions: new Map(),
-        current: null,
-        currentName: "",
+        meshes,
         headBone: findBone(root, ["head"]),
         neckBone: findBone(root, ["neck"]),
-        torsoBone: findBone(root, ["spine02", "spine01", "spine"]),
-        homeX,
+        torsoBone: findBone(root, ["spine2", "spine1", "spine"]),
         homeZ,
-        micro: "rest",
-        microBlend: {
-          rest: 1,
-          listening: 0,
-          thinking: 0,
-          speaking: 0,
-          waving: 0,
-        },
+        state: "idle",
         stateStartedAt: performance.now(),
         forward: 0,
       };
-      for (const [name, clip] of this.clips)
-        this.bindClip(character, name, clip);
-      this.applyAction(character, this.resting ? "sit" : "idle", true);
+      this.applyExpression(character);
       this.scene.add(root);
       this.characters.push(character);
     });
   }
 
-  private applyAction(
-    character: Character,
-    name: string,
-    immediate = false,
+  private styleFigure(
+    root: THREE.Object3D,
+    config: AvatarConfig,
+    meshes: MorphMesh[],
   ): void {
-    const resolved =
-      this.resting && character.actions.has("sit") ? "sit" : name;
-    const next =
-      character.actions.get(resolved) ?? character.actions.get("idle");
-    if (!next) return;
-    character.currentName = resolved;
-    if (next === character.current) return;
-    next.reset();
-    next.enabled = true;
-    next.setLoop(THREE.LoopRepeat, Infinity);
-    next.setEffectiveWeight(1);
-    next.play();
-    if (character.current && !immediate) {
-      next.crossFadeFrom(character.current, 0.42, false);
-    } else if (character.current) {
-      character.current.stop();
-    }
-    character.current = next;
+    const skin = new THREE.Color(
+      SKIN_COLORS[config.material_theme] ?? SKIN_COLORS.demo,
+    );
+    const outfit = new THREE.Color(
+      OUTFIT_TINTS[config.material_theme] ?? OUTFIT_TINTS.demo,
+    );
+    const eye = new THREE.Color(
+      EYE_COLORS[config.eye_color ?? "default"] ?? EYE_COLORS.default,
+    );
+    root.traverse((object) => {
+      if (!isMorphMesh(object)) return;
+      object.frustumCulled = false;
+      if (object.morphTargetDictionary && object.morphTargetInfluences) {
+        meshes.push(object);
+      }
+      const name = object.name.toLowerCase();
+      const sources = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      const styled = sources.map((source) => {
+        const material = source.clone() as THREE.MeshStandardMaterial;
+        if (material.color) {
+          if (name.includes("eye")) material.color.copy(eye);
+          else if (name.includes("head") || name.includes("body"))
+            material.color.copy(skin);
+          else if (name.includes("outfit")) material.color.multiply(outfit);
+        }
+        return material;
+      });
+      object.material = styled.length === 1 ? styled[0] : styled;
+    });
   }
 
   /**
-   * Additive bone motion on top of whichever clip is running.
-   *
-   * These meshes carry no blendshapes, so a speaking Agent cannot open its
-   * mouth. The head and torso do the work the mouth would: a nod on the beat
-   * while speaking, a tilt while thinking, a turn toward the speaker while
-   * listening.
+   * Expression is a held pose, so it is written once per state change rather
+   * than every frame; the mouth is animated on top of it while speaking.
    */
-  private applyMicroMotion(
+  private applyExpression(character: Character): void {
+    const expression = expressionForAvatarState(
+      character.state,
+      character.spec.config.default_expression,
+    );
+    const targets = EXPRESSION_TARGETS[expression];
+    const strength =
+      EXPRESSION_STRENGTH[character.spec.config.expression_strength];
+    for (const mesh of character.meshes) {
+      const dictionary = mesh.morphTargetDictionary;
+      const influences = mesh.morphTargetInfluences;
+      if (!dictionary || !influences) continue;
+      influences.fill(0);
+      for (const [name, value] of Object.entries(targets)) {
+        const index = dictionary[name];
+        if (index !== undefined) influences[index] = value * strength;
+      }
+    }
+  }
+
+  private animateCharacter(
     character: Character,
     delta: number,
     elapsed: number,
   ): void {
-    if (this.reducedMotion) return;
     const stateElapsed = (performance.now() - character.stateStartedAt) / 1000;
-    for (const mode of MICRO_MODES) {
-      character.microBlend[mode] = THREE.MathUtils.damp(
-        character.microBlend[mode],
-        character.micro === mode ? 1 : 0,
-        5.2,
-        delta,
-      );
-    }
+    const frame = avatarMotionFrame(
+      this.reducedMotion ? "idle" : character.state,
+      elapsed,
+      stateElapsed,
+      character.spec.config.motion_style,
+    );
 
-    const breathe = Math.sin(elapsed * 0.9);
-    const drift = Math.sin(elapsed * 0.47 + 1.1);
-    const talkNod = Math.sin(elapsed * 2.9);
-    const talkTurn = Math.sin(elapsed * 1.4 + 0.5);
-    const thinkTilt = Math.sin(elapsed * 0.85 + 0.4);
-    const blend = character.microBlend;
-
-    if (character.torsoBone) {
+    if (!this.reducedMotion) {
+      // Additive on the upper body rather than on the root: rotating the whole
+      // figure reads as the person swaying, not as attention moving.
+      const calm = this.resting ? 0.45 : 1;
       this.addRotation(
         character.torsoBone,
-        breathe * 0.012 * (blend.rest + blend.listening),
-        drift * 0.02 * blend.rest,
-        thinkTilt * 0.02 * blend.thinking,
+        frame.rotationX * 0.35 * calm,
+        frame.rotationY * 0.5 * calm,
+        frame.rotationZ * calm,
       );
-    }
-    if (character.neckBone) {
       this.addRotation(
         character.neckBone,
-        talkNod * 0.03 * blend.speaking,
-        talkTurn * 0.035 * blend.speaking - 0.06 * blend.thinking,
-        -0.05 * blend.thinking,
+        frame.rotationX * 0.5 * calm,
+        frame.rotationY * 0.6 * calm,
+        0,
       );
-    }
-    if (character.headBone) {
-      const nodEnvelope = Math.max(0, 1 - stateElapsed / 1.3);
       this.addRotation(
         character.headBone,
-        talkNod * 0.045 * blend.speaking +
-          Math.sin(stateElapsed * 10.5) * 0.09 * blend.waving * nodEnvelope,
-        drift * 0.03 * blend.listening,
-        thinkTilt * 0.03 * blend.thinking,
+        frame.rotationX * calm,
+        frame.rotationY * calm,
+        frame.rotationZ * 0.6 * calm,
       );
     }
+
+    for (const mesh of character.meshes) {
+      const dictionary = mesh.morphTargetDictionary;
+      const influences = mesh.morphTargetInfluences;
+      if (!dictionary || !influences) continue;
+      const mouth = dictionary.mouthOpen;
+      const jaw = dictionary.jawOpen;
+      if (character.state === "speaking") {
+        if (mouth !== undefined) influences[mouth] = frame.mouthOpen;
+        if (jaw !== undefined) influences[jaw] = frame.jawOpen;
+      } else {
+        if (mouth !== undefined) influences[mouth] *= 0.8;
+        if (jaw !== undefined) influences[jaw] *= 0.8;
+      }
+    }
+
+    character.root.position.z = THREE.MathUtils.damp(
+      character.root.position.z,
+      character.homeZ + character.forward,
+      4.5,
+      delta,
+    );
   }
 
   private addRotation(
-    bone: THREE.Object3D,
+    bone: THREE.Object3D | null,
     x: number,
     y: number,
     z: number,
   ): void {
-    if (!x && !y && !z) return;
+    if (!bone || (!x && !y && !z)) return;
     this.offsetEuler.set(x, y, z, "XYZ");
     this.offsetQuat.setFromEuler(this.offsetEuler);
     bone.quaternion.multiply(this.offsetQuat);
@@ -499,19 +476,18 @@ export class ScholarStage {
     for (const character of this.characters) {
       const bone = character.headBone ?? character.root;
       bone.getWorldPosition(this.projection);
-      this.projection.y += 0.22;
+      this.projection.y += 0.18;
       this.projection.project(this.camera);
-      const inside =
-        this.projection.z < 1 &&
-        this.projection.x >= -1.4 &&
-        this.projection.x <= 1.4;
       const nx = (this.projection.x + 1) / 2;
       anchors.push({
         id: character.spec.id,
         nx,
         x: nx * this.width,
         y: ((1 - this.projection.y) / 2) * this.height,
-        visible: inside,
+        visible:
+          this.projection.z < 1 &&
+          this.projection.x >= -1.4 &&
+          this.projection.x <= 1.4,
       });
     }
     this.onAnchors(anchors);
@@ -524,14 +500,7 @@ export class ScholarStage {
       const delta = Math.min(this.clock.getDelta(), 0.1);
       const elapsed = (performance.now() - this.startedAt) / 1000;
       for (const character of this.characters) {
-        character.mixer.update(delta);
-        this.applyMicroMotion(character, delta, elapsed);
-        character.root.position.z = THREE.MathUtils.damp(
-          character.root.position.z,
-          character.homeZ + character.forward,
-          4.5,
-          delta,
-        );
+        this.animateCharacter(character, delta, elapsed);
       }
       this.renderer.render(this.scene, this.camera);
       this.emitAnchors(performance.now());

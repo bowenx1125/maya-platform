@@ -19,22 +19,16 @@ license text is in `LICENSE-draco.txt`. Three.js itself is distributed under
 the MIT license; its license text is in `LICENSE-threejs.txt` and the
 dependency version is pinned in the workspace lockfile.
 
-## `laozi/` — Debates (beta) bench
+## `laozi/sumie_bg.jpg`
 
-`scholar_base.glb`, `clip_sit.glb`, `clip_talk.glb`, `clip_wave.glb` and
-`sumie_bg.jpg` come from the project owner's own Laozi digital-human prototype,
-supplied for this repository by the owner. The character and its animations
-were generated with Meshy AI; the ink-wash backdrop ships with the same
-prototype. **This inclusion is not a public asset licence clearance:** confirm
-the Meshy AI output terms for classroom and any public use before Maya is
-deployed or shared outside the private demo.
+The ink-wash backdrop behind the Debates (beta) bench comes from the project
+owner's own Laozi digital-human prototype, supplied for this repository by the
+owner. **This inclusion is not a public asset licence clearance:** confirm its
+terms for classroom and any public use before Maya is deployed or shared
+outside the private demo.
 
-The three clip files are re-packed. The source exports were four ~11 MB GLBs
-that each repeated the same mesh and a 6 MB texture; only `scholar_base.glb`
-keeps the mesh, and the other three were reduced to their animation samplers
-and node names alone, taking the bench from 44 MB to 11.9 MB. The re-pack
-changes no geometry, no texture and no keyframe values.
-
-The figures carry a skeleton but no blendshapes, so the beta stage drives head
-and torso bones where the platform's head-only avatar drives ARKit morph
-targets. Expression and mouth parameters have no effect on these meshes.
+The animated character bodies that shipped alongside it were removed. They
+carried a skeleton and no blendshapes, so a speaking Agent could never open its
+mouth; the bench now uses `female_1.glb` above, whose full ARKit morph set is
+what lets a speech read as speech. Dropping them also took the stage assets
+from 11.9 MB to 3.8 MB and removed an unresolved licence question with them.
