@@ -500,7 +500,7 @@ describe("Wave 2 M12 playback stage", () => {
 
   it.each([
     ["debate.failed", "failed", "Debate needs attention"],
-    ["debate.stopped", "stopped", "Debate stopped"],
+    ["debate.stopped", "stopped", "Stopped"],
   ] as const)(
     "does not reacquire after a stale start response when %s wins the race",
     async (terminalEvent, outcome, expectedLabel) => {

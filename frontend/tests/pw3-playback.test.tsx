@@ -292,7 +292,7 @@ describe("PW3-D three-control playback", () => {
         ),
     ).toHaveLength(0);
     expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
     expect(
       screen.queryByText("Waiting for the teacher controller…"),
     ).toBeNull();
@@ -325,7 +325,7 @@ describe("PW3-D three-control playback", () => {
     expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
     // The stage's own status pill carries this; the line that repeated it at
     // the top-left of the speeches is gone.
-    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toHaveProperty("disabled", false);
@@ -667,8 +667,8 @@ describe("PW3-D three-control playback", () => {
       ).toBeTruthy(),
     );
     expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Debate complete")).toBeNull();
-    expect(screen.queryByText("Debate stopped")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
+    expect(screen.queryByText("Stopped")).toBeNull();
   });
 
   it("restores the complete transcript only after final replay completion", async () => {
@@ -718,7 +718,7 @@ describe("PW3-D three-control playback", () => {
     );
     // Terminal state reads from the panel's status pill, not from a second
     // line above the transcript that said the same thing.
-    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toBeTruthy();
