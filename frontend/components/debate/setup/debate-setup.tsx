@@ -153,23 +153,33 @@ export function TeacherDebateList({
                   {/* A draft is not idle: it is warming its turns in the
                       background, so the list says how far along it is rather
                       than only that it is a draft. */}
-                  {debate.status === "draft" ? (
+                  {/* A stall outranks both other readings, and a running
+                      debate can stall too: the lesson that stopped generating
+                      mid-round used to read Running with nothing to act on. */}
+                  {stalled(debate) ? (
                     <PrewarmBadge
                       expected={debate.expected_turns ?? 0}
                       prepared={debate.prepared_turns ?? 0}
                       stall={debate.stall}
                     />
+                  ) : debate.status === "draft" ? (
+                    <PrewarmBadge
+                      expected={debate.expected_turns ?? 0}
+                      prepared={debate.prepared_turns ?? 0}
+                    />
                   ) : (
                     <StatusBadge status={debate.status} />
                   )}
                 </Link>
-                {/* Warming stopped at one turn; regenerating that turn is one
-                    provider call, where rebuilding the debate is all of them. */}
-                {debate.status === "draft" && debate.stall ? (
+                {/* Regenerating the one turn that stopped is a single provider
+                    call, where rebuilding the debate is all of them. */}
+                {stalled(debate) ? (
                   <ResumeButton
                     debateId={debate.id}
                     onResumed={() => void load()}
-                    turnId={debate.stall.turn_id}
+                    turnId={
+                      (debate.stall as NonNullable<typeof debate.stall>).turn_id
+                    }
                   />
                 ) : null}
                 {/* A lesson left running blocks every later debate on this
@@ -197,6 +207,19 @@ export function TeacherDebateList({
  * is generated. Either way the debate can be started: an unwarmed turn simply
  * waits where it always did.
  */
+/** A debate whose generation stopped and is still worth resuming.
+
+ * Only while it could still reach the end: a stopped or failed debate has a
+ * failed turn in its history too, and calling that a stall would offer a
+ * Resume that leads nowhere.
+ */
+function stalled(debate: DebateSummary): boolean {
+  return (
+    debate.stall != null &&
+    (debate.status === "draft" || debate.status === "running")
+  );
+}
+
 function PrewarmBadge({
   prepared,
   expected,
