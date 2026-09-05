@@ -334,7 +334,72 @@ class PlaybackPreparationMixin(PlaybackCore):
         except Exception:
             LOGGER.exception("Could not release a turn claim for %s", getattr(turn, "id", "?"))
 
+    @staticmethod
+    def _has_accepted_llm_stage(db: Any, turn_id: str) -> bool:
+        """Whether a charged reply for this turn is staged and unpublished.
+
+        A real-provider turn is produced in two passes on purpose: the first
+        accepts and stages the reply the supplier was paid for, and a later
+        pass publishes it, so a crash between the two can never lose a charged
+        answer. Nothing was making that second pass, so every real turn stopped
+        one step short of ready: the money was spent, the answer was on disk,
+        and the turn stayed pending with no error to show for it.
+        """
+
+        execute = getattr(db, "execute", None)
+        if not callable(execute):
+            return False
+        try:
+            from sqlalchemy import text
+
+            row = execute(
+                text(
+                    "SELECT 1 FROM provider_operations "
+                    "WHERE provider_operation='llm_debate_turn' "
+                    "AND logical_item_id=:turn_id AND state='accepted' LIMIT 1"
+                ),
+                {"turn_id": turn_id},
+            ).first()
+        except Exception:
+            # A repository without this table simply has no staged reply.
+            return False
+        return row is not None
+
+    def _turn_is_ready(self, db: Any, debate_id: str, turn_id: str) -> bool:
+        try:
+            debate = self._get_debate(db, debate_id)
+            if debate is None:
+                return True
+            for item in self._turns(db, debate):
+                if str(self._get(item, "id", default="")) == turn_id:
+                    return str(self._get(item, "generation_status", default="")) in {
+                        "final_ready",
+                        "ready",
+                        "completed",
+                    }
+        except Exception:
+            return True
+        return True
+
     async def prepare_turn(self, db: Any, debate_id: str, turn_id: str) -> None:
+        """Produce one turn, publishing a staged reply when one is waiting.
+
+        The pass below is the whole of preparation for a Mock turn. A real
+        provider turn needs a second pass to publish what the first one staged,
+        and the gate is deliberately narrow: only a turn that is still not
+        ready and has an accepted, unpublished operation gets one. That second
+        pass resumes the staged reply and cannot reach the supplier, so it can
+        neither spend money nor spin.
+        """
+
+        await self._prepare_turn_pass(db, debate_id, turn_id)
+        if self._turn_is_ready(db, debate_id, turn_id):
+            return
+        if not self._has_accepted_llm_stage(db, turn_id):
+            return
+        await self._prepare_turn_pass(db, debate_id, turn_id)
+
+    async def _prepare_turn_pass(self, db: Any, debate_id: str, turn_id: str) -> None:
         """Generate/TTS one turn: the current one, its successor, or a pre-warm.
 
         A running Debate keeps the CAS fence it always had -- only the playing
