@@ -17,6 +17,8 @@ from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.modules.debates.generation.speech_match import find_claim_span
+
 from .retrieval import TurnSubquery
 from .types import (
     EvidenceTraceClaimType,
@@ -210,7 +212,16 @@ def utf16_slice(value: str, start_utf16: int, end_utf16: int) -> str:
 
 
 def derive_exact_speech_span(speech: str, claim_text: str) -> SpeechSpanV1:
-    """Find one exact claim occurrence and reject ambiguity/non-exact text."""
+    """Locate the claim in the speech it was taken from.
+
+    This used to demand a byte-exact substring appearing exactly once. Both
+    halves cost turns for reasons unrelated to truth: a curly apostrophe or a
+    line break inside a sentence failed the first, and a speaker who repeated a
+    sentence failed the second -- a rule the prompt never stated, so no model
+    could have obeyed it. The claim must still be something the speaker said,
+    word for word; only presentation is forgiven, and a repeat resolves to the
+    first occurrence.
+    """
 
     if not isinstance(speech, str) or not speech:
         raise EvidenceTraceValidationError(
@@ -218,26 +229,12 @@ def derive_exact_speech_span(speech: str, claim_text: str) -> SpeechSpanV1:
         )
     if not isinstance(claim_text, str) or not claim_text:
         raise EvidenceTraceValidationError("claim_text is required", code="claim_invalid")
-    starts: list[int] = []
-    cursor = 0
-    while True:
-        index = speech.find(claim_text, cursor)
-        if index < 0:
-            break
-        starts.append(index)
-        # Advance by one code point so overlapping exact occurrences are also
-        # rejected rather than silently selecting one.
-        cursor = index + 1
-    if not starts:
+    span = find_claim_span(speech, claim_text)
+    if span is None:
         raise EvidenceTraceValidationError(
-            "claim_text is not an exact speech slice", code="span_non_exact"
+            "claim_text is not a sentence of the speech", code="span_non_exact"
         )
-    if len(starts) != 1:
-        raise EvidenceTraceValidationError(
-            "claim_text has an ambiguous speech occurrence", code="span_ambiguous"
-        )
-    start = starts[0]
-    end = start + len(claim_text)
+    start, end = span
     return SpeechSpanV1(
         start_utf16=utf16_length(speech[:start]),
         end_utf16=utf16_length(speech[:end]),

@@ -27,12 +27,12 @@ SUPPORTED_OUTPUT_LANGUAGES: frozenset[str] = frozenset({"en", "zh"})
 CJK_RE = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 
 # A Latin word and a Han character are not the same unit of meaning, so the
-# per-turn bound cannot be one number. These are the Chinese equivalents of
-# the 80-200 word English bound: a Han character carries roughly as much as a
-# short English word, and a turn that reads for about the same length runs to
-# a few hundred characters.
-CHINESE_MIN_UNITS = 150
-CHINESE_MAX_UNITS = 400
+# per-turn bound cannot be one number. These track the English 60-320 bound at
+# the same ratio: a Han character carries roughly as much as a short English
+# word, and a turn that reads for about the same length runs to a few hundred
+# characters.
+CHINESE_MIN_UNITS = 110
+CHINESE_MAX_UNITS = 620
 
 
 def debate_output_language(debate: Any) -> OutputLanguage:

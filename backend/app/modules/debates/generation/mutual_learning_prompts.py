@@ -57,7 +57,7 @@ _RULE_TEMPLATE = (
     "must cite a receipt in used_evidence_refs by its 0-based catalog index, and only "
     "where it genuinely supports that claim. All-empty used_evidence_refs with a "
     "non-empty catalog is rejected. Empty catalog: leave them all empty.",
-    "REQUIREMENT 2. The speech must be 80-200 words, counting the question text when "
+    "REQUIREMENT 2. The speech must be 60-320 words, counting the question text when "
     "the turn asks one. Outside that range the turn is rejected.",
     "REQUIREMENT 3. An exchange or final turn must have at least one engagement of "
     "another expert's EARLIER-round turn; empty engagements is rejected. An opening turn "
@@ -65,9 +65,10 @@ _RULE_TEMPLATE = (
     "visible transcript. Use target_claim_ref -1, meaning the turn as a whole and always "
     "valid, unless quoting one numbered claim of it.",
     "REQUIREMENT 4. Write the speech first, then fill key_claims by copying whole "
-    "sentences out of it. Each claim_text must be an exact character-for-character "
-    "substring of the speech: never rephrase, shorten, re-punctuate, translate or join. "
-    "If a claim is not word-for-word in the speech, change the speech.",
+    "sentences out of it. Each claim_text must be word for word from the speech: never "
+    "rephrase, shorten, translate or join. Spacing, line breaks, and the style of "
+    "quotes, apostrophes and dashes are forgiven, and a sentence you said twice is "
+    "fine. If a claim is not word for word in the speech, change the speech.",
     "REQUIREMENT 5. An exchange turn must ask exactly one question: mode='ask' with "
     "question.text a non-empty sentence that also appears word-for-word in the speech. "
     "An empty question.text is rejected, and its words count toward requirement 2. The "

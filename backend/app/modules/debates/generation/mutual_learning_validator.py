@@ -258,8 +258,13 @@ class MutualLearningValidator:
     def __init__(
         self,
         *,
-        min_words: int = 80,
-        max_words: int = 200,
+        # Widened from 80-200. A turn that must carry claims quoted from its own
+        # speech, an engagement and a verbatim question was losing turns to the
+        # ceiling rather than to anything about their content. The floor still
+        # rejects a one-line non-answer and the ceiling still protects the
+        # prompt budget every later turn is charged against.
+        min_words: int = 60,
+        max_words: int = 320,
         language: str = "en",
     ) -> None:
         self.language = language
