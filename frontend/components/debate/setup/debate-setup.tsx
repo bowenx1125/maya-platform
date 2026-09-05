@@ -117,7 +117,8 @@ export function TeacherDebateList({
   return (
     <div className={styles.pageStack}>
       <PageIntro
-        title={t("debates")}
+        eyebrow={t("debates")}
+        title={t("debatePreviewTitle")}
         action={
           <Link className="primary-action" href="/teacher/debates/new">
             {t("newDebate")}

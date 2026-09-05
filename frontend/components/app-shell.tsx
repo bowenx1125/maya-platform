@@ -6,7 +6,6 @@ import { useState, type ReactNode } from "react";
 
 import { LanguageSwitcher, useT } from "./locale";
 import { useSession } from "./session-provider";
-import { DemoCompositionBadge } from "./demo-composition";
 
 export function AppShell({
   children,
@@ -33,10 +32,6 @@ export function AppShell({
   }
 
   const isStudent = role === "student";
-  // Only the landing screen of either role, not every page under it.
-  const isDashboard =
-    pathname === "/teacher" ||
-    /^\/student\/groups\/[^/]+$/.test(pathname ?? "");
   const links = isStudent
     ? [
         { href: "/student", label: t("home") },
@@ -108,13 +103,7 @@ export function AppShell({
           </button>
         </div>
       </header>
-      <main className="app-main">
-        {/* The composition strip belongs to the dashboard, which is where a
-            teacher goes to see what is real and what is Mock. Repeating it
-            above every screen pushed the actual work down the page. */}
-        {isDashboard ? <DemoCompositionBadge /> : null}
-        {children}
-      </main>
+      <main className="app-main">{children}</main>
     </div>
   );
 }

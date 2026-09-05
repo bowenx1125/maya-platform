@@ -3015,11 +3015,6 @@ export function BetaDebateStage({
         ?.motion_state ?? "idle";
   }
 
-  const replayAudioUnavailable =
-    publicTurns.length > 0 &&
-    (detailState.status === "debate_finished" ||
-      detailState.status === "completed") &&
-    audioPointer !== debateId;
   const phase = deriveClassroomPhase(
     detailState.status,
     playback.status,
@@ -3381,11 +3376,6 @@ export function BetaDebateStage({
                   />
                 </>
               ) : null}
-            </div>
-          ) : null}
-          {replayAudioUnavailable ? (
-            <div className={styles.failureCard} role="status">
-              <span>{labels.audioNotRetained}</span>
             </div>
           ) : null}
           {/* The panel under the face already carries this state. A second
