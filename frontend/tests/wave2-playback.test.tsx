@@ -65,6 +65,7 @@ function detail(
     created_at: "2026-08-27T00:00:00Z",
     prepared_turns: 0,
     expected_turns: 0,
+    stall: null,
     revision: 1,
     last_sequence: overrides.last_sequence ?? 0,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",

@@ -48,6 +48,7 @@ from app.modules.debates.schemas import (
     RULE_SET_ID_MUTUAL_LEARNING,
     DebateDetail,
     DebateDraftRequest,
+    DebateStall,
     DebateSummary,
     RetrievalSource,
 )
@@ -868,6 +869,7 @@ def debate_summary(
     *,
     prepared_turns: int = 0,
     expected_turns: int = 0,
+    stall: DebateStall | None = None,
 ) -> DebateSummary:
     return DebateSummary.model_validate(
         {
@@ -878,6 +880,7 @@ def debate_summary(
             "created_at": debate.created_at,
             "prepared_turns": prepared_turns,
             "expected_turns": expected_turns,
+            "stall": stall,
         }
     )
 
@@ -1006,6 +1009,7 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     summaries: list[DebateSummary] = []
     ready_by_debate: dict[str, int] = {}
     participants_by_debate: dict[str, int] = {}
+    stall_by_debate: dict[str, DebateStall] = {}
     if rows:
         ids = [row.id for row in rows]
         for debate_id, ready in db.execute(
@@ -1023,12 +1027,36 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
             .group_by(DebateParticipant.debate_id)
         ):
             participants_by_debate[str(debate_id)] = int(count)
+        # Ordered by turn index so setdefault keeps the earliest failure: that
+        # is the turn warming stopped at, and the later ones never ran.
+        for debate_id, turn_id, round_no, code in db.execute(
+            select(
+                DebateTurn.debate_id,
+                DebateTurn.id,
+                DebateTurn.round_no,
+                DebateTurn.safe_error_code,
+            )
+            .where(
+                DebateTurn.debate_id.in_(ids),
+                DebateTurn.generation_status.in_(("failed", "turn_generation_failed")),
+            )
+            .order_by(DebateTurn.debate_id, DebateTurn.turn_index)
+        ):
+            stall_by_debate.setdefault(
+                str(debate_id),
+                DebateStall(
+                    turn_id=UUID(str(turn_id)),
+                    round_no=int(round_no),
+                    safe_error_code=str(code or "turn_generation_failed"),
+                ),
+            )
     for row in rows:
         summaries.append(
             debate_summary(
                 row,
                 prepared_turns=ready_by_debate.get(str(row.id), 0),
                 expected_turns=expected_turn_count(row, participants_by_debate.get(str(row.id), 0)),
+                stall=stall_by_debate.get(str(row.id)),
             )
         )
     return summaries

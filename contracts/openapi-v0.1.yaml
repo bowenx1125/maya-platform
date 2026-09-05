@@ -2446,6 +2446,16 @@ components:
         current_stance:
           { type: [string, "null"], enum: [support, oppose, neutral, null] }
         current_position_summary: { type: string }
+    DebateStall:
+      type: object
+      additionalProperties: false
+      required: [turn_id, round_no, safe_error_code]
+      properties:
+        turn_id: { $ref: "#/components/schemas/Uuid" }
+        round_no: { type: integer, minimum: 1 }
+        safe_error_code:
+          type: string
+          description: The server-authored code for why that turn would not generate.
     DebateSummary:
       type: object
       required: [id, course_id, topic, status, created_at]
@@ -2469,6 +2479,15 @@ components:
           minimum: 0
           default: 0
           description: Turns this debate's plan contains, from its own agent and round counts.
+        stall:
+          oneOf:
+            [{ $ref: "#/components/schemas/DebateStall" }, { type: "null" }]
+          default: null
+          description: >-
+            The turn that stopped this draft warming, if one did. Background
+            warming halts at the first turn that will not generate and changes
+            no status, so without this a stalled draft is indistinguishable
+            from one still thinking. Read from that turn, never stored.
     DebateDetail:
       allOf:
         - $ref: "#/components/schemas/DebateSummary"

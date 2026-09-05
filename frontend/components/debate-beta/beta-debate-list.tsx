@@ -24,8 +24,6 @@ const COPY = {
   en: {
     eyebrow: "Debates (beta)",
     title: "The 3D bench",
-    intro:
-      "The same debates, played on a full-figure stage: every Agent stands on the bench, the speaker steps forward, and classroom messages cross the scene while the debate is still running.",
     unavailable: "No teacher course is available for this account.",
     empty: "No debates yet. Create one in Debates, then open it here.",
     open: "Open on the bench",
@@ -35,8 +33,6 @@ const COPY = {
   zh: {
     eyebrow: "Debates（beta）",
     title: "3D 讲席",
-    intro:
-      "同一批辩论，换成全身讲席：每个 Agent 都在席上，发言者上前一步，弹幕在辩论进行中穿过画面。",
     unavailable: "当前账号没有可用的教师课程。",
     empty: "还没有辩论。先在 Debates 里创建，再回到这里打开。",
     open: "在讲席上打开",
@@ -79,7 +75,6 @@ export function BetaDebateList() {
   return (
     <>
       <PageIntro eyebrow={copy.eyebrow} title={copy.title} />
-      <p className={styles.intro}>{copy.intro}</p>
       <p className={styles.hint}>
         {copy.classicHint} <Link href="/teacher/debates">{copy.classic}</Link>
       </p>

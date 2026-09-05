@@ -187,6 +187,14 @@ class DebateParticipant(_ClosedModel):
     current_position_summary: str = ""
 
 
+class DebateStall(_ClosedModel):
+    """The turn that stopped a draft warming, and why."""
+
+    turn_id: UUID
+    round_no: int = Field(ge=1)
+    safe_error_code: str
+
+
 class DebateSummary(_ClosedModel):
     id: UUID
     course_id: UUID
@@ -205,6 +213,10 @@ class DebateSummary(_ClosedModel):
     # is a draft.
     prepared_turns: int = Field(default=0, ge=0)
     expected_turns: int = Field(default=0, ge=0)
+    # Warming stops at the first turn that will not generate and changes no
+    # status, so a stalled draft used to be indistinguishable from one still
+    # thinking. This is read from that turn, not stored on the debate.
+    stall: DebateStall | None = None
 
 
 class PlaybackState(_ClosedModel):

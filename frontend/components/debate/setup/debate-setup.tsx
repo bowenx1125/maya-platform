@@ -21,10 +21,10 @@ import {
   type PlatformApi,
   type PublishedAgentSummary,
 } from "../../../lib/api";
-import type { MessageKey } from "../../../lib/i18n";
+import { localizeError, type MessageKey } from "../../../lib/i18n";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { turnsForShape } from "../../../lib/debate-rounds";
-import { useT } from "../../locale";
+import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import { ReleaseButton } from "../release-button";
 import {
@@ -156,11 +156,21 @@ export function TeacherDebateList({
                     <PrewarmBadge
                       expected={debate.expected_turns ?? 0}
                       prepared={debate.prepared_turns ?? 0}
+                      stall={debate.stall}
                     />
                   ) : (
                     <StatusBadge status={debate.status} />
                   )}
                 </Link>
+                {/* Warming stopped at one turn; regenerating that turn is one
+                    provider call, where rebuilding the debate is all of them. */}
+                {debate.status === "draft" && debate.stall ? (
+                  <ResumeButton
+                    debateId={debate.id}
+                    onResumed={() => void load()}
+                    turnId={debate.stall.turn_id}
+                  />
+                ) : null}
                 {/* A lesson left running blocks every later debate on this
                     course, and clearing it used to need a shell on the server.
                     The recovery belongs beside the thing that needs it. */}
@@ -189,14 +199,33 @@ export function TeacherDebateList({
 function PrewarmBadge({
   prepared,
   expected,
+  stall,
 }: {
   prepared: number;
   expected: number;
+  stall?: DebateSummary["stall"];
 }) {
   const t = useT();
   const complete = expected > 0 && prepared >= expected;
   const percent =
     expected > 0 ? Math.min(100, Math.round((prepared / expected) * 100)) : 0;
+  // A draft whose warming gave up keeps its percentage forever. Reporting that
+  // frozen number as progress is what made a dead draft look like a thinking
+  // one, so a stall outranks both other readings.
+  if (stall) {
+    return (
+      <span
+        className="status-badge status-bad"
+        data-prewarm="stalled"
+        title={t("debateStalledReason")
+          .replace("{round}", String(stall.round_no))
+          .replace("{code}", stall.safe_error_code)}
+      >
+        <span aria-hidden="true" />
+        {t("debateStalled")}
+      </span>
+    );
+  }
   return (
     <span
       className={`status-badge ${complete ? "status-good" : "status-warn"}`}
@@ -207,6 +236,58 @@ function PrewarmBadge({
         ? t("debatePrewarmReady")
         : `${t("debatePrewarming")} ${percent}%`}
     </span>
+  );
+}
+
+/** Generate the one turn warming stopped at, so the draft can warm on. */
+function ResumeButton({
+  debateId,
+  turnId,
+  onResumed,
+}: {
+  debateId: string;
+  turnId: string;
+  onResumed: () => void;
+}) {
+  const t = useT();
+  const { api } = useSession();
+  const { locale } = useLocale();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <button
+        className="secondary-action"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          // The retry is guarded by the playback control version, which only
+          // the debate's own snapshot carries; the list never had a reason to
+          // hold one until now.
+          api
+            .debate(debateId)
+            .then((detail) =>
+              api.retryDebatePreparation(
+                debateId,
+                {
+                  turn_id: turnId,
+                  expected_control_version: detail.playback.control_version,
+                },
+                { idempotency: createIdempotencyHandle() },
+              ),
+            )
+            .then(() => onResumed())
+            .catch((cause: unknown) => setError(localizeError(cause, locale)))
+            .finally(() => setBusy(false));
+        }}
+        type="button"
+      >
+        {busy ? t("debateWarmResuming") : t("debateWarmResume")}
+      </button>
+      {error ? <span role="status">{error}</span> : null}
+    </>
   );
 }
 

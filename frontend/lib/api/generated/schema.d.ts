@@ -1612,6 +1612,12 @@ export interface components {
             current_stance?: "support" | "oppose" | "neutral" | null;
             current_position_summary?: string;
         };
+        DebateStall: {
+            turn_id: components["schemas"]["Uuid"];
+            round_no: number;
+            /** @description The server-authored code for why that turn would not generate. */
+            safe_error_code: string;
+        };
         DebateSummary: {
             id: components["schemas"]["Uuid"];
             course_id: components["schemas"]["Uuid"];
@@ -1629,6 +1635,11 @@ export interface components {
              * @default 0
              */
             expected_turns: number;
+            /**
+             * @description The turn that stopped this draft warming, if one did. Background warming halts at the first turn that will not generate and changes no status, so without this a stalled draft is indistinguishable from one still thinking. Read from that turn, never stored.
+             * @default null
+             */
+            stall: components["schemas"]["DebateStall"] | null;
         };
         DebateDetail: components["schemas"]["DebateSummary"] & {
             revision: number;
