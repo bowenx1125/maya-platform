@@ -122,6 +122,18 @@ in `app/providers/control.py` is the single definition.
     operation so it can only ever publish, never generate. The stall marker and
     Resume now cover running debates too, not only drafts.
 
+  - The bench figure can open its mouth. It was built on separately animated
+    bodies that waved and sat but carried no blendshapes at all, so a speaking
+    Agent kept its mouth shut. It now uses the figure the avatar preview
+    already uses: no clips, but the full ARKit morph set, so the mouth moves
+    while a turn plays and the five expressions a student picks in the editor
+    finally reach the stage. Stage assets went from 11.9 MB to 3.8 MB and an
+    unresolved licence question went with them.
+  - The classroom has one button, and only finished debates. Start and Next
+    collapse into a single control on the beta stage, and the beta list shows
+    only debates that reached the end: generation, and every way it can fail,
+    belongs to the preview bench before class.
+
   Next, in order: a real-provider run to see whether generation is now
   reliable, since the publication gap — not the validator — was the blocker;
   `rule_id` in the repair feedback is deferred until that run says it is
