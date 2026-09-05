@@ -9,16 +9,11 @@ import {
   resolveBetaStageLabels,
 } from "../../../../../components/debate-beta/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
-import { AppShell } from "../../../../../components/app-shell";
 import {
   RouteGuard,
   useSession,
 } from "../../../../../components/session-provider";
-import {
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-} from "../../../../../components/ui";
+import { ErrorNotice, LoadingCard } from "../../../../../components/ui";
 import {
   createIdempotencyHandle,
   type DebateDetail,
@@ -28,6 +23,7 @@ import {
 import { useLocale, useT } from "../../../../../components/locale";
 import { localizeError, type Locale } from "../../../../../lib/i18n";
 import { expectedTurnCount } from "../../../../../lib/debate-rounds";
+import styles from "./control.module.css";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
   connection: "connecting",
@@ -368,102 +364,104 @@ export default function TeacherDebateControlPage() {
 
   return (
     <RouteGuard role="teacher">
-      <AppShell role="teacher">
-        {loading && !detail ? <LoadingCard /> : null}
-        {!loading && error && !detail ? (
-          <ErrorNotice error={error} onRetry={() => void load()} />
-        ) : null}
-        {detail && debateId ? (
-          <>
-            <PageIntro eyebrow={t("debateList")} title={detail.topic} />
-            {error ? (
+      {!detail || !debateId ? (
+        <div className={styles.boot}>
+          <Link className={styles.bootBack} href="/teacher/debates-beta">
+            {t("debateBack")}
+          </Link>
+          {loading ? <LoadingCard /> : null}
+          {!loading && error ? (
+            <ErrorNotice error={error} onRetry={() => void load()} />
+          ) : null}
+        </div>
+      ) : (
+        <>
+          {error ? (
+            <div className={styles.floatingNotice}>
               <ErrorNotice
                 error={error}
                 onRetry={() => void refreshSnapshot()}
               />
-            ) : null}
-            <BetaDebateStage
-              headerActions={
-                <>
-                  <Link
-                    className="secondary-action"
-                    href="/teacher/debates-beta"
-                  >
-                    {t("debateBack")}
-                  </Link>
-                  {detail.status === "running" &&
-                  detail.playback.mode === "live" ? (
-                    <>
-                      <button
-                        aria-describedby={
-                          finishAllowed ? undefined : "finish-authority-message"
-                        }
-                        className="primary-action"
-                        disabled={finishBusy || !finishAllowed}
-                        onClick={() => void finish()}
-                        type="button"
-                      >
-                        {finishBusy
-                          ? locale === "zh"
-                            ? "正在结束…"
-                            : "Finishing…"
-                          : stageLabels.finish}
-                      </button>
-                      {finishAllowed ? null : (
-                        <span id="finish-authority-message" role="status">
-                          {finishBlockedCopy(detail, playbackAuthority, locale)}
-                        </span>
-                      )}
-                    </>
-                  ) : null}
-                  {/* Beta opens classroom messages during the debate, not
-                      after it, so the join code can go up on the stage while
-                      the Agents are still speaking. */}
-                  {!joinUrl && detail.status !== "draft" ? (
+            </div>
+          ) : null}
+          <BetaDebateStage
+            headerActions={
+              <>
+                <Link className="secondary-action" href="/teacher/debates-beta">
+                  {t("debateBack")}
+                </Link>
+                {detail.status === "running" &&
+                detail.playback.mode === "live" ? (
+                  <>
                     <button
-                      className="secondary-action"
-                      disabled={interactionBusy}
-                      onClick={() => void openInteraction()}
+                      aria-describedby={
+                        finishAllowed ? undefined : "finish-authority-message"
+                      }
+                      className="primary-action"
+                      disabled={finishBusy || !finishAllowed}
+                      onClick={() => void finish()}
                       type="button"
                     >
-                      {interactionBusy
-                        ? betaLabels.interactionOpening
-                        : betaLabels.openInteraction}
+                      {finishBusy
+                        ? locale === "zh"
+                          ? "正在结束…"
+                          : "Finishing…"
+                        : stageLabels.finish}
                     </button>
-                  ) : null}
-                  {interactionError ? (
-                    <span role="status">{interactionError}</span>
-                  ) : null}
-                  {(detail.status === "debate_finished" ||
-                    detail.status === "completed") &&
-                  hasCompletePublicPlan(detail) ? (
-                    <Link
-                      className="primary-action"
-                      href={`/teacher/debates/${debateId}/interaction`}
-                    >
-                      {t("wave3Title")}
-                    </Link>
-                  ) : null}
-                </>
-              }
-              api={api}
-              betaLabels={betaLabels}
-              joinUrl={joinUrl}
-              onInteractionOpened={() => void readInteraction()}
-              debateId={debateId}
-              detail={detail}
-              currentAudioDebateId={currentAudioDebateId}
-              labels={stageLabels}
-              onAuthorityChange={updatePlaybackAuthority}
-              onDetailChange={setDetail}
-              onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
-              outputLanguage={locale === "zh" ? "zh" : "en"}
-              actionInFlight={finishBusy}
-              refreshSnapshot={refreshSnapshot}
-            />
-          </>
-        ) : null}
-      </AppShell>
+                    {finishAllowed ? null : (
+                      <span id="finish-authority-message" role="status">
+                        {finishBlockedCopy(detail, playbackAuthority, locale)}
+                      </span>
+                    )}
+                  </>
+                ) : null}
+                {/* Beta opens classroom messages during the debate, not
+                      after it, so the join code can go up on the stage while
+                      the Agents are still speaking. */}
+                {!joinUrl && detail.status !== "draft" ? (
+                  <button
+                    className="secondary-action"
+                    disabled={interactionBusy}
+                    onClick={() => void openInteraction()}
+                    type="button"
+                  >
+                    {interactionBusy
+                      ? betaLabels.interactionOpening
+                      : betaLabels.openInteraction}
+                  </button>
+                ) : null}
+                {interactionError ? (
+                  <span role="status">{interactionError}</span>
+                ) : null}
+                {(detail.status === "debate_finished" ||
+                  detail.status === "completed") &&
+                hasCompletePublicPlan(detail) ? (
+                  <Link
+                    className="primary-action"
+                    href={`/teacher/debates/${debateId}/interaction`}
+                  >
+                    {t("wave3Title")}
+                  </Link>
+                ) : null}
+              </>
+            }
+            api={api}
+            betaLabels={betaLabels}
+            joinUrl={joinUrl}
+            onInteractionOpened={() => void readInteraction()}
+            debateId={debateId}
+            detail={detail}
+            currentAudioDebateId={currentAudioDebateId}
+            labels={stageLabels}
+            onAuthorityChange={updatePlaybackAuthority}
+            onDetailChange={setDetail}
+            onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
+            outputLanguage={locale === "zh" ? "zh" : "en"}
+            actionInFlight={finishBusy}
+            refreshSnapshot={refreshSnapshot}
+          />
+        </>
+      )}
     </RouteGuard>
   );
 }

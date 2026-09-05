@@ -1,0 +1,40 @@
+/* The immersive surface has no app shell, so the states before the stage
+   exists need a ground and a way back of their own. */
+.boot {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 18px;
+  width: min(680px, calc(100% - 40px));
+  min-height: 100vh;
+  margin: 0 auto;
+}
+
+.bootBack {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.bootBack:hover {
+  color: var(--ink);
+}
+
+/* A snapshot that failed to refresh must not hide behind the full-screen
+   stage, and must not push the bench around either. */
+.floatingNotice {
+  position: fixed;
+  z-index: 10;
+  bottom: 22px;
+  left: 22px;
+  width: min(420px, calc(100vw - 44px));
+}
+
+@media (max-width: 900px) {
+  .floatingNotice {
+    right: 12px;
+    bottom: auto;
+    top: 12px;
+    left: 12px;
+    width: auto;
+  }
+}

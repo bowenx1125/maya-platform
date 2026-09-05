@@ -3141,6 +3141,10 @@ export function BetaDebateStage({
         </div>
       ) : null}
 
+      <div className={styles.stageTitleCard}>
+        <h1>{detailState.topic}</h1>
+      </div>
+
       <ScholarScene
         bubbleText={
           playback.status === "playing" && activeVisibleTurn

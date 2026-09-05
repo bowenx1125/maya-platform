@@ -846,24 +846,217 @@
 /* ---------------------------------------------------------------------------
    Debates (beta) overrides.
 
-   The bench is now a full-width scene above the two columns, so the left
-   column carries only the controls it used to sit under. Everything above this
-   line is the classic stage's stylesheet, copied so the classic surface can
-   keep changing without dragging the beta stage with it.
+   The classic stage is a document: bands of cards down a scrolling page. This
+   one is a room. The ink-wash ground and the bench fill the viewport, and
+   every control floats on top of it in frosted glass, which is the whole point
+   of the beta surface being separate.
+
+   Everything above this line is the classic stage's stylesheet, copied so the
+   classic surface can keep changing without dragging the beta stage with it.
    ------------------------------------------------------------------------ */
 
-.avatarColumn {
-  /* No face in this column any more: the panel is the whole of it. */
-  grid-template-rows: 1fr;
+.stage {
+  /* The prototype's own type: a running-script display face for names and
+     titles over a Song serif for reading. Both fall back through the CJK
+     families a Mac, a Windows machine and a Linux box actually ship. */
+  --brush:
+    "STXingkai", "Xingkai SC", "HanziPen SC", "STKaiti", "Kaiti SC", "KaiTi",
+    "BiauKai", "Songti SC", serif;
+  --script:
+    "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun",
+    serif;
+  --ink-deep: #1d1a17;
+  --ink-quiet: rgba(29, 26, 23, 0.68);
+
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  display: block;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  background: #ece8e0;
+  font-family: var(--script);
 }
 
+/* The debate's own name, where a room would put it: on the wall, not in a
+   header band that would cost the bench its height. */
+.stageTitleCard {
+  position: absolute;
+  z-index: 9;
+  top: 20px;
+  left: 50%;
+  max-width: min(520px, calc(100vw - 560px));
+  padding: 8px 18px 10px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(38, 31, 24, 0.1);
+  border-radius: 999px;
+  background: rgba(252, 250, 245, 0.9);
+  box-shadow: 0 8px 22px rgba(58, 46, 30, 0.1);
+  pointer-events: none;
+}
+
+.stageTitleCard h1 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-deep);
+  font-family: var(--brush);
+  font-size: 1.24rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-text-stroke: 0.3px rgba(34, 24, 17, 0.3);
+}
+
+/* ---------- the floating panel ---------- */
+
 .stageColumns {
-  /* The speeches take more of the width once the faces have moved out. */
-  grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.9fr);
+  position: absolute;
+  z-index: 8;
+  top: 22px;
+  right: 22px;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(436px, calc(100vw - 44px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 24px;
+  background: rgba(253, 251, 246, 0.62);
+  box-shadow: 0 22px 54px rgba(48, 38, 24, 0.16);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* Speeches on top, controls beneath them: the panel reads the way the room
+   does, newest word above the buttons that produce the next one. */
+.speechColumn {
+  display: flex;
+  order: 1;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.avatarColumn {
+  display: block;
+  order: 2;
+  flex: 0 0 auto;
+  grid-template-rows: none;
+  gap: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 253, 249, 0.42);
+}
+
+.stagePanel {
+  padding: 14px 18px 16px;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.streamCard {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px 18px 8px;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.streamList {
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 0;
+  /* The panel's own height is the bound now, not a viewport fraction. */
+  max-height: none;
+  padding-right: 8px;
+}
+
+.streamHeader h2 {
+  color: var(--ink-deep);
+  font-family: var(--brush);
+  font-size: 1.44rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  -webkit-text-stroke: 0.3px rgba(34, 24, 17, 0.28);
+}
+
+.streamSpeech {
+  color: var(--ink-deep);
+  font-family: var(--script);
+  font-size: 0.98rem;
+  line-height: 1.86;
+}
+
+.streamWho {
+  font-family: var(--brush);
+  font-size: 0.98rem;
+  letter-spacing: 0.03em;
+}
+
+.streamMeta,
+.streamSources,
+.streamCount {
+  color: var(--ink-quiet);
+}
+
+/* Buttons keep the platform's own shape; only the ground under them changes. */
+.stagePanel .playbackStatus,
+.stagePanel .statusCluster {
+  color: var(--ink-quiet);
+}
+
+.streamItem {
+  border-bottom-color: rgba(38, 31, 24, 0.1);
+}
+
+/* Notices float in the corner the panel leaves free rather than pushing the
+   speeches down inside it. */
+.connectionOverlay {
+  position: absolute;
+  z-index: 9;
+  bottom: 22px;
+  left: 22px;
+  max-width: min(460px, calc(100vw - 500px));
+}
+
+.failureCard,
+.providerGateCard {
+  margin: 0 18px;
 }
 
 @media (max-width: 900px) {
   .stageColumns {
-    grid-template-columns: minmax(0, 1fr);
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    height: 56dvh;
+    min-height: 300px;
+  }
+
+  .stageTitleCard {
+    max-width: calc(100vw - 40px);
+  }
+
+  .connectionOverlay {
+    right: 12px;
+    bottom: calc(56dvh + 22px);
+    left: 12px;
+    max-width: none;
   }
 }

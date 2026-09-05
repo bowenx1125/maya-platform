@@ -130,16 +130,20 @@ class PrewarmScheduler:
                 # the teacher has since opened takes over without this one
                 # losing the turn it just produced.
                 if self._owner != owner:
-                    self._task = None
-                    self._focus(self._owner)
                     return
         except asyncio.CancelledError:
             raise
         except Exception:
             LOGGER.exception("Pre-warm stopped for debate %s", debate_id)
         finally:
-            if self._task is not None and self._task.done():
-                self._task = None
+            # Every exit from the loop above releases the bandwidth, not only
+            # the ownership-change one: a draft that finished warming, one
+            # whose turn did not advance, and one that raised all used to
+            # return without handing the slot on. Whatever the teacher has
+            # since opened then waited forever, and nothing warmed at all.
+            self._task = None
+            if not self._closed and self._owner is not None and self._owner != debate_id:
+                self._focus(self._owner)
 
     async def close(self) -> None:
         self._closed = True
