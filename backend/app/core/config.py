@@ -118,6 +118,14 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FALLBACK_VOICE_PROFILE_ID",
     )
+    # Debates (beta) shows a join code on the stage and flies classroom
+    # messages across it while the Agents are still speaking, which the
+    # after-the-debate gate forbids.  Off by default: with the switch off the
+    # classic Debates surface behaves exactly as it always has.
+    debates_beta_live_interaction: bool = Field(
+        default=False,
+        validation_alias="DEBATES_BETA_LIVE_INTERACTION",
+    )
 
     # These server-only operational values are also part of C02/C08. They are
     # intentionally not exposed in browser-facing DTOs. ``DATABASE_URL`` is

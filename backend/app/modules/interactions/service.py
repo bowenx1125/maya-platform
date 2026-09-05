@@ -669,7 +669,23 @@ def _publish(
         return
 
 
-def _open_eligibility(session: Session, debate: Debate) -> None:
+def _open_eligibility(session: Session, debate: Debate, *, allow_live: bool = False) -> None:
+    """Decide whether a teacher may open classroom interaction now.
+
+    Opening and finalising used to be one question.  Finalising still needs the
+    complete round matrix below, because the report freezes over it.  Opening
+    only needs a debate that has a bench and has begun, which is what lets
+    Debates (beta) put a join code on the stage while the Agents are still
+    speaking.
+    """
+
+    if allow_live and debate.status == "running":
+        if len(_participants(session, debate.id)) < 2:
+            raise conflict(
+                "invalid_state",
+                "Classroom interaction needs at least two Agents on the stage.",
+            )
+        return
     if debate.status != "debate_finished":
         raise conflict(
             "invalid_state",
@@ -800,7 +816,11 @@ class InteractionService:
             if window.status == "open":
                 # Another idempotency key cannot reopen/rotate the capability.
                 raise conflict("invalid_state", "The classroom interaction is already open.")
-            _open_eligibility(session, debate)
+            _open_eligibility(
+                session,
+                debate,
+                allow_live=self.settings.debates_beta_live_interaction,
+            )
             timestamp = _now()
             nonce = secrets.token_bytes(32)
             _transition_window(

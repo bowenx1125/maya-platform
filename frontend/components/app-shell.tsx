@@ -59,6 +59,9 @@ export function AppShell({
     : [
         { href: "/teacher", label: t("dashboard") },
         { href: "/teacher/debates", label: t("debates") },
+        // A sibling surface, not a replacement: the classic Debates entry and
+        // everything under it are untouched.
+        { href: "/teacher/debates-beta", label: `${t("debates")} (beta)` },
       ];
 
   const activeHref = links
