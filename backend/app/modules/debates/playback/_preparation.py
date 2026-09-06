@@ -33,6 +33,28 @@ from .schemas import (
 LOGGER = logging.getLogger(__name__)
 
 
+def _raise_site(exc: BaseException, *, frames: int = 4) -> str:
+    """The last few source positions an exception passed through.
+
+    Deliberately positions only: `file:line:function`, joined innermost last.
+    The exception's own message is never included, because it can quote a
+    provider response or a student's text.
+    """
+
+    import traceback
+
+    try:
+        trace = traceback.extract_tb(exc.__traceback__)
+    except Exception:  # pragma: no cover - diagnosis must never raise
+        return "-"
+    if not trace:
+        return "-"
+    return " > ".join(
+        f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno}:{frame.name}"
+        for frame in trace[-frames:]
+    )
+
+
 class PlaybackPreparationMixin(PlaybackCore):
     """Turn preparation: generation fence, provider call, audio swap."""
 
@@ -262,13 +284,25 @@ class PlaybackPreparationMixin(PlaybackCore):
         # Debate's language is measured in. Counting Latin words in a Chinese
         # speech finds none, so every Chinese turn failed here after passing
         # every rule that had been taught about the language.
-        from app.modules.debates.output_language import speech_units, unit_bounds
+        from app.modules.debates.generation.types import TurnValidationError
+        from app.modules.debates.output_language import (
+            TURN_MAX_WORDS,
+            TURN_MIN_WORDS,
+            speech_units,
+            unit_bounds,
+        )
 
         speech = prepared.speech.strip()
-        minimum, maximum = unit_bounds(language, 80, 200)  # type: ignore[arg-type]
+        minimum, maximum = unit_bounds(language, TURN_MIN_WORDS, TURN_MAX_WORDS)  # type: ignore[arg-type]
         count = speech_units(speech, "zh") if language == "zh" else PlaybackCore._word_count(speech)
         if not speech or count < minimum or count > maximum:
-            raise ValueError("turn speech word count is invalid")
+            # Coded, because an uncoded failure here is invisible: the turn
+            # stops, no status changes, and the lesson waits on nothing.
+            raise TurnValidationError(
+                "The prepared speech is outside this debate's per-turn length.",
+                code="turn_length_invalid",
+                json_pointers=("/speech",),
+            )
         sources = tuple(prepared.sources)
         if sources:
             # Wave 2 intentionally uses mixed rather than claiming claim-level
@@ -768,7 +802,8 @@ class PlaybackPreparationMixin(PlaybackCore):
             # line a turn that dies before its provider manifest leaves
             # nothing but the generic ``turn_generation_failed`` code.
             LOGGER.error(
-                "Turn preparation failed debate_id=%s turn_id=%s error_type=%s safe_code=%s",
+                "Turn preparation failed debate_id=%s turn_id=%s error_type=%s "
+                "safe_code=%s raised_at=%s",
                 debate_id,
                 turn_id,
                 type(exc).__name__,
@@ -776,6 +811,14 @@ class PlaybackPreparationMixin(PlaybackCore):
                 # so recording it leaks nothing and is often the only thing
                 # that distinguishes a missing policy from a refused request.
                 getattr(exc, "code", "-"),
+                # Where it was raised, never what it said. An exception that
+                # carries no safe code -- a bare ValueError from somewhere deep
+                # in generation -- otherwise leaves a line that names a type and
+                # nothing a person can act on, and a turn stops with the failure
+                # invisible. File, line and function are our own source
+                # positions and cannot contain provider or student data, which
+                # is what keeps the message itself out of this.
+                _raise_site(exc),
                 exc_info=False,
             )
             # The final Turn/source/job writes and the LLM operation CAS share

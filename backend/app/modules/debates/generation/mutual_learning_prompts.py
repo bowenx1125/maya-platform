@@ -7,6 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import cast
 
+from ..output_language import TURN_MAX_WORDS, TURN_MIN_WORDS
 from .evidence_trace import EvidenceTraceQueryKind, EvidenceTraceQueryV1, server_query_id
 from .mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
@@ -57,8 +58,11 @@ _RULE_TEMPLATE = (
     "must cite a receipt in used_evidence_refs by its 0-based catalog index, and only "
     "where it genuinely supports that claim. All-empty used_evidence_refs with a "
     "non-empty catalog is rejected. Empty catalog: leave them all empty.",
-    "REQUIREMENT 2. The speech must be 60-320 words, counting the question text when "
-    "the turn asks one. Outside that range the turn is rejected.",
+    # Rendered from the same constant the validators use. Writing the numbers
+    # here by hand is how the prompt and the rule drifted apart before.
+    f"REQUIREMENT 2. The speech must be {TURN_MIN_WORDS}-{TURN_MAX_WORDS} words, "
+    "counting the question text when the turn asks one. Outside that range the "
+    "turn is rejected.",
     "REQUIREMENT 3. An exchange or final turn must have at least one engagement of "
     "another expert's EARLIER-round turn; empty engagements is rejected. An opening turn "
     "must leave engagements empty. target_turn_ref is that turn's 0-based index in the "

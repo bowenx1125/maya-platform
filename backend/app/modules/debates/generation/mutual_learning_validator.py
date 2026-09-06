@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from ..output_language import TURN_MAX_WORDS, TURN_MIN_WORDS
 from .mutual_learning_policy import pending_question_for_turn, visible_prior_round_turns
 from .policy import TurnPlan
 from .round_phase import RoundPhase, resolve_round_phase
@@ -258,13 +259,11 @@ class MutualLearningValidator:
     def __init__(
         self,
         *,
-        # Widened from 80-200. A turn that must carry claims quoted from its own
-        # speech, an engagement and a verbatim question was losing turns to the
-        # ceiling rather than to anything about their content. The floor still
-        # rejects a one-line non-answer and the ceiling still protects the
-        # prompt budget every later turn is charged against.
-        min_words: int = 60,
-        max_words: int = 320,
+        # One definition, in output_language. This was a pair of literals, and
+        # a second pair lived in the playback layer; widening one and not the
+        # other is what let a valid speech die after generation with no code.
+        min_words: int = TURN_MIN_WORDS,
+        max_words: int = TURN_MAX_WORDS,
         language: str = "en",
     ) -> None:
         self.language = language
