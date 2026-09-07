@@ -144,9 +144,10 @@ started during this resume. Removing a usage stop never authorizes reset credits
   edit; subsequent classroom tests waived by owner. Ruff/mypy/format and contracts
   passed: 82 declared routes, 61 implemented, no placeholders. Schema head: 0023.
 
-Next: GitHub delivery and Docker restart, then owner-led manual classroom/RAG
-acceptance. TTS/Voice stay Mock. Keep failed ledgers and never resend unknown
-operations. Private artifacts and backups remain outside Git in Maya outputs.
+Delivered to main (code merge f2e8b1b); other local/remote branches are deleted.
+Docker backend/frontend/gateway were recreated and became healthy. TTS/Voice stay
+Mock. Next: owner-led manual classroom/RAG acceptance. Preserve failed ledgers;
+private artifacts and backups remain outside Git in Maya outputs.
 
 ## Product boundaries
 
