@@ -171,7 +171,7 @@ describe("Wave 3 M14 ReportPanel", () => {
     vi.useRealTimers();
   });
 
-  it("shows insight/report state and renders Markdown as text", async () => {
+  it("removes status chrome while preserving insight content and report text", async () => {
     const api = apiMock();
     render(
       <LocaleProvider initialLocale="en">
@@ -181,6 +181,9 @@ describe("Wave 3 M14 ReportPanel", () => {
 
     expect(await screen.findByText("Report")).toBeTruthy();
     expect(screen.getByText("Shared concern")).toBeTruthy();
+    expect(screen.queryByText("Anonymous classroom insight")).toBeNull();
+    expect(screen.queryByText("Current report")).toBeNull();
+    expect(screen.queryByText(/included.*filtered/)).toBeNull();
     expect(screen.getByLabelText("Current report").textContent).toContain(
       "Civilization Mutual Learning Report",
     );

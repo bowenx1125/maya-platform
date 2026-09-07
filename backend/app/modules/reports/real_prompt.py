@@ -180,6 +180,12 @@ def build_report_request(
     system = (
         REPORT_SYSTEM_PROMPT_V2 if isinstance(report, ReportRequestV2) else REPORT_SYSTEM_PROMPT
     )
+    if isinstance(report, ReportRequestV2) and report.score_summary is not None:
+        system += (
+            " The optional score_summary is a code-owned count of paragraph support modes. "
+            "Do not turn it into a winner, ranking, or semantic quality judgement; the "
+            "server displays it separately."
+        )
     try:
         budget = preflight_prompt_budget(
             (system, user),

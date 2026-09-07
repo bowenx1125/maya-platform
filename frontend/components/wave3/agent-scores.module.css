@@ -1,0 +1,16 @@
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 1rem;
+}
+
+.legend [data-grade="direct"] {
+  color: var(--green);
+}
+
+.legend [data-grade="indirect"] {
+  color: #8d6926;
+}

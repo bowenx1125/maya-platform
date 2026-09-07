@@ -1,9 +1,11 @@
 "use client";
 
 import { useLocale } from "../locale";
+import type { SegmentEvidence } from "../../lib/evidence-grading";
+import { SegmentGrade } from "./segment-grade";
 import styles from "./segment-rag-inspector.module.css";
 
-export type SegmentRagSegment = {
+export type SegmentRagSegment = SegmentEvidence & {
   text: string;
   source_ids: readonly string[];
   reply_to: string | null;
@@ -50,6 +52,7 @@ export function SegmentRagInspector({
       <div className={styles.segmentList}>
         {segments.map((segment, index) => (
           <article className={styles.segment} key={`${index}-${segment.text}`}>
+            <SegmentGrade segment={segment} />
             <p className={styles.segmentText}>{segment.text}</p>
             <div className={styles.sourceList}>
               {segment.source_ids.length === 0 ? (

@@ -297,28 +297,6 @@ export function ReportPanel({
         </p>
       ) : null}
 
-      <div className={styles.statusGrid}>
-        <div className={styles.statusCard}>
-          <span>{copy.insight}</span>
-          <strong>
-            {reportStatusLabel(locale, insight?.status ?? "not_started")}
-          </strong>
-          <small>
-            {insight?.included_count ?? 0} {copy.included} ·{" "}
-            {insight?.filtered_count ?? 0} {copy.filtered}
-          </small>
-        </div>
-        <div className={styles.statusCard}>
-          <span>{copy.report}</span>
-          <strong>
-            {reportStatusLabel(
-              locale,
-              report?.generation_status ?? "not_started",
-            )}
-          </strong>
-        </div>
-      </div>
-
       {reportGenerating ? (
         <p className={styles.notice} role="status">
           {copy.generating}
@@ -352,11 +330,9 @@ export function ReportPanel({
 
       <div className={styles.reportCard}>
         <div className={styles.cardHeading}>
-          <h3>
-            {displayed
-              ? revisionTitle(locale, displayed.revision_no)
-              : copy.report}
-          </h3>
+          {displayed ? (
+            <h3>{revisionTitle(locale, displayed.revision_no)}</h3>
+          ) : null}
           {displayed?.status === "ready" && selectedRevision === null ? (
             <button
               type="button"

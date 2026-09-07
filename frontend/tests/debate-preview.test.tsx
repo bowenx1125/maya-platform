@@ -77,7 +77,9 @@ describe("teacher debate preview", () => {
     expect(
       screen.getByText("A saved speech remains available for teacher review."),
     ).toBeTruthy();
-    expect(screen.getByText("Audio not ready")).toBeTruthy();
+    expect(screen.getByText("Audio Not Ready")).toBeTruthy();
+    expect(screen.getByText("Audio Ready")).toBeTruthy();
+    expect(screen.queryByText("Saved", { exact: true })).toBeNull();
     expect(screen.getByText("Audio needs attention.")).toBeTruthy();
     expect(screen.queryByText("tts_failed")).toBeNull();
     expect(screen.getByRole("button", { name: "Retry turn" })).toBeTruthy();

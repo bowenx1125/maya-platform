@@ -68,7 +68,10 @@ SEGMENT_ENDPOINT_PATH = "/compatible-mode/v1/chat/completions"
 SEGMENT_RECOVERY_INPUT_VERSION = "segment_recovery_input_v2"
 SEGMENT_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 
-SEGMENT_SCHEMA_SHA256 = "16e0854ed073e8fd71df30af59803ca2c5c0920a257ba5d5b0878414bf32a2b0"
+# The schema is optional-field compatible: old frozen requests retain their
+# persisted schema hash and remain readable during recovery, while new
+# requests bind this updated wire schema hash.
+SEGMENT_SCHEMA_SHA256 = "3b449edcdb9e4d12e1d56d4f7deab686a89b41c78823fcd0988fc81d5841ba7b"
 
 
 def _schema_candidates() -> tuple[Path, Path]:

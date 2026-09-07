@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarConfig } from "../components/avatar";
 import type { DebateDetail, TeacherInteraction } from "../lib/api";
+import { agentScores } from "../components/wave3/agent-scores";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 const reportPanelMock = vi.hoisted(() => vi.fn());
@@ -32,11 +33,27 @@ vi.mock("../components/session-provider", () => ({
   useSession: useSessionMock,
 }));
 vi.mock("../components/debate-beta/stage", () => ({
-  BetaDebateStage: ({ headerActions }: { headerActions?: ReactNode }) => (
-    <section data-testid="beta-stage">{headerActions}</section>
+  BetaDebateStage: ({
+    headerActions,
+    joinUrl,
+    joinCodeVisible,
+  }: {
+    headerActions?: ReactNode;
+    joinUrl?: string | null;
+    joinCodeVisible?: boolean;
+  }) => (
+    <section data-testid="beta-stage" data-join-url={joinUrl}>
+      {headerActions}
+      {joinUrl && joinCodeVisible ? (
+        <div id="classroom-join-code" role="img" aria-label="Scan to join">
+          {joinUrl}
+        </div>
+      ) : null}
+    </section>
   ),
   resolveBetaStageLabels: () => ({
-    openInteraction: "Open classroom messages",
+    openInteraction: "Open Message",
+    hideInteraction: "Hide",
     interactionOpening: "Opening…",
   }),
 }));
@@ -266,6 +283,87 @@ afterEach(() => {
 });
 
 describe("segments_v2 Bench Conclude and Report", () => {
+  it("uses public paragraph grades for Conclude totals and never counts a replay twice", async () => {
+    const detail = finishedSegmentsDetail();
+    const first = detail.public_turns[0]!;
+    first.segment_turn = {
+      schema_version: "segment_turn_v2",
+      segments: [
+        {
+          text: "The record names the agreed day.",
+          source_ids: ["source-1"],
+          reply_to: null,
+          support_mode: "direct",
+        },
+        {
+          text: "The shared practice provides background.",
+          source_ids: ["source-1"],
+          reply_to: null,
+          support_mode: "contextual",
+        },
+        {
+          text: "I suggest discussing a change.",
+          source_ids: [],
+          reply_to: null,
+          support_mode: "no_match",
+        },
+      ],
+    };
+    expect(
+      agentScores(detail.participants, [...detail.public_turns, first])[0]
+        ?.value,
+    ).toBe(7);
+    expect(
+      agentScores(detail.participants, detail.public_turns)[1]?.value,
+    ).toBe(0);
+    const api = pageApi(interaction("open"), interaction("finalized"), detail);
+    renderPage(api);
+    fireEvent.click(await screen.findByRole("button", { name: "Conclude" }));
+    await screen.findByRole("dialog", { name: "Report" });
+    expect(screen.getByRole("heading", { name: "Agent scores" })).toBeTruthy();
+    expect(screen.getByText("3 unscored")).toBeTruthy();
+    expect(screen.getByText("Direct evidence +5")).toBeTruthy();
+    expect(api.closeInteraction).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles the same join code without closing or reopening classroom messages", async () => {
+    const detail = { ...finishedSegmentsDetail(), status: "running" as const };
+    const api = pageApi(interaction("closed"), interaction("closed"), detail);
+    renderPage(api);
+    const toggle = await screen.findByRole("button", { name: "Open Message" });
+    fireEvent.click(toggle);
+    expect(await screen.findByRole("button", { name: "Hide" })).toBe(toggle);
+    const url = screen.getByRole("img", { name: "Scan to join" }).textContent;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("img", { name: "Scan to join" })).toBeNull();
+    expect(screen.getByTestId("beta-stage").getAttribute("data-join-url")).toBe(
+      url,
+    );
+    expect(screen.getByRole("button", { name: "Open Message" })).toBe(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("img", { name: "Scan to join" }).textContent).toBe(
+      url,
+    );
+    expect(api.openInteraction).toHaveBeenCalledTimes(1);
+    expect(api.closeInteraction).not.toHaveBeenCalled();
+  });
+
+  it("restores the existing classroom URL after a reload without a new open request", async () => {
+    const detail = { ...finishedSegmentsDetail(), status: "running" as const };
+    const api = pageApi(interaction("open"), interaction("open"), detail);
+    renderPage(api);
+    const toggle = await screen.findByRole("button", { name: "Open Message" });
+    expect(screen.queryByRole("img", { name: "Scan to join" })).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByRole("img", { name: "Scan to join" }).textContent).toBe(
+      interaction("open").public_url,
+    );
+    expect(api.openInteraction).not.toHaveBeenCalled();
+    expect(api.closeInteraction).not.toHaveBeenCalled();
+  });
+
   it("closes an already-open classroom and opens the Report dialog", async () => {
     const api = pageApi(interaction("open"));
     renderPage(api);
@@ -303,12 +401,12 @@ describe("segments_v2 Bench Conclude and Report", () => {
     expect(await screen.findByTestId("inline-report")).toBeTruthy();
   });
 
-  it("restores a Report action after refresh and allows closing and reopening", async () => {
+  it("restores Conclude after refresh to reopen the report without closing interaction again", async () => {
     const api = pageApi(interaction("finalized"));
     renderPage(api);
 
     const report = await screen.findByRole("button", {
-      name: "Report",
+      name: "Conclude",
     });
     expect(screen.queryByTestId("inline-report")).toBeNull();
     fireEvent.click(report);
@@ -320,7 +418,9 @@ describe("segments_v2 Bench Conclude and Report", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(report);
     expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Conclude" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Report" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Agent scores" })).toBeNull();
+    expect(api.closeInteraction).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Interaction" })).toBeNull();
   });
 

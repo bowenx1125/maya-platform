@@ -24,7 +24,7 @@ import re
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -140,7 +140,9 @@ def _contains_acceptance_unknown(value: object, *, depth: int = 0) -> bool:
             if _contains_acceptance_unknown(value.get(key), depth=depth + 1):
                 return True
     elif isinstance(value, list):
-        return any(_contains_acceptance_unknown(item, depth=depth + 1) for item in value)
+        return any(
+            _contains_acceptance_unknown(item, depth=depth + 1) for item in value
+        )
     return False
 
 
@@ -190,6 +192,48 @@ class HttpTransport:
         csrf: bool = True,
         raw: bool = False,
     ) -> WireResponse:
+        return self._request(
+            method,
+            path,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            csrf=csrf,
+            raw=raw,
+        )
+
+    def request_multipart(
+        self,
+        method: str,
+        path: str,
+        *,
+        fields: Mapping[str, str],
+        file_name: str,
+        file_content: bytes,
+        content_type: str,
+        idempotency_key: str | None = None,
+        csrf: bool = True,
+    ) -> WireResponse:
+        return self._request(
+            method,
+            path,
+            idempotency_key=idempotency_key,
+            csrf=csrf,
+            multipart={"file": (file_name, file_content, content_type)},
+            fields=fields,
+        )
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: object | None = None,
+        idempotency_key: str | None = None,
+        csrf: bool = True,
+        raw: bool = False,
+        multipart: Mapping[str, object] | None = None,
+        fields: Mapping[str, str] | None = None,
+    ) -> WireResponse:
         if not path.startswith("/") or path.startswith("//"):
             raise RunnerFailure("relative_path_required")
         headers = {"Accept": "application/json", "Origin": self._origin}
@@ -204,7 +248,16 @@ class HttpTransport:
                 raise RunnerFailure("csrf_token_missing")
             headers["X-CSRF-Token"] = self._csrf_token
         try:
-            response = self._client.request(method, path, json=payload, headers=headers)
+            response = self._client.request(
+                method,
+                path,
+                headers=headers,
+                **(
+                    {"files": multipart, "data": fields}
+                    if multipart is not None
+                    else {"json": payload}
+                ),
+            )
         except Exception as exc:
             del exc
             raise RunnerFailure("transport_unavailable") from None
@@ -241,7 +294,9 @@ class HttpTransport:
         parsed = urlsplit(self._base_url)
         scheme = "wss" if parsed.scheme == "https" else "ws"
         ws_url = urlunsplit((scheme, parsed.netloc, path, "", ""))
-        cookie_header = "; ".join(f"{key}={value}" for key, value in self._client.cookies.items())
+        cookie_header = "; ".join(
+            f"{key}={value}" for key, value in self._client.cookies.items()
+        )
         headers = {"Cookie": cookie_header} if cookie_header else None
         try:
             from websockets.sync.client import connect
@@ -272,6 +327,8 @@ class ExecutionConfig:
     expected_version_ids: tuple[str, ...] = ()
     timeout_seconds: float = 180.0
     poll_interval_seconds: float = 1.0
+    group_id: str | None = None
+    corpus_path: Path | None = None
 
 
 def _mapping(value: object, code: str) -> dict[str, object]:
@@ -343,7 +400,11 @@ def _event_mapping(value: object) -> dict[str, object]:
         raise RunnerFailure("acceptance_unknown")
     if data.get("message_type") == "command.rejected":
         code = data.get("code")
-        safe = code if isinstance(code, str) and _SAFE_CODE.fullmatch(code) else "command_rejected"
+        safe = (
+            code
+            if isinstance(code, str) and _SAFE_CODE.fullmatch(code)
+            else "command_rejected"
+        )
         raise RunnerFailure(safe)
     return data
 
@@ -359,12 +420,14 @@ class PlaybackController:
         debate_id: str,
         timeout_seconds: float,
         poll_interval_seconds: float = 1.0,
+        require_grades: bool = False,
     ) -> None:
         self.transport = transport
         self.socket = socket
         self.debate_id = debate_id
         self.timeout_seconds = timeout_seconds
         self.poll_interval_seconds = max(0.0, poll_interval_seconds)
+        self.require_grades = require_grades
         self.audio_fetches = 0
         self.audio_bytes = 0
         self.turn_latencies_ms: list[int] = []
@@ -372,7 +435,9 @@ class PlaybackController:
 
     def _recv(self, timeout_seconds: float | None = None) -> dict[str, object]:
         try:
-            timeout = self.timeout_seconds if timeout_seconds is None else timeout_seconds
+            timeout = (
+                self.timeout_seconds if timeout_seconds is None else timeout_seconds
+            )
             raw = self.socket.recv(timeout)
         except TypeError:
             raw = self.socket.recv()
@@ -397,7 +462,9 @@ class PlaybackController:
         timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         deadline = time.monotonic() + (
-            self.timeout_seconds if timeout_seconds is None else max(0.0, timeout_seconds)
+            self.timeout_seconds
+            if timeout_seconds is None
+            else max(0.0, timeout_seconds)
         )
         while time.monotonic() < deadline:
             remaining = max(0.0, deadline - time.monotonic())
@@ -418,7 +485,9 @@ class PlaybackController:
             del exc
             raise RunnerFailure("websocket_send_failed") from None
 
-    def _command(self, command_type: str, expected_control_version: int, **fields: object) -> None:
+    def _command(
+        self, command_type: str, expected_control_version: int, **fields: object
+    ) -> None:
         self._send(
             {
                 "command_id": str(uuid4()),
@@ -434,7 +503,9 @@ class PlaybackController:
         snapshot = self._until("event_type", "snapshot")
         payload = _mapping(snapshot.get("payload"), "snapshot_invalid")
         playback = _mapping(payload.get("playback"), "snapshot_playback_invalid")
-        snapshot_version = _int(playback.get("control_version"), "control_version_invalid")
+        snapshot_version = _int(
+            playback.get("control_version"), "control_version_invalid"
+        )
         if snapshot_version != expected_control_version:
             expected_control_version = snapshot_version
         self._command(
@@ -464,9 +535,15 @@ class PlaybackController:
             playback_action=action,
         )
         prepared = self._until("message_type", "media.prepared")
-        media_path = _safe_media_path(prepared.get("media_url"), self.debate_id, turn_id)
+        media_path = _safe_media_path(
+            prepared.get("media_url"), self.debate_id, turn_id
+        )
         audio = self.transport.request("GET", media_path, raw=True, csrf=False)
-        if audio.status_code not in {200, 206} or audio.byte_count is None or audio.byte_count <= 0:
+        if (
+            audio.status_code not in {200, 206}
+            or audio.byte_count is None
+            or audio.byte_count <= 0
+        ):
             raise RunnerFailure("audio_unavailable", status_code=audio.status_code)
         self.audio_fetches += 1
         self.audio_bytes += audio.byte_count
@@ -483,7 +560,9 @@ class PlaybackController:
         _text(started_payload.get("speech"), "public_speech_missing")
         if not isinstance(started_payload.get("sources"), list):
             raise RunnerFailure("public_sources_invalid")
-        segment = _mapping(started_payload.get("segment_turn"), "segment_payload_missing")
+        segment = _mapping(
+            started_payload.get("segment_turn"), "segment_payload_missing"
+        )
         if segment.get("schema_version") != "segment_turn_v2":
             raise RunnerFailure("segment_schema_invalid")
         segments = segment.get("segments")
@@ -492,8 +571,19 @@ class PlaybackController:
         for item in segments:
             row = _mapping(item, "segment_invalid")
             _text(row.get("text"), "segment_text_missing")
-            if not isinstance(row.get("source_ids"), list):
+            source_ids = row.get("source_ids")
+            if not isinstance(source_ids, list):
                 raise RunnerFailure("segment_sources_invalid")
+            if self.require_grades:
+                if any(not isinstance(source_id, str) or not source_id.strip() for source_id in source_ids):
+                    raise RunnerFailure("segment_sources_invalid")
+                support_mode = row.get("support_mode")
+                if support_mode not in {"direct", "contextual", "no_match"}:
+                    raise RunnerFailure("segment_grade_missing")
+                if support_mode in {"direct", "contextual"} and not source_ids:
+                    raise RunnerFailure("segment_grade_source_mismatch")
+                if support_mode == "no_match" and source_ids:
+                    raise RunnerFailure("segment_grade_source_mismatch")
             reply = row.get("reply_to")
             if reply is not None and (
                 not isinstance(reply, str) or not re.fullmatch(r"B[1-9][0-9]*", reply)
@@ -510,9 +600,15 @@ class PlaybackController:
             turn_id=turn_id,
         )
         completed = self._until("event_type", "playback.completed")
-        completed_payload = _mapping(completed.get("payload"), "playback_completed_invalid")
-        next_version = _int(completed_payload.get("control_version"), "control_version_invalid")
-        self.turn_latencies_ms.append(max(0, int((time.monotonic() - turn_started) * 1000)))
+        completed_payload = _mapping(
+            completed.get("payload"), "playback_completed_invalid"
+        )
+        next_version = _int(
+            completed_payload.get("control_version"), "control_version_invalid"
+        )
+        self.turn_latencies_ms.append(
+            max(0, int((time.monotonic() - turn_started) * 1000))
+        )
         return started, completed, next_version
 
 
@@ -545,7 +641,9 @@ def _run_timed(
         raise
     except Exception as exc:
         del exc
-        _stages(report).append(_stage(name, started, status="failed", code="runner_failure"))
+        _stages(report).append(
+            _stage(name, started, status="failed", code="runner_failure")
+        )
         raise RunnerFailure("runner_failure") from None
     _stages(report).append(_stage(name, started))
     return result
@@ -578,15 +676,21 @@ def _poll(
             del last
             raise RunnerFailure(timeout_code)
         if poll_interval_seconds > 0:
-            time.sleep(min(poll_interval_seconds, max(0.0, deadline - time.monotonic())))
+            time.sleep(
+                min(poll_interval_seconds, max(0.0, deadline - time.monotonic()))
+            )
 
 
-def _preview_turns(detail: Mapping[str, object], expected: int) -> list[dict[str, object]]:
+def _preview_turns(
+    detail: Mapping[str, object], expected: int
+) -> list[dict[str, object]]:
     raw = detail.get("preview_turns")
     if not isinstance(raw, list) or len(raw) != expected:
         raise RunnerFailure("preview_turn_count_invalid")
     rows = [_mapping(item, "preview_turn_invalid") for item in raw]
-    rows.sort(key=lambda item: _int(item.get("turn_index"), "preview_turn_index_invalid"))
+    rows.sort(
+        key=lambda item: _int(item.get("turn_index"), "preview_turn_index_invalid")
+    )
     if [item.get("turn_index") for item in rows] != list(range(expected)):
         raise RunnerFailure("preview_turn_order_invalid")
     for row in rows:
@@ -599,7 +703,9 @@ def _preview_turns(detail: Mapping[str, object], expected: int) -> list[dict[str
     return rows
 
 
-def _preview_poll_rows(detail: Mapping[str, object], expected: int) -> list[dict[str, object]]:
+def _preview_poll_rows(
+    detail: Mapping[str, object], expected: int
+) -> list[dict[str, object]]:
     raw = detail.get("preview_turns")
     if not isinstance(raw, list) or len(raw) != expected:
         raise RunnerFailure("preview_turn_count_invalid")
@@ -612,13 +718,19 @@ def _preview_poll_rows(detail: Mapping[str, object], expected: int) -> list[dict
         seen_indices.add(index)
         _uuid(row.get("id"), "preview_turn_id_invalid")
         status = row.get("generation_status")
-        if not isinstance(status, str) or not status.strip() or not _SAFE_CODE.fullmatch(status):
+        if (
+            not isinstance(status, str)
+            or not status.strip()
+            or not _SAFE_CODE.fullmatch(status)
+        ):
             raise RunnerFailure("preview_turn_status_invalid")
         if not isinstance(row.get("audio_ready"), bool):
             raise RunnerFailure("preview_audio_status_invalid")
     if seen_indices != set(range(expected)):
         raise RunnerFailure("preview_turn_order_invalid")
-    rows.sort(key=lambda item: _int(item.get("turn_index"), "preview_turn_index_invalid"))
+    rows.sort(
+        key=lambda item: _int(item.get("turn_index"), "preview_turn_index_invalid")
+    )
     return rows
 
 
@@ -680,10 +792,16 @@ def _preview_poll(
                 },
             )
             status_progress = item["status_progress"]
-            if not isinstance(status_progress, list):  # pragma: no cover - internal invariant
+            if not isinstance(
+                status_progress, list
+            ):  # pragma: no cover - internal invariant
                 raise RunnerFailure("preview_progress_invalid")
             previous = status_progress[-1] if status_progress else None
-            current = {"at_ms": elapsed_ms, "generation_status": status, "audio_ready": audio_ready}
+            current = {
+                "at_ms": elapsed_ms,
+                "generation_status": status,
+                "audio_ready": audio_ready,
+            }
             if previous != current:
                 status_progress.append(current)
 
@@ -692,11 +810,17 @@ def _preview_poll(
             if status in {"failed", "turn_generation_failed"}:
                 raise RunnerFailure("preview_turn_failed")
             running_at_value = item.get("running_at_ms")
-            running_at_ms = running_at_value if isinstance(running_at_value, int) else None
+            running_at_ms = (
+                running_at_value if isinstance(running_at_value, int) else None
+            )
             if running_at_ms is None and status == "running":
                 item["running_at_ms"] = elapsed_ms
                 running_at_ms = elapsed_ms
-            if not ready and running_at_ms is None and status not in {"pending", "queued"}:
+            if (
+                not ready
+                and running_at_ms is None
+                and status not in {"pending", "queued"}
+            ):
                 # A turn can be in the audio stage after generation has
                 # completed.  Start its bounded active timer at that point.
                 item["running_at_ms"] = elapsed_ms
@@ -755,7 +879,10 @@ def _validate_created_detail(
         raise RunnerFailure("participant_count_mismatch")
     for index, item in enumerate(participants):
         row = _mapping(item, "participant_invalid")
-        if _uuid(row.get("agent_id"), "participant_agent_invalid") != config.agent_ids[index]:
+        if (
+            _uuid(row.get("agent_id"), "participant_agent_invalid")
+            != config.agent_ids[index]
+        ):
             raise RunnerFailure("participant_order_mismatch")
         _uuid(row.get("agent_version_id"), "participant_version_invalid")
         _uuid(row.get("knowledge_snapshot_id"), "participant_snapshot_invalid")
@@ -796,7 +923,10 @@ def _validate_agents(
         if selected is None:
             raise RunnerFailure("agent_not_published")
         version = _mapping(selected.get("current_version"), "published_version_invalid")
-        if _uuid(version.get("agent_id"), "published_version_agent_invalid") != agent_id:
+        if (
+            _uuid(version.get("agent_id"), "published_version_agent_invalid")
+            != agent_id
+        ):
             raise RunnerFailure("published_version_agent_invalid")
         if version.get("state") != "published":
             raise RunnerFailure("agent_not_published")
@@ -811,7 +941,41 @@ def _validate_agents(
             raise RunnerFailure("published_version_mismatch")
 
 
-def _next_turn_ready_detail(detail: Mapping[str, object], completed_turn_id: str) -> bool:
+def _validate_fresh_composition(transport: SessionTransport) -> dict[str, str]:
+    """Require the reviewed Real/Mock slice before a fresh acceptance case."""
+
+    response = transport.request("GET", "/api/v1/demo/composition", csrf=False)
+    body = _mapping(response.data, "composition_response_invalid")
+    raw_components = body.get("components")
+    if not isinstance(raw_components, list):
+        raise RunnerFailure("composition_components_invalid")
+    expected = {"embedding", "llm", "tts", "voice", "report"}
+    modes: dict[str, str] = {}
+    for item in raw_components:
+        component = _mapping(item, "composition_component_invalid")
+        key = _text(component.get("key"), "composition_component_key_invalid")
+        mode = _text(component.get("mode"), "composition_component_mode_invalid")
+        if key not in expected or key in modes or mode not in {"real", "mock"}:
+            raise RunnerFailure("composition_component_invalid")
+        unreviewed = component.get("policy_unreviewed")
+        if not isinstance(unreviewed, bool):
+            raise RunnerFailure("composition_policy_status_invalid")
+        if key in {"embedding", "llm", "report"}:
+            if mode != "real":
+                raise RunnerFailure("composition_real_required")
+            if unreviewed:
+                raise RunnerFailure("composition_policy_unreviewed")
+        elif mode != "mock":
+            raise RunnerFailure("composition_mock_required")
+        modes[key] = mode
+    if set(modes) != expected:
+        raise RunnerFailure("composition_component_missing")
+    return modes
+
+
+def _next_turn_ready_detail(
+    detail: Mapping[str, object], completed_turn_id: str
+) -> bool:
     playback = detail.get("playback")
     if not isinstance(playback, Mapping):
         return False
@@ -986,15 +1150,28 @@ def _play_many(
                 controller,
                 debate_id,
                 expected_id,
-                expected_next_id=(turn_ids[index + 1] if turn_ids is not None else None),
+                expected_next_id=(
+                    turn_ids[index + 1] if turn_ids is not None else None
+                ),
             )
         else:
             control_version = ended_version
     return events, control_version, reply_bound
 
 
-def _safe_case_report(spec: SessionSpec) -> dict[str, object]:
-    return {
+def _safe_case_report(
+    spec: SessionSpec,
+    *,
+    composition_modes: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    provider_evidence: dict[str, object] = {
+        "embedding": UNAVAILABLE,
+        "llm": UNAVAILABLE,
+        "report": UNAVAILABLE,
+        "tts": UNAVAILABLE,
+        "three_d_browser": UNAVAILABLE,
+    }
+    result: dict[str, object] = {
         "session_id": spec.session_id,
         "session_kind": spec.session_kind,
         "language": spec.language,
@@ -1005,15 +1182,14 @@ def _safe_case_report(spec: SessionSpec) -> dict[str, object]:
         "expected_final_replies": spec.expected_final_replies,
         "status": "running",
         "stages": [],
-        "provider_evidence": {
-            "embedding": UNAVAILABLE,
-            "llm": UNAVAILABLE,
-            "report": UNAVAILABLE,
-            "tts": UNAVAILABLE,
-            "three_d_browser": UNAVAILABLE,
-        },
+        "provider_evidence": provider_evidence,
         "audio_playback_evidence": "http_bytes_only",
     }
+    if composition_modes is not None:
+        observed = dict(composition_modes)
+        result["composition_modes"] = observed
+        provider_evidence.update(observed)
+    return result
 
 
 def _observed_turns(item: Mapping[str, object]) -> int:
@@ -1050,6 +1226,7 @@ class NextWaveRealSessionRunner:
         student = self.transport_factory("student")
         reports: list[dict[str, object]] = []
         stopped_reason: str | None = None
+        composition_modes: dict[str, str] | None = None
         try:
             setup: list[dict[str, object]] = []
             started = time.monotonic()
@@ -1062,11 +1239,17 @@ class NextWaveRealSessionRunner:
                 student_login(config.student_user_id)
                 setup.append(_stage("quick_login", started))
                 started = time.monotonic()
-                _validate_agents(teacher, config)
-                setup.append(_stage("agent_preflight", started))
+                if config.group_id is not None and resume_debug_debate_id is None:
+                    composition_modes = _validate_fresh_composition(teacher)
+                    setup.append(_stage("composition_preflight", started))
+                elif config.group_id is None:
+                    _validate_agents(teacher, config)
+                    setup.append(_stage("agent_preflight", started))
             except RunnerFailure as exc:
                 setup.append(_stage("setup", started, status="failed", code=exc.code))
-                return self._run_summary(sessions, reports, setup, stopped_reason=exc.code)
+                return self._run_summary(
+                    sessions, reports, setup, stopped_reason=exc.code
+                )
 
             for spec in sessions:
                 report = self._run_case(
@@ -1075,15 +1258,22 @@ class NextWaveRealSessionRunner:
                     teacher,
                     student,
                     resume_debug_debate_id=resume_debug_debate_id,
+                    composition_modes=composition_modes,
                 )
                 reports.append(report)
-                if report.get("status") == "acceptance_unknown":
-                    stopped_reason = "acceptance_unknown"
+                if report.get("status") in {"acceptance_unknown", "failed"}:
+                    stopped_reason = str(
+                        report.get("safe_error_code")
+                        or report.get("error_code")
+                        or report.get("status")
+                    )
                     break
         finally:
             teacher.close()
             student.close()
-        return self._run_summary(sessions, reports, setup, stopped_reason=stopped_reason)
+        return self._run_summary(
+            sessions, reports, setup, stopped_reason=stopped_reason
+        )
 
     def _run_summary(
         self,
@@ -1117,7 +1307,7 @@ class NextWaveRealSessionRunner:
             "stopped_reason": stopped_reason,
             "pending_evidence": [
                 "provider_attempt_counts",
-                "real_tts_audio_identity",
+                "configured_tts_audio_identity",
                 "audio_playback_evidence",
                 "browser_audio_playback",
                 "three_d_face_playback",
@@ -1133,8 +1323,9 @@ class NextWaveRealSessionRunner:
         student: SessionTransport,
         *,
         resume_debug_debate_id: str | None = None,
+        composition_modes: Mapping[str, str] | None = None,
     ) -> dict[str, object]:
-        report = _safe_case_report(spec)
+        report = _safe_case_report(spec, composition_modes=composition_modes)
         session_receipt = _idempotency(self.run_id, spec.session_id, "case")
         report["case_receipt_id"] = session_receipt
         if resume_debug_debate_id is not None:
@@ -1144,6 +1335,37 @@ class NextWaveRealSessionRunner:
         socket: EventSocket | None = None
         controller: PlaybackController | None = None
         try:
+            if config.group_id is not None and resume_debug_debate_id is None:
+                from next_wave_session_authoring import (
+                    AuthoringFailure,
+                    author_session_agents,
+                )
+
+                try:
+                    authored = author_session_agents(
+                        spec,
+                        student=student,
+                        teacher=teacher,
+                        group_id=config.group_id,
+                        corpus=config.corpus_path,
+                        run_id=self.run_id,
+                    )
+                except AuthoringFailure as exc:
+                    report["agent_authoring"] = exc.partial_audit
+                    raise RunnerFailure(exc.code) from None
+                report["agent_authoring"] = authored
+                config = replace(
+                    config,
+                    agent_ids=tuple(
+                        _uuid(item, "authored_agent_id_invalid")
+                        for item in cast(list[object], authored["agent_ids"])
+                    ),
+                    expected_version_ids=tuple(
+                        _uuid(item, "authored_version_id_invalid")
+                        for item in cast(list[object], authored["version_ids"])
+                    ),
+                )
+                _validate_agents(teacher, config)
             selected_agents = config.agent_ids[: spec.agent_count]
             selected_versions = (
                 config.expected_version_ids[: spec.agent_count]
@@ -1177,7 +1399,9 @@ class NextWaveRealSessionRunner:
                                 for agent_id in selected_agents
                             ],
                         },
-                        idempotency_key=_idempotency(self.run_id, spec.session_id, "create"),
+                        idempotency_key=_idempotency(
+                            self.run_id, spec.session_id, "create"
+                        ),
                     ),
                 )
                 created = _mapping(created_response.data, "create_response_invalid")
@@ -1191,7 +1415,9 @@ class NextWaveRealSessionRunner:
                     report,
                     "resume_read",
                     lambda: _mapping(
-                        teacher.request("GET", f"/api/v1/debates/{debate_id}", csrf=False).data,
+                        teacher.request(
+                            "GET", f"/api/v1/debates/{debate_id}", csrf=False
+                        ).data,
                         "resume_detail_invalid",
                     ),
                 )
@@ -1208,12 +1434,17 @@ class NextWaveRealSessionRunner:
                     poll_interval_seconds=config.poll_interval_seconds,
                 ),
             )
-            if not isinstance(preview_result, PreviewPollResult):  # pragma: no cover - invariant
+            if not isinstance(
+                preview_result, PreviewPollResult
+            ):  # pragma: no cover - invariant
                 raise RunnerFailure("preview_result_invalid")
             report["preview_progress"] = preview_result.audit
             preview_detail = preview_result.detail
             preview_rows = _preview_turns(preview_detail, expected_preview)
-            pre_ids = [str(_uuid(row.get("id"), "preview_turn_id_invalid")) for row in preview_rows]
+            pre_ids = [
+                str(_uuid(row.get("id"), "preview_turn_id_invalid"))
+                for row in preview_rows
+            ]
             pre_rounds = {
                 str(_uuid(row.get("id"), "preview_turn_id_invalid")): _int(
                     row.get("round_no"), "preview_round_invalid"
@@ -1237,7 +1468,9 @@ class NextWaveRealSessionRunner:
                                 "confirm_previous_audio_cleanup": False,
                                 "output_language": spec.language,
                             },
-                            idempotency_key=_idempotency(self.run_id, spec.session_id, "start"),
+                            idempotency_key=_idempotency(
+                                self.run_id, spec.session_id, "start"
+                            ),
                         ).data,
                         "start_response_invalid",
                     ),
@@ -1245,8 +1478,12 @@ class NextWaveRealSessionRunner:
             else:
                 start_detail = preview_detail
             playback = _mapping(start_detail.get("playback"), "start_playback_invalid")
-            control_version = _int(playback.get("control_version"), "control_version_invalid")
-            current_turn_id = _uuid(playback.get("current_turn_id"), "current_turn_invalid")
+            control_version = _int(
+                playback.get("control_version"), "control_version_invalid"
+            )
+            current_turn_id = _uuid(
+                playback.get("current_turn_id"), "current_turn_invalid"
+            )
             if current_turn_id != pre_ids[0]:
                 raise RunnerFailure("initial_turn_mismatch")
 
@@ -1258,7 +1495,9 @@ class NextWaveRealSessionRunner:
                         teacher.request(
                             "POST",
                             f"/api/v1/debates/{debate_id}/interaction/open",
-                            idempotency_key=_idempotency(self.run_id, spec.session_id, "open"),
+                            idempotency_key=_idempotency(
+                                self.run_id, spec.session_id, "open"
+                            ),
                         ).data,
                         "interaction_response_invalid",
                     ),
@@ -1269,7 +1508,9 @@ class NextWaveRealSessionRunner:
                     "interaction_resume",
                     lambda: _mapping(
                         teacher.request(
-                            "GET", f"/api/v1/debates/{debate_id}/interaction", csrf=False
+                            "GET",
+                            f"/api/v1/debates/{debate_id}/interaction",
+                            csrf=False,
                         ).data,
                         "interaction_response_invalid",
                     ),
@@ -1290,6 +1531,7 @@ class NextWaveRealSessionRunner:
                 debate_id=debate_id,
                 timeout_seconds=config.timeout_seconds,
                 poll_interval_seconds=config.poll_interval_seconds,
+                require_grades=config.group_id is not None,
             )
             assert controller is not None
             epoch, control_version = _run_timed(
@@ -1299,7 +1541,10 @@ class NextWaveRealSessionRunner:
             )
 
             def submit_for_turn(turn_id: str, round_no: int) -> None:
-                if spec.barrage_mode != "with_barrage" or round_no not in spec.eligible_turns:
+                if (
+                    spec.barrage_mode != "with_barrage"
+                    or round_no not in spec.eligible_turns
+                ):
                     return
                 if round_no in sent_rounds:
                     return
@@ -1355,7 +1600,9 @@ class NextWaveRealSessionRunner:
             )
             if frozen.get("ready") is not True:
                 raise RunnerFailure("final_input_not_ready")
-            if _int(frozen.get("barrage_count"), "barrage_count_invalid") != len(sent_rounds):
+            if _int(frozen.get("barrage_count"), "barrage_count_invalid") != len(
+                sent_rounds
+            ):
                 raise RunnerFailure("barrage_count_mismatch")
             report["final_input"] = {
                 "barrage_count": frozen.get("barrage_count"),
@@ -1374,9 +1621,15 @@ class NextWaveRealSessionRunner:
                     timeout_code="final_preparation_timeout",
                 ),
             )
-            final_playback = _mapping(final_waiting.get("playback"), "final_playback_invalid")
-            control_version = _int(final_playback.get("control_version"), "control_version_invalid")
-            prior_id = _uuid(final_playback.get("current_turn_id"), "current_turn_invalid")
+            final_playback = _mapping(
+                final_waiting.get("playback"), "final_playback_invalid"
+            )
+            control_version = _int(
+                final_playback.get("control_version"), "control_version_invalid"
+            )
+            prior_id = _uuid(
+                final_playback.get("current_turn_id"), "current_turn_invalid"
+            )
             if prior_id != pre_ids[-1]:
                 raise RunnerFailure("final_boundary_turn_mismatch")
             next_state = _mapping(
@@ -1391,8 +1644,12 @@ class NextWaveRealSessionRunner:
                 "final_next_response_invalid",
             )
             next_playback = _mapping(next_state, "final_next_response_invalid")
-            control_version = _int(next_playback.get("control_version"), "control_version_invalid")
-            current_turn_id = _uuid(next_playback.get("current_turn_id"), "final_turn_invalid")
+            control_version = _int(
+                next_playback.get("control_version"), "control_version_invalid"
+            )
+            current_turn_id = _uuid(
+                next_playback.get("current_turn_id"), "final_turn_invalid"
+            )
             final_playback_started = time.monotonic()
             final_started_events, control_version, final_reply_bound_turns = _play_many(
                 controller,
@@ -1405,7 +1662,9 @@ class NextWaveRealSessionRunner:
                 epoch=epoch,
                 action="next",
                 require_reply_binding=spec.barrage_mode == "with_barrage",
-                allowed_reply_ids={f"B{index}" for index in range(1, len(sent_rounds) + 1)},
+                allowed_reply_ids={
+                    f"B{index}" for index in range(1, len(sent_rounds) + 1)
+                },
             )
             _stages(report).append(_stage("playback_final", final_playback_started))
 
@@ -1416,7 +1675,9 @@ class NextWaveRealSessionRunner:
             conclude_action = _run_timed(
                 report,
                 "finish_conclude",
-                lambda: _finish_and_conclude(teacher, debate_id, config, spec, control_version),
+                lambda: _finish_and_conclude(
+                    teacher, debate_id, config, spec, control_version
+                ),
             )
             report["conclude_action"] = conclude_action
             generated = _run_timed(
@@ -1425,7 +1686,9 @@ class NextWaveRealSessionRunner:
                 lambda: teacher.request(
                     "POST",
                     f"/api/v1/debates/{debate_id}/report/generate",
-                    idempotency_key=_idempotency(self.run_id, spec.session_id, "report"),
+                    idempotency_key=_idempotency(
+                        self.run_id, spec.session_id, "report"
+                    ),
                 ),
             )
             _mapping(generated.data, "report_response_invalid")
@@ -1454,7 +1717,9 @@ class NextWaveRealSessionRunner:
                 ),
             )
             if downloaded.status_code != 200 or not downloaded.byte_count:
-                raise RunnerFailure("report_download_failed", status_code=downloaded.status_code)
+                raise RunnerFailure(
+                    "report_download_failed", status_code=downloaded.status_code
+                )
             observed: dict[str, object] = {
                 "turns": len(pre_started_events) + len(final_started_events),
                 "nonfinal_turns": len(pre_started_events),
@@ -1581,8 +1846,12 @@ def _finish_and_conclude(
 
 
 def _validate_config(sessions: Sequence[SessionSpec], config: ExecutionConfig) -> None:
-    if not 2 <= len(config.agent_ids) <= 5:
+    if config.group_id is None and not 2 <= len(config.agent_ids) <= 5:
         raise RunnerFailure("agent_count_invalid")
+    if config.group_id is not None:
+        _uuid(config.group_id, "group_id_invalid")
+        if config.agent_ids or config.expected_version_ids:
+            raise RunnerFailure("authoring_agent_ids_conflict")
     if config.timeout_seconds <= 0 or config.poll_interval_seconds < 0:
         raise RunnerFailure("timeout_config_invalid")
     if len(config.expected_version_ids) not in {0, len(config.agent_ids)}:
@@ -1595,7 +1864,7 @@ def _validate_config(sessions: Sequence[SessionSpec], config: ExecutionConfig) -
     if not sessions:
         raise RunnerFailure("session_selection_empty")
     max_agents = max(item.agent_count for item in sessions)
-    if len(config.agent_ids) < max_agents:
+    if config.group_id is None and len(config.agent_ids) < max_agents:
         raise RunnerFailure("agent_ids_insufficient")
     for value in (*config.agent_ids, *config.expected_version_ids):
         try:
@@ -1614,7 +1883,11 @@ def select_sessions(
         raise RunnerFailure("selection_flags_conflict")
     if debug_2x2:
         selected = next(
-            (item for item in bundle.sessions if item.agent_count == 2 and item.round_count == 2),
+            (
+                item
+                for item in bundle.sessions
+                if item.agent_count == 2 and item.round_count == 2
+            ),
             None,
         )
         if selected is None:
@@ -1632,7 +1905,9 @@ def select_sessions(
     return tuple(item for item in bundle.sessions if item.session_id in requested_set)
 
 
-def dry_run(bundle: FixtureBundle, sessions: Sequence[SessionSpec]) -> dict[str, object]:
+def dry_run(
+    bundle: FixtureBundle, sessions: Sequence[SessionSpec]
+) -> dict[str, object]:
     return {
         "schema_version": RUN_SCHEMA_VERSION,
         "status": "dry_run",
@@ -1642,8 +1917,12 @@ def dry_run(bundle: FixtureBundle, sessions: Sequence[SessionSpec]) -> dict[str,
         "turns_expected": sum(item.expected_turns for item in sessions),
         "reports_expected": len(sessions),
         "barrage_assignments": {
-            "with_barrage": sum(item.barrage_mode == "with_barrage" for item in sessions),
-            "without_barrage": sum(item.barrage_mode == "without_barrage" for item in sessions),
+            "with_barrage": sum(
+                item.barrage_mode == "with_barrage" for item in sessions
+            ),
+            "without_barrage": sum(
+                item.barrage_mode == "without_barrage" for item in sessions
+            ),
         },
         "fixture_hash": bundle.fixture_hash,
         "session_ids": [item.session_id for item in sessions],
@@ -1670,11 +1949,15 @@ def _write_output(value: Mapping[str, object], path: Path | None) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--fixture-root", type=Path, default=ROOT / "backend/tests/fixtures/next_wave_rag"
+        "--fixture-root",
+        type=Path,
+        default=ROOT / "backend/tests/fixtures/next_wave_rag",
     )
     parser.add_argument("--session-id", action="append", default=[])
     parser.add_argument(
-        "--debug-2x2", action="store_true", help="run one deterministic 2x2 debug session"
+        "--debug-2x2",
+        action="store_true",
+        help="run one deterministic 2x2 debug session",
     )
     parser.add_argument(
         "--resume-debug-debate-id",
@@ -1687,6 +1970,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--course-id")
     parser.add_argument("--teacher-user-id")
     parser.add_argument("--student-user-id")
+    parser.add_argument(
+        "--group-id", help="author fresh Agents and knowledge for every session"
+    )
+    parser.add_argument(
+        "--corpus-path", type=Path, help="synthetic Markdown knowledge for fresh Agents"
+    )
     parser.add_argument("--agent-id", action="append", default=[])
     parser.add_argument("--agent-version-id", action="append", default=[])
     parser.add_argument("--timeout-seconds", type=float, default=180.0)
@@ -1695,7 +1984,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         bundle = load_fixture_bundle(args.fixture_root)
-        sessions = select_sessions(bundle, session_ids=args.session_id, debug_2x2=args.debug_2x2)
+        sessions = select_sessions(
+            bundle, session_ids=args.session_id, debug_2x2=args.debug_2x2
+        )
         if args.resume_debug_debate_id and (
             not args.execute_real or not args.debug_2x2 or len(sessions) != 1
         ):
@@ -1710,6 +2001,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 2
         if args.resume_debug_debate_id:
+            if args.group_id:
+                raise RunnerFailure("fresh_authoring_cannot_resume")
             try:
                 UUID(args.resume_debug_debate_id)
             except (ValueError, AttributeError):
@@ -1742,12 +2035,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             tuple(args.agent_version_id),
             args.timeout_seconds,
             args.poll_interval_seconds,
+            args.group_id,
+            args.corpus_path,
         )
         _validate_config(sessions, config)
         runner = NextWaveRealSessionRunner(
             bundle,
             transport_factory=lambda _role: HttpTransport(
-                cast(str, args.base_url), timeout_seconds=min(30.0, args.timeout_seconds)
+                cast(str, args.base_url),
+                timeout_seconds=min(30.0, args.timeout_seconds),
             ),
         )
         result = runner.execute(
@@ -1759,14 +2055,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         # API completion intentionally remains non-zero until the separate
         # browser/3D/TTS evidence exists; this cannot be mistaken for the
         # frozen full acceptance gate.
-        return 2 if result["status"] == "api_flow_complete_pending_browser_review" else 1
+        return (
+            2 if result["status"] == "api_flow_complete_pending_browser_review" else 1
+        )
     except FixtureValidationError as exc:
         _write_output(
             {
                 "schema_version": RUN_SCHEMA_VERSION,
                 "status": "fixtures_invalid",
                 "real_calls_made": 0,
-                "error_codes": list(dict.fromkeys(exc.codes or ("fixture_validation_failed",))),
+                "error_codes": list(
+                    dict.fromkeys(exc.codes or ("fixture_validation_failed",))
+                ),
             },
             args.output,
         )
@@ -1775,7 +2075,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         _write_output(
             {
                 "schema_version": RUN_SCHEMA_VERSION,
-                "status": "configuration_invalid" if not args.execute_real else "real_failed",
+                "status": "configuration_invalid"
+                if not args.execute_real
+                else "real_failed",
                 "real_calls_made": 0,
                 "error_code": exc.code,
             },
@@ -1783,7 +2085,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return (
             2
-            if exc.code.startswith(("configuration", "selection", "agent_", "identity", "version_"))
+            if exc.code.startswith(
+                ("configuration", "selection", "agent_", "identity", "version_")
+            )
             else 1
         )
 

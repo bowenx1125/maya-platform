@@ -1,0 +1,13 @@
+.grade {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.grade[data-grade="direct"] {
+  color: var(--green);
+}
+
+.grade[data-grade="indirect"] {
+  color: #8d6926;
+}

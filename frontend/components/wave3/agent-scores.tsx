@@ -2,21 +2,14 @@
 
 import { BarChart, type ChartDatum } from "../charts";
 import { useLocale } from "../locale";
-import { EVIDENCE_GRADE_POINTS, gradeClaims } from "../../lib/evidence-grading";
+import {
+  EVIDENCE_GRADE_POINTS,
+  EVIDENCE_GRADE_LABELS,
+  gradeClaims,
+  segmentEvidenceGrade,
+} from "../../lib/evidence-grading";
 import type { DebateParticipant, DebateTurn } from "../../lib/api";
-
-/**
- * How much each Agent grounded its speeches in retrieved evidence.
- *
- * Read from the evidence chain the Check RAG panel already shows, through the
- * same `support_mode` mapping — one helper feeds both, so the score and the
- * labels can never disagree about what counts as direct.
- *
- * This measures how often a claim was tied to retrieved evidence. It is not a
- * judgement of how good an argument was, and the caption says so: the same
- * honesty the evidence panel keeps when it says it records lineage, not fact
- * checking.
- */
+import styles from "./agent-scores.module.css";
 
 function claimsOf(turn: DebateTurn): { support_mode: string }[] {
   // The chain is typed on the wire, but a turn from an older run may carry
@@ -37,8 +30,16 @@ export function agentScores(
   turns: DebateTurn[],
 ): ChartDatum[] {
   const byParticipant = new Map<string, number>();
+  const seen = new Set<string>();
   for (const turn of turns) {
-    const points = gradeClaims(claimsOf(turn));
+    if (seen.has(turn.id)) continue;
+    seen.add(turn.id);
+    const points = turn.segment_turn
+      ? turn.segment_turn.segments.reduce((total, segment) => {
+          const grade = segmentEvidenceGrade(segment);
+          return total + (grade === null ? 0 : EVIDENCE_GRADE_POINTS[grade]);
+        }, 0)
+      : gradeClaims(claimsOf(turn));
     byParticipant.set(
       turn.participant_id,
       (byParticipant.get(turn.participant_id) ?? 0) + points,
@@ -61,12 +62,23 @@ export function AgentScores({
   const { locale } = useLocale();
   const zh = locale === "zh";
   const data = agentScores(participants, turns);
+  const unscored = [...new Map(turns.map((turn) => [turn.id, turn])).values()]
+    .flatMap((turn) => turn.segment_turn?.segments ?? [])
+    .filter((segment) => segmentEvidenceGrade(segment) === null).length;
   return (
     <section aria-labelledby="agent-scores-title" className="section-card">
       <div className="section-card-header">
         <div>
           <h2 id="agent-scores-title">{zh ? "Agent 评分" : "Agent scores"}</h2>
         </div>
+      </div>
+      <div aria-label="Evidence grading" className={styles.legend}>
+        {Object.entries(EVIDENCE_GRADE_LABELS).map(([grade, label]) => (
+          <span key={grade} data-grade={grade}>
+            {label}
+          </span>
+        ))}
+        {unscored > 0 ? <span>{unscored} unscored</span> : null}
       </div>
       <BarChart
         data={data}

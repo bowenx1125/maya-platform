@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { SegmentEvidence } from "../../../lib/evidence-grading";
+import { SegmentGrade } from "../../evidence/segment-grade";
 
 import { ErrorNotice, SectionCard, StatusBadge } from "../../ui";
 import styles from "./debate-preview.module.css";
@@ -12,7 +14,7 @@ export type DebatePreviewProgress = {
   ready: boolean;
 };
 
-export type DebatePreviewSegment = {
+export type DebatePreviewSegment = SegmentEvidence & {
   text: string;
   source_ids: readonly string[];
   reply_to: string | null;
@@ -73,12 +75,6 @@ export function DebatePreview({
 }) {
   const previewTurns = detail.preview_turns ?? [];
   const progress = detail.preview ?? deriveProgress(previewTurns);
-  const audioUnavailable = previewTurns.some(
-    (turn) => turn.generation_status === "final_ready" && !turn.audio_ready,
-  );
-  const needsAttention = previewTurns.some((turn) =>
-    Boolean(turn.safe_error_code),
-  );
   const participantNames = new Map(
     detail.participants.map((participant) => [
       participant.id,
@@ -98,51 +94,22 @@ export function DebatePreview({
         </div>
         <div className={styles.headerActions}>
           {actions}
-          {backHref ? (
-            <Link className="secondary-action" href={backHref}>
-              {backLabel}
-            </Link>
-          ) : null}
-          {progress.ready ? (
-            <Link className="primary-action" href={openClassroomHref}>
-              Open Classroom
-            </Link>
-          ) : null}
+          <div className={styles.navigationActions}>
+            {backHref ? (
+              <Link className="secondary-action" href={backHref}>
+                {backLabel}
+              </Link>
+            ) : null}
+            {progress.ready ? (
+              <Link className="primary-action" href={openClassroomHref}>
+                Open Classroom
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
 
       {error ? <ErrorNotice error={error} /> : null}
-
-      <SectionCard className={styles.progressCard} title="Preview progress">
-        <div className={styles.progressLine}>
-          <strong>
-            {progress.prepared_turns} / {progress.expected_turns} turns ready
-          </strong>
-          <span>
-            {progress.ready
-              ? "Ready for classroom"
-              : audioUnavailable
-                ? "Audio unavailable"
-                : needsAttention
-                  ? "Needs attention"
-                  : "Preparing"}
-          </span>
-        </div>
-        <div
-          aria-label="Preview progress"
-          aria-valuemax={progress.expected_turns}
-          aria-valuemin={0}
-          aria-valuenow={progress.prepared_turns}
-          className={styles.progressTrack}
-          role="progressbar"
-        >
-          <span
-            style={{
-              width: `${progress.expected_turns > 0 ? Math.min(100, (progress.prepared_turns / progress.expected_turns) * 100) : 0}%`,
-            }}
-          />
-        </div>
-      </SectionCard>
 
       {turns.length === 0 ? (
         <SectionCard>
@@ -196,16 +163,15 @@ function PreviewTurnCard({
         </div>
         <div className={styles.turnStatus}>
           <StatusBadge
-            status={failed ? "failed" : savedSpeech ? "Saved" : "preparing"}
-            tone={failed ? "bad" : savedSpeech ? "good" : "warn"}
-          />
-          <span
-            className={
-              turn.audio_ready ? styles.audioReady : styles.audioPending
+            status={
+              turn.audio_ready
+                ? "Audio Ready"
+                : failed
+                  ? "Audio Not Ready"
+                  : "Preparing"
             }
-          >
-            {turn.audio_ready ? "Audio ready" : "Audio not ready"}
-          </span>
+            tone={turn.audio_ready ? "good" : failed ? "bad" : "warn"}
+          />
         </div>
       </div>
 
@@ -256,6 +222,7 @@ function RagCheck({
       <div className={styles.segmentList}>
         {segments.map((segment, index) => (
           <div className={styles.segment} key={`${index}-${segment.text}`}>
+            <SegmentGrade segment={segment} />
             <p>{segment.text}</p>
             <div className={styles.segmentSources}>
               {segment.source_ids.length === 0 ? (

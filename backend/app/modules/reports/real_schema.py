@@ -16,7 +16,7 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from .schemas import ReportSectionOutput
+from .schemas import ReportScoreSummary, ReportSectionOutput
 
 REPORT_SECTION_FIELDS: Final[tuple[str, ...]] = (
     "debate_overview",
@@ -324,6 +324,9 @@ class ReportRequestV2(ReportRequest):
     sources: tuple[ReportSource, ...] = Field(default=(), max_length=150)
     classroom_barrages: tuple[ReportBarrage, ...] = ()
     replies: tuple[ReportReply, ...] = ()
+    # Code-owned, deterministic classroom grading.  Omit for an older stored
+    # v2 manifest so its request hash remains stable during recovery.
+    score_summary: ReportScoreSummary | None = None
 
     @model_validator(mode="after")
     def validate_v2_semantics(self) -> ReportRequestV2:
@@ -349,10 +352,24 @@ class ReportRequestV2(ReportRequest):
         ]
         if len(reply_keys) != len(set(reply_keys)):
             raise ReportBoundaryError("report_duplicate_reply")
+        if self.score_summary is not None and {item.slot for item in self.score_summary.agents} != {
+            item.slot for item in self.participants
+        }:
+            raise ReportBoundaryError("report_score_projection")
         return self
 
     def canonical_payload(self) -> dict[str, object]:
         payload = super().canonical_payload()
+        if payload.get("score_summary") is None:
+            payload.pop("score_summary", None)
+        elif isinstance(payload.get("score_summary"), dict):
+            score_summary = cast(dict[str, object], payload["score_summary"])
+            agents = score_summary.get("agents")
+            if isinstance(agents, list):
+                score_summary["agents"] = sorted(
+                    cast(list[dict[str, object]], agents),
+                    key=lambda row: str(row["slot"]),
+                )
         payload["classroom_barrages"] = sorted(
             cast(list[dict[str, object]], payload["classroom_barrages"]),
             key=lambda row: (str(row["barrage_id"]), int(cast(int, row["turn_index"]))),

@@ -503,6 +503,8 @@ function deriveClassroomPhase(
 export type BetaStageProps = DebateStageProps & {
   /** The classroom join URL, once a teacher has opened interaction. */
   joinUrl?: string | null;
+  /** Display only; hiding the code never closes the classroom entry. */
+  joinCodeVisible?: boolean;
   /** Ask the page to re-read the interaction so the join URL arrives. */
   onInteractionOpened?: () => void;
   /** Beta-only copy, kept out of the shared label table. */
@@ -558,6 +560,7 @@ export function BetaDebateStage({
   headerActions,
   outputLanguage = "en",
   joinUrl,
+  joinCodeVisible = true,
   onInteractionOpened,
   betaLabels,
 }: BetaStageProps) {
@@ -3225,8 +3228,8 @@ export function BetaDebateStage({
               label={beta.barrageLane}
               paused={barragePaused}
             />
-            {joinUrl ? (
-              <div className={stage3d.joinCard}>
+            {joinUrl && joinCodeVisible ? (
+              <div className={stage3d.joinCard} id="classroom-join-code">
                 {/* QrCode brings its own caption with the URL under it, so the
                     card adds only the running count beside the symbol. */}
                 <QrCode label={beta.joinLabel} value={joinUrl} />

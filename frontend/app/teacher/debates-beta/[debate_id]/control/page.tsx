@@ -15,6 +15,7 @@ import {
   useSession,
 } from "../../../../../components/session-provider";
 import { ReportPanel } from "../../../../../components/report";
+import { AgentScores } from "../../../../../components/wave3/agent-scores";
 import { ErrorNotice, LoadingCard } from "../../../../../components/ui";
 import {
   createIdempotencyHandle,
@@ -217,9 +218,8 @@ export default function TeacherDebateControlPage() {
   const [interaction, setInteraction] = useState<TeacherInteraction | null>(
     null,
   );
-  // The join URL only exists once a teacher has opened classroom messages;
-  // until then the stage shows no code and no lanes.
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
+  const [joinCodeVisible, setJoinCodeVisible] = useState(false);
   const [interactionBusy, setInteractionBusy] = useState(false);
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -295,6 +295,10 @@ export default function TeacherDebateControlPage() {
 
   const openInteraction = useCallback(async () => {
     if (!debateId || interactionInFlight.current) return;
+    if (joinUrl) {
+      setJoinCodeVisible((visible) => !visible);
+      return;
+    }
     interactionInFlight.current = true;
     setInteractionBusy(true);
     setInteractionError(null);
@@ -305,13 +309,14 @@ export default function TeacherDebateControlPage() {
       interactionOpenKey.current = null;
       setInteraction(next);
       setJoinUrl(next.status === "open" ? next.public_url : null);
+      setJoinCodeVisible(next.status === "open" && Boolean(next.public_url));
     } catch (cause) {
       setInteractionError(localizeError(cause, locale));
     } finally {
       interactionInFlight.current = false;
       setInteractionBusy(false);
     }
-  }, [api, debateId, locale]);
+  }, [api, debateId, joinUrl, locale]);
 
   const refreshSnapshot = useCallback(async () => {
     if (!debateId) throw new Error("Debate id is missing.");
@@ -488,9 +493,8 @@ export default function TeacherDebateControlPage() {
   const showOpenInteraction =
     Boolean(detail) &&
     detail?.status !== "draft" &&
-    !joinUrl &&
-    interaction?.status !== "open" &&
-    (!segmentsProtocol || detail?.status === "running");
+    interaction?.status !== "finalized" &&
+    (Boolean(joinUrl) || !segmentsProtocol || detail?.status === "running");
 
   return (
     <RouteGuard role="teacher">
@@ -561,6 +565,8 @@ export default function TeacherDebateControlPage() {
                       the Agents are still speaking. */}
                 {showOpenInteraction ? (
                   <button
+                    aria-expanded={Boolean(joinUrl) && joinCodeVisible}
+                    aria-controls="classroom-join-code"
                     className="secondary-action"
                     disabled={interactionBusy}
                     onClick={() => void openInteraction()}
@@ -568,7 +574,9 @@ export default function TeacherDebateControlPage() {
                   >
                     {interactionBusy
                       ? betaLabels.interactionOpening
-                      : betaLabels.openInteraction}
+                      : joinUrl && joinCodeVisible
+                        ? betaLabels.hideInteraction
+                        : betaLabels.openInteraction}
                   </button>
                 ) : null}
                 {showSegmentsConclude ? (
@@ -587,7 +595,7 @@ export default function TeacherDebateControlPage() {
                     type="button"
                     onClick={() => setReportOpen(true)}
                   >
-                    Report
+                    Conclude
                   </button>
                 ) : null}
                 {interactionError ? (
@@ -609,6 +617,7 @@ export default function TeacherDebateControlPage() {
             api={api}
             betaLabels={betaLabels}
             joinUrl={joinUrl}
+            joinCodeVisible={joinCodeVisible}
             onInteractionOpened={() => void readInteraction()}
             debateId={debateId}
             detail={detail}
@@ -633,6 +642,10 @@ export default function TeacherDebateControlPage() {
                   Close
                 </button>
               </form>
+              <AgentScores
+                participants={detail.participants}
+                turns={detail.public_turns}
+              />
               <ReportPanel canRegenerate debateId={debateId} api={api} />
             </dialog>
           ) : null}

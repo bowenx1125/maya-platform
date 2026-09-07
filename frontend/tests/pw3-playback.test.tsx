@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -367,7 +368,7 @@ describe("PW3-D three-control playback", () => {
       />,
     );
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
-    socket.emit("open");
+    await act(async () => socket.emit("open"));
 
     const replay = screen.getByRole("button", {
       name: "Replay whole debate",
