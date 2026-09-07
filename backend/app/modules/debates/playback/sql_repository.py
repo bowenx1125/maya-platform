@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
@@ -31,6 +31,80 @@ from .protocols import (
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+_TTS_DEFERRED_CODES = frozenset(
+    {
+        "tts_timeout",
+        "tts_http_rejected",
+        "tts_response_invalid",
+        "tts_result_url_rejected",
+        "tts_result_dns_failed",
+        "tts_result_download_failed",
+        "tts_audio_invalid",
+    }
+)
+
+
+def _row_value(row: object, name: str, default: object = None) -> object:
+    if isinstance(row, Mapping):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
+def _turn_structured_value(turn: object) -> Mapping[str, object] | None:
+    raw = _row_value(turn, "structured_json", _row_value(turn, "structured"))
+    if isinstance(raw, Mapping):
+        return raw
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def _has_cached_segment_fence(turn: object) -> bool:
+    """Recognize only a complete, already validated v2 text/fence shape."""
+
+    speech = _row_value(turn, "speech", _row_value(turn, "original_text"))
+    transcript_hash = _row_value(turn, "transcript_hash")
+    structured = _turn_structured_value(turn)
+    if not isinstance(speech, str) or not speech.strip() or not isinstance(transcript_hash, str):
+        return False
+    if not transcript_hash.strip() or structured is None:
+        return False
+    if structured.get("schema_version") != "segment_turn_v2":
+        return False
+    try:
+        from app.modules.debates.generation.segments import load_stored_segment_turn_result
+
+        return load_stored_segment_turn_result(structured).speech == speech
+    except (TypeError, ValueError):
+        return False
+
+
+def _segment_fence_matches(turn: object, fence: PreparedGenerationFence) -> bool:
+    if not _has_cached_segment_fence(turn):
+        return False
+    transcript_hash = _row_value(turn, "transcript_hash")
+    cutoff = _row_value(turn, "cutoff_turn_index")
+    predecessors = _row_value(turn, "predecessor_turn_ids_json")
+    if not isinstance(transcript_hash, str) or not isinstance(cutoff, int):
+        return False
+    if not isinstance(predecessors, str):
+        return False
+    try:
+        parsed = json.loads(predecessors)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return (
+        transcript_hash == fence.transcript_hash
+        and int(cutoff) == fence.cutoff_turn_index
+        and isinstance(parsed, list)
+        and tuple(str(item) for item in parsed) == tuple(fence.predecessor_turn_ids)
+    )
 
 
 @dataclass
@@ -235,6 +309,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         accepted_recovery_turns: set[str] = set()
         blocked_recovery_turns: set[str] = set()
         deferred_provider_turns: set[str] = set()
+        deferred_segment_tts_turns: set[str] = set()
         if (
             self._has_table(db, "llm_accepted_stages")
             and self._has_table(db, "llm_recovery_inputs")
@@ -309,6 +384,50 @@ class SqlPlaybackRepository(PlaybackRepository):
                         {"updated_at": _now(), "turn_ids": tuple(blocked_recovery_turns)},
                     )
         if self._has_table(db, "jobs"):
+            if self._has_table(db, "debate_turns"):
+                deferred_segment_tts_turns = {
+                    str(row[0])
+                    for row in db.execute(
+                        text(
+                            "SELECT DISTINCT j.turn_id FROM jobs AS j "
+                            "JOIN debate_turns AS t ON t.id=j.turn_id "
+                            "WHERE j.turn_id IS NOT NULL AND j.state IN ('pending','running') "
+                            "AND j.safe_error_code IN :tts_codes "
+                            "AND json_valid(t.structured_json) "
+                            "AND json_extract(t.structured_json, '$.schema_version')="
+                            "'segment_turn_v2' AND trim(COALESCE(t.speech,''))<>'' "
+                            "AND trim(COALESCE(t.transcript_hash,''))<>''"
+                        ).bindparams(bindparam("tts_codes", expanding=True)),
+                        {"tts_codes": tuple(_TTS_DEFERRED_CODES) or ("",)},
+                    ).all()
+                }
+                if deferred_segment_tts_turns:
+                    db.execute(
+                        text(
+                            "UPDATE debate_turns SET generation_status='pending', "
+                            "preparation_stage='generation', updated_at=:updated_at "
+                            "WHERE id IN :turn_ids"
+                        ).bindparams(bindparam("turn_ids", expanding=True)),
+                        {
+                            "updated_at": _now(),
+                            "turn_ids": tuple(deferred_segment_tts_turns),
+                        },
+                    )
+            if deferred_segment_tts_turns:
+                db.execute(
+                    text(
+                        "UPDATE jobs SET state='pending', claim_token=NULL, updated_at=:updated_at "
+                        "WHERE turn_id IN :turn_ids AND state IN ('pending','running') "
+                        "AND safe_error_code IN :tts_codes"
+                    )
+                    .bindparams(bindparam("turn_ids", expanding=True))
+                    .bindparams(bindparam("tts_codes", expanding=True)),
+                    {
+                        "updated_at": _now(),
+                        "turn_ids": tuple(deferred_segment_tts_turns),
+                        "tts_codes": tuple(_TTS_DEFERRED_CODES),
+                    },
+                )
             deferred_provider_turns = {
                 str(row[0])
                 for row in db.execute(
@@ -339,6 +458,23 @@ class SqlPlaybackRepository(PlaybackRepository):
                     ).bindparams(bindparam("turn_ids", expanding=True)),
                     {"updated_at": _now(), "turn_ids": tuple(deferred_provider_turns)},
                 )
+        if self._has_table(db, "debate_turns"):
+            # A pending turn holding a transcript_hash cannot be prepared by
+            # anything: mark_turn_running requires that hash to be null, so the
+            # turn reads as ready to start, claims cleanly, and is refused at
+            # the last CAS every time. The pair is contradictory whatever
+            # produced it, so startup clears it rather than leaving a Debate
+            # that can never move.
+            db.execute(
+                text(
+                    "UPDATE debate_turns SET transcript_hash=NULL, updated_at=:updated_at "
+                    "WHERE generation_status='pending' AND transcript_hash IS NOT NULL "
+                    "AND NOT (json_valid(structured_json) "
+                    "AND json_extract(structured_json, '$.schema_version')='segment_turn_v2' "
+                    "AND trim(COALESCE(speech,''))<>'')"
+                ),
+                {"updated_at": _now()},
+            )
         affected: tuple[str, ...] = ()
         if self._has_table(db, "jobs"):
             all_inflight = tuple(
@@ -355,7 +491,10 @@ class SqlPlaybackRepository(PlaybackRepository):
             # are interrupted and converted to failed debates on restart.
             accepted_recovery_debates: set[str] = set()
             protected_turns = (
-                accepted_recovery_turns | blocked_recovery_turns | deferred_provider_turns
+                accepted_recovery_turns
+                | blocked_recovery_turns
+                | deferred_provider_turns
+                | deferred_segment_tts_turns
             )
             if protected_turns and self._has_table(db, "debate_turns"):
                 accepted_recovery_debates = {
@@ -384,9 +523,14 @@ class SqlPlaybackRepository(PlaybackRepository):
                             "JOIN playback_states AS ps ON ps.debate_id=j.debate_id "
                             "JOIN debates AS d ON d.id=ps.debate_id "
                             "WHERE j.turn_id IS NOT NULL AND j.state IN ('pending','running') "
-                            "AND ps.status='paused' AND d.status='running')"
-                        ),
-                        {"updated_at": _now()},
+                            "AND ps.status='paused' AND d.status='running' "
+                            "AND j.turn_id NOT IN :deferred_segment_tts_turn_ids)"
+                        ).bindparams(bindparam("deferred_segment_tts_turn_ids", expanding=True)),
+                        {
+                            "updated_at": _now(),
+                            "deferred_segment_tts_turn_ids": tuple(deferred_segment_tts_turns)
+                            or ("",),
+                        },
                     )
                 db.execute(
                     text(
@@ -395,9 +539,14 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "WHERE state IN ('pending','running') AND debate_id IN "
                         "(SELECT ps.debate_id FROM playback_states AS ps "
                         "JOIN debates AS d ON d.id=ps.debate_id "
-                        "WHERE ps.status='paused' AND d.status='running')"
-                    ),
-                    {"updated_at": _now()},
+                        "WHERE ps.status='paused' AND d.status='running') "
+                        "AND (turn_id IS NULL OR turn_id NOT IN "
+                        ":deferred_segment_tts_turn_ids)"
+                    ).bindparams(bindparam("deferred_segment_tts_turn_ids", expanding=True)),
+                    {
+                        "updated_at": _now(),
+                        "deferred_segment_tts_turn_ids": tuple(deferred_segment_tts_turns) or ("",),
+                    },
                 )
             # Mark the Turn while its Job still has the pre-restart state;
             # otherwise diagnostics could observe a failed Debate with a
@@ -411,17 +560,20 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "AND id NOT IN :accepted_turn_ids "
                         "AND id NOT IN :blocked_turn_ids "
                         "AND id NOT IN :deferred_provider_turn_ids "
+                        "AND id NOT IN :deferred_segment_tts_turn_ids "
                         "AND id IN (SELECT turn_id FROM jobs WHERE debate_id IS NOT NULL "
                         "AND turn_id IS NOT NULL AND state IN ('pending','running'))"
                     )
                     .bindparams(bindparam("accepted_turn_ids", expanding=True))
                     .bindparams(bindparam("blocked_turn_ids", expanding=True))
-                    .bindparams(bindparam("deferred_provider_turn_ids", expanding=True)),
+                    .bindparams(bindparam("deferred_provider_turn_ids", expanding=True))
+                    .bindparams(bindparam("deferred_segment_tts_turn_ids", expanding=True)),
                     {
                         "updated_at": _now(),
                         "accepted_turn_ids": tuple(accepted_recovery_turns) or ("",),
                         "blocked_turn_ids": tuple(blocked_recovery_turns) or ("",),
                         "deferred_provider_turn_ids": tuple(deferred_provider_turns) or ("",),
+                        "deferred_segment_tts_turn_ids": tuple(deferred_segment_tts_turns) or ("",),
                     },
                 )
             db.execute(
@@ -431,6 +583,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND state IN ('pending','running') AND turn_id NOT IN :accepted_turn_ids "
                     "AND turn_id NOT IN :blocked_turn_ids "
                     "AND turn_id NOT IN :deferred_provider_turn_ids "
+                    "AND turn_id NOT IN :deferred_segment_tts_turn_ids "
                     "AND debate_id NOT IN "
                     "(SELECT ps.debate_id FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
@@ -438,12 +591,14 @@ class SqlPlaybackRepository(PlaybackRepository):
                 )
                 .bindparams(bindparam("accepted_turn_ids", expanding=True))
                 .bindparams(bindparam("blocked_turn_ids", expanding=True))
-                .bindparams(bindparam("deferred_provider_turn_ids", expanding=True)),
+                .bindparams(bindparam("deferred_provider_turn_ids", expanding=True))
+                .bindparams(bindparam("deferred_segment_tts_turn_ids", expanding=True)),
                 {
                     "updated_at": _now(),
                     "accepted_turn_ids": tuple(accepted_recovery_turns) or ("",),
                     "blocked_turn_ids": tuple(blocked_recovery_turns) or ("",),
                     "deferred_provider_turn_ids": tuple(deferred_provider_turns) or ("",),
+                    "deferred_segment_tts_turn_ids": tuple(deferred_segment_tts_turns) or ("",),
                 },
             )
         state_columns = (
@@ -1284,7 +1439,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND ps.pending_ticket_hash IS NULL "
                     "AND ps.pending_media_command_id IS NULL "
                     "AND d.status IN ('debate_finished','completed') "
-                    "AND c.current_audio_debate_id=d.id "
+                    "AND (c.current_audio_debate_id=d.id OR "
+                    "json_extract(d.rule_snapshot_json, '$.turn_protocol')='segments_v2') "
                     "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
@@ -1667,7 +1823,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND t.audio_duration_ms IS NOT NULL "
                     "AND t.audio_duration_ms > 0 "
                     "AND t.audio_duration_ms=:audio_duration_ms "
-                    "AND c.current_audio_debate_id=d.id "
+                    "AND (c.current_audio_debate_id=d.id OR "
+                    "json_extract(d.rule_snapshot_json, '$.turn_protocol')='segments_v2') "
                     "AND sf.kind='debate_audio' AND sf.state='active' "
                     "AND sf.relative_path=:expected_audio_relative_path "
                     "AND sf.sha256=:expected_audio_sha256 "
@@ -1801,6 +1958,145 @@ class SqlPlaybackRepository(PlaybackRepository):
                 {"table_name": table_name},
             ).first()
         )
+
+    def save_turn_text(
+        self,
+        db: Any,
+        turn: SqlRow,
+        prepared: PreparedTurn,
+        *,
+        claim_token: str | None,
+        generation: int,
+        debate_status: str,
+    ) -> bool:
+        """Persist validated teacher text before the separate audio request."""
+
+        if claim_token is None or prepared.transcript_hash is None:
+            return False
+        for source in prepared.source_receipts:
+            if source.snapshot_id != str(turn.knowledge_snapshot_id):
+                return False
+            chunk = db.execute(
+                text("SELECT text FROM knowledge_chunks WHERE id=:id AND snapshot_id=:snapshot"),
+                {"id": source.chunk_id, "snapshot": source.snapshot_id},
+            ).first()
+            if chunk is None or str(chunk[0]) != source.text:
+                return False
+        changed = db.execute(
+            text(
+                "UPDATE debate_turns SET speech=:speech, structured_json=:structured, "
+                "retrieval_status=:retrieval, grounding_mode=:grounding, "
+                "retrieval_receipts_json=:receipts, evidence_trace_json=:trace, updated_at=:now "
+                "WHERE id=:id AND generation_status='running' "
+                "AND transcript_hash=:transcript_hash AND predecessor_turn_ids_json=:predecessors "
+                "AND cutoff_turn_index=:cutoff "
+                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                "AND debates.status=:status AND debates.cancellation_generation=:generation) "
+                "AND EXISTS (SELECT 1 FROM jobs WHERE jobs.turn_id=debate_turns.id "
+                "AND jobs.state='running' AND jobs.claim_token=:claim "
+                "AND jobs.cancellation_generation=:generation)"
+            ),
+            {
+                "id": str(turn.id),
+                "speech": prepared.speech,
+                "structured": json.dumps(
+                    dict(prepared.structured), sort_keys=True, separators=(",", ":")
+                ),
+                "retrieval": prepared.retrieval_status,
+                "grounding": prepared.grounding_mode,
+                "receipts": json.dumps(
+                    [
+                        {key: value for key, value in asdict(source).items() if value is not None}
+                        for source in prepared.source_receipts
+                    ],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                "trace": json.dumps(
+                    [dict(item) for item in prepared.evidence_trace], separators=(",", ":")
+                ),
+                "now": _now(),
+                "transcript_hash": prepared.transcript_hash,
+                "predecessors": json.dumps(prepared.predecessor_turn_ids, separators=(",", ":")),
+                "cutoff": prepared.cutoff_turn_index,
+                "status": debate_status,
+                "generation": generation,
+                "claim": claim_token,
+            },
+        )
+        return int(getattr(changed, "rowcount", 0)) == 1
+
+    def fence_audio_promotion(
+        self,
+        db: Any,
+        debate: SqlRow,
+        turn: SqlRow,
+        claim_token: str | None,
+        generation: int,
+    ) -> bool:
+        """Hold the SQL writer fence while staged audio becomes canonical.
+
+        The no-op Job update deliberately remains uncommitted.  The caller
+        must promote the already staged bytes and finish ``mark_turn_ready``
+        on this Session before releasing the writer lock, so Delete Voice or
+        Stop cannot clear the turn between the final check and the rename.
+        """
+
+        if claim_token is None:
+            return False
+        turn_id = str(turn.id)
+        debate_id = str(debate.id)
+        changed = db.execute(
+            text(
+                "UPDATE jobs SET updated_at=updated_at WHERE debate_id=:debate_id "
+                "AND turn_id=:turn_id AND operation='debate_turn_prepare' "
+                "AND state='running' AND claim_token=:claim_token "
+                "AND cancellation_generation=:generation "
+                "AND EXISTS (SELECT 1 FROM debates WHERE id=:debate_id "
+                "AND status IN ('draft','running') "
+                "AND cancellation_generation=:generation)"
+            ),
+            {
+                "debate_id": debate_id,
+                "turn_id": turn_id,
+                "claim_token": claim_token,
+                "generation": generation,
+            },
+        )
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            return False
+        current = (
+            db.execute(
+                text(
+                    "SELECT t.generation_status, t.speech, t.structured_json, "
+                    "t.transcript_hash, t.predecessor_turn_ids_json, t.cutoff_turn_index, "
+                    "d.status, d.cancellation_generation FROM debate_turns AS t "
+                    "JOIN debates AS d ON d.id=t.debate_id "
+                    "WHERE t.id=:turn_id AND t.debate_id=:debate_id"
+                ),
+                {"turn_id": turn_id, "debate_id": debate_id},
+            )
+            .mappings()
+            .first()
+        )
+        if current is None or str(current["generation_status"]) != "running":
+            return False
+        if (
+            str(current["status"]) not in {"draft", "running"}
+            or int(current["cancellation_generation"] or 0) != generation
+        ):
+            return False
+        for name in (
+            "speech",
+            "structured_json",
+            "transcript_hash",
+            "predecessor_turn_ids_json",
+            "cutoff_turn_index",
+        ):
+            expected = _row_value(turn, name)
+            if expected is not None and current[name] != expected:
+                return False
+        return True
 
     def mark_turn_ready(
         self,
@@ -2188,13 +2484,21 @@ class SqlPlaybackRepository(PlaybackRepository):
         if claim_token is None or fence is None or fence.attempt not in {1, 2}:
             return False
         predecessor_json = json.dumps(fence.predecessor_turn_ids, separators=(",", ":"))
+        cached_segment = _segment_fence_matches(turn, fence)
+        transcript_guard = (
+            "AND transcript_hash=:transcript_hash "
+            "AND speech=:cached_speech AND structured_json=:cached_structured "
+            if cached_segment
+            else "AND transcript_hash IS NULL "
+        )
         changed = db.execute(
             text(
                 "UPDATE debate_turns SET generation_status='running', "
                 "preparation_stage='generation', transcript_hash=:transcript_hash, "
                 "attempt=:attempt, safe_error_code=NULL, updated_at=:updated_at "
                 "WHERE id=:turn_id AND generation_status='pending' "
-                "AND transcript_hash IS NULL AND attempt=:attempt "
+                + transcript_guard
+                + "AND attempt=:attempt "
                 "AND predecessor_turn_ids_json=:predecessors "
                 "AND cutoff_turn_index=:cutoff "
                 "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
@@ -2213,6 +2517,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "claim_token": claim_token,
                 "generation": cancellation_generation,
                 "transcript_hash": fence.transcript_hash,
+                "cached_speech": _row_value(turn, "speech", ""),
+                "cached_structured": _row_value(turn, "structured_json", ""),
                 "attempt": fence.attempt,
                 "predecessors": predecessor_json,
                 "cutoff": fence.cutoff_turn_index,
@@ -2250,13 +2556,21 @@ class SqlPlaybackRepository(PlaybackRepository):
         if claim_token is None or fence is None or fence.attempt not in {1, 2}:
             return False
         predecessor_json = json.dumps(fence.predecessor_turn_ids, separators=(",", ":"))
+        cached_segment = _segment_fence_matches(turn, fence)
+        transcript_guard = (
+            "AND transcript_hash=:transcript_hash "
+            "AND speech=:cached_speech AND structured_json=:cached_structured "
+            if cached_segment
+            else "AND transcript_hash IS NULL "
+        )
         changed = db.execute(
             text(
                 "UPDATE debate_turns SET generation_status='running', "
                 "preparation_stage='generation', transcript_hash=:transcript_hash, "
                 "attempt=:attempt, safe_error_code=NULL, updated_at=:updated_at "
                 "WHERE id=:turn_id AND generation_status='pending' "
-                "AND transcript_hash IS NULL AND attempt=:attempt "
+                + transcript_guard
+                + "AND attempt=:attempt "
                 "AND predecessor_turn_ids_json=:predecessors "
                 "AND cutoff_turn_index=:cutoff "
                 "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
@@ -2277,6 +2591,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "claim_token": claim_token,
                 "generation": cancellation_generation,
                 "transcript_hash": fence.transcript_hash,
+                "cached_speech": _row_value(turn, "speech", ""),
+                "cached_structured": _row_value(turn, "structured_json", ""),
                 "attempt": fence.attempt,
                 "predecessors": predecessor_json,
                 "cutoff": fence.cutoff_turn_index,
@@ -2302,6 +2618,36 @@ class SqlPlaybackRepository(PlaybackRepository):
                 raise RuntimeError("turn claim lost its durable job fence")
         return accepted
 
+    def fail_prewarm_turn(
+        self, db: Any, turn: SqlRow, *, claim_token: str | None, code: str
+    ) -> bool:
+        """Keep a failed Preview visible without terminating its draft."""
+
+        if claim_token is None:
+            return False
+        changed = db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='failed', "
+                "safe_error_code=:code, updated_at=:updated_at "
+                "WHERE id=:turn_id AND generation_status='running' "
+                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                "AND debates.status='draft') "
+                "AND EXISTS (SELECT 1 FROM jobs WHERE jobs.turn_id=debate_turns.id "
+                "AND jobs.operation='debate_turn_prepare' AND jobs.state='running' "
+                "AND jobs.claim_token=:claim_token)"
+            ),
+            {
+                "updated_at": _now(),
+                "turn_id": str(turn.id),
+                "claim_token": claim_token,
+                "code": code,
+            },
+        )
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            return False
+        self.fail_turn_job(db, turn, claim_token, code)
+        return True
+
     def reset_prewarm_turn(self, db: Any, turn: SqlRow, *, claim_token: str | None) -> bool:
         """Return a draft's turn to pending after a failed warm-up.
 
@@ -2315,17 +2661,35 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if claim_token is None:
             return False
+        cached_segment = _has_cached_segment_fence(turn)
+        transcript_update = "" if cached_segment else "transcript_hash=NULL, "
+        transcript_guard = (
+            "AND transcript_hash=:existing_transcript_hash "
+            "AND speech=:existing_speech AND structured_json=:existing_structured "
+            if cached_segment
+            else ""
+        )
         changed = db.execute(
             text(
                 "UPDATE debate_turns SET generation_status='pending', "
-                "transcript_hash=NULL, safe_error_code=NULL, updated_at=:updated_at "
+                + transcript_update
+                + "safe_error_code=NULL, updated_at=:updated_at "
                 "WHERE id=:turn_id AND generation_status='running' "
-                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                + transcript_guard
+                + "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
                 "AND debates.status='draft')"
             ),
-            {"updated_at": _now(), "turn_id": str(turn.id)},
+            {
+                "updated_at": _now(),
+                "turn_id": str(turn.id),
+                "existing_transcript_hash": _row_value(turn, "transcript_hash", ""),
+                "existing_speech": _row_value(turn, "speech", ""),
+                "existing_structured": _row_value(turn, "structured_json", ""),
+            },
         )
-        db.execute(
+        if cached_segment and int(getattr(changed, "rowcount", 0)) != 1:
+            return False
+        job = db.execute(
             text(
                 "UPDATE jobs SET state='pending', claim_token=NULL, updated_at=:updated_at "
                 "WHERE turn_id=:turn_id AND operation='debate_turn_prepare' "
@@ -2333,7 +2697,134 @@ class SqlPlaybackRepository(PlaybackRepository):
             ),
             {"updated_at": _now(), "turn_id": str(turn.id), "claim_token": claim_token},
         )
+        if cached_segment and int(getattr(job, "rowcount", 0)) != 1:
+            rollback = getattr(db, "rollback", None)
+            if callable(rollback):
+                rollback()
+            return False
         return int(getattr(changed, "rowcount", 0)) == 1
+
+    def retry_draft_segment_turn(
+        self,
+        db: Any,
+        debate: SqlRow,
+        turn: SqlRow,
+        *,
+        expected_control_version: int,
+        code: str,
+    ) -> bool:
+        """CAS one safe Preview retry back to the preparation queue.
+
+        This is the SQL half of the teacher's draft retry command.  It moves
+        the exact failed/pending preparation Job and turn together while
+        advancing the draft PlaybackState control version.  A cached segment
+        TTS failure keeps its validated text/fence; provider-not-sent and a
+        verified accepted-stage continuation clear the old transcript fence so
+        preparation recomputes it from the current immutable prefix.
+
+        The method does not commit.  On a failed multi-table CAS it rolls back
+        its own writes so callers can safely return a stale-control response.
+        """
+
+        if expected_control_version < 0:
+            return False
+        retry_codes = {
+            "provider_confirmation_required",
+            "provider_not_sent",
+            "turn_generation_failed",
+        } | _TTS_DEFERRED_CODES
+        if code not in retry_codes or not self._has_table(db, "playback_states"):
+            return False
+        debate_id = str(debate.id)
+        turn_id = str(turn.id)
+        if code == "turn_generation_failed" and (
+            debate_id,
+            turn_id,
+        ) not in self.recoverable_llm_turns(db):
+            return False
+        cached_segment = code in _TTS_DEFERRED_CODES and _has_cached_segment_fence(turn)
+        if code in _TTS_DEFERRED_CODES and not cached_segment:
+            return False
+        timestamp = _now()
+
+        state = db.execute(
+            text(
+                "UPDATE playback_states SET control_version=control_version+1, "
+                "updated_at=:updated_at WHERE debate_id=:debate_id AND status='preparing' "
+                "AND mode='live' AND current_turn_id IS NULL "
+                "AND control_version=:expected_control_version "
+                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=:debate_id "
+                "AND d.status='draft' AND json_valid(d.rule_snapshot_json) "
+                "AND json_extract(d.rule_snapshot_json, '$.turn_protocol')='segments_v2')"
+            ),
+            {
+                "updated_at": timestamp,
+                "debate_id": debate_id,
+                "expected_control_version": expected_control_version,
+            },
+        )
+        if int(getattr(state, "rowcount", 0)) != 1:
+            return False
+
+        turn_sql = (
+            "UPDATE debate_turns SET generation_status='pending', "
+            "preparation_stage='generation', "
+            + ("" if cached_segment else "transcript_hash=NULL, ")
+            + "safe_error_code=NULL, updated_at=:updated_at "
+            "WHERE id=:turn_id AND debate_id=:debate_id "
+            "AND generation_status IN ('pending','failed','turn_generation_failed') "
+            "AND publication_status='unpublished' AND safe_error_code=:code "
+            "AND CAST(round_no AS INTEGER) < CAST(COALESCE(json_extract(("
+            "SELECT rule_snapshot_json FROM debates WHERE id=:debate_id), "
+            "'$.round_count'), 2) AS INTEGER) "
+            "AND NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
+            "WHERE earlier.debate_id=debate_turns.debate_id "
+            "AND earlier.turn_index < debate_turns.turn_index "
+            "AND earlier.generation_status NOT IN ('final_ready','ready','completed')) "
+            + (
+                "AND transcript_hash=:existing_transcript_hash "
+                "AND speech=:existing_speech AND structured_json=:existing_structured "
+                if cached_segment
+                else ""
+            )
+        )
+        changed = db.execute(
+            text(turn_sql),
+            {
+                "updated_at": timestamp,
+                "turn_id": turn_id,
+                "debate_id": debate_id,
+                "code": code,
+                "existing_transcript_hash": _row_value(turn, "transcript_hash", ""),
+                "existing_speech": _row_value(turn, "speech", ""),
+                "existing_structured": _row_value(turn, "structured_json", ""),
+            },
+        )
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            rollback = getattr(db, "rollback", None)
+            if callable(rollback):
+                rollback()
+            return False
+        job = db.execute(
+            text(
+                "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=NULL, "
+                "updated_at=:updated_at WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                "AND operation='debate_turn_prepare' AND state IN ('pending','failed') "
+                "AND safe_error_code=:code"
+            ),
+            {
+                "updated_at": timestamp,
+                "debate_id": debate_id,
+                "turn_id": turn_id,
+                "code": code,
+            },
+        )
+        if int(getattr(job, "rowcount", 0)) != 1:
+            rollback = getattr(db, "rollback", None)
+            if callable(rollback):
+                rollback()
+            return False
+        return True
 
     def defer_turn_job(
         self,
@@ -2358,6 +2849,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "tts_audio_invalid",
         }:
             return False
+        preserve_segment_fence = code in _TTS_DEFERRED_CODES and _has_cached_segment_fence(turn)
         timestamp = _now()
         job = db.execute(
             text(
@@ -2380,11 +2872,18 @@ class SqlPlaybackRepository(PlaybackRepository):
         deferred = db.execute(
             text(
                 "UPDATE debate_turns SET generation_status='pending', "
-                "preparation_stage='generation', transcript_hash=NULL, "
-                "safe_error_code=:code, updated_at=:updated_at "
+                "preparation_stage='generation', "
+                + ("" if preserve_segment_fence else "transcript_hash=NULL, ")
+                + "safe_error_code=:code, updated_at=:updated_at "
                 "WHERE id=:turn_id AND debate_id=:debate_id "
                 "AND generation_status='running' AND publication_status='unpublished' "
-                "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
+                + (
+                    "AND transcript_hash=:existing_transcript_hash "
+                    "AND speech=:existing_speech AND structured_json=:existing_structured "
+                    if preserve_segment_fence
+                    else ""
+                )
+                + "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
                 "AND debates.status='running' "
                 "AND debates.cancellation_generation=:generation)"
             ),
@@ -2394,6 +2893,9 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "debate_id": str(debate.id),
                 "turn_id": str(turn.id),
                 "generation": int(debate.cancellation_generation or 0),
+                "existing_transcript_hash": _row_value(turn, "transcript_hash", ""),
+                "existing_speech": _row_value(turn, "speech", ""),
+                "existing_structured": _row_value(turn, "structured_json", ""),
             },
         )
         if int(getattr(deferred, "rowcount", 0)) != 1:
@@ -2451,6 +2953,13 @@ class SqlPlaybackRepository(PlaybackRepository):
             raise RuntimeError("final-ready turn has invalid structured data") from None
         if not isinstance(structured, dict):
             raise RuntimeError("final-ready turn has invalid structured data")
+        if structured.get("schema_version") == "segment_turn_v2":
+            from app.modules.debates.generation.segments import load_stored_segment_turn_result
+
+            load_stored_segment_turn_result(structured)
+            # Paragraphs express the position themselves; do not invent the
+            # retired position-summary/history fields during publication.
+            return True
         participant_id = str(current["participant_id"])
         participant = (
             db.execute(
@@ -2619,6 +3128,18 @@ class SqlPlaybackRepository(PlaybackRepository):
         return (
             db.execute(text(f"SELECT 1 FROM debates WHERE {where} LIMIT 1"), params).first()
             is not None
+        )
+
+    def running_debate_ids(self, db: Any) -> tuple[str, ...]:
+        """Every lesson still marked running, for startup to drive again."""
+
+        if not self._has_table(db, "debates"):
+            return ()
+        return tuple(
+            str(row[0])
+            for row in db.execute(
+                text("SELECT id FROM debates WHERE status IN ('running','paused')")
+            ).all()
         )
 
     def running_debate(self, db: Any, course_id: str, except_debate_id: str | None = None) -> Any:

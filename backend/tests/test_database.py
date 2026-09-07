@@ -47,7 +47,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0019_debate_output_language"
+    assert ALEMBIC_HEAD == "0023_segment_report_wordcount"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (

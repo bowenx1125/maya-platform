@@ -183,18 +183,6 @@ button:disabled {
   padding: clamp(30px, 4.8vw, 56px);
 }
 
-.landing-language {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: clamp(26px, 4vw, 44px);
-}
-
-.landing-language .locale-label {
-  display: none;
-}
-
 .landing-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
@@ -1584,10 +1572,6 @@ details > summary {
     padding: 26px 20px 30px;
   }
 
-  .landing-language {
-    margin-bottom: 26px;
-  }
-
   .quick-switch .chip-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1699,7 +1683,7 @@ details > summary {
 }
 
 .feature-card {
-  min-height: 190px;
+  min-height: 132px;
   padding: 26px;
 }
 

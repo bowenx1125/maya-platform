@@ -19,10 +19,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.agents.persona import (
     PERSONA_COMPILER_VERSION,
     PersonaCompileResult,
+    PersonaCompilerVersion,
     PersonaDiagnostic,
-    PersonaSpecV1,
     canonical_json,
     compile_persona,
+    parse_persona_spec,
     persona_spec_hash,
     raw_agent_md_hash,
 )
@@ -51,7 +52,7 @@ class PersonaVersionState(PersonaDomainModel):
     raw_agent_md_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     persona_spec_json: str | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    persona_compiler_version: str | None = None
+    persona_compiler_version: PersonaCompilerVersion | None = None
     persona_confirmation_revision: int | None = Field(default=None, ge=0)
     student_confirmed_at: datetime | None = None
     # Internal only.  This field is never part of a provider/browser DTO.
@@ -69,7 +70,7 @@ class PersonaConfirmationRequest(PersonaDomainModel):
     expected_revision: int = Field(ge=0)
     raw_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     persona_spec_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+    compiler_version: PersonaCompilerVersion = PERSONA_COMPILER_VERSION
 
 
 class PersonaCompilationWrite(PersonaDomainModel):
@@ -80,7 +81,7 @@ class PersonaCompilationWrite(PersonaDomainModel):
     raw_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     persona_spec_json: str | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+    compiler_version: PersonaCompilerVersion = PERSONA_COMPILER_VERSION
     diagnostics: tuple[PersonaDiagnostic, ...] = ()
 
 
@@ -149,7 +150,7 @@ class PersonaService:
             raw_agent_md_hash=result.source_agent_md_hash,
             persona_spec_json=result.canonical_json if result.compiled else None,
             persona_spec_hash=result.persona_spec_hash if result.compiled else None,
-            compiler_version=PERSONA_COMPILER_VERSION,
+            compiler_version=result.compiler_version,
             diagnostics=result.diagnostics,
         )
         # The store must clear any prior active Persona on failure.  It may
@@ -217,7 +218,7 @@ def _assert_compiled_and_exact(
             "The Persona compiler version is no longer current.",
         )
     try:
-        parsed = PersonaSpecV1.model_validate(json.loads(state.persona_spec_json))
+        parsed = parse_persona_spec(state.persona_spec_json)
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise PersonaDomainError(
             PERSONA_INTEGRITY_MISMATCH,
@@ -226,6 +227,7 @@ def _assert_compiled_and_exact(
     if (
         canonical_json(parsed) != state.persona_spec_json
         or persona_spec_hash(parsed) != state.persona_spec_hash
+        or parsed.compiler_version != state.persona_compiler_version
     ):
         raise PersonaDomainError(
             PERSONA_INTEGRITY_MISMATCH,
@@ -257,7 +259,15 @@ def is_persona_confirmed(version: PersonaVersionState | Mapping[str, object] | o
     )
     if not isinstance(raw, str) or not isinstance(raw_hash, str) or not isinstance(spec_json, str):
         return False
-    if not isinstance(spec_hash, str) or compiler_version != PERSONA_COMPILER_VERSION:
+    if (
+        not isinstance(spec_hash, str)
+        or not isinstance(compiler_version, str)
+        or compiler_version
+        not in {
+            "persona_template_v1",
+            "persona_template_v2",
+        }
+    ):
         return False
     if (
         not isinstance(revision, int)
@@ -269,10 +279,14 @@ def is_persona_confirmed(version: PersonaVersionState | Mapping[str, object] | o
     if raw_agent_md_hash(raw) != raw_hash:
         return False
     try:
-        parsed = PersonaSpecV1.model_validate(json.loads(spec_json))
+        parsed = parse_persona_spec(spec_json)
     except (TypeError, ValueError, json.JSONDecodeError):
         return False
-    return canonical_json(parsed) == spec_json and persona_spec_hash(parsed) == spec_hash
+    return (
+        canonical_json(parsed) == spec_json
+        and persona_spec_hash(parsed) == spec_hash
+        and parsed.compiler_version == compiler_version
+    )
 
 
 def publication_eligibility(

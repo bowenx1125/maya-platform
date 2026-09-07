@@ -1,0 +1,608 @@
+{
+  "schema_version": "next_wave_acceptance_manifest_v1",
+  "manifest_id": "next-wave-acceptance-2026-09-rag-v1",
+  "questions_file": "questions.json",
+  "corpus_directory": "corpus",
+  "session_plan": {
+    "agent_counts": [2, 3, 4, 5],
+    "round_counts": [2, 3, 4, 5],
+    "languages": ["en", "zh"],
+    "expected_sessions": 37,
+    "expected_turns": 412,
+    "expected_reports": 37,
+    "sessions": [
+      {
+        "session_id": "shape-a2-r2-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a2-r2-en-barrage-01"],
+        "expected_final_replies": 2
+      },
+      {
+        "session_id": "shape-a2-r3-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 3,
+        "expected_turns": 6,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a2-r4-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 4,
+        "expected_turns": 8,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a2-r4-en-barrage-01"],
+        "expected_final_replies": 2
+      },
+      {
+        "session_id": "shape-a2-r5-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 5,
+        "expected_turns": 10,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a3-r2-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 3,
+        "round_count": 2,
+        "expected_turns": 6,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a3-r3-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 3,
+        "round_count": 3,
+        "expected_turns": 9,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a3-r3-en-barrage-01"],
+        "expected_final_replies": 3
+      },
+      {
+        "session_id": "shape-a3-r4-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 3,
+        "round_count": 4,
+        "expected_turns": 12,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a3-r5-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 3,
+        "round_count": 5,
+        "expected_turns": 15,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a3-r5-en-barrage-01"],
+        "expected_final_replies": 3
+      },
+      {
+        "session_id": "shape-a4-r2-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 4,
+        "round_count": 2,
+        "expected_turns": 8,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a4-r2-en-barrage-01"],
+        "expected_final_replies": 4
+      },
+      {
+        "session_id": "shape-a4-r3-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 4,
+        "round_count": 3,
+        "expected_turns": 12,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a4-r4-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 4,
+        "round_count": 4,
+        "expected_turns": 16,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a4-r4-en-barrage-01"],
+        "expected_final_replies": 4
+      },
+      {
+        "session_id": "shape-a4-r5-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 4,
+        "round_count": 5,
+        "expected_turns": 20,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a5-r2-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 5,
+        "round_count": 2,
+        "expected_turns": 10,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a5-r3-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 5,
+        "round_count": 3,
+        "expected_turns": 15,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a5-r3-en-barrage-01"],
+        "expected_final_replies": 5
+      },
+      {
+        "session_id": "shape-a5-r4-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 5,
+        "round_count": 4,
+        "expected_turns": 20,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a5-r5-en",
+        "session_kind": "shape",
+        "language": "en",
+        "agent_count": 5,
+        "round_count": 5,
+        "expected_turns": 25,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a5-r5-en-barrage-01"],
+        "expected_final_replies": 5
+      },
+      {
+        "session_id": "shape-a2-r2-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a2-r3-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 2,
+        "round_count": 3,
+        "expected_turns": 6,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a2-r3-zh-barrage-01"],
+        "expected_final_replies": 2
+      },
+      {
+        "session_id": "shape-a2-r4-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 2,
+        "round_count": 4,
+        "expected_turns": 8,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a2-r5-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 2,
+        "round_count": 5,
+        "expected_turns": 10,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a2-r5-zh-barrage-01"],
+        "expected_final_replies": 2
+      },
+      {
+        "session_id": "shape-a3-r2-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 3,
+        "round_count": 2,
+        "expected_turns": 6,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a3-r2-zh-barrage-01"],
+        "expected_final_replies": 3
+      },
+      {
+        "session_id": "shape-a3-r3-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 3,
+        "round_count": 3,
+        "expected_turns": 9,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a3-r4-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 3,
+        "round_count": 4,
+        "expected_turns": 12,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a3-r4-zh-barrage-01"],
+        "expected_final_replies": 3
+      },
+      {
+        "session_id": "shape-a3-r5-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 3,
+        "round_count": 5,
+        "expected_turns": 15,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a4-r2-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 4,
+        "round_count": 2,
+        "expected_turns": 8,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a4-r3-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 4,
+        "round_count": 3,
+        "expected_turns": 12,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a4-r3-zh-barrage-01"],
+        "expected_final_replies": 4
+      },
+      {
+        "session_id": "shape-a4-r4-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 4,
+        "round_count": 4,
+        "expected_turns": 16,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a4-r5-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 4,
+        "round_count": 5,
+        "expected_turns": 20,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a4-r5-zh-barrage-01"],
+        "expected_final_replies": 4
+      },
+      {
+        "session_id": "shape-a5-r2-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 5,
+        "round_count": 2,
+        "expected_turns": 10,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a5-r2-zh-barrage-01"],
+        "expected_final_replies": 5
+      },
+      {
+        "session_id": "shape-a5-r3-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 5,
+        "round_count": 3,
+        "expected_turns": 15,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "shape-a5-r4-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 5,
+        "round_count": 4,
+        "expected_turns": 20,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["shape-a5-r4-zh-barrage-01"],
+        "expected_final_replies": 5
+      },
+      {
+        "session_id": "shape-a5-r5-zh",
+        "session_kind": "shape",
+        "language": "zh",
+        "agent_count": 5,
+        "round_count": 5,
+        "expected_turns": 25,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "fresh-01-2x2-en",
+        "session_kind": "fresh",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["fresh-01-2x2-en-barrage-01"],
+        "expected_final_replies": 2
+      },
+      {
+        "session_id": "fresh-02-2x2-zh",
+        "session_kind": "fresh",
+        "language": "zh",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "fresh-03-2x2-en",
+        "session_kind": "fresh",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["fresh-03-2x2-en-barrage-01"],
+        "expected_final_replies": 2
+      },
+      {
+        "session_id": "fresh-04-2x2-zh",
+        "session_kind": "fresh",
+        "language": "zh",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "without_barrage",
+        "eligible_turns": [],
+        "barrage_ids": [],
+        "expected_final_replies": 0
+      },
+      {
+        "session_id": "fresh-05-2x2-en",
+        "session_kind": "fresh",
+        "language": "en",
+        "agent_count": 2,
+        "round_count": 2,
+        "expected_turns": 4,
+        "barrage_mode": "with_barrage",
+        "eligible_turns": [1],
+        "barrage_ids": ["fresh-05-2x2-en-barrage-01"],
+        "expected_final_replies": 2
+      }
+    ]
+  },
+  "rag_plan": {
+    "conditions": ["correct", "disabled", "irrelevant", "updated"],
+    "repeats": [1, 2, 3],
+    "expected_answers": 72,
+    "cases": [
+      {
+        "question_id": "q01",
+        "condition": "correct",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q01",
+        "condition": "disabled",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q01",
+        "condition": "irrelevant",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q01",
+        "condition": "updated",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q02",
+        "condition": "correct",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q02",
+        "condition": "disabled",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q02",
+        "condition": "irrelevant",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q02",
+        "condition": "updated",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q03",
+        "condition": "correct",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q03",
+        "condition": "disabled",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q03",
+        "condition": "irrelevant",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q03",
+        "condition": "updated",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q04",
+        "condition": "correct",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q04",
+        "condition": "disabled",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q04",
+        "condition": "irrelevant",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q04",
+        "condition": "updated",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q05",
+        "condition": "correct",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q05",
+        "condition": "disabled",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q05",
+        "condition": "irrelevant",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q05",
+        "condition": "updated",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q06",
+        "condition": "correct",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q06",
+        "condition": "disabled",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q06",
+        "condition": "irrelevant",
+        "repeats": [1, 2, 3]
+      },
+      {
+        "question_id": "q06",
+        "condition": "updated",
+        "repeats": [1, 2, 3]
+      }
+    ]
+  },
+  "files_sha256": {
+    "questions.json": "45f08120af597f6302468f10e929305e396304663322a2313de1d2845fea0909",
+    "corpus/q01/correct.md": "7c4f1094cbf77d7966d12d1572d9b159f2715228cdbc27799882740c4a73c6a9",
+    "corpus/q01/irrelevant.md": "65dc7d0e553dcf07e14aa33b963d0f6c2a12cc92377297f47362c9811b633b57",
+    "corpus/q01/updated.md": "b058d76ca06e62db783e85848745f0843a538fb08a2fe596f65cfab1d05be3f4",
+    "corpus/q02/correct.md": "89aaf888705c911b0925bc76fbb7b23fa1a9c1ddae90a71181858e2ca73d3e87",
+    "corpus/q02/irrelevant.md": "96f9dd966eebdcbf77398b8cb8902c32f3d78b3a9a1410d6a5bbf761d8d53a61",
+    "corpus/q02/updated.md": "50a133a6f6dc73bec891af086d1930ac9e19b1127c6a084c9d8df3e388c3e50f",
+    "corpus/q03/correct.md": "c07cd53891a7492db800136b5cf50e4af6c1e2e6d18979595ec2edf6bdd7632d",
+    "corpus/q03/irrelevant.md": "2ad74b6c10f3444644bd416ed131e2e1f72b560726cb5c9aa1277fc062e8b8c3",
+    "corpus/q03/updated.md": "756f18a4983b5b9f2209d56b0d699f0ea695a83106dd72ed82986e4741673a2d",
+    "corpus/q04/correct.md": "d4894618e48d2b24b18f72b0fba9d8bda6e199f6b43d839bc6b7a1904777bbd1",
+    "corpus/q04/irrelevant.md": "9bad8890a30d366ed92eb176a6262237915f20c02d2ce117cfd3514ff26f96af",
+    "corpus/q04/updated.md": "22b6048b91fabd3c101ffd4be228a658ebfa7f1bee61ecc6878bea93c6f7abee",
+    "corpus/q05/correct.md": "9a8ccf89fe9825d28dc0b70e3de7aa927ca19e3eb71c8972f01f89cc30d79d94",
+    "corpus/q05/irrelevant.md": "51ad400dab600c3cf3ece14b4dc209e0b60febbe1d284dc132d329e7b303a713",
+    "corpus/q05/updated.md": "2d0ff3ad4e624d95f12700fd71ebbdf08e2a6122d20cb8fde225b82b9bdd80e0",
+    "corpus/q06/correct.md": "956736a990f2580a062c00a0a801d6f38200289d4753382380aa02ef0a6a047c",
+    "corpus/q06/irrelevant.md": "b4dc263bd231deb0ebd8b0a6ee0069f4cae6945315a75f9d67172b23be28dee7",
+    "corpus/q06/updated.md": "a1358a9a79b10b6c4bf833b12f4ec869d5fcdd3baf6978d4ed29572b417eeca5"
+  }
+}

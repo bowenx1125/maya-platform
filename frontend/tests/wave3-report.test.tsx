@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -73,6 +74,103 @@ function apiMock(overrides: Partial<ReportPanelApi> = {}): ReportPanelApi {
 }
 
 describe("Wave 3 M14 ReportPanel", () => {
+  it("labels the first explicit report action Generate Report", async () => {
+    const api = apiMock({
+      getCurrentReport: vi.fn(
+        async () =>
+          ({
+            ...readyReport(),
+            generation_status: "not_started",
+            latest_attempt_status: "not_started",
+            current_success_revision: null,
+          }) as Report,
+      ),
+      listReportRevisions: vi.fn(async () => []),
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <ReportPanel debateId={debateId} api={api} />
+      </LocaleProvider>,
+    );
+
+    await screen.findByText("Report");
+    expect(
+      screen.getByRole("button", { name: "Generate Report" }),
+    ).toBeTruthy();
+  });
+
+  it("allows Generate Report while insight preparation is still running", async () => {
+    const api = apiMock({
+      getCurrentReport: vi.fn(
+        async () =>
+          ({
+            ...readyReport(),
+            generation_status: "not_started",
+            latest_attempt_status: "not_started",
+            insight: { ...readyReport().insight, status: "generating" },
+            current_success_revision: null,
+          }) as Report,
+      ),
+      listReportRevisions: vi.fn(async () => []),
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <ReportPanel debateId={debateId} api={api} />
+      </LocaleProvider>,
+    );
+
+    await screen.findByText("Report");
+    const button = screen.getByRole("button", { name: "Generate Report" });
+    expect(button).toHaveProperty("disabled", false);
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(api.regenerateReport).toHaveBeenCalledWith(
+        debateId,
+        expect.objectContaining({ idempotency: expect.anything() }),
+      ),
+    );
+  });
+
+  it("polls a generating report until the authoritative status is ready", async () => {
+    vi.useFakeTimers();
+    const generating = {
+      ...readyReport(),
+      generation_status: "generating",
+      latest_attempt_status: "generating",
+      insight: { ...readyReport().insight, status: "generating" },
+      current_success_revision: null,
+    } as Report;
+    const ready = readyReport("# Civilization Mutual Learning Report\n\nready");
+    const getCurrentReport = vi
+      .fn<ReportPanelApi["getCurrentReport"]>()
+      .mockResolvedValueOnce(generating)
+      .mockResolvedValueOnce(ready);
+    const api = apiMock({
+      getCurrentReport,
+      listReportRevisions: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(revisions()),
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <ReportPanel debateId={debateId} api={api} />
+      </LocaleProvider>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText("Generating report…")).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.getByText(/ready/)).toBeTruthy();
+    expect(getCurrentReport).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
   it("shows insight/report state and renders Markdown as text", async () => {
     const api = apiMock();
     render(

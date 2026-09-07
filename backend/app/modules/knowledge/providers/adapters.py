@@ -10,9 +10,12 @@ perform its own Gate/policy/reservation checks first.
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Literal, Protocol
 from urllib.parse import urlsplit
 
 import httpx
@@ -40,6 +43,104 @@ from .snapshot_build import (
 DEFAULT_DASHSCOPE_EMBEDDING_ENDPOINT_PATH = (
     "/api/v1/services/embeddings/text-embedding/text-embedding"
 )
+LOGGER = logging.getLogger(__name__)
+
+EmbeddingTransportPhase = Literal["connect", "write", "read", "response", "decode", "unknown"]
+
+_SAFE_TRANSPORT_EXCEPTION_CLASSES = frozenset(
+    {
+        "ConnectError",
+        "ConnectTimeout",
+        "ReadError",
+        "ReadTimeout",
+        "RemoteProtocolError",
+        "WriteError",
+        "NetworkError",
+        "TimeoutException",
+        "TimeoutError",
+        "ConnectionError",
+        "OSError",
+        "EmbeddingTransportNotSent",
+        "EmbeddingAcceptanceUnknown",
+        "HTTPStatus",
+        "UnknownError",
+    }
+)
+_SAFE_CLIENT_MODES = frozenset({"managed", "provided", "injected"})
+
+
+@dataclass(frozen=True, slots=True)
+class EmbeddingTransportDiagnostics:
+    """Safe transport facts retained without provider request content."""
+
+    exception_class: str
+    phase: EmbeddingTransportPhase
+    elapsed_ms: int
+    timeout_seconds: float
+    client_mode: str
+    trust_env: bool | None
+    http_status: int | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "exception_class": self.exception_class,
+            "phase": self.phase,
+            "elapsed_ms": self.elapsed_ms,
+            "timeout_seconds": self.timeout_seconds,
+            "client_mode": self.client_mode,
+            "trust_env": self.trust_env,
+            "http_status": self.http_status,
+        }
+
+
+def _safe_transport_exception_class(error: BaseException | None) -> str:
+    if error is None:
+        return "HTTPStatus"
+    name = type(error).__name__
+    return name if name in _SAFE_TRANSPORT_EXCEPTION_CLASSES else "UnknownError"
+
+
+def _transport_phase(error: BaseException | None) -> EmbeddingTransportPhase:
+    if error is None:
+        return "response"
+    if isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout)):
+        return "connect"
+    if isinstance(error, (httpx.ReadError, httpx.ReadTimeout)):
+        return "read"
+    if isinstance(error, httpx.WriteError):
+        return "write"
+    return "unknown"
+
+
+def _transport_diagnostics(
+    error: BaseException | None,
+    *,
+    started: float,
+    timeout_seconds: float,
+    client_mode: str,
+    trust_env: bool | None,
+    phase: EmbeddingTransportPhase | None = None,
+    http_status: int | None = None,
+) -> EmbeddingTransportDiagnostics:
+    return EmbeddingTransportDiagnostics(
+        exception_class=_safe_transport_exception_class(error),
+        phase=phase or _transport_phase(error),
+        elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
+        timeout_seconds=float(timeout_seconds),
+        client_mode=client_mode if client_mode in _SAFE_CLIENT_MODES else "injected",
+        trust_env=trust_env,
+        http_status=http_status,
+    )
+
+
+def _log_transport_diagnostics(diagnostics: EmbeddingTransportDiagnostics) -> None:
+    """Emit only the allowlisted diagnostic projection; never ``exc_info``."""
+
+    LOGGER.warning(
+        "embedding_transport_failure %s",
+        json.dumps(diagnostics.as_dict(), sort_keys=True, separators=(",", ":")),
+        extra={"embedding_transport": diagnostics.as_dict()},
+    )
 
 
 class EmbeddingTransport(Protocol):
@@ -59,8 +160,20 @@ class EmbeddingTransport(Protocol):
 class HttpxEmbeddingTransport:
     """Single-attempt HTTP transport with explicit acceptance classification."""
 
-    def __init__(self, client: httpx.Client | None = None) -> None:
+    def __init__(self, client: httpx.Client | None = None, *, trust_env: bool = True) -> None:
         self.client = client
+        self._trust_env = bool(trust_env)
+
+    @property
+    def client_mode(self) -> str:
+        return "provided" if self.client is not None else "managed"
+
+    @property
+    def trust_env(self) -> bool | None:
+        if self.client is None:
+            return self._trust_env
+        value = getattr(self.client, "_trust_env", None)
+        return value if isinstance(value, bool) else None
 
     def post(
         self,
@@ -70,6 +183,7 @@ class HttpxEmbeddingTransport:
         json: Mapping[str, object],
         timeout: float,
     ) -> object:
+        started = time.monotonic()
         try:
             if self.client is not None:
                 return self.client.post(
@@ -79,7 +193,7 @@ class HttpxEmbeddingTransport:
                     timeout=timeout,
                     follow_redirects=False,
                 )
-            with httpx.Client(follow_redirects=False) as client:
+            with httpx.Client(follow_redirects=False, trust_env=self._trust_env) as client:
                 return client.post(
                     url,
                     headers=dict(headers),
@@ -87,9 +201,25 @@ class HttpxEmbeddingTransport:
                     timeout=timeout,
                 )
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
-            raise EmbeddingTransportNotSent() from exc
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=timeout,
+                client_mode=self.client_mode,
+                trust_env=self.trust_env,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingTransportNotSent(diagnostics=diagnostics) from exc
         except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
-            raise EmbeddingAcceptanceUnknown() from exc
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=timeout,
+                client_mode=self.client_mode,
+                trust_env=self.trust_env,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingAcceptanceUnknown(diagnostics=diagnostics) from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,38 +242,62 @@ class EmbeddingProviderError(RuntimeError):
         message: str = "embedding provider unavailable",
         *,
         code: str = "provider_unavailable",
+        diagnostics: EmbeddingTransportDiagnostics | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
+        self.diagnostics: dict[str, object] | None = (
+            diagnostics.as_dict() if diagnostics is not None else None
+        )
 
 
 class EmbeddingHTTPRejected(EmbeddingProviderError):
     """A supplier HTTP status explicitly rejected the request."""
 
-    def __init__(self, status_code: int) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        diagnostics: EmbeddingTransportDiagnostics | None = None,
+    ) -> None:
         self.status_code = status_code
-        super().__init__(code="provider_http_rejected")
+        super().__init__(code="provider_http_rejected", diagnostics=diagnostics)
 
 
 class EmbeddingTransportNotSent(EmbeddingProviderError):
     """Transport proved that no supplier request could have been accepted."""
 
-    def __init__(self, message: str = "embedding request was not sent") -> None:
-        super().__init__(message, code="provider_not_sent")
+    def __init__(
+        self,
+        message: str = "embedding request was not sent",
+        *,
+        diagnostics: EmbeddingTransportDiagnostics | None = None,
+    ) -> None:
+        super().__init__(message, code="provider_not_sent", diagnostics=diagnostics)
 
 
 class EmbeddingAcceptanceUnknown(EmbeddingProviderError):
     """The connection outcome cannot exclude supplier acceptance."""
 
-    def __init__(self, message: str = "embedding request acceptance is unknown") -> None:
-        super().__init__(message, code="acceptance_unknown")
+    def __init__(
+        self,
+        message: str = "embedding request acceptance is unknown",
+        *,
+        diagnostics: EmbeddingTransportDiagnostics | None = None,
+    ) -> None:
+        super().__init__(message, code="acceptance_unknown", diagnostics=diagnostics)
 
 
 class EmbeddingAdapterError(EmbeddingProviderError):
     """The adapter received an invalid HTTP envelope or supplier JSON shape."""
 
-    def __init__(self, message: str = "embedding provider response invalid") -> None:
-        super().__init__(message, code="provider_response_invalid")
+    def __init__(
+        self,
+        message: str = "embedding provider response invalid",
+        *,
+        diagnostics: EmbeddingTransportDiagnostics | None = None,
+    ) -> None:
+        super().__init__(message, code="provider_response_invalid", diagnostics=diagnostics)
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,6 +510,15 @@ class OpenAICompatibleEmbeddingAdapter:
             expected_region=self.region or None,
             expected_policy_version=self.policy_version,
         )
+        started = time.monotonic()
+        raw_client_mode = getattr(self.transport, "client_mode", "injected")
+        client_mode = (
+            raw_client_mode
+            if isinstance(raw_client_mode, str) and raw_client_mode in _SAFE_CLIENT_MODES
+            else "injected"
+        )
+        trust_env_value = getattr(self.transport, "trust_env", None)
+        trust_env = trust_env_value if isinstance(trust_env_value, bool) else None
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -366,29 +529,97 @@ class OpenAICompatibleEmbeddingAdapter:
                 json=self._payload(batch),
                 timeout=self.timeout_seconds,
             )
-        except EmbeddingProviderError:
+        except EmbeddingProviderError as exc:
+            if exc.diagnostics is None and exc.code in {
+                "provider_not_sent",
+                "acceptance_unknown",
+            }:
+                diagnostics = _transport_diagnostics(
+                    exc.__cause__ if isinstance(exc.__cause__, BaseException) else exc,
+                    started=started,
+                    timeout_seconds=self.timeout_seconds,
+                    client_mode=client_mode,
+                    trust_env=trust_env,
+                )
+                exc.diagnostics = diagnostics.as_dict()
+                _log_transport_diagnostics(diagnostics)
             raise
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             # Keep this classification here as well as in HttpxEmbeddingTransport:
             # injected fakes may raise the concrete HTTPX exception directly.
-            raise EmbeddingTransportNotSent() from exc
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=self.timeout_seconds,
+                client_mode=client_mode,
+                trust_env=trust_env,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingTransportNotSent(diagnostics=diagnostics) from exc
         except (
             httpx.ReadTimeout,
             httpx.RemoteProtocolError,
             httpx.NetworkError,
             httpx.TimeoutException,
         ) as exc:
-            raise EmbeddingAcceptanceUnknown() from exc
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=self.timeout_seconds,
+                client_mode=client_mode,
+                trust_env=trust_env,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingAcceptanceUnknown(diagnostics=diagnostics) from exc
         except (TimeoutError, ConnectionError, OSError) as exc:
             # A generic broken connection cannot prove whether the supplier
             # accepted the request.  Callers must persist this state and never
             # retry it automatically.
-            raise EmbeddingAcceptanceUnknown() from exc
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=self.timeout_seconds,
+                client_mode=client_mode,
+                trust_env=trust_env,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingAcceptanceUnknown(diagnostics=diagnostics) from exc
         except Exception as exc:
-            raise EmbeddingProviderError() from exc
-        status_code, payload = _response_parts(response)
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=self.timeout_seconds,
+                client_mode=client_mode,
+                trust_env=trust_env,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingProviderError(diagnostics=diagnostics) from exc
+        try:
+            status_code, payload = _response_parts(response)
+        except EmbeddingAdapterError as exc:
+            diagnostics = _transport_diagnostics(
+                exc,
+                started=started,
+                timeout_seconds=self.timeout_seconds,
+                client_mode=client_mode,
+                trust_env=trust_env,
+                phase="decode",
+            )
+            exc.diagnostics = diagnostics.as_dict()
+            _log_transport_diagnostics(diagnostics)
+            raise
         if status_code < 200 or status_code >= 300:
-            raise EmbeddingHTTPRejected(status_code)
+            diagnostics = _transport_diagnostics(
+                None,
+                started=started,
+                timeout_seconds=self.timeout_seconds,
+                client_mode=client_mode,
+                trust_env=trust_env,
+                phase="response",
+                http_status=status_code,
+            )
+            _log_transport_diagnostics(diagnostics)
+            raise EmbeddingHTTPRejected(status_code, diagnostics=diagnostics)
         return validate_embedding_batch_response(
             payload,
             batch,
@@ -456,6 +687,7 @@ __all__ = [
     "EmbeddingAdapterError",
     "EmbeddingHTTPRejected",
     "EmbeddingProviderError",
+    "EmbeddingTransportDiagnostics",
     "EmbeddingTransport",
     "EmbeddingTransportNotSent",
     "EmbeddingTransportResponse",

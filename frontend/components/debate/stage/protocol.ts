@@ -13,6 +13,8 @@ import type {
   PlaybackEvent,
   PlaybackEventType,
   PrivatePlaybackMessage,
+  SegmentSourceDetail,
+  SegmentTurnPublic,
   VisiblePlaybackTurn,
 } from "./types";
 
@@ -393,6 +395,140 @@ function sourceList(value: unknown): VisiblePlaybackTurn["sources"] {
   });
 }
 
+function audioReady(value: unknown): boolean | null | undefined {
+  return value === true || value === false || value === null
+    ? value
+    : undefined;
+}
+
+function normaliseSegment(
+  value: unknown,
+): SegmentTurnPublic["segments"][number] | null {
+  if (!isRecord(value) || !isNonEmptyString(value.text)) return null;
+  if (!Array.isArray(value.source_ids)) return null;
+  if (
+    !Object.prototype.hasOwnProperty.call(value, "reply_to") ||
+    (value.reply_to !== null && !isNonEmptyString(value.reply_to))
+  ) {
+    return null;
+  }
+  const sourceIds = value.source_ids.map((sourceId) =>
+    isNonEmptyString(sourceId) ? sourceId : null,
+  );
+  if (sourceIds.some((sourceId) => sourceId === null)) return null;
+  return {
+    text: value.text,
+    source_ids: sourceIds as string[],
+    reply_to: value.reply_to as string | null,
+  };
+}
+
+/** Parse the closed segment projection while leaving legacy turns untouched. */
+export function normaliseSegmentTurn(value: unknown): SegmentTurnPublic | null {
+  if (!isRecord(value) || value.schema_version !== "segment_turn_v2") {
+    return null;
+  }
+  if (!Array.isArray(value.segments) || value.segments.length === 0) {
+    return null;
+  }
+  const segments = value.segments.map(normaliseSegment);
+  if (segments.some((segment) => segment === null)) return null;
+  return {
+    schema_version: "segment_turn_v2",
+    segments: segments as SegmentTurnPublic["segments"],
+  };
+}
+
+/** Parse teacher-readable source receipts attached to a segment turn. */
+export function normaliseSourceDetails(value: unknown): SegmentSourceDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (
+      !isRecord(item) ||
+      !isNonEmptyString(item.source_id) ||
+      !isNonEmptyString(item.source_filename) ||
+      !isNonEmptyString(item.excerpt) ||
+      !isNonEmptyString(item.version_label)
+    ) {
+      return [];
+    }
+    if (
+      item.query_text !== undefined &&
+      item.query_text !== null &&
+      !isNonEmptyString(item.query_text)
+    ) {
+      return [];
+    }
+    return [
+      {
+        source_id: item.source_id,
+        source_filename: item.source_filename,
+        excerpt: item.excerpt,
+        query_text:
+          item.query_text === null || item.query_text === undefined
+            ? null
+            : item.query_text,
+        version_label: item.version_label,
+      },
+    ];
+  });
+}
+
+/**
+ * Normalise one HTTP/WS public turn for both the classic and segments readers.
+ * Invalid structured fields are ignored so a legacy speech remains readable.
+ */
+export function normaliseVisiblePlaybackTurn(
+  value: unknown,
+): VisiblePlaybackTurn | null {
+  if (!isRecord(value)) return null;
+  if (
+    !isNonEmptyString(value.id) ||
+    !isNonEmptyString(value.participant_id) ||
+    !isNonEmptyString(value.speech)
+  ) {
+    return null;
+  }
+  const evidenceTrace = normaliseEvidenceTrace(value.evidence_trace);
+  const segmentTurn = normaliseSegmentTurn(value.segment_turn);
+  const sourceDetails = normaliseSourceDetails(value.source_details);
+  const retainedAudio = audioReady(value.audio_ready);
+  return {
+    id: value.id,
+    participant_id: value.participant_id,
+    round_no:
+      typeof value.round_no === "number" && Number.isInteger(value.round_no)
+        ? value.round_no
+        : 1,
+    turn_index:
+      typeof value.turn_index === "number" && Number.isInteger(value.turn_index)
+        ? value.turn_index
+        : 0,
+    speech: value.speech,
+    sources: sourceList(value.sources),
+    ...(retainedAudio !== undefined ? { audio_ready: retainedAudio } : {}),
+    ...(segmentTurn ? { segment_turn: segmentTurn } : {}),
+    ...(sourceDetails.length > 0 ? { source_details: sourceDetails } : {}),
+    ...(evidenceTrace.length > 0 ? { evidence_trace: evidenceTrace } : {}),
+    ...(value.phase === "opening" ||
+    value.phase === "exchange" ||
+    value.phase === "final_integration"
+      ? { phase: value.phase }
+      : {}),
+  };
+}
+
+/** Normalise the ordered public transcript without changing its legacy shape. */
+export function normaliseVisiblePlaybackTurns(
+  value: unknown,
+): VisiblePlaybackTurn[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const turn = normaliseVisiblePlaybackTurn(item);
+    return turn ? [turn] : [];
+  });
+}
+
 /** Build the only speech-bearing object from a server playback.started payload. */
 export function visibleTurnFromPlaybackStarted(
   participants: readonly DebateParticipant[],
@@ -416,6 +552,11 @@ export function visibleTurnFromPlaybackStarted(
     existing?.turn_index ??
     Math.max(0, roundNo - 1) * participants.length +
       (participant?.order_index ?? 0);
+  const segmentTurn =
+    normaliseSegmentTurn(payload.segment_turn) ?? existing?.segment_turn;
+  const sourceDetails = normaliseSourceDetails(payload.source_details);
+  const retainedAudio = audioReady(payload.audio_ready);
+  const existingAudio = existing?.audio_ready;
   return {
     id: payload.turn_id,
     participant_id: existing?.participant_id ?? participant?.id ?? "",
@@ -423,6 +564,17 @@ export function visibleTurnFromPlaybackStarted(
     turn_index: turnIndex,
     speech: payload.speech,
     sources: sourceList(payload.sources),
+    ...(retainedAudio !== undefined
+      ? { audio_ready: retainedAudio }
+      : existingAudio !== undefined
+        ? { audio_ready: existingAudio }
+        : {}),
+    ...(segmentTurn ? { segment_turn: segmentTurn } : {}),
+    ...(sourceDetails.length > 0
+      ? { source_details: sourceDetails }
+      : existing?.source_details
+        ? { source_details: existing.source_details }
+        : {}),
     // The started event carries the claim lineage and this builder used to
     // drop it, so the turn rebuilt from the event replaced the one that had
     // it and the evidence chain vanished the moment a speech went public.

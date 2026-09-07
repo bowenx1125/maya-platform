@@ -1769,7 +1769,7 @@ class LlmRecoveryInput(Base):
             name="ck_llm_recovery_inputs_attempt",
         ),
         CheckConstraint(
-            "input_version = 'llm_recovery_input_v1'",
+            "input_version IN ('llm_recovery_input_v1', 'segment_recovery_input_v2')",
             name="ck_llm_recovery_inputs_version",
         ),
         CheckConstraint(

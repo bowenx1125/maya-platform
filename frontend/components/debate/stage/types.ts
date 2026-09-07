@@ -47,6 +47,7 @@ export type DebatePlaybackApi = Pick<
   | "advanceDebatePlayback"
   | "pauseDebate"
   | "resumeDebate"
+  | "freezeFinalInput"
   | "retryDebatePreparation"
   | "listProviderDataCallManifests"
   | "replayDebate"
@@ -132,10 +133,33 @@ export type AvatarVisualState = {
   expression_strength: AvatarConfig["expression_strength"];
 };
 
+export type SegmentTurnPublic = {
+  schema_version: "segment_turn_v2";
+  segments: Array<{
+    text: string;
+    source_ids: string[];
+    reply_to: string | null;
+  }>;
+};
+
+export type SegmentSourceDetail = {
+  source_id: string;
+  source_filename: string;
+  excerpt: string;
+  query_text?: string | null;
+  version_label: string;
+};
+
 export type VisiblePlaybackTurn = Pick<
   DebateTurn,
   "id" | "participant_id" | "round_no" | "turn_index" | "speech" | "sources"
 > & {
+  /** Whether retained public audio is available for this turn. */
+  audio_ready?: boolean | null;
+  /** Present for the segments_v2 protocol; omitted from legacy turns. */
+  segment_turn?: SegmentTurnPublic | null;
+  /** Teacher-readable source receipts for the segments_v2 protocol. */
+  source_details?: SegmentSourceDetail[];
   phase?: DebateRoundPhase;
   evidence_trace?: EvidenceTraceRow[];
 };

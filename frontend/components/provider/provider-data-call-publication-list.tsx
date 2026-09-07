@@ -72,10 +72,6 @@ export function ProviderDataCallPublicationList({
           <h2 id="provider-publication-title">
             External publication approvals
           </h2>
-          <p>
-            Review each exact disclosure for this Agent version. No request is
-            allowed until its manifest is confirmed.
-          </p>
         </div>
       </div>
       {value.items.length === 0 ? (

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Protocol, cast
 
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
+from app.providers.llm_adapter import DashScopeLLMAdapter, LLMAdapterError
 
 from .evidence_trace import (
     align_mutual_learning_claim_ids,
@@ -15,7 +18,10 @@ from .evidence_trace import (
 )
 from .fencing import GenerationFence, GenerationFenceError, TurnClaim
 from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
-from .mutual_learning_prompts import make_mutual_learning_prompt_input
+from .mutual_learning_prompts import (
+    compute_mutual_transcript_hash,
+    make_mutual_learning_prompt_input,
+)
 from .mutual_learning_validator import MutualLearningValidator
 from .policy import RULE_SET_ID, SUPPORTED_RULE_SET_IDS
 from .prompt_attempt import (
@@ -37,6 +43,13 @@ from .retrieval import (
     build_turn_subqueries,
 )
 from .runtime import LLMTurnRuntime
+from .segments import (
+    SegmentInputSnapshot,
+    SegmentProtocolError,
+    SegmentTurnResult,
+    build_segment_input,
+    validate_segment_output,
+)
 from .types import (
     EvidenceTraceClaimV1,
     FinalReadyTurn,
@@ -48,6 +61,7 @@ from .types import (
     MutualLearningPromptInput,
     MutualLearningTurnResultV1,
     ParticipantContext,
+    PublicSource,
     SnapshotRetrievalReceipt,
     StructuredTurnResult,
     TurnPromptInput,
@@ -68,8 +82,11 @@ class Retriever(Protocol):
 
 class TurnLLM(Protocol):
     def generate_turn(
-        self, prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1
-    ) -> StructuredTurnResult | MutualLearningTurnResultV1:
+        self,
+        prompt: (
+            TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot
+        ),
+    ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
         """Generate a provider-neutral structured turn."""
 
 
@@ -145,6 +162,8 @@ class TurnGenerationService:
         *,
         claim: TurnClaim | None = None,
     ) -> GenerationResult:
+        if getattr(context, "turn_protocol", "legacy_v1") == "segments_v2":
+            return self._generate_segments(context, claim=claim)
         if self.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID:
             if context.participant.persona is not None:
                 return self._generate_mutual_learning_strict(context, claim=claim)
@@ -236,6 +255,359 @@ class TurnGenerationService:
                     ) from exc
         # The loop always returns or raises; keep type checkers honest.
         raise GenerationFailed("Turn generation did not produce a result.")
+
+    def _generate_segments(
+        self,
+        context: GenerationContext,
+        *,
+        claim: TurnClaim | None,
+    ) -> GenerationResult:
+        """Generate the explicitly opted-in segments_v2 turn.
+
+        Retrieval and the seven-group snapshot are frozen once.  A second
+        attempt can only revalidate the same snapshot after a structure error;
+        no legacy claim/evidence fields are manufactured for this protocol.
+        """
+
+        attempts: list[GenerationAttempt] = []
+        active_claim = claim
+        visible_predecessor_ids = tuple(
+            item.turn_id
+            for item in sorted(
+                (item for item in context.predecessors if item.round_no < context.turn.round_no),
+                key=lambda item: (item.round_no, item.turn_index, item.turn_id),
+            )
+        )
+        transcript_hash = compute_mutual_transcript_hash(
+            tuple(
+                item
+                for item in sorted(
+                    (
+                        item
+                        for item in context.predecessors
+                        if item.round_no < context.turn.round_no
+                    ),
+                    key=lambda item: (item.round_no, item.turn_index, item.turn_id),
+                )
+            )
+        )
+        try:
+            persona = context.participant.persona
+            if persona is None:
+                raise SegmentProtocolError(
+                    "segments_v2 requires a compiled Persona", code="persona_missing"
+                )
+            subqueries = build_turn_subqueries(context)
+            if self.mock_retrieval_policy_id is None:
+                retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
+            elif isinstance(self.retriever, SnapshotRetriever):
+                retrieval = self.retriever.retrieve(
+                    context.participant.snapshot_id,
+                    subqueries,
+                    policy_id=self.mock_retrieval_policy_id,
+                    topic_anchor=context.topic,
+                )
+            else:
+                raise RAGRetrievalError(
+                    "The Mock lexical policy requires the snapshot retriever.",
+                    technical=False,
+                )
+            receipts = self._receipts(retrieval)
+            snapshot = build_segment_input(
+                context,
+                persona=persona,
+                receipts=receipts,
+                barrages=context.barrages,
+                round_total=context.round_count,
+            )
+        except (RAGRetrievalError, SegmentProtocolError, ValueError) as exc:
+            raise GenerationFailed(
+                "Segment input could not be frozen before the provider request.", attempt=1
+            ) from exc
+
+        if self.llm_runtime is not None:
+            if getattr(self.llm_runtime, "protocol", None) != "segments_v2":
+                raise GenerationFailed(
+                    "segments_v2 requires its durable provider runtime.", attempt=1
+                )
+            return self._generate_segments_durable(
+                context,
+                snapshot=snapshot,
+                subqueries=subqueries,
+                transcript_hash=transcript_hash,
+            )
+        if isinstance(self.llm, DashScopeLLMAdapter):
+            raise GenerationFailed("segments_v2 requires the durable provider runtime.", attempt=1)
+
+        for attempt in (1, 2):
+            record = GenerationAttempt(
+                attempt=attempt,
+                retrieval_count=len(snapshot.receipts),
+            )
+            try:
+                if self.fence is not None:
+                    active_claim = self._claim_for_attempt(
+                        context,
+                        attempt,
+                        active_claim,
+                        transcript_hash=transcript_hash,
+                        predecessor_turn_ids=visible_predecessor_ids,
+                    )
+                raw = self._segment_generate(snapshot, attempt=attempt)
+                record = replace(record, provider_called=True)
+                segment_result = (
+                    raw
+                    if isinstance(raw, SegmentTurnResult)
+                    else validate_segment_output(raw, snapshot)
+                )
+                validated = ValidatedTurn(
+                    result=segment_result,
+                    retrieval_status="matched" if snapshot.receipts else "no_match",
+                    grounding_mode="rag_grounded"
+                    if segment_result.used_receipts
+                    else "general_reasoning",
+                    used_receipts=segment_result.used_receipts,
+                    public_sources=tuple(
+                        PublicSource(
+                            source_filename=item.source_filename,
+                            chunk_id=item.chunk_id,
+                            evidence_id=item.resolved_evidence_id(),
+                            rank=item.rank,
+                            score=item.score,
+                        )
+                        for item in segment_result.used_receipts
+                    ),
+                    word_count=len(segment_result.speech.split()),
+                )
+                final = final_ready_turn(
+                    validated,
+                    turn_id=context.turn.turn_id,
+                    participant_id=context.participant.participant_id,
+                    snapshot_id=context.participant.snapshot_id,
+                    round_no=context.turn.round_no,
+                    turn_index=context.turn.turn_index,
+                    predecessor_turn_ids=visible_predecessor_ids,
+                    cutoff_turn_index=max(
+                        (
+                            item.turn_index
+                            for item in context.predecessors
+                            if item.round_no < context.turn.round_no
+                        ),
+                        default=-1,
+                    ),
+                    transcript_hash=transcript_hash,
+                    attempt=attempt,
+                )
+                if self.fence is not None:
+                    if active_claim is None or not self.fence.complete(
+                        active_claim,
+                        stage="generation",
+                        attempt=attempt,
+                        predecessor_turn_ids=final.predecessor_turn_ids,
+                        transcript_hash=transcript_hash,
+                    ):
+                        raise GenerationDiscarded(
+                            "The segment result arrived after its fence changed."
+                        )
+                attempts.append(record)
+                return GenerationResult(final, tuple(attempts))
+            except GenerationDiscarded:
+                raise
+            except SegmentProtocolError as exc:
+                attempts.append(replace(record, failure_code=exc.code))
+                if attempt == 2:
+                    if self.fence is not None and active_claim is not None:
+                        self.fence.release(active_claim)
+                    raise GenerationFailed(
+                        "Segment output failed after the frozen structure repair attempt.",
+                        attempt=2,
+                    ) from exc
+                # The second call receives the same immutable snapshot.  A
+                # provider adapter may inspect this safe code/pointer through
+                # its optional keyword; no raw output is forwarded.
+                continue
+            except (GenerationProviderError, LLMAdapterError, ValueError) as exc:
+                attempts.append(
+                    replace(record, failure_code=getattr(exc, "code", "turn_generation_failed"))
+                )
+                if self.fence is not None and active_claim is not None:
+                    self.fence.release(active_claim)
+                    active_claim = None
+                if attempt == 2:
+                    raise GenerationFailed(
+                        "Segment generation failed after the shared two-attempt budget.",
+                        attempt=2,
+                    ) from exc
+        raise GenerationFailed("Segment generation did not produce a result.", attempt=2)
+
+    def _generate_segments_durable(
+        self,
+        context: GenerationContext,
+        *,
+        snapshot: SegmentInputSnapshot,
+        subqueries: Sequence[TurnSubquery],
+        transcript_hash: str,
+    ) -> GenerationResult:
+        """Run v2 through the durable provider/ledger seam after freezing input."""
+
+        from .segments_runtime import SegmentLLMRuntime
+
+        runtime = self.llm_runtime
+        if not isinstance(runtime, SegmentLLMRuntime):
+            # Structural runtime fakes are useful in offline tests, but the
+            # same method contract and explicit protocol marker are required.
+            if not callable(getattr(runtime, "prepare", None)) or not callable(
+                getattr(runtime, "run", None)
+            ):
+                raise GenerationFailed("Segment provider runtime is unavailable.", attempt=1)
+
+        options = dict(self.llm_runtime_options)
+        if self.llm_manifest_preparer is not None and not options.get("manifest_hash"):
+            try:
+                manifest_values = self.llm_manifest_preparer(
+                    snapshot,
+                    context,
+                    snapshot.receipts,
+                    subqueries,
+                )
+                if not isinstance(manifest_values, Mapping):
+                    raise ValueError("segment manifest preparation returned an invalid value")
+                options.update(manifest_values)
+            except Exception as exc:
+                raise GenerationFailed(
+                    "Segment provider manifest could not be prepared.", attempt=1
+                ) from exc
+
+        def required(name: str) -> str:
+            value = options.get(name)
+            return value if isinstance(value, str) else ""
+
+        fence_value = options.get("fence")
+        if isinstance(fence_value, Mapping):
+            generation_fence = hashlib.sha256(
+                json.dumps(
+                    fence_value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+        else:
+            generation_fence = fence_value if isinstance(fence_value, str) else ""
+        revision_value = options.get("confirmation_revision", 1)
+        confirmation_revision = (
+            revision_value
+            if isinstance(revision_value, int) and not isinstance(revision_value, bool)
+            else 1
+        )
+        identity_values = options.get("identity_tokens", ())
+        identity_tokens = (
+            tuple(item for item in identity_values if isinstance(item, str))
+            if isinstance(identity_values, Sequence)
+            and not isinstance(identity_values, (str, bytes, bytearray))
+            else ()
+        )
+        try:
+            prepared = runtime.prepare(  # type: ignore[union-attr]
+                snapshot,
+                debate_id=context.debate_id,
+                turn_id=context.turn.turn_id,
+                policy_hash=required("policy_hash"),
+                manifest_hash=required("manifest_hash"),
+                build_manifest_hash=required("build_manifest_hash"),
+                confirmation_revision=confirmation_revision,
+                generation_fence=generation_fence,
+                repair_policy_hash=required("repair_policy_hash"),
+                identity_tokens=identity_tokens,
+                outbound_manifest=options.get("outbound_manifest"),
+                queries=subqueries,
+            )
+            outcome = runtime.run(  # type: ignore[union-attr]
+                prepared,
+                context=context,
+                confirmed=options.get("confirmed"),
+            )
+        except Exception as exc:
+            raise GenerationFailed("Segment durable runtime failed.", attempt=1) from exc
+        status = str(getattr(outcome, "status", "failed"))
+        if status != "succeeded" or getattr(outcome, "final_ready", None) is None:
+            code = str(getattr(outcome, "safe_error_code", None) or "segment_runtime_failed")
+            error = GenerationProviderError("The segment provider did not complete safely.")
+            error.code = code
+            error.acceptance_state = (
+                "not_sent"
+                if status == "not_sent"
+                else "unknown"
+                if status == "acceptance_unknown"
+                else "accepted"
+            )
+            error.failure_kind = "transport_unknown" if status != "failed" else "provider_terminal"
+            raise error
+        final = cast(FinalReadyTurn, outcome.final_ready)
+        traces = tuple(
+            GenerationAttempt(
+                attempt=int(getattr(item, "attempt_no", 1)),
+                retrieval_count=len(snapshot.receipts),
+                provider_called=bool(getattr(item, "provider_called", False)),
+                failure_code=getattr(item, "safe_error_code", None),
+            )
+            for item in getattr(outcome, "attempts", ())
+        )
+        if not traces:
+            traces = (
+                GenerationAttempt(
+                    attempt=final.attempt,
+                    retrieval_count=len(snapshot.receipts),
+                    provider_called=True,
+                ),
+            )
+        if (
+            final.predecessor_turn_ids
+            != tuple(
+                item.turn_id
+                for item in sorted(
+                    (
+                        item
+                        for item in context.predecessors
+                        if item.round_no < context.turn.round_no
+                    ),
+                    key=lambda item: (item.round_no, item.turn_index, item.turn_id),
+                )
+            )
+            or final.transcript_hash != transcript_hash
+        ):
+            raise GenerationDiscarded("The segment runtime returned a stale fence.")
+        return GenerationResult(
+            final,
+            traces,
+            getattr(outcome, "deferred_publication", None),
+        )
+
+    def _segment_generate(self, snapshot: SegmentInputSnapshot, *, attempt: int) -> object:
+        generator = getattr(self.llm, "generate_segments", None)
+        if not callable(generator):
+            generator = getattr(self.llm, "generate_turn", None)
+        if not callable(generator):
+            raise GenerationProviderError("The segment provider is unavailable.")
+        if attempt == 1:
+            return generator(snapshot)
+        # Avoid a TypeError probe after a real call: only pass feedback when
+        # the injected callable explicitly advertises that keyword.
+        import inspect
+
+        parameters: Mapping[str, inspect.Parameter] = {}
+        try:
+            parameters = inspect.signature(generator).parameters
+        except (TypeError, ValueError):
+            pass
+        if "repair_feedback" in parameters or any(
+            item.kind is inspect.Parameter.VAR_KEYWORD for item in parameters.values()
+        ):
+            return generator(
+                snapshot,
+                repair_feedback={"code": "segment_structure_invalid", "json_pointers": ["/"]},
+            )
+        return generator(snapshot)
 
     def _generate_mutual_learning_strict(
         self,
@@ -1042,7 +1414,7 @@ class PositionLedger:
         if turn.participant_id != participant.participant_id:
             raise GenerationDiscarded("Position publication participant does not match the turn.")
         before = self.summaries.get(participant.participant_id, "")
-        after = turn.structured.position_summary
+        after = str(getattr(turn.structured, "position_summary", ""))
         new_stance = getattr(turn.structured, "new_stance", None)
         if participant.stance_mode == "open" and new_stance is not None:
             raise TurnValidationError("An open participant cannot publish an enum stance.")
@@ -1054,8 +1426,8 @@ class PositionLedger:
             turn_id=turn.turn_id,
             before_summary=before,
             after_summary=after,
-            update_type=turn.structured.position_update,
-            reason=turn.structured.position_update_reason,
+            update_type=str(getattr(turn.structured, "position_update", "unchanged")),
+            reason=cast(str | None, getattr(turn.structured, "position_update_reason", None)),
         )
         self.history.append(record)
         return record

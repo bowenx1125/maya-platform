@@ -52,7 +52,7 @@ class ReportRevisionSummary(ClosedModel):
     id: UUID
     revision_no: int = Field(ge=1)
     status: Literal["generating", "ready", "failed"]
-    word_count: int | None = Field(default=None, ge=600, le=900)
+    word_count: int | None = Field(default=None, ge=1, le=900)
     safe_error_code: str | None = None
     created_at: datetime
 
@@ -84,7 +84,7 @@ class ReadyReportRevision(ClosedModel):
     revision_no: int = Field(ge=1)
     status: Literal["ready"]
     english_markdown: str = Field(min_length=1)
-    word_count: int = Field(ge=600, le=900)
+    word_count: int = Field(ge=1, le=900)
     safe_error_code: None = None
     created_at: datetime
 
@@ -150,16 +150,42 @@ class ManifestParticipant(ClosedModel):
     stance_mode: Literal["assigned", "open"]
     initial_stance: Literal["support", "oppose", "neutral"] | None
     current_stance: Literal["support", "oppose", "neutral"] | None
-    initial_position_summary: str
-    current_position_summary: str
+    # These are retained for legacy report manifests.  segments_v2 carries
+    # its position in the authored paragraph text and must not manufacture a
+    # position-history projection just to fill these fields.
+    initial_position_summary: str = ""
+    current_position_summary: str = ""
 
 
 class ManifestTurn(ClosedModel):
     turn_id: UUID
     participant_id: UUID
-    round_no: int = Field(ge=1, le=2)
+    round_no: int = Field(ge=1, le=5)
     turn_index: int = Field(ge=0)
     text_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ManifestTurnV2(ManifestTurn):
+    """A segment turn with its actual canonical evidence references."""
+
+    used_evidence_ids: list[str] = Field(default_factory=list)
+
+
+class ManifestBarrage(ClosedModel):
+    """One frozen, already-anonymized classroom message."""
+
+    barrage_id: str = Field(pattern=r"^B[1-9][0-9]*$")
+    turn_index: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=300)
+
+
+class ManifestReply(ClosedModel):
+    """One actual segment-to-barrage binding from a final speech."""
+
+    barrage_id: str = Field(pattern=r"^B[1-9][0-9]*$")
+    slot: Literal["A", "B", "C", "D", "E"]
+    turn_index: int = Field(ge=0)
+    paragraph_index: int = Field(ge=0)
 
 
 class ManifestTurnSource(ClosedModel):
@@ -171,6 +197,16 @@ class ManifestTurnSource(ClosedModel):
     chunk_id: UUID
     chunk_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_filename: str
+
+
+class ManifestTurnSourceV2(ManifestTurnSource):
+    """A deduplicated source row keyed by the canonical receipt ID."""
+
+    evidence_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    )
 
 
 class ManifestVote(ClosedModel):
@@ -195,7 +231,7 @@ class ManifestInsight(ClosedModel):
     items: list[ManifestInsightItem]
 
 
-class ReportInputManifestV1(ClosedModel):
+class _ReportInputManifestBase(ClosedModel):
     """Canonical, hashable report input boundary.
 
     Arrays are normalized in ``canonical_payload`` according to the frozen
@@ -203,7 +239,6 @@ class ReportInputManifestV1(ClosedModel):
     nickname mapping, unused chunk, full RAG snapshot or provider metadata.
     """
 
-    manifest_version: Literal["report_input_manifest_v1"] = "report_input_manifest_v1"
     policy_version: Literal["mock_barrage_insight_v1"] = "mock_barrage_insight_v1"
     render_version: Literal["mock_maya_report_v1"] = "mock_maya_report_v1"
     validator_version: Literal["mock_maya_report_validator_v1"] = "mock_maya_report_validator_v1"
@@ -212,13 +247,11 @@ class ReportInputManifestV1(ClosedModel):
     debate_id: UUID | None = None
     topic: str = ""
     participants: list[ManifestParticipant]
-    turns: list[ManifestTurn]
-    turn_sources: list[ManifestTurnSource]
     votes: list[ManifestVote]
     insight: ManifestInsight
 
     @model_validator(mode="after")
-    def validate_no_float_values(self) -> ReportInputManifestV1:
+    def validate_no_float_values(self) -> _ReportInputManifestBase:
         _reject_floats(self.model_dump(mode="python"))
         return self
 
@@ -262,6 +295,62 @@ class ReportInputManifestV1(ClosedModel):
         return hashlib.sha256(self.canonical_json_bytes()).hexdigest()
 
 
+class ReportInputManifestV1(_ReportInputManifestBase):
+    manifest_version: Literal["report_input_manifest_v1"] = "report_input_manifest_v1"
+    turns: list[ManifestTurn]
+    turn_sources: list[ManifestTurnSource]
+
+
+class ReportInputManifestV2(_ReportInputManifestBase):
+    """Versioned manifest for segment turns and anonymous final input."""
+
+    manifest_version: Literal["report_input_manifest_v2"] = "report_input_manifest_v2"
+    turn_protocol: Literal["segments_v2"] = "segments_v2"
+    turns: list[ManifestTurnV2]
+    turn_sources: list[ManifestTurnSourceV2]
+    classroom_barrages: list[ManifestBarrage] = Field(default_factory=list)
+    replies: list[ManifestReply] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_segment_manifest(self) -> ReportInputManifestV2:
+        barrage_ids = [item.barrage_id for item in self.classroom_barrages]
+        if len(barrage_ids) != len(set(barrage_ids)):
+            raise ValueError("segment report manifest has duplicate barrage IDs")
+        reply_keys = [
+            (item.slot, item.turn_index, item.paragraph_index, item.barrage_id)
+            for item in self.replies
+        ]
+        if len(reply_keys) != len(set(reply_keys)):
+            raise ValueError("segment report manifest has duplicate reply bindings")
+        if any(item.barrage_id not in set(barrage_ids) for item in self.replies):
+            raise ValueError("segment report manifest reply is outside frozen barrages")
+        known_turns = {item.turn_index for item in self.turns}
+        if any(item.turn_index not in known_turns for item in self.replies):
+            raise ValueError("segment report manifest reply is outside public turns")
+        source_ids = {item.evidence_id for item in self.turn_sources}
+        used_ids = {evidence_id for turn in self.turns for evidence_id in turn.used_evidence_ids}
+        if not used_ids.issubset(source_ids):
+            raise ValueError("segment report manifest evidence is outside source rows")
+        return self
+
+    def canonical_payload(self) -> dict[str, Any]:
+        payload = super().canonical_payload()
+        payload["classroom_barrages"] = sorted(
+            payload["classroom_barrages"],
+            key=lambda row: (str(row["barrage_id"]), int(row["turn_index"])),
+        )
+        payload["replies"] = sorted(
+            payload["replies"],
+            key=lambda row: (
+                int(row["turn_index"]),
+                int(row["paragraph_index"]),
+                str(row["slot"]),
+                str(row["barrage_id"]),
+            ),
+        )
+        return payload
+
+
 class ReportSectionOutput(ClosedModel):
     """Closed structured output produced before Markdown rendering."""
 
@@ -298,13 +387,18 @@ __all__ = [
     "ManifestInsightItem",
     "ManifestParticipant",
     "ManifestTurn",
+    "ManifestTurnV2",
     "ManifestTurnSource",
+    "ManifestTurnSourceV2",
+    "ManifestBarrage",
+    "ManifestReply",
     "ManifestVote",
     "MockBarrageInsightResult",
     "ReadyReportRevision",
     "Report",
     "ContinueRealReportRequest",
     "ReportInputManifestV1",
+    "ReportInputManifestV2",
     "ReportRevisionSummary",
     "ReportSectionOutput",
 ]

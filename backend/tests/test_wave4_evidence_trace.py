@@ -60,18 +60,46 @@ def test_utf16_span_is_exact_and_handles_astral_characters() -> None:
     assert utf16_slice(speech, span.start_utf16, span.end_utf16) == claim
 
 
-def test_non_exact_and_ambiguous_spans_fail_closed() -> None:
-    with pytest.raises(EvidenceTraceValidationError, match="not an exact"):
+def test_a_claim_the_speaker_did_not_make_fails_closed() -> None:
+    with pytest.raises(EvidenceTraceValidationError, match="not a sentence"):
         derive_exact_speech_span("A short claim.", "A different claim.")
-    with pytest.raises(EvidenceTraceValidationError, match="ambiguous"):
-        derive_exact_speech_span("Repeated claim. Repeated claim.", "Repeated claim.")
-    with pytest.raises(EvidenceTraceValidationError, match="exact speech"):
+    with pytest.raises(EvidenceTraceValidationError, match="not a sentence"):
         build_evidence_trace_bundle(
             "turn-a",
             "A claim is there.",
             [EvidenceTraceClaimV1(claim_text="A claim is here", claim_type="proposal")],
             snapshot_id="snapshot-a",
         )
+
+
+def test_presentation_differences_do_not_cost_a_turn() -> None:
+    """The rule is that the speaker said it, not that the bytes agree.
+
+    Each of these used to fail. None of them is a different sentence: a
+    provider swapping in a curly apostrophe, breaking a line inside a sentence,
+    or doubling a space after a full stop says exactly what it said before.
+    """
+
+    speech = "The river's banks hold.  A city\nowes it care\u2014always."
+    for claim in (
+        "The river\u2019s banks hold.",
+        "A city owes it care\u2014always.",
+        "A city\nowes it care-always.",
+    ):
+        span = derive_exact_speech_span(speech, claim)
+        assert span.end_utf16 > span.start_utf16
+
+
+def test_a_repeated_claim_resolves_to_its_first_occurrence() -> None:
+    """Saying something twice is not dishonest.
+
+    Rejecting it was an unstated rule -- the prompt never asked a speaker to
+    avoid repeating itself -- so no model could have obeyed it and the turn was
+    lost to a requirement nobody had been given.
+    """
+
+    span = derive_exact_speech_span("Repeated claim. Repeated claim.", "Repeated claim.")
+    assert (span.start_utf16, span.end_utf16) == (0, 15)
 
 
 def test_locator_uses_server_document_and_half_open_code_point_offsets() -> None:

@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DebateStage } from "../../../../../components/debate/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
+import { DebatePreview } from "../../../../../components/debate/preview";
+import { DebateCleanupControls } from "../../../../../components/debate/debate-cleanup-controls";
 import { AppShell } from "../../../../../components/app-shell";
 import {
   RouteGuard,
@@ -160,9 +162,9 @@ export default function TeacherDebateControlPage() {
       statusPaused: t("statusPaused"),
       waitingNext: t("debateWaitingNext"),
       phaseReady: locale === "zh" ? "等待开始" : "Ready to start",
-      phaseInProgress: locale === "zh" ? "进行中" : "In progress",
-      phaseWaiting: locale === "zh" ? "生成中" : "Thinking",
-      phaseFinished: locale === "zh" ? "已结束" : "Finished",
+      phaseInProgress: locale === "zh" ? "进行中" : "Running",
+      phaseWaiting: locale === "zh" ? "等待继续" : "Waiting",
+      phaseFinished: locale === "zh" ? "已完成" : "Completed",
       phaseOpening: t("debatePhaseOpening"),
       phaseExchange: t("debatePhaseExchange"),
       phaseFinalIntegration: t("debatePhaseFinalIntegration"),
@@ -206,6 +208,9 @@ export default function TeacherDebateControlPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [finishBusy, setFinishBusy] = useState(false);
+  const [retryingPreviewTurnId, setRetryingPreviewTurnId] = useState<
+    string | null
+  >(null);
   const [playbackAuthority, setPlaybackAuthority] =
     useState<PlaybackAuthorityState>(INITIAL_PLAYBACK_AUTHORITY);
   const playbackAuthorityRef = useRef<PlaybackAuthorityState>(
@@ -323,6 +328,30 @@ export default function TeacherDebateControlPage() {
     ? canFinishWithAuthority(detail, playbackAuthority)
     : false;
 
+  const retryPreviewTurn = useCallback(
+    async (turnId: string) => {
+      if (!detail || !debateId || retryingPreviewTurnId) return;
+      setRetryingPreviewTurnId(turnId);
+      setError(null);
+      try {
+        await api.retryDebatePreparation(
+          debateId,
+          {
+            turn_id: turnId,
+            expected_control_version: detail.playback.control_version,
+          },
+          { idempotency: createIdempotencyHandle() },
+        );
+        await refreshSnapshot();
+      } catch (cause) {
+        setError(cause);
+      } finally {
+        setRetryingPreviewTurnId(null);
+      }
+    },
+    [api, debateId, detail, refreshSnapshot, retryingPreviewTurnId],
+  );
+
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
@@ -331,70 +360,98 @@ export default function TeacherDebateControlPage() {
           <ErrorNotice error={error} onRetry={() => void load()} />
         ) : null}
         {detail && debateId ? (
-          <>
-            <PageIntro eyebrow={t("debateList")} title={detail.topic} />
-            {error ? (
-              <ErrorNotice
-                error={error}
-                onRetry={() => void refreshSnapshot()}
-              />
-            ) : null}
-            <DebateStage
-              headerActions={
-                <>
-                  <Link className="secondary-action" href="/teacher/debates">
-                    {t("debateBack")}
-                  </Link>
-                  {detail.status === "running" &&
-                  detail.playback.mode === "live" ? (
-                    <>
-                      <button
-                        aria-describedby={
-                          finishAllowed ? undefined : "finish-authority-message"
-                        }
-                        className="primary-action"
-                        disabled={finishBusy || !finishAllowed}
-                        onClick={() => void finish()}
-                        type="button"
-                      >
-                        {finishBusy
-                          ? locale === "zh"
-                            ? "正在结束…"
-                            : "Finishing…"
-                          : stageLabels.finish}
-                      </button>
-                      {finishAllowed ? null : (
-                        <span id="finish-authority-message" role="status">
-                          {finishBlockedCopy(detail, playbackAuthority, locale)}
-                        </span>
-                      )}
-                    </>
-                  ) : null}
-                  {(detail.status === "debate_finished" ||
-                    detail.status === "completed") &&
-                  hasCompletePublicPlan(detail) ? (
-                    <Link
-                      className="primary-action"
-                      href={`/teacher/debates/${debateId}/interaction`}
-                    >
-                      {t("wave3Title")}
-                    </Link>
-                  ) : null}
-                </>
+          detail.turn_protocol === "segments_v2" ? (
+            <DebatePreview
+              actions={
+                <DebateCleanupControls
+                  showDeleteControls={false}
+                  detail={detail}
+                  api={api}
+                  onVoiceDeleted={async () => {
+                    await refreshSnapshot();
+                  }}
+                />
               }
-              api={api}
-              debateId={debateId}
+              backHref="/teacher/debates"
+              backLabel={t("debateBack")}
               detail={detail}
-              currentAudioDebateId={currentAudioDebateId}
-              labels={stageLabels}
-              onAuthorityChange={updatePlaybackAuthority}
-              onDetailChange={setDetail}
-              onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
-              outputLanguage={locale === "zh" ? "zh" : "en"}
-              actionInFlight={finishBusy}
-              refreshSnapshot={refreshSnapshot}
+              error={error ? localizeError(error, locale) : null}
+              onRetryTurn={(turnId) => void retryPreviewTurn(turnId)}
+              retryingTurnId={retryingPreviewTurnId}
+              openClassroomHref={`/teacher/debates-beta/${debateId}/control`}
             />
-          </>
+          ) : (
+            <>
+              <PageIntro eyebrow={t("debateList")} title={detail.topic} />
+              {error ? (
+                <ErrorNotice
+                  error={error}
+                  onRetry={() => void refreshSnapshot()}
+                />
+              ) : null}
+              <DebateStage
+                headerActions={
+                  <>
+                    <Link className="secondary-action" href="/teacher/debates">
+                      {t("debateBack")}
+                    </Link>
+                    {detail.status === "running" &&
+                    detail.playback.mode === "live" ? (
+                      <>
+                        <button
+                          aria-describedby={
+                            finishAllowed
+                              ? undefined
+                              : "finish-authority-message"
+                          }
+                          className="primary-action"
+                          disabled={finishBusy || !finishAllowed}
+                          onClick={() => void finish()}
+                          type="button"
+                        >
+                          {finishBusy
+                            ? locale === "zh"
+                              ? "正在结束…"
+                              : "Finishing…"
+                            : stageLabels.finish}
+                        </button>
+                        {finishAllowed ? null : (
+                          <span id="finish-authority-message" role="status">
+                            {finishBlockedCopy(
+                              detail,
+                              playbackAuthority,
+                              locale,
+                            )}
+                          </span>
+                        )}
+                      </>
+                    ) : null}
+                    {(detail.status === "debate_finished" ||
+                      detail.status === "completed") &&
+                    hasCompletePublicPlan(detail) ? (
+                      <Link
+                        className="primary-action"
+                        href={`/teacher/debates/${debateId}/interaction`}
+                      >
+                        {t("wave3Title")}
+                      </Link>
+                    ) : null}
+                  </>
+                }
+                api={api}
+                debateId={debateId}
+                detail={detail}
+                currentAudioDebateId={currentAudioDebateId}
+                labels={stageLabels}
+                onAuthorityChange={updatePlaybackAuthority}
+                onDetailChange={setDetail}
+                onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
+                outputLanguage={locale === "zh" ? "zh" : "en"}
+                actionInFlight={finishBusy}
+                refreshSnapshot={refreshSnapshot}
+              />
+            </>
+          )
         ) : null}
       </AppShell>
     </RouteGuard>

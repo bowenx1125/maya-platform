@@ -516,6 +516,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     "speech": str(self._get(turn, "speech", "original_text", default="")),
                     "sources": self._sources(turn),
                     **evidence_trace_payload,
+                    **self._segment_payload(db, turn),
                     **self._mutual_phase_payload(debate, turn),
                     "playback_url": f"/api/v1/debates/{debate_id}/audio/{turn_id}",
                     "avatar_states": self._avatar_states(participants, turn),
@@ -844,6 +845,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     ),
                     "sources": self._sources(turn),
                     **self._evidence_trace_payload(turn),
+                    **self._segment_payload(db, turn),
                 }
             )
         # Read the watermark from the same transaction/session as the
@@ -886,6 +888,7 @@ class PlaybackSessionMixin(PlaybackCore):
         )
         payload = {
             "debate_status": str(getattr(debate, "status", "draft")),
+            "final_input_frozen": bool(self._get(debate, "final_input_json")),
             "playback_status": state.status,
             "interaction_status": wave3["interaction_status"],
             "insight_status": wave3["insight_status"],
@@ -913,7 +916,9 @@ class PlaybackSessionMixin(PlaybackCore):
         if self.audio_store is None:
             raise not_found()
         current_pointer = self.repository.current_audio_debate_id(db, self._course_id(debate))
-        if current_pointer != debate_id:
+        from app.modules.debates.round_count import uses_segment_protocol
+
+        if not uses_segment_protocol(debate) and current_pointer != debate_id:
             raise PlatformError("audio_not_retained", "This audio is no longer retained.", 410)
         turn = next((item for item in self._turns(db, debate) if str(item.id) == turn_id), None)
         # Initial live media is fetched immediately after the browser's

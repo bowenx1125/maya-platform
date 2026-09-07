@@ -104,9 +104,11 @@ class Debate(Base):
     topic: Mapped[str] = mapped_column(Text, nullable=False)
     rule_set_id: Mapped[str] = mapped_column(String(100), nullable=False)
     rule_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
-    # Chosen when the teacher starts the debate and fixed from then on; see
-    # app/modules/debates/output_language.py for why it cannot change midway.
+    # Chosen before Preview generation; playback cannot change saved speech.
     output_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    final_input_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    final_input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    final_frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -353,7 +355,9 @@ class DebateTurn(Base):
             name="ck_debate_turns_grounding_mode",
         ),
         CheckConstraint(
-            "word_count IS NULL OR (word_count >= 80 AND word_count <= 200)",
+            "word_count IS NULL OR (word_count >= 80 AND word_count <= 200) OR "
+            "(json_extract(structured_json, '$.schema_version') = 'segment_turn_v2' "
+            "AND word_count >= 0)",
             name="ck_debate_turns_word_count",
         ),
         CheckConstraint(
@@ -361,7 +365,10 @@ class DebateTurn(Base):
             "(preparation_stage = 'ready' AND speech IS NOT NULL AND structured_json IS NOT NULL "
             "AND transcript_hash IS NOT NULL AND cutoff_turn_index IS NOT NULL "
             "AND retrieval_status IS NOT NULL AND grounding_mode IS NOT NULL "
-            "AND word_count IS NOT NULL AND word_count >= 80 AND word_count <= 200)",
+            "AND word_count IS NOT NULL AND "
+            "((word_count >= 80 AND word_count <= 200) OR "
+            "(json_extract(structured_json, '$.schema_version') = 'segment_turn_v2' "
+            "AND word_count >= 0)))",
             name="ck_debate_turns_final_ready_shape",
         ),
         CheckConstraint("attempt >= 1 AND attempt <= 2", name="ck_debate_turns_attempt"),

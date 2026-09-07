@@ -10,6 +10,7 @@ import { create } from "qrcode";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../components/locale";
+import { PlatformApiError } from "../lib/api";
 import {
   AudienceInteractionForm,
   QrCode,
@@ -39,6 +40,7 @@ const openInteraction: TeacherInteraction = {
   barrages: [
     {
       id: "message-1",
+      turn_id: null,
       nickname: "Learner",
       raw_text: "I want to hear both sides.",
       sequence: 1,
@@ -51,6 +53,9 @@ function audienceApi(): AudienceInteractionApi {
   return {
     getForm: vi.fn(async () => ({
       topic: "Should classrooms use anonymous questions?",
+      current_turn_id: null,
+      round_no: null,
+      barrage_open: true,
       participants: participants.map((participant) => ({
         participant_id: participant.id,
         slot: participant.slot,
@@ -203,6 +208,113 @@ describe("M13 teacher interaction panel", () => {
 });
 
 describe("M13 anonymous audience form", () => {
+  it("refreshes a refused stale turn without discarding the student's text", async () => {
+    const api = audienceApi();
+    const form = {
+      ...(await api.getForm("token")),
+      current_turn_id: "turn-old",
+      round_no: 1,
+    };
+    vi.mocked(api.getForm)
+      .mockResolvedValueOnce(form)
+      .mockResolvedValue({ ...form, current_turn_id: "turn-new", round_no: 2 });
+    vi.mocked(api.submitBarrage).mockRejectedValueOnce(
+      new PlatformApiError(409, "Turn changed", {
+        code: "barrage_turn_changed",
+      }),
+    );
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", { name: form.topic });
+    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+      target: { value: "Learner" },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText("Share a thought or question"),
+      { target: { value: "How does the source support this?" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send barrage" }));
+    await screen.findByText("Round 2");
+    expect(
+      (
+        screen.getByPlaceholderText(
+          "Share a thought or question",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("How does the source support this?");
+    fireEvent.click(screen.getByRole("button", { name: "Send barrage" }));
+    await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(api.submitBarrage).mock.calls;
+    expect(calls[0][1].turn_id).toBe("turn-old");
+    expect(calls[1][1].turn_id).toBe("turn-new");
+    expect(calls[0][1].client_submission_id).not.toBe(
+      calls[1][1].client_submission_id,
+    );
+  });
+
+  it("sends multiple turn-bound barrages and distinguishes a network loss from Final", async () => {
+    const api = audienceApi();
+    const form = {
+      ...(await api.getForm("token")),
+      current_turn_id: "turn-1",
+      round_no: 1,
+    };
+    vi.mocked(api.getForm).mockResolvedValue(form);
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", { name: form.topic });
+    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+      target: { value: "Learner" },
+    });
+    for (const message of ["First question", "Another question"]) {
+      fireEvent.change(
+        screen.getByPlaceholderText("Share a thought or question"),
+        { target: { value: message } },
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Send barrage" }));
+      await waitFor(() =>
+        expect(
+          (
+            screen.getByPlaceholderText(
+              "Share a thought or question",
+            ) as HTMLTextAreaElement
+          ).value,
+        ).toBe(""),
+      );
+    }
+    expect(api.submitBarrage).toHaveBeenCalledTimes(2);
+    const calls = vi.mocked(api.submitBarrage).mock.calls;
+    expect(calls.map((call) => call[1].turn_id)).toEqual(["turn-1", "turn-1"]);
+    expect(calls[0][1].client_submission_id).not.toBe(
+      calls[1][1].client_submission_id,
+    );
+    vi.useFakeTimers();
+    // Remount with timers controlled so each poll observes one authoritative state.
+    cleanup();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+      target: { value: "Learner" },
+    });
+    vi.mocked(api.getForm).mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByRole("status").textContent).toContain(
+      "Connection interrupted",
+    );
+    expect(screen.queryByText("Collection closed")).toBeNull();
+    vi.mocked(api.getForm).mockResolvedValue({
+      ...form,
+      current_turn_id: "turn-2",
+      round_no: 2,
+      barrage_open: false,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByText("Collection closed")).toBeTruthy();
+    expect(screen.queryByText(/Connection interrupted/)).toBeNull();
+  });
+
   it("does not reveal vote or barrage sections before a nickname is entered", async () => {
     const api = audienceApi();
     render(<AudienceInteractionForm accessToken="token" api={api} />);
@@ -281,7 +393,7 @@ describe("M13 anonymous audience form", () => {
         name: "Submitted successfully",
       }),
     ).toBeTruthy();
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("reuses valid UUID submission identities after an ambiguous failure", async () => {

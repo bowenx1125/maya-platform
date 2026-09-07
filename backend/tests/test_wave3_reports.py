@@ -501,6 +501,11 @@ def test_m14_enqueuer_runs_empty_interaction_to_ready_report(app_factory) -> Non
     with TestClient(app):
         debate_id, snapshot_id = _finalize_interaction(database, settings)
         with database.session() as session:
+            process_insight_job(session, snapshot_id)
+            session.commit()
+        # Closing interaction creates only the insight job.  Report generation
+        # is a separate explicit Bench action after that insight is ready.
+        with database.session() as session:
             regenerate_report(
                 session,
                 actor_user_id=TEACHER_ID,
@@ -515,9 +520,6 @@ def test_m14_enqueuer_runs_empty_interaction_to_ready_report(app_factory) -> Non
                 )
                 == "report.generate"
             )
-        with database.session() as session:
-            process_insight_job(session, snapshot_id)
-            session.commit()
             revision = session.scalar(
                 select(CivilizationReportRevision).where(
                     CivilizationReportRevision.debate_id == debate_id

@@ -33,7 +33,7 @@ from app.core.errors import (
     not_found,
     unprocessable,
 )
-from app.core.models import CourseMember, IdempotencyRecord
+from app.core.models import CourseMember, IdempotencyRecord, User
 from app.modules.debates.models import (
     Debate,
     DebateEvent,
@@ -48,6 +48,7 @@ from app.modules.debates.round_count import (
 from app.modules.debates.round_count import (
     expected_turn_count as planned_turn_count,
 )
+from app.modules.debates.round_count import uses_segment_protocol
 
 from .models import (
     BarrageMessage,
@@ -62,6 +63,7 @@ from .schemas import (
 from .schemas import (
     BarrageRequest,
     BarrageSubmitted,
+    FrozenFinalInput,
     PublicInteractionForm,
     PublicInteractionParticipant,
     TeacherInteractionClosed,
@@ -359,6 +361,7 @@ def _barrage_dtos(session: Session, window_id: str) -> list[BarrageMessageDTO]:
             raw_text=row.raw_text,
             sequence=row.sequence,
             submitted_at=row.submitted_at,
+            turn_id=_as_uuid(row.turn_id) if row.turn_id else None,
         )
         for row in _barrages(session, window_id)
     ]
@@ -819,7 +822,8 @@ class InteractionService:
             _open_eligibility(
                 session,
                 debate,
-                allow_live=self.settings.debates_beta_live_interaction,
+                allow_live=self.settings.debates_beta_live_interaction
+                or uses_segment_protocol(debate),
             )
             timestamp = _now()
             nonce = secrets.token_bytes(32)
@@ -870,6 +874,11 @@ class InteractionService:
         event: PostCommitInteractionEvent | None = None
         try:
             debate = _require_teacher(session, actor_user_id, debate_id)
+            if uses_segment_protocol(debate):
+                from app.modules.debates.playback.eligibility import has_complete_finished_playback
+
+                if not has_complete_finished_playback(session, debate_id):
+                    raise conflict("invalid_state", "Finish the final round before Conclude.")
             record, replay = _claim_authenticated_idempotency(
                 session,
                 actor_user_id=actor_user_id,
@@ -948,6 +957,9 @@ class InteractionService:
                 # vote+barrage hash for the teacher-stage catch-up signal.
                 input_hash=barrage_input_hash,
             )
+            if uses_segment_protocol(debate):
+                debate.status = "completed"
+                debate.updated_at = timestamp
             event = _event(
                 session,
                 debate,
@@ -974,6 +986,40 @@ class InteractionService:
                 _publish(self.event_publisher, event)
             return result
 
+    def freeze_final(
+        self, *, actor_user_id: str, debate_id: str, expected_control_version: int
+    ) -> FrozenFinalInput:
+        from app.modules.debates.final_input import freeze_final_input
+
+        session = _begin_writer(self.session_factory)
+        try:
+            debate = _require_teacher(session, actor_user_id, debate_id)
+            users = session.scalars(
+                select(User)
+                .join(CourseMember, CourseMember.user_id == User.id)
+                .where(CourseMember.course_id == debate.course_id)
+            ).all()
+            tokens = tuple(
+                value for user in users for value in (user.id, user.username, user.display_name)
+            )
+            frozen = freeze_final_input(
+                session,
+                debate,
+                expected_control_version=expected_control_version,
+                identity_tokens=tokens,
+            )
+            result = FrozenFinalInput(
+                barrage_count=len(frozen["barrages"]),
+                cutoff_sequence=frozen["cutoff_sequence"],
+            )
+            session.commit()
+            return result
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def public_form(self, *, access_token: str) -> PublicInteractionForm:
         parsed = _window_token(self.settings, access_token)
         with self.session_factory() as session:
@@ -997,7 +1043,25 @@ class InteractionService:
             debate = session.get(Debate, window.debate_id)
             if debate is None:
                 raise not_found()
+            playback = session.scalar(
+                select(PlaybackState).where(PlaybackState.debate_id == debate.id)
+            )
+            current = (
+                session.get(DebateTurn, playback.current_turn_id)
+                if (playback is not None and playback.current_turn_id is not None)
+                else None
+            )
+            is_segment = uses_segment_protocol(debate)
             return PublicInteractionForm(
+                current_turn_id=_as_uuid(current.id) if current else None,
+                round_no=current.round_no if current else None,
+                barrage_open=not is_segment
+                or (
+                    debate.status == "running"
+                    and debate.final_input_json is None
+                    and current is not None
+                    and current.round_no < planned_round_count(debate)
+                ),
                 topic=debate.topic,
                 participants=[
                     PublicInteractionParticipant(
@@ -1138,7 +1202,11 @@ class InteractionService:
                 )
             )
             if existing is not None:
-                if existing.nickname != payload.nickname or existing.raw_text != payload.raw_text:
+                if (
+                    existing.nickname != payload.nickname
+                    or existing.raw_text != payload.raw_text
+                    or existing.turn_id != (str(payload.turn_id) if payload.turn_id else None)
+                ):
                     raise idempotency_conflict()
                 session.commit()
                 session.close()
@@ -1153,6 +1221,40 @@ class InteractionService:
                 raise not_found()
             if not payload.nickname.strip() or not payload.raw_text.strip():
                 raise unprocessable("barrage_blank", "Nickname and barrage text must not be blank.")
+            debate = session.get(Debate, window.debate_id)
+            if debate is None:
+                raise not_found()
+            turn_id = None
+            if uses_segment_protocol(debate):
+                if debate.final_input_json is not None:
+                    raise PlatformError(
+                        "barrage_collection_closed", "Barrage collection has ended.", 410
+                    )
+                playback = session.scalar(
+                    select(PlaybackState).where(PlaybackState.debate_id == debate.id)
+                )
+                current = (
+                    session.get(DebateTurn, playback.current_turn_id)
+                    if (playback is not None and playback.current_turn_id is not None)
+                    else None
+                )
+                if (
+                    debate.status != "running"
+                    or current is None
+                    or current.round_no >= planned_round_count(debate)
+                    or str(payload.turn_id or "") != current.id
+                ):
+                    raise conflict(
+                        "barrage_turn_changed",
+                        "The current turn has changed. Refresh and send again.",
+                    )
+                if len(payload.raw_text) > 300:
+                    raise unprocessable("barrage_too_long", "Use at most 300 characters.")
+                turn_id = current.id
+            elif payload.turn_id is not None:
+                raise unprocessable(
+                    "barrage_turn_unavailable", "This lesson has no turn-bound collection."
+                )
             next_sequence = (
                 int(
                     session.scalar(
@@ -1168,6 +1270,7 @@ class InteractionService:
                 id=str(uuid4()),
                 window_id=window.id,
                 debate_id=window.debate_id,
+                turn_id=turn_id,
                 nickname=payload.nickname,
                 raw_text=payload.raw_text,
                 client_submission_id=str(payload.client_submission_id),
@@ -1204,6 +1307,7 @@ class InteractionService:
                     row is not None
                     and row.nickname == payload.nickname
                     and row.raw_text == payload.raw_text
+                    and row.turn_id == (str(payload.turn_id) if payload.turn_id else None)
                 ):
                     return BarrageSubmitted(barrage_submitted=True)
             raise idempotency_conflict() from None

@@ -336,7 +336,9 @@ class CivilizationReportRevision(Base):
             "attempt >= 1 AND attempt <= 2", name="ck_civilization_report_revisions_attempt"
         ),
         CheckConstraint(
-            "status != 'ready' OR (english_markdown IS NOT NULL AND word_count >= 600 "
+            "status != 'ready' OR (english_markdown IS NOT NULL AND word_count >= 1 "
+            "AND (word_count >= 600 OR COALESCE(json_extract(input_manifest_json, "
+            "'$.manifest_version'), '') = 'report_input_manifest_v2') "
             "AND word_count <= 900 AND safe_error_code IS NULL)",
             name="ck_civilization_report_revisions_ready_shape",
         ),

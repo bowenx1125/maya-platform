@@ -1,0 +1,77 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { DebateCleanupControls } from "../components/debate/debate-cleanup-controls";
+import type { DebateDetail, PlatformApi } from "../lib/api";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+afterEach(cleanup);
+
+it("regenerates only missing saved audio and shows immediate progress", async () => {
+  let finish: (value: unknown) => void = () => undefined;
+  const generate = vi.fn(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const refresh = vi.fn();
+  const detail = {
+    id: "debate-a",
+    revision: 3,
+    turn_protocol: "segments_v2",
+    playback: { control_version: 2 },
+    public_turns: [],
+    preview_turns: [
+      {
+        id: "saved",
+        speech: "Saved paragraph",
+        generation_status: "final_ready",
+        audio_ready: false,
+      },
+      {
+        id: "ready",
+        speech: "Existing audio",
+        generation_status: "final_ready",
+        audio_ready: true,
+      },
+      {
+        id: "pending",
+        speech: "",
+        generation_status: "pending",
+        audio_ready: false,
+      },
+    ],
+  } as unknown as DebateDetail;
+  const api = {
+    deleteDebateVoice: vi.fn(),
+    deleteDebateAll: vi.fn(),
+    regenerateDebateTurnAudio: generate,
+  } as unknown as Pick<
+    PlatformApi,
+    "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
+  >;
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={api}
+      onVoiceDeleted={refresh}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Generate Audio" }));
+  expect(screen.getByRole("status").textContent).toBe("Preparing audio…");
+  expect(generate).toHaveBeenCalledTimes(1);
+  expect(generate.mock.calls[0]?.slice(0, 3)).toEqual([
+    "debate-a",
+    "saved",
+    { expected_revision: 3 },
+  ]);
+  finish({ status: "completed", audio_ready: true });
+  await waitFor(() => expect(refresh).toHaveBeenCalled());
+  expect(generate).toHaveBeenCalledTimes(1);
+});

@@ -37,8 +37,10 @@ export type PersonaPreviewSpec = {
     concession_style: string;
     question_style: string;
   };
-  debate_strategy: readonly string[];
-  boundaries: readonly string[];
+  /** Present only on the immutable seven-section V1 projection. */
+  debate_strategy?: readonly string[];
+  /** Present only on the immutable seven-section V1 projection. */
+  boundaries?: readonly string[];
   source_agent_md_hash?: string;
   compiler_version?: string;
 };
@@ -49,7 +51,7 @@ export type PersonaCompileResponse = {
   raw_agent_md_hash: string;
   persona_spec: PersonaPreviewSpec | null;
   persona_spec_hash: string | null;
-  compiler_version: string;
+  compiler_version: "persona_template_v1" | "persona_template_v2";
   diagnostics: Array<{
     code?: string;
     message: string;
@@ -62,7 +64,7 @@ export type ConfirmPersonaRequest = {
   expected_revision: number;
   raw_agent_md_hash: string;
   persona_spec_hash: string;
-  compiler_version: string;
+  compiler_version: "persona_template_v1" | "persona_template_v2";
 };
 export type ProviderDataCallDisclosureResponse =
   components["schemas"]["ProviderDataCallDisclosureResponseV1"];
@@ -105,6 +107,13 @@ export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
 export type DebateSummary = components["schemas"]["DebateSummary"];
 export type DebateDetail = components["schemas"]["DebateDetail"];
+export type DebateCleanupRequest =
+  components["schemas"]["DebateCleanupRequest"];
+export type DebateCleanupResult = components["schemas"]["DebateCleanupResult"];
+export type RegenerateTurnAudioRequest =
+  components["schemas"]["RegenerateTurnAudioRequest"];
+export type RegenerateTurnAudioResult =
+  components["schemas"]["RegenerateTurnAudioResult"];
 
 /**
  * Browser-safe Real-Core Demo status. These handwritten DTOs intentionally
@@ -1264,6 +1273,18 @@ export class PlatformApi {
     );
   }
 
+  async freezeFinalInput(debateId: string, expectedControlVersion: number) {
+    return unwrap(
+      await this.client.POST("/debates/{debate_id}/final-input", {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { expected_control_version: expectedControlVersion },
+      }),
+    );
+  }
+
   async pauseDebate(
     debateId: string,
     body: PlaybackControlRequest,
@@ -1343,6 +1364,73 @@ export class PlatformApi {
         },
         body: { confirm_release: true },
       }),
+    );
+  }
+
+  async regenerateDebateTurnAudio(
+    debateId: string,
+    turnId: string,
+    body: RegenerateTurnAudioRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<RegenerateTurnAudioResult> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST(
+          "/debates/{debate_id}/audio/{turn_id}/regenerate",
+          {
+            params: {
+              path: { debate_id: debateId, turn_id: turnId },
+              header: {
+                "Idempotency-Key": key,
+                "X-CSRF-Token": this.csrfToken ?? "",
+              },
+            },
+            body,
+          },
+        ),
+      ),
+    );
+  }
+
+  async deleteDebateVoice(
+    debateId: string,
+    body: DebateCleanupRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateCleanupResult> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.DELETE("/debates/{debate_id}/audio", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
+  }
+
+  async deleteDebateAll(
+    debateId: string,
+    body: DebateCleanupRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateCleanupResult> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.DELETE("/debates/{debate_id}", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
     );
   }
 

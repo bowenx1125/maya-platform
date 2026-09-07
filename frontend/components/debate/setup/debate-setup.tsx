@@ -21,11 +21,12 @@ import {
   type PlatformApi,
   type PublishedAgentSummary,
 } from "../../../lib/api";
-import type { MessageKey } from "../../../lib/i18n";
+import { localizeError, type MessageKey } from "../../../lib/i18n";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { turnsForShape } from "../../../lib/debate-rounds";
-import { useT } from "../../locale";
+import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
+import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { ReleaseButton } from "../release-button";
 import {
   EmptyCard,
@@ -117,7 +118,8 @@ export function TeacherDebateList({
   return (
     <div className={styles.pageStack}>
       <PageIntro
-        title={t("debates")}
+        eyebrow={t("debates")}
+        title={t("debatePreviewTitle")}
         action={
           <Link className="primary-action" href="/teacher/debates/new">
             {t("newDebate")}
@@ -152,24 +154,71 @@ export function TeacherDebateList({
                   {/* A draft is not idle: it is warming its turns in the
                       background, so the list says how far along it is rather
                       than only that it is a draft. */}
-                  {debate.status === "draft" ? (
+                  {/* A stall outranks both other readings, and a running
+                      debate can stall too: the lesson that stopped generating
+                      mid-round used to read Running with nothing to act on. */}
+                  {stalled(debate) ? (
                     <PrewarmBadge
-                      expected={debate.expected_turns ?? 0}
-                      prepared={debate.prepared_turns ?? 0}
+                      expected={
+                        debate.preview?.expected_turns ??
+                        debate.expected_turns ??
+                        0
+                      }
+                      prepared={
+                        debate.preview?.prepared_turns ??
+                        debate.prepared_turns ??
+                        0
+                      }
+                      stall={debate.stall}
+                    />
+                  ) : debate.status === "draft" ? (
+                    <PrewarmBadge
+                      expected={
+                        debate.preview?.expected_turns ??
+                        debate.expected_turns ??
+                        0
+                      }
+                      prepared={
+                        debate.preview?.prepared_turns ??
+                        debate.prepared_turns ??
+                        0
+                      }
                     />
                   ) : (
                     <StatusBadge status={debate.status} />
                   )}
                 </Link>
-                {/* A lesson left running blocks every later debate on this
+                <div className={styles.debateActions}>
+                  {/* Regenerating the one turn that stopped is a single provider
+                    call, where rebuilding the debate is all of them. */}
+                  {stalled(debate) ? (
+                    <ResumeButton
+                      debateId={debate.id}
+                      onResumed={() => void load()}
+                      turnId={
+                        (debate.stall as NonNullable<typeof debate.stall>)
+                          .turn_id
+                      }
+                    />
+                  ) : null}
+                  {/* A lesson left running blocks every later debate on this
                     course, and clearing it used to need a shell on the server.
                     The recovery belongs beside the thing that needs it. */}
-                {debate.status === "running" ? (
-                  <ReleaseButton
-                    debateId={debate.id}
-                    onReleased={() => void load()}
+                  {debate.status === "running" ? (
+                    <ReleaseButton
+                      debateId={debate.id}
+                      onReleased={() => void load()}
+                    />
+                  ) : null}
+                  <DebateCleanupControls
+                    api={api}
+                    loadDetail={() => api.debate(debate.id)}
+                    onVoiceDeleted={load}
+                    onAllDeleted={load}
+                    className={styles.listCleanup}
+                    showGenerateAudio={false}
                   />
-                ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -186,17 +235,49 @@ export function TeacherDebateList({
  * is generated. Either way the debate can be started: an unwarmed turn simply
  * waits where it always did.
  */
+/** A debate whose generation stopped and is still worth resuming.
+
+ * Only while it could still reach the end: a stopped or failed debate has a
+ * failed turn in its history too, and calling that a stall would offer a
+ * Resume that leads nowhere.
+ */
+function stalled(debate: DebateSummary): boolean {
+  return (
+    debate.stall != null &&
+    (debate.status === "draft" || debate.status === "running")
+  );
+}
+
 function PrewarmBadge({
   prepared,
   expected,
+  stall,
 }: {
   prepared: number;
   expected: number;
+  stall?: DebateSummary["stall"];
 }) {
   const t = useT();
   const complete = expected > 0 && prepared >= expected;
   const percent =
     expected > 0 ? Math.min(100, Math.round((prepared / expected) * 100)) : 0;
+  // A draft whose warming gave up keeps its percentage forever. Reporting that
+  // frozen number as progress is what made a dead draft look like a thinking
+  // one, so a stall outranks both other readings.
+  if (stall) {
+    return (
+      <span
+        className="status-badge status-bad"
+        data-prewarm="stalled"
+        title={t("debateStalledReason")
+          .replace("{round}", String(stall.round_no))
+          .replace("{code}", stall.safe_error_code)}
+      >
+        <span aria-hidden="true" />
+        {t("debateStalled")}
+      </span>
+    );
+  }
   return (
     <span
       className={`status-badge ${complete ? "status-good" : "status-warn"}`}
@@ -207,6 +288,58 @@ function PrewarmBadge({
         ? t("debatePrewarmReady")
         : `${t("debatePrewarming")} ${percent}%`}
     </span>
+  );
+}
+
+/** Generate the one turn warming stopped at, so the draft can warm on. */
+function ResumeButton({
+  debateId,
+  turnId,
+  onResumed,
+}: {
+  debateId: string;
+  turnId: string;
+  onResumed: () => void;
+}) {
+  const t = useT();
+  const { api } = useSession();
+  const { locale } = useLocale();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <button
+        className="secondary-action"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          // The retry is guarded by the playback control version, which only
+          // the debate's own snapshot carries; the list never had a reason to
+          // hold one until now.
+          api
+            .debate(debateId)
+            .then((detail) =>
+              api.retryDebatePreparation(
+                debateId,
+                {
+                  turn_id: turnId,
+                  expected_control_version: detail.playback.control_version,
+                },
+                { idempotency: createIdempotencyHandle() },
+              ),
+            )
+            .then(() => onResumed())
+            .catch((cause: unknown) => setError(localizeError(cause, locale)))
+            .finally(() => setBusy(false));
+        }}
+        type="button"
+      >
+        {busy ? t("debateWarmResuming") : t("debateWarmResume")}
+      </button>
+      {error ? <span role="status">{error}</span> : null}
+    </>
   );
 }
 
@@ -264,6 +397,7 @@ export function TeacherDebateCreate({
     Record<string, ParticipantDraft>
   >({});
   const [topic, setTopic] = useState("");
+  const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("en");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
   const [roundCount, setRoundCount] = useState<MutualRoundCount>(2);
   const [loading, setLoading] = useState(true);
@@ -340,7 +474,7 @@ export function TeacherDebateCreate({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    const topicValidation = validateDebateTopic(topic);
+    const topicValidation = validateDebateTopic(topic, outputLanguage);
     if (!topicValidation.valid) {
       setTopicError(
         copy(
@@ -363,6 +497,8 @@ export function TeacherDebateCreate({
     }
     const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
+      output_language: outputLanguage,
+      turn_protocol: "segments_v2",
       participants: selectedIds.map((agentId) => {
         const draft = participantDrafts[agentId] ?? defaultParticipant();
         return {
@@ -432,10 +568,7 @@ export function TeacherDebateCreate({
       />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form className={styles.pageStack} onSubmit={submit}>
-        <SectionCard
-          title={copy(t, "debateTopic")}
-          description={copy(t, "debateTopicPlaceholder")}
-        >
+        <SectionCard title={copy(t, "debateTopic")}>
           <label className="stack-form">
             <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
             <textarea
@@ -608,6 +741,20 @@ export function TeacherDebateCreate({
         {/* The card names the protocol, so the line inside it can be the one
             fact a teacher needs: the shape of a round. */}
         <SectionCard title={copy(t, "debateMutualLearningRuleSet")}>
+          <label className={styles.roundField}>
+            <span className={styles.roundLabel}>Language</span>
+            <select
+              aria-label="Language"
+              disabled={busy}
+              value={outputLanguage}
+              onChange={(event) =>
+                setOutputLanguage(event.target.value as "en" | "zh")
+              }
+            >
+              <option value="en">English</option>
+              <option value="zh">Chinese</option>
+            </select>
+          </label>
           <div className={styles.fixedRule}>
             <p
               aria-label={copy(t, "debateRuleSet")}

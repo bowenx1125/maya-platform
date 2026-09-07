@@ -47,6 +47,12 @@ function finishedDetail(): DebateDetail {
     created_at: "2026-08-30T00:00:00Z",
     prepared_turns: 0,
     expected_turns: 0,
+    preview: null,
+    output_language: "en",
+    turn_protocol: null,
+    preview_turns: [],
+    final_input_frozen: false,
+    stall: null,
     revision: 1,
     last_sequence: 1,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",
@@ -82,6 +88,24 @@ function teacherPageApi() {
 }
 
 describe("Wave 3 dedicated teacher page", () => {
+  it("hides legacy claim scores for the segments protocol", async () => {
+    const detail = {
+      ...finishedDetail(),
+      turn_protocol: "segments_v2" as const,
+    };
+    const api = teacherPageApi();
+    render(
+      <TeacherWave3
+        api={api as unknown as PlatformApi}
+        debateId={detail.id}
+        detail={detail}
+      />,
+    );
+
+    await screen.findByText("Report");
+    expect(screen.queryByRole("heading", { name: "Agent scores" })).toBeNull();
+  });
+
   it("does not mount any downstream reader for a partial Finish", async () => {
     const methods = {
       teacherInteraction: vi.fn(),
@@ -98,6 +122,12 @@ describe("Wave 3 dedicated teacher page", () => {
       created_at: "2026-08-30T00:00:00Z",
       prepared_turns: 0,
       expected_turns: 0,
+      preview: null,
+      output_language: "en",
+      turn_protocol: null,
+      preview_turns: [],
+      final_input_frozen: false,
+      stall: null,
       revision: 1,
       last_sequence: 1,
       rule_set_id: "ordered_multi_agent_rounds_demo_v1",

@@ -32,10 +32,17 @@ from app.modules.auth.dependencies import get_db
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
+from app.modules.debates.cleanup import resume_cleanup_journals
+from app.modules.debates.cleanup_router import router as debate_cleanup_router
 from app.modules.debates.playback.audio import AudioStore
+from app.modules.debates.playback.audio_regeneration import (
+    discard_unjournaled_audio_stages,
+    startup_resume_audio_regeneration,
+)
 from app.modules.debates.playback.events import DebateEventHub
 from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
 from app.modules.debates.playback.prewarm import PrewarmScheduler
+from app.modules.debates.playback.recovery import release_stalled_turn_claim
 from app.modules.debates.playback.router import router as debate_playback_router
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlEventStore, SqlPlaybackRepository
@@ -169,12 +176,17 @@ def create_app(
             # A draft that cannot be started must not be warmed: every turn
             # would be a real provider call spent on a lesson the teacher will
             # be told to fix before it can run.
-            from app.modules.debates.topic_language import validate_english_topic
+            from app.modules.debates.topic_language import validate_topic
 
             try:
-                validate_english_topic(str(getattr(debate, "topic", "")))
+                validate_topic(
+                    str(getattr(debate, "topic", "")),
+                    str(getattr(debate, "output_language", "en")),
+                )
             except Exception:
                 return []
+            from app.modules.debates.round_count import debate_round_count, uses_segment_protocol
+
             turns = playback_repository.turns(session, debate)
             if not turns:
                 # A draft has no plan until something asks for one. Warming is
@@ -191,12 +203,26 @@ def create_app(
                     in {"final_ready", "ready", "completed"},
                 )
                 for turn in sorted(turns, key=lambda item: int(getattr(item, "turn_index", 0) or 0))
+                if not uses_segment_protocol(debate)
+                or int(getattr(turn, "round_no", 0)) < debate_round_count(debate)
             ]
 
     async def _prewarm_prepare(debate_id: str, turn_id: str) -> None:
-        with runtime_database.session() as session:
-            await playback_service.prepare_turn(session, debate_id, turn_id)
-            session.commit()
+        try:
+            with runtime_database.session() as session:
+                await playback_service.prepare_turn(session, debate_id, turn_id)
+                session.commit()
+        finally:
+            # Warming claims the turn before it generates it. A warm that stops
+            # without finishing -- cancelled at shutdown, abandoned when the
+            # bandwidth moved, or raised -- used to leave that claim behind,
+            # and the claim is what lets anyone prepare the turn. The Debate
+            # then could not be started, showed no ready turn, offered no Next
+            # and no failure to retry. Hand the claim back so the next warm, or
+            # the teacher pressing Start, can take it.
+            with runtime_database.session() as session:
+                release_stalled_turn_claim(session, debate_id, turn_id)
+                session.commit()
 
     prewarm = PrewarmScheduler(plan=_prewarm_plan, prepare=_prewarm_prepare)
     if runtime_settings.is_test:
@@ -264,6 +290,12 @@ def create_app(
                         logger.info("Reinstalled %s reviewed provider policies", restored)
             recover_embedding_provider_startup(runtime_database)
             recover_llm_startup(ProviderRepository(runtime_database))
+            with runtime_database.session() as session:
+                resume_cleanup_journals(session, runtime_settings.resolved_data_root)
+            with runtime_database.session() as session:
+                startup_resume_audio_regeneration(session, playback_service=playback_service)
+                if playback_service.audio_store is not None:
+                    discard_unjournaled_audio_stages(session, playback_service.audio_store)
             with runtime_database.session() as session:
                 recover_startup(session, runtime_settings.resolved_data_root)
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
@@ -389,6 +421,7 @@ def create_app(
     app.include_router(avatars_router, prefix="/api/v1")
     app.include_router(voices_router, prefix="/api/v1")
     app.include_router(debate_setup_router, prefix="/api/v1")
+    app.include_router(debate_cleanup_router, prefix="/api/v1")
     app.include_router(debate_playback_router, prefix="/api/v1")
     app.include_router(interaction_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
@@ -439,6 +472,8 @@ def create_app(
                         string_branch.get("enum"), list
                     ):
                         value["enum"] = [*string_branch["enum"], None]
+                    elif isinstance(string_branch, dict) and "const" in string_branch:
+                        value["enum"] = [string_branch["const"], None]
                 for child in value.values():
                     freeze_nullable_scalars(child)
             elif isinstance(value, list):
@@ -531,6 +566,10 @@ def create_app(
                             "createDebate",
                             "updateDebateDraft",
                             "startDebate",
+                            "freezeFinalInput",
+                            "deleteDebateVoice",
+                            "regenerateDebateTurnAudio",
+                            "deleteDebateAll",
                             "submitVote",
                             "submitBarrage",
                             "translateCurrentPublishedContent",

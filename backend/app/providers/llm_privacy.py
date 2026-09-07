@@ -19,6 +19,7 @@ LLM_REPAIR_FEEDBACK_POLICY_HASH: Final = (
 )
 LLM_REPAIR_FEEDBACK_POLICY_VERSION: Final = "repair_feedback_v1"
 LLM_REPAIR_FEEDBACK_FIELD_CLASS: Final = "server_authored_structure_repair_feedback"
+LLM_ANONYMOUS_BARRAGE_FIELD_CLASS: Final = "anonymous_classroom_barrage"
 
 LLM_ALLOWED_OUTBOUND_FIELD_CLASSES: Final = frozenset(
     {
@@ -28,6 +29,7 @@ LLM_ALLOWED_OUTBOUND_FIELD_CLASSES: Final = frozenset(
         "current_evidence_excerpt",
         "opaque_local_id",
         LLM_REPAIR_FEEDBACK_FIELD_CLASS,
+        LLM_ANONYMOUS_BARRAGE_FIELD_CLASS,
     }
 )
 LLM_REQUIRED_OUTBOUND_FIELD_CLASSES: Final = frozenset(
@@ -265,6 +267,13 @@ _QUERY_KEYS = frozenset({"query_id", "query_kind", "query_text", "query_hash", "
 _EVIDENCE_KEYS = frozenset({"evidence_id", "excerpt", "query_ids"})
 _DISAGREEMENT_KEYS = frozenset({"summary", "category", "claim_ids"})
 _REPAIR_KEYS = frozenset({"code", "json_pointers", "safe_error_code"})
+_SEGMENT_INPUT_KEYS = frozenset(
+    {"topic", "language", "round", "persona", "history", "sources", "barrages"}
+)
+_SEGMENT_ROUND_KEYS = frozenset({"number", "total"})
+_SEGMENT_PERSONA_KEYS = frozenset(
+    {"identity", "cultural_lens", "core_values", "initial_position", "speaking_style"}
+)
 
 
 def _message_parts(messages: Sequence[object]) -> tuple[tuple[str, str], ...]:
@@ -405,10 +414,14 @@ def _scan_text(
     for token in identity_tokens:
         if isinstance(token, str) and token.strip() and _contains_identity_token(folded, token):
             _reject()
+    # Typed public identifiers can contain a phone-shaped numeric suffix by
+    # chance. Only a complete UUID in an allowed ID field gets this exemption;
+    # authenticated identity tokens above and phone numbers in prose still fail.
+    phone_text = "" if allow_uuid and _UUID_RE.fullmatch(text) else text
     if (
         (not allow_uuid and _UUID_RE.search(text))
         or _EMAIL_RE.search(text)
-        or _PHONE_RE.search(text)
+        or _PHONE_RE.search(phone_text)
         or _BEARER_RE.search(text)
         or _SECRET_TOKEN_RE.search(text)
         or _CREDENTIAL_LABEL_RE.search(text)
@@ -420,6 +433,28 @@ def _scan_text(
         or _PATH_RE.search(text)
     ):
         _reject()
+
+
+def validate_anonymous_barrage_text(
+    text: str,
+    *,
+    identity_tokens: Iterable[str] = (),
+    workspace_id: str | None = None,
+) -> str:
+    """Validate one classroom barrage before it enters a provider snapshot.
+
+    This reuses the exact outbound text scanner used for the system/user
+    messages.  It returns the original text for callers that want a compact
+    expression in a filtering pipeline; it never includes the rejected value
+    in an exception or log.  The caller supplies the approved identity tokens
+    for the local classroom and may redact or discard the message on failure.
+    """
+
+    if not isinstance(text, str) or not text.strip():
+        _reject(code="llm_anonymous_barrage_invalid")
+    tokens = tuple(item for item in identity_tokens if isinstance(item, str) and item.strip())
+    _scan_text(text, identity_tokens=tokens, workspace_id=workspace_id)
+    return text
 
 
 def _path_allows_uuid(path: tuple[str, ...]) -> bool:
@@ -519,6 +554,63 @@ def scan_llm_outbound_messages(
     )
 
 
+def scan_segment_outbound_messages(
+    messages: Sequence[object],
+    *,
+    identity_tokens: Iterable[str] = (),
+    workspace_id: str | None = None,
+    field_classes: Iterable[str] = (),
+) -> LLMOutboundScanResult:
+    """Scan the exact system/user bytes for the closed ``segments_v2`` shape."""
+
+    parts = _message_parts(messages)
+    tokens = tuple(
+        str(token) for token in identity_tokens if isinstance(token, str) and token.strip()
+    )
+    _scan_text(parts[0][1], identity_tokens=tokens, workspace_id=workspace_id)
+    try:
+        decoded = json.loads(
+            parts[1][1],
+            object_pairs_hook=_no_duplicate_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _reject(code="llm_outbound_json_invalid")
+    if not isinstance(decoded, Mapping) or set(decoded) != _SEGMENT_INPUT_KEYS:
+        _reject(code="llm_outbound_field_forbidden")
+    round_value = decoded.get("round")
+    if isinstance(round_value, Mapping) and set(round_value) != _SEGMENT_ROUND_KEYS:
+        _reject(code="llm_outbound_field_forbidden")
+    persona_value = decoded.get("persona")
+    if isinstance(persona_value, Mapping) and set(persona_value) != _SEGMENT_PERSONA_KEYS:
+        _reject(code="llm_outbound_field_forbidden")
+    if isinstance(persona_value, Mapping):
+        identity = persona_value.get("identity")
+        if isinstance(identity, Mapping) and set(identity) != _PERSONA_IDENTITY_KEYS:
+            _reject(code="llm_outbound_field_forbidden")
+        style = persona_value.get("speaking_style")
+        if isinstance(style, Mapping) and set(style) != _PERSONA_STYLE_KEYS:
+            _reject(code="llm_outbound_field_forbidden")
+    for key in ("history", "sources", "barrages"):
+        values = decoded.get(key)
+        if not isinstance(values, list):
+            _reject(code="llm_outbound_json_invalid")
+        allowed = {"speaker", "round", "text"} if key == "history" else {"id", "text"}
+        for item in values:
+            if not isinstance(item, Mapping) or set(item) != allowed:
+                _reject(code="llm_outbound_field_forbidden")
+    _scan_value(decoded, path=(), identity_tokens=tokens, workspace_id=workspace_id)
+    classes = tuple(dict.fromkeys(str(value) for value in field_classes))
+    if any(value not in LLM_ALLOWED_OUTBOUND_FIELD_CLASSES for value in classes):
+        _reject(code="llm_manifest_field_forbidden")
+    raw = "\x1e".join(content for _role, content in parts).encode("utf-8")
+    return LLMOutboundScanResult(
+        message_hash=hashlib.sha256(raw).hexdigest(),
+        message_bytes=sum(len(content.encode("utf-8")) for _role, content in parts),
+        field_classes=classes,
+    )
+
+
 def scan_real_llm_messages(*args: object, **kwargs: object) -> LLMOutboundScanResult:
     """Alias named after the real-provider boundary used by tests/runtime."""
 
@@ -531,6 +623,7 @@ validate_real_llm_messages = scan_llm_outbound_messages
 
 __all__ = [
     "LLM_ALLOWED_OUTBOUND_FIELD_CLASSES",
+    "LLM_ANONYMOUS_BARRAGE_FIELD_CLASS",
     "LLMOutboundManifestV1",
     "LLMOutboundPrivacyError",
     "LLMOutboundScanResult",
@@ -541,7 +634,9 @@ __all__ = [
     "LLM_REPAIR_FEEDBACK_POLICY_VERSION",
     "OutboundLLMDataError",
     "scan_llm_outbound_messages",
+    "scan_segment_outbound_messages",
     "scan_real_llm_messages",
+    "validate_anonymous_barrage_text",
     "validate_llm_outbound_messages",
     "validate_real_llm_messages",
 ]

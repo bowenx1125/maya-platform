@@ -69,13 +69,14 @@ class DebateDraftRequest(_ClosedModel):
     topic: str = Field(
         min_length=1,
         description=(
-            "Non-empty English debate topic using Latin-script letters; Unicode Latin "
-            "diacritics, numbers, ordinary whitespace and punctuation are allowed. "
-            "Control and non-Latin letter characters are rejected at the domain boundary."
+            "Non-empty topic in the selected lesson language. English accepts Latin "
+            "letters; Chinese also accepts Han characters. Controls are rejected."
         ),
     )
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: int = Field(ge=2, le=5)
+    output_language: Literal["en", "zh"] = "en"
+    turn_protocol: Literal["segments_v2"] | None = None
     rule_set_id: RuleSetId = NEW_DEBATE_RULE_SET_ID
     total_duration_seconds: None = None
     turn_duration_seconds: None = None
@@ -100,10 +101,8 @@ class DebateStartRequest(_ClosedModel):
     expected_revision: int = Field(ge=0)
     expected_current_audio_debate_id: UUID | None
     confirm_previous_audio_cleanup: bool
-    # The language the debate is generated in, fixed from this moment. It is
-    # not the browser's interface language: switching that afterwards
-    # translates the chrome, never the lesson.
-    output_language: Literal["en", "zh"] = "en"
+    # Retained for old clients; it may only confirm the draft's saved language.
+    output_language: Literal["en", "zh"] | None = None
 
 
 class PlaybackCommandRequest(_ClosedModel):
@@ -187,6 +186,20 @@ class DebateParticipant(_ClosedModel):
     current_position_summary: str = ""
 
 
+class DebateStall(_ClosedModel):
+    """The turn that stopped a draft warming, and why."""
+
+    turn_id: UUID
+    round_no: int = Field(ge=1)
+    safe_error_code: str
+
+
+class DebatePreviewProgress(_ClosedModel):
+    prepared_turns: int = Field(ge=0)
+    expected_turns: int = Field(ge=1)
+    ready: bool
+
+
 class DebateSummary(_ClosedModel):
     id: UUID
     course_id: UUID
@@ -205,6 +218,11 @@ class DebateSummary(_ClosedModel):
     # is a draft.
     prepared_turns: int = Field(default=0, ge=0)
     expected_turns: int = Field(default=0, ge=0)
+    preview: DebatePreviewProgress | None = None
+    # Warming stops at the first turn that will not generate and changes no
+    # status, so a stalled draft used to be indistinguishable from one still
+    # thinking. This is read from that turn, not stored on the debate.
+    stall: DebateStall | None = None
 
 
 class PlaybackState(_ClosedModel):
@@ -219,6 +237,38 @@ class PlaybackState(_ClosedModel):
     next_turn_ready: bool
 
 
+class DebateSegment(_ClosedModel):
+    text: str
+    source_ids: list[str]
+    reply_to: str | None
+
+
+class SegmentTurnPublic(_ClosedModel):
+    schema_version: Literal["segment_turn_v2"] = "segment_turn_v2"
+    segments: list[DebateSegment]
+
+
+class SegmentSourceDetail(_ClosedModel):
+    source_id: str
+    source_filename: str
+    excerpt: str
+    query_text: str | None = None
+    version_label: str
+
+
+class PreviewTurn(_ClosedModel):
+    id: UUID
+    participant_id: UUID
+    round_no: int
+    turn_index: int
+    speech: str
+    generation_status: str
+    audio_ready: bool
+    safe_error_code: str | None = None
+    segments: list[DebateSegment] = Field(default_factory=list)
+    sources: list[SegmentSourceDetail] = Field(default_factory=list)
+
+
 class DebateTurn(_ClosedModel):
     id: UUID
     participant_id: UUID
@@ -230,8 +280,11 @@ class DebateTurn(_ClosedModel):
     grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"]
     sources: list[RetrievalSource]
     playback_resource: DebatePlaybackResource | None = None
+    audio_ready: bool | None = None
     mutual_learning: MutualLearningTurnResultV1 | None = None
     evidence_trace: list[EvidenceTraceV1] | None = None
+    segment_turn: SegmentTurnPublic | None = None
+    source_details: list[SegmentSourceDetail] = Field(default_factory=list)
 
 
 class Transcript(_ClosedModel):
@@ -241,6 +294,10 @@ class Transcript(_ClosedModel):
 
 
 class DebateDetail(DebateSummary):
+    output_language: Literal["en", "zh"] = "en"
+    turn_protocol: Literal["segments_v2"] | None = None
+    preview_turns: list[PreviewTurn] = Field(default_factory=list)
+    final_input_frozen: bool = False
     revision: int = Field(ge=0)
     last_sequence: int = Field(ge=0)
     rule_set_id: RuleSetId
@@ -252,6 +309,21 @@ class DebateDetail(DebateSummary):
     insight_status: Literal["not_started", "generating", "ready", "failed"]
     report_status: Literal["not_started", "generating", "ready", "failed"]
     mutual_learning_synthesis: MutualLearningSynthesisV1 | None = None
+
+
+class DebateCleanupRequest(_ClosedModel):
+    expected_revision: int = Field(ge=0)
+    expected_control_version: int = Field(ge=0)
+
+
+class DebateCleanupResult(_ClosedModel):
+    debate_id: UUID
+    cleanup_status: Literal["complete", "pending"]
+    revision: int = Field(ge=0)
+    control_version: int = Field(ge=0)
+    deleted_file_count: int = Field(ge=0)
+    pending_file_count: int = Field(ge=0)
+    regenerable_turn_ids: list[UUID] = Field(default_factory=list)
 
 
 class TurnPlanEntry(_ClosedModel):
@@ -275,6 +347,7 @@ class DebateRuleSnapshot(_ClosedModel):
     rule_set_id: RuleSetId = "ordered_multi_agent_rounds_demo_v2"
     retrieval_policy_id: Literal["mock_lexical_anchor_v2"] | None = MOCK_RETRIEVAL_POLICY_ID
     round_count: int = Field(default=2, ge=2, le=5)
+    turn_protocol: Literal["segments_v2"] | None = None
     min_participants: Literal[2] = 2
     max_participants: Literal[5] = 5
     min_words: Literal[80] = 80
@@ -337,3 +410,19 @@ __all__ = [
     "Transcript",
     "TurnPlanEntry",
 ]
+
+
+class RegenerateTurnAudioRequest(_ClosedModel):
+    expected_revision: int = Field(ge=0)
+
+
+class RegenerateTurnAudioResult(_ClosedModel):
+    operation: Literal["debate_turn_tts"] = "debate_turn_tts"
+    status: Literal["completed", "already_ready", "queued", "failed", "stale", "not_found"]
+    debate_id: UUID
+    turn_id: UUID
+    revision: int | None
+    operation_id: UUID | None
+    audio_ready: bool
+    audio_duration_ms: int | None
+    safe_error_code: str | None

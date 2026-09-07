@@ -145,6 +145,7 @@ def _context_record(context: GenerationContext) -> dict[str, object]:
     # owner/snapshot fence; this avoids a second copy of prompt prose.
     return {
         "version": LLM_RECOVERY_INPUT_VERSION,
+        "output_language": context.output_language,
         "participants": [_participant_record(item) for item in context.participants],
         "predecessor_fences": [_predecessor_fence_record(item) for item in context.predecessors],
     }
@@ -365,7 +366,10 @@ def context_from_recovery_input(value: LLMRecoveryInputV1) -> GenerationContext:
 
     participants_value = payload.get("participants")
     predecessor_fences_value = payload.get("predecessor_fences")
-    if set(payload) != {"version", "participants", "predecessor_fences"}:
+    if set(payload) not in (
+        {"version", "participants", "predecessor_fences"},
+        {"version", "output_language", "participants", "predecessor_fences"},
+    ):
         raise ValueError("recovery participant fence is not closed")
     if payload.get("version") != LLM_RECOVERY_INPUT_VERSION:
         raise ValueError("recovery participant fence version is unsupported")
@@ -495,6 +499,7 @@ def context_from_recovery_input(value: LLMRecoveryInputV1) -> GenerationContext:
         participants=participants,
         predecessors=tuple(predecessors),
         pending_question=pending,
+        output_language=str(payload.get("output_language", "en")),
     )
 
 

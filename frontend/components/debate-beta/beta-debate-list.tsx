@@ -23,25 +23,17 @@ function teacherCourseId(
 const COPY = {
   en: {
     eyebrow: "Debates (beta)",
-    title: "The 3D bench",
-    intro:
-      "The same debates, played on a full-figure stage: every Agent stands on the bench, the speaker steps forward, and classroom messages cross the scene while the debate is still running.",
+    title: "Classroom Stage",
     unavailable: "No teacher course is available for this account.",
-    empty: "No debates yet. Create one in Debates, then open it here.",
+    empty: "No prepared debates.",
     open: "Open on the bench",
-    classic: "Debates",
-    classicHint: "Create, edit and report on debates in the classic surface.",
   },
   zh: {
     eyebrow: "Debates（beta）",
-    title: "3D 讲席",
-    intro:
-      "同一批辩论，换成全身讲席：每个 Agent 都在席上，发言者上前一步，弹幕在辩论进行中穿过画面。",
+    title: "课堂讲席",
     unavailable: "当前账号没有可用的教师课程。",
-    empty: "还没有辩论。先在 Debates 里创建，再回到这里打开。",
+    empty: "还没有准备好的辩论。",
     open: "在讲席上打开",
-    classic: "Debates",
-    classicHint: "创建、编辑和生成报告仍在原来的 Debates 页面。",
   },
 } as const;
 
@@ -63,7 +55,17 @@ export function BetaDebateList() {
     setLoading(true);
     setError(null);
     try {
-      setDebates(await api.debates(courseId));
+      const all = await api.debates(courseId);
+      setDebates(
+        all.filter((debate) =>
+          debate.preview
+            ? debate.preview.ready &&
+              !["failed", "stopped"].includes(debate.status)
+            : ["debate_finished", "completed"].includes(debate.status) &&
+              debate.expected_turns > 0 &&
+              debate.prepared_turns === debate.expected_turns,
+        ),
+      );
     } catch (cause) {
       setError(cause);
     } finally {
@@ -79,11 +81,6 @@ export function BetaDebateList() {
   return (
     <>
       <PageIntro eyebrow={copy.eyebrow} title={copy.title} />
-      <p className={styles.intro}>{copy.intro}</p>
-      <p className={styles.hint}>
-        {copy.classicHint} <Link href="/teacher/debates">{copy.classic}</Link>
-      </p>
-
       {loading ? <LoadingCard /> : null}
       {!loading && error ? (
         <ErrorNotice error={error} onRetry={() => void load()} />
@@ -100,11 +97,17 @@ export function BetaDebateList() {
                   <h2>{debate.topic}</h2>
                   <span className={styles.meta}>
                     <span className={styles.status} data-status={debate.status}>
-                      {statusLabel(debate.status, locale)}
+                      {debate.preview?.ready && debate.status === "draft"
+                        ? "Ready"
+                        : statusLabel(debate.status, locale)}
                     </span>
                     {debate.expected_turns > 0 ? (
                       <span className={styles.progress}>
-                        {debate.prepared_turns}/{debate.expected_turns}
+                        {debate.preview?.prepared_turns ??
+                          debate.prepared_turns}
+                        /
+                        {debate.preview?.expected_turns ??
+                          debate.expected_turns}
                       </span>
                     ) : null}
                   </span>

@@ -695,10 +695,28 @@ export interface paths {
         get: operations["getDebate"];
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["deleteDebateAll"];
         options?: never;
         head?: never;
         patch: operations["updateDebateDraft"];
+        trace?: never;
+    };
+    "/debates/{debate_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteDebateVoice"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/debates/{debate_id}/start": {
@@ -879,6 +897,22 @@ export interface paths {
         get: operations["getTeacherInteraction"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debates/{debate_id}/final-input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["freezeFinalInput"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1173,6 +1207,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/audio/{turn_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Audio Route */
+        post: operations["regenerateDebateTurnAudio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1199,7 +1250,7 @@ export interface components {
             /** @constant */
             region: "cn-beijing";
             purpose: string;
-            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
             storage_fact: string;
             no_training_basis: string;
             retention_setting: string;
@@ -1398,9 +1449,10 @@ export interface components {
             enabled_documents?: components["schemas"]["KnowledgeDocument"][];
             publish_blockers?: string[];
             raw_agent_md_hash?: string | null;
-            persona_spec?: components["schemas"]["PersonaSpecV1"] | null;
+            persona_spec?: components["schemas"]["PersonaSpecV1"] | components["schemas"]["PersonaSpecV2"] | null;
             persona_spec_hash?: string | null;
-            persona_compiler_version?: string | null;
+            /** @enum {string|null} */
+            persona_compiler_version?: "persona_template_v1" | "persona_template_v2" | null;
             persona_diagnostics?: components["schemas"]["PersonaDiagnostic"][];
             persona_confirmation_revision?: number | null;
             /** @default false */
@@ -1453,22 +1505,22 @@ export interface components {
             persona_spec_hash: string;
             /**
              * @default persona_template_v1
-             * @constant
+             * @enum {string}
              */
-            compiler_version: "persona_template_v1";
+            compiler_version: "persona_template_v1" | "persona_template_v2";
         };
         PersonaCompileResponse: {
             version_id: components["schemas"]["Uuid"];
             revision: number;
             compiled: boolean;
             raw_agent_md_hash: string;
-            persona_spec?: components["schemas"]["PersonaSpecV1"] | null;
+            persona_spec?: components["schemas"]["PersonaSpecV1"] | components["schemas"]["PersonaSpecV2"] | null;
             persona_spec_hash?: string | null;
             /**
              * @default persona_template_v1
-             * @constant
+             * @enum {string}
              */
-            compiler_version: "persona_template_v1";
+            compiler_version: "persona_template_v1" | "persona_template_v2";
             diagnostics?: components["schemas"]["PersonaDiagnostic"][];
             /** @default false */
             persona_confirmed: boolean;
@@ -1557,8 +1609,19 @@ export interface components {
             teacher_note: string;
         };
         DebateDraftRequest: {
-            /** @description Non-empty English debate topic. The value must contain at least one Latin-script letter and may include Unicode Latin diacritics, numbers, punctuation, and ordinary Unicode space separators. Control characters, non-Latin letters, symbols, unsafe marks, and non-space separators are rejected by the domain validator; there is no product-level maximum length in Wave 2. */
+            /** @description Non-empty topic in the selected lesson language. English accepts Latin letters; Chinese also accepts Han characters. Controls are rejected. */
             topic: string;
+            /**
+             * @default en
+             * @enum {string}
+             */
+            output_language: "en" | "zh";
+            /**
+             * @description Current clients send segments_v2; omission preserves legacy callers.
+             * @default null
+             * @enum {string|null}
+             */
+            turn_protocol: "segments_v2" | null;
             participants: components["schemas"]["DebateParticipantInput"][];
             /**
              * @default ordered_multi_expert_mutual_learning_v1
@@ -1612,6 +1675,89 @@ export interface components {
             current_stance?: "support" | "oppose" | "neutral" | null;
             current_position_summary?: string;
         };
+        DebateStall: {
+            turn_id: components["schemas"]["Uuid"];
+            round_no: number;
+            /** @description The server-authored code for why that turn would not generate. */
+            safe_error_code: string;
+        };
+        DebatePreviewProgress: {
+            prepared_turns: number;
+            expected_turns: number;
+            ready: boolean;
+        };
+        FreezeFinalRequest: {
+            expected_control_version: number;
+        };
+        FrozenFinalInput: {
+            /**
+             * @default true
+             * @constant
+             */
+            ready: true;
+            barrage_count: number;
+            cutoff_sequence: number;
+        };
+        /**
+         * @description Canonical stored schema for the five-section Persona template.
+         *
+         *     V2 intentionally has no ``debate_strategy`` or ``boundaries`` fields.
+         *     Platform rules and debate scheduling remain server-owned, so retaining
+         *     those headings as empty compatibility values would misrepresent authorship
+         *     and make the new schema indistinguishable from a legacy V1 projection.
+         */
+        PersonaSpecV2: {
+            /**
+             * @default persona_template_v2
+             * @constant
+             */
+            compiler_version: "persona_template_v2";
+            core_values: string[];
+            cultural_lens: string[];
+            identity: components["schemas"]["PersonaIdentity"];
+            initial_position: string;
+            /**
+             * @default persona_spec_v2
+             * @constant
+             */
+            schema_version: "persona_spec_v2";
+            source_agent_md_hash: string;
+            speaking_style: components["schemas"]["PersonaSpeakingStyle"];
+        };
+        DebateSegment: {
+            reply_to: string | null;
+            source_ids: string[];
+            text: string;
+        };
+        SegmentTurnPublic: {
+            /**
+             * @default segment_turn_v2
+             * @constant
+             */
+            schema_version: "segment_turn_v2";
+            segments: components["schemas"]["DebateSegment"][];
+        };
+        SegmentSourceDetail: {
+            excerpt: string;
+            query_text?: string | null;
+            source_filename: string;
+            source_id: string;
+            version_label: string;
+        };
+        PreviewTurn: {
+            audio_ready: boolean;
+            generation_status: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            participant_id: string;
+            round_no: number;
+            safe_error_code?: string | null;
+            segments?: components["schemas"]["DebateSegment"][];
+            sources?: components["schemas"]["SegmentSourceDetail"][];
+            speech: string;
+            turn_index: number;
+        };
         DebateSummary: {
             id: components["schemas"]["Uuid"];
             course_id: components["schemas"]["Uuid"];
@@ -1629,6 +1775,27 @@ export interface components {
              * @default 0
              */
             expected_turns: number;
+            /** @default null */
+            preview: components["schemas"]["DebatePreviewProgress"] | null;
+            /**
+             * @description The turn that stopped this draft warming, if one did. Background warming halts at the first turn that will not generate and changes no status, so without this a stalled draft is indistinguishable from one still thinking. Read from that turn, never stored.
+             * @default null
+             */
+            stall: components["schemas"]["DebateStall"] | null;
+        };
+        DebateCleanupRequest: {
+            expected_revision: number;
+            expected_control_version: number;
+        };
+        DebateCleanupResult: {
+            debate_id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            cleanup_status: "complete" | "pending";
+            revision: number;
+            control_version: number;
+            deleted_file_count: number;
+            pending_file_count: number;
+            regenerable_turn_ids?: components["schemas"]["Uuid"][];
         };
         DebateDetail: components["schemas"]["DebateSummary"] & {
             revision: number;
@@ -1636,6 +1803,19 @@ export interface components {
             /** @enum {string} */
             rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
             round_count: number;
+            /**
+             * @default en
+             * @enum {string}
+             */
+            output_language: "en" | "zh";
+            /**
+             * @default null
+             * @enum {string|null}
+             */
+            turn_protocol: "segments_v2" | null;
+            /** @default false */
+            final_input_frozen: boolean;
+            preview_turns?: components["schemas"]["PreviewTurn"][];
             participants: components["schemas"]["DebateParticipant"][];
             public_turns: components["schemas"]["DebateTurn"][];
             playback: components["schemas"]["PlaybackState"];
@@ -1660,6 +1840,9 @@ export interface components {
             next_turn_ready: boolean;
         };
         DebateTurn: {
+            /** @default null */
+            segment_turn: components["schemas"]["SegmentTurnPublic"] | null;
+            source_details?: components["schemas"]["SegmentSourceDetail"][];
             id: components["schemas"]["Uuid"];
             participant_id: components["schemas"]["Uuid"];
             round_no: number;
@@ -1670,6 +1853,7 @@ export interface components {
             /** @enum {string} */
             grounding_mode: "rag_grounded" | "mixed" | "general_reasoning";
             sources: components["schemas"]["RetrievalSource"][];
+            audio_ready?: boolean | null;
             playback_resource?: components["schemas"]["DebatePlaybackResource"] | null;
             /** @enum {string|null} */
             phase?: "opening" | "exchange" | "final_integration" | "rebuttal" | null;
@@ -1798,6 +1982,8 @@ export interface components {
         };
         BarrageMessage: {
             id: components["schemas"]["Uuid"];
+            /** @default null */
+            turn_id: components["schemas"]["Uuid"] | null;
             nickname: string;
             raw_text: string;
             sequence: number;
@@ -1828,6 +2014,12 @@ export interface components {
         };
         PublicInteractionForm: {
             topic: string;
+            /** @default null */
+            current_turn_id: components["schemas"]["Uuid"] | null;
+            /** @default null */
+            round_no: number | null;
+            /** @default true */
+            barrage_open: boolean;
             participants: {
                 participant_id: components["schemas"]["Uuid"];
                 /** @enum {string} */
@@ -1904,6 +2096,45 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "running" | "completed" | "failed" | "interrupted";
             safe_error_code?: string | null;
+        };
+        /** RegenerateTurnAudioRequest */
+        RegenerateTurnAudioRequest: {
+            /** Expected Revision */
+            expected_revision: number;
+        };
+        /** RegenerateTurnAudioResult */
+        RegenerateTurnAudioResult: {
+            /** Audio Duration Ms */
+            audio_duration_ms: number | null;
+            /** Audio Ready */
+            audio_ready: boolean;
+            /**
+             * Debate Id
+             * Format: uuid
+             */
+            debate_id: string;
+            /**
+             * Operation
+             * @default debate_turn_tts
+             * @constant
+             */
+            operation: "debate_turn_tts";
+            /** Operation Id */
+            operation_id: string | null;
+            /** Revision */
+            revision: number | null;
+            /** Safe Error Code */
+            safe_error_code: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "already_ready" | "queued" | "failed" | "stale" | "not_found";
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
         };
     };
     responses: {
@@ -3272,6 +3503,41 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    deleteDebateAll: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DebateCleanupRequest"];
+            };
+        };
+        responses: {
+            /** @description Bounded cleanup committed; pending status requires completion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebateCleanupResult"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
     updateDebateDraft: {
         parameters: {
             query?: never;
@@ -3305,6 +3571,41 @@ export interface operations {
             422: components["responses"]["Error"];
         };
     };
+    deleteDebateVoice: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DebateCleanupRequest"];
+            };
+        };
+        responses: {
+            /** @description Bounded cleanup committed; pending status requires completion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebateCleanupResult"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
     startDebate: {
         parameters: {
             query?: never;
@@ -3325,11 +3626,11 @@ export interface operations {
                     expected_current_audio_debate_id: components["schemas"]["Uuid"] | null;
                     confirm_previous_audio_cleanup: boolean;
                     /**
-                     * @description The language this debate is generated in, fixed at start. Not the interface language: changing that afterwards translates the chrome, never the lesson.
-                     * @default en
-                     * @enum {string}
+                     * @description Optional confirmation of the language saved in Preview; cannot change it.
+                     * @default null
+                     * @enum {string|null}
                      */
-                    output_language?: "en" | "zh";
+                    output_language?: "en" | "zh" | null;
                 };
             };
         };
@@ -3612,6 +3913,39 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    freezeFinalInput: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreezeFinalRequest"];
+            };
+        };
+        responses: {
+            /** @description Immutable final-round classroom input is ready. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrozenFinalInput"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
     openInteraction: {
         parameters: {
             query?: never;
@@ -3744,6 +4078,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @default null */
+                    turn_id?: components["schemas"]["Uuid"] | null;
                     nickname: string;
                     raw_text: string;
                     client_submission_id: components["schemas"]["Uuid"];
@@ -4147,6 +4483,81 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    regenerateDebateTurnAudio: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                debate_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateTurnAudioRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegenerateTurnAudioResult"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

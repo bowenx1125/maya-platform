@@ -30,6 +30,12 @@ from app.modules.debates.generation.mutual_learning_prompts import (
 )
 from app.modules.debates.generation.prompt_request import ProviderPromptV1
 from app.modules.debates.generation.prompts import build_turn_prompt, prompt_hash
+from app.modules.debates.generation.segments import (
+    SegmentInputSnapshot,
+    SegmentTurnResult,
+    build_segment_system_prompt,
+    validate_segment_output,
+)
 from app.modules.debates.generation.types import (
     EngagementV1,
     EvidenceTraceClaimV1,
@@ -143,9 +149,21 @@ class LLMProvider(Protocol):
     """The only text generation operation owned by M11."""
 
     def generate_turn(
-        self, prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1
-    ) -> StructuredTurnResult | MutualLearningTurnResultV1:
+        self,
+        prompt: TurnPromptInput
+        | MutualLearningPromptInput
+        | ProviderPromptV1
+        | SegmentInputSnapshot,
+    ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
         """Generate one closed structured turn from a frozen prompt."""
+
+    def generate_segments(
+        self,
+        snapshot: SegmentInputSnapshot,
+        *,
+        repair_feedback: dict[str, object] | None = None,
+    ) -> dict[str, object] | SegmentTurnResult:
+        """Generate the explicit paragraph protocol from a frozen snapshot."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,8 +272,14 @@ class MockLLMProvider:
         self._failures.append(kind)
 
     def generate_turn(
-        self, prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1
-    ) -> StructuredTurnResult | MutualLearningTurnResultV1:
+        self,
+        prompt: TurnPromptInput
+        | MutualLearningPromptInput
+        | ProviderPromptV1
+        | SegmentInputSnapshot,
+    ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
+        if isinstance(prompt, SegmentInputSnapshot):
+            return validate_segment_output(self.generate_segments(prompt), prompt)
         self.calls += 1
         messages: tuple[tuple[str, str], ...] = ()
         if isinstance(prompt, ProviderPromptV1):
@@ -355,6 +379,54 @@ class MockLLMProvider:
             else self._valid_result(_legacy_turn_prompt(prompt))
         )
 
+    def generate_segments(
+        self,
+        snapshot: SegmentInputSnapshot,
+        *,
+        repair_feedback: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        """Emit a deterministic local v2 shape; this never calls a provider."""
+
+        if not isinstance(snapshot, SegmentInputSnapshot):
+            raise LLMStructuredOutputError("segment snapshot is invalid")
+        del repair_feedback
+        self.calls += 1
+        system = build_segment_system_prompt(snapshot)
+        self.call_log.append(
+            MockLLMCall(
+                prompt_hash=hashlib.sha256(
+                    "\x1e".join((system, snapshot.to_user_json())).encode("utf-8")
+                ).hexdigest(),
+                receipt_hash=snapshot.receipt_hash,
+                turn_id="",
+                messages=(("system", system), ("user", snapshot.to_user_json())),
+            )
+        )
+        failure = self._failures.popleft() if self._failures else None
+        if failure == "technical":
+            raise LLMProviderError("mock technical provider failure", acceptance_state="not_sent")
+        if failure in {"json", "shape"}:
+            raise LLMStructuredOutputError("mock malformed segment output")
+        if failure == "long":
+            return {"segments": [{"text": "x" * 8_001, "source_ids": [], "reply_to": None}]}
+        source_ids = ["S1"] if snapshot.sources else []
+        reply_to = (
+            snapshot.barrages[0].id
+            if snapshot.phase == "final_integration" and snapshot.barrages
+            else None
+        )
+        if failure == "rule":
+            reply_to = None
+        if failure == "matched_but_unused":
+            source_ids = []
+        text = (
+            f"{snapshot.persona.name} considers the topic carefully and keeps the response "
+            "grounded in the discussion."
+        )
+        if reply_to is not None:
+            text += " I will address the classroom question directly."
+        return {"segments": [{"text": text, "source_ids": source_ids, "reply_to": reply_to}]}
+
     def _mutual_result(
         self,
         prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
@@ -435,7 +507,7 @@ class MockLLMProvider:
                 f"{speech_dimensions.value_priority_sentence} "
                 f"{speech_dimensions.argument_pattern_sentence} "
                 f"{speech_dimensions.concession_style_sentence} "
-                f"{speech_dimensions.debate_strategy_sentence} "
+                f"{getattr(speech_dimensions, 'debate_strategy_sentence', '')} "
                 f"{speech_dimensions.question_style_sentence} "
             )
         )
@@ -747,7 +819,7 @@ class MockLLMProvider:
         )
         target_turn_id = predecessor.turn_id if predecessor is not None else None
         target_claim = (
-            predecessor.structured.position_summary
+            getattr(predecessor.structured, "position_summary", "")
             if predecessor is not None
             else "the earlier participant's specific claim"
         )

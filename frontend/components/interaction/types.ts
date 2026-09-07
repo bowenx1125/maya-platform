@@ -33,6 +33,7 @@ export type AudienceInteractionApi = {
     payload: {
       nickname: string;
       raw_text: string;
+      turn_id?: string;
       client_submission_id: string;
     },
   ) => Promise<{ barrage_submitted: true }>;

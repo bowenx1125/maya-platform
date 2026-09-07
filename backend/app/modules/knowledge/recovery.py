@@ -65,7 +65,14 @@ def recover_file_operations(
 
     query = select(FileOperation).where(
         FileOperation.state.in_(_RECOVERABLE_OPERATION_STATES),
-        FileOperation.operation_kind != "debate_audio_swap",
+        FileOperation.operation_kind.not_in(
+            (
+                "debate_audio_swap",
+                "debate_turn_tts",
+                "debate_cleanup_voice_v1",
+                "debate_cleanup_all_v1",
+            )
+        ),
     )
     if idempotency_record_id is not None:
         query = query.where(FileOperation.idempotency_record_id == idempotency_record_id)

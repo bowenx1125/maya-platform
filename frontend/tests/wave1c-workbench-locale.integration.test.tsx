@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
+import { buildPersonaTemplate } from "../components/persona";
 import { LanguageSwitcher, LocaleProvider } from "../components/locale";
 import { SessionProvider, useSession } from "../components/session-provider";
 import type {
@@ -19,7 +20,6 @@ import type {
   RagPreview,
 } from "../lib/api";
 import { PlatformApiError } from "../lib/api";
-import { AGENT_OUTLINE } from "../lib/i18n";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 
@@ -257,7 +257,7 @@ describe("Wave 1C real workbench locale boundary", () => {
 
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe(AGENT_OUTLINE);
+    ).toBe(buildPersonaTemplate("Agent"));
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
     ).toContain("# Identity");

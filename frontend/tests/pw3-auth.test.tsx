@@ -81,7 +81,7 @@ describe("PW3-A anonymous Demo login", () => {
     expect(navigation.replace).toHaveBeenCalledWith("/student");
   });
 
-  it("combines the platform introduction and both login paths on the home page", async () => {
+  it("keeps the home page focused on Maya and both login paths", async () => {
     const api = {
       me: vi.fn(async () => {
         throw new PlatformApiError(401, "Authentication is required.");
@@ -106,17 +106,18 @@ describe("PW3-A anonymous Demo login", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Build a point of view. Keep the evidence clear.",
+        name: "Maya",
       }),
     ).toBeTruthy();
     expect(await screen.findByRole("button", { name: /Student/ })).toBeTruthy();
     expect(screen.getByLabelText("Username")).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: "Environment health" })
-        .getAttribute("href"),
-    ).toBe("/health");
+      screen.queryByRole("link", { name: "Environment health" }),
+    ).toBeNull();
+    expect(screen.queryByText("Build with intention")).toBeNull();
+    expect(screen.queryByText("Release with context")).toBeNull();
+    expect(screen.queryByText("Keep the boundary clear")).toBeNull();
     expect(screen.queryByRole("link", { name: "Sign in to Maya" })).toBeNull();
     expect(screen.queryByText(/WAVE 1A/)).toBeNull();
   });

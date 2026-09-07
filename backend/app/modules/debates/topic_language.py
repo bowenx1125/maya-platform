@@ -112,6 +112,31 @@ def validate_english_topic(value: str) -> str:
     return trimmed
 
 
+def validate_topic(value: str, output_language: str = "en") -> str:
+    """Chinese lessons accept Han and Latin text before any pre-generation."""
+
+    if output_language == "en":
+        return validate_english_topic(value)
+    if output_language != "zh" or not isinstance(value, str):
+        raise TopicLanguageError()
+    # Replace Han letters solely for script validation; return the authored
+    # text, not this projection. Both UI and server use these explicit ranges.
+    projected = "".join(
+        "A"
+        if (
+            0x3400 <= ord(char) <= 0x4DBF
+            or 0x4E00 <= ord(char) <= 0x9FFF
+            or 0xF900 <= ord(char) <= 0xFAFF
+            or 0x20000 <= ord(char) <= 0x2FA1F
+            or 0x30000 <= ord(char) <= 0x323AF
+        )
+        else char
+        for char in value
+    )
+    validate_english_topic(projected)
+    return value.strip()
+
+
 __all__ = [
     "TOPIC_LANGUAGE_ERROR_CODE",
     "TOPIC_LANGUAGE_ERROR_DETAILS",

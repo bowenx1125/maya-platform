@@ -16,8 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.agents.persona import (
     PersonaProviderViewV1,
+    PersonaProviderViewV2,
     PersonaSpecV1,
-    compile_persona_or_raise,
+    PersonaSpecV2,
+    compile_persona_v1_or_raise,
 )
 from app.modules.debates.generation.validator import has_explicit_source_claim
 
@@ -30,6 +32,13 @@ TEACHING_DIMENSIONS = (
     "concession_style",
     "question_style",
     "debate_strategy",
+)
+TEACHING_DIMENSIONS_V2 = (
+    "tone",
+    "value_priority",
+    "argument_pattern",
+    "concession_style",
+    "question_style",
 )
 # The Persona compiler deliberately accepts rich authored fields (up to 240
 # characters for style/list items).  Those fields are useful in the provider
@@ -51,7 +60,7 @@ TeachingDimension = Literal[
     "question_style",
     "debate_strategy",
 ]
-type PersonaInput = PersonaSpecV1 | PersonaProviderViewV1
+type PersonaInput = PersonaSpecV1 | PersonaSpecV2 | PersonaProviderViewV1 | PersonaProviderViewV2
 
 
 class MockPersonaModel(BaseModel):
@@ -67,12 +76,22 @@ class MockTeachingDimensions(MockPersonaModel):
     debate_strategy: str
 
 
+class MockTeachingDimensionsV2(MockPersonaModel):
+    """Five teaching dimensions exposed by the current Persona projection."""
+
+    tone: str
+    value_priority: str
+    argument_pattern: str
+    concession_style: str
+    question_style: str
+
+
 class MockPersonaResponse(MockPersonaModel):
     schema_version: Literal["persona_mock_response_v1"] = MOCK_PERSONA_SCHEMA_VERSION
     stance: str = "open"
     speech: str = Field(min_length=1)
     position_summary: str = Field(min_length=1)
-    teaching_dimensions: MockTeachingDimensions
+    teaching_dimensions: MockTeachingDimensions | MockTeachingDimensionsV2
     evidence_ids: tuple[str, ...] = ()
     rule_set_id: str = MOCK_PERSONA_RULE_SET_ID
     seed: int
@@ -132,18 +151,28 @@ def mock_persona_response(
     )
     dimensions = teaching_dimensions_for_persona(persona)
     speech_dimensions = bounded_teaching_dimensions_for_persona(persona)
-    speech = (
-        f"{opening} On {topic.strip()}, {speech_dimensions.value_priority_sentence} "
-        f"{speech_dimensions.tone_sentence} "
-        f"{speech_dimensions.argument_pattern_sentence} "
-        f"{speech_dimensions.concession_style_sentence} "
-        f"{speech_dimensions.debate_strategy_sentence} "
-        f"{speech_dimensions.question_style_sentence} {grounding}"
-    )
+    speech_parts = [
+        f"{opening} On {topic.strip()}, {speech_dimensions.value_priority_sentence}",
+        speech_dimensions.tone_sentence,
+        speech_dimensions.argument_pattern_sentence,
+        speech_dimensions.concession_style_sentence,
+    ]
+    if isinstance(speech_dimensions, MockSpeechTeachingDimensions):
+        speech_parts.append(speech_dimensions.debate_strategy_sentence)
+    speech_parts.extend((speech_dimensions.question_style_sentence, grounding))
+    speech = " ".join(speech_parts)
+    if isinstance(dimensions, MockTeachingDimensions):
+        position_summary = position_summary_for_persona(persona)
+    else:
+        value_priority = english_safe_dimension_value(
+            dimensions.value_priority,
+            fallback="the authored value priority",
+        )
+        position_summary = f"Prioritize {value_priority}."
     return MockPersonaResponse(
         stance=stance,
         speech=speech,
-        position_summary=position_summary_for_persona(persona),
+        position_summary=position_summary,
         teaching_dimensions=dimensions,
         evidence_ids=ordered_evidence,
         rule_set_id=MOCK_PERSONA_RULE_SET_ID,
@@ -151,14 +180,24 @@ def mock_persona_response(
     )
 
 
-def teaching_dimensions_for_persona(persona: PersonaInput) -> MockTeachingDimensions:
-    """Project exactly the six allowed teaching dimensions for the Mock.
+def teaching_dimensions_for_persona(
+    persona: PersonaInput,
+) -> MockTeachingDimensions | MockTeachingDimensionsV2:
+    """Project the version-specific teaching dimensions for the Mock.
 
     Identity, cultural context, boundaries, hashes and other audit fields are
-    intentionally excluded.  This same projection is used by the direct
-    acceptance helper and by the actual ``MockLLMProvider`` path.
+    intentionally excluded.  V1 retains its six-dimension projection for
+    historical tests; V2 has only the five authored sections.
     """
 
+    if isinstance(persona, (PersonaSpecV2, PersonaProviderViewV2)):
+        return MockTeachingDimensionsV2(
+            tone=persona.speaking_style.tone,
+            value_priority=persona.core_values[0],
+            argument_pattern=persona.speaking_style.argument_pattern,
+            concession_style=persona.speaking_style.concession_style,
+            question_style=persona.speaking_style.question_style,
+        )
     return MockTeachingDimensions(
         tone=persona.speaking_style.tone,
         value_priority=persona.core_values[0],
@@ -185,6 +224,16 @@ class MockSpeechTeachingDimensions(MockPersonaModel):
     concession_style_sentence: str
     question_style_sentence: str
     debate_strategy_sentence: str
+
+
+class MockSpeechTeachingDimensionsV2(MockPersonaModel):
+    """Bounded speech projection for the current five-section Persona."""
+
+    tone_sentence: str
+    value_priority_sentence: str
+    argument_pattern_sentence: str
+    concession_style_sentence: str
+    question_style_sentence: str
 
 
 def bounded_dimension_sentence(label: str, value: str) -> str:
@@ -268,6 +317,8 @@ def position_summary_for_persona(persona: PersonaInput) -> str:
         dimensions.value_priority,
         fallback="the authored value priority",
     )
+    if isinstance(dimensions, MockTeachingDimensionsV2):
+        return f"Prioritize {value_priority}."
     debate_strategy = english_safe_dimension_value(
         dimensions.debate_strategy,
         fallback="the authored debate strategy",
@@ -293,10 +344,26 @@ def _source_neutral_sentence(label: str, sentence: str) -> str:
 
 def bounded_teaching_dimensions_for_persona(
     persona: PersonaInput,
-) -> MockSpeechTeachingDimensions:
-    """Project the six allowed dimensions into bounded complete sentences."""
+) -> MockSpeechTeachingDimensions | MockSpeechTeachingDimensionsV2:
+    """Project the version-specific dimensions into bounded sentences."""
 
     dimensions = teaching_dimensions_for_persona(persona)
+    if isinstance(dimensions, MockTeachingDimensionsV2):
+        return MockSpeechTeachingDimensionsV2(
+            tone_sentence=bounded_dimension_sentence("tone", dimensions.tone),
+            value_priority_sentence=bounded_dimension_sentence(
+                "value priority", dimensions.value_priority
+            ),
+            argument_pattern_sentence=bounded_dimension_sentence(
+                "argument pattern", dimensions.argument_pattern
+            ),
+            concession_style_sentence=bounded_dimension_sentence(
+                "concession style", dimensions.concession_style
+            ),
+            question_style_sentence=bounded_dimension_sentence(
+                "question style", dimensions.question_style
+            ),
+        )
     return MockSpeechTeachingDimensions(
         tone_sentence=bounded_dimension_sentence("tone", dimensions.tone),
         value_priority_sentence=bounded_dimension_sentence(
@@ -345,8 +412,13 @@ def compare_personas(
     changed: list[TeachingDimension] = []
     first_dimensions = first_response.teaching_dimensions.model_dump()
     second_dimensions = second_response.teaching_dimensions.model_dump()
-    for dimension in TEACHING_DIMENSIONS:
-        if first_dimensions[dimension] != second_dimensions[dimension]:
+    dimensions_to_compare = (
+        TEACHING_DIMENSIONS
+        if "debate_strategy" in first_dimensions or "debate_strategy" in second_dimensions
+        else TEACHING_DIMENSIONS_V2
+    )
+    for dimension in dimensions_to_compare:
+        if first_dimensions.get(dimension) != second_dimensions.get(dimension):
             changed.append(dimension)  # type: ignore[arg-type]
     return MockPersonaComparison(
         first=first_response,
@@ -362,7 +434,7 @@ def compare_personas(
 def contrasting_persona_fixtures() -> tuple[PersonaSpecV1, PersonaSpecV1]:
     """Return two valid deterministic fixtures differing in all six dimensions."""
 
-    first = compile_persona_or_raise(
+    first = compile_persona_v1_or_raise(
         """# River Keeper
 
 ## Identity
@@ -400,7 +472,7 @@ Protect shared resources through careful, long-term stewardship.
 """,
         expected_name="River Keeper",
     )
-    second = compile_persona_or_raise(
+    second = compile_persona_v1_or_raise(
         """# Market Steward
 
 ## Identity
@@ -469,11 +541,15 @@ __all__ = [
     "MOCK_PERSONA_SCHEMA_VERSION",
     "SPEECH_DIMENSION_WORD_LIMIT",
     "TEACHING_DIMENSIONS",
+    "TEACHING_DIMENSIONS_V2",
     "MockPersonaComparison",
     "MockPersonaModel",
     "MockPersonaResponse",
     "MockSpeechTeachingDimensions",
+    "MockSpeechTeachingDimensionsV2",
     "MockTeachingDimensions",
+    "MockTeachingDimensionsV2",
+    "PersonaInput",
     "TeachingDimension",
     "compare_contrasting_personas",
     "compare_persona_responses",

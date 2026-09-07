@@ -134,7 +134,7 @@ class ReportSpeech(_ClosedModel):
     """One public final-ready speech and only the evidence it actually used."""
 
     slot: Slot
-    round_no: int = Field(ge=1, le=2)
+    round_no: int = Field(ge=1, le=5)
     turn_index: int = Field(ge=0, le=999)
     speech: str = Field(min_length=1, max_length=8000)
     used_evidence_ids: tuple[str, ...] = ()
@@ -148,6 +148,23 @@ class ReportSource(_ClosedModel):
     # maps it back to the immutable TurnSource row when rendering citations.
     evidence_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     excerpt: str = Field(min_length=1, max_length=2400)
+
+
+class ReportBarrage(_ClosedModel):
+    """An already-anonymized frozen classroom message for v2 reports."""
+
+    barrage_id: str = Field(min_length=2, max_length=16, pattern=r"^B[1-9][0-9]*$")
+    turn_index: int = Field(ge=0, le=999)
+    text: str = Field(min_length=1, max_length=300)
+
+
+class ReportReply(_ClosedModel):
+    """A real paragraph-to-barrage binding from a final segment turn."""
+
+    barrage_id: str = Field(min_length=2, max_length=16, pattern=r"^B[1-9][0-9]*$")
+    slot: Slot
+    turn_index: int = Field(ge=0, le=999)
+    paragraph_index: int = Field(ge=0, le=99)
 
 
 class ReportVote(_ClosedModel):
@@ -223,7 +240,13 @@ class ReportRequest(_ClosedModel):
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
 
-def _text_error(value: str, *, output: bool = False, allow_cjk: bool = False) -> str | None:
+def _text_error(
+    value: str,
+    *,
+    output: bool = False,
+    allow_cjk: bool = False,
+    allow_authoritative_text: bool = False,
+) -> str | None:
     if not value.strip() or any(ord(char) < 32 and char not in "\t\n\r" for char in value):
         return "report_output_text" if output else "report_input_text"
     # A Chinese debate's speeches are Chinese, and the report reads them. The
@@ -237,14 +260,19 @@ def _text_error(value: str, *, output: bool = False, allow_cjk: bool = False) ->
         return "report_output_identity" if output else "report_input_identity"
     if _ABSOLUTE_PATH_RE.search(value) or _PROVIDER_INTERNAL_RE.search(value):
         return "report_output_internal" if output else "report_input_internal"
-    if _MARKDOWN_RE.search(value) or _CITATION_RE.search(value):
+    if not allow_authoritative_text and (_MARKDOWN_RE.search(value) or _CITATION_RE.search(value)):
         return "report_output_markdown" if output else "report_input_markdown"
-    if _UNSAFE_WINNER_RE.search(value):
+    if _UNSAFE_WINNER_RE.search(value) and (output or not allow_authoritative_text):
         return "report_output_winner_language" if output else "report_input_winner_language"
     return None
 
 
 def _validate_request_semantics(request: ReportRequest) -> None:
+    # Segment requests carry authoritative public speech/barrage text.  That
+    # text may discuss a winner or quote formatting, while private/provider
+    # identifiers remain blocked below.  Legacy requests retain the stricter
+    # v1 wording checks for compatibility.
+    allow_authoritative_text = getattr(request, "protocol_version", "legacy_v1") == "segments_v2"
     text_values = [request.topic]
     text_values.extend(
         value for participant in request.participants for value in (participant.agent_name,)
@@ -254,7 +282,11 @@ def _validate_request_semantics(request: ReportRequest) -> None:
     text_values.extend(insight.summary for insight in request.insights)
     allow_cjk = request.source_language == "zh"
     for value in text_values:
-        error = _text_error(value, allow_cjk=allow_cjk)
+        error = _text_error(
+            value,
+            allow_cjk=allow_cjk,
+            allow_authoritative_text=allow_authoritative_text,
+        )
         if error is not None:
             raise ReportBoundaryError(error)
 
@@ -284,12 +316,67 @@ def _validate_request_semantics(request: ReportRequest) -> None:
         raise ReportBoundaryError("report_vote_projection")
 
 
+class ReportRequestV2(ReportRequest):
+    """Versioned report input for 2–5-round segment Debates."""
+
+    protocol_version: Literal["segments_v2"] = "segments_v2"
+    speeches: tuple[ReportSpeech, ...] = Field(min_length=1, max_length=25)
+    sources: tuple[ReportSource, ...] = Field(default=(), max_length=150)
+    classroom_barrages: tuple[ReportBarrage, ...] = ()
+    replies: tuple[ReportReply, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_v2_semantics(self) -> ReportRequestV2:
+        for item in self.classroom_barrages:
+            error = _text_error(
+                item.text,
+                allow_cjk=self.source_language == "zh",
+                allow_authoritative_text=True,
+            )
+            if error is not None:
+                raise ReportBoundaryError(error)
+        barrage_ids = [item.barrage_id for item in self.classroom_barrages]
+        if len(barrage_ids) != len(set(barrage_ids)):
+            raise ReportBoundaryError("report_duplicate_barrage")
+        if any(reply.barrage_id not in set(barrage_ids) for reply in self.replies):
+            raise ReportBoundaryError("report_reply_not_available")
+        speech_keys = {(speech.round_no, speech.turn_index) for speech in self.speeches}
+        if any((reply.turn_index not in {key[1] for key in speech_keys}) for reply in self.replies):
+            raise ReportBoundaryError("report_reply_turn_unknown")
+        reply_keys = [
+            (reply.slot, reply.turn_index, reply.paragraph_index, reply.barrage_id)
+            for reply in self.replies
+        ]
+        if len(reply_keys) != len(set(reply_keys)):
+            raise ReportBoundaryError("report_duplicate_reply")
+        return self
+
+    def canonical_payload(self) -> dict[str, object]:
+        payload = super().canonical_payload()
+        payload["classroom_barrages"] = sorted(
+            cast(list[dict[str, object]], payload["classroom_barrages"]),
+            key=lambda row: (str(row["barrage_id"]), int(cast(int, row["turn_index"]))),
+        )
+        payload["replies"] = sorted(
+            cast(list[dict[str, object]], payload["replies"]),
+            key=lambda row: (
+                int(cast(int, row["turn_index"])),
+                int(cast(int, row["paragraph_index"])),
+                str(row["slot"]),
+                str(row["barrage_id"]),
+            ),
+        )
+        return payload
+
+
 def validate_report_request(value: ReportRequest | Mapping[str, object]) -> ReportRequest:
     """Validate a request while exposing only a safe boundary code."""
 
     if isinstance(value, ReportRequest):
         return value
     try:
+        if isinstance(value, Mapping) and value.get("protocol_version") == "segments_v2":
+            return ReportRequestV2.model_validate(value)
         return ReportRequest.model_validate(value)
     except ValidationError as exc:
         # Pydantic wraps model-validator errors.  Recover only our closed
@@ -352,11 +439,14 @@ __all__ = [
     "REPORT_SECTION_SCHEMA",
     "REPORT_SECTION_SCHEMA_HASH",
     "ReportBoundaryError",
+    "ReportBarrage",
     "ReportEvidence",
     "ReportInsight",
     "ReportParticipant",
     "ReportParticipantInput",
     "ReportRequest",
+    "ReportRequestV2",
+    "ReportReply",
     "ReportSource",
     "ReportSpeech",
     "ReportSpeechInput",

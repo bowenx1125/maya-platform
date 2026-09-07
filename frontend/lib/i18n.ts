@@ -1,3 +1,5 @@
+import { PERSONA_OUTLINE_V2 } from "../components/persona/persona-template";
+
 export type Locale = "en" | "zh";
 
 /**
@@ -5,39 +7,7 @@ export type Locale = "en" | "zh";
  * Keep one frozen English value so changing the interface locale can never
  * write a translated outline into the Agent's authoritative prompt.
  */
-export const AGENT_OUTLINE = `# Agent name
-
-## Identity
-
-- Role: Describe the cultural or social role this Agent represents.
-- Historical or cultural context: Describe the context that should shape interpretation.
-
-## Cultural lens
-
-- Describe the lens this Agent uses to understand the topic.
-
-## Core values
-
-- Name one value that should guide this Agent's judgment.
-
-## Initial position
-
-Describe the Agent's starting position and the trade-offs it recognizes.
-
-## Speaking style
-
-- Tone: Describe the desired tone.
-- Argument pattern: Describe how the Agent builds an argument.
-- Concession style: Describe how the Agent acknowledges reasonable concerns.
-- Question style: Describe how the Agent asks questions.
-
-## Debate strategy
-
-- Describe how the Agent responds to other views and uses its evidence.
-
-## Boundaries
-
-- State a claim or action this Agent must avoid.`;
+export const AGENT_OUTLINE = PERSONA_OUTLINE_V2;
 
 /**
  * All platform-owned copy lives in one typed dictionary.  The language
@@ -155,8 +125,13 @@ const enMessages = {
   debateConnectionSignIn: "Sign in",
   debateConnectionReload: "Reload",
   debateRegenerate: "Regenerate",
+  debatePreviewTitle: "Preview Debates",
   debatePrewarming: "Thinking",
   debatePrewarmReady: "Ready",
+  debateStalled: "Stalled",
+  debateWarmResume: "Resume",
+  debateWarmResuming: "Resuming…",
+  debateStalledReason: "Warming stopped at round {round}: {code}",
   debateRelease: "Release",
   debateReleaseConfirm: "Release?",
   debatePause: "Pause",
@@ -174,7 +149,7 @@ const enMessages = {
   debateRound: "Round",
   debatePrepared: "Preparing the next classroom turn…",
   debateComplete: "Finish",
-  debateStopped: "Debate stopped",
+  debateStopped: "Stopped",
   debateFailed: "Failed",
   debateWaitingForAudio: "Waiting for the server to prepare audio…",
   debateWaitingNext: "Waiting",
@@ -242,10 +217,10 @@ const enMessages = {
   statusOpen: "open",
   statusClosed: "closed",
   statusFinalized: "finalized",
-  statusRunning: "running",
-  statusCompleted: "completed",
-  statusStopped: "Finished",
-  statusDebateFinished: "Finished",
+  statusRunning: "Running",
+  statusCompleted: "Completed",
+  statusStopped: "Stopped",
+  statusDebateFinished: "Completed",
   statusPreparing: "preparing",
   statusPlaying: "playing",
   statusPaused: "paused",
@@ -515,21 +490,6 @@ const enMessages = {
   markdownUploadedNotice: "Markdown uploaded and enabled for this draft.",
   editor: "editor",
   navigation: "navigation",
-  heroEyebrow: "Maya · Cultural exchange classroom",
-  heroTitle: "Build a point of view. Keep the evidence clear.",
-  heroLede:
-    "A calm workspace for building a cultural Agent, checking its Markdown evidence, and sharing an immutable release with a teacher.",
-  environmentHealth: "Environment health",
-  heroFeatureOne: "Build with intention",
-  heroFeatureOneLede:
-    "Agent identity and knowledge stay explicit so students can see what shaped each answer.",
-  heroFeatureTwo: "Release with context",
-  heroFeatureTwoLede:
-    "Publishing freezes the Agent prompt and selected Markdown so teacher review cannot leak a moving draft.",
-  heroFeatureThree: "Keep the boundary clear",
-  heroFeatureThreeLede:
-    "The browser talks only to Maya APIs; session credentials and implementation details remain server-side.",
-  waveBoundary: "Maya teaching principles",
   languageLabel: "Language",
   languageControl: "Interface language",
   languageEnglish: "English",
@@ -853,8 +813,13 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateConnectionSignIn: "重新登录",
   debateConnectionReload: "重新载入",
   debateRegenerate: "重新生成",
+  debatePreviewTitle: "课前预览",
   debatePrewarming: "生成中",
   debatePrewarmReady: "已就绪",
+  debateStalled: "已停滞",
+  debateWarmResume: "继续生成",
+  debateWarmResuming: "正在继续…",
+  debateStalledReason: "预热停在第 {round} 轮：{code}",
   debateRelease: "释放",
   debateReleaseConfirm: "确认释放？",
   debatePause: "暂停",
@@ -872,7 +837,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateRound: "轮次",
   debatePrepared: "正在准备下一位课堂发言…",
   debateComplete: "完成",
-  debateStopped: "辩论已停止",
+  debateStopped: "已中止",
   debateFailed: "失败",
   debateWaitingForAudio: "正在等待服务器准备语音…",
   debateWaitingNext: "等待中",
@@ -939,7 +904,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   statusFinalized: "已定稿",
   statusRunning: "进行中",
   statusCompleted: "已完成",
-  statusStopped: "已结束",
+  statusStopped: "已中止",
   statusDebateFinished: "已结束",
   statusPreparing: "准备中",
   statusPlaying: "播放中",
@@ -1173,19 +1138,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   markdownUploadedNotice: "Markdown 已上传并启用到当前草稿。",
   editor: "编辑器",
   navigation: "导航",
-  heroEyebrow: "MAYA · 文明互鉴课堂",
-  heroTitle: "构建你的观点，保持证据清晰。",
-  heroLede:
-    "在安静的工作区里构建文化智能体、检查 Markdown 证据，并将不可变发布版本交给教师。",
-  environmentHealth: "环境健康",
-  heroFeatureOne: "有意识地构建",
-  heroFeatureOneLede: "明确的人设和知识来源，让学生看见每个回答由什么塑造。",
-  heroFeatureTwo: "带着上下文发布",
-  heroFeatureTwoLede:
-    "发布会冻结智能体提示词和选定 Markdown，教师复核不会泄露变化中的草稿。",
-  heroFeatureThree: "保持边界清晰",
-  heroFeatureThreeLede: "浏览器只访问 Maya API；会话凭据和实现细节留在服务端。",
-  waveBoundary: "Maya 教学原则",
   languageLabel: "语言",
   languageControl: "界面语言",
   languageEnglish: "English",

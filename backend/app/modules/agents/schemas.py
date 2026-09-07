@@ -10,8 +10,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.modules.agents.persona import (
     PERSONA_COMPILER_VERSION,
+    PersonaCompilerVersion,
     PersonaDiagnostic,
-    PersonaSpecV1,
+    PersonaSpecVersion,
 )
 from app.modules.knowledge.schemas import KnowledgeDocument
 
@@ -44,9 +45,9 @@ class AgentVersion(BaseModel):
     revision: int = Field(ge=0)
     agent_md: str = Field(default="", max_length=12000)
     raw_agent_md_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
-    persona_spec: PersonaSpecV1 | None = None
+    persona_spec: PersonaSpecVersion | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    persona_compiler_version: Literal["persona_template_v1"] | None = None
+    persona_compiler_version: PersonaCompilerVersion | None = None
     persona_diagnostics: list[PersonaDiagnostic] = Field(default_factory=list)
     persona_confirmation_revision: int | None = Field(default=None, ge=0)
     student_confirmed_at: datetime | None = None
@@ -68,7 +69,7 @@ class ConfirmPersonaRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     raw_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     persona_spec_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+    compiler_version: PersonaCompilerVersion = PERSONA_COMPILER_VERSION
 
 
 class PersonaCompileResponse(BaseModel):
@@ -76,9 +77,9 @@ class PersonaCompileResponse(BaseModel):
     revision: int = Field(ge=0)
     compiled: bool
     raw_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    persona_spec: PersonaSpecV1 | None = None
+    persona_spec: PersonaSpecVersion | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+    compiler_version: PersonaCompilerVersion = PERSONA_COMPILER_VERSION
     diagnostics: list[PersonaDiagnostic] = Field(default_factory=list)
     persona_confirmed: bool = False
 

@@ -23,15 +23,11 @@ import {
   type VoiceProfile,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
-import {
-  AGENT_OUTLINE,
-  blockerLabel,
-  statusLabel,
-  type MessageKey,
-} from "../lib/i18n";
+import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import {
+  buildPersonaTemplate,
   PersonaPreview,
   type PersonaPreviewDiagnostic,
   type PersonaPreviewSpec,
@@ -401,10 +397,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
         )}
       </SectionCard>
       <div className="workspace-grid">
-        <SectionCard
-          title={t("currentRelease")}
-          description={t("currentReleaseLede")}
-        >
+        <SectionCard title={t("currentRelease")}>
           {current ? (
             <VersionSummary version={current} current />
           ) : (
@@ -423,10 +416,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
             />
           )}
         </SectionCard>
-        <SectionCard
-          title={t("draftStatus")}
-          description={t("draftStatusLede")}
-        >
+        <SectionCard title={t("draftStatus")}>
           {draft ? (
             <VersionSummary
               version={draft}
@@ -444,10 +434,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           )}
         </SectionCard>
       </div>
-      <SectionCard
-        title={t("versionHistory")}
-        description={t("versionHistoryLede")}
-      >
+      <SectionCard title={t("versionHistory")}>
         {versions.length === 0 ? (
           <p className="muted-copy">{t("noVersions")}</p>
         ) : (
@@ -958,7 +945,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       <PageIntro
         eyebrow={t("agentWorkbench")}
         title={`${agent.name} · ${version.version_label}`}
-        description={t("workbenchLede")}
         action={
           <div className="button-row">
             <Link
@@ -1049,7 +1035,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   onClick={() => {
                     abandonUploadIntent();
                     abandonPublishIntent();
-                    setAgentMd(AGENT_OUTLINE);
+                    setAgentMd(buildPersonaTemplate(agent.name));
                   }}
                 >
                   {t("insertOutline")}
@@ -1255,10 +1241,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           </SectionCard>
         </div>
         <aside className="workbench-side">
-          <SectionCard
-            title={t("publishChecklist")}
-            description={t("checklistLede")}
-          >
+          <SectionCard title={t("publishChecklist")}>
             <div className="checklist">
               {blockers.length === 0 ? (
                 <div className="check-item check-good">
@@ -1309,13 +1292,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             ) : (
               <LoadingCard label={t("preparingPreview")} />
             )}
-          </SectionCard>
-          <SectionCard title={t("whatTeaches")}>
-            <p className="teaching-copy">
-              <strong>{t("promptWord")}</strong> {t("whatTeachesPrompt")}{" "}
-              <strong>{t("ragWord")}</strong> {t("whatTeachesRag")}{" "}
-              <strong>{t("publishWord")}</strong> {t("whatTeachesPublish")}
-            </p>
           </SectionCard>
         </aside>
       </div>
@@ -1681,11 +1657,12 @@ function parsePersonaSpec(value: unknown): PersonaPreviewSpec | null {
     typeof record.initial_position !== "string" ||
     !isStringArray(record.cultural_lens) ||
     !isStringArray(record.core_values) ||
-    !isStringArray(record.debate_strategy) ||
-    !isStringArray(record.boundaries)
+    (record.debate_strategy !== undefined &&
+      !isStringArray(record.debate_strategy)) ||
+    (record.boundaries !== undefined && !isStringArray(record.boundaries))
   )
     return null;
-  return {
+  const spec: PersonaPreviewSpec = {
     schema_version:
       typeof record.schema_version === "string"
         ? record.schema_version
@@ -1704,8 +1681,6 @@ function parsePersonaSpec(value: unknown): PersonaPreviewSpec | null {
       concession_style: style.concession_style,
       question_style: style.question_style,
     },
-    debate_strategy: record.debate_strategy,
-    boundaries: record.boundaries,
     source_agent_md_hash:
       typeof record.source_agent_md_hash === "string"
         ? record.source_agent_md_hash
@@ -1715,6 +1690,13 @@ function parsePersonaSpec(value: unknown): PersonaPreviewSpec | null {
         ? record.compiler_version
         : undefined,
   };
+  if (isStringArray(record.debate_strategy)) {
+    spec.debate_strategy = record.debate_strategy;
+  }
+  if (isStringArray(record.boundaries)) {
+    spec.boundaries = record.boundaries;
+  }
+  return spec;
 }
 
 function parsePersonaVersionSpec(value: unknown): PersonaPreviewSpec | null {

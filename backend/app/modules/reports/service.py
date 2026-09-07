@@ -42,10 +42,18 @@ from app.core.models import (
     ProviderOperation,
     ProviderPolicySnapshot,
 )
+from app.modules.debates.final_input import read_final_input
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, TurnSource
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
-from app.modules.debates.round_count import expected_turn_count as planned_turn_count
+from app.modules.debates.round_count import (
+    debate_round_count,
+    uses_segment_protocol,
+)
+from app.modules.debates.round_count import (
+    expected_turn_count as planned_turn_count,
+)
+from app.modules.interactions.models import BarrageMessage
 from app.providers.control import (
     LLM_MAYA_REPORT_BUCKET,
     ExportConfirmationV1,
@@ -55,6 +63,7 @@ from app.providers.control import (
     ProviderScopeBudgetV1,
 )
 from app.providers.llm_price_card import LLM_RESERVED_OUTPUT_TOKEN_CAP
+from app.providers.llm_privacy import LLM_ANONYMOUS_BARRAGE_FIELD_CLASS
 
 from .models import (
     BarrageInsightAssignment,
@@ -72,12 +81,15 @@ from .policy import (
     mock_barrage_insight_v1,
     validate_insight_partition,
 )
-from .real_prompt import REPORT_SYSTEM_PROMPT, ReportWireRequest
+from .real_prompt import ReportWireRequest
 from .real_provider import REAL_REPORT_MODEL, ReportProviderError
 from .real_schema import (
+    ReportBarrage,
     ReportInsight,
     ReportParticipant,
+    ReportReply,
     ReportRequest,
+    ReportRequestV2,
     ReportSource,
     ReportSpeech,
     ReportVote,
@@ -86,16 +98,21 @@ from .schemas import (
     BarrageInsight,
     FailedReportRevision,
     GeneratingReportRevision,
+    ManifestBarrage,
     ManifestInsight,
     ManifestInsightItem,
     ManifestParticipant,
+    ManifestReply,
     ManifestTurn,
     ManifestTurnSource,
+    ManifestTurnSourceV2,
+    ManifestTurnV2,
     ManifestVote,
     MockBarrageInsightResult,
     ReadyReportRevision,
     Report,
     ReportInputManifestV1,
+    ReportInputManifestV2,
     ReportRevision,
     ReportRevisionSummary,
     ReportSectionOutput,
@@ -122,10 +139,7 @@ REPORT_HEADINGS = (
     "## Classroom Perspectives",
     "## Mutual Learning Reflection",
 )
-_CITATION_RE = re.compile(
-    r"\[evidence:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
-    r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})\]"
-)
+_CITATION_RE = re.compile(r"\[evidence:([A-Za-z0-9_.:-]{1,128})\]")
 _UNSAFE_REPORT_TERMS_RE = re.compile(
     r"\b(?:winner|winners|won|winning|vote\s+for\s+me|please\s+vote|nickname)\b",
     re.IGNORECASE,
@@ -400,6 +414,7 @@ class ReportSourceContext:
     chunk_id: UUID
     source_filename: str
     chunk_text: str
+    evidence_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -414,13 +429,115 @@ class ReportTurnContext:
 
 
 @dataclass(frozen=True)
+class ReportBarrageContext:
+    """An anonymous, frozen final-input candidate kept out of legacy reports."""
+
+    barrage_id: str
+    turn_index: int
+    text: str
+
+
+@dataclass(frozen=True)
+class ReportReplyContext:
+    """One actual segment paragraph binding to a frozen barrage candidate."""
+
+    barrage_id: str
+    slot: str
+    turn_index: int
+    paragraph_index: int
+
+
+def _segment_turn_payload(turn: DebateTurn) -> tuple[tuple[str, ...], tuple[tuple[int, str], ...]]:
+    """Read the closed persisted segment shape without inventing legacy fields."""
+
+    from app.modules.debates.generation.segments import load_stored_segment_turn_result
+
+    try:
+        value = json.loads(str(turn.structured_json or ""))
+        result = load_stored_segment_turn_result(value)
+        if result.speech != turn.speech:
+            raise ValueError("paragraph text differs from saved speech")
+    except (TypeError, ValueError):
+        raise invalid_state("A segment turn has invalid saved paragraphs.") from None
+    return result.used_evidence_ids, tuple(
+        (index, segment.reply_to)
+        for index, segment in enumerate(result.segments)
+        if segment.reply_to is not None
+    )
+
+
+def _segment_final_input(
+    db: Session,
+    debate: Debate,
+    turns: Sequence[DebateTurn],
+    frozen_barrages: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[ReportBarrageContext, ...], dict[str, str]]:
+    """Project the immutable final-input pool to opaque B IDs and turn indexes."""
+
+    value = read_final_input(debate)
+    if value is None:
+        raise invalid_state("A segment Debate has no frozen final input.")
+    candidates = value.get("barrages")
+    message_ids = value.get("message_ids")
+    if not isinstance(candidates, list) or not isinstance(message_ids, list):
+        raise invalid_state("The frozen final input has an invalid barrage shape.")
+    if len(candidates) != len(message_ids):
+        raise invalid_state("The frozen final input barrage mapping is incomplete.")
+    frozen_by_id = {str(row["id"]): row for row in frozen_barrages}
+    turn_indexes = {str(row.id): row.turn_index for row in turns}
+    rows = list(
+        db.scalars(
+            select(BarrageMessage).where(
+                BarrageMessage.debate_id == debate.id,
+                BarrageMessage.id.in_([str(item) for item in message_ids]),
+            )
+        ).all()
+    )
+    row_by_id = {str(row.id): row for row in rows}
+    contexts: list[ReportBarrageContext] = []
+    b_to_message: dict[str, str] = {}
+    for index, candidate in enumerate(candidates):
+        if not isinstance(candidate, Mapping):
+            raise invalid_state("The frozen final input has an invalid barrage.")
+        barrage_id = candidate.get("id")
+        text_value = candidate.get("text")
+        message_id = str(message_ids[index])
+        if (
+            not isinstance(barrage_id, str)
+            or re.fullmatch(r"B[1-9][0-9]*", barrage_id) is None
+            or not isinstance(text_value, str)
+            or not text_value.strip()
+            or message_id not in frozen_by_id
+            or message_id not in row_by_id
+        ):
+            raise invalid_state("The frozen final input barrage is not an immutable classroom row.")
+        row = row_by_id[message_id]
+        if row.turn_id is None or str(row.turn_id) not in turn_indexes:
+            raise invalid_state("The frozen final input barrage is outside the prepared turns.")
+        contexts.append(
+            ReportBarrageContext(
+                barrage_id=barrage_id,
+                turn_index=turn_indexes[str(row.turn_id)],
+                text=text_value,
+            )
+        )
+        b_to_message[barrage_id] = message_id
+    if len(b_to_message) != len(contexts):
+        raise invalid_state("The frozen final input has duplicate barrage IDs.")
+    return tuple(contexts), b_to_message
+
+
+@dataclass(frozen=True)
 class ReportContext:
     debate: Debate
-    manifest: ReportInputManifestV1
+    manifest: ReportInputManifestV1 | ReportInputManifestV2
     turns: tuple[ReportTurnContext, ...]
     sources: tuple[ReportSourceContext, ...]
     vote_total: int
     barrage_total: int
+    classroom_barrages: tuple[ReportBarrageContext, ...] = ()
+    replies: tuple[ReportReplyContext, ...] = ()
+    protocol_version: str = "legacy_v1"
 
 
 class ReportInsightEnqueuer:
@@ -725,9 +842,17 @@ def process_insight_snapshot(
         snapshot.id,
         attempt=snapshot.attempt,
     )
-    # The first automatic pipeline creates a report revision after insight is
-    # ready.  A later report route may create another immutable revision.
-    _create_report_revision_for_insight(db, snapshot, trigger="automatic", requested_by=None)
+    db.flush()
+    debate = db.get(Debate, snapshot.debate_id)
+    if debate is not None and not uses_segment_protocol(debate):
+        _create_report_revision_for_insight(db, snapshot, trigger="automatic", requested_by=None)
+    elif debate is not None:
+        requested = db.scalar(
+            select(CivilizationReport).where(CivilizationReport.debate_id == debate.id)
+        )
+        if requested is not None and requested.generation_status == "generating":
+            _create_report_revision_for_insight(db, snapshot, trigger="manual", requested_by=None)
+    # Paragraph lessons wait for the explicit Bench Report action.
     db.flush()
     return snapshot
 
@@ -873,6 +998,30 @@ def _mark_job_failed(
         .where(where, Job.state == "running")
         .values(state="failed", attempt=attempt, safe_error_code=code, updated_at=utc_now())
     )
+    if operation == "barrage_insight.generate":
+        fail_report_waiting_for_insight(db, owner_id)
+
+
+def fail_report_waiting_for_insight(db: Session, snapshot_id: str) -> None:
+    snapshot = db.get(BarrageInsightSnapshot, snapshot_id)
+    if snapshot is None:
+        return
+    debate = db.get(Debate, snapshot.debate_id)
+    if debate is None or not uses_segment_protocol(debate):
+        return
+    report = db.scalar(select(CivilizationReport).where(CivilizationReport.debate_id == debate.id))
+    if report is None or report.generation_status != "generating":
+        return
+    active = db.scalar(
+        select(CivilizationReportRevision.id).where(
+            CivilizationReportRevision.report_id == report.id,
+            CivilizationReportRevision.status == "generating",
+        )
+    )
+    if active is None:
+        report.generation_status = "failed"
+        report.latest_attempt_status = "failed"
+        report.updated_at = utc_now()
 
 
 def _job_is_running(db: Session, operation: str, owner_id: str) -> bool:
@@ -1008,6 +1157,7 @@ def _report_context(
     if len(turns) != expected_turn_count:
         raise invalid_state("The public final-ready turn set is incomplete.")
 
+    segment_mode = uses_segment_protocol(debate)
     manifest_participants = [
         ManifestParticipant(
             participant_id=_uuid(row.id),
@@ -1017,13 +1167,18 @@ def _report_context(
             stance_mode=cast(Any, row.stance_mode),
             initial_stance=cast(Any, row.initial_stance),
             current_stance=cast(Any, row.current_stance),
-            initial_position_summary=row.initial_position_summary,
-            current_position_summary=row.current_position_summary,
+            # New paragraph turns carry their position in speech text.  The
+            # empty compatibility values keep old public manifests readable
+            # without synthesizing PositionHistory rows.
+            initial_position_summary=(row.initial_position_summary if not segment_mode else ""),
+            current_position_summary=(row.current_position_summary if not segment_mode else ""),
         )
         for row in participants
     ]
     participant_names = {row.id: row.agent_name for row in participants}
-    manifest_turns: list[ManifestTurn] = []
+    segment_sources_by_turn: dict[str, tuple[str, ...]] = {}
+    segment_replies_by_turn: dict[str, tuple[tuple[int, str], ...]] = {}
+    manifest_turns: list[ManifestTurn | ManifestTurnV2] = []
     turn_context: list[ReportTurnContext] = []
     turn_ids = {row.id for row in turns}
     for row in turns:
@@ -1031,13 +1186,23 @@ def _report_context(
             raise invalid_state("A public turn references an unknown participant.")
         if not row.speech:
             raise invalid_state("A public final-ready turn has no speech.")
+        if segment_mode:
+            source_ids, replies = _segment_turn_payload(row)
+            segment_sources_by_turn[row.id] = source_ids
+            segment_replies_by_turn[row.id] = replies
+        turn_class = ManifestTurnV2 if segment_mode else ManifestTurn
         manifest_turns.append(
-            ManifestTurn(
+            turn_class(
                 turn_id=_uuid(row.id),
                 participant_id=_uuid(row.participant_id),
                 round_no=row.round_no,
                 turn_index=row.turn_index,
                 text_hash=_sha256(row.speech),
+                **(
+                    {"used_evidence_ids": list(segment_sources_by_turn[row.id])}
+                    if segment_mode
+                    else {}
+                ),
             )
         )
         turn_context.append(
@@ -1060,8 +1225,10 @@ def _report_context(
     )
     turns_by_id = {row.id: row for row in turns}
     source_context: list[ReportSourceContext] = []
-    manifest_sources: list[ManifestTurnSource] = []
+    manifest_sources: list[ManifestTurnSource | ManifestTurnSourceV2] = []
     seen_source_ids: set[str] = set()
+    source_by_chunk: dict[tuple[str, str], str] = {}
+    evidence_aliases: dict[str, str] = {}
     for source in source_rows:
         turn = turns_by_id.get(source.turn_id)
         chunk = db.get(KnowledgeChunk, source.chunk_id)
@@ -1074,38 +1241,69 @@ def _report_context(
             or chunk.snapshot_id != source.snapshot_id
         ):
             raise invalid_state("A report source is not an immutable used turn source.")
+        source_evidence_id = str(source.evidence_id or "").strip()
+        if segment_mode:
+            expected_ids = set(segment_sources_by_turn.get(source.turn_id, ()))
+            if not source_evidence_id or source_evidence_id not in expected_ids:
+                raise invalid_state("A segment source is not linked by its paragraph output.")
+        else:
+            source_evidence_id = str(source.id)
         seen_source_ids.add(source.id)
         chunk_hash = _sha256(chunk.chunk_text)
-        manifest_sources.append(
-            ManifestTurnSource(
-                turn_source_id=_uuid(source.id),
-                turn_id=_uuid(source.turn_id),
-                turn_index=turn.turn_index,
-                rank=source.rank,
-                snapshot_id=_uuid(source.snapshot_id),
-                chunk_id=_uuid(source.chunk_id),
-                chunk_content_hash=chunk_hash,
-                source_filename=source.source_filename,
-            )
+        source_key = (
+            (str(source.snapshot_id), str(source.chunk_id))
+            if segment_mode
+            else (str(source.id), str(source.id))
         )
-        source_context.append(
-            ReportSourceContext(
-                turn_source_id=_uuid(source.id),
-                turn_id=_uuid(source.turn_id),
-                turn_index=turn.turn_index,
-                rank=source.rank,
-                snapshot_id=_uuid(source.snapshot_id),
-                chunk_id=_uuid(source.chunk_id),
-                source_filename=source.source_filename,
-                chunk_text=chunk.chunk_text,
+        canonical_evidence_id = source_by_chunk.get(source_key)
+        if canonical_evidence_id is None:
+            canonical_evidence_id = source_evidence_id
+            source_by_chunk[source_key] = canonical_evidence_id
+            manifest_source_type = ManifestTurnSourceV2 if segment_mode else ManifestTurnSource
+            manifest_sources.append(
+                manifest_source_type(
+                    turn_source_id=_uuid(source.id),
+                    turn_id=_uuid(source.turn_id),
+                    turn_index=turn.turn_index,
+                    rank=source.rank,
+                    snapshot_id=_uuid(source.snapshot_id),
+                    chunk_id=_uuid(source.chunk_id),
+                    chunk_content_hash=chunk_hash,
+                    source_filename=source.source_filename,
+                    **({"evidence_id": canonical_evidence_id} if segment_mode else {}),
+                )
             )
-        )
+            source_context.append(
+                ReportSourceContext(
+                    turn_source_id=_uuid(source.id),
+                    turn_id=_uuid(source.turn_id),
+                    turn_index=turn.turn_index,
+                    rank=source.rank,
+                    snapshot_id=_uuid(source.snapshot_id),
+                    chunk_id=_uuid(source.chunk_id),
+                    source_filename=source.source_filename,
+                    chunk_text=chunk.chunk_text,
+                    evidence_id=canonical_evidence_id,
+                )
+            )
+        evidence_aliases[source_evidence_id] = canonical_evidence_id
 
     evidence_by_turn: dict[str, list[str]] = {}
-    for report_source in source_context:
-        evidence_by_turn.setdefault(str(report_source.turn_id), []).append(
-            str(report_source.turn_source_id)
-        )
+    for turn in turns:
+        if segment_mode:
+            raw_ids = segment_sources_by_turn.get(turn.id, ())
+            canonical_ids = tuple(
+                dict.fromkeys(evidence_aliases.get(source_id, source_id) for source_id in raw_ids)
+            )
+            if any(source_id not in evidence_aliases for source_id in raw_ids):
+                raise invalid_state("A segment source reference is unavailable to the report.")
+            evidence_by_turn[turn.id] = list(canonical_ids)
+        else:
+            evidence_by_turn[turn.id] = [
+                str(source.turn_source_id)
+                for source in source_context
+                if str(source.turn_id) == turn.id
+            ]
     turn_context = [
         ReportTurnContext(
             turn_id=item.turn_id,
@@ -1118,6 +1316,44 @@ def _report_context(
         )
         for item in turn_context
     ]
+    if segment_mode:
+        # Persist the same deduplicated canonical evidence IDs that the
+        # ReportRequest will expose.  Keeping a local S alias here would make
+        # an immutable v2 manifest disagree with the actual TurnSource row.
+        manifest_turns = [
+            ManifestTurnV2(
+                turn_id=_uuid(turn.id),
+                participant_id=_uuid(turn.participant_id),
+                round_no=turn.round_no,
+                turn_index=turn.turn_index,
+                text_hash=_sha256(turn.speech or ""),
+                used_evidence_ids=evidence_by_turn.get(turn.id, []),
+            )
+            for turn in turns
+        ]
+
+    classroom_barrages: tuple[ReportBarrageContext, ...] = ()
+    reply_context: list[ReportReplyContext] = []
+    if segment_mode:
+        classroom_barrages, barrage_messages = _segment_final_input(
+            db, debate, turns, frozen_barrages
+        )
+        participant_slots = {row.id: row.slot for row in participants}
+        for turn in turns:
+            for paragraph_index, barrage_id in segment_replies_by_turn.get(turn.id, ()):
+                if (
+                    turn.round_no != debate_round_count(debate)
+                    or barrage_id not in barrage_messages
+                ):
+                    raise invalid_state("A segment reply is outside the frozen final input.")
+                reply_context.append(
+                    ReportReplyContext(
+                        barrage_id=barrage_id,
+                        slot=str(participant_slots[turn.participant_id]),
+                        turn_index=turn.turn_index,
+                        paragraph_index=paragraph_index,
+                    )
+                )
 
     final_votes = _final_vote_rows(db, debate_id, str(window["id"]))
     _verify_frozen_vote_projection(window, participants, final_votes)
@@ -1139,15 +1375,43 @@ def _report_context(
         for row in participants
     ]
     insight_manifest = _insight_for_snapshot(db, snapshot)
-    manifest = ReportInputManifestV1(
-        debate_id=_uuid(debate_id),
-        topic=debate.topic,
-        participants=manifest_participants,
-        turns=manifest_turns,
-        turn_sources=manifest_sources,
-        votes=manifest_votes,
-        insight=insight_manifest,
-    )
+    if segment_mode:
+        manifest: ReportInputManifestV1 | ReportInputManifestV2 = ReportInputManifestV2(
+            debate_id=_uuid(debate_id),
+            topic=debate.topic,
+            participants=manifest_participants,
+            turns=cast(list[ManifestTurnV2], manifest_turns),
+            turn_sources=cast(list[ManifestTurnSourceV2], manifest_sources),
+            votes=manifest_votes,
+            insight=insight_manifest,
+            classroom_barrages=[
+                ManifestBarrage(
+                    barrage_id=item.barrage_id,
+                    turn_index=item.turn_index,
+                    text=item.text,
+                )
+                for item in classroom_barrages
+            ],
+            replies=[
+                ManifestReply(
+                    barrage_id=item.barrage_id,
+                    slot=cast(Any, item.slot),
+                    turn_index=item.turn_index,
+                    paragraph_index=item.paragraph_index,
+                )
+                for item in reply_context
+            ],
+        )
+    else:
+        manifest = ReportInputManifestV1(
+            debate_id=_uuid(debate_id),
+            topic=debate.topic,
+            participants=manifest_participants,
+            turns=manifest_turns,
+            turn_sources=manifest_sources,
+            votes=manifest_votes,
+            insight=insight_manifest,
+        )
     return ReportContext(
         debate=debate,
         manifest=manifest,
@@ -1155,16 +1419,38 @@ def _report_context(
         sources=tuple(source_context),
         vote_total=sum(item.count for item in manifest_votes),
         barrage_total=len(frozen_barrages),
+        classroom_barrages=classroom_barrages,
+        replies=tuple(reply_context),
+        protocol_version="segments_v2" if segment_mode else "legacy_v1",
     )
 
 
-def build_report_input_manifest(db: Session, debate_id: str) -> ReportInputManifestV1:
+def _load_report_manifest(value: str) -> ReportInputManifestV1 | ReportInputManifestV2:
+    """Load either immutable report manifest version without widening the DTO."""
+
+    try:
+        raw = json.loads(value)
+    except (TypeError, ValueError):
+        raise ValueError("report input manifest is not valid JSON") from None
+    if not isinstance(raw, Mapping):
+        raise ValueError("report input manifest is not an object")
+    model = (
+        ReportInputManifestV2
+        if raw.get("manifest_version") == "report_input_manifest_v2"
+        else ReportInputManifestV1
+    )
+    return model.model_validate(raw)
+
+
+def build_report_input_manifest(
+    db: Session, debate_id: str
+) -> ReportInputManifestV1 | ReportInputManifestV2:
     """Build and validate the exact manifest consumed by Mock Maya."""
 
     return _report_context(db, debate_id).manifest
 
 
-def build_real_report_request(context: ReportContext) -> ReportRequest:
+def build_real_report_request(context: ReportContext) -> ReportRequest | ReportRequestV2:
     """Project one immutable report context into the closed Real input DTO."""
 
     participants = tuple(
@@ -1189,12 +1475,20 @@ def build_real_report_request(context: ReportContext) -> ReportRequest:
     )
     sources = tuple(
         ReportSource(
-            evidence_id=str(source.turn_source_id),
+            evidence_id=(
+                source.evidence_id
+                if context.protocol_version == "segments_v2" and source.evidence_id
+                else str(source.turn_source_id)
+            ),
             # Quoted source text, not report syntax. Every excerpt comes from a
             # Markdown evidence file, so passing chunk_text through raw meant a
             # heading or a list bullet failed the outbound boundary check and
             # no real report could be generated at all.
-            excerpt=_safe_fragment(source.chunk_text, limit=2400),
+            excerpt=(
+                source.chunk_text
+                if context.protocol_version == "segments_v2"
+                else _safe_fragment(source.chunk_text, limit=2400)
+            ),
         )
         for source in context.sources
     )
@@ -1208,18 +1502,40 @@ def build_real_report_request(context: ReportContext) -> ReportRequest:
         for participant in context.manifest.participants
     )
     insights = tuple(
-        ReportInsight(category=item.category, summary=item.summary)
+        ReportInsight(category=item.category, summary=_safe_fragment(item.summary, limit=1600))
         for item in context.manifest.insight.items
     )
-    return ReportRequest(
-        topic=context.manifest.topic or context.debate.topic,
-        participants=participants,
-        speeches=speeches,
-        sources=sources,
-        votes=votes,
-        insights=insights,
-        source_language=debate_output_language(context.debate),
-    )
+    common: dict[str, Any] = {
+        "topic": context.manifest.topic or context.debate.topic,
+        "participants": participants,
+        "speeches": speeches,
+        "sources": sources,
+        "votes": votes,
+        "insights": insights,
+        "source_language": debate_output_language(context.debate),
+    }
+    if context.protocol_version == "segments_v2":
+        return ReportRequestV2(
+            **common,
+            classroom_barrages=tuple(
+                ReportBarrage(
+                    barrage_id=item.barrage_id,
+                    turn_index=item.turn_index,
+                    text=item.text,
+                )
+                for item in context.classroom_barrages
+            ),
+            replies=tuple(
+                ReportReply(
+                    barrage_id=item.barrage_id,
+                    slot=cast(Any, item.slot),
+                    turn_index=item.turn_index,
+                    paragraph_index=item.paragraph_index,
+                )
+                for item in context.replies
+            ),
+        )
+    return ReportRequest(**common)
 
 
 def _safe_fragment(value: str, *, limit: int = 260) -> str:
@@ -1253,7 +1569,7 @@ def _excerpt(value: str, words: int = 22) -> str:
 
 
 def _citation(source: ReportSourceContext) -> str:
-    return f"[evidence:{source.turn_source_id}]"
+    return f"[evidence:{source.evidence_id or source.turn_source_id}]"
 
 
 def _source_lines(context: ReportContext) -> list[str]:
@@ -1269,6 +1585,9 @@ def _source_lines(context: ReportContext) -> list[str]:
     for turn_index in sorted(by_turn):
         turn_sources = by_turn[turn_index]
         citations = " ".join(_citation(source) for source in turn_sources)
+        if context.protocol_version == "segments_v2":
+            lines.append(f"Turn {turn_index + 1} sources: {citations}.")
+            continue
         lines.append(
             f"Turn {turn_index + 1} evidence {citations}: "
             f"{_excerpt(turn_sources[0].chunk_text, words=3)}."
@@ -1276,7 +1595,7 @@ def _source_lines(context: ReportContext) -> list[str]:
     return lines
 
 
-def _vote_lines_for_manifest(manifest: ReportInputManifestV1) -> list[str]:
+def _vote_lines_for_manifest(manifest: ReportInputManifestV1 | ReportInputManifestV2) -> list[str]:
     """Return the code-owned per-participant vote lines used by the report."""
 
     counts = {str(vote.participant_id): vote.count for vote in manifest.votes}
@@ -1290,6 +1609,31 @@ def _vote_lines_for_manifest(manifest: ReportInputManifestV1) -> list[str]:
 
 def _vote_lines(context: ReportContext) -> list[str]:
     return _vote_lines_for_manifest(context.manifest)
+
+
+def _reply_summary(context: ReportContext) -> str:
+    """Describe only persisted paragraph replies, never infer an answer."""
+
+    if context.protocol_version != "segments_v2":
+        return ""
+    if not context.classroom_barrages:
+        return "No classroom messages were available for the final round."
+    linked = len({item.barrage_id for item in context.replies})
+    return (
+        f"Final round: {linked} of {len(context.classroom_barrages)} classroom messages "
+        "have a linked response."
+    )
+
+
+def _interaction_total_marker(
+    manifest: ReportInputManifestV1 | ReportInputManifestV2, vote_total: int, barrage_total: int
+) -> str:
+    if isinstance(manifest, ReportInputManifestV2):
+        return f"Classroom totals: {vote_total} votes and {barrage_total} messages."
+    return (
+        f"The code-owned final vote total is {vote_total}, and the frozen barrage "
+        f"message total is {barrage_total}."
+    )
 
 
 def mock_maya_report_v1(context: ReportContext) -> ReportSectionOutput:
@@ -1389,8 +1733,7 @@ def mock_maya_report_v1(context: ReportContext) -> ReportSectionOutput:
     )
     classroom = (
         "Classroom perspectives are reported as aggregates and anonymous themes. "
-        f"The code-owned final vote total is {context.vote_total}, and the frozen barrage "
-        f"message total is {context.barrage_total}. "
+        f"{_interaction_total_marker(manifest, context.vote_total, context.barrage_total)} "
         + " ".join(vote_lines)
         + " "
         + (
@@ -1398,6 +1741,7 @@ def mock_maya_report_v1(context: ReportContext) -> ReportSectionOutput:
             if insight_lines
             else "No anonymous theme was retained."
         )
+        + (f" {_reply_summary(context)}" if _reply_summary(context) else "")
         + " "
         + classroom_outcome
     )
@@ -1439,7 +1783,7 @@ def render_report_markdown(
             f"{REPORT_HEADINGS[6]}\n\n{result.mutual_learning_reflection}",
         )
     )
-    while report_word_count(markdown) < 600:
+    while context.protocol_version != "segments_v2" and report_word_count(markdown) < 600:
         markdown = f"{markdown} {_REPORT_PADDING_SENTENCE}"
     return markdown
 
@@ -1451,9 +1795,8 @@ def render_real_report_markdown(
     """Render provider prose with server-owned citations and vote aggregates."""
 
     evidence_suffix = " ".join(_source_lines(context))
-    count_marker = (
-        f"The code-owned final vote total is {context.vote_total}, and the frozen barrage "
-        f"message total is {context.barrage_total}."
+    count_marker = _interaction_total_marker(
+        context.manifest, context.vote_total, context.barrage_total
     )
     vote_lines = " ".join(_vote_lines(context))
     interaction_suffix = (
@@ -1467,6 +1810,7 @@ def render_real_report_markdown(
                 "weight of an argument."
             )
         )
+        + (f" {_reply_summary(context)}" if _reply_summary(context) else "")
     )
     projected = sections.model_copy(
         update={
@@ -1486,49 +1830,78 @@ def report_word_count(markdown: str) -> int:
     return len(WORD_RE.findall(without_citations))
 
 
+class ReportValidationError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def validate_report_markdown(
     markdown: str,
     *,
-    manifest: ReportInputManifestV1,
+    manifest: ReportInputManifestV1 | ReportInputManifestV2,
     vote_total: int,
     barrage_total: int,
 ) -> int:
     """Validate heading/citation/word/count safety before a ready commit."""
 
     if markdown.split("\n\n", 1)[0] != REPORT_HEADINGS[0]:
-        raise ValueError("report title heading is not canonical")
+        raise ReportValidationError("report_title_invalid", "report title heading is not canonical")
     found_headings = [line for line in markdown.splitlines() if line.startswith("#")]
     if found_headings != list(REPORT_HEADINGS):
-        raise ValueError("report headings are not canonical")
-    known_source_ids = {str(item.turn_source_id) for item in manifest.turn_sources}
+        raise ReportValidationError("report_headings_invalid", "report headings are not canonical")
+    known_source_ids = {
+        str(getattr(item, "evidence_id", "") or item.turn_source_id)
+        for item in manifest.turn_sources
+    }
     citations = _CITATION_RE.findall(markdown)
-    if any(citation.lower() not in known_source_ids for citation in citations):
-        raise ValueError("report contains an unknown evidence citation")
-    if {citation.lower() for citation in citations} != known_source_ids:
-        raise ValueError("report citations do not match used sources")
+    citation_keys = (
+        citations if isinstance(manifest, ReportInputManifestV2) else [c.lower() for c in citations]
+    )
+    if any(citation not in known_source_ids for citation in citation_keys):
+        raise ReportValidationError(
+            "report_citation_unknown", "report contains an unknown evidence citation"
+        )
+    if set(citation_keys) != known_source_ids:
+        raise ReportValidationError(
+            "report_citations_mismatch", "report citations do not match used sources"
+        )
     if re.search(r"\[evidence:[^\]]+\]", _CITATION_RE.sub("", markdown)):
-        raise ValueError("report contains a malformed evidence citation")
+        raise ReportValidationError(
+            "report_citation_malformed", "report contains a malformed evidence citation"
+        )
     if _UNSAFE_REPORT_TERMS_RE.search(markdown):
-        raise ValueError("report contains a prohibited winner or nickname phrase")
+        raise ReportValidationError(
+            "report_prohibited_phrase", "report contains a prohibited winner or nickname phrase"
+        )
     zero_phrase = "This session had no classroom interaction data."
     if (vote_total == 0 and barrage_total == 0) != (zero_phrase in markdown):
-        raise ValueError("zero-interaction report phrase does not match frozen counts")
+        raise ReportValidationError(
+            "report_interaction_phrase_invalid",
+            "zero-interaction report phrase does not match frozen counts",
+        )
     count = report_word_count(markdown)
-    if not 600 <= count <= 900:
-        raise ValueError("report word count is outside the 600-900 contract")
+    minimum = 1 if isinstance(manifest, ReportInputManifestV2) else 600
+    if not minimum <= count <= 900:
+        raise ReportValidationError(
+            "report_word_count_invalid", "report word count is outside the versioned contract"
+        )
     manifest_vote_total = sum(item.count for item in manifest.votes)
     manifest_barrage_total = manifest.insight.included_count + manifest.insight.filtered_count
     if vote_total != manifest_vote_total or barrage_total != manifest_barrage_total:
-        raise ValueError("report counts do not match the canonical manifest")
-    total_marker = (
-        f"The code-owned final vote total is {vote_total}, and the frozen barrage "
-        f"message total is {barrage_total}."
-    )
+        raise ReportValidationError(
+            "report_counts_mismatch", "report counts do not match the canonical manifest"
+        )
+    total_marker = _interaction_total_marker(manifest, vote_total, barrage_total)
     if markdown.count(total_marker) != 1:
-        raise ValueError("report is missing canonical interaction totals")
+        raise ReportValidationError(
+            "report_interaction_totals_missing", "report is missing canonical interaction totals"
+        )
     expected_vote_lines = _vote_lines_for_manifest(manifest)
     if any(markdown.count(line) != 1 for line in expected_vote_lines):
-        raise ValueError("report contains noncanonical participant vote counts")
+        raise ReportValidationError(
+            "report_vote_counts_invalid", "report contains noncanonical participant vote counts"
+        )
     return count
 
 
@@ -1695,10 +2068,10 @@ def _report_manifest(
     source_projection = [
         {"evidence_id": source.evidence_id, "excerpt": source.excerpt} for source in request.sources
     ]
-    fields = (
+    fields: tuple[ExportFieldV1, ...] = (
         ExportFieldV1(
             "topic_and_platform_rules",
-            _report_field_hash({"topic": request.topic, "prompt": REPORT_SYSTEM_PROMPT}),
+            _report_field_hash({"topic": request.topic, "prompt": wire.system_message.content}),
         ),
         ExportFieldV1(
             "public_agent_name",
@@ -1742,6 +2115,34 @@ def _report_manifest(
             ),
         ),
     )
+    if isinstance(request, ReportRequestV2):
+        fields = (
+            *fields,
+            ExportFieldV1(
+                LLM_ANONYMOUS_BARRAGE_FIELD_CLASS,
+                _report_field_hash(
+                    {
+                        "barrages": [
+                            {
+                                "barrage_id": item.barrage_id,
+                                "turn_index": item.turn_index,
+                                "text": item.text,
+                            }
+                            for item in request.classroom_barrages
+                        ],
+                        "replies": [
+                            {
+                                "barrage_id": item.barrage_id,
+                                "slot": item.slot,
+                                "turn_index": item.turn_index,
+                                "paragraph_index": item.paragraph_index,
+                            }
+                            for item in request.replies
+                        ],
+                    }
+                ),
+            ),
+        )
     estimated_cost = wire.estimated_cost_cny
     budget = wire.budget
     max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
@@ -1761,9 +2162,13 @@ def _report_manifest(
         model_key=REAL_REPORT_MODEL,
         policy_hash=policy_hash,
         build_manifest_hash=context.manifest.input_hash(),
-        persona_spec_hash=_sha256("real_report_persona_absent_v1"),
+        persona_spec_hash=_sha256(
+            "real_report_persona_absent_v2"
+            if isinstance(request, ReportRequestV2)
+            else "real_report_persona_absent_v1"
+        ),
         fields=fields,
-        operation_revision=1,
+        operation_revision=2 if isinstance(request, ReportRequestV2) else 1,
         max_attempts=1,
         max_total_tokens=max_tokens,
         max_cost_cny=max_cost,
@@ -1896,13 +2301,17 @@ def _standing_report_consent(
         return False
     if not getattr(settings, "demo_auto_confirm_provider", False):
         return False
-    manifest_row_id = runtime.repository.get_export_manifest_id(prepared.manifest_hash)
+    get_manifest_id = getattr(runtime.repository, "get_export_manifest_id", None)
+    get_confirmation = getattr(runtime.repository, "get_export_confirmation", None)
+    if not callable(get_manifest_id) or not callable(get_confirmation):
+        return False
+    manifest_row_id = get_manifest_id(prepared.manifest_hash)
     if manifest_row_id is None:
         return False
     # The same report inputs hash to the same manifest, so a retry re-derives a
     # manifest that already carries a confirmation. That confirmation is the
     # consent; re-recording it only violates the ledger's uniqueness.
-    if runtime.repository.get_export_confirmation(prepared.manifest_hash) is not None:
+    if get_confirmation(prepared.manifest_hash) is not None:
         return True
     manifest = db.get(ProviderExportManifest, manifest_row_id)
     if manifest is None:
@@ -2146,6 +2555,10 @@ def _process_real_report_revision(
             barrage_total=prepared.context.barrage_total,
         )
     except ReportProviderError as exc:
+        _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
+        return revision
+    except ReportValidationError as exc:
+        LOGGER.warning("Real report validation failed: %s", exc.code)
         _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
         return revision
     except Exception as exc:
@@ -2541,7 +2954,9 @@ def regenerate_report(
     _begin_immediate(db)
     # Re-authorize and re-read after obtaining the writer lock.  A membership
     # change between the first read and this command must not grant authority.
-    _require_teacher(db, actor_user_id, debate_id)
+    debate = _require_teacher(db, actor_user_id, debate_id)
+    if uses_segment_protocol(debate) and not has_complete_finished_playback(db, debate_id):
+        raise invalid_state("Conclude the complete classroom before generating its report.")
     record, replay = _idempotency_replay_or_claim(
         db,
         actor_user_id=actor_user_id,
@@ -2556,6 +2971,25 @@ def regenerate_report(
     _frozen_message_rows(db, window)
 
     latest = _latest_insight(db, debate_id)
+    if uses_segment_protocol(debate) and (latest is None or latest.status != "ready"):
+        requested = db.scalar(
+            select(CivilizationReport).where(CivilizationReport.debate_id == debate_id)
+        )
+        if requested is None:
+            requested = CivilizationReport(
+                id=str(uuid4()),
+                debate_id=debate_id,
+                policy_key=MOCK_MAYA_REPORT_POLICY_KEY,
+                generation_status="generating",
+                latest_attempt_status="generating",
+                created_at=utc_now(),
+                updated_at=utc_now(),
+            )
+            db.add(requested)
+        else:
+            requested.generation_status = "generating"
+            requested.latest_attempt_status = "generating"
+            requested.updated_at = utc_now()
     if latest is None or latest.status == "failed":
         next_revision = _next_snapshot_revision(db, debate_id)
         raw_hash = str(window.get("frozen_barrage_input_hash") or "")
@@ -2583,6 +3017,7 @@ def regenerate_report(
             trigger="manual",
             requested_by=actor_user_id,
         )
+    db.flush()
     report = _report_dto(db, debate_id)
     _finish_idempotency(db, record, report)
     db.flush()
@@ -2625,7 +3060,7 @@ def process_report_revision(
     if not _job_is_running(db, "report.generate", revision.id):
         return revision
     try:
-        manifest = ReportInputManifestV1.model_validate(json.loads(revision.input_manifest_json))
+        manifest = _load_report_manifest(revision.input_manifest_json)
         context = _report_context(
             db,
             revision.debate_id,
@@ -2646,9 +3081,7 @@ def process_report_revision(
         revision.attempt = 2
         revision.updated_at = utc_now()
         try:
-            manifest = ReportInputManifestV1.model_validate(
-                json.loads(revision.input_manifest_json)
-            )
+            manifest = _load_report_manifest(revision.input_manifest_json)
             context = _report_context(
                 db,
                 revision.debate_id,
@@ -2818,6 +3251,7 @@ def recover_report_jobs(db: Session) -> int:
                 snapshot.attempt = min(max(snapshot.attempt, 1), 2)
                 snapshot.safe_error_code = "operation_interrupted"
                 snapshot.updated_at = utc_now()
+                fail_report_waiting_for_insight(db, snapshot.id)
                 _mark_debate_completed(db, snapshot.debate_id)
         else:
             revision = db.get(CivilizationReportRevision, owner_id)

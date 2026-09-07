@@ -15,6 +15,7 @@ import {
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import { AvatarPreview } from "./avatar";
+import { DemoCompositionBadge } from "./demo-composition";
 import {
   EmptyCard,
   ErrorNotice,
@@ -83,6 +84,9 @@ export function TeacherDashboard() {
           </div>
         }
       />
+      {/* What is real and what is Mock, under the course it describes rather
+          than above the title, so the page opens on its own heading. */}
+      <DemoCompositionBadge />
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (

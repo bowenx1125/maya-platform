@@ -13,9 +13,15 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.modules.knowledge.files import contained_path, write_atomic
+from app.modules.knowledge.files import (
+    contained_path,
+    promote_atomic,
+    stage_atomic,
+    verify_staged,
+    write_atomic,
+)
 from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError
 
 MEDIA_TICKET_TTL = timedelta(minutes=5)
@@ -48,6 +54,20 @@ def audio_relative_path(course_id: str | UUID, debate_id: str | UUID, turn_id: s
     )
 
 
+def audio_staging_relative_path(
+    course_id: str | UUID,
+    debate_id: str | UUID,
+    turn_id: str | UUID,
+    operation_id: str | UUID,
+) -> str:
+    """Construct a unique per-operation WAV staging path."""
+
+    return (
+        f"staging/debate-turn-tts/{_uuid_part(course_id)}/"
+        f"{_uuid_part(debate_id)}/{_uuid_part(turn_id)}/{_uuid_part(operation_id)}.wav"
+    )
+
+
 @dataclass(frozen=True)
 class AudioMetadata:
     course_id: str
@@ -58,6 +78,26 @@ class AudioMetadata:
     size_bytes: int
     duration_ms: int
     modified_at: datetime
+
+
+@dataclass(frozen=True)
+class StagedAudio:
+    """One provider WAV held outside the canonical playback path.
+
+    The operation UUID is part of the lexical path.  A staged result can
+    therefore be discarded or recovered by its exact journal row without
+    ever guessing which worker owns a canonical turn file.
+    """
+
+    operation_id: str
+    course_id: str
+    debate_id: str
+    turn_id: str
+    relative_path: str
+    target_relative_path: str
+    sha256: str
+    size_bytes: int
+    duration_ms: int
 
 
 @dataclass(frozen=True)
@@ -278,6 +318,7 @@ class AudioStore:
         turn_id: str,
         speech: str,
         voice_token: str,
+        language: str = "en",
     ) -> AudioMetadata:
         """Use the injected (Mock by default) TTS provider and atomically store WAV."""
 
@@ -285,7 +326,7 @@ class AudioStore:
             raise TTSProviderError("speech is empty")
         # The caller supplies a server-side kind/profile token; it never leaves
         # the store or appears in a public DTO.
-        result = self.tts_provider.synthesize(speech, voice_token, language="en")
+        result = self.tts_provider.synthesize(speech, voice_token, language=language)
         raw = result.audio_bytes
         relative = self.relative_path(course_id, debate_id, turn_id)
         digest, size = write_atomic(self.data_root, relative, raw)
@@ -303,6 +344,133 @@ class AudioStore:
         with self._lock:
             self._metadata[(debate_id, turn_id)] = metadata
         return metadata
+
+    def stage_synthesis(
+        self,
+        *,
+        course_id: str,
+        debate_id: str,
+        turn_id: str,
+        speech: str,
+        voice_token: str,
+        language: str = "en",
+        operation_id: str | UUID | None = None,
+    ) -> StagedAudio:
+        """Synthesize one WAV into a unique journal-owned staging file.
+
+        The canonical path is intentionally untouched.  Promotion is a
+        separate operation performed only after the caller wins its database
+        revision and Job claim fences.
+        """
+
+        if not speech.strip():
+            raise TTSProviderError("speech is empty")
+        operation = _uuid_part(operation_id or uuid4())
+        relative = audio_staging_relative_path(course_id, debate_id, turn_id, operation)
+        target = self.relative_path(course_id, debate_id, turn_id)
+        path = self._non_symlink_path(relative)
+        if path is None or path.exists() or path.is_symlink():
+            raise TTSProviderError("audio staging path is unavailable")
+        result = self.tts_provider.synthesize(speech, voice_token, language=language)
+        raw = result.audio_bytes
+        if not isinstance(raw, bytes) or not raw:
+            raise TTSProviderError("audio output is empty")
+        duration = wav_duration_ms(raw)
+        digest, size = stage_atomic(self.data_root, relative, raw)
+        staged = self._non_symlink_path(relative)
+        if staged is None or staged.is_symlink() or not staged.is_file():
+            self.discard_staged_audio(relative)
+            raise TTSProviderError("audio staging path is unavailable")
+        try:
+            verify_staged(self.data_root, relative, digest, size)
+        except Exception:
+            self.discard_staged_audio(relative)
+            raise
+        return StagedAudio(
+            operation_id=operation,
+            course_id=_uuid_part(course_id),
+            debate_id=_uuid_part(debate_id),
+            turn_id=_uuid_part(turn_id),
+            relative_path=relative,
+            target_relative_path=target,
+            sha256=digest,
+            size_bytes=size,
+            duration_ms=duration,
+        )
+
+    def promote_staged_audio(self, staged: StagedAudio) -> AudioMetadata:
+        """Promote one verified staging file to its empty canonical path."""
+
+        if not isinstance(staged, StagedAudio):
+            raise TypeError("staged audio has the wrong type")
+        expected_target = self.relative_path(staged.course_id, staged.debate_id, staged.turn_id)
+        if staged.target_relative_path != expected_target:
+            raise ValueError("audio promotion target is outside the turn boundary")
+        source = self._non_symlink_path(staged.relative_path)
+        target = self._non_symlink_path(staged.target_relative_path)
+        if source is None or target is None or source.is_symlink() or target.is_symlink():
+            raise ValueError("audio promotion path cannot be a symlink")
+        if source == target or not source.is_file():
+            raise ValueError("audio staging file is unavailable")
+        if target.exists():
+            raise FileExistsError("audio promotion target is already occupied")
+        verify_staged(self.data_root, staged.relative_path, staged.sha256, staged.size_bytes)
+        promote_atomic(self.data_root, staged.relative_path, staged.target_relative_path)
+        promoted = self._non_symlink_path(staged.target_relative_path)
+        if promoted is None or promoted.is_symlink() or not promoted.is_file():
+            raise TTSProviderError("audio promotion output is unavailable")
+        raw = promoted.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != staged.sha256 or len(raw) != staged.size_bytes:
+            raise TTSProviderError("audio promotion output changed")
+        duration = wav_duration_ms(raw)
+        if duration != staged.duration_ms:
+            raise TTSProviderError("audio promotion duration changed")
+        metadata = AudioMetadata(
+            course_id=staged.course_id,
+            debate_id=staged.debate_id,
+            turn_id=staged.turn_id,
+            relative_path=staged.target_relative_path,
+            sha256=digest,
+            size_bytes=len(raw),
+            duration_ms=duration,
+            modified_at=datetime.fromtimestamp(promoted.stat().st_mtime, UTC),
+        )
+        with self._lock:
+            self._metadata[(staged.debate_id, staged.turn_id)] = metadata
+        return metadata
+
+    def discard_staged_audio(self, relative_path: str | StagedAudio) -> None:
+        """Remove exactly one stage file and no sibling or canonical file."""
+
+        relative = (
+            relative_path.relative_path if isinstance(relative_path, StagedAudio) else relative_path
+        )
+        path = self._non_symlink_path(relative)
+        if path is None or path.is_symlink() or not path.is_file():
+            return
+        path.unlink(missing_ok=True)
+
+    def remove_promoted_audio_if_owned(self, staged: StagedAudio) -> bool:
+        """Remove a canonical file only when its bytes still match this stage."""
+
+        if not isinstance(staged, StagedAudio):
+            raise TypeError("staged audio has the wrong type")
+        path = self._non_symlink_path(staged.target_relative_path)
+        if path is None or path.is_symlink() or not path.is_file():
+            return False
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            return False
+        if hashlib.sha256(raw).hexdigest() != staged.sha256 or len(raw) != staged.size_bytes:
+            return False
+        path.unlink(missing_ok=True)
+        with self._lock:
+            current = self._metadata.get((staged.debate_id, staged.turn_id))
+            if current is not None and current.sha256 == staged.sha256:
+                self._metadata.pop((staged.debate_id, staged.turn_id), None)
+        return True
 
     def store_bytes(
         self,

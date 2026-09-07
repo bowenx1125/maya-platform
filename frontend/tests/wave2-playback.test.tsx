@@ -65,6 +65,12 @@ function detail(
     created_at: "2026-08-27T00:00:00Z",
     prepared_turns: 0,
     expected_turns: 0,
+    preview: null,
+    output_language: "en",
+    turn_protocol: null,
+    preview_turns: [],
+    final_input_frozen: false,
+    stall: null,
     revision: 1,
     last_sequence: overrides.last_sequence ?? 0,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",
@@ -196,6 +202,7 @@ function fakeApi(initial: DebateDetail): DebatePlaybackApi {
       status: "ready",
       control_version: initial.playback.control_version + 1,
     }),
+    freezeFinalInput: vi.fn(),
     listProviderDataCallManifests: vi.fn().mockResolvedValue({
       scope_id: initial.id,
       items: [],
@@ -272,6 +279,7 @@ function finalLiveDetail(): DebateDetail {
     speech: `Published speech ${Number(turnIndex) + 1}.`,
     retrieval_status: "matched" as const,
     grounding_mode: "mixed" as const,
+    segment_turn: null,
     sources: [],
   }));
   const initial = detail({ public_turns: turns });
@@ -500,7 +508,7 @@ describe("Wave 2 M12 playback stage", () => {
 
   it.each([
     ["debate.failed", "failed", "Debate needs attention"],
-    ["debate.stopped", "stopped", "Debate stopped"],
+    ["debate.stopped", "stopped", "Stopped"],
   ] as const)(
     "does not reacquire after a stale start response when %s wins the race",
     async (terminalEvent, outcome, expectedLabel) => {
@@ -577,6 +585,7 @@ describe("Wave 2 M12 playback stage", () => {
           speech: "The first public speech.",
           retrieval_status: "matched",
           grounding_mode: "mixed",
+          segment_turn: null,
           sources: [],
         },
       ],
@@ -932,6 +941,7 @@ describe("Wave 2 M12 playback stage", () => {
           speech: retainedSpeech,
           retrieval_status: "matched",
           grounding_mode: "mixed",
+          segment_turn: null,
           sources: [{ source_filename: "retained-source.md" }],
         },
       ],
@@ -1068,6 +1078,7 @@ describe("Wave 2 M12 playback stage", () => {
           speech: "A published speech available for replay.",
           retrieval_status: "matched",
           grounding_mode: "mixed",
+          segment_turn: null,
           sources: [],
         },
       ],
@@ -1180,6 +1191,7 @@ describe("Wave 2 M12 playback stage", () => {
             speech: "A published speech whose audio may be retained.",
             retrieval_status: "matched",
             grounding_mode: "mixed",
+            segment_turn: null,
             sources: [],
           },
         ],
@@ -1247,6 +1259,7 @@ describe("Wave 2 M12 playback stage", () => {
       speech: "A published speech after start.",
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     };
     const initial = detail({ status: "draft" });
@@ -1355,6 +1368,7 @@ describe("Wave 2 M12 playback stage", () => {
           speech: firstSpeech,
           retrieval_status: "matched",
           grounding_mode: "mixed",
+          segment_turn: null,
           sources: [],
         },
       ],
@@ -1378,6 +1392,7 @@ describe("Wave 2 M12 playback stage", () => {
           speech: secondSpeech,
           retrieval_status: "matched" as const,
           grounding_mode: "mixed" as const,
+          segment_turn: null,
           sources: [],
         },
       ],
@@ -1437,6 +1452,7 @@ describe("Wave 2 M12 playback stage", () => {
       speech: "The first public speech.",
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     };
     const secondPublicTurn = {
@@ -1856,6 +1872,7 @@ describe("Wave 2 M12 playback stage", () => {
           speech: "A published speech",
           retrieval_status: "matched",
           grounding_mode: "mixed",
+          segment_turn: null,
           sources: [],
         },
       ],
@@ -2102,6 +2119,7 @@ describe("Wave 2 M12 playback stage", () => {
       speech: "The first public speech.",
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     };
     const initial = detail({ public_turns: [firstPublicTurn] });
@@ -2188,6 +2206,7 @@ describe("Wave 2 M12 playback stage", () => {
       speech: "The first public speech.",
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     };
     const successorPublicTurn = {
@@ -2292,6 +2311,7 @@ describe("Wave 2 M12 playback stage", () => {
       speech: "The first public speech.",
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     };
     const successorPublicTurn = {
@@ -2415,6 +2435,7 @@ describe("Wave 2 M12 playback stage", () => {
       speech: "The first public speech.",
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     };
     const initial = detail({ public_turns: [firstPublicTurn] });

@@ -1,5 +1,7 @@
 """Deterministic, provider-neutral Wave 2 turn generation primitives."""
 
+from typing import TYPE_CHECKING
+
 from .evidence_trace import (
     EVIDENCE_TRACE_VERSION,
     EvidenceTrace,
@@ -173,6 +175,7 @@ from .retrieval import (
     RetrievalResult,
     SnapshotRetriever,
     TurnSubquery,
+    build_segment_subqueries,
     build_turn_subqueries,
 )
 from .round_phase import (
@@ -204,6 +207,29 @@ from .runtime import (
     LLMRuntimeLedgerPort,
     LLMTurnRuntime,
     OpenAICompatibleLLMAdapter,
+)
+from .segments import (
+    Segment,
+    SegmentBarrage,
+    SegmentHistory,
+    SegmentInputSnapshot,
+    SegmentLineage,
+    SegmentPersona,
+    SegmentProtocolError,
+    SegmentRound,
+    SegmentSource,
+    SegmentTurnResult,
+    SegmentTurnResultV2,
+    StoredSegment,
+    StoredSegmentTurnResult,
+    build_segment_input,
+    build_segment_system_prompt,
+    coerce_persona,
+    freeze_barrages,
+    load_segment_turn_result,
+    load_stored_segment_turn_result,
+    parse_segment_output_json,
+    validate_segment_output,
 )
 from .service import (
     GenerationAttempt,
@@ -279,6 +305,19 @@ __all__ = [
     "MUTUAL_LEARNING_MAX_ROUNDS",
     "RAGRetrievalError",
     "RetrievalResult",
+    "Segment",
+    "SegmentBarrage",
+    "SegmentHistory",
+    "SegmentInputSnapshot",
+    "SegmentLineage",
+    "SegmentPersona",
+    "SegmentProtocolError",
+    "SegmentRound",
+    "SegmentSource",
+    "SegmentTurnResult",
+    "SegmentTurnResultV2",
+    "StoredSegment",
+    "StoredSegmentTurnResult",
     "SelectedEvidence",
     "SnapshotRetrievalReceipt",
     "StructuredTurnResult",
@@ -369,7 +408,16 @@ __all__ = [
     "ValidatedTurn",
     "build_turn_prompt",
     "PLATFORM_PRIORITY_RULES",
+    "build_segment_subqueries",
     "build_turn_subqueries",
+    "build_segment_input",
+    "build_segment_system_prompt",
+    "coerce_persona",
+    "freeze_barrages",
+    "load_segment_turn_result",
+    "load_stored_segment_turn_result",
+    "parse_segment_output_json",
+    "validate_segment_output",
     "can_claim_turn",
     "compute_receipt_hash",
     "compute_transcript_hash",
@@ -378,6 +426,12 @@ __all__ = [
     "PositionHistoryRecord",
     "PositionLedger",
     "TurnGenerationService",
+    "SegmentAttempt",
+    "SegmentDeferredPublicationV2",
+    "SegmentLLMRuntime",
+    "SegmentPreparedAttempt",
+    "SegmentRunOutcome",
+    "SegmentRuntimeError",
     "LLMAcceptedStagePort",
     "LLMAcceptedStageV1",
     "LLMAtomicPublicationPort",
@@ -475,3 +529,29 @@ __all__ = [
     "MutualLearningSynthesizer",
     "truncate_complete_sentences",
 ]
+
+
+if TYPE_CHECKING:
+    from .segments_runtime import (
+        SegmentAttempt,
+        SegmentDeferredPublicationV2,
+        SegmentLLMRuntime,
+        SegmentPreparedAttempt,
+        SegmentRunOutcome,
+        SegmentRuntimeError,
+    )
+
+
+def __getattr__(name: str) -> object:
+    if name in {
+        "SegmentAttempt",
+        "SegmentDeferredPublicationV2",
+        "SegmentLLMRuntime",
+        "SegmentPreparedAttempt",
+        "SegmentRunOutcome",
+        "SegmentRuntimeError",
+    }:
+        from . import segments_runtime
+
+        return getattr(segments_runtime, name)
+    raise AttributeError(name)

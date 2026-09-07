@@ -57,6 +57,7 @@ function turns() {
       speech: speech("First"),
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     },
     {
@@ -67,6 +68,7 @@ function turns() {
       speech: speech("Second"),
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     },
   ];
@@ -85,6 +87,12 @@ function detail(
     created_at: "2026-08-28T00:00:00Z",
     prepared_turns: 0,
     expected_turns: 0,
+    preview: null,
+    output_language: "en",
+    turn_protocol: null,
+    preview_turns: [],
+    final_input_frozen: false,
+    stall: null,
     revision: 1,
     last_sequence: 0,
     rule_set_id: "ordered_multi_agent_rounds_demo_v1",
@@ -190,6 +198,7 @@ function apiFor(
     replayDebate: vi.fn().mockResolvedValue(replay),
     pauseDebate: vi.fn().mockResolvedValue({ ...replay, status: "paused" }),
     resumeDebate: vi.fn().mockResolvedValue({ ...replay, status: "ready" }),
+    freezeFinalInput: vi.fn(),
     listProviderDataCallManifests: vi.fn().mockResolvedValue({
       scope_id: initial.id,
       items: [],
@@ -292,7 +301,7 @@ describe("PW3-D three-control playback", () => {
         ),
     ).toHaveLength(0);
     expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
     expect(
       screen.queryByText("Waiting for the teacher controller…"),
     ).toBeNull();
@@ -325,7 +334,7 @@ describe("PW3-D three-control playback", () => {
     expect(screen.getAllByText("Finished").length).toBeGreaterThan(0);
     // The stage's own status pill carries this; the line that repeated it at
     // the top-left of the speeches is gone.
-    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toHaveProperty("disabled", false);
@@ -667,8 +676,8 @@ describe("PW3-D three-control playback", () => {
       ).toBeTruthy(),
     );
     expect(screen.getAllByText(speech("First")).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Debate complete")).toBeNull();
-    expect(screen.queryByText("Debate stopped")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
+    expect(screen.queryByText("Stopped")).toBeNull();
   });
 
   it("restores the complete transcript only after final replay completion", async () => {
@@ -718,7 +727,7 @@ describe("PW3-D three-control playback", () => {
     );
     // Terminal state reads from the panel's status pill, not from a second
     // line above the transcript that said the same thing.
-    expect(screen.queryByText("Debate complete")).toBeNull();
+    expect(screen.queryByText("Completed")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Replay whole debate" }),
     ).toBeTruthy();

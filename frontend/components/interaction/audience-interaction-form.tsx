@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { apiErrorMessage } from "../../lib/api";
-import { LanguageSwitcher, useLocale } from "../locale";
+import { apiErrorMessage, PlatformApiError } from "../../lib/api";
+import { useLocale } from "../locale";
 import type { AudienceInteractionApi } from "./types";
 import styles from "./interaction.module.css";
 
@@ -78,7 +78,14 @@ async function requestBrowser<T>(path: string, init?: RequestInit): Promise<T> {
       payload && typeof payload === "object" && "message" in payload
         ? String((payload as { message?: unknown }).message ?? "Request failed")
         : "Request failed";
-    throw new Error(message);
+    const code =
+      payload &&
+      typeof payload === "object" &&
+      "code" in payload &&
+      typeof payload.code === "string"
+        ? payload.code
+        : undefined;
+    throw new PlatformApiError(response.status, message, { code });
   }
   return payload as T;
 }
@@ -93,6 +100,7 @@ export function AudienceInteractionForm({
   > | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<unknown>(null);
+  const [syncFailed, setSyncFailed] = useState(false);
   const [nickname, setNickname] = useState("");
   const [selectedParticipant, setSelectedParticipant] = useState("");
   const [voteState, setVoteState] = useState<"idle" | "busy" | "success">(
@@ -111,6 +119,7 @@ export function AudienceInteractionForm({
   const [barragePayload, setBarragePayload] = useState<{
     nickname: string;
     raw_text: string;
+    turn_id?: string;
     client_submission_id: string;
   } | null>(null);
 
@@ -135,10 +144,32 @@ export function AudienceInteractionForm({
     };
   }, [accessToken, api]);
 
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refreshTurn() {
+      try {
+        const next = await api.getForm(accessToken);
+        if (active) {
+          setForm(next);
+          setSyncFailed(false);
+        }
+      } catch {
+        if (active) setSyncFailed(true);
+      } finally {
+        if (active) timer = setTimeout(() => void refreshTurn(), 2000);
+      }
+    }
+    timer = setTimeout(() => void refreshTurn(), 2000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [accessToken, api]);
+
   if (loading) {
     return (
       <main className={styles.audiencePage}>
-        <LanguageSwitcher />
         <p role="status">{t("audienceLoading")}</p>
       </main>
     );
@@ -146,7 +177,6 @@ export function AudienceInteractionForm({
   if (loadError || !form) {
     return (
       <main className={styles.audiencePage}>
-        <LanguageSwitcher />
         <section className={styles.audienceCard} role="alert">
           <span className={styles.eyebrow}>{t("appName")}</span>
           <h1>{t("audienceUnavailable")}</h1>
@@ -157,12 +187,13 @@ export function AudienceInteractionForm({
   }
 
   const canInteract = nickname.trim().length > 0;
-  const bothSucceeded = voteState === "success" && barrageState === "success";
+  const turnBound = Boolean(form.current_turn_id);
+  const bothSucceeded =
+    !turnBound && voteState === "success" && barrageState === "success";
 
   if (bothSucceeded) {
     return (
       <main className={styles.audiencePage}>
-        <LanguageSwitcher />
         <section className={styles.audienceCard}>
           <span className={styles.eyebrow}>{t("appName")}</span>
           <h1>{t("audienceSubmitted")}</h1>
@@ -193,31 +224,59 @@ export function AudienceInteractionForm({
   }
 
   async function submitBarrage() {
-    if (!canInteract || !barrageText.trim() || barrageState !== "idle") return;
+    if (
+      !canInteract ||
+      !barrageText.trim() ||
+      barrageState === "busy" ||
+      form?.barrage_open === false
+    )
+      return;
     setBarrageState("busy");
     setBarrageError(null);
     try {
       const payload = barragePayload ?? {
         nickname,
         raw_text: barrageText,
+        ...(form?.current_turn_id ? { turn_id: form.current_turn_id } : {}),
         client_submission_id: newSubmissionId(),
       };
       if (!barragePayload) setBarragePayload(payload);
       await api.submitBarrage(accessToken, payload);
       setBarrageState("success");
+      if (turnBound) {
+        setBarrageText("");
+        setBarragePayload(null);
+      }
     } catch (cause) {
       setBarrageState("idle");
       setBarrageError(cause);
+      if (
+        cause instanceof PlatformApiError &&
+        cause.code === "barrage_turn_changed"
+      ) {
+        setBarragePayload(null);
+        try {
+          setForm(await api.getForm(accessToken));
+          setSyncFailed(false);
+        } catch {
+          setSyncFailed(true);
+        }
+      } else if (
+        cause instanceof PlatformApiError &&
+        cause.code === "barrage_collection_closed"
+      ) {
+        setForm((current) =>
+          current ? { ...current, barrage_open: false } : current,
+        );
+      }
     }
   }
 
   return (
     <main className={styles.audiencePage}>
-      <LanguageSwitcher />
       <section className={styles.audienceCard}>
         <span className={styles.eyebrow}>{t("audienceEyebrow")}</span>
         <h1>{form.topic}</h1>
-        <p className={styles.audienceLede}>{t("audienceLede")}</p>
 
         <label className={styles.field}>
           <span>{t("audienceNickname")}</span>
@@ -290,24 +349,45 @@ export function AudienceInteractionForm({
                   <strong>{t("audienceBarrageSubmitted")}</strong>
                 ) : null}
               </div>
-              <p>{t("audienceBarrageHint")}</p>
+              {form.round_no ? <span>Round {form.round_no}</span> : null}
+              {form.barrage_open === false ? (
+                <span>Collection closed</span>
+              ) : null}
+              {syncFailed ? (
+                <p role="status">Connection interrupted. Reconnecting…</p>
+              ) : null}
               <textarea
                 aria-label={t("audienceBarrage")}
                 value={barrageText}
-                onChange={(event) => setBarrageText(event.target.value)}
+                onChange={(event) => {
+                  setBarrageText(event.target.value);
+                  if (turnBound) {
+                    setBarragePayload(null);
+                    setBarrageState("idle");
+                  }
+                }}
+                maxLength={turnBound ? 300 : undefined}
                 placeholder={t("audienceBarragePlaceholder")}
                 rows={5}
                 disabled={
                   !canInteract ||
-                  barrageState !== "idle" ||
-                  barragePayload !== null
+                  form.barrage_open === false ||
+                  (turnBound
+                    ? barrageState === "busy"
+                    : barrageState !== "idle" || barragePayload !== null)
                 }
               />
               <button
                 className={styles.secondaryButton}
                 type="button"
                 disabled={
-                  !canInteract || !barrageText.trim() || barrageState !== "idle"
+                  !canInteract ||
+                  syncFailed ||
+                  !barrageText.trim() ||
+                  form.barrage_open === false ||
+                  (turnBound
+                    ? barrageState === "busy"
+                    : barrageState !== "idle")
                 }
                 onClick={() => void submitBarrage()}
               >

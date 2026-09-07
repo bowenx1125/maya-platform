@@ -109,6 +109,7 @@ from app.modules.knowledge.services import (
 )
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider as select_embedding_provider
+from app.providers.standing_consent import apply_standing_provider_consent
 
 router = APIRouter(tags=["Agents"])
 
@@ -462,14 +463,44 @@ def _publish_real_embedding_snapshot(
             agent_version_id=version.id,
             policy=policy,
         )
-        confirmation = require_exact_confirmation(
-            db,
-            manifest,
-            policy,
-            course_id=group.course_id,
-            group_id=group.id,
-            agent_version_id=version.id,
-        )
+        try:
+            confirmation = require_exact_confirmation(
+                db,
+                manifest,
+                policy,
+                course_id=group.course_id,
+                group_id=group.id,
+                agent_version_id=version.id,
+            )
+        except ProductPublicationError as error:
+            if error.code not in {
+                "provider_confirmation_required",
+                "provider_confirmation_stale",
+            }:
+                raise
+            standing_confirmed = apply_standing_provider_consent(
+                repository,
+                manifest,
+                policy,
+                settings,
+            )
+            if not standing_confirmed:
+                raise
+            # Standing consent writes the same immutable confirmation a
+            # teacher would submit. Re-run the owner-bound check before any
+            # provider call so the operator flag cannot widen the manifest
+            # scope.
+            try:
+                confirmation = require_exact_confirmation(
+                    db,
+                    manifest,
+                    policy,
+                    course_id=group.course_id,
+                    group_id=group.id,
+                    agent_version_id=version.id,
+                )
+            except ProductPublicationError:
+                raise
         renew_idempotency_lease(db, record, lease_seconds=900)
         selected_provider = select_embedding_provider(settings)
         result = run_confirmed_real_embedding_publication(

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from app.modules.debates.generation.prompt_request import PromptRequestV1
+from app.modules.debates.generation.speech_match import speech_contains_claim
 from app.modules.debates.generation.types import (
     EngagementV1,
     EvidenceTraceClaimType,
@@ -401,7 +402,9 @@ def map_provider_output(
         if not isinstance(raw_claim, Mapping):
             raise LLMOutputError(code="schema_invalid", json_pointers=(f"/key_claims/{index}",))
         claim_text = raw_claim.get("claim_text")
-        if not isinstance(claim_text, str) or claim_text not in speech:
+        # The same containment rule the evidence trace applies, with the same
+        # tolerance: a provider's curly quote is not a different sentence.
+        if not isinstance(claim_text, str) or not speech_contains_claim(speech, claim_text):
             raise LLMOutputError(
                 code="rule_invalid", json_pointers=(f"/key_claims/{index}/claim_text",)
             )

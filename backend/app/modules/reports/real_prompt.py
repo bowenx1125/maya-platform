@@ -36,10 +36,14 @@ from .real_schema import (
     REPORT_SECTION_SCHEMA_HASH,
     ReportBoundaryError,
     ReportRequest,
+    ReportRequestV2,
     validate_report_request,
 )
 
-REPORT_PROMPT_CONTRACT_VERSION: Final = "real_report_prompt_v1"
+REPORT_PROMPT_CONTRACT_VERSION_LEGACY: Final = "real_report_prompt_v1"
+REPORT_PROMPT_CONTRACT_VERSION_V2: Final = "real_report_prompt_v2"
+# Existing callers import this name; legacy requests retain the v1 identity.
+REPORT_PROMPT_CONTRACT_VERSION: Final = REPORT_PROMPT_CONTRACT_VERSION_LEGACY
 REPORT_REQUESTED_OUTPUT_TOKENS: Final = LLM_REQUESTED_OUTPUT_TOKEN_CAP
 REPORT_REQUEST_COST_LIMIT: Final[Decimal] = LLM_REQUEST_COST_CAP
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -52,6 +56,13 @@ REPORT_SYSTEM_PROMPT: Final = (
     "The server will add headings, evidence citations, and aggregate counts later. "
     "Use only the public report material in the user message; do not infer identities "
     "or add sources."
+)
+REPORT_SYSTEM_PROMPT_V2: Final = (
+    REPORT_SYSTEM_PROMPT + " If classroom_barrages and replies are present, describe a "
+    "message as answered only when a matching persisted reply binding is present; "
+    "never infer an answer for an unlinked message. Keep all six prose fields together "
+    "within 600 words, leaving space for server-added sources and counts. There is no "
+    "minimum length; do not repeat content to reach a word count."
 )
 
 
@@ -79,7 +90,7 @@ class ReportWireRequest:
     method: Literal["POST"]
     body: Mapping[str, object]
     messages: tuple[ReportMessage, ReportMessage]
-    report: ReportRequest
+    report: ReportRequest | ReportRequestV2
     budget: PromptBudgetV1
     request_hash: str
     input_hash: str
@@ -88,6 +99,7 @@ class ReportWireRequest:
     tokenizer_asset_hash: str
     policy_hash: str
     estimated_cost_cny: Decimal
+    prompt_contract_version: str = REPORT_PROMPT_CONTRACT_VERSION_LEGACY
 
     @property
     def user_message(self) -> ReportMessage:
@@ -128,7 +140,7 @@ def _tokenizer_identity(tokenizer: object) -> tuple[str, str]:
 
 
 def build_report_request(
-    value: ReportRequest | Mapping[str, object],
+    value: ReportRequest | ReportRequestV2 | Mapping[str, object],
     *,
     config: DashScopeLLMConfig,
     tokenizer: object,
@@ -138,6 +150,11 @@ def build_report_request(
     """Build the exact report request without performing network I/O."""
 
     report = validate_report_request(value)
+    prompt_contract_version = (
+        REPORT_PROMPT_CONTRACT_VERSION_V2
+        if isinstance(report, ReportRequestV2)
+        else REPORT_PROMPT_CONTRACT_VERSION_LEGACY
+    )
     if not isinstance(config, DashScopeLLMConfig):
         raise ReportBoundaryError("report_config_invalid")
     try:
@@ -160,7 +177,9 @@ def build_report_request(
         raise ReportBoundaryError(getattr(exc, "code", "report_price_card_invalid")) from None
     resolved_policy_hash = _safe_policy_hash(policy_hash, config)
     user = report.canonical_json()
-    system = REPORT_SYSTEM_PROMPT
+    system = (
+        REPORT_SYSTEM_PROMPT_V2 if isinstance(report, ReportRequestV2) else REPORT_SYSTEM_PROMPT
+    )
     try:
         budget = preflight_prompt_budget(
             (system, user),
@@ -197,7 +216,7 @@ def build_report_request(
         },
     }
     hash_input = {
-        "prompt_contract_version": REPORT_PROMPT_CONTRACT_VERSION,
+        "prompt_contract_version": prompt_contract_version,
         "method": "POST",
         "endpoint": endpoint,
         "body": body,
@@ -227,6 +246,7 @@ def build_report_request(
         tokenizer_asset_hash=tokenizer_asset_hash,
         policy_hash=resolved_policy_hash,
         estimated_cost_cny=estimated_cost,
+        prompt_contract_version=prompt_contract_version,
     )
 
 
@@ -237,9 +257,12 @@ RealReportWireRequest = ReportWireRequest
 
 __all__ = [
     "REPORT_PROMPT_CONTRACT_VERSION",
+    "REPORT_PROMPT_CONTRACT_VERSION_LEGACY",
+    "REPORT_PROMPT_CONTRACT_VERSION_V2",
     "REPORT_REQUEST_COST_LIMIT",
     "REPORT_REQUESTED_OUTPUT_TOKENS",
     "REPORT_SYSTEM_PROMPT",
+    "REPORT_SYSTEM_PROMPT_V2",
     "RealReportWireRequest",
     "ReportMessage",
     "ReportWireRequest",
