@@ -20,10 +20,24 @@ export type PersonaPreviewSpec = {
     concession_style: string;
     question_style: string;
   };
-  debate_strategy: readonly string[];
-  boundaries: readonly string[];
+  /** Present only on the immutable seven-section V1 projection. */
+  debate_strategy?: readonly string[];
+  /** Present only on the immutable seven-section V1 projection. */
+  boundaries?: readonly string[];
   source_agent_md_hash?: string;
   compiler_version?: string;
+};
+
+export type PersonaPreviewSpecV1 = PersonaPreviewSpec & {
+  debate_strategy: readonly string[];
+  boundaries: readonly string[];
+};
+
+export type PersonaPreviewSpecV2 = Omit<
+  PersonaPreviewSpec,
+  "debate_strategy" | "boundaries"
+> & {
+  schema_version?: "persona_spec_v2";
 };
 
 export type PersonaPreviewDiagnostic = {
@@ -55,8 +69,14 @@ export type MockPersonaTeachingDimensions = {
   argument_pattern: string;
   concession_style: string;
   question_style: string;
-  debate_strategy: string;
+  /** V1 only; V2 has no synthetic strategy field. */
+  debate_strategy?: string;
 };
+
+export type MockPersonaTeachingDimensionsV2 = Omit<
+  MockPersonaTeachingDimensions,
+  "debate_strategy"
+>;
 
 export type MockPersonaResponse = {
   schema_version: "persona_mock_response_v1";
@@ -83,7 +103,7 @@ const mockResponseTopic = "How should a community share a scarce resource?";
 // honest: general reasoning must not display fabricated source identifiers.
 const mockResponseEvidenceIds = [] as const;
 
-/** Build the deterministic student-facing Mock response from six dimensions. */
+/** Build the deterministic student-facing Mock response from the stored Persona. */
 export function buildMockPersonaResponse(
   persona: PersonaPreviewSpec,
   options: {
@@ -99,7 +119,9 @@ export function buildMockPersonaResponse(
     argument_pattern: persona.speaking_style.argument_pattern,
     concession_style: persona.speaking_style.concession_style,
     question_style: persona.speaking_style.question_style,
-    debate_strategy: persona.debate_strategy[0] ?? "the stated strategy",
+    ...(persona.debate_strategy?.[0]
+      ? { debate_strategy: persona.debate_strategy[0] }
+      : {}),
   };
   const openings = [
     "I begin by locating the question in its wider context.",
@@ -116,15 +138,24 @@ export function buildMockPersonaResponse(
     `My tone is ${dimensions.tone}. On ${options.topic.trim()}, I prioritize ${dimensions.value_priority}.`,
     `I use this argument pattern: ${dimensions.argument_pattern}.`,
     `When another view is reasonable, I ${dimensions.concession_style}.`,
-    `My debate strategy is to ${dimensions.debate_strategy}.`,
     `I ask questions in this way: ${dimensions.question_style}.`,
     grounding,
-  ].join(" ");
+  ];
+  if (dimensions.debate_strategy) {
+    speech.splice(
+      5,
+      0,
+      `My debate strategy is to ${dimensions.debate_strategy}.`,
+    );
+  }
+  const speechText = speech.join(" ");
   return {
     schema_version: "persona_mock_response_v1",
     stance: options.stance,
-    speech,
-    position_summary: `Prioritize ${dimensions.value_priority} by applying ${dimensions.debate_strategy}.`,
+    speech: speechText,
+    position_summary: dimensions.debate_strategy
+      ? `Prioritize ${dimensions.value_priority} by applying ${dimensions.debate_strategy}.`
+      : `Prioritize ${dimensions.value_priority}.`,
     teaching_dimensions: dimensions,
     evidence_ids: [...options.evidenceIds],
     rule_set_id: "persona_mock_teaching_v1",
@@ -189,19 +220,24 @@ const teachingDimensions: readonly {
     label: "Question style",
     read: (spec) => spec.speaking_style.question_style,
   },
-  {
-    key: "debate_strategy",
-    label: "Debate strategy",
-    read: (spec) => spec.debate_strategy.join(", "),
-  },
 ];
+
+const legacyTeachingDimension = {
+  key: "debate_strategy" as const,
+  label: "Debate strategy",
+  read: (spec: PersonaPreviewSpec) => spec.debate_strategy?.join(", ") ?? "—",
+};
 
 /** Pure canonical field comparison used by the preview and student tests. */
 export function diffPersonaSpec(
   before: PersonaPreviewSpec | null | undefined,
   after: PersonaPreviewSpec | null | undefined,
 ): PersonaDiff[] {
-  return teachingDimensions.map(({ key, label, read }) => {
+  const dimensions =
+    before?.debate_strategy || after?.debate_strategy
+      ? [...teachingDimensions, legacyTeachingDimension]
+      : teachingDimensions;
+  return dimensions.map(({ key, label, read }) => {
     const beforeValue = before ? read(before) : "—";
     const afterValue = after ? read(after) : "—";
     return {
@@ -298,7 +334,9 @@ export function PersonaPreview({
               label="Initial position"
               value={spec.initial_position}
             />
-            <PersonaField label="Boundaries" value={spec.boundaries} />
+            {spec.boundaries ? (
+              <PersonaField label="Boundaries" value={spec.boundaries} />
+            ) : null}
           </div>
           <div className={styles.semanticGrid}>
             <PersonaField label="Tone" value={spec.speaking_style.tone} />
@@ -314,10 +352,12 @@ export function PersonaPreview({
               label="Question style"
               value={spec.speaking_style.question_style}
             />
-            <PersonaField
-              label="Debate strategy"
-              value={spec.debate_strategy}
-            />
+            {spec.debate_strategy ? (
+              <PersonaField
+                label="Debate strategy"
+                value={spec.debate_strategy}
+              />
+            ) : null}
           </div>
           {hasDiff ? (
             <div className={styles.diffBlock}>

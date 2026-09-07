@@ -903,7 +903,8 @@ def test_sql_publication_failure_rolls_turn_and_operation_back(tmp_path) -> None
     database.dispose()
 
 
-def test_recovery_projection_is_closed_and_hash_bound() -> None:
+@pytest.mark.parametrize("output_language", ["en", "zh"])
+def test_recovery_projection_is_closed_and_hash_bound(output_language: str) -> None:
     people = _participants()
     plan = MutualLearningPolicy().plan(people, round_count=2)[0]
     context = GenerationContext(
@@ -912,6 +913,7 @@ def test_recovery_projection_is_closed_and_hash_bound() -> None:
         turn=plan,
         participant=people[0],
         participants=people,
+        output_language=output_language,
     )
     prompt = build_provider_prompt(context, persona=people[0].persona)
     prepared = SimpleNamespace(
@@ -972,3 +974,6 @@ def test_recovery_projection_is_closed_and_hash_bound() -> None:
     assert "agent_md" not in serialized
     assert "teacher_note" not in serialized
     assert hashlib.sha256(serialized.encode()).hexdigest() == recovery.input_hash
+    from app.modules.debates.generation.recovery_input import context_from_recovery_input
+
+    assert context_from_recovery_input(recovery).output_language == output_language

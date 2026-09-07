@@ -69,9 +69,7 @@ describe("PW3-E teacher information architecture", () => {
     ).toBeNull();
 
     expect(screen.getByRole("button", { name: "Log out" })).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Switch to Chinese" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Maya" })).toBeTruthy();
   });
 
   it("keeps the debate item active for nested create and control routes", () => {

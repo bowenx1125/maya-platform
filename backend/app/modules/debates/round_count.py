@@ -50,6 +50,21 @@ def expected_turn_count(debate: Any, participant_count: int) -> int:
     return participant_count * debate_round_count(debate)
 
 
+def uses_segment_protocol(debate: Any) -> bool:
+    """Old immutable snapshots retain their original generation protocol."""
+
+    try:
+        snapshot = json.loads(str(getattr(debate, "rule_snapshot_json", "{}") or "{}"))
+    except (TypeError, ValueError):
+        return False
+    return isinstance(snapshot, dict) and snapshot.get("turn_protocol") == "segments_v2"
+
+
+def preview_turn_count(debate: Any, participant_count: int) -> int:
+    rounds = debate_round_count(debate) - int(uses_segment_protocol(debate))
+    return participant_count * rounds
+
+
 __all__ = [
     "DEFAULT_ROUND_COUNT",
     "MAX_ROUND_COUNT",

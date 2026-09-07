@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { components } from "../../lib/api/generated/schema";
 import { apiErrorMessage, type IdempotencyHandle } from "../../lib/api";
@@ -48,6 +48,9 @@ export type ReportPanelProps = {
   canRegenerate?: boolean;
 };
 
+const REPORT_POLL_INTERVAL_MS = 1500;
+const REPORT_POLL_LIMIT_MS = 180_000;
+
 function reportStatusLabel(locale: "en" | "zh", status: string): string {
   const labels: Record<string, [string, string]> = {
     not_started: ["Not started", "尚未生成"],
@@ -89,6 +92,8 @@ export function ReportPanel({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const pollStartedAt = useRef<number | null>(null);
 
   const copy = useMemo(
     () =>
@@ -99,15 +104,16 @@ export function ReportPanel({
             report: "当前报告",
             history: "报告修订历史",
             refresh: "刷新",
+            generate: "生成报告",
             regenerate: "重新生成",
             download: "下载英文 Markdown",
             loading: "正在读取报告状态…",
-            noReport: "尚未生成报告。结束课堂互动后，Maya 才会开始生成。",
+            noReport: "还没有报告。",
             noHistory: "还没有报告修订。",
             view: "查看修订",
             selected: "当前查看",
-            generating: "Maya 正在整理辩论与匿名课堂洞察。",
-            failed: "这次报告生成失败；既有成功修订仍会保留。",
+            generating: "报告生成中…",
+            failed: "报告生成失败；既有成功修订仍会保留。",
             included: "已纳入",
             filtered: "已筛除",
             words: "词",
@@ -118,18 +124,16 @@ export function ReportPanel({
             report: "Current report",
             history: "Report revision history",
             refresh: "Refresh",
+            generate: "Generate Report",
             regenerate: "Regenerate",
             download: "Download English Markdown",
             loading: "Reading report status…",
-            noReport:
-              "No report has been generated yet. Maya starts after classroom interaction is closed.",
+            noReport: "No report yet.",
             noHistory: "No report revisions yet.",
             view: "View revision",
             selected: "Viewing",
-            generating:
-              "Maya is organizing the debate and anonymous classroom insight.",
-            failed:
-              "This report attempt failed; earlier successful revisions remain available.",
+            generating: "Generating report…",
+            failed: "Report generation failed; earlier revisions remain.",
             included: "included",
             filtered: "filtered",
             words: "words",
@@ -137,28 +141,71 @@ export function ReportPanel({
     [locale],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [nextReport, nextRevisions] = await Promise.all([
-        api.getCurrentReport(debateId),
-        api.listReportRevisions(debateId),
-      ]);
-      setReport(nextReport);
-      setRevisions(nextRevisions);
-      setSelectedRevision(null);
-    } catch (cause) {
-      setError(apiErrorMessage(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [api, debateId]);
+  const load = useCallback(
+    async ({ quiet = false } = {}) => {
+      if (!quiet) setLoading(true);
+      if (!quiet) setPollTimedOut(false);
+      setError(null);
+      try {
+        const [nextReport, nextRevisions] = await Promise.all([
+          api.getCurrentReport(debateId),
+          api.listReportRevisions(debateId),
+        ]);
+        setReport(nextReport);
+        setRevisions(nextRevisions);
+        if (!quiet) setSelectedRevision(null);
+        if (
+          nextReport.generation_status !== "generating" &&
+          nextReport.insight.status !== "generating"
+        ) {
+          setPollTimedOut(false);
+        }
+      } catch (cause) {
+        setError(apiErrorMessage(cause));
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [api, debateId],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    const generating =
+      report?.generation_status === "generating" ||
+      report?.insight.status === "generating";
+    if (!generating || pollTimedOut) {
+      if (!generating) pollStartedAt.current = null;
+      return;
+    }
+
+    let disposed = false;
+    let timer: number | null = null;
+    const startedAt = pollStartedAt.current ?? Date.now();
+    pollStartedAt.current = startedAt;
+    const deadline = startedAt + REPORT_POLL_LIMIT_MS;
+    const poll = async () => {
+      if (disposed) return;
+      if (Date.now() >= deadline) {
+        pollStartedAt.current = null;
+        setPollTimedOut(true);
+        return;
+      }
+      await load({ quiet: true });
+      if (!disposed) {
+        timer = window.setTimeout(() => void poll(), REPORT_POLL_INTERVAL_MS);
+      }
+    };
+    timer = window.setTimeout(() => void poll(), REPORT_POLL_INTERVAL_MS);
+    return () => {
+      disposed = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [load, pollTimedOut, report?.generation_status, report?.insight.status]);
 
   async function regenerate() {
     setBusy(true);
@@ -212,6 +259,13 @@ export function ReportPanel({
   const insight = report?.insight;
   const current = report?.current_success_revision ?? null;
   const displayed = selectedRevision ?? current;
+  const insightGenerating = insight?.status === "generating";
+  const reportGenerating = report?.generation_status === "generating";
+  const polling = insightGenerating || reportGenerating;
+  const actionLabel =
+    report?.generation_status === "not_started" || report === null
+      ? copy.generate
+      : copy.regenerate;
 
   return (
     <section
@@ -230,9 +284,9 @@ export function ReportPanel({
           <button
             type="button"
             onClick={() => void regenerate()}
-            disabled={busy || !canRegenerate}
+            disabled={busy || !canRegenerate || reportGenerating}
           >
-            {copy.regenerate}
+            {actionLabel}
           </button>
         </div>
       </header>
@@ -265,12 +319,20 @@ export function ReportPanel({
         </div>
       </div>
 
-      {report?.generation_status === "generating" ? (
+      {reportGenerating ? (
         <p className={styles.notice} role="status">
           {copy.generating}
         </p>
       ) : null}
-      {report?.generation_status === "failed" ? (
+      {pollTimedOut && polling ? (
+        <p className={styles.notice} role="status">
+          {locale === "zh"
+            ? "报告仍在生成，请刷新查看最新状态。"
+            : "The report is still generating. Refresh to check again."}
+        </p>
+      ) : null}
+      {report?.generation_status === "failed" ||
+      insight?.status === "failed" ? (
         <p className={styles.notice} role="status">
           {copy.failed}
         </p>

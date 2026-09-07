@@ -18,7 +18,7 @@ from typing import Protocol, cast
 from app.providers.control import LLMRecoveryInputV1
 from app.providers.llm_adapter import LLMAcceptedCandidateV1, LLMRequestV1
 
-from .mutual_learning_prompts import MUTUAL_LEARNING_PLATFORM_RULES
+from .mutual_learning_prompts import mutual_learning_platform_rules
 from .prompt_budget import preflight_prompt_budget
 from .prompt_request import (
     PromptMessageV1,
@@ -152,6 +152,7 @@ def _assert_context_matches(
     if (
         live.debate_id != recovered.debate_id
         or live.topic != recovered.topic
+        or live.output_language != recovered.output_language
         or _plan_fence(live.turn) != _plan_fence(recovered.turn)
         or _participant_fence(live.participant) != _participant_fence(recovered.participant)
         or live_participants != recovered_participants
@@ -435,7 +436,9 @@ class LLMRecoveryService:
             system = render_prompt_system_message(
                 rule_set_id=prompt_request.rule_set_id,
                 rule_set_hash=prompt_request.rule_set_hash,
-                rules=MUTUAL_LEARNING_PLATFORM_RULES,
+                rules=mutual_learning_platform_rules(
+                    context_from_recovery_input(recovery_input).output_language
+                ),
             )
             user = prompt_request.canonical_json()
             budget = preflight_prompt_budget(

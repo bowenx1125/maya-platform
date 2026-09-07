@@ -1338,6 +1338,9 @@
             "failed"
           ]
         },
+        "final_input_frozen": {
+          "type": "boolean"
+        },
         "public_turns": {
           "type": "array",
           "items": {
@@ -1590,6 +1593,109 @@
                       "additionalProperties": false
                     },
                     "minItems": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "segment_turn": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "segments"
+                    ],
+                    "properties": {
+                      "schema_version": {
+                        "type": "string",
+                        "const": "segment_turn_v2"
+                      },
+                      "segments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "text",
+                            "source_ids",
+                            "reply_to"
+                          ],
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "source_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "minItems": 0
+                            },
+                            "reply_to": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source_details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "source_id",
+                    "source_filename",
+                    "excerpt",
+                    "version_label"
+                  ],
+                  "properties": {
+                    "source_id": {
+                      "type": "string"
+                    },
+                    "source_filename": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": "string"
+                    },
+                    "query_text": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "version_label": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "minItems": 0
+              },
+              "audio_ready": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
                   },
                   {
                     "type": "null"
@@ -2236,6 +2342,268 @@
             "additionalProperties": false
           },
           "minItems": 0
+        },
+        "evidence_trace": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "turn_id",
+                  "claim_id",
+                  "claim_text",
+                  "claim_type",
+                  "support_mode",
+                  "speech_span"
+                ],
+                "properties": {
+                  "trace_version": {
+                    "type": "string",
+                    "const": "evidence_trace_v1"
+                  },
+                  "turn_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "claim_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "claim_text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "factual",
+                      "background",
+                      "value_judgement",
+                      "proposal"
+                    ]
+                  },
+                  "query_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "query_kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "viewpoint",
+                          "pending_question",
+                          "rebuttal",
+                          "updated_position",
+                          "context"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "query_text": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "evidence_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "chunk_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "source_filename": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "source_locator": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "support_mode": {
+                    "type": "string",
+                    "enum": [
+                      "direct",
+                      "contextual",
+                      "general_reasoning",
+                      "no_match"
+                    ]
+                  },
+                  "speech_span": {
+                    "type": "object",
+                    "required": [
+                      "start_utf16",
+                      "end_utf16"
+                    ],
+                    "properties": {
+                      "start_utf16": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "end_utf16": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "minItems": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "segment_turn": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "segments"
+              ],
+              "properties": {
+                "schema_version": {
+                  "type": "string",
+                  "const": "segment_turn_v2"
+                },
+                "segments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "source_ids",
+                      "reply_to"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "source_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 0
+                      },
+                      "reply_to": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "minItems": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source_id",
+              "source_filename",
+              "excerpt",
+              "version_label"
+            ],
+            "properties": {
+              "source_id": {
+                "type": "string"
+              },
+              "source_filename": {
+                "type": "string"
+              },
+              "excerpt": {
+                "type": "string"
+              },
+              "query_text": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "version_label": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "audio_ready": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "playback_url": {
           "type": "string",

@@ -51,9 +51,10 @@ from app.core.models import (
     StoredFile,
 )
 from app.modules.agents.persona import (
-    PERSONA_COMPILER_VERSION,
+    PersonaCompilerVersion,
     PersonaDiagnostic,
-    PersonaSpecV1,
+    PersonaSpecVersion,
+    parse_persona_spec,
 )
 from app.modules.agents.persona_service import (
     is_persona_confirmed,
@@ -857,10 +858,10 @@ def version_dto(
         agent.group_id,
         settings or db.info.get("maya_settings") or get_settings(),
     )
-    persona_spec: PersonaSpecV1 | None = None
+    persona_spec: PersonaSpecVersion | None = None
     if version.persona_spec_json:
         try:
-            persona_spec = PersonaSpecV1.model_validate(json.loads(version.persona_spec_json))
+            persona_spec = parse_persona_spec(version.persona_spec_json)
         except (TypeError, ValueError, json.JSONDecodeError):
             # A malformed stored Persona is not exposed as a partially trusted
             # browser DTO; publication/confirmation eligibility remains false.
@@ -877,6 +878,11 @@ def version_dto(
                 ]
         except (TypeError, ValueError, json.JSONDecodeError):
             persona_diagnostics = []
+    persona_compiler_version: PersonaCompilerVersion | None = (
+        cast(PersonaCompilerVersion, version.persona_compiler_version)
+        if version.persona_compiler_version in {"persona_template_v1", "persona_template_v2"}
+        else None
+    )
     return AgentVersionDTO(
         id=UUID(version.id),
         agent_id=UUID(version.agent_id),
@@ -887,11 +893,7 @@ def version_dto(
         raw_agent_md_hash=version.raw_agent_md_hash,
         persona_spec=persona_spec,
         persona_spec_hash=version.persona_spec_hash,
-        persona_compiler_version=(
-            PERSONA_COMPILER_VERSION
-            if version.persona_compiler_version == PERSONA_COMPILER_VERSION
-            else None
-        ),
+        persona_compiler_version=persona_compiler_version,
         persona_diagnostics=persona_diagnostics,
         persona_confirmation_revision=version.persona_confirmation_revision,
         student_confirmed_at=version.student_confirmed_at,

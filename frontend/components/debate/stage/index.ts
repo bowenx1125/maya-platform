@@ -11,6 +11,10 @@ export {
   debateSocketUrl,
   deriveAvatarStates,
   isSafeMediaUrl,
+  normaliseSegmentTurn,
+  normaliseSourceDetails,
+  normaliseVisiblePlaybackTurn,
+  normaliseVisiblePlaybackTurns,
   parsePlaybackEvent,
   parsePrivatePlaybackMessage,
   publicTurnById,
@@ -32,5 +36,7 @@ export type {
   PlaybackStageLabels,
   PlaybackStatus,
   PrivatePlaybackMessage,
+  SegmentSourceDetail,
+  SegmentTurnPublic,
   VisiblePlaybackTurn,
 } from "./types";

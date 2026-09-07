@@ -95,8 +95,11 @@ describe("KnowledgeLibrary integration", () => {
     expect(file.type).toBe("text/markdown");
     await waitFor(() => expect(screen.getByText("shared.md")).toBeTruthy());
     expect(
-      screen.getAllByText(/not enabled on any Agent draft automatically/),
-    ).toHaveLength(2);
+      screen.getByRole("heading", {
+        name: "Add Markdown to the group library",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add to library/ })).toBeTruthy();
   });
 
   it("downloads the original before editing and submits document CAS values", async () => {

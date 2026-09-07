@@ -886,6 +886,53 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Debates]
+      operationId: deleteDebateAll
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DebateCleanupRequest" }
+      responses:
+        "200":
+          description: Bounded cleanup committed; pending status requires completion.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateCleanupResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/audio:
+    parameters:
+      - $ref: "#/components/parameters/DebateId"
+    delete:
+      tags: [Debates]
+      operationId: deleteDebateVoice
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DebateCleanupRequest" }
+      responses:
+        "200":
+          description: Bounded cleanup committed; pending status requires completion.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateCleanupResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /debates/{debate_id}/start:
     parameters:
       - $ref: "#/components/parameters/DebateId"
@@ -913,13 +960,10 @@ paths:
                     [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
                 confirm_previous_audio_cleanup: { type: boolean }
                 output_language:
-                  type: string
-                  enum: [en, zh]
-                  default: en
-                  description: >-
-                    The language this debate is generated in, fixed at start.
-                    Not the interface language: changing that afterwards
-                    translates the chrome, never the lesson.
+                  type: [string, "null"]
+                  enum: [en, zh, null]
+                  default: null
+                  description: Optional confirmation of the language saved in Preview; cannot change it.
       responses:
         "200":
           description: Debate started; prior retained audio swap committed if confirmed.
@@ -1109,6 +1153,28 @@ paths:
               schema: { $ref: "#/components/schemas/TeacherInteraction" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/final-input:
+    post:
+      tags: [Interaction]
+      operationId: freezeFinalInput
+      parameters:
+        - $ref: "#/components/parameters/DebateId"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FreezeFinalRequest" }
+      responses:
+        "200":
+          description: Immutable final-round classroom input is ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FrozenFinalInput" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /debates/{debate_id}/interaction/open:
     post:
       tags: [Interaction]
@@ -1209,6 +1275,9 @@ paths:
               additionalProperties: false
               required: [nickname, raw_text, client_submission_id]
               properties:
+                turn_id:
+                  oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+                  default: null
                 nickname: { type: string, minLength: 1 }
                 raw_text: { type: string, minLength: 1 }
                 client_submission_id: { $ref: "#/components/schemas/Uuid" }
@@ -1507,6 +1576,87 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /debates/{debate_id}/audio/{turn_id}/regenerate:
+    post:
+      operationId: regenerateDebateTurnAudio
+      parameters:
+      - in: path
+        name: debate_id
+        required: true
+        schema:
+          format: uuid
+          title: Debate Id
+          type: string
+      - in: path
+        name: turn_id
+        required: true
+        schema:
+          format: uuid
+          title: Turn Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          minLength: 16
+          title: Idempotency-Key
+          type: string
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          minLength: 32
+          title: X-Csrf-Token
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegenerateTurnAudioRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegenerateTurnAudioResult'
+          description: Successful Response
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Entity
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+      security:
+      - sessionCookie: []
+      summary: Regenerate Audio Route
+      tags:
+      - Debates
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1734,6 +1884,7 @@ components:
                 opaque_local_id,
                 public_agent_name,
                 anonymous_insight_summary,
+                anonymous_classroom_barrage,
                 aggregate_vote_count,
                 current_tts_speech,
                 server_authored_structure_repair_feedback,
@@ -1866,7 +2017,7 @@ components:
         revision_no: { type: integer, minimum: 1 }
         status: { type: string, const: ready }
         english_markdown: { type: string, minLength: 1 }
-        word_count: { type: integer, minimum: 600, maximum: 900 }
+        word_count: { type: integer, minimum: 1, maximum: 900 }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ContinueFailedReportRevision:
@@ -2091,11 +2242,12 @@ components:
         persona_spec:
           oneOf:
             - { $ref: "#/components/schemas/PersonaSpecV1" }
+            - { $ref: "#/components/schemas/PersonaSpecV2" }
             - { type: "null" }
         persona_spec_hash:
           { type: [string, "null"] }
         persona_compiler_version:
-          { type: [string, "null"] }
+          { type: [string, "null"], enum: [persona_template_v1, persona_template_v2, null] }
         persona_diagnostics:
           type: array
           items: { $ref: "#/components/schemas/PersonaDiagnostic" }
@@ -2186,7 +2338,7 @@ components:
         persona_spec_hash:
           { type: string, pattern: '^[0-9a-f]{64}$' }
         compiler_version:
-          { type: string, const: persona_template_v1, default: persona_template_v1 }
+          { type: string, enum: [persona_template_v1, persona_template_v2], default: persona_template_v1 }
     PersonaCompileResponse:
       type: object
       required: [version_id, revision, compiled, raw_agent_md_hash]
@@ -2199,10 +2351,11 @@ components:
         persona_spec:
           oneOf:
             - { $ref: "#/components/schemas/PersonaSpecV1" }
+            - { $ref: "#/components/schemas/PersonaSpecV2" }
             - { type: "null" }
         persona_spec_hash: { type: [string, "null"] }
         compiler_version:
-          { type: string, const: persona_template_v1, default: persona_template_v1 }
+          { type: string, enum: [persona_template_v1, persona_template_v2], default: persona_template_v1 }
         diagnostics:
           type: array
           items: { $ref: "#/components/schemas/PersonaDiagnostic" }
@@ -2346,12 +2499,14 @@ components:
           type: string
           minLength: 1
           description: >-
-            Non-empty English debate topic. The value must contain at least one
-            Latin-script letter and may include Unicode Latin diacritics,
-            numbers, punctuation, and ordinary Unicode space separators.
-            Control characters, non-Latin letters, symbols, unsafe marks, and
-            non-space separators are rejected by the domain validator; there is
-            no product-level maximum length in Wave 2.
+            Non-empty topic in the selected lesson language. English accepts
+            Latin letters; Chinese also accepts Han characters. Controls are rejected.
+        output_language: { type: string, enum: [en, zh], default: en }
+        turn_protocol:
+          type: [string, "null"]
+          enum: [segments_v2, null]
+          default: null
+          description: Current clients send segments_v2; omission preserves legacy callers.
         participants:
           type: array
           minItems: 2
@@ -2456,6 +2611,173 @@ components:
         safe_error_code:
           type: string
           description: The server-authored code for why that turn would not generate.
+    DebatePreviewProgress:
+      type: object
+      additionalProperties: false
+      required: [prepared_turns, expected_turns, ready]
+      properties:
+        prepared_turns: { type: integer, minimum: 0 }
+        expected_turns: { type: integer, minimum: 1 }
+        ready: { type: boolean }
+    FreezeFinalRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_control_version]
+      properties:
+        expected_control_version: { type: integer, minimum: 0 }
+    FrozenFinalInput:
+      type: object
+      additionalProperties: false
+      required: [barrage_count, cutoff_sequence]
+      properties:
+        ready: { type: boolean, const: true, default: true }
+        barrage_count: { type: integer, minimum: 0, maximum: 12 }
+        cutoff_sequence: { type: integer, minimum: 0 }
+    PersonaSpecV2:
+      additionalProperties: false
+      description: 'Canonical stored schema for the five-section Persona template.
+
+
+        V2 intentionally has no ``debate_strategy`` or ``boundaries`` fields.
+
+        Platform rules and debate scheduling remain server-owned, so retaining
+
+        those headings as empty compatibility values would misrepresent authorship
+
+        and make the new schema indistinguishable from a legacy V1 projection.'
+      properties:
+        compiler_version:
+          const: persona_template_v2
+          default: persona_template_v2
+          type: string
+        core_values:
+          items:
+            type: string
+          maxItems: 8
+          minItems: 1
+          type: array
+        cultural_lens:
+          items:
+            type: string
+          maxItems: 8
+          minItems: 1
+          type: array
+        identity:
+          $ref: '#/components/schemas/PersonaIdentity'
+        initial_position:
+          maxLength: 1000
+          minLength: 1
+          type: string
+        schema_version:
+          const: persona_spec_v2
+          default: persona_spec_v2
+          type: string
+        source_agent_md_hash:
+          pattern: ^sha256:[0-9a-f]{64}$
+          type: string
+        speaking_style:
+          $ref: '#/components/schemas/PersonaSpeakingStyle'
+      required:
+      - identity
+      - cultural_lens
+      - core_values
+      - initial_position
+      - speaking_style
+      - source_agent_md_hash
+      type: object
+    DebateSegment:
+      additionalProperties: false
+      properties:
+        reply_to:
+          type:
+          - string
+          - 'null'
+        source_ids:
+          items:
+            type: string
+          type: array
+        text:
+          type: string
+      required:
+      - text
+      - source_ids
+      - reply_to
+      type: object
+    SegmentTurnPublic:
+      additionalProperties: false
+      properties:
+        schema_version:
+          const: segment_turn_v2
+          default: segment_turn_v2
+          type: string
+        segments:
+          items:
+            $ref: '#/components/schemas/DebateSegment'
+          type: array
+      required:
+      - segments
+      type: object
+    SegmentSourceDetail:
+      additionalProperties: false
+      properties:
+        excerpt:
+          type: string
+        query_text:
+          type:
+          - string
+          - 'null'
+        source_filename:
+          type: string
+        source_id:
+          type: string
+        version_label:
+          type: string
+      required:
+      - source_id
+      - source_filename
+      - excerpt
+      - version_label
+      type: object
+    PreviewTurn:
+      additionalProperties: false
+      properties:
+        audio_ready:
+          type: boolean
+        generation_status:
+          type: string
+        id:
+          format: uuid
+          type: string
+        participant_id:
+          format: uuid
+          type: string
+        round_no:
+          type: integer
+        safe_error_code:
+          type:
+          - string
+          - 'null'
+        segments:
+          items:
+            $ref: '#/components/schemas/DebateSegment'
+          type: array
+        sources:
+          items:
+            $ref: '#/components/schemas/SegmentSourceDetail'
+          type: array
+        speech:
+          type: string
+        turn_index:
+          type: integer
+      required:
+      - id
+      - participant_id
+      - round_no
+      - turn_index
+      - speech
+      - generation_status
+      - audio_ready
+      type: object
     DebateSummary:
       type: object
       required: [id, course_id, topic, status, created_at]
@@ -2479,6 +2801,9 @@ components:
           minimum: 0
           default: 0
           description: Turns this debate's plan contains, from its own agent and round counts.
+        preview:
+          oneOf: [{ $ref: "#/components/schemas/DebatePreviewProgress" }, { type: "null" }]
+          default: null
         stall:
           oneOf:
             [{ $ref: "#/components/schemas/DebateStall" }, { type: "null" }]
@@ -2488,6 +2813,27 @@ components:
             warming halts at the first turn that will not generate and changes
             no status, so without this a stalled draft is indistinguishable
             from one still thinking. Read from that turn, never stored.
+    DebateCleanupRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, expected_control_version]
+      properties:
+        expected_revision: { type: integer, minimum: 0 }
+        expected_control_version: { type: integer, minimum: 0 }
+    DebateCleanupResult:
+      type: object
+      additionalProperties: false
+      required: [debate_id, cleanup_status, revision, control_version, deleted_file_count, pending_file_count]
+      properties:
+        debate_id: { $ref: "#/components/schemas/Uuid" }
+        cleanup_status: { type: string, enum: [complete, pending] }
+        revision: { type: integer, minimum: 0 }
+        control_version: { type: integer, minimum: 0 }
+        deleted_file_count: { type: integer, minimum: 0 }
+        pending_file_count: { type: integer, minimum: 0 }
+        regenerable_turn_ids:
+          type: array
+          items: { $ref: "#/components/schemas/Uuid" }
     DebateDetail:
       allOf:
         - $ref: "#/components/schemas/DebateSummary"
@@ -2519,6 +2865,12 @@ components:
                   ],
               }
             round_count: { type: integer, minimum: 2, maximum: 5 }
+            output_language: { type: string, enum: [en, zh], default: en }
+            turn_protocol: { type: [string, "null"], enum: [segments_v2, null], default: null }
+            final_input_frozen: { type: boolean, default: false }
+            preview_turns:
+              type: array
+              items: { $ref: "#/components/schemas/PreviewTurn" }
             participants:
               type: array
               items: { $ref: "#/components/schemas/DebateParticipant" }
@@ -2585,6 +2937,12 @@ components:
           sources,
         ]
       properties:
+        segment_turn:
+          oneOf: [{ $ref: "#/components/schemas/SegmentTurnPublic" }, { type: "null" }]
+          default: null
+        source_details:
+          type: array
+          items: { $ref: "#/components/schemas/SegmentSourceDetail" }
         id: { $ref: "#/components/schemas/Uuid" }
         participant_id: { $ref: "#/components/schemas/Uuid" }
         round_no: { type: integer, minimum: 1 }
@@ -2596,6 +2954,10 @@ components:
         sources:
           type: array
           items: { $ref: "#/components/schemas/RetrievalSource" }
+        audio_ready:
+          anyOf:
+            - type: boolean
+            - type: "null"
         playback_resource:
           {
             oneOf:
@@ -2850,6 +3212,9 @@ components:
       required: [id, nickname, raw_text, sequence, submitted_at]
       properties:
         id: { $ref: "#/components/schemas/Uuid" }
+        turn_id:
+          oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+          default: null
         nickname: { type: string }
         raw_text: { type: string }
         sequence: { type: integer, minimum: 1 }
@@ -2907,6 +3272,11 @@ components:
       required: [topic, participants]
       properties:
         topic: { type: string }
+        current_turn_id:
+          oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+          default: null
+        round_no: { type: [integer, "null"], default: null }
+        barrage_open: { type: boolean, default: true }
         participants:
           type: array
           items:
@@ -2945,7 +3315,7 @@ components:
         id: { $ref: "#/components/schemas/Uuid" }
         revision_no: { type: integer, minimum: 1 }
         status: { type: string, enum: [generating, ready, failed] }
-        word_count: { type: [integer, "null"], minimum: 600, maximum: 900 }
+        word_count: { type: [integer, "null"], minimum: 1, maximum: 900 }
         safe_error_code: { type: [string, "null"] }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ReportRevision:
@@ -2992,7 +3362,7 @@ components:
         revision_no: { type: integer, minimum: 1 }
         status: { type: string, const: ready }
         english_markdown: { type: string, minLength: 1 }
-        word_count: { type: integer, minimum: 600, maximum: 900 }
+        word_count: { type: integer, minimum: 1, maximum: 900 }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     FailedReportRevision:
@@ -3049,3 +3419,75 @@ components:
             enum: [pending, running, completed, failed, interrupted],
           }
         safe_error_code: { type: [string, "null"] }
+    RegenerateTurnAudioRequest:
+      additionalProperties: false
+      properties:
+        expected_revision:
+          minimum: 0.0
+          title: Expected Revision
+          type: integer
+      required:
+      - expected_revision
+      title: RegenerateTurnAudioRequest
+      type: object
+    RegenerateTurnAudioResult:
+      additionalProperties: false
+      properties:
+        audio_duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Duration Ms
+        audio_ready:
+          title: Audio Ready
+          type: boolean
+        debate_id:
+          format: uuid
+          title: Debate Id
+          type: string
+        operation:
+          const: debate_turn_tts
+          default: debate_turn_tts
+          title: Operation
+          type: string
+        operation_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Operation Id
+        revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Revision
+        safe_error_code:
+          title: Safe Error Code
+          type:
+          - string
+          - 'null'
+        status:
+          enum:
+          - completed
+          - already_ready
+          - queued
+          - failed
+          - stale
+          - not_found
+          title: Status
+          type: string
+        turn_id:
+          format: uuid
+          title: Turn Id
+          type: string
+      required:
+      - status
+      - debate_id
+      - turn_id
+      - revision
+      - operation_id
+      - audio_ready
+      - audio_duration_ms
+      - safe_error_code
+      title: RegenerateTurnAudioResult
+      type: object

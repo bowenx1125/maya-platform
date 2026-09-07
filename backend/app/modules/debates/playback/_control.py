@@ -12,7 +12,12 @@ from app.core.errors import PlatformError, conflict, forbidden, invalid_state, n
 from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
-from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
+from app.modules.debates.round_count import (
+    debate_round_count,
+    preview_turn_count,
+    uses_segment_protocol,
+)
+from app.modules.debates.topic_language import TopicLanguageError, validate_topic
 
 from ._core import (
     _RECOVERABLE_PROVIDER_GENERATION_CODES,
@@ -29,6 +34,9 @@ from .schemas import (
 )
 
 LOGGER = logging.getLogger(__name__)
+_DRAFT_TTS_RETRY_CODES = frozenset(
+    code for code in _RECOVERABLE_PROVIDER_GENERATION_CODES if code.startswith("tts_")
+)
 
 
 class PlaybackControlMixin(PlaybackCore):
@@ -126,7 +134,7 @@ class PlaybackControlMixin(PlaybackCore):
         expected_revision: int,
         expected_current_audio_debate_id: str | None,
         confirm_previous_audio_cleanup: bool,
-        output_language: str = "en",
+        output_language: str | None = None,
         context: AuthContext | None = None,
         idempotency_key: str | None = None,
         request_id: str | None = None,
@@ -140,7 +148,10 @@ class PlaybackControlMixin(PlaybackCore):
         self._assert_teacher(db, preflight_debate, context)
         if str(self._get(preflight_debate, "status", default="draft")) == "draft":
             try:
-                validate_english_topic(self._get(preflight_debate, "topic", default=""))
+                validate_topic(
+                    self._get(preflight_debate, "topic", default=""),
+                    self._get(preflight_debate, "output_language", default="en"),
+                )
             except TopicLanguageError as exc:
                 raise PlatformError(exc.code, exc.message, 422, exc.details) from exc
         idempotency_record: Any | None = None
@@ -189,7 +200,10 @@ class PlaybackControlMixin(PlaybackCore):
             if str(getattr(debate, "status", "draft")) != "draft":
                 raise invalid_state("Only a draft debate can be started.")
             try:
-                validate_english_topic(self._get(debate, "topic", default=""))
+                validate_topic(
+                    self._get(debate, "topic", default=""),
+                    self._get(debate, "output_language", default="en"),
+                )
             except TopicLanguageError as exc:
                 raise PlatformError(exc.code, exc.message, 422, exc.details) from exc
             revision = int(self._get(debate, "revision", default=0) or 0)
@@ -201,20 +215,35 @@ class PlaybackControlMixin(PlaybackCore):
                 )
             course_id = self._course_id(debate)
             current_pointer = self.repository.current_audio_debate_id(db, course_id)
-            if current_pointer != expected_current_audio_debate_id:
+            segment_mode = uses_segment_protocol(debate)
+            if segment_mode:
+                preview_turns = [
+                    row
+                    for row in self._turns(db, debate)
+                    if self._round(row) < debate_round_count(debate)
+                ]
+                if (
+                    len(preview_turns)
+                    != preview_turn_count(debate, len(self._participants(db, debate)))
+                    or not preview_turns
+                    or any(
+                        not self._turn_ready(row)
+                        or self._validated_turn_audio(db, debate, row) is None
+                        for row in preview_turns
+                    )
+                ):
+                    raise conflict("preview_not_ready", "Finish preparing Preview before Start.")
+            if not segment_mode and current_pointer != expected_current_audio_debate_id:
                 raise conflict("stale_control_version", "The retained audio pointer changed.")
-            if current_pointer and not confirm_previous_audio_cleanup:
+            if not segment_mode and current_pointer and not confirm_previous_audio_cleanup:
                 raise conflict(
                     "previous_audio_cleanup_confirmation_required",
                     "Confirm removal of the previous retained audio before starting.",
                 )
-            # The language is fixed here and never afterwards: every later turn
-            # carries the speeches before it, and turns are prepared ahead of
-            # the teacher, so a change midway would leave a bilingual record.
-            debate.output_language = output_language if output_language in {"en", "zh"} else "en"
-            # The row projection only persists through an explicit save, and
-            # nothing later in this method writes the debate row.
-            self.repository.save_debate(db, debate)
+            if output_language is not None and output_language != self._get(
+                debate, "output_language", default="en"
+            ):
+                raise conflict("output_language_locked", "The lesson language was set in Preview.")
             if self.repository.course_running(db, course_id, except_debate_id=debate_id):
                 # Name the debate holding the slot. Without it a teacher was
                 # told something else was running and had to go looking, and
@@ -229,7 +258,7 @@ class PlaybackControlMixin(PlaybackCore):
                     {"blocking_debate": blocking} if blocking else None,
                 )
             swap = None
-            if current_pointer and confirm_previous_audio_cleanup:
+            if current_pointer and confirm_previous_audio_cleanup and not segment_mode:
                 swap = self._prepare_audio_swap(
                     db,
                     course_id=course_id,
@@ -286,7 +315,9 @@ class PlaybackControlMixin(PlaybackCore):
                         db,
                         debate,
                         expected_revision=expected_revision,
-                        expected_audio_pointer=expected_current_audio_debate_id,
+                        expected_audio_pointer=current_pointer
+                        if segment_mode
+                        else expected_current_audio_debate_id,
                         journal_id=journal_id,
                     ):
                         raise conflict(
@@ -378,7 +409,7 @@ class PlaybackControlMixin(PlaybackCore):
                 self._commit(db)
             except PlatformError:
                 self._rollback(db)
-                if current_pointer:
+                if current_pointer and not segment_mode:
                     self._restore_audio_swap(
                         db,
                         swap,
@@ -388,7 +419,7 @@ class PlaybackControlMixin(PlaybackCore):
                 raise
             except Exception as exc:
                 self._rollback(db)
-                if current_pointer:
+                if current_pointer and not segment_mode:
                     self._restore_audio_swap(
                         db,
                         swap,
@@ -400,7 +431,7 @@ class PlaybackControlMixin(PlaybackCore):
                     "The debate could not be started safely.",
                     503,
                 ) from exc
-            if current_pointer:
+            if current_pointer and not segment_mode:
                 self._commit_audio_swap(
                     db,
                     swap,
@@ -434,6 +465,8 @@ class PlaybackControlMixin(PlaybackCore):
         """
 
         try:
+            if uses_segment_protocol(self._get_debate(db, debate_id)):
+                return
             if not has_complete_finished_playback(db, debate_id):
                 return
             if self.audio_store is not None:
@@ -480,10 +513,77 @@ class PlaybackControlMixin(PlaybackCore):
                 debate = self._get_debate(db, debate_id)
                 state = self._state(db, debate)
                 return self._state_dto(state, db, debate)
-            if str(self._get(debate, "status", default="")) != "running":
-                raise invalid_state("Only a running Debate can retry preparation.")
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
+            debate_status = str(self._get(debate, "status", default=""))
+            if debate_status == "draft" and uses_segment_protocol(debate):
+                # Preview has no classroom controller or current turn.  Its
+                # retry CAS is the draft PlaybackState version plus the
+                # repository's exact failed turn/Job fence; no playback state
+                # or classroom interaction is announced here.
+                if state.status != "preparing" or state.mode != "live":
+                    raise invalid_state("Preview is not waiting for preparation.")
+                if state.current_turn_id is not None:
+                    raise invalid_state("Preview has no current playback turn.")
+                turns = sorted(
+                    self._turns(db, debate),
+                    key=lambda item: int(self._get(item, "turn_index", default=0) or 0),
+                )
+                preview_turns = [
+                    item for item in turns if self._round(item) < debate_round_count(debate)
+                ]
+                target = next(
+                    (item for item in preview_turns if not self._turn_ready(item)),
+                    None,
+                )
+                if target is None or str(self._get(target, "id", default="")) != turn_id:
+                    raise invalid_state("Only the next unprepared Preview turn can be retried.")
+                code = str(self._get(target, "safe_error_code", "failed_code", default="") or "")
+                if code == "acceptance_unknown":
+                    raise invalid_state("The selected turn needs provider reconciliation.")
+                if code == "turn_generation_failed":
+                    recoverable = getattr(self.repository, "recoverable_llm_turns", None)
+                    accepted = False
+                    if callable(recoverable):
+                        try:
+                            accepted = (debate_id, turn_id) in tuple(recoverable(db))
+                        except Exception:
+                            accepted = False
+                    if not accepted:
+                        raise invalid_state("The selected turn has no verified local recovery.")
+                elif (
+                    code
+                    not in {
+                        "provider_confirmation_required",
+                        "provider_not_sent",
+                    }
+                    and code not in _DRAFT_TTS_RETRY_CODES
+                ):
+                    raise invalid_state(
+                        "The selected turn is not waiting for a safe provider retry."
+                    )
+                retry = getattr(self.repository, "retry_draft_segment_turn", None)
+                if not callable(retry) or not retry(
+                    db,
+                    debate,
+                    target,
+                    expected_control_version=expected_control_version,
+                    code=code,
+                ):
+                    self._rollback(db)
+                    raise conflict(
+                        "stale_control_version",
+                        "The Preview changed before retry was committed.",
+                    )
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
+                result = self._state_dto(state, db, debate)
+                self._finish_control_idempotency(db, record, result)
+                self._commit(db)
+                await self._enqueue(debate, target)
+                return result
+            if debate_status != "running":
+                raise invalid_state("Only a running Debate can retry preparation.")
             if state.mode != "live" or state.current_turn_id is None:
                 raise invalid_state("Live playback has no retryable turn.")
             turns = sorted(
@@ -1049,6 +1149,12 @@ class PlaybackControlMixin(PlaybackCore):
                     raise conflict(
                         "invalid_state", "The playback turn plan has multiple successors."
                     )
+                if (
+                    uses_segment_protocol(debate)
+                    and self._round(successor) == debate_round_count(debate)
+                    and not self._get(debate, "final_input_json")
+                ):
+                    raise conflict("invalid_state", "Freeze the classroom input before Final.")
                 if not self._next_turn_ready(db, debate, state):
                     raise conflict(
                         "next_not_ready",
@@ -1535,6 +1641,7 @@ class PlaybackControlMixin(PlaybackCore):
             )
             if (
                 strict_retention
+                and not uses_segment_protocol(debate)
                 and self.repository.current_audio_debate_id(db, self._course_id(debate))
                 != debate_id
             ):

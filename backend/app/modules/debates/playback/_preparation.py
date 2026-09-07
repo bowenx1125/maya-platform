@@ -12,13 +12,14 @@ from typing import Any
 
 from app.core.errors import PlatformError
 from app.modules.debates.output_language import debate_output_language
+from app.modules.debates.round_count import debate_round_count, uses_segment_protocol
 from app.providers.tts import TTSProviderError
 
 from ._core import (
     _SAFE_GENERATION_CODES,
     PlaybackCore,
 )
-from .audio import AudioMetadata
+from .audio import AudioMetadata, StagedAudio
 from .events import EventRecord
 from .protocols import (
     PreparedGenerationFence,
@@ -43,16 +44,22 @@ def _raise_site(exc: BaseException, *, frames: int = 4) -> str:
 
     import traceback
 
+    parts: list[str] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
     try:
-        trace = traceback.extract_tb(exc.__traceback__)
+        while current is not None and id(current) not in seen and len(parts) < 4:
+            seen.add(id(current))
+            trace = traceback.extract_tb(current.__traceback__)
+            locations = " > ".join(
+                f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno}:{frame.name}"
+                for frame in trace[-frames:]
+            )
+            parts.append(f"{type(current).__name__}[{locations or '-'}]")
+            current = current.__cause__
     except Exception:  # pragma: no cover - diagnosis must never raise
         return "-"
-    if not trace:
-        return "-"
-    return " > ".join(
-        f"{frame.filename.rsplit('/', 1)[-1]}:{frame.lineno}:{frame.name}"
-        for frame in trace[-frames:]
-    )
+    return " caused_by ".join(parts) or "-"
 
 
 class PlaybackPreparationMixin(PlaybackCore):
@@ -127,7 +134,18 @@ class PlaybackPreparationMixin(PlaybackCore):
         # the SQLite connections are built with ``check_same_thread=False``.
         # An async preparer is only constructed in the thread and is still
         # awaited on the loop, so a test double keeps its own semantics.
-        result = await asyncio.to_thread(call)
+        work = asyncio.create_task(asyncio.to_thread(call))
+        try:
+            result = await asyncio.shield(work)
+        except asyncio.CancelledError:
+            # Cancelling an asyncio wrapper does not stop its provider thread.
+            # Keep the worker's Session alive until that thread relinquishes it;
+            # durable job/generation fences already reject late publication.
+            try:
+                await work
+            except Exception:
+                pass
+            raise
         if inspect.isawaitable(result):
             result = await result
         if isinstance(result, PreparedTurn):
@@ -291,6 +309,21 @@ class PlaybackPreparationMixin(PlaybackCore):
             speech_units,
             unit_bounds,
         )
+
+        if prepared.structured.get("schema_version") == "segment_turn_v2":
+            segments = prepared.structured.get("segments")
+            if (
+                not isinstance(segments, (list, tuple))
+                or not segments
+                or any(
+                    not isinstance(segment, Mapping) or not isinstance(segment.get("text"), str)
+                    for segment in segments
+                )
+            ):
+                raise TurnValidationError("Prepared paragraphs are invalid.", code="schema_invalid")
+            if prepared.speech != "\n\n".join(segment["text"] for segment in segments):
+                raise TurnValidationError("Prepared text changed.", code="schema_invalid")
+            return prepared
 
         speech = prepared.speech.strip()
         minimum, maximum = unit_bounds(language, TURN_MIN_WORDS, TURN_MAX_WORDS)  # type: ignore[arg-type]
@@ -459,6 +492,9 @@ class PlaybackPreparationMixin(PlaybackCore):
             prewarming = status == "draft"
             if status != "running" and not prewarming:
                 return
+            if uses_segment_protocol(debate) and self._round(turn) == debate_round_count(debate):
+                if prewarming or not getattr(debate, "final_input_json", None):
+                    return
             if prewarming:
                 current_index = -1
                 turn_index = int(self._get(turn, "turn_index", default=0) or 0)
@@ -635,6 +671,7 @@ class PlaybackPreparationMixin(PlaybackCore):
         next_turn_to_enqueue: Any | None = None
         last_error: Exception | None = None
         audio: AudioMetadata | None = None
+        staged_audio: StagedAudio | None = None
         prepared: PreparedTurn | None = None
         try:
             # M11 owns the single shared attempt 1|2 repair budget.  Playback
@@ -649,6 +686,18 @@ class PlaybackPreparationMixin(PlaybackCore):
             # operation ``accepted``; only the final mark_turn_ready
             # transaction may promote it to ``succeeded``.
             if prepared.llm_publication is not None:
+                self._commit(db)
+            if uses_segment_protocol(debate):
+                save_text = getattr(self.repository, "save_turn_text", None)
+                if not callable(save_text) or not save_text(
+                    db,
+                    turn,
+                    prepared,
+                    claim_token=claim_token,
+                    generation=cancellation_generation,
+                    debate_status="draft" if prewarming else "running",
+                ):
+                    raise PlatformError("turn_generation_failed", "The saved turn changed.", 409)
                 self._commit(db)
             voice = self._resolve_voice(db, participant)
             prepared = replace(
@@ -670,15 +719,39 @@ class PlaybackPreparationMixin(PlaybackCore):
             # more blocking HTTP call, and the audio store writes a file. Mock
             # TTS returns fast enough to hide this, so leaving it on the loop
             # would put the freeze back the moment the voice slice goes real.
-            synthesize: Callable[[], AudioMetadata] = functools.partial(
-                self.audio_store.synthesize_and_store,
-                course_id=self._course_id(debate),
-                debate_id=debate_id,
-                turn_id=turn_id,
-                speech=prepared.speech,
-                voice_token=voice_token,
-            )
-            audio = await asyncio.to_thread(synthesize)
+            if uses_segment_protocol(debate):
+                stage_work = asyncio.create_task(
+                    asyncio.to_thread(
+                        self.audio_store.stage_synthesis,
+                        course_id=self._course_id(debate),
+                        debate_id=debate_id,
+                        turn_id=turn_id,
+                        operation_id=claim_token,
+                        speech=prepared.speech,
+                        voice_token=voice_token,
+                        language=debate_output_language(debate),
+                    )
+                )
+                try:
+                    staged_audio = await asyncio.shield(stage_work)
+                except asyncio.CancelledError:
+                    try:
+                        abandoned_stage = await stage_work
+                        self.audio_store.discard_staged_audio(abandoned_stage)
+                    except Exception:
+                        pass
+                    raise
+            else:
+                synthesize: Callable[[], AudioMetadata] = functools.partial(
+                    self.audio_store.synthesize_and_store,
+                    course_id=self._course_id(debate),
+                    debate_id=debate_id,
+                    turn_id=turn_id,
+                    speech=prepared.speech,
+                    voice_token=voice_token,
+                    language=debate_output_language(debate),
+                )
+                audio = await asyncio.to_thread(synthesize)
             async with self._lock:
                 fresh_debate = self._get_debate(db, debate_id)
                 fresh_turn = next(
@@ -698,8 +771,21 @@ class PlaybackPreparationMixin(PlaybackCore):
                     or self._get(fresh_turn, "generation_status", default="")
                     not in {"running", "pending"}
                 ):
-                    self.audio_store.remove_turn(debate_id, turn_id)
+                    if staged_audio is not None:
+                        self.audio_store.discard_staged_audio(staged_audio)
+                    else:
+                        self.audio_store.remove_turn(debate_id, turn_id)
                     return
+                if staged_audio is not None:
+                    fence_audio = getattr(self.repository, "fence_audio_promotion", None)
+                    if not callable(fence_audio) or not fence_audio(
+                        db, fresh_debate, fresh_turn, claim_token, cancellation_generation
+                    ):
+                        self._rollback(db)
+                        self.audio_store.discard_staged_audio(staged_audio)
+                        return
+                    audio = self.audio_store.promote_staged_audio(staged_audio)
+                assert audio is not None
                 accepted = self.repository.mark_turn_ready(
                     db,
                     fresh_turn,
@@ -711,7 +797,16 @@ class PlaybackPreparationMixin(PlaybackCore):
                     claim_token=claim_token,
                 )
                 if not accepted:
-                    self.audio_store.remove_turn(debate_id, turn_id)
+                    if staged_audio is not None:
+                        self.audio_store.remove_promoted_audio_if_owned(staged_audio)
+                        self._rollback(db)
+                    else:
+                        self.audio_store.remove_turn(debate_id, turn_id)
+                    return
+                if prewarming:
+                    # The Preview scheduler alone advances a draft. Enqueuing
+                    # its successor here races a second worker for that turn.
+                    self._commit(db)
                     return
                 current_state = self._state(db, fresh_debate)
                 current_turns = self._turns(db, fresh_debate)
@@ -824,8 +919,12 @@ class PlaybackPreparationMixin(PlaybackCore):
             # The final Turn/source/job writes and the LLM operation CAS share
             # this transaction.  Roll back before either the recoverable or
             # terminal handler starts a new state transition.
+            if staged_audio is not None and self.audio_store is not None:
+                self.audio_store.discard_staged_audio(staged_audio)
+                if audio is not None:
+                    self.audio_store.remove_promoted_audio_if_owned(staged_audio)
             self._rollback(db)
-            if audio is not None and self.audio_store is not None:
+            if staged_audio is None and audio is not None and self.audio_store is not None:
                 self.audio_store.remove_turn(debate_id, turn_id)
         error_code = getattr(last_error, "code", None) or getattr(last_error, "safe_code", None)
         recoverable_provider_error = error_code in {
@@ -837,7 +936,7 @@ class PlaybackPreparationMixin(PlaybackCore):
             isinstance(error_code, str)
             and error_code.startswith("tts_")
             and prepared is not None
-            and prepared.llm_publication is not None
+            and (prepared.llm_publication is not None or uses_segment_protocol(debate))
         )
         if (
             recoverable_provider_error or recoverable_tts_error
@@ -850,18 +949,23 @@ class PlaybackPreparationMixin(PlaybackCore):
         ):
             return
         if prewarming:
-            # A draft that fails to warm returns its turn to the queue rather
-            # than failing the Debate. Warming ahead is an optimisation; the
-            # teacher has not started this lesson, and marking it failed for a
-            # turn nobody has seen would be a worse answer than generating it
-            # live when they do.
             async with self._lock:
                 debate = self._get_debate(db, debate_id)
                 turns = self._turns(db, debate)
                 current = next(
                     (item for item in turns if str(getattr(item, "id", "")) == turn_id), turn
                 )
-                self._release_claim(db, debate, current, claim_token)
+                code = (
+                    str(error_code)
+                    if error_code in _SAFE_GENERATION_CODES
+                    else "turn_generation_failed"
+                )
+                fail_prewarm = getattr(self.repository, "fail_prewarm_turn", None)
+                if callable(fail_prewarm):
+                    fail_prewarm(db, current, claim_token=claim_token, code=code)
+                    self._commit(db)
+                else:
+                    self._release_claim(db, debate, current, claim_token)
             return
         failed_event: EventRecord | None = None
         failed_epoch: str | None = None

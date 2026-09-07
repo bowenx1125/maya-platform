@@ -13,6 +13,7 @@ from datetime import datetime
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -151,6 +152,9 @@ class BarrageMessage(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     window_id: Mapped[str] = mapped_column(String(36), nullable=False)
     debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    turn_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("debate_turns.id", ondelete="RESTRICT"), nullable=True
+    )
     nickname: Mapped[str] = mapped_column(Text, nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     client_submission_id: Mapped[str] = mapped_column(String(36), nullable=False)

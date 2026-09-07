@@ -494,6 +494,7 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "opaque_local_id",
         "public_agent_name",
         "anonymous_insight_summary",
+        "anonymous_classroom_barrage",
         "aggregate_vote_count",
         "current_tts_speech",
         "server_authored_structure_repair_feedback",
@@ -1728,10 +1729,17 @@ class ProviderOperationRepository(Protocol):
     ) -> LLMAcceptedStageV1:
         """Persist an accepted stage and canonical input atomically."""
 
+    def stage_segment_accepted_with_recovery(
+        self,
+        stage: LLMAcceptedStageV1,
+        recovery_input: object,
+    ) -> LLMAcceptedStageV1:
+        """Persist the explicit v2 segment stage/input pair atomically."""
+
     def load_llm_accepted_bundle(
         self,
         operation_id: str,
-    ) -> LLMAcceptedBundleV1 | None:
+    ) -> object | None:
         """Load an exact stage/input pair, or no recoverable bundle."""
 
     def mark_succeeded(self, operation_id: str) -> ProviderOperationV1:
@@ -1816,6 +1824,7 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
         self._reservations: dict[str, ProviderReservationV1] = {}
         self._llm_stages: dict[str, LLMAcceptedStageV1] = {}
         self._llm_recovery_inputs: dict[str, LLMRecoveryInputV1] = {}
+        self._segment_recovery_inputs: dict[str, object] = {}
         self._by_key: dict[tuple[str, str, str, int], str] = {}
         self._acceptance_calls: dict[tuple[str, int], str] = {}
         self._lock = RLock()
@@ -2063,6 +2072,71 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
                 self.mark_accepted(operation.id, response_hash=stage.output_hash)
             return stage
 
+    def stage_segment_accepted_with_recovery(
+        self,
+        stage: LLMAcceptedStageV1,
+        recovery_input: object,
+    ) -> LLMAcceptedStageV1:
+        """Persist one explicit v2 frozen request beside its accepted stage."""
+
+        from app.providers.llm_segments import SegmentRecoveryInputV2
+
+        if not isinstance(recovery_input, SegmentRecoveryInputV2):
+            raise OperationStateError("segment recovery input has the wrong version")
+        stage.__post_init__()
+        recovery_input.__post_init__()
+        if (
+            recovery_input.operation_id != stage.operation_id
+            or recovery_input.turn_id != stage.turn_id
+            or recovery_input.attempt_no != stage.attempt_no
+        ):
+            raise OperationStateError("segment recovery input does not match stage")
+        with self._lock:
+            operation = self.operation(stage.operation_id)
+            if operation.provider_operation != "llm_debate_turn":
+                raise OperationStateError("LLM stage operation type is invalid")
+            try:
+                recovery_input.assert_stage_identity(stage, operation)
+            except Exception as exc:
+                raise OperationStateError("segment recovery input identity is corrupt") from exc
+            existing_stage = self._llm_stages.get(stage.operation_id)
+            existing_input = self._segment_recovery_inputs.get(stage.operation_id)
+            if existing_stage is not None or existing_input is not None:
+                if existing_stage != stage or existing_input != recovery_input:
+                    raise OperationStateError("LLM accepted bundle is immutable")
+                if operation.state not in {"accepted", "succeeded"}:
+                    raise OperationStateError("LLM accepted bundle operation state is invalid")
+                if existing_stage is None:
+                    raise OperationStateError("LLM accepted bundle is partial")
+                return existing_stage
+            if operation.state not in {"sending", "accepted"}:
+                raise OperationStateError("LLM accepted bundle requires an accepted response")
+            if (
+                operation.logical_item_id != stage.turn_id
+                or operation.attempt_no != stage.attempt_no
+                or operation.request_hash != stage.request_hash
+                or operation.policy_hash != stage.policy_hash
+                or operation.export_manifest_hash != stage.export_manifest_hash
+                or operation.model_key != stage.model_key
+            ):
+                raise OperationStateError("LLM accepted stage does not match operation")
+            if stage.completion_tokens > operation.max_tokens:
+                raise OperationStateError("LLM accepted stage exceeds reserved output tokens")
+            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
+                str(operation.max_cost_cny)
+            ):
+                raise OperationStateError("LLM accepted stage exceeds reserved cost")
+            if (
+                operation.state == "accepted"
+                and operation.staged_response_hash != stage.output_hash
+            ):
+                raise OperationStateError("LLM accepted stage response hash is stale")
+            self._segment_recovery_inputs[recovery_input.operation_id] = recovery_input
+            self._llm_stages[stage.operation_id] = stage
+            if operation.state == "sending":
+                self.mark_accepted(operation.id, response_hash=stage.output_hash)
+            return stage
+
     def stage_llm_accepted_with_recovery(
         self,
         stage: LLMAcceptedStageV1,
@@ -2122,14 +2196,34 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
     def load_llm_accepted_bundle(
         self,
         operation_id: str,
-    ) -> LLMAcceptedBundleV1 | None:
+    ) -> object | None:
         with self._lock:
             stage = self._llm_stages.get(operation_id)
+            segment_input = self._segment_recovery_inputs.get(operation_id)
             recovery_input = self._llm_recovery_inputs.get(operation_id)
-            if stage is None and recovery_input is None:
+            if stage is None and recovery_input is None and segment_input is None:
                 return None
             if stage is None:
                 raise OperationStateError("LLM recovery input has no accepted stage")
+            if segment_input is not None:
+                from app.providers.llm_segments import (
+                    SegmentAcceptedBundleV2,
+                    SegmentRecoveryInputV2,
+                )
+
+                if not isinstance(segment_input, SegmentRecoveryInputV2):
+                    raise OperationStateError("LLM accepted bundle has the wrong version")
+                operation = self._operations.get(operation_id)
+                if operation is None:
+                    raise OperationStateError("LLM accepted bundle operation does not exist")
+                try:
+                    segment_input.__post_init__()
+                    segment_input.assert_stage_identity(stage, operation)
+                except Exception as exc:
+                    raise OperationStateError("LLM accepted bundle identity is corrupt") from exc
+                if operation.state not in {"accepted", "succeeded"}:
+                    raise OperationStateError("LLM accepted bundle operation state is invalid")
+                return SegmentAcceptedBundleV2(stage=stage, recovery_input=segment_input)
             # A stage without an input is a pre-0015 accepted row: keep the
             # old stage readable, but never present it as recoverable input.
             if recovery_input is None:

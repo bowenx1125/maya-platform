@@ -158,14 +158,30 @@ export function TeacherDebateList({
                       mid-round used to read Running with nothing to act on. */}
                   {stalled(debate) ? (
                     <PrewarmBadge
-                      expected={debate.expected_turns ?? 0}
-                      prepared={debate.prepared_turns ?? 0}
+                      expected={
+                        debate.preview?.expected_turns ??
+                        debate.expected_turns ??
+                        0
+                      }
+                      prepared={
+                        debate.preview?.prepared_turns ??
+                        debate.prepared_turns ??
+                        0
+                      }
                       stall={debate.stall}
                     />
                   ) : debate.status === "draft" ? (
                     <PrewarmBadge
-                      expected={debate.expected_turns ?? 0}
-                      prepared={debate.prepared_turns ?? 0}
+                      expected={
+                        debate.preview?.expected_turns ??
+                        debate.expected_turns ??
+                        0
+                      }
+                      prepared={
+                        debate.preview?.prepared_turns ??
+                        debate.prepared_turns ??
+                        0
+                      }
                     />
                   ) : (
                     <StatusBadge status={debate.status} />
@@ -369,6 +385,7 @@ export function TeacherDebateCreate({
     Record<string, ParticipantDraft>
   >({});
   const [topic, setTopic] = useState("");
+  const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("en");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
   const [roundCount, setRoundCount] = useState<MutualRoundCount>(2);
   const [loading, setLoading] = useState(true);
@@ -445,7 +462,7 @@ export function TeacherDebateCreate({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    const topicValidation = validateDebateTopic(topic);
+    const topicValidation = validateDebateTopic(topic, outputLanguage);
     if (!topicValidation.valid) {
       setTopicError(
         copy(
@@ -468,6 +485,8 @@ export function TeacherDebateCreate({
     }
     const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
+      output_language: outputLanguage,
+      turn_protocol: "segments_v2",
       participants: selectedIds.map((agentId) => {
         const draft = participantDrafts[agentId] ?? defaultParticipant();
         return {
@@ -537,10 +556,7 @@ export function TeacherDebateCreate({
       />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form className={styles.pageStack} onSubmit={submit}>
-        <SectionCard
-          title={copy(t, "debateTopic")}
-          description={copy(t, "debateTopicPlaceholder")}
-        >
+        <SectionCard title={copy(t, "debateTopic")}>
           <label className="stack-form">
             <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
             <textarea
@@ -713,6 +729,20 @@ export function TeacherDebateCreate({
         {/* The card names the protocol, so the line inside it can be the one
             fact a teacher needs: the shape of a round. */}
         <SectionCard title={copy(t, "debateMutualLearningRuleSet")}>
+          <label className={styles.roundField}>
+            <span className={styles.roundLabel}>Language</span>
+            <select
+              aria-label="Language"
+              disabled={busy}
+              value={outputLanguage}
+              onChange={(event) =>
+                setOutputLanguage(event.target.value as "en" | "zh")
+              }
+            >
+              <option value="en">English</option>
+              <option value="zh">Chinese</option>
+            </select>
+          </label>
           <div className={styles.fixedRule}>
             <p
               aria-label={copy(t, "debateRuleSet")}

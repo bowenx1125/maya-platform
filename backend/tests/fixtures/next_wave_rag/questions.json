@@ -1,0 +1,962 @@
+{
+  "schema_version": "next_wave_rag_questions_v1",
+  "questions": [
+    {
+      "question_id": "q01",
+      "language": "en",
+      "question": "What operating rule does the Tz'ikin Basin council use for dry-season water sharing?",
+      "facts": [
+        {
+          "fact_id": "q01-f01",
+          "current_aliases": ["14 Nawal days"],
+          "updated_aliases": ["9 Nawal days"]
+        },
+        {
+          "fact_id": "q01-f02",
+          "current_aliases": ["three reed knots"],
+          "updated_aliases": ["two reed knots"]
+        },
+        {
+          "fact_id": "q01-f03",
+          "current_aliases": ["west terrace"],
+          "updated_aliases": ["north terrace"]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "correct",
+          "corpus_path": "corpus/q01/correct.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q01-correct-e01",
+              "corpus_path": "corpus/q01/correct.md",
+              "locator": "Evidence q01-correct-e01",
+              "marker": "The Tz'ikin Basin opens water exchange at first light after 14 Nawal days.",
+              "fact_ids": ["q01-f01"]
+            },
+            {
+              "evidence_id": "q01-correct-e02",
+              "corpus_path": "corpus/q01/correct.md",
+              "locator": "Evidence q01-correct-e02",
+              "marker": "A completed exchange is marked with three reed knots.",
+              "fact_ids": ["q01-f02"]
+            },
+            {
+              "evidence_id": "q01-correct-e03",
+              "corpus_path": "corpus/q01/correct.md",
+              "locator": "Evidence q01-correct-e03",
+              "marker": "Storage jars stay on the west terrace.",
+              "fact_ids": ["q01-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q01-correct-e01",
+            "q01-correct-e02",
+            "q01-correct-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["14 Nawal days"],
+              ["three reed knots"],
+              ["west terrace"]
+            ],
+            "forbidden_any": ["9 Nawal days", "two reed knots", "north terrace"]
+          }
+        },
+        {
+          "condition": "disabled",
+          "corpus_path": null,
+          "retrieval_status": "no_match",
+          "expected_evidence": [],
+          "allowed_retrieved_evidence": [],
+          "answer_policy": {
+            "required_any_groups": [
+              [
+                "no evidence",
+                "not enough evidence",
+                "cannot determine",
+                "cannot answer"
+              ]
+            ],
+            "forbidden_any": [
+              "14 Nawal days",
+              "three reed knots",
+              "west terrace",
+              "9 Nawal days",
+              "two reed knots",
+              "north terrace"
+            ]
+          }
+        },
+        {
+          "condition": "irrelevant",
+          "corpus_path": "corpus/q01/irrelevant.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q01-irrelevant-e01",
+              "corpus_path": "corpus/q01/irrelevant.md",
+              "locator": "Evidence q01-irrelevant-e01",
+              "marker": "The Noxara bridge keeps five lanterns beside the basalt path.",
+              "fact_ids": []
+            }
+          ],
+          "allowed_retrieved_evidence": ["q01-irrelevant-e01"],
+          "answer_policy": {
+            "required_any_groups": [
+              [
+                "no evidence",
+                "not enough evidence",
+                "cannot determine",
+                "cannot answer"
+              ]
+            ],
+            "forbidden_any": [
+              "14 Nawal days",
+              "three reed knots",
+              "west terrace",
+              "9 Nawal days",
+              "two reed knots",
+              "north terrace"
+            ]
+          }
+        },
+        {
+          "condition": "updated",
+          "corpus_path": "corpus/q01/updated.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q01-updated-e01",
+              "corpus_path": "corpus/q01/updated.md",
+              "locator": "Evidence q01-updated-e01",
+              "marker": "The Tz'ikin Basin opens water exchange at first light after 9 Nawal days.",
+              "fact_ids": ["q01-f01"]
+            },
+            {
+              "evidence_id": "q01-updated-e02",
+              "corpus_path": "corpus/q01/updated.md",
+              "locator": "Evidence q01-updated-e02",
+              "marker": "A completed exchange is marked with two reed knots.",
+              "fact_ids": ["q01-f02"]
+            },
+            {
+              "evidence_id": "q01-updated-e03",
+              "corpus_path": "corpus/q01/updated.md",
+              "locator": "Evidence q01-updated-e03",
+              "marker": "Storage jars stay on the north terrace.",
+              "fact_ids": ["q01-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q01-updated-e01",
+            "q01-updated-e02",
+            "q01-updated-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["9 Nawal days"],
+              ["two reed knots"],
+              ["north terrace"]
+            ],
+            "forbidden_any": [
+              "14 Nawal days",
+              "three reed knots",
+              "west terrace"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "q02",
+      "language": "en",
+      "question": "How should the K'anul Archive preserve a visitor's seed record?",
+      "facts": [
+        {
+          "fact_id": "q02-f01",
+          "current_aliases": ["blue bark"],
+          "updated_aliases": ["red bark"]
+        },
+        {
+          "fact_id": "q02-f02",
+          "current_aliases": ["hummingbird shelf"],
+          "updated_aliases": ["firefly shelf"]
+        },
+        {
+          "fact_id": "q02-f03",
+          "current_aliases": ["Vela-7"],
+          "updated_aliases": ["Mero-3"]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "correct",
+          "corpus_path": "corpus/q02/correct.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q02-correct-e01",
+              "corpus_path": "corpus/q02/correct.md",
+              "locator": "Evidence q02-correct-e01",
+              "marker": "The seed record is copied onto blue bark before sunset.",
+              "fact_ids": ["q02-f01"]
+            },
+            {
+              "evidence_id": "q02-correct-e02",
+              "corpus_path": "corpus/q02/correct.md",
+              "locator": "Evidence q02-correct-e02",
+              "marker": "The archive indexes it under the hummingbird shelf.",
+              "fact_ids": ["q02-f02"]
+            },
+            {
+              "evidence_id": "q02-correct-e03",
+              "corpus_path": "corpus/q02/correct.md",
+              "locator": "Evidence q02-correct-e03",
+              "marker": "A duplicate is sealed with a clay ring marked Vela-7.",
+              "fact_ids": ["q02-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q02-correct-e01",
+            "q02-correct-e02",
+            "q02-correct-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["blue bark"],
+              ["hummingbird shelf"],
+              ["Vela-7"]
+            ],
+            "forbidden_any": ["red bark", "firefly shelf", "Mero-3"]
+          }
+        },
+        {
+          "condition": "disabled",
+          "corpus_path": null,
+          "retrieval_status": "no_match",
+          "expected_evidence": [],
+          "allowed_retrieved_evidence": [],
+          "answer_policy": {
+            "required_any_groups": [
+              [
+                "no evidence",
+                "not enough evidence",
+                "cannot determine",
+                "cannot answer"
+              ]
+            ],
+            "forbidden_any": [
+              "blue bark",
+              "hummingbird shelf",
+              "Vela-7",
+              "red bark",
+              "firefly shelf",
+              "Mero-3"
+            ]
+          }
+        },
+        {
+          "condition": "irrelevant",
+          "corpus_path": "corpus/q02/irrelevant.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q02-irrelevant-e01",
+              "corpus_path": "corpus/q02/irrelevant.md",
+              "locator": "Evidence q02-irrelevant-e01",
+              "marker": "The Oruma kiln cools seven copper tiles on a sand shelf.",
+              "fact_ids": []
+            }
+          ],
+          "allowed_retrieved_evidence": ["q02-irrelevant-e01"],
+          "answer_policy": {
+            "required_any_groups": [
+              [
+                "no evidence",
+                "not enough evidence",
+                "cannot determine",
+                "cannot answer"
+              ]
+            ],
+            "forbidden_any": [
+              "blue bark",
+              "hummingbird shelf",
+              "Vela-7",
+              "red bark",
+              "firefly shelf",
+              "Mero-3"
+            ]
+          }
+        },
+        {
+          "condition": "updated",
+          "corpus_path": "corpus/q02/updated.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q02-updated-e01",
+              "corpus_path": "corpus/q02/updated.md",
+              "locator": "Evidence q02-updated-e01",
+              "marker": "The seed record is copied onto red bark before sunset.",
+              "fact_ids": ["q02-f01"]
+            },
+            {
+              "evidence_id": "q02-updated-e02",
+              "corpus_path": "corpus/q02/updated.md",
+              "locator": "Evidence q02-updated-e02",
+              "marker": "The archive indexes it under the firefly shelf.",
+              "fact_ids": ["q02-f02"]
+            },
+            {
+              "evidence_id": "q02-updated-e03",
+              "corpus_path": "corpus/q02/updated.md",
+              "locator": "Evidence q02-updated-e03",
+              "marker": "A duplicate is sealed with a clay ring marked Mero-3.",
+              "fact_ids": ["q02-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q02-updated-e01",
+            "q02-updated-e02",
+            "q02-updated-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["red bark"],
+              ["firefly shelf"],
+              ["Mero-3"]
+            ],
+            "forbidden_any": ["blue bark", "hummingbird shelf", "Vela-7"]
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "q03",
+      "language": "en",
+      "question": "What does the Ixora Council advise when the Cloudstone signal fades?",
+      "facts": [
+        {
+          "fact_id": "q03-f01",
+          "current_aliases": ["copper prism"],
+          "updated_aliases": ["silver prism"]
+        },
+        {
+          "fact_id": "q03-f02",
+          "current_aliases": ["two watchers"],
+          "updated_aliases": ["three watchers"]
+        },
+        {
+          "fact_id": "q03-f03",
+          "current_aliases": ["one full bell"],
+          "updated_aliases": ["two full bells"]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "correct",
+          "corpus_path": "corpus/q03/correct.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q03-correct-e01",
+              "corpus_path": "corpus/q03/correct.md",
+              "locator": "Evidence q03-correct-e01",
+              "marker": "The Cloudstone beacon is checked with a copper prism.",
+              "fact_ids": ["q03-f01"]
+            },
+            {
+              "evidence_id": "q03-correct-e02",
+              "corpus_path": "corpus/q03/correct.md",
+              "locator": "Evidence q03-correct-e02",
+              "marker": "Two watchers compare the signal at the river gate.",
+              "fact_ids": ["q03-f02"]
+            },
+            {
+              "evidence_id": "q03-correct-e03",
+              "corpus_path": "corpus/q03/correct.md",
+              "locator": "Evidence q03-correct-e03",
+              "marker": "If the prism stays dim, the council waits one full bell before relighting.",
+              "fact_ids": ["q03-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q03-correct-e01",
+            "q03-correct-e02",
+            "q03-correct-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["copper prism"],
+              ["two watchers"],
+              ["one full bell"]
+            ],
+            "forbidden_any": [
+              "silver prism",
+              "three watchers",
+              "two full bells"
+            ]
+          }
+        },
+        {
+          "condition": "disabled",
+          "corpus_path": null,
+          "retrieval_status": "no_match",
+          "expected_evidence": [],
+          "allowed_retrieved_evidence": [],
+          "answer_policy": {
+            "required_any_groups": [
+              [
+                "no evidence",
+                "not enough evidence",
+                "cannot determine",
+                "cannot answer"
+              ]
+            ],
+            "forbidden_any": [
+              "copper prism",
+              "two watchers",
+              "one full bell",
+              "silver prism",
+              "three watchers",
+              "two full bells"
+            ]
+          }
+        },
+        {
+          "condition": "irrelevant",
+          "corpus_path": "corpus/q03/irrelevant.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q03-irrelevant-e01",
+              "corpus_path": "corpus/q03/irrelevant.md",
+              "locator": "Evidence q03-irrelevant-e01",
+              "marker": "The Pelan ferry counts eight shells before leaving the reed dock.",
+              "fact_ids": []
+            }
+          ],
+          "allowed_retrieved_evidence": ["q03-irrelevant-e01"],
+          "answer_policy": {
+            "required_any_groups": [
+              [
+                "no evidence",
+                "not enough evidence",
+                "cannot determine",
+                "cannot answer"
+              ]
+            ],
+            "forbidden_any": [
+              "copper prism",
+              "two watchers",
+              "one full bell",
+              "silver prism",
+              "three watchers",
+              "two full bells"
+            ]
+          }
+        },
+        {
+          "condition": "updated",
+          "corpus_path": "corpus/q03/updated.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q03-updated-e01",
+              "corpus_path": "corpus/q03/updated.md",
+              "locator": "Evidence q03-updated-e01",
+              "marker": "The Cloudstone beacon is checked with a silver prism.",
+              "fact_ids": ["q03-f01"]
+            },
+            {
+              "evidence_id": "q03-updated-e02",
+              "corpus_path": "corpus/q03/updated.md",
+              "locator": "Evidence q03-updated-e02",
+              "marker": "Three watchers compare the signal at the river gate.",
+              "fact_ids": ["q03-f02"]
+            },
+            {
+              "evidence_id": "q03-updated-e03",
+              "corpus_path": "corpus/q03/updated.md",
+              "locator": "Evidence q03-updated-e03",
+              "marker": "If the prism stays dim, the council waits two full bells before relighting.",
+              "fact_ids": ["q03-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q03-updated-e01",
+            "q03-updated-e02",
+            "q03-updated-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["silver prism"],
+              ["three watchers"],
+              ["two full bells"]
+            ],
+            "forbidden_any": ["copper prism", "two watchers", "one full bell"]
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "q04",
+      "language": "zh",
+      "question": "月影谷的守望者应如何记录雨季的第一场雨？",
+      "facts": [
+        {
+          "fact_id": "q04-f01",
+          "current_aliases": ["紫色石墨"],
+          "updated_aliases": ["绿色石墨"]
+        },
+        {
+          "fact_id": "q04-f02",
+          "current_aliases": ["南门"],
+          "updated_aliases": ["东门"]
+        },
+        {
+          "fact_id": "q04-f03",
+          "current_aliases": ["第三块石板"],
+          "updated_aliases": ["第五块石板"]
+        },
+        {
+          "fact_id": "q04-f04",
+          "current_aliases": ["两名记录者"],
+          "updated_aliases": ["三名记录者"]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "correct",
+          "corpus_path": "corpus/q04/correct.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q04-correct-e01",
+              "corpus_path": "corpus/q04/correct.md",
+              "locator": "Evidence q04-correct-e01",
+              "marker": "月影谷用紫色石墨在雨簿上记录第一场雨。",
+              "fact_ids": ["q04-f01"]
+            },
+            {
+              "evidence_id": "q04-correct-e02",
+              "corpus_path": "corpus/q04/correct.md",
+              "locator": "Evidence q04-correct-e02",
+              "marker": "记录者把日期写在南门下的第三块石板。",
+              "fact_ids": ["q04-f02", "q04-f03"]
+            },
+            {
+              "evidence_id": "q04-correct-e03",
+              "corpus_path": "corpus/q04/correct.md",
+              "locator": "Evidence q04-correct-e03",
+              "marker": "两名记录者一起复核雨量。",
+              "fact_ids": ["q04-f04"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q04-correct-e01",
+            "q04-correct-e02",
+            "q04-correct-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["紫色石墨"],
+              ["南门"],
+              ["第三块石板"],
+              ["两名记录者"]
+            ],
+            "forbidden_any": ["绿色石墨", "东门", "第五块石板", "三名记录者"]
+          }
+        },
+        {
+          "condition": "disabled",
+          "corpus_path": null,
+          "retrieval_status": "no_match",
+          "expected_evidence": [],
+          "allowed_retrieved_evidence": [],
+          "answer_policy": {
+            "required_any_groups": [
+              ["没有足够证据", "无法确定", "无法回答", "资料不足"]
+            ],
+            "forbidden_any": [
+              "紫色石墨",
+              "南门",
+              "第三块石板",
+              "两名记录者",
+              "绿色石墨",
+              "东门",
+              "第五块石板",
+              "三名记录者"
+            ]
+          }
+        },
+        {
+          "condition": "irrelevant",
+          "corpus_path": "corpus/q04/irrelevant.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q04-irrelevant-e01",
+              "corpus_path": "corpus/q04/irrelevant.md",
+              "locator": "Evidence q04-irrelevant-e01",
+              "marker": "赤泉的陶匠把六只小杯放在西侧窑台。",
+              "fact_ids": []
+            }
+          ],
+          "allowed_retrieved_evidence": ["q04-irrelevant-e01"],
+          "answer_policy": {
+            "required_any_groups": [
+              ["没有足够证据", "无法确定", "无法回答", "资料不足"]
+            ],
+            "forbidden_any": [
+              "紫色石墨",
+              "南门",
+              "第三块石板",
+              "两名记录者",
+              "绿色石墨",
+              "东门",
+              "第五块石板",
+              "三名记录者"
+            ]
+          }
+        },
+        {
+          "condition": "updated",
+          "corpus_path": "corpus/q04/updated.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q04-updated-e01",
+              "corpus_path": "corpus/q04/updated.md",
+              "locator": "Evidence q04-updated-e01",
+              "marker": "月影谷用绿色石墨在雨簿上记录第一场雨。",
+              "fact_ids": ["q04-f01"]
+            },
+            {
+              "evidence_id": "q04-updated-e02",
+              "corpus_path": "corpus/q04/updated.md",
+              "locator": "Evidence q04-updated-e02",
+              "marker": "记录者把日期写在东门下的第五块石板。",
+              "fact_ids": ["q04-f02", "q04-f03"]
+            },
+            {
+              "evidence_id": "q04-updated-e03",
+              "corpus_path": "corpus/q04/updated.md",
+              "locator": "Evidence q04-updated-e03",
+              "marker": "三名记录者一起复核雨量。",
+              "fact_ids": ["q04-f04"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q04-updated-e01",
+            "q04-updated-e02",
+            "q04-updated-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [
+              ["绿色石墨"],
+              ["东门"],
+              ["第五块石板"],
+              ["三名记录者"]
+            ],
+            "forbidden_any": ["紫色石墨", "南门", "第三块石板", "两名记录者"]
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "q05",
+      "language": "zh",
+      "question": "青羽工坊怎样保存回声鼓的调音方法？",
+      "facts": [
+        {
+          "fact_id": "q05-f01",
+          "current_aliases": ["七弦架"],
+          "updated_aliases": ["九弦架"]
+        },
+        {
+          "fact_id": "q05-f02",
+          "current_aliases": ["青铜楔"],
+          "updated_aliases": ["黑曜石楔"]
+        },
+        {
+          "fact_id": "q05-f03",
+          "current_aliases": ["东侧陶盒"],
+          "updated_aliases": ["西侧木盒"]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "correct",
+          "corpus_path": "corpus/q05/correct.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q05-correct-e01",
+              "corpus_path": "corpus/q05/correct.md",
+              "locator": "Evidence q05-correct-e01",
+              "marker": "调音前把鼓放在七弦架上。",
+              "fact_ids": ["q05-f01"]
+            },
+            {
+              "evidence_id": "q05-correct-e02",
+              "corpus_path": "corpus/q05/correct.md",
+              "locator": "Evidence q05-correct-e02",
+              "marker": "主音由青铜楔固定。",
+              "fact_ids": ["q05-f02"]
+            },
+            {
+              "evidence_id": "q05-correct-e03",
+              "corpus_path": "corpus/q05/correct.md",
+              "locator": "Evidence q05-correct-e03",
+              "marker": "校准记录存放在东侧陶盒。",
+              "fact_ids": ["q05-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q05-correct-e01",
+            "q05-correct-e02",
+            "q05-correct-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [["七弦架"], ["青铜楔"], ["东侧陶盒"]],
+            "forbidden_any": ["九弦架", "黑曜石楔", "西侧木盒"]
+          }
+        },
+        {
+          "condition": "disabled",
+          "corpus_path": null,
+          "retrieval_status": "no_match",
+          "expected_evidence": [],
+          "allowed_retrieved_evidence": [],
+          "answer_policy": {
+            "required_any_groups": [
+              ["没有足够证据", "无法确定", "无法回答", "资料不足"]
+            ],
+            "forbidden_any": [
+              "七弦架",
+              "青铜楔",
+              "东侧陶盒",
+              "九弦架",
+              "黑曜石楔",
+              "西侧木盒"
+            ]
+          }
+        },
+        {
+          "condition": "irrelevant",
+          "corpus_path": "corpus/q05/irrelevant.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q05-irrelevant-e01",
+              "corpus_path": "corpus/q05/irrelevant.md",
+              "locator": "Evidence q05-irrelevant-e01",
+              "marker": "雾桥的织工把四卷灰线放进南边木柜。",
+              "fact_ids": []
+            }
+          ],
+          "allowed_retrieved_evidence": ["q05-irrelevant-e01"],
+          "answer_policy": {
+            "required_any_groups": [
+              ["没有足够证据", "无法确定", "无法回答", "资料不足"]
+            ],
+            "forbidden_any": [
+              "七弦架",
+              "青铜楔",
+              "东侧陶盒",
+              "九弦架",
+              "黑曜石楔",
+              "西侧木盒"
+            ]
+          }
+        },
+        {
+          "condition": "updated",
+          "corpus_path": "corpus/q05/updated.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q05-updated-e01",
+              "corpus_path": "corpus/q05/updated.md",
+              "locator": "Evidence q05-updated-e01",
+              "marker": "调音前把鼓放在九弦架上。",
+              "fact_ids": ["q05-f01"]
+            },
+            {
+              "evidence_id": "q05-updated-e02",
+              "corpus_path": "corpus/q05/updated.md",
+              "locator": "Evidence q05-updated-e02",
+              "marker": "主音由黑曜石楔固定。",
+              "fact_ids": ["q05-f02"]
+            },
+            {
+              "evidence_id": "q05-updated-e03",
+              "corpus_path": "corpus/q05/updated.md",
+              "locator": "Evidence q05-updated-e03",
+              "marker": "校准记录存放在西侧木盒。",
+              "fact_ids": ["q05-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q05-updated-e01",
+            "q05-updated-e02",
+            "q05-updated-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [["九弦架"], ["黑曜石楔"], ["西侧木盒"]],
+            "forbidden_any": ["七弦架", "青铜楔", "东侧陶盒"]
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "q06",
+      "language": "zh",
+      "question": "灰鹿议会在交换种子时遵循哪些封存条件？",
+      "facts": [
+        {
+          "fact_id": "q06-f01",
+          "current_aliases": ["四层棕榈纸"],
+          "updated_aliases": ["两层桑皮纸"]
+        },
+        {
+          "fact_id": "q06-f02",
+          "current_aliases": ["禾-二九"],
+          "updated_aliases": ["禾-三一"]
+        },
+        {
+          "fact_id": "q06-f03",
+          "current_aliases": ["北侧石室"],
+          "updated_aliases": ["南侧木室"]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "correct",
+          "corpus_path": "corpus/q06/correct.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q06-correct-e01",
+              "corpus_path": "corpus/q06/correct.md",
+              "locator": "Evidence q06-correct-e01",
+              "marker": "交换包使用四层棕榈纸。",
+              "fact_ids": ["q06-f01"]
+            },
+            {
+              "evidence_id": "q06-correct-e02",
+              "corpus_path": "corpus/q06/correct.md",
+              "locator": "Evidence q06-correct-e02",
+              "marker": "封条写着“禾-二九”。",
+              "fact_ids": ["q06-f02"]
+            },
+            {
+              "evidence_id": "q06-correct-e03",
+              "corpus_path": "corpus/q06/correct.md",
+              "locator": "Evidence q06-correct-e03",
+              "marker": "包裹放在北侧石室。",
+              "fact_ids": ["q06-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q06-correct-e01",
+            "q06-correct-e02",
+            "q06-correct-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [["四层棕榈纸"], ["禾-二九"], ["北侧石室"]],
+            "forbidden_any": ["两层桑皮纸", "禾-三一", "南侧木室"]
+          }
+        },
+        {
+          "condition": "disabled",
+          "corpus_path": null,
+          "retrieval_status": "no_match",
+          "expected_evidence": [],
+          "allowed_retrieved_evidence": [],
+          "answer_policy": {
+            "required_any_groups": [
+              ["没有足够证据", "无法确定", "无法回答", "资料不足"]
+            ],
+            "forbidden_any": [
+              "四层棕榈纸",
+              "禾-二九",
+              "北侧石室",
+              "两层桑皮纸",
+              "禾-三一",
+              "南侧木室"
+            ]
+          }
+        },
+        {
+          "condition": "irrelevant",
+          "corpus_path": "corpus/q06/irrelevant.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q06-irrelevant-e01",
+              "corpus_path": "corpus/q06/irrelevant.md",
+              "locator": "Evidence q06-irrelevant-e01",
+              "marker": "白鹿渡的船夫把三枚石牌挂在东岸木桩。",
+              "fact_ids": []
+            }
+          ],
+          "allowed_retrieved_evidence": ["q06-irrelevant-e01"],
+          "answer_policy": {
+            "required_any_groups": [
+              ["没有足够证据", "无法确定", "无法回答", "资料不足"]
+            ],
+            "forbidden_any": [
+              "四层棕榈纸",
+              "禾-二九",
+              "北侧石室",
+              "两层桑皮纸",
+              "禾-三一",
+              "南侧木室"
+            ]
+          }
+        },
+        {
+          "condition": "updated",
+          "corpus_path": "corpus/q06/updated.md",
+          "retrieval_status": "matched",
+          "expected_evidence": [
+            {
+              "evidence_id": "q06-updated-e01",
+              "corpus_path": "corpus/q06/updated.md",
+              "locator": "Evidence q06-updated-e01",
+              "marker": "交换包使用两层桑皮纸。",
+              "fact_ids": ["q06-f01"]
+            },
+            {
+              "evidence_id": "q06-updated-e02",
+              "corpus_path": "corpus/q06/updated.md",
+              "locator": "Evidence q06-updated-e02",
+              "marker": "封条写着“禾-三一”。",
+              "fact_ids": ["q06-f02"]
+            },
+            {
+              "evidence_id": "q06-updated-e03",
+              "corpus_path": "corpus/q06/updated.md",
+              "locator": "Evidence q06-updated-e03",
+              "marker": "包裹放在南侧木室。",
+              "fact_ids": ["q06-f03"]
+            }
+          ],
+          "allowed_retrieved_evidence": [
+            "q06-updated-e01",
+            "q06-updated-e02",
+            "q06-updated-e03"
+          ],
+          "answer_policy": {
+            "required_any_groups": [["两层桑皮纸"], ["禾-三一"], ["南侧木室"]],
+            "forbidden_any": ["四层棕榈纸", "禾-二九", "北侧石室"]
+          }
+        }
+      ]
+    }
+  ]
+}

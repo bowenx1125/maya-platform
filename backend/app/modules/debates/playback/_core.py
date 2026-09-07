@@ -27,6 +27,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.evidence_trace import public_evidence_trace
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.round_phase import phase_for_round
+from app.modules.debates.round_count import uses_segment_protocol
 from app.providers.tts import MockTTSProvider, TTSProvider
 
 from .audio import AudioMetadata, AudioStore, MediaTicketBinding, MediaTicketStore
@@ -381,6 +382,7 @@ class PlaybackCore:
                 ),
                 None,
             )
+            await self.enqueue_frozen_final(db, debate_id)
             if turn is None or self._turn_ready(turn):
                 # A ready turn needs no work; prepare_turn announces it when
                 # the classroom reconnects.
@@ -757,6 +759,29 @@ class PlaybackCore:
         trace = PlaybackCore._evidence_trace(turn)
         return {"evidence_trace": trace} if trace else {}
 
+    def _segment_payload(self, db: Any, turn: Any) -> dict[str, Any]:
+        raw = self._get(turn, "structured_json")
+        if not raw or '"segment_turn_v2"' not in raw:
+            return {}
+        from app.modules.debates.models import DebateParticipant, DebateTurn
+        from app.modules.debates.setup.segment_projection import segment_projection
+
+        saved = db.get(DebateTurn, str(turn.id))
+        participant = db.get(DebateParticipant, str(turn.participant_id))
+        if saved is None or participant is None:
+            raise invalid_state("The saved paragraph owner is unavailable.")
+        from app.core.models import StoredFile
+
+        audio = db.get(StoredFile, saved.audio_file_id) if saved.audio_file_id else None
+        result, sources = segment_projection(db, saved, participant)
+        if result is None:
+            raise invalid_state("The saved paragraph is unavailable.")
+        return {
+            "segment_turn": result.model_dump(mode="json"),
+            "source_details": [item.model_dump(mode="json") for item in sources],
+            "audio_ready": audio is not None and audio.state == "active",
+        }
+
     def _retained_audio_record(self, db: Any, debate: Any, turn: Any) -> Any | None:
         reader = getattr(self.repository, "retained_audio_file", None)
         if not callable(reader):
@@ -874,9 +899,9 @@ class PlaybackCore:
         # example, when a newer Debate replaces the retained audio), so this
         # check must be repeated at every waiting/Next readiness gate rather
         # than relying on the replay-start snapshot alone.
-        if self.repository.current_audio_debate_id(db, self._course_id(debate)) != self._debate_id(
-            debate
-        ):
+        if not uses_segment_protocol(debate) and self.repository.current_audio_debate_id(
+            db, self._course_id(debate)
+        ) != self._debate_id(debate):
             return False
         return self._validated_turn_audio(db, debate, turn) is not None
 
@@ -884,7 +909,10 @@ class PlaybackCore:
         """Return whether the course currently retains every public turn's bytes."""
 
         debate = self._get_debate(db, debate_id)
-        if self.repository.current_audio_debate_id(db, self._course_id(debate)) != debate_id:
+        if (
+            not uses_segment_protocol(debate)
+            and self.repository.current_audio_debate_id(db, self._course_id(debate)) != debate_id
+        ):
             return False
         turns = self._turns(db, debate)
         public_turns = [turn for turn in turns if self._turn_public(turn)]
@@ -1537,6 +1565,29 @@ class PlaybackCore:
             # A synchronous caller can explicitly invoke prepare_turn.  Do not
             # run unbounded background work on a closed request loop.
             return False
+
+    async def enqueue_frozen_final(self, db: Any, debate_id: str) -> None:
+        """Resume the adjacent final speaker from the committed classroom cutoff."""
+        debate = self._get_debate(db, debate_id)
+        if not uses_segment_protocol(debate) or not self._get(debate, "final_input_json"):
+            return
+        if self._get(debate, "status") != "running":
+            return
+        state = self._state(db, debate)
+        if state.mode != "live" or state.status != "waiting_next":
+            return
+        turns = self._turns(db, debate)
+        current = next((item for item in turns if str(item.id) == state.current_turn_id), None)
+        if current is None:
+            return
+        successor, unique = self._adjacent_successor(turns, current)
+        if successor is None or not unique or self._turn_ready(successor):
+            return
+        if self._get(successor, "generation_status") != "pending" or self._get(
+            successor, "safe_error_code"
+        ):
+            return
+        await self._enqueue(debate, successor)
 
     def _prepare_audio_swap(
         self,

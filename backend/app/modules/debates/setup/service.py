@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,7 +43,11 @@ from app.core.models import (
 from app.modules.agents.persona_service import is_persona_confirmed
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
-from app.modules.debates.round_count import expected_turn_count
+from app.modules.debates.round_count import (
+    expected_turn_count,
+    preview_turn_count,
+    uses_segment_protocol,
+)
 from app.modules.debates.schemas import (
     RULE_SET_ID_MUTUAL_LEARNING,
     DebateDetail,
@@ -66,7 +70,7 @@ from app.modules.debates.setup.rules import (
     build_turn_plan,
     canonical_rule_snapshot_json,
 )
-from app.modules.debates.topic_language import TopicLanguageError, validate_english_topic
+from app.modules.debates.topic_language import TopicLanguageError, validate_topic
 from app.modules.interactions.service import create_closed_window
 
 
@@ -510,11 +514,11 @@ def _ensure_payload(payload: DebateDraftRequest) -> None:
         raise validation_failure(exc.message, code=exc.code) from exc
 
 
-def _validated_topic(value: str) -> str:
+def _validated_topic(value: str, output_language: str = "en") -> str:
     """Apply the shared topic boundary and expose its stable API error."""
 
     try:
-        return validate_english_topic(value)
+        return validate_topic(value, output_language)
     except TopicLanguageError as exc:
         raise validation_failure(exc.message, exc.details, code=exc.code) from exc
 
@@ -704,6 +708,27 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         )
         or 0
     )
+    preview = None
+    if uses_segment_protocol(debate):
+        preview_expected = preview_turn_count(debate, len(participants))
+        preview_prepared = int(
+            db.scalar(
+                select(func.count())
+                .select_from(DebateTurn)
+                .where(
+                    DebateTurn.debate_id == debate.id,
+                    DebateTurn.round_no < _round_count_from_snapshot(debate),
+                    DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
+                    DebateTurn.audio_file_id.is_not(None),
+                )
+            )
+            or 0
+        )
+        preview = {
+            "prepared_turns": preview_prepared,
+            "expected_turns": preview_expected,
+            "ready": preview_prepared == preview_expected and preview_expected > 0,
+        }
     playback = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate.id))
     if playback is None:
         playback_dto = PlaybackStateDTO(
@@ -757,6 +782,12 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
     ]
     turn_dtos: list[DebateTurnDTO] = []
     synthesis_inputs: list[dict[str, Any]] = []
+    participant_by_id = {row.id: row for row in participants}
+    from app.modules.debates.setup.segment_projection import (
+        preview_turn_projection,
+        segment_projection,
+    )
+
     for row in turn_rows:
         # TurnSource is imported lazily to keep this service's core imports
         # concise and to avoid a circular type-only dependency.
@@ -766,9 +797,20 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             select(TurnSource).where(TurnSource.turn_id == row.id).order_by(TurnSource.rank)
         ).all()
         mutual_result = None
+        segment_result, segment_sources = segment_projection(
+            db, row, participant_by_id[row.participant_id]
+        )
         phase = None
+        if segment_result is not None:
+            from app.modules.debates.generation.round_phase import phase_for_round
+
+            phase = phase_for_round(row.round_no, _round_count_from_snapshot(debate)).value
         evidence_trace: list[dict[str, Any]] = []
-        if str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING and row.structured_json:
+        if (
+            str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING
+            and row.structured_json
+            and segment_result is None
+        ):
             from app.modules.debates.generation.round_phase import phase_for_round
             from app.modules.debates.generation.types import MutualLearningTurnResultV1
 
@@ -823,6 +865,15 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                         for source in source_rows
                     ],
                     "mutual_learning": mutual_result,
+                    "segment_turn": segment_result,
+                    "source_details": segment_sources,
+                    "audio_ready": bool(
+                        row.audio_file_id
+                        and (audio_file := db.get(StoredFile, row.audio_file_id)) is not None
+                        and audio_file.state == "active"
+                    )
+                    if uses_segment_protocol(debate)
+                    else None,
                     "evidence_trace": evidence_trace,
                 }
             )
@@ -848,11 +899,28 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "last_sequence": debate.last_sequence,
             "rule_set_id": debate.rule_set_id,
             "round_count": _round_count_from_snapshot(debate),
+            "output_language": debate.output_language,
+            "turn_protocol": "segments_v2" if uses_segment_protocol(debate) else None,
+            "final_input_frozen": bool(debate.final_input_json),
             # The list projection has carried these since pre-warm landed; the
             # detail did not, so a debate's own page reported 0/0 and the
             # language it was generated in came back as null.
             "prepared_turns": prepared_turns,
             "expected_turns": expected_turn_count(debate, len(participant_dtos)),
+            "preview": preview,
+            "preview_turns": [
+                preview_turn_projection(db, turn, participant_by_id[turn.participant_id])
+                for turn in db.scalars(
+                    select(DebateTurn)
+                    .where(
+                        DebateTurn.debate_id == debate.id,
+                        DebateTurn.round_no < _round_count_from_snapshot(debate),
+                    )
+                    .order_by(DebateTurn.turn_index)
+                ).all()
+            ]
+            if uses_segment_protocol(debate)
+            else [],
             "participants": participant_dtos,
             "public_turns": turn_dtos,
             "playback": playback_dto,
@@ -870,6 +938,8 @@ def debate_summary(
     prepared_turns: int = 0,
     expected_turns: int = 0,
     stall: DebateStall | None = None,
+    preview_prepared: int = 0,
+    participant_count: int = 0,
 ) -> DebateSummary:
     return DebateSummary.model_validate(
         {
@@ -881,6 +951,14 @@ def debate_summary(
             "prepared_turns": prepared_turns,
             "expected_turns": expected_turns,
             "stall": stall,
+            "preview": {
+                "prepared_turns": preview_prepared,
+                "expected_turns": preview_turn_count(debate, participant_count),
+                "ready": preview_prepared == preview_turn_count(debate, participant_count)
+                and participant_count > 0,
+            }
+            if uses_segment_protocol(debate) and participant_count > 0
+            else None,
         }
     )
 
@@ -896,7 +974,7 @@ def create_debate_draft(
 ) -> DebateDetail:
     require_teacher_course(db, actor_user_id, course_id)
     _find_course(db, course_id)
-    topic = _validated_topic(payload.topic)
+    topic = _validated_topic(payload.topic, payload.output_language)
     _ensure_payload(payload)
     body_hash = _canonical_hash(
         {
@@ -921,10 +999,12 @@ def create_debate_draft(
         id=str(uuid4()),
         course_id=course_id,
         topic=topic,
+        output_language=payload.output_language,
         rule_set_id=payload.rule_set_id,
         rule_snapshot_json=canonical_rule_snapshot_json(
             rule_set_id=payload.rule_set_id,
             round_count=payload.round_count,
+            turn_protocol=payload.turn_protocol,
         ),
         status="draft",
         revision=0,
@@ -1008,19 +1088,31 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     # the screen a teacher watches while a draft warms, and it is polled.
     summaries: list[DebateSummary] = []
     ready_by_debate: dict[str, int] = {}
+    preview_by_debate: dict[str, int] = {}
+    rounds_by_debate = {row.id: _round_count_from_snapshot(row) for row in rows}
     participants_by_debate: dict[str, int] = {}
     stall_by_debate: dict[str, DebateStall] = {}
     if rows:
         ids = [row.id for row in rows]
-        for debate_id, ready in db.execute(
-            select(DebateTurn.debate_id, func.count())
+        for debate_id, round_no, audio_ready, ready in db.execute(
+            select(
+                DebateTurn.debate_id,
+                DebateTurn.round_no,
+                DebateTurn.audio_file_id.is_not(None),
+                func.count(),
+            )
             .where(
                 DebateTurn.debate_id.in_(ids),
                 DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
             )
-            .group_by(DebateTurn.debate_id)
+            .group_by(
+                DebateTurn.debate_id, DebateTurn.round_no, DebateTurn.audio_file_id.is_not(None)
+            )
         ):
-            ready_by_debate[str(debate_id)] = int(ready)
+            key = str(debate_id)
+            ready_by_debate[key] = ready_by_debate.get(key, 0) + int(ready)
+            if int(round_no) < rounds_by_debate[key] and audio_ready:
+                preview_by_debate[key] = preview_by_debate.get(key, 0) + int(ready)
         for debate_id, count in db.execute(
             select(DebateParticipant.debate_id, func.count())
             .where(DebateParticipant.debate_id.in_(ids))
@@ -1034,11 +1126,22 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                 DebateTurn.debate_id,
                 DebateTurn.id,
                 DebateTurn.round_no,
-                DebateTurn.safe_error_code,
+                func.coalesce(DebateTurn.safe_error_code, Job.safe_error_code),
+            )
+            .outerjoin(
+                Job,
+                and_(
+                    Job.debate_id == DebateTurn.debate_id,
+                    Job.turn_id == DebateTurn.id,
+                    Job.operation == "debate_turn_prepare",
+                ),
             )
             .where(
                 DebateTurn.debate_id.in_(ids),
-                DebateTurn.generation_status.in_(("failed", "turn_generation_failed")),
+                or_(
+                    DebateTurn.generation_status.in_(("failed", "turn_generation_failed")),
+                    and_(DebateTurn.generation_status == "pending", Job.state == "failed"),
+                ),
             )
             .order_by(DebateTurn.debate_id, DebateTurn.turn_index)
         ):
@@ -1057,6 +1160,8 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                 prepared_turns=ready_by_debate.get(str(row.id), 0),
                 expected_turns=expected_turn_count(row, participants_by_debate.get(str(row.id), 0)),
                 stall=stall_by_debate.get(str(row.id)),
+                preview_prepared=preview_by_debate.get(str(row.id), 0),
+                participant_count=participants_by_debate.get(str(row.id), 0),
             )
         )
     return summaries
@@ -1102,7 +1207,7 @@ def update_debate_draft(
     require_teacher_course(db, actor_user_id, debate.course_id)
     if debate.status != "draft":
         raise invalid_state("Only a draft Debate can be updated.")
-    topic = _validated_topic(payload.topic)
+    topic = _validated_topic(payload.topic, payload.output_language)
     _ensure_payload(payload)
     timestamp = utc_now()
     # A draft warms its turns in the background, so an edit has to discard
@@ -1120,10 +1225,12 @@ def update_debate_draft(
         )
         .values(
             topic=topic,
+            output_language=payload.output_language,
             rule_set_id=payload.rule_set_id,
             rule_snapshot_json=canonical_rule_snapshot_json(
                 rule_set_id=payload.rule_set_id,
                 round_count=payload.round_count,
+                turn_protocol=payload.turn_protocol,
             ),
             revision=Debate.revision + 1,
             updated_at=timestamp,

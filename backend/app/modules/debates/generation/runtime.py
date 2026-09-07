@@ -416,17 +416,18 @@ def _transport_decision(error: object) -> tuple[str, str, bool]:
 
 
 def _invoke(method: Callable[..., object], *args: object, **kwargs: object) -> object:
-    """Use the post-0014 keyword shape, then the pre-migration shape."""
+    """Bind a legacy-compatible signature before making exactly one call."""
 
-    try:
-        return method(*args, **kwargs)
-    except TypeError as first:
-        if kwargs:
+    if kwargs:
+        try:
+            inspect.signature(method).bind(*args, **kwargs)
+        except (TypeError, ValueError):
             try:
-                return method(*args)
-            except TypeError:
-                raise first from None
-        raise
+                inspect.signature(method).bind(*args)
+            except (TypeError, ValueError) as exc:
+                raise TypeError("LLM port signature does not match") from exc
+            return method(*args)
+    return method(*args, **kwargs)
 
 
 def _method(value: object, *names: str) -> Callable[..., object] | None:

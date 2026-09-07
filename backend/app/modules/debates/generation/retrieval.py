@@ -13,6 +13,7 @@ from app.modules.knowledge.mock_lexical import (
     MockLexicalAnchorV2,
 )
 
+from .segments import SegmentBarrage, SegmentPersona, coerce_persona
 from .types import (
     GenerationContext,
     PendingQuestion,
@@ -24,7 +25,14 @@ RELAXED_THRESHOLD = 0.08
 MAX_SUBQUERIES = 3
 TOP_K = 6
 MOCK_LEXICAL_CANDIDATE_LIMIT = 256
-SUBQUERY_KINDS = {"viewpoint", "pending_question", "rebuttal", "updated_position", "context"}
+SUBQUERY_KINDS = {
+    "viewpoint",
+    "pending_question",
+    "rebuttal",
+    "updated_position",
+    "context",
+    "barrage",
+}
 
 
 class RAGRetrievalError(RuntimeError):
@@ -339,6 +347,9 @@ def build_turn_subqueries(
 ) -> tuple[TurnSubquery, ...]:
     """Build the bounded, typed query set for round one or round two."""
 
+    if getattr(context, "turn_protocol", "legacy_v1") == "segments_v2":
+        return build_segment_subqueries(context, barrages=context.barrages)
+
     position = context.participant.effective_position_summary or "the current position"
     topic = context.topic.strip()
     # New mutual-learning plans use their explicit phase and round barrier.
@@ -417,6 +428,131 @@ def build_turn_subqueries(
     return tuple(queries[:MAX_SUBQUERIES])
 
 
+def _segment_persona_focus(persona: SegmentPersona) -> str:
+    """Render only Persona fields useful for evidence matching."""
+
+    return "\n".join(
+        (
+            f"Persona name: {persona.name}",
+            f"Role: {persona.identity['role']}",
+            f"Cultural lens: {'; '.join(persona.cultural_lens)}",
+            f"Initial position: {persona.initial_position}",
+        )
+    )
+
+
+def _segment_barrage_rows(rows: Sequence[object]) -> tuple[SegmentBarrage, ...]:
+    """Read the already-frozen anonymous pool used by a final turn query."""
+
+    result: list[SegmentBarrage] = []
+    for index, row in enumerate(rows, start=1):
+        if isinstance(row, SegmentBarrage):
+            result.append(row)
+            continue
+        if not isinstance(row, Mapping):
+            raise RAGRetrievalError("A frozen barrage is not a mapping.", technical=False)
+        row_id = row.get("id", f"B{index}")
+        text = row.get("text")
+        if not isinstance(row_id, str) or not isinstance(text, str):
+            raise RAGRetrievalError("A frozen barrage has invalid shape.", technical=False)
+        try:
+            result.append(SegmentBarrage(id=row_id, text=text))
+        except ValueError as exc:
+            raise RAGRetrievalError("A frozen barrage has invalid text.", technical=False) from exc
+    return tuple(result)
+
+
+def build_segment_subqueries(
+    context: GenerationContext,
+    *,
+    persona: object | None = None,
+    barrages: Sequence[object] = (),
+) -> tuple[TurnSubquery, ...]:
+    """Build the bounded deterministic query set for ``segments_v2``.
+
+    Queries stay focused for embedding quality.  Opening starts with the exact
+    topic and a short Persona focus query; later turns use the current
+    position.  The complete earlier-round speech remains in the LLM history
+    group, while one final query contains every frozen barrage candidate so a
+    final turn cannot silently omit a classroom question.  No query-planning
+    model runs here, and no history or barrage text is summarized or truncated
+    in the LLM input.
+    """
+
+    if not isinstance(context, GenerationContext):
+        raise RAGRetrievalError("segment retrieval needs a typed context.", technical=False)
+    topic = context.topic.strip()
+    if not topic:
+        raise RAGRetrievalError("segment retrieval needs a topic.", technical=False)
+    source_persona = persona if persona is not None else context.participant.persona
+    if source_persona is None:
+        raise RAGRetrievalError("segments_v2 retrieval needs a compiled Persona.", technical=False)
+    try:
+        segment_persona = (
+            source_persona
+            if isinstance(source_persona, SegmentPersona)
+            else coerce_persona(source_persona)  # type: ignore[arg-type]
+        )
+    except (TypeError, ValueError) as exc:
+        raise RAGRetrievalError(
+            "segments_v2 retrieval Persona is invalid.", technical=False
+        ) from exc
+
+    if context.turn.round_no == 1 or getattr(context.turn, "phase", "") == "opening":
+        queries = [
+            TurnSubquery("viewpoint", topic),
+            TurnSubquery(
+                "context",
+                (
+                    f"{topic}\n"
+                    "Evidence relevant to this Persona focus:\n"
+                    f"{_segment_persona_focus(segment_persona)}"
+                ),
+            ),
+        ]
+    else:
+        current_position = context.participant.effective_position_summary.strip()
+        queries = [
+            TurnSubquery(
+                "updated_position",
+                (
+                    f"{topic}\nCurrent position: "
+                    f"{current_position or segment_persona.initial_position}"
+                ),
+            ),
+            TurnSubquery(
+                "rebuttal",
+                f"{topic}\nEvidence for a careful response to earlier-round perspectives.",
+            ),
+        ]
+    frozen_barrages = _segment_barrage_rows(barrages)
+    if frozen_barrages:
+        barrage_text = "\n\n".join(f"[{item.id}] {item.text}" for item in frozen_barrages)
+        queries.append(
+            TurnSubquery(
+                "barrage",
+                (
+                    f"Topic:\n{topic}\n"
+                    "Frozen anonymous classroom barrages to address in the final turn:\n"
+                    f"{barrage_text}\n"
+                    "Find evidence relevant to every listed barrage."
+                ),
+            )
+        )
+    else:
+        queries.append(
+            TurnSubquery(
+                "updated_position",
+                (
+                    f"Topic:\n{topic}\n"
+                    f"Current Persona position:\n{segment_persona.initial_position}\n"
+                    "Find evidence that supports or qualifies this considered position."
+                ),
+            )
+        )
+    return tuple(queries)
+
+
 __all__ = [
     "MAX_SUBQUERIES",
     "MOCK_LEXICAL_CANDIDATE_LIMIT",
@@ -429,5 +565,6 @@ __all__ = [
     "SUBQUERY_KINDS",
     "TOP_K",
     "TurnSubquery",
+    "build_segment_subqueries",
     "build_turn_subqueries",
 ]

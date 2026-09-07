@@ -50,7 +50,10 @@ function isAllowedNonLetter(
  * Return a trimmed topic only when it satisfies the frozen English-topic
  * boundary. The result never mutates the input string.
  */
-export function validateDebateTopic(value: string): DebateTopicValidation {
+export function validateDebateTopic(
+  value: string,
+  language: "en" | "zh" = "en",
+): DebateTopicValidation {
   const normalized = value.trim();
   if (!normalized) return { valid: false, reason: "required" };
 
@@ -60,7 +63,15 @@ export function validateDebateTopic(value: string): DebateTopicValidation {
     if (FORMAT.test(character) || CONTROL.test(character)) {
       return { valid: false, reason: "english" };
     }
-    if (isLatinLetter(character)) {
+    const point = character.codePointAt(0) ?? 0;
+    const isHan =
+      language === "zh" &&
+      ((point >= 0x3400 && point <= 0x4dbf) ||
+        (point >= 0x4e00 && point <= 0x9fff) ||
+        (point >= 0xf900 && point <= 0xfaff) ||
+        (point >= 0x20000 && point <= 0x2fa1f) ||
+        (point >= 0x30000 && point <= 0x323af));
+    if (isLatinLetter(character) || isHan) {
       hasLatinLetter = true;
       canAcceptCombiningMark = true;
       continue;

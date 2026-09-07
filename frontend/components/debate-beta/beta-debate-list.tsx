@@ -25,21 +25,15 @@ const COPY = {
     eyebrow: "Debates (beta)",
     title: "Classroom Stage",
     unavailable: "No teacher course is available for this account.",
-    empty:
-      "Nothing ready for class yet. A debate appears here once it has been run to the end in Preview Debates.",
+    empty: "No prepared debates.",
     open: "Open on the bench",
-    classic: "Preview Debates",
-    classicHint: "Create, run and check debates before class in",
   },
   zh: {
     eyebrow: "Debates（beta）",
     title: "课堂讲席",
     unavailable: "当前账号没有可用的教师课程。",
-    empty:
-      "还没有可用于上课的辩论。在 Preview Debates 里把一场跑到结束，它就会出现在这里。",
+    empty: "还没有准备好的辩论。",
     open: "在讲席上打开",
-    classic: "Preview Debates",
-    classicHint: "课前的创建、生成与检查在",
   },
 } as const;
 
@@ -61,15 +55,15 @@ export function BetaDebateList() {
     setLoading(true);
     setError(null);
     try {
-      // Only debates that reached the end. Generation, and every way it can
-      // fail, belongs to the preview bench before class; the classroom
-      // replays what is already written and calls no provider at all.
       const all = await api.debates(courseId);
       setDebates(
-        all.filter(
-          (debate) =>
-            debate.status === "debate_finished" ||
-            debate.status === "completed",
+        all.filter((debate) =>
+          debate.preview
+            ? debate.preview.ready &&
+              !["failed", "stopped"].includes(debate.status)
+            : ["debate_finished", "completed"].includes(debate.status) &&
+              debate.expected_turns > 0 &&
+              debate.prepared_turns === debate.expected_turns,
         ),
       );
     } catch (cause) {
@@ -87,10 +81,6 @@ export function BetaDebateList() {
   return (
     <>
       <PageIntro eyebrow={copy.eyebrow} title={copy.title} />
-      <p className={styles.hint}>
-        {copy.classicHint} <Link href="/teacher/debates">{copy.classic}</Link>
-      </p>
-
       {loading ? <LoadingCard /> : null}
       {!loading && error ? (
         <ErrorNotice error={error} onRetry={() => void load()} />
@@ -107,11 +97,17 @@ export function BetaDebateList() {
                   <h2>{debate.topic}</h2>
                   <span className={styles.meta}>
                     <span className={styles.status} data-status={debate.status}>
-                      {statusLabel(debate.status, locale)}
+                      {debate.preview?.ready && debate.status === "draft"
+                        ? "Ready"
+                        : statusLabel(debate.status, locale)}
                     </span>
                     {debate.expected_turns > 0 ? (
                       <span className={styles.progress}>
-                        {debate.prepared_turns}/{debate.expected_turns}
+                        {debate.preview?.prepared_turns ??
+                          debate.prepared_turns}
+                        /
+                        {debate.preview?.expected_turns ??
+                          debate.expected_turns}
                       </span>
                     ) : null}
                   </span>

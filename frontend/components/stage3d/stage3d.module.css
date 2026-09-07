@@ -34,6 +34,16 @@
   );
 }
 
+/* The beta Public Debate panel floats above the right side of the bench. Keep
+   the renderer and its DOM anchors inside the remaining canvas so the camera
+   uses the same width and height that the teacher can actually see. */
+.canvasViewport {
+  position: absolute;
+  inset: 0 480px 0 0;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .canvas {
   position: absolute;
   inset: 0;
@@ -319,6 +329,17 @@
 }
 
 @media (max-width: 900px) {
+  /* On a narrow screen the Public Debate panel moves below the scene. The
+     44dvh viewport leaves a small breathing gap above its 56dvh panel. */
+  .canvasViewport {
+    top: 0;
+    right: 0;
+    bottom: auto;
+    height: calc(44dvh - 24px);
+    min-height: 180px;
+    max-height: calc(100% - 24px);
+  }
+
   .joinCard svg {
     width: 46px;
     height: 46px;

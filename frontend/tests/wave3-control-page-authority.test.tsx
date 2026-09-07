@@ -15,6 +15,7 @@ import { PlatformApiError } from "../lib/api";
 const useSessionMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
   useParams: () => ({ debate_id: "20000000-0000-4000-8000-000000000001" }),
 }));
 vi.mock("../components/session-provider", () => ({
@@ -27,6 +28,19 @@ vi.mock("../components/app-shell", () => ({
 vi.mock("../components/ui", () => ({
   ErrorNotice: () => <div>Error</div>,
   LoadingCard: () => <div>Loading</div>,
+  SectionCard: ({
+    children,
+    title,
+  }: {
+    children: ReactNode;
+    title?: string;
+  }) => (
+    <section>
+      {title ? <h2>{title}</h2> : null}
+      {children}
+    </section>
+  ),
+  StatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
   PageIntro: ({ title, action }: { title: string; action?: ReactNode }) => (
     <header>
       <h1>{title}</h1>
@@ -69,6 +83,11 @@ function runningDetail(): DebateDetail {
     created_at: "2026-08-30T00:00:00Z",
     prepared_turns: 0,
     expected_turns: 0,
+    preview: null,
+    output_language: "en",
+    turn_protocol: null,
+    preview_turns: [],
+    final_input_frozen: false,
     stall: null,
     revision: 1,
     last_sequence: 0,
@@ -101,6 +120,7 @@ function runningDetail(): DebateDetail {
         speech: "A published classroom speech.",
         retrieval_status: "matched",
         grounding_mode: "mixed",
+        segment_turn: null,
         sources: [],
       },
     ],
@@ -213,6 +233,7 @@ function pageApi() {
     pauseDebate: vi.fn(),
     resumeDebate: vi.fn(),
     replayDebate: vi.fn(),
+    retryDebatePreparation: vi.fn().mockResolvedValue(detail.playback),
   };
 }
 
@@ -244,6 +265,71 @@ afterEach(() => {
 });
 
 describe("Wave 3 control-page Finish authority gate", () => {
+  it("uses the teacher preview for the segments protocol and gates classroom access", async () => {
+    const preview = runningDetail();
+    preview.turn_protocol = "segments_v2";
+    preview.preview = { prepared_turns: 1, expected_turns: 1, ready: true };
+    preview.preview_turns = [
+      {
+        id: turnId,
+        participant_id: participantId,
+        round_no: 1,
+        turn_index: 0,
+        speech: "Saved teacher preview speech.",
+        generation_status: "ready",
+        audio_ready: true,
+        segments: [],
+        sources: [],
+      },
+    ];
+    const api = pageApi();
+    api.debate.mockResolvedValue(preview);
+    useSessionMock.mockReturnValue({ api });
+
+    render(<TeacherDebateControlPage />);
+
+    expect(await screen.findByTestId("debate-preview")).toBeTruthy();
+    expect(screen.getByText("Saved teacher preview speech.")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Open Classroom" }).getAttribute("href"),
+    ).toBe(`/teacher/debates-beta/${debateId}/control`);
+    expect(screen.queryByRole("button", { name: "End" })).toBeNull();
+  });
+
+  it("retries one failed preview turn with the saved control version", async () => {
+    const preview = runningDetail();
+    preview.turn_protocol = "segments_v2";
+    preview.preview = { prepared_turns: 0, expected_turns: 1, ready: false };
+    preview.preview_turns = [
+      {
+        id: turnId,
+        participant_id: participantId,
+        round_no: 1,
+        turn_index: 0,
+        speech: "Saved speech despite the audio failure.",
+        generation_status: "failed",
+        audio_ready: false,
+        safe_error_code: "tts_failed",
+        segments: [],
+        sources: [],
+      },
+    ];
+    const api = pageApi();
+    api.debate.mockResolvedValue(preview);
+    useSessionMock.mockReturnValue({ api });
+
+    render(<TeacherDebateControlPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Retry turn" }));
+    await waitFor(() =>
+      expect(api.retryDebatePreparation).toHaveBeenCalledWith(
+        debateId,
+        { turn_id: turnId, expected_control_version: 1 },
+        expect.anything(),
+      ),
+    );
+  });
+
   it("keeps Finish blocked after superseded even when public paused state advances", async () => {
     const { api, finish, socket } = await mountWithController();
     socket.emit("message", revoked("superseded"));

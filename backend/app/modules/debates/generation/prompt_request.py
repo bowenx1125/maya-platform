@@ -20,9 +20,15 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.agents.persona import (
     PersonaProviderViewV1,
+    PersonaProviderViewV2,
+    PersonaProviderViewVersionDTO,
     PersonaSpecV1,
+    PersonaSpecV2,
+    PersonaSpecVersion,
+    parse_persona_spec,
     persona_spec_hash,
     provider_view,
+    provider_view_v1,
 )
 
 from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
@@ -709,8 +715,10 @@ def compute_prompt_rule_hash(rule_set_id: str, rules: Sequence[str]) -> str:
     return _hash({"rule_set_id": rule_set_id, "rules": tuple(rules)})
 
 
-def compute_prompt_persona_hash(persona: PersonaSpecV1 | PersonaProviderViewV1) -> str:
-    if isinstance(persona, PersonaSpecV1):
+def compute_prompt_persona_hash(
+    persona: PersonaSpecVersion | PersonaProviderViewVersionDTO,
+) -> str:
+    if isinstance(persona, (PersonaSpecV1, PersonaSpecV2)):
         return persona_spec_hash(persona)
     return _hash(persona.model_dump(mode="json"))
 
@@ -719,7 +727,7 @@ def confirmed_persona_provider_view(
     persona_spec_json: str,
     *,
     expected_persona_spec_hash: str | None = None,
-) -> tuple[PersonaProviderViewV1, str]:
+) -> tuple[PersonaProviderViewV1 | PersonaProviderViewV2, str]:
     """Parse one persisted confirmed Persona without accepting raw fallback.
 
     The persistence adapter supplies the canonical ``persona_spec_json`` and
@@ -734,7 +742,7 @@ def confirmed_persona_provider_view(
         )
     try:
         decoded = json.loads(persona_spec_json)
-        spec = PersonaSpecV1.model_validate(decoded)
+        spec = parse_persona_spec(decoded)
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise PromptRequestError(
             "the persisted Persona is invalid", code="persona_invalid"
@@ -859,7 +867,7 @@ def build_prompt_request(
             )
     if isinstance(persona, PersonaSpecV1):
         try:
-            current_persona = provider_view(persona)
+            current_persona = provider_view_v1(persona)
         except ValueError as exc:
             raise PromptRequestError(
                 "the current Persona cannot be exported", code="persona_invalid"

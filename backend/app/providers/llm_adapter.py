@@ -13,11 +13,12 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from urllib.parse import urlsplit
 
 import httpx
 
+from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
 from app.modules.debates.generation.prompt_budget import (
     PromptBudgetError,
     PromptBudgetV1,
@@ -33,6 +34,9 @@ from app.modules.debates.generation.types import (
     MutualLearningTurnResultV1,
     TurnPromptInput,
 )
+
+if TYPE_CHECKING:
+    from app.modules.debates.generation.segments import SegmentInputSnapshot, SegmentTurnResult
 
 from .llm_output import (
     LLM_REPAIR_FEEDBACK_SCHEMA_HASH,
@@ -1592,14 +1596,22 @@ class DashScopeLLMAdapter:
 
     def generate_turn(
         self,
-        prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
-    ) -> MutualLearningTurnResultV1:
+        prompt: TurnPromptInput
+        | MutualLearningPromptInput
+        | ProviderPromptV1
+        | SegmentInputSnapshot,
+    ) -> MutualLearningTurnResultV1 | SegmentTurnResult:
         """Protocol-compatible façade for the provider-neutral generation service."""
+
+        from app.modules.debates.generation.segments import SegmentInputSnapshot
+
+        if isinstance(prompt, SegmentInputSnapshot):
+            return self.generate_segments(prompt)
 
         if isinstance(prompt, ProviderPromptV1):
             provider_prompt = prompt
-        elif (
-            isinstance(prompt, MutualLearningPromptInput) and prompt.participant.persona is not None
+        elif isinstance(prompt, MutualLearningPromptInput) and isinstance(
+            prompt.participant.persona, (PersonaSpecV1, PersonaProviderViewV1)
         ):
             provider_prompt = build_provider_prompt_from_mutual_input(
                 prompt,
@@ -1622,6 +1634,26 @@ class DashScopeLLMAdapter:
         error.failure_kind = result.failure_kind
         cast(Any, error).adapter_result = result
         raise error
+
+    def generate_segments(
+        self,
+        snapshot: SegmentInputSnapshot,
+        *,
+        repair_feedback: Mapping[str, object] | None = None,
+    ) -> SegmentTurnResult:
+        """Delegate explicit v2 output to the sibling segment adapter."""
+
+        from app.providers.llm_segments import SegmentLLMAdapter
+
+        adapter = SegmentLLMAdapter(
+            self.config,
+            self.transport,
+            tokenizer=self.tokenizer,
+            price_card=self.price_card,
+            identity_tokens=self.identity_tokens,
+            outbound_manifest=self.outbound_manifest,
+        )
+        return adapter.generate_segments(snapshot, repair_feedback=repair_feedback)
 
 
 # Alternate names used by a runtime worker or tests.

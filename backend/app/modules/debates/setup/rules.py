@@ -170,12 +170,18 @@ def canonical_rule_snapshot_json(
         "ordered_multi_expert_mutual_learning_v1",
     ] = RULE_SET_ID,
     round_count: int = 2,
+    turn_protocol: Literal["segments_v2"] | None = None,
 ) -> str:
     """Serialize the rule snapshot deterministically for a Debate row."""
 
     payload = rule_snapshot(rule_set_id=rule_set_id, round_count=round_count).model_dump(
         mode="json"
     )
+    payload.pop("turn_protocol", None)
+    if turn_protocol is not None:
+        if rule_set_id != RULE_SET_ID_MUTUAL_LEARNING:
+            raise RuleViolation("rule_set_unavailable", "Segments require mutual learning.")
+        payload["turn_protocol"] = turn_protocol
     if rule_set_id == RULE_SET_ID_V1:
         # Preserve the byte-shape of the historical v1 canonical snapshot;
         # the retrieval policy field did not exist when those rows were made.

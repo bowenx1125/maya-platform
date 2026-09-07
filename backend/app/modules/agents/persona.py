@@ -1,4 +1,4 @@
-"""Deterministic, extraction-only PersonaSpecV1 compiler.
+"""Deterministic, extraction-only versioned Persona compiler.
 
 The compiler deliberately has no database, provider, filesystem or network
 dependency.  ``AGENT.md`` remains the only raw authored value; this module
@@ -22,9 +22,29 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PERSONA_SCHEMA_VERSION: Literal["persona_spec_v1"] = "persona_spec_v1"
-PERSONA_PROVIDER_VIEW_VERSION: Literal["persona_provider_view_v1"] = "persona_provider_view_v1"
-PERSONA_COMPILER_VERSION: Literal["persona_template_v1"] = "persona_template_v1"
+PERSONA_SCHEMA_VERSION_V1: Literal["persona_spec_v1"] = "persona_spec_v1"
+PERSONA_SCHEMA_VERSION_V2: Literal["persona_spec_v2"] = "persona_spec_v2"
+PERSONA_PROVIDER_VIEW_VERSION_V1: Literal["persona_provider_view_v1"] = "persona_provider_view_v1"
+PERSONA_PROVIDER_VIEW_VERSION_V2: Literal["persona_provider_view_v2"] = "persona_provider_view_v2"
+PERSONA_COMPILER_VERSION_V1: Literal["persona_template_v1"] = "persona_template_v1"
+PERSONA_COMPILER_VERSION_V2: Literal["persona_template_v2"] = "persona_template_v2"
+
+# The unsuffixed constants are retained as V1 aliases.  Existing published
+# rows and consumers use these names, and changing them would make their
+# canonical hashes or confirmation material appear to change.
+PERSONA_SCHEMA_VERSION = PERSONA_SCHEMA_VERSION_V1
+PERSONA_PROVIDER_VIEW_VERSION = PERSONA_PROVIDER_VIEW_VERSION_V1
+PERSONA_COMPILER_VERSION = PERSONA_COMPILER_VERSION_V1
+DEFAULT_PERSONA_SCHEMA_VERSION = PERSONA_SCHEMA_VERSION_V2
+DEFAULT_PERSONA_PROVIDER_VIEW_VERSION = PERSONA_PROVIDER_VIEW_VERSION_V2
+DEFAULT_PERSONA_COMPILER_VERSION = PERSONA_COMPILER_VERSION_V2
+CURRENT_PERSONA_SCHEMA_VERSION = DEFAULT_PERSONA_SCHEMA_VERSION
+CURRENT_PERSONA_PROVIDER_VIEW_VERSION = DEFAULT_PERSONA_PROVIDER_VIEW_VERSION
+CURRENT_PERSONA_COMPILER_VERSION = DEFAULT_PERSONA_COMPILER_VERSION
+
+PersonaSchemaVersion = Literal["persona_spec_v1", "persona_spec_v2"]
+PersonaProviderViewVersion = Literal["persona_provider_view_v1", "persona_provider_view_v2"]
+PersonaCompilerVersion = Literal["persona_template_v1", "persona_template_v2"]
 MAX_AGENT_MD_CHARS = 12_000
 
 _SECTIONS = (
@@ -35,6 +55,13 @@ _SECTIONS = (
     "Speaking style",
     "Debate strategy",
     "Boundaries",
+)
+_V2_SECTIONS = (
+    "Identity",
+    "Cultural lens",
+    "Core values",
+    "Initial position",
+    "Speaking style",
 )
 _LIST_SECTIONS = {"Cultural lens", "Core values", "Debate strategy", "Boundaries"}
 _SCALAR_SECTIONS = {
@@ -90,6 +117,25 @@ class PersonaSpecV1(PersonaClosedModel):
     compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
 
 
+class PersonaSpecV2(PersonaClosedModel):
+    """Canonical stored schema for the five-section Persona template.
+
+    V2 intentionally has no ``debate_strategy`` or ``boundaries`` fields.
+    Platform rules and debate scheduling remain server-owned, so retaining
+    those headings as empty compatibility values would misrepresent authorship
+    and make the new schema indistinguishable from a legacy V1 projection.
+    """
+
+    schema_version: Literal["persona_spec_v2"] = PERSONA_SCHEMA_VERSION_V2
+    identity: PersonaIdentity
+    cultural_lens: tuple[str, ...] = Field(min_length=1, max_length=8)
+    core_values: tuple[str, ...] = Field(min_length=1, max_length=8)
+    initial_position: str = Field(min_length=1, max_length=1_000)
+    speaking_style: PersonaSpeakingStyle
+    source_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    compiler_version: Literal["persona_template_v2"] = PERSONA_COMPILER_VERSION_V2
+
+
 class PersonaProviderViewV1(PersonaClosedModel):
     """Provider-safe view: semantic fields only, with no audit/hash fields."""
 
@@ -101,6 +147,21 @@ class PersonaProviderViewV1(PersonaClosedModel):
     speaking_style: PersonaSpeakingStyle
     debate_strategy: tuple[str, ...] = Field(min_length=1, max_length=8)
     boundaries: tuple[str, ...] = Field(min_length=1, max_length=8)
+
+
+class PersonaProviderViewV2(PersonaClosedModel):
+    """Provider-safe semantic view for a five-section Persona."""
+
+    schema_version: Literal["persona_provider_view_v2"] = PERSONA_PROVIDER_VIEW_VERSION_V2
+    identity: PersonaIdentity
+    cultural_lens: tuple[str, ...] = Field(min_length=1, max_length=8)
+    core_values: tuple[str, ...] = Field(min_length=1, max_length=8)
+    initial_position: str = Field(min_length=1, max_length=1_000)
+    speaking_style: PersonaSpeakingStyle
+
+
+PersonaSpecVersion = PersonaSpecV1 | PersonaSpecV2
+PersonaProviderViewVersionDTO = PersonaProviderViewV1 | PersonaProviderViewV2
 
 
 class PersonaDiagnostic(PersonaClosedModel):
@@ -116,11 +177,11 @@ class PersonaCompileResult(PersonaClosedModel):
     """Deterministic compiler result suitable for a draft preview."""
 
     ok: bool
-    spec: PersonaSpecV1 | None = None
+    spec: PersonaSpecVersion | None = None
     canonical_json: str | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     source_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
+    compiler_version: PersonaCompilerVersion = PERSONA_COMPILER_VERSION
     diagnostics: tuple[PersonaDiagnostic, ...] = ()
 
     @property
@@ -160,8 +221,13 @@ class PersonaProviderIdentityError(ValueError):
 class PersonaCompiler:
     """Small object seam for dependency injection in route/tests."""
 
-    def __init__(self, *, compiler_version: str = PERSONA_COMPILER_VERSION) -> None:
-        if compiler_version != PERSONA_COMPILER_VERSION:
+    def __init__(
+        self, *, compiler_version: PersonaCompilerVersion = DEFAULT_PERSONA_COMPILER_VERSION
+    ) -> None:
+        if compiler_version not in {
+            PERSONA_COMPILER_VERSION_V1,
+            PERSONA_COMPILER_VERSION_V2,
+        }:
             raise ValueError("Unsupported Persona compiler version.")
         self.compiler_version = compiler_version
 
@@ -172,7 +238,12 @@ class PersonaCompiler:
         expected_name: str | None = None,
         agent_name: str | None = None,
     ) -> PersonaCompileResult:
-        return compile_persona(source, expected_name=expected_name, agent_name=agent_name)
+        return compile_persona(
+            source,
+            expected_name=expected_name,
+            agent_name=agent_name,
+            compiler_version=self.compiler_version,
+        )
 
 
 @dataclass(frozen=True)
@@ -228,13 +299,42 @@ def canonical_json(value: BaseModel | Mapping[str, Any] | Sequence[Any] | Any) -
     return canonical_json_bytes(value).decode("utf-8")
 
 
+def parse_persona_spec(value: str | Mapping[str, Any] | PersonaSpecVersion) -> PersonaSpecVersion:
+    """Parse one stored canonical Persona payload without version guessing.
+
+    The discriminator is persisted in the JSON itself.  This keeps V1 hashes
+    stable and prevents a V2 payload from being coerced into a legacy shape by
+    dropping its missing sections or inventing removed fields.
+    """
+
+    if isinstance(value, (PersonaSpecV1, PersonaSpecV2)):
+        return value
+    if isinstance(value, str):
+        decoded = json.loads(value)
+    elif isinstance(value, Mapping):
+        decoded = value
+    else:
+        raise TypeError("Stored Persona must be canonical JSON or a mapping.")
+    if not isinstance(decoded, Mapping):
+        raise ValueError("Stored Persona must be a JSON object.")
+    version = decoded.get("schema_version")
+    if version == PERSONA_SCHEMA_VERSION_V1:
+        return PersonaSpecV1.model_validate(decoded)
+    if version == PERSONA_SCHEMA_VERSION_V2:
+        return PersonaSpecV2.model_validate(decoded)
+    raise ValueError("Stored Persona schema version is unsupported.")
+
+
+parse_stored_persona = parse_persona_spec
+
+
 def diagnostics_json(diagnostics: Sequence[PersonaDiagnostic]) -> str:
     """Encode safe compile diagnostics for an optional persistence column."""
 
     return canonical_json([item.model_dump(mode="json") for item in diagnostics])
 
 
-def persona_spec_hash(spec: PersonaSpecV1 | Mapping[str, Any]) -> str:
+def persona_spec_hash(spec: PersonaSpecVersion | Mapping[str, Any]) -> str:
     """Hash canonical PersonaSpec JSON as an untagged lower-case SHA-256."""
 
     return hashlib.sha256(canonical_json_bytes(spec)).hexdigest()
@@ -248,10 +348,10 @@ ProviderPersonaView = PersonaProviderViewV1
 
 
 def provider_view(
-    spec: PersonaSpecV1,
+    spec: PersonaSpecVersion,
     *,
     student_identity_tokens: Sequence[str] = (),
-) -> PersonaProviderViewV1:
+) -> PersonaProviderViewVersionDTO:
     """Drop audit fields and reject caller-supplied personal identity tokens.
 
     Agent names are fictional/cultural labels and remain part of the semantic
@@ -271,14 +371,22 @@ def provider_view(
         spec.speaking_style.argument_pattern,
         spec.speaking_style.concession_style,
         spec.speaking_style.question_style,
-        *spec.debate_strategy,
-        *spec.boundaries,
     )
+    if isinstance(spec, PersonaSpecV1):
+        semantic = (*semantic, *spec.debate_strategy, *spec.boundaries)
     for token in student_identity_tokens:
         normalized_token = token.strip().casefold()
         if normalized_token and any(normalized_token in item.casefold() for item in semantic):
             raise PersonaProviderIdentityError()
 
+    if isinstance(spec, PersonaSpecV2):
+        return PersonaProviderViewV2(
+            identity=spec.identity,
+            cultural_lens=spec.cultural_lens,
+            core_values=spec.core_values,
+            initial_position=spec.initial_position,
+            speaking_style=spec.speaking_style,
+        )
     return PersonaProviderViewV1(
         identity=spec.identity,
         cultural_lens=spec.cultural_lens,
@@ -290,7 +398,33 @@ def provider_view(
     )
 
 
-def compile_persona(
+def provider_view_v1(
+    spec: PersonaSpecV1,
+    *,
+    student_identity_tokens: Sequence[str] = (),
+) -> PersonaProviderViewV1:
+    """Return the legacy V1 provider projection without changing its shape."""
+
+    view = provider_view(spec, student_identity_tokens=student_identity_tokens)
+    if not isinstance(view, PersonaProviderViewV1):  # pragma: no cover - closed DTO
+        raise TypeError("V1 Persona projection returned an unexpected version.")
+    return view
+
+
+def provider_view_v2(
+    spec: PersonaSpecV2,
+    *,
+    student_identity_tokens: Sequence[str] = (),
+) -> PersonaProviderViewV2:
+    """Return the five-section provider projection with no legacy fields."""
+
+    view = provider_view(spec, student_identity_tokens=student_identity_tokens)
+    if not isinstance(view, PersonaProviderViewV2):  # pragma: no cover - closed DTO
+        raise TypeError("V2 Persona projection returned an unexpected version.")
+    return view
+
+
+def _compile_persona_v1(
     source: str | bytes,
     *,
     expected_name: str | None = None,
@@ -462,15 +596,404 @@ def compile_persona(
     )
 
 
-def compile_agent_md(
+def compile_persona_v2(
     source: str | bytes,
     *,
     expected_name: str | None = None,
     agent_name: str | None = None,
 ) -> PersonaCompileResult:
+    """Compile the current five-section Persona template.
+
+    V2 is deliberately a separate compiler boundary.  It makes it impossible
+    for a caller to satisfy the new template by silently filling removed V1
+    fields with empty or synthetic values, while preserving the exact V1
+    compiler for immutable historical rows.
+    """
+
+    source_hash: str
+    try:
+        normalized = normalize_agent_md(source)
+        source_hash = raw_agent_md_hash(normalized)
+    except UnicodeDecodeError:
+        return _failed_result(
+            "invalid_utf8",
+            "AGENT.md must be valid UTF-8.",
+            source_hash="sha256:" + "0" * 64,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    except TypeError:
+        return _failed_result(
+            "invalid_source",
+            "AGENT.md must be text or UTF-8 bytes.",
+            source_hash="sha256:" + "0" * 64,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    if agent_name is not None:
+        if expected_name is not None and expected_name.strip() != agent_name.strip():
+            return _failed_result(
+                "conflicting_expected_name",
+                "The expected Agent name is ambiguous.",
+                source_hash=source_hash,
+                compiler_version=PERSONA_COMPILER_VERSION_V2,
+            )
+        expected_name = agent_name
+
+    diagnostics: list[PersonaDiagnostic] = []
+    if len(normalized) > MAX_AGENT_MD_CHARS:
+        diagnostics.append(
+            _diagnostic("document_too_large", "AGENT.md exceeds the 12,000 character limit.")
+        )
+    invalid_control = _first_disallowed_control(normalized)
+    if invalid_control is not None:
+        position, _character = invalid_control
+        diagnostics.append(
+            _diagnostic(
+                "disallowed_control_character",
+                "AGENT.md contains a disallowed control or format character.",
+                line=normalized.count("\n", 0, position) + 1,
+            )
+        )
+    if diagnostics:
+        return _failed_result(
+            *diagnostics,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+
+    stripped = normalized.strip()
+    if not stripped:
+        return _failed_result(
+            "empty_document",
+            "AGENT.md must contain the five-section Persona template.",
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    lines = [_Line(index, text) for index, text in enumerate(stripped.split("\n"), start=1)]
+    h1 = lines[0].text.strip()
+    if not h1.startswith("# ") or h1.startswith("## "):
+        return _failed_result(
+            "h1_required",
+            "AGENT.md must start with exactly one H1 Agent name.",
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    h1_text = _clean_inline(h1[2:].strip())
+    if not h1_text:
+        return _failed_result(
+            "name_empty",
+            "The Agent display name cannot be empty.",
+            line=lines[0].number,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    if len(h1_text) > 80:
+        return _failed_result(
+            "name_too_long",
+            "The Agent display name exceeds 80 characters.",
+            line=lines[0].number,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    if _has_forbidden_markup(h1[2:].strip()):
+        return _failed_result(
+            "unsupported_markup",
+            "Links and HTML are not allowed in Persona content.",
+            line=lines[0].number,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    extra_heading = next(
+        (
+            line
+            for line in lines[1:]
+            if _HEADING_RE.match(line.text.strip()) and not line.text.strip().startswith("## ")
+        ),
+        None,
+    )
+    if extra_heading is not None:
+        return _failed_result(
+            "unexpected_heading",
+            "Only the required H1 and H2 headings are allowed.",
+            line=extra_heading.number,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    if expected_name is not None and _clean_inline(expected_name.strip()) != h1_text:
+        return _failed_result(
+            "name_mismatch",
+            "The H1 must match the Agent display name.",
+            line=lines[0].number,
+            field="identity.name",
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+
+    for line in lines[1:]:
+        heading = line.text.strip()
+        if heading in {"## Debate strategy", "## Boundaries"}:
+            field = "debate_strategy" if heading.endswith("strategy") else "boundaries"
+            diagnostics.append(
+                _diagnostic(
+                    "removed_section",
+                    "Debate strategy and Boundaries are not part of the current Persona template.",
+                    line=line.number,
+                    field=field,
+                )
+            )
+    sections, parse_diagnostics = _parse_sections(lines[1:], section_names=_V2_SECTIONS)
+    diagnostics.extend(parse_diagnostics)
+    if diagnostics:
+        return _failed_result(
+            *diagnostics,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+
+    values: dict[str, Any] = {
+        "identity": {"name": h1_text},
+        "cultural_lens": (),
+        "core_values": (),
+        "initial_position": "",
+        "speaking_style": {},
+        "source_agent_md_hash": source_hash,
+        "compiler_version": PERSONA_COMPILER_VERSION_V2,
+    }
+    for section in _V2_SECTIONS:
+        section_lines = sections[section]
+        if section in {"Cultural lens", "Core values"}:
+            parsed, section_errors = _parse_list(section, section_lines)
+            diagnostics.extend(section_errors)
+            values[_section_field(section)] = tuple(parsed)
+        elif section == "Initial position":
+            initial, section_errors = _parse_initial_position(section_lines)
+            diagnostics.extend(section_errors)
+            values["initial_position"] = initial
+        else:
+            parsed_scalars, section_errors = _parse_scalar_section(section, section_lines)
+            diagnostics.extend(section_errors)
+            if section == "Identity":
+                values["identity"].update(parsed_scalars)
+            else:
+                values["speaking_style"] = parsed_scalars
+    if diagnostics:
+        return _failed_result(
+            *diagnostics,
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    try:
+        spec = PersonaSpecV2.model_validate(values)
+    except ValueError:
+        return _failed_result(
+            "invalid_persona_schema",
+            "The Persona content does not satisfy the closed five-section schema.",
+            source_hash=source_hash,
+            compiler_version=PERSONA_COMPILER_VERSION_V2,
+        )
+    serialized = canonical_json(spec)
+    return PersonaCompileResult(
+        ok=True,
+        spec=spec,
+        canonical_json=serialized,
+        persona_spec_hash=persona_spec_hash(spec),
+        source_agent_md_hash=source_hash,
+        compiler_version=PERSONA_COMPILER_VERSION_V2,
+        diagnostics=(),
+    )
+
+
+def compile_persona_v2_or_raise(
+    source: str | bytes,
+    *,
+    expected_name: str | None = None,
+    agent_name: str | None = None,
+) -> PersonaSpecV2:
+    """Compile V2 and narrow the result for current-template consumers."""
+
+    result = compile_persona_v2(source, expected_name=expected_name, agent_name=agent_name)
+    if not result.compiled or not isinstance(result.spec, PersonaSpecV2):
+        raise PersonaCompileError(result)
+    return result.spec
+
+
+def compile_persona_v1(
+    source: str | bytes,
+    *,
+    expected_name: str | None = None,
+    agent_name: str | None = None,
+) -> PersonaCompileResult:
+    """Compile the immutable seven-section Persona template explicitly."""
+
+    return _compile_persona_v1(source, expected_name=expected_name, agent_name=agent_name)
+
+
+def compile_persona_v1_or_raise(
+    source: str | bytes,
+    *,
+    expected_name: str | None = None,
+    agent_name: str | None = None,
+) -> PersonaSpecV1:
+    """Compile V1 and narrow the result for legacy-only consumers."""
+
+    result = compile_persona_v1(source, expected_name=expected_name, agent_name=agent_name)
+    if not result.compiled or not isinstance(result.spec, PersonaSpecV1):
+        raise PersonaCompileError(result)
+    return result.spec
+
+
+def compile_persona(
+    source: str | bytes,
+    *,
+    expected_name: str | None = None,
+    agent_name: str | None = None,
+    schema_version: PersonaSchemaVersion | None = None,
+    compiler_version: PersonaCompilerVersion | None = None,
+    version: str | None = None,
+) -> PersonaCompileResult:
+    """Compile V2 by default while autodetecting immutable V1 Markdown.
+
+    New five-section Markdown selects V2 without a flag.  A source containing
+    either removed V2 heading is treated as legacy V1 for compatibility, so
+    old raw bytes and their canonical V1 hashes remain readable.  Callers that
+    need a strict V2 check can use :func:`compile_persona_v2` directly.
+    """
+
+    if agent_name is not None:
+        if expected_name is not None and expected_name.strip() != agent_name.strip():
+            try:
+                source_hash = raw_agent_md_hash(source)
+            except (TypeError, UnicodeDecodeError):
+                source_hash = "sha256:" + "0" * 64
+            return _failed_result(
+                "conflicting_expected_name",
+                "The expected Agent name is ambiguous.",
+                source_hash=source_hash,
+                compiler_version=_safe_compiler_version(compiler_version),
+            )
+        expected_name = agent_name
+
+    requested_schema: PersonaSchemaVersion | None = schema_version
+    if version is not None:
+        version_map: dict[str, PersonaSchemaVersion] = {
+            "v1": PERSONA_SCHEMA_VERSION_V1,
+            "v2": PERSONA_SCHEMA_VERSION_V2,
+            PERSONA_SCHEMA_VERSION_V1: PERSONA_SCHEMA_VERSION_V1,
+            PERSONA_SCHEMA_VERSION_V2: PERSONA_SCHEMA_VERSION_V2,
+            PERSONA_COMPILER_VERSION_V1: PERSONA_SCHEMA_VERSION_V1,
+            PERSONA_COMPILER_VERSION_V2: PERSONA_SCHEMA_VERSION_V2,
+        }
+        mapped_version = version_map.get(version)
+        if mapped_version is None:
+            try:
+                source_hash = raw_agent_md_hash(source)
+            except (TypeError, UnicodeDecodeError):
+                source_hash = "sha256:" + "0" * 64
+            return _failed_result(
+                "unsupported_persona_version",
+                "The Persona schema version is not supported.",
+                source_hash=source_hash,
+                compiler_version=_safe_compiler_version(compiler_version),
+            )
+        if requested_schema is not None and requested_schema != mapped_version:
+            try:
+                source_hash = raw_agent_md_hash(source)
+            except (TypeError, UnicodeDecodeError):
+                source_hash = "sha256:" + "0" * 64
+            return _failed_result(
+                "conflicting_persona_version",
+                "The Persona schema and requested versions do not agree.",
+                source_hash=source_hash,
+                compiler_version=_safe_compiler_version(compiler_version),
+            )
+        requested_schema = mapped_version
+    if requested_schema is not None and requested_schema not in {
+        PERSONA_SCHEMA_VERSION_V1,
+        PERSONA_SCHEMA_VERSION_V2,
+    }:
+        try:
+            source_hash = raw_agent_md_hash(source)
+        except (TypeError, UnicodeDecodeError):
+            source_hash = "sha256:" + "0" * 64
+        return _failed_result(
+            "unsupported_persona_version",
+            "The Persona schema version is not supported.",
+            source_hash=source_hash,
+            compiler_version=_safe_compiler_version(compiler_version),
+        )
+    if compiler_version is not None:
+        mapped_schema: PersonaSchemaVersion | None = (
+            PERSONA_SCHEMA_VERSION_V1
+            if compiler_version == PERSONA_COMPILER_VERSION_V1
+            else PERSONA_SCHEMA_VERSION_V2
+            if compiler_version == PERSONA_COMPILER_VERSION_V2
+            else None
+        )
+        if mapped_schema is None:
+            try:
+                source_hash = raw_agent_md_hash(source)
+            except (TypeError, UnicodeDecodeError):
+                source_hash = "sha256:" + "0" * 64
+            return _failed_result(
+                "unsupported_compiler_version",
+                "The Persona compiler version is not supported.",
+                source_hash=source_hash,
+                compiler_version=DEFAULT_PERSONA_COMPILER_VERSION,
+            )
+        if requested_schema is not None and requested_schema != mapped_schema:
+            try:
+                source_hash = raw_agent_md_hash(source)
+            except (TypeError, UnicodeDecodeError):
+                source_hash = "sha256:" + "0" * 64
+            return _failed_result(
+                "conflicting_persona_version",
+                "The Persona schema and compiler versions do not agree.",
+                source_hash=source_hash,
+                compiler_version=compiler_version,
+            )
+        requested_schema = mapped_schema
+
+    if requested_schema is not None:
+        if requested_schema == PERSONA_SCHEMA_VERSION_V1:
+            return _compile_persona_v1(source, expected_name=expected_name)
+        return compile_persona_v2(source, expected_name=expected_name)
+
+    try:
+        normalized = normalize_agent_md(source)
+    except (TypeError, UnicodeDecodeError):
+        # V2 is the default for new drafts, including their safe invalid-input
+        # diagnostic.  V1 callers still have the explicit version boundary.
+        return compile_persona_v2(source, expected_name=expected_name)
+    headings = {line.strip() for line in normalized.split("\n") if line.strip().startswith("## ")}
+    if any(f"## {section}" in headings for section in ("Debate strategy", "Boundaries")):
+        return _compile_persona_v1(source, expected_name=expected_name)
+    if any(f"## {section}" in headings for section in _V2_SECTIONS):
+        return compile_persona_v2(source, expected_name=expected_name)
+    # A heading-less or otherwise unrecognizable value is ambiguous between a
+    # malformed legacy draft and a malformed new draft.  Keep the public
+    # compatibility entry point's V1 diagnostic shape; callers creating new
+    # drafts can request the strict V2 boundary explicitly.
+    return _compile_persona_v1(source, expected_name=expected_name)
+
+
+def compile_agent_md(
+    source: str | bytes,
+    *,
+    expected_name: str | None = None,
+    agent_name: str | None = None,
+    schema_version: PersonaSchemaVersion | None = None,
+    compiler_version: PersonaCompilerVersion | None = None,
+    version: str | None = None,
+) -> PersonaCompileResult:
     """Compatibility name for adapters that call the input ``agent_md``."""
 
-    return compile_persona(source, expected_name=expected_name, agent_name=agent_name)
+    return compile_persona(
+        source,
+        expected_name=expected_name,
+        agent_name=agent_name,
+        schema_version=schema_version,
+        compiler_version=compiler_version,
+        version=version,
+    )
 
 
 def compile_persona_or_raise(
@@ -478,8 +1001,18 @@ def compile_persona_or_raise(
     *,
     expected_name: str | None = None,
     agent_name: str | None = None,
-) -> PersonaSpecV1:
-    result = compile_persona(source, expected_name=expected_name, agent_name=agent_name)
+    schema_version: PersonaSchemaVersion | None = None,
+    compiler_version: PersonaCompilerVersion | None = None,
+    version: str | None = None,
+) -> PersonaSpecVersion:
+    result = compile_persona(
+        source,
+        expected_name=expected_name,
+        agent_name=agent_name,
+        schema_version=schema_version,
+        compiler_version=compiler_version,
+        version=version,
+    )
     if not result.compiled or result.spec is None:
         raise PersonaCompileError(result)
     return result.spec
@@ -501,11 +1034,14 @@ def looks_like_persona_template(source: str | bytes) -> bool:
 
 def _parse_sections(
     lines: Sequence[_Line],
+    *,
+    section_names: Sequence[str] = _SECTIONS,
 ) -> tuple[dict[str, list[_Line]], list[PersonaDiagnostic]]:
-    sections: dict[str, list[_Line]] = {section: [] for section in _SECTIONS}
+    sections: dict[str, list[_Line]] = {section: [] for section in section_names}
     diagnostics: list[PersonaDiagnostic] = []
     index = 0
-    for expected in _SECTIONS:
+    section_set = set(section_names)
+    for expected in section_names:
         while index < len(lines) and not lines[index].text.strip():
             index += 1
         if index >= len(lines):
@@ -559,7 +1095,7 @@ def _parse_sections(
     # headings here; body content was already reported by the owning pass.
     for line in lines:
         text = line.text.strip()
-        if text.startswith("## ") and text[3:] not in _SECTIONS:
+        if text.startswith("## ") and text[3:] not in section_set:
             diagnostics.append(
                 _diagnostic("unknown_section", "Unknown Persona section.", line=line.number)
             )
@@ -872,6 +1408,7 @@ def _failed_result(
     source_hash: str,
     line: int | None = None,
     field: str | None = None,
+    compiler_version: PersonaCompilerVersion = PERSONA_COMPILER_VERSION,
 ) -> PersonaCompileResult:
     normalized: list[PersonaDiagnostic] = []
     index = 0
@@ -893,8 +1430,17 @@ def _failed_result(
         canonical_json=None,
         persona_spec_hash=None,
         source_agent_md_hash=source_hash,
+        compiler_version=compiler_version,
         diagnostics=tuple(_dedupe_diagnostics(normalized)),
     )
+
+
+def _safe_compiler_version(value: object) -> PersonaCompilerVersion:
+    if value == PERSONA_COMPILER_VERSION_V1:
+        return PERSONA_COMPILER_VERSION_V1
+    if value == PERSONA_COMPILER_VERSION_V2:
+        return PERSONA_COMPILER_VERSION_V2
+    return DEFAULT_PERSONA_COMPILER_VERSION
 
 
 def _dedupe_diagnostics(values: Sequence[PersonaDiagnostic]) -> list[PersonaDiagnostic]:
@@ -917,10 +1463,23 @@ def _json_default(value: Any) -> Any:
 
 
 __all__ = [
+    "CURRENT_PERSONA_COMPILER_VERSION",
+    "CURRENT_PERSONA_PROVIDER_VIEW_VERSION",
+    "CURRENT_PERSONA_SCHEMA_VERSION",
+    "DEFAULT_PERSONA_COMPILER_VERSION",
+    "DEFAULT_PERSONA_PROVIDER_VIEW_VERSION",
+    "DEFAULT_PERSONA_SCHEMA_VERSION",
     "MAX_AGENT_MD_CHARS",
     "PERSONA_COMPILER_VERSION",
+    "PERSONA_COMPILER_VERSION_V1",
+    "PERSONA_COMPILER_VERSION_V2",
     "PERSONA_PROVIDER_VIEW_VERSION",
+    "PERSONA_PROVIDER_VIEW_VERSION_V1",
+    "PERSONA_PROVIDER_VIEW_VERSION_V2",
     "PERSONA_SCHEMA_VERSION",
+    "PERSONA_SCHEMA_VERSION_V1",
+    "PERSONA_SCHEMA_VERSION_V2",
+    "PersonaCompilerVersion",
     "PersonaClosedModel",
     "PersonaCompileError",
     "PersonaCompileResult",
@@ -928,22 +1487,36 @@ __all__ = [
     "PersonaIdentity",
     "PersonaCompiler",
     "PersonaProviderIdentityError",
+    "PersonaProviderViewVersion",
+    "PersonaProviderViewVersionDTO",
     "PersonaProviderViewV1",
+    "PersonaProviderViewV2",
     "ProviderPersonaView",
     "PersonaSpeakingStyle",
     "PersonaSpec",
+    "PersonaSpecVersion",
     "PersonaSpecV1",
+    "PersonaSpecV2",
+    "PersonaSchemaVersion",
     "canonical_json",
     "canonical_json_bytes",
     "compile_agent_md",
     "compile_persona",
+    "compile_persona_v1",
+    "compile_persona_v1_or_raise",
     "compile_persona_or_raise",
+    "compile_persona_v2",
+    "compile_persona_v2_or_raise",
     "diagnostics_json",
     "hash_agent_md",
     "hash_persona_spec",
     "looks_like_persona_template",
     "normalize_agent_md",
+    "parse_persona_spec",
+    "parse_stored_persona",
     "persona_spec_hash",
     "provider_view",
+    "provider_view_v1",
+    "provider_view_v2",
     "raw_agent_md_hash",
 ]

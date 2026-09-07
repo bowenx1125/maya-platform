@@ -13,6 +13,8 @@ from typing import Any
 from app.core.models import AgentVersion
 from app.modules.agents.persona import compile_persona
 
+from tests.persona_v2_fixtures import confirmed_persona_v2_fields
+
 
 def confirmed_persona_fields(
     name: str,
@@ -78,4 +80,4 @@ Prefer evidence-aware proportional safeguards.
     return values
 
 
-__all__ = ["confirmed_persona_fields"]
+__all__ = ["confirmed_persona_fields", "confirmed_persona_v2_fields"]

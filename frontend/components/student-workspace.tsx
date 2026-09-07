@@ -612,15 +612,8 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("newAgent")}
-        title={t("newAgentTitle")}
-        description={t("newAgentLede")}
-      />
-      <SectionCard
-        title={t("agentIdentity")}
-        description={t("agentIdentityLede")}
-      >
+      <PageIntro eyebrow={t("newAgent")} title={t("newAgentTitle")} />
+      <SectionCard title={t("agentIdentity")}>
         <form className="stack-form wide-form" onSubmit={submit}>
           <label>
             <span>{t("agentName")}</span>

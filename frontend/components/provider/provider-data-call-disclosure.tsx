@@ -121,10 +121,6 @@ export function ProviderDataCallDisclosure({
       <div className={styles.header}>
         <div>
           <h2 id="provider-disclosure-title">External data disclosure</h2>
-          <p>
-            Review the exact data classes and supplier terms before allowing a
-            future external request.
-          </p>
         </div>
         <span
           className={`${styles.status} ${confirmed ? styles.confirmed : styles.pending}`}

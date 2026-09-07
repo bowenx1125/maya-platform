@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.errors import Error
@@ -15,6 +16,8 @@ from app.modules.auth.service import AuthContext
 from .schemas import (
     BarrageRequest,
     BarrageSubmitted,
+    FreezeFinalRequest,
+    FrozenFinalInput,
     PublicInteractionForm,
     TeacherInteraction,
     VoteRequest,
@@ -40,6 +43,37 @@ def get_interaction_service(
         event_publisher=getattr(request.app.state, "interaction_event_publisher", None),
         insight_enqueuer=getattr(request.app.state, "insight_enqueuer", None),
     )
+
+
+@router.post(
+    "/debates/{debate_id}/final-input",
+    response_model=FrozenFinalInput,
+    operation_id="freezeFinalInput",
+    responses={
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+        422: {"model": Error},
+    },
+)
+async def freeze_final_input_route(
+    debate_id: UUID,
+    payload: FreezeFinalRequest,
+    request: Request,
+    context: AuthContext = Depends(require_authenticated_mutation),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    service: InteractionService = Depends(get_interaction_service),
+    db: Session = Depends(get_db),
+) -> FrozenFinalInput:
+    result = service.freeze_final(
+        actor_user_id=str(context.user.id),
+        debate_id=str(debate_id),
+        expected_control_version=payload.expected_control_version,
+    )
+    from app.modules.debates.playback.router import get_playback_service
+
+    await get_playback_service(request).enqueue_frozen_final(db, str(debate_id))
+    return result
 
 
 def _no_store(response: Response) -> None:

@@ -252,11 +252,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("knowledgePage")}
-        title={t("knowledgePageTitle")}
-        description={t("knowledgePageLede")}
-      />
+      <PageIntro eyebrow={t("knowledgePage")} title={t("knowledgePageTitle")} />
       {error ? <ErrorNotice error={error} onRetry={retry} /> : null}
       {conflict ? (
         <div className="notice notice-warning" role="status">
@@ -268,20 +264,14 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
           {t(notice)}
         </div>
       ) : null}
-      <SectionCard
-        title={t("knowledgeCreateTitle")}
-        description={t("knowledgeCreateLede")}
-      >
+      <SectionCard title={t("knowledgeCreateTitle")}>
         <MarkdownEditor
           disabled={busyId !== null}
           onCreate={(file) => void create(file)}
         />
       </SectionCard>
       {editing ? (
-        <SectionCard
-          title={t("knowledgeEditTitle")}
-          description={t("knowledgeEditLede")}
-        >
+        <SectionCard title={t("knowledgeEditTitle")}>
           <p className="muted-copy">{t("knowledgeEditDownload")}</p>
           <MarkdownEditor
             document={editing}

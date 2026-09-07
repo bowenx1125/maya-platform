@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.providers.control import LLMRecoveryInputV1
+from app.providers.llm_segments import SegmentRecoveryInputV2
 
 
 def _now() -> datetime:
@@ -69,6 +70,8 @@ class SqlLLMPublication:
         self.ledger = ledger
 
     def stage_accepted_with_recovery(self, stage: object, recovery_input: object) -> object:
+        if isinstance(recovery_input, SegmentRecoveryInputV2):
+            return self.stage_segment_accepted_with_recovery(stage, recovery_input)
         method = _method(
             self.ledger,
             "stage_llm_accepted_with_recovery",
@@ -81,6 +84,24 @@ class SqlLLMPublication:
         return method(stage, recovery_input)
 
     stage_llm_accepted_with_recovery = stage_accepted_with_recovery
+
+    def stage_segment_accepted_with_recovery(
+        self, stage: object, recovery_input: SegmentRecoveryInputV2
+    ) -> object:
+        """Persist the explicit segments_v2 stage/input pair atomically."""
+
+        if not isinstance(recovery_input, SegmentRecoveryInputV2):
+            raise RuntimeError("segment recovery input has the wrong domain type")
+        method = _method(
+            self.ledger,
+            "stage_segment_accepted_with_recovery",
+            "stage_segments_accepted_with_recovery",
+        )
+        if method is None:
+            raise RuntimeError("the segment accepted-stage recovery port is unavailable")
+        return method(stage, recovery_input)
+
+    stage_segments_accepted_with_recovery = stage_segment_accepted_with_recovery
 
     def get_llm_accepted_stage(self, operation_id: str) -> object | None:
         method = _method(self.ledger, "get_llm_accepted_stage", "get_accepted_llm_stage")
@@ -109,6 +130,9 @@ class SqlLLMPublication:
         ``SqlPlaybackRepository.mark_turn_ready`` on this same Session.  A
         failed CAS raises so the caller's transaction rolls every write back.
         """
+
+        if isinstance(kwargs.get("recovery_input"), SegmentRecoveryInputV2):
+            return self.commit_segment_turn_success(**kwargs)
 
         operation_id = kwargs.get("operation_id")
         turn_id = kwargs.get("turn_id")
@@ -398,6 +422,266 @@ class SqlLLMPublication:
                 "operation_id": operation_id,
                 "output_hash": output_hash,
             },
+        )
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            raise RuntimeError("LLM publication operation CAS failed")
+        reservation = self.db.execute(
+            text(
+                "UPDATE provider_reservations SET state='succeeded', updated_at=:updated_at "
+                "WHERE operation_id=:operation_id AND state='accepted'"
+            ),
+            {"updated_at": _now(), "operation_id": operation_id},
+        )
+        if int(getattr(reservation, "rowcount", 0)) != 1:
+            raise RuntimeError("LLM publication reservation CAS failed")
+        return {"operation_id": operation_id, "state": "succeeded"}
+
+    def commit_segment_turn_success(self, **kwargs: object) -> object:
+        """Finalize a staged segments_v2 turn without invoking the provider."""
+
+        from app.modules.debates.generation.segments import (
+            SegmentTurnResult,
+            StoredSegmentTurnResult,
+            load_stored_segment_turn_result,
+        )
+
+        recovery_input = kwargs.get("recovery_input")
+        if not isinstance(recovery_input, SegmentRecoveryInputV2):
+            raise RuntimeError("segment recovery input is unavailable")
+        recovery_input.__post_init__()
+        operation_id = kwargs.get("operation_id")
+        turn_id = kwargs.get("turn_id")
+        request_hash = kwargs.get("request_hash")
+        if not isinstance(operation_id, str) or not operation_id:
+            raise RuntimeError("LLM publication operation identity is missing")
+        if not isinstance(turn_id, str) or not turn_id:
+            raise RuntimeError("LLM publication turn identity is missing")
+        if not isinstance(request_hash, str) or not request_hash:
+            raise RuntimeError("LLM publication request identity is missing")
+        stage = kwargs.get("stage")
+        output_hash = _read(stage, "output_hash", _read(stage, "stage_hash"))
+        if (
+            str(_read(stage, "operation_id")) != operation_id
+            or str(_read(stage, "turn_id")) != turn_id
+            or str(_read(stage, "request_hash")) != request_hash
+            or not isinstance(output_hash, str)
+            or len(output_hash) != 64
+        ):
+            raise RuntimeError("LLM publication stage identity is stale")
+        operation_row = (
+            self.db.execute(
+                text(
+                    "SELECT state, provider_operation, logical_item_id, attempt_no, request_hash, "
+                    "policy_hash, export_manifest_hash, build_manifest_hash, model_key, "
+                    "staged_response_hash, scope_id FROM provider_operations "
+                    "WHERE id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+            .mappings()
+            .first()
+        )
+        if operation_row is None:
+            raise RuntimeError("LLM publication operation is unavailable")
+        frozen = recovery_input.frozen_request
+        if (
+            str(operation_row["provider_operation"]) != "llm_debate_turn"
+            or str(operation_row["scope_id"]) != frozen.debate_id
+            or str(operation_row["logical_item_id"]) != turn_id
+            or int(operation_row["attempt_no"]) != frozen.attempt_no
+            or str(operation_row["request_hash"]) != request_hash
+            or str(operation_row["request_hash"]) != frozen.request_hash
+            or str(operation_row["policy_hash"]) != frozen.policy_hash
+            or str(operation_row["export_manifest_hash"]) != frozen.export_manifest_hash
+            or str(operation_row["build_manifest_hash"]) != frozen.build_manifest_hash
+            or str(operation_row["model_key"]) != str(_read(stage, "model_key", ""))
+            or str(operation_row["staged_response_hash"] or "") != output_hash
+        ):
+            raise RuntimeError("LLM publication operation identity is stale")
+        try:
+            recovery_input.assert_stage_identity(stage)
+        except Exception as exc:
+            raise RuntimeError("LLM publication recovery identity is stale") from exc
+        stage_row = (
+            self.db.execute(
+                text(
+                    "SELECT output_hash, turn_id, attempt_no, request_hash "
+                    "FROM llm_accepted_stages "
+                    "WHERE operation_id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+            .mappings()
+            .first()
+        )
+        if stage_row is None or (
+            str(stage_row["output_hash"]) != output_hash
+            or str(stage_row["turn_id"]) != turn_id
+            or int(stage_row["attempt_no"]) != frozen.attempt_no
+            or str(stage_row["request_hash"]) != request_hash
+        ):
+            raise RuntimeError("LLM publication accepted stage is unavailable")
+        recovery_row = (
+            self.db.execute(
+                text(
+                    "SELECT input_version, input_json, input_hash, operation_id, turn_id, "
+                    "attempt_no "
+                    "FROM llm_recovery_inputs WHERE operation_id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
+            .mappings()
+            .first()
+        )
+        if recovery_row is None or (
+            str(recovery_row["input_version"]) != "segment_recovery_input_v2"
+            or str(recovery_row["input_json"]) != recovery_input.input_json
+            or str(recovery_row["input_hash"]) != recovery_input.input_hash
+            or str(recovery_row["operation_id"]) != operation_id
+            or str(recovery_row["turn_id"]) != turn_id
+            or int(recovery_row["attempt_no"]) != frozen.attempt_no
+        ):
+            raise RuntimeError("LLM publication recovery input is unavailable")
+        turn_row = (
+            self.db.execute(
+                text(
+                    "SELECT t.generation_status, t.structured_json, t.retrieval_receipts_json, "
+                    "t.debate_id, t.participant_id, t.knowledge_snapshot_id, "
+                    "t.predecessor_turn_ids_json, t.transcript_hash, t.cutoff_turn_index, "
+                    "d.cancellation_generation FROM debate_turns AS t "
+                    "JOIN debates AS d ON d.id=t.debate_id WHERE t.id=:turn_id"
+                ),
+                {"turn_id": turn_id},
+            )
+            .mappings()
+            .first()
+        )
+        if turn_row is None or str(turn_row["generation_status"]) != "final_ready":
+            raise RuntimeError("LLM publication turn is not final-ready")
+        if str(turn_row["debate_id"]) != frozen.debate_id or str(
+            turn_row["knowledge_snapshot_id"]
+        ) != str(frozen.snapshot.snapshot_id):
+            raise RuntimeError("LLM publication recovery identity is stale")
+        try:
+            predecessor_ids = json.loads(str(turn_row["predecessor_turn_ids_json"]))
+            if not isinstance(predecessor_ids, list) or not all(
+                isinstance(item, str) and item for item in predecessor_ids
+            ):
+                raise ValueError("predecessor fence is invalid")
+            fence_value = {
+                "predecessor_turn_ids": predecessor_ids,
+                "transcript_hash": str(turn_row["transcript_hash"] or ""),
+                "cutoff_turn_index": int(turn_row["cutoff_turn_index"]),
+                "generation": int(turn_row["cancellation_generation"]),
+            }
+            fence_hash = hashlib.sha256(_canonical(fence_value).encode("utf-8")).hexdigest()
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError("LLM publication generation fence is invalid") from exc
+        if (
+            frozen.generation_fence != fence_hash
+            or str(_read(stage, "generation_fence", "")) != fence_hash
+            or str(_read(stage, "transcript_hash", "")) != str(turn_row["transcript_hash"] or "")
+            or str(_read(stage, "receipt_hash", "")) != frozen.snapshot.receipt_hash
+        ):
+            raise RuntimeError("LLM publication generation fence is stale")
+        for receipt in frozen.snapshot.receipts:
+            chunk = self.db.execute(
+                text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
+                {"chunk_id": receipt.chunk_id},
+            ).first()
+            if (
+                chunk is None
+                or str(chunk[0]) != str(frozen.snapshot.snapshot_id)
+                or str(chunk[1]) != receipt.text
+            ):
+                raise RuntimeError("LLM publication recovery receipt crossed its snapshot")
+        stored_value = _read(kwargs.get("final_ready"), "structured")
+        if isinstance(stored_value, SegmentTurnResult):
+            stored_payload = stored_value.as_stored_payload()
+        elif isinstance(stored_value, StoredSegmentTurnResult):
+            stored_payload = stored_value.as_payload()
+        elif isinstance(stored_value, Mapping):
+            stored_payload = dict(stored_value)
+        else:
+            raise RuntimeError("LLM publication segment result is unavailable")
+        stored = load_stored_segment_turn_result(stored_payload)
+        stored_hash = hashlib.sha256(_canonical(stored.as_payload()).encode("utf-8")).hexdigest()
+        if stored_hash != output_hash:
+            raise RuntimeError("LLM publication segment output hash is stale")
+        try:
+            persisted_structured = json.loads(str(turn_row["structured_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError("LLM publication structured result is invalid") from exc
+        if persisted_structured != stored.as_payload():
+            raise RuntimeError("LLM publication structured result is stale")
+        try:
+            persisted_receipts = json.loads(str(turn_row["retrieval_receipts_json"] or "[]"))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError("LLM publication receipts are invalid") from exc
+        if not isinstance(persisted_receipts, list):
+            raise RuntimeError("LLM publication receipts are invalid")
+        persisted_ids = tuple(
+            str(item.get("evidence_id"))
+            for item in persisted_receipts
+            if isinstance(item, Mapping) and item.get("evidence_id")
+        )
+        if persisted_ids != stored.used_evidence_ids:
+            raise RuntimeError("LLM publication receipts do not match segment references")
+        final_ready = kwargs.get("final_ready")
+        if (
+            str(_read(final_ready, "turn_id", "")) != turn_id
+            or str(_read(final_ready, "participant_id", "")) != str(turn_row["participant_id"])
+            or str(_read(final_ready, "snapshot_id", "")) != str(turn_row["knowledge_snapshot_id"])
+            or str(_read(final_ready, "transcript_hash", "")) != str(turn_row["transcript_hash"])
+            or _as_int(_read(final_ready, "cutoff_turn_index", -1), -1)
+            != int(turn_row["cutoff_turn_index"])
+            or tuple(_items(_read(final_ready, "predecessor_turn_ids", ())))
+            != tuple(predecessor_ids)
+        ):
+            raise RuntimeError("LLM publication turn fence is stale")
+        manifest_row = (
+            self.db.execute(
+                text(
+                    "SELECT scope_id, provider_operation, model_key, policy_hash, "
+                    "build_manifest_hash, debate_id, turn_id, max_attempts, repair_policy_hash "
+                    "FROM provider_export_manifests WHERE manifest_hash=:manifest_hash"
+                ),
+                {"manifest_hash": str(_read(stage, "export_manifest_hash", ""))},
+            )
+            .mappings()
+            .first()
+        )
+        expected_attempts = 2 if _read(stage, "repair_policy_hash") else 1
+        if manifest_row is None or (
+            str(manifest_row["scope_id"]) != frozen.debate_id
+            or str(manifest_row["provider_operation"]) != "llm_debate_turn"
+            or str(manifest_row["model_key"]) != str(_read(stage, "model_key", ""))
+            or str(manifest_row["policy_hash"]) != frozen.policy_hash
+            or str(manifest_row["build_manifest_hash"]) != frozen.build_manifest_hash
+            or str(manifest_row["debate_id"]) != frozen.debate_id
+            or str(manifest_row["turn_id"]) != turn_id
+            or int(manifest_row["max_attempts"]) != expected_attempts
+            or str(manifest_row["repair_policy_hash"] or "")
+            != str(_read(stage, "repair_policy_hash", "") or "")
+        ):
+            raise RuntimeError("LLM publication export manifest is stale")
+        state = str(operation_row["state"])
+        if state == "succeeded":
+            reservation_state = self.db.execute(
+                text("SELECT state FROM provider_reservations WHERE operation_id=:operation_id"),
+                {"operation_id": operation_id},
+            ).scalar_one_or_none()
+            if str(reservation_state) != "succeeded":
+                raise RuntimeError("LLM publication reservation state is inconsistent")
+            return operation_row
+        if state != "accepted":
+            raise RuntimeError("LLM publication operation is not accepted")
+        changed = self.db.execute(
+            text(
+                "UPDATE provider_operations SET state='succeeded', updated_at=:updated_at "
+                "WHERE id=:operation_id AND state='accepted' AND staged_response_hash=:output_hash"
+            ),
+            {"updated_at": _now(), "operation_id": operation_id, "output_hash": output_hash},
         )
         if int(getattr(changed, "rowcount", 0)) != 1:
             raise RuntimeError("LLM publication operation CAS failed")

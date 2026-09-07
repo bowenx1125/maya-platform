@@ -17,7 +17,12 @@ from .models import (
     CivilizationReportCurrentSuccess,
     CivilizationReportRevision,
 )
-from .service import RealReportRuntime, process_insight_job, process_report_job
+from .service import (
+    RealReportRuntime,
+    fail_report_waiting_for_insight,
+    process_insight_job,
+    process_report_job,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,7 +79,22 @@ class ReportTaskManager:
             self._schedule(debate_id)
 
     async def _run(self, debate_id: str) -> None:
-        await asyncio.to_thread(self._run_chain, debate_id)
+        work = asyncio.create_task(asyncio.to_thread(self._run_chain, debate_id))
+        try:
+            await asyncio.shield(work)
+        except asyncio.CancelledError:
+            try:
+                await work
+            except Exception:
+                pass
+            raise
+
+    async def cancel_debate(self, debate_id: str) -> None:
+        self._rewake.discard(debate_id)
+        task = self._tasks.get(debate_id)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     def _next_job(self, debate_id: str) -> tuple[str, str] | None:
         with self.session_factory() as db:
@@ -150,6 +170,7 @@ class ReportTaskManager:
                     if snapshot is not None and snapshot.status == "generating":
                         snapshot.status = "failed"
                         snapshot.safe_error_code = "insight_generation_failed"
+                        fail_report_waiting_for_insight(db, snapshot.id)
                 if operation == "report.generate":
                     pointer = (
                         db.scalar(

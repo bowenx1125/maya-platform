@@ -24,6 +24,7 @@ from app.modules.reports.real_schema import (
     REPORT_SECTION_SCHEMA_HASH,
     ReportBoundaryError,
     ReportRequest,
+    ReportRequestV2,
     validate_report_sections,
 )
 from app.modules.reports.schemas import ReportSectionOutput
@@ -71,7 +72,8 @@ def _canonical(value: object) -> str:
 
 def _hash_provider_request(prepared: ReportWireRequest, body: Mapping[str, object]) -> str:
     hash_input = {
-        "prompt_contract_version": REPORT_PROMPT_CONTRACT_VERSION,
+        "prompt_contract_version": prepared.prompt_contract_version
+        or REPORT_PROMPT_CONTRACT_VERSION,
         "method": "POST",
         "endpoint": prepared.endpoint,
         "body": body,
@@ -105,7 +107,7 @@ def _provider_schema_body(prepared: ReportWireRequest) -> dict[str, object]:
 
 
 def _prepare_provider_request(
-    value: ReportRequest | Mapping[str, object],
+    value: ReportRequest | ReportRequestV2 | Mapping[str, object],
     *,
     config: DashScopeLLMConfig,
     tokenizer: object | None,
@@ -260,7 +262,9 @@ class RealReportProvider:
         if self.transport is None:
             self.transport = HttpxLLMTransport()
 
-    def build_request(self, value: ReportRequest | Mapping[str, object]) -> ReportWireRequest:
+    def build_request(
+        self, value: ReportRequest | ReportRequestV2 | Mapping[str, object]
+    ) -> ReportWireRequest:
         """Build and validate the exact request without network I/O."""
 
         if not isinstance(self.config, DashScopeLLMConfig):
@@ -309,7 +313,9 @@ class RealReportProvider:
             raise ReportProviderError("report_price_card_required")
         return _response_sections(payload, price_card=self.price_card, prepared=prepared)
 
-    def execute(self, value: ReportRequest | Mapping[str, object]) -> ReportSectionOutput:
+    def execute(
+        self, value: ReportRequest | ReportRequestV2 | Mapping[str, object]
+    ) -> ReportSectionOutput:
         """Build once, then make one transport call."""
 
         return self.execute_prepared(self.build_request(value))
@@ -323,7 +329,7 @@ RealReportAdapter = RealReportProvider
 
 
 def generate_report_sections(
-    value: ReportRequest | Mapping[str, object],
+    value: ReportRequest | ReportRequestV2 | Mapping[str, object],
     *,
     config: DashScopeLLMConfig,
     transport: LLMTransport | None = None,

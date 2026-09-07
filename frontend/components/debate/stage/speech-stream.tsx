@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { EvidenceTraceInspector } from "../../evidence";
+import {
+  EvidenceTraceInspector,
+  SegmentRagInspector,
+  type SegmentRagSegment,
+  type SegmentRagSource,
+} from "../../evidence";
 import styles from "./debate-stage.module.css";
 import type { PlaybackStageLabels } from "./types";
 
@@ -12,8 +17,14 @@ export type StreamTurn = {
   participant_id: string;
   round_no: number;
   speech: string;
+  audio_ready?: boolean | null;
   evidence_trace?: unknown;
   sources?: { source_filename: string; chunk_id?: string | null }[];
+  segment_turn?: {
+    schema_version: "segment_turn_v2";
+    segments: readonly SegmentRagSegment[];
+  } | null;
+  source_details?: readonly SegmentRagSource[];
   playback_resource?: { playback_url: string } | null;
 };
 
@@ -104,7 +115,10 @@ function StreamItem({
   phaseOf: SpeechStreamProps["phaseOf"];
   animate: boolean;
 }) {
-  const shown = useTypedSpeech(turn.speech, animate);
+  const segments = turn.segment_turn?.segments ?? [];
+  const hasStructuredRag =
+    segments.length > 0 || (turn.source_details?.length ?? 0) > 0;
+  const shown = useTypedSpeech(turn.speech, animate && !hasStructuredRag);
   const who = describe(turn.participant_id);
   const phase = phaseOf(turn);
   const audioUrl = turn.playback_resource?.playback_url ?? null;
@@ -139,26 +153,47 @@ function StreamItem({
           </button>
         ) : null}
       </div>
-      <p className={styles.streamSpeech}>
-        {shown}
-        {shown.length < turn.speech.length ? (
-          <span aria-hidden="true" className={styles.caret} />
-        ) : null}
-      </p>
-      <EvidenceTraceInspector
-        speech={turn.speech}
-        trace={turn.evidence_trace as never}
-      />
-      {/* Which snapshot files backed this speech. It belongs with the speech
-          it justifies, and merging the two panels must not quietly drop it. */}
-      {/* One line, not a heading over a bullet list: a turn cites one or two
-          files and the list format gave three lines of chrome to two words. */}
-      <p className={styles.streamSources}>
-        <span className={styles.streamSourcesLabel}>{labels.sources}:</span>{" "}
-        {turn.sources && turn.sources.length > 0
-          ? turn.sources.map((source) => source.source_filename).join(", ")
-          : labels.noSources}
-      </p>
+      {segments.length > 0 ? (
+        <div className={styles.streamParagraphs}>
+          {segments.map((segment, index) => (
+            <p
+              className={styles.streamSpeech}
+              key={`${turn.id}-segment-${index}`}
+            >
+              {segment.text}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className={styles.streamSpeech}>
+          {shown}
+          {shown.length < turn.speech.length ? (
+            <span aria-hidden="true" className={styles.caret} />
+          ) : null}
+        </p>
+      )}
+      {hasStructuredRag ? (
+        <SegmentRagInspector
+          segments={segments}
+          sources={turn.source_details ?? []}
+        />
+      ) : (
+        <>
+          <EvidenceTraceInspector
+            speech={turn.speech}
+            trace={turn.evidence_trace as never}
+          />
+          {/* Which snapshot files backed this speech. It belongs with the
+              speech it justifies, and merging the two panels must not quietly
+              drop it. */}
+          <p className={styles.streamSources}>
+            <span className={styles.streamSourcesLabel}>{labels.sources}:</span>{" "}
+            {turn.sources && turn.sources.length > 0
+              ? turn.sources.map((source) => source.source_filename).join(", ")
+              : labels.noSources}
+          </p>
+        </>
+      )}
       {audioUrl ? <audio preload="none" ref={reviewRef} /> : null}
     </article>
   );

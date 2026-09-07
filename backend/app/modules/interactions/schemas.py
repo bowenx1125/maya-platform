@@ -25,6 +25,7 @@ class BarrageMessage(ClosedModel):
     raw_text: str
     sequence: int = Field(ge=1)
     submitted_at: datetime
+    turn_id: UUID | None = None
 
 
 class TeacherInteractionClosed(ClosedModel):
@@ -63,6 +64,9 @@ class PublicInteractionParticipant(ClosedModel):
 class PublicInteractionForm(ClosedModel):
     topic: str
     participants: list[PublicInteractionParticipant]
+    current_turn_id: UUID | None = None
+    round_no: int | None = None
+    barrage_open: bool = True
 
 
 class VoteRequest(ClosedModel):
@@ -74,6 +78,17 @@ class BarrageRequest(ClosedModel):
     nickname: str = Field(min_length=1)
     raw_text: str = Field(min_length=1)
     client_submission_id: UUID
+    turn_id: UUID | None = None
+
+
+class FreezeFinalRequest(ClosedModel):
+    expected_control_version: int = Field(ge=0)
+
+
+class FrozenFinalInput(ClosedModel):
+    ready: Literal[True] = True
+    barrage_count: int = Field(ge=0, le=12)
+    cutoff_sequence: int = Field(ge=0)
 
 
 class VoteSubmitted(ClosedModel):

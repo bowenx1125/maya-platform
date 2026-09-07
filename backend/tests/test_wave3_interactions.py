@@ -341,7 +341,13 @@ def test_m13_full_lifecycle_preserves_anonymous_boundary(interaction_app: Any) -
 
     form = service.public_form(access_token=token)
     assert form.topic.startswith("Should a classroom")
-    assert set(form.model_dump()) == {"topic", "participants"}
+    assert set(form.model_dump()) == {
+        "topic",
+        "participants",
+        "current_turn_id",
+        "round_no",
+        "barrage_open",
+    }
     assert set(form.participants[0].model_dump()) == {"participant_id", "slot", "name"}
 
     vote_key = str(uuid4())
@@ -923,6 +929,9 @@ def test_a_complete_finish_releases_its_audio_and_a_partial_one_keeps_it(
             released.append(debate_id)
 
     class _Repository:
+        def get_debate(self, db: Any, debate_id: str) -> Any:
+            return db.get(Debate, debate_id)
+
         def mark_debate_audio_deleted(self, _db: Any, debate_id: str) -> int:
             released.append(f"marked:{debate_id}")
             return 1

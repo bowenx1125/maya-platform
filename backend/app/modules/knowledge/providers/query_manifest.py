@@ -34,7 +34,7 @@ from .snapshot_build import REAL_EMBEDDING_IDENTITY
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _QUERY_KINDS = frozenset(
-    {"viewpoint", "pending_question", "rebuttal", "updated_position", "context"}
+    {"viewpoint", "pending_question", "rebuttal", "updated_position", "context", "barrage"}
 )
 
 
@@ -241,6 +241,24 @@ def ensure_real_query_export_manifest(
             ExportFieldV1(
                 "current_evidence_excerpt",
                 sha256_hex(canonical_json_bytes(texts)),
+            ),
+            *(
+                (
+                    ExportFieldV1(
+                        "anonymous_classroom_barrage",
+                        sha256_hex(
+                            canonical_json_bytes(
+                                [
+                                    text
+                                    for kind, text in zip(kinds, texts, strict=True)
+                                    if kind == "barrage"
+                                ]
+                            )
+                        ),
+                    ),
+                )
+                if "barrage" in kinds
+                else ()
             ),
         ),
     )

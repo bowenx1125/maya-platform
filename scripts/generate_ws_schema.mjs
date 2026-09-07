@@ -42,6 +42,32 @@ const closed = (properties, required = []) => ({
   additionalProperties: false,
 });
 const nullable = (schema) => ({ anyOf: [schema, { type: "null" }] });
+const segmentTurn = closed(
+  {
+    schema_version: { type: "string", const: "segment_turn_v2" },
+    segments: arrayOf(
+      closed(
+        {
+          text: { type: "string" },
+          source_ids: arrayOf({ type: "string" }),
+          reply_to: nullable({ type: "string" }),
+        },
+        ["text", "source_ids", "reply_to"],
+      ),
+    ),
+  },
+  ["segments"],
+);
+const segmentSource = closed(
+  {
+    source_id: { type: "string" },
+    source_filename: { type: "string" },
+    excerpt: { type: "string" },
+    query_text: nullable({ type: "string" }),
+    version_label: { type: "string" },
+  },
+  ["source_id", "source_filename", "excerpt", "version_label"],
+);
 const roundPhase = {
   type: "string",
   enum: ["opening", "exchange", "final_integration", "rebuttal"],
@@ -111,6 +137,9 @@ const publicTurn = closed(
     },
     sources: arrayOf(retrievalSource),
     evidence_trace: nullable(arrayOf(evidenceTrace)),
+    segment_turn: nullable(segmentTurn),
+    source_details: arrayOf(segmentSource),
+    audio_ready: nullable({ type: "boolean" }),
   },
   [
     "id",
@@ -292,6 +321,7 @@ const payloads = {
       interaction_status: statuses.interaction,
       insight_status: statuses.insight,
       report_status: statuses.report,
+      final_input_frozen: { type: "boolean" },
       public_turns: arrayOf(publicTurn),
       playback: playbackState,
       interaction: interactionSummary,
@@ -383,6 +413,10 @@ const payloads = {
       round_count: nullable(roundCount),
       speech: nonEmpty,
       sources: arrayOf(retrievalSource),
+      evidence_trace: nullable(arrayOf(evidenceTrace)),
+      segment_turn: nullable(segmentTurn),
+      source_details: arrayOf(segmentSource),
+      audio_ready: nullable({ type: "boolean" }),
       playback_url: publicMediaPath,
       avatar_states: arrayOf(avatarState, 1),
       cursor_ms: { type: "integer", const: 0 },

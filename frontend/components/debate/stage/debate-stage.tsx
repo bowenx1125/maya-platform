@@ -17,7 +17,6 @@ import type {
   ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
-import { EvidenceTraceInspector, normaliseEvidenceTrace } from "../../evidence";
 import { ReleaseButton } from "../release-button";
 import { SpeechStream, type StreamTurn } from "./speech-stream";
 import { expectedTurnCount } from "../../../lib/debate-rounds";
@@ -43,6 +42,7 @@ import {
   isSafeMediaUrl,
   parsePlaybackEvent,
   parsePrivatePlaybackMessage,
+  normaliseVisiblePlaybackTurns,
   publicTurnById,
   visibleTurnFromPlaybackStarted,
 } from "./protocol";
@@ -60,6 +60,19 @@ import type {
 } from "./types";
 
 type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
+
+function atFinalBoundary(
+  detail: DebateDetail,
+  playback: DebatePlaybackState,
+): boolean {
+  return (
+    detail.turn_protocol === "segments_v2" &&
+    playback.mode === "live" &&
+    detail.public_turns.find((turn) => turn.id === playback.current_turn_id)
+      ?.turn_index ===
+      detail.participants.length * (detail.round_count - 1) - 1
+  );
+}
 
 type ProviderGateState = {
   code: "provider_confirmation_required" | "provider_not_sent";
@@ -121,13 +134,38 @@ function isProductTerminalDetail(
   );
 }
 
+function hasReplayableSegmentAudio(
+  detail: Pick<DebateDetail, "turn_protocol" | "public_turns">,
+): boolean {
+  if (detail.turn_protocol !== "segments_v2") return false;
+  const turns = normalisePublicTurns(detail.public_turns);
+  return (
+    detail.public_turns.length > 0 &&
+    turns.length === detail.public_turns.length &&
+    turns.every((turn) => turn.audio_ready === true)
+  );
+}
+
+function replayAudioAvailable(
+  detail: Pick<DebateDetail, "turn_protocol" | "public_turns">,
+  audioPointer: string | null | undefined,
+  debateId: string,
+): boolean {
+  return detail.turn_protocol === "segments_v2"
+    ? hasReplayableSegmentAudio(detail)
+    : audioPointer === debateId;
+}
+
 function isReplayableTerminalSource(
-  detail: Pick<DebateDetail, "status" | "playback" | "public_turns">,
+  detail: Pick<
+    DebateDetail,
+    "status" | "playback" | "public_turns" | "turn_protocol"
+  >,
   audioPointer: string | null | undefined,
   debateId: string,
 ): boolean {
   return (
-    audioPointer === debateId &&
+    replayAudioAvailable(detail, audioPointer, debateId) &&
     detail.public_turns.length > 0 &&
     (detail.status === "debate_finished" || detail.status === "completed") &&
     detail.playback.mode === "live" &&
@@ -253,51 +291,8 @@ function hasStaleControlVersion(
   );
 }
 
-function normaliseSources(value: unknown): VisiblePlaybackTurn["sources"] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((source) => {
-    if (!isRecord(source) || !isNonEmptyString(source.source_filename))
-      return [];
-    return [
-      {
-        source_filename: source.source_filename,
-        ...(isNonEmptyString(source.chunk_id)
-          ? { chunk_id: source.chunk_id }
-          : {}),
-      },
-    ];
-  });
-}
-
 function normalisePublicTurns(value: unknown): VisiblePlaybackTurn[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!isRecord(item)) return [];
-    if (
-      !isNonEmptyString(item.id) ||
-      !isNonEmptyString(item.participant_id) ||
-      !isNonEmptyString(item.speech)
-    ) {
-      return [];
-    }
-    const evidenceTrace = normaliseEvidenceTrace(item.evidence_trace);
-    return [
-      {
-        id: item.id,
-        participant_id: item.participant_id,
-        round_no: integer(item.round_no, 1),
-        turn_index: integer(item.turn_index, 0),
-        speech: item.speech,
-        sources: normaliseSources(item.sources),
-        ...(evidenceTrace.length > 0 ? { evidence_trace: evidenceTrace } : {}),
-        ...(item.phase === "opening" ||
-        item.phase === "exchange" ||
-        item.phase === "final_integration"
-          ? { phase: item.phase }
-          : {}),
-      },
-    ];
-  });
+  return normaliseVisiblePlaybackTurns(value);
 }
 
 function normaliseAvatarStates(value: unknown): AvatarVisualState[] {
@@ -1107,6 +1102,7 @@ export function DebateStage({
           controllerEpochRef.current = message.controller_epoch;
           controlVersionRef.current = message.control_version;
           acquirePendingRef.current = false;
+          terminalReplayAcquirePendingRef.current = false;
           markControllerReady(true);
           setFailure(null);
           applyPlayback({ control_version: message.control_version });
@@ -1334,6 +1330,7 @@ export function DebateStage({
       const nextDetail: DebateDetail = {
         ...detailRef.current,
         status: nextStatus,
+        final_input_frozen: payload.final_input_frozen === true,
         last_sequence: decision.nextSequence,
         playback: nextPlayback,
         public_turns: turns as DebateTurn[],
@@ -2295,10 +2292,27 @@ export function DebateStage({
         socketGenerationRef.current === socketGeneration;
       const onOpen = () => {
         if (!isCurrentSocket()) return;
-        if (controllerAcquireBlockedRef.current) return;
+        // Terminal debates do not acquire a controller on connect.  A teacher
+        // may still press Replay while the socket is connecting, though; the
+        // request is intentionally held until the browser reports OPEN so a
+        // native WebSocket.send() cannot throw and silently abort the action.
+        const replayAcquirePending = terminalReplayAcquirePendingRef.current;
+        const terminalReplayMayAcquire =
+          replayAcquirePending &&
+          (connectionIssueRef.current === null ||
+            connectionIssueRef.current === "terminal");
+        if (controllerAcquireBlockedRef.current && !terminalReplayMayAcquire)
+          return;
+        if (terminalReplayMayAcquire) {
+          controllerAcquireBlockedRef.current = false;
+        }
         markConnection("connected");
         markConnectionIssue(null);
         setFailure(null);
+        if (replayAcquirePending) {
+          acquireReplayControllerAfterTerminal();
+          return;
+        }
         if (!readOnly && !isProductTerminalDetail(detailRef.current)) {
           sendControllerAcquire();
         }
@@ -2383,6 +2397,7 @@ export function DebateStage({
       }
     },
     [
+      acquireReplayControllerAfterTerminal,
       handleSocketMessage,
       markConnection,
       markConnectionIssue,
@@ -2614,11 +2629,16 @@ export function DebateStage({
         audioPointer,
         debateId,
       );
+      const replayAudioReady = replayAudioAvailable(
+        detailRef.current,
+        audioPointer,
+        debateId,
+      );
       if (
         action === "replay" &&
         ((!controllerReadyRef.current && !replayableTerminalSource) ||
           acquirePendingRef.current ||
-          audioPointer !== debateId)
+          !replayAudioReady)
       ) {
         return;
       }
@@ -2629,7 +2649,11 @@ export function DebateStage({
           (playbackRef.current.mode !== "live" &&
             playbackRef.current.mode !== "replay") ||
           playbackRef.current.status !== "waiting_next" ||
-          !playbackRef.current.next_turn_ready ||
+          (!playbackRef.current.next_turn_ready &&
+            !(
+              atFinalBoundary(detailRef.current, playbackRef.current) &&
+              !detailRef.current.final_input_frozen
+            )) ||
           !playbackRef.current.current_turn_id)
       ) {
         return;
@@ -2675,6 +2699,7 @@ export function DebateStage({
           pendingActionRef.current = "start";
           if (
             audioPointer &&
+            detailRef.current.turn_protocol !== "segments_v2" &&
             !window.confirm(labelsRef.current.replaceRetainedAudioConfirm)
           ) {
             return;
@@ -2688,10 +2713,7 @@ export function DebateStage({
               expected_revision: detailRef.current.revision,
               expected_current_audio_debate_id: audioPointer ?? null,
               confirm_previous_audio_cleanup: Boolean(audioPointer),
-              // The interface language at the moment Start is pressed decides
-              // what the Agents speak. Switching the interface afterwards
-              // translates the chrome, never the lesson.
-              output_language: outputLanguage,
+              output_language: detailRef.current.output_language ?? "en",
             },
             { idempotency },
           );
@@ -2728,6 +2750,15 @@ export function DebateStage({
         if (action === "next") {
           const expectedCurrentTurnId = current.current_turn_id;
           if (!expectedCurrentTurnId) return;
+          if (
+            atFinalBoundary(detailRef.current, current) &&
+            !detailRef.current.final_input_frozen
+          ) {
+            await api.freezeFinalInput(debateId, current.control_version);
+            if (!isCurrentRequest()) return;
+            commitDetail({ ...detailRef.current, final_input_frozen: true });
+            return;
+          }
           const next = await api.advanceDebatePlayback(debateId, {
             expected_control_version: current.control_version,
             expected_current_turn_id: expectedCurrentTurnId,
@@ -2746,10 +2777,35 @@ export function DebateStage({
         if (action === "replay") {
           pendingActionRef.current = "replay";
           if (!controllerReadyRef.current) {
+            const socket = socketRef.current;
+            const readyState = socket
+              ? (socket as PlaybackSocket & { readyState?: unknown }).readyState
+              : null;
+            const socketState =
+              typeof readyState === "number" ? readyState : null;
+            // A native WebSocket throws when send() is called in CONNECTING
+            // state. Hold the acquire until onOpen instead of turning a
+            // perfectly valid terminal replay into a silent no-op.
+            if (!socket || socketState === 2 || socketState === 3) {
+              setControlError(labelsRef.current.connectionDisconnected);
+              return;
+            }
+            const socketOpening =
+              socketState === 0 ||
+              (socketState === null && connection !== "connected");
             const acquireResult = new Promise<void>((resolve, reject) => {
               pendingReplayAcquireRef.current = { resolve, reject };
             });
-            if (!sendControllerAcquire(true)) {
+            terminalReplayAcquirePendingRef.current = true;
+            if (
+              controllerAcquireBlockedRef.current &&
+              connectionIssueRef.current === "terminal"
+            ) {
+              controllerAcquireBlockedRef.current = false;
+              markConnectionIssue(null);
+            }
+            if (!socketOpening && !sendControllerAcquire(true)) {
+              terminalReplayAcquirePendingRef.current = false;
               settlePendingReplayAcquire(
                 new Error(labelsRef.current.connectionError),
               );
@@ -2831,8 +2887,10 @@ export function DebateStage({
       audioPointer,
       busyAction,
       commitDetail,
+      connection,
       debateId,
       markControllerReady,
+      markConnectionIssue,
       markCurrentAudioDebate,
       outputLanguage,
       readOnly,
@@ -2896,16 +2954,25 @@ export function DebateStage({
   );
   const canReplay =
     !readOnly &&
-    audioPointer === debateId &&
+    replayAudioAvailable(detailState, audioPointer, debateId) &&
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&
     playback.mode === "live" &&
     playback.status === "completed" &&
+    connectionIssue === null &&
     (controllerReady || replayableTerminalSource);
+  const finalBoundary = atFinalBoundary(detailState, playback);
+  const finalActionLabel =
+    finalBoundary && !detailState.final_input_frozen
+      ? "Final"
+      : finalBoundary && !playback.next_turn_ready
+        ? "Preparing final…"
+        : labels.next;
   const canAdvance =
     playback.status === "waiting_next" &&
-    playback.next_turn_ready &&
+    (playback.next_turn_ready ||
+      (finalBoundary && !detailState.final_input_frozen)) &&
     controllerReady &&
     busyAction === null &&
     (playback.mode === "live" || playback.mode === "replay");
@@ -2929,7 +2996,7 @@ export function DebateStage({
     publicTurns.length > 0 &&
     (detailState.status === "debate_finished" ||
       detailState.status === "completed") &&
-    audioPointer !== debateId;
+    !replayAudioAvailable(detailState, audioPointer, debateId);
   const phase = deriveClassroomPhase(
     detailState.status,
     playback.status,
@@ -3137,7 +3204,7 @@ export function DebateStage({
                     disabled={!canAdvance}
                     onClick={() => void runControl("next")}
                   >
-                    {labels.next}
+                    {finalActionLabel}
                   </button>
                 </div>
                 {busyAction ? (

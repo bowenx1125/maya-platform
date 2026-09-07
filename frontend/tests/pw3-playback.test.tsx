@@ -57,6 +57,7 @@ function turns() {
       speech: speech("First"),
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     },
     {
@@ -67,6 +68,7 @@ function turns() {
       speech: speech("Second"),
       retrieval_status: "matched" as const,
       grounding_mode: "mixed" as const,
+      segment_turn: null,
       sources: [],
     },
   ];
@@ -85,6 +87,11 @@ function detail(
     created_at: "2026-08-28T00:00:00Z",
     prepared_turns: 0,
     expected_turns: 0,
+    preview: null,
+    output_language: "en",
+    turn_protocol: null,
+    preview_turns: [],
+    final_input_frozen: false,
     stall: null,
     revision: 1,
     last_sequence: 0,
@@ -191,6 +198,7 @@ function apiFor(
     replayDebate: vi.fn().mockResolvedValue(replay),
     pauseDebate: vi.fn().mockResolvedValue({ ...replay, status: "paused" }),
     resumeDebate: vi.fn().mockResolvedValue({ ...replay, status: "ready" }),
+    freezeFinalInput: vi.fn(),
     listProviderDataCallManifests: vi.fn().mockResolvedValue({
       scope_id: initial.id,
       items: [],

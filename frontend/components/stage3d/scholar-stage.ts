@@ -86,6 +86,11 @@ const EXPRESSION_STRENGTH: Record<AvatarConfig["expression_strength"], number> =
 const SPEAKER_STEP_FORWARD = 0.16;
 const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
+const CAMERA_FOV_DEGREES = 34;
+const DEFAULT_CAMERA_Z = 4.4;
+const CAMERA_TARGET_Y = 1.24;
+const CAMERA_DEPTH_MARGIN = 0.35;
+const CAMERA_EDGE_MARGIN = 1.08;
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
@@ -187,8 +192,10 @@ export class ScholarStage {
     this.onAnchors = options.onAnchors;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 60);
-    this.camera.position.set(0, 1.42, 4.4);
+    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEGREES, 1, 0.1, 60);
+    // Keep the normalized feet line above the lower edge; the old target was
+    // high enough to clip shoes at the default distance.
+    this.camera.position.set(0, CAMERA_TARGET_Y, DEFAULT_CAMERA_Z);
     this.scene.add(this.camera);
 
     this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x4a5464, 2.1));
@@ -224,6 +231,7 @@ export class ScholarStage {
   setCharacters(specs: StageCharacter[]): void {
     if (!this.template) {
       this.pending = specs;
+      this.updateCameraFraming();
       return;
     }
     this.rebuild(specs);
@@ -333,6 +341,36 @@ export class ScholarStage {
       this.scene.add(root);
       this.characters.push(character);
     });
+    this.updateCameraFraming();
+  }
+
+  /** Keep every figure inside the visible safe viewport as the bench grows. */
+  private updateCameraFraming(): void {
+    let minX = -0.55;
+    let maxX = 0.55;
+    if (this.characters.length > 0) {
+      minX = Infinity;
+      maxX = -Infinity;
+      for (const character of this.characters) {
+        const bounds = new THREE.Box3().setFromObject(character.root);
+        minX = Math.min(minX, bounds.min.x);
+        maxX = Math.max(maxX, bounds.max.x);
+      }
+    } else if (this.pending && this.pending.length > 1) {
+      const count = this.pending.length;
+      const spread = Math.min(0.86, 2.5 / count);
+      const outer = ((count - 1) / 2) * spread * 1.4;
+      minX = -outer - 0.55;
+      maxX = outer + 0.55;
+    }
+
+    const halfWidth =
+      Math.max(Math.abs(minX), Math.abs(maxX)) * CAMERA_EDGE_MARGIN;
+    const aspect = Math.max(this.camera.aspect, 0.1);
+    const halfFovRadians = THREE.MathUtils.degToRad(CAMERA_FOV_DEGREES / 2);
+    const requiredDistance =
+      halfWidth / Math.tan(halfFovRadians) / aspect + CAMERA_DEPTH_MARGIN;
+    this.camera.position.z = Math.max(DEFAULT_CAMERA_Z, requiredDistance);
   }
 
   private styleFigure(
@@ -523,6 +561,7 @@ export class ScholarStage {
     this.width = width;
     this.height = height;
     this.camera.aspect = width / height;
+    this.updateCameraFraming();
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
   }

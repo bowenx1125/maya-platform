@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
-import { LanguageSwitcher, useT } from "./locale";
+import { useT } from "./locale";
 import { useSession } from "./session-provider";
 
 export function AppShell({
@@ -92,7 +92,6 @@ export function AppShell({
           ))}
         </nav>
         <div className="nav-account">
-          <LanguageSwitcher />
           <button
             className="nav-logout"
             type="button"

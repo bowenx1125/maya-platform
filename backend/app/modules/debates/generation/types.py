@@ -19,10 +19,14 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
+from app.modules.agents.persona import (
+    PersonaProviderViewVersionDTO,
+    PersonaSpecVersion,
+)
 
 if TYPE_CHECKING:
     from .policy import TurnPlan
+    from .segments import SegmentTurnResult, StoredSegmentTurnResult
 
 
 StanceMode = Literal["assigned", "open"]
@@ -429,7 +433,7 @@ class ParticipantContext:
     # New W4-PROMPT callers provide the confirmed structured Persona here.
     # Legacy contexts may leave it unset; the legacy RuleSet path never reads
     # this field and therefore keeps its historical raw-input semantics.
-    persona: PersonaSpecV1 | PersonaProviderViewV1 | None = None
+    persona: PersonaSpecVersion | PersonaProviderViewVersionDTO | None = None
     persona_spec_hash: str | None = None
 
     def __post_init__(self) -> None:
@@ -559,7 +563,12 @@ class FinalReadyTurn:
     round_no: int
     turn_index: int
     speech: str
-    structured: StructuredTurnResult | MutualLearningTurnResultV1
+    structured: (
+        StructuredTurnResult
+        | MutualLearningTurnResultV1
+        | SegmentTurnResult
+        | StoredSegmentTurnResult
+    )
     retrieval_status: RetrievalStatus
     grounding_mode: GroundingMode
     used_receipts: tuple[SnapshotRetrievalReceipt, ...]
@@ -594,18 +603,20 @@ class FinalReadyTurn:
                     validate_exact_speech_span(self.speech, row.claim_text, row.speech_span)
                 except ValueError as exc:
                     raise ValueError("final-ready evidence trace span is invalid") from exc
-        structured_evidence_ids = (
-            tuple(self.structured.used_evidence_id)
-            if isinstance(self.structured, StructuredTurnResult)
-            else self.structured.used_evidence_ids
-        )
+        if isinstance(self.structured, StructuredTurnResult):
+            structured_evidence_ids = tuple(self.structured.used_evidence_id)
+        elif isinstance(self.structured, MutualLearningTurnResultV1):
+            structured_evidence_ids = self.structured.used_evidence_ids
+        else:
+            structured_evidence_ids = tuple(self.structured.used_evidence_id)
         if tuple(receipt.resolved_evidence_id() for receipt in self.used_receipts) != tuple(
             structured_evidence_ids
         ):
             raise ValueError("final-ready used receipts must match structured evidence IDs")
+        segment_result = getattr(self.structured, "protocol_version", None) == "segments_v2"
         if self.retrieval_status == "no_match" and self.grounding_mode != "general_reasoning":
             raise ValueError("no-match turns must use general_reasoning")
-        if self.retrieval_status == "matched" and not self.used_receipts:
+        if self.retrieval_status == "matched" and not self.used_receipts and not segment_result:
             raise ValueError("matched turns need used receipts")
         if self.grounding_mode == "mixed" and not self.used_receipts:
             raise ValueError("mixed turns need used receipts")
@@ -614,8 +625,12 @@ class FinalReadyTurn:
 
     @property
     def question_id(self) -> str | None:
-        question = self.structured.question
-        return f"{self.turn_id}:question" if question.type != "none" else None
+        question = getattr(self.structured, "question", None)
+        return (
+            f"{self.turn_id}:question"
+            if question is not None and getattr(question, "type", "none") != "none"
+            else None
+        )
 
     @property
     def public_sources(self) -> tuple[PublicSource, ...]:
@@ -635,7 +650,12 @@ class FinalReadyTurn:
 class ValidatedTurn:
     """Validator output with server-derived retrieval/grounding fields."""
 
-    result: StructuredTurnResult | MutualLearningTurnResultV1
+    result: (
+        StructuredTurnResult
+        | MutualLearningTurnResultV1
+        | SegmentTurnResult
+        | StoredSegmentTurnResult
+    )
     retrieval_status: RetrievalStatus
     grounding_mode: GroundingMode
     used_receipts: tuple[SnapshotRetrievalReceipt, ...]
@@ -657,8 +677,21 @@ class GenerationContext:
     pending_question: PendingQuestion | None = None
     # The language this Debate was started in; see debates/output_language.py.
     output_language: str = "en"
+    # Omitted contexts retain the immutable legacy protocol.  New callers must
+    # opt in explicitly so old hashes and stored turns remain readable.
+    turn_protocol: Literal["legacy_v1", "segments_v2"] = "legacy_v1"
+    round_count: int | None = None
+    barrages: tuple[Mapping[str, object], ...] = ()
 
     def __post_init__(self) -> None:
+        if self.turn_protocol not in {"legacy_v1", "segments_v2"}:
+            raise ValueError("unsupported turn protocol")
+        if self.round_count is not None and (
+            isinstance(self.round_count, bool)
+            or not isinstance(self.round_count, int)
+            or not 2 <= self.round_count <= 5
+        ):
+            raise ValueError("round_count must be between two and five")
         ordered = tuple(sorted(self.predecessors, key=lambda item: item.turn_index))
         if getattr(self.turn, "barrier", "prefix") == "round":
             # New mutual-learning plans may be built from a storage prefix
@@ -679,6 +712,8 @@ class GenerationContext:
         is validated against the current participant by :class:`TurnValidator`.
         """
 
+        if self.turn_protocol == "segments_v2":
+            return None
         if self.pending_question is not None:
             return self.pending_question
         source_predecessors = self.predecessors
@@ -691,18 +726,21 @@ class GenerationContext:
                 current_round=self.turn.round_no,
             )
         for predecessor in reversed(source_predecessors):
-            question = predecessor.structured.question
+            question = getattr(predecessor.structured, "question", None)
+            if question is None:
+                continue
             if (
-                question.type == "agent"
-                and question.target_participant_id == self.participant.participant_id
-                and question.text
+                getattr(question, "type", "none") == "agent"
+                and getattr(question, "target_participant_id", None)
+                == self.participant.participant_id
+                and getattr(question, "text", None)
             ):
                 return PendingQuestion(
                     question_id=predecessor.question_id or f"{predecessor.turn_id}:question",
                     source_turn_id=predecessor.turn_id,
                     source_participant_id=predecessor.participant_id,
                     target_participant_id=self.participant.participant_id,
-                    text=question.text,
+                    text=str(getattr(question, "text", None)),
                 )
         return None
 

@@ -1,17 +1,3 @@
-.intro {
-  max-width: 62ch;
-  margin: 0 0 6px;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
-.hint {
-  max-width: 62ch;
-  margin: 0 0 22px;
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
 .empty {
   margin: 0;
   padding: 26px 20px;

@@ -147,7 +147,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
       <PageIntro
         eyebrow={t("voiceProfilesEyebrow")}
         title={t("voiceProfilesTitle")}
-        description={t("voiceProfilesLede")}
       />
       {error ? (
         <ErrorNotice error={error} onRetry={() => setError(null)} />
@@ -157,10 +156,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
           {t(notice)}
         </div>
       ) : null}
-      <SectionCard
-        title={t("voiceCreateTitle")}
-        description={t("voiceCreateLede")}
-      >
+      <SectionCard title={t("voiceCreateTitle")}>
         <div className={styles.uploadCard}>
           <input
             className={styles.fileInput}
@@ -188,10 +184,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
           </button>
         </div>
       </SectionCard>
-      <SectionCard
-        title={t("voiceGroupTitle")}
-        description={t("voiceGroupLede")}
-      >
+      <SectionCard title={t("voiceGroupTitle")}>
         {profiles.length === 0 ? (
           <EmptyCard title={t("voiceNoCustom")} />
         ) : (

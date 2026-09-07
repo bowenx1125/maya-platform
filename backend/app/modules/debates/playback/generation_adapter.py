@@ -13,7 +13,6 @@ import json
 import logging
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -46,7 +45,6 @@ from app.modules.debates.generation import (
     StructuredTurnResult,
     TurnGenerationService,
     TurnPolicy,
-    build_provider_prompt,
     build_turn_subqueries,
     compute_prompt_receipt_hash,
     compute_transcript_hash,
@@ -55,13 +53,27 @@ from app.modules.debates.generation import (
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
-from app.modules.debates.generation.prompt_request import confirmed_persona_provider_view
+from app.modules.debates.generation.prompt_request import (
+    PromptRequestV1,
+    confirmed_persona_provider_view,
+)
 from app.modules.debates.generation.recovery import LLMRecoveryService
+from app.modules.debates.generation.recovery_input import (
+    receipts_from_recovery_input,
+    request_from_recovery_input,
+)
 from app.modules.debates.generation.runtime import LLMTurnRuntime
+from app.modules.debates.generation.segments import (
+    SegmentTurnResult,
+    StoredSegmentTurnResult,
+    load_stored_segment_turn_result,
+)
+from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
+from app.modules.debates.round_count import uses_segment_protocol
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
@@ -94,11 +106,9 @@ from app.modules.knowledge.providers.tokenizer import TokenizerError, count_toke
 from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
-    ExportConfirmationV1,
+    ExportFieldV1,
     ExportManifestV1,
-    ProviderPolicySnapshotV1,
     ProviderScopeBudgetV1,
-    confirm_export_manifest,
 )
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import (
@@ -109,13 +119,46 @@ from app.providers.factory import (
 )
 from app.providers.llm import LLMProvider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
-from app.providers.llm_price_card import debate_budget_cap, real_core_demo_budget_cap
+from app.providers.llm_price_card import (
+    LLM_INPUT_TOKEN_CAP,
+    LLM_MODEL_KEY,
+    LLM_REQUEST_COST_CAP,
+    LLM_RESERVED_OUTPUT_TOKEN_CAP,
+    debate_budget_cap,
+    real_core_demo_budget_cap,
+)
+from app.providers.llm_privacy import LLMOutboundManifestV1
+from app.providers.llm_segments import SegmentLLMAdapter, SegmentRecoveryInputV2
+from app.providers.standing_consent import (
+    apply_standing_provider_consent as _standing_provider_consent,
+)
 
 from .llm_publication import SqlLLMPublication
 from .protocols import PreparedGenerationFence, PreparedSource, PreparedTurn
 from .schemas import RetrievalSourceDTO
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _structured_payload(
+    value: StructuredTurnResult
+    | MutualLearningTurnResultV1
+    | SegmentTurnResult
+    | StoredSegmentTurnResult,
+) -> dict[str, Any]:
+    if isinstance(value, SegmentTurnResult):
+        return value.as_stored_payload()
+    if isinstance(value, StoredSegmentTurnResult):
+        return value.as_payload()
+    return value.model_dump(mode="json")
+
+
+def _prepared_word_count(final: FinalReadyTurn) -> int:
+    question = getattr(final.structured, "question", None)
+    return count_turn_words(
+        final.speech,
+        question.text if question is not None and question.type != "none" else None,
+    )
 
 
 def _provider_policy_hash(settings: object | None, slice_name: str) -> str | None:
@@ -169,61 +212,27 @@ def _dual_real(settings: object | None) -> bool:
     )
 
 
-def _standing_provider_consent(
-    repository: ProviderRepository,
-    manifest: ExportManifestV1,
-    policy: ProviderPolicySnapshotV1,
-    settings: object,
-) -> bool:
-    """Apply the operator's standing consent to one provider disclosure.
+def _query_request_cap(
+    settings: object | None,
+    debate: object,
+    *,
+    participant_count: int,
+) -> int:
+    """Choose the query scope cap for the protocol and frozen Debate shape.
 
-    Owner decision (2026-09-03), recorded through DEMO_AUTO_CONFIRM_PROVIDER
-    and effective only while DEMO_MODE is on. In a local Demo the teacher is
-    the same person who installed the policy, and confirming once per turn
-    stops the lesson rather than informing anyone.
-
-    Every check that guards a hand confirmation still runs here:
-    ``confirm_export_manifest`` re-derives the manifest and policy binding, and
-    the repository refuses a stale hash. A refusal still parks the turn, so
-    standing consent can never turn a rejected disclosure into a sent request.
-    It is standing consent, not an absence of consent: what the disclosure
-    covers is unchanged, and the teacher can withdraw it by clearing the flag.
+    The legacy Real-Core demo deliberately kept a two-request cap.  A
+    ``segments_v2`` Debate performs one query batch for each participant in
+    each round, so reusing that cap would make a valid multi-round Debate run
+    out of budget before generation finishes.
     """
 
-    if not getattr(settings, "demo_mode", False):
-        return False
-    if not getattr(settings, "demo_auto_confirm_provider", False):
-        return False
-    try:
-        revision = int(manifest.operation_revision)
-        confirmation = confirm_export_manifest(
-            manifest,
-            policy,
-            confirmed_at=datetime.now(UTC).isoformat(),
-            expected_manifest_hash=manifest.manifest_hash,
-            expected_policy_hash=policy.policy_hash,
-        )
-        identifier = repository.get_export_manifest_id(manifest.manifest_hash)
-        if identifier is None:
-            return False
-        repository.save_export_confirmation(
-            identifier,
-            ExportConfirmationV1(
-                manifest_hash=confirmation.manifest_hash,
-                policy_hash=confirmation.policy_hash,
-                confirmed_at=confirmation.confirmed_at,
-                confirmation_revision=revision,
-            ),
-        )
-    except Exception:
-        return False
-    # The operational record says which confirmations were standing rather than
-    # hand-given, so an audit can tell them apart.
-    LOGGER.warning(
-        "Provider disclosure confirmed by standing Demo consent manifest=%s",
-        manifest.manifest_hash,
-    )
-    return True
+    if not _dual_real(settings):
+        return SQL_QUERY_MAX_REQUESTS
+    if not uses_segment_protocol(debate):
+        return REAL_CORE_DEMO_QUERY_MAX_REQUESTS
+    if isinstance(participant_count, bool) or participant_count < 1:
+        raise ValueError("segment query participant count is invalid")
+    return participant_count * _debate_round_count(debate)
 
 
 def _assert_llm_provider_endpoint(
@@ -338,7 +347,7 @@ class SqlTurnPreparer:
         *,
         settings: object | None = None,
         llm: LLMProvider | None = None,
-        llm_runtime: LLMTurnRuntime | None = None,
+        llm_runtime: LLMTurnRuntime | SegmentLLMRuntime | None = None,
         llm_runtime_options: Mapping[str, object] | None = None,
     ) -> None:
         self.settings = settings
@@ -396,7 +405,7 @@ class SqlTurnPreparer:
         turn: DebateTurn,
         participant_row: DebateParticipant,
         participants: tuple[ParticipantContext, ...],
-    ) -> tuple[LLMTurnRuntime | None, Mapping[str, object], Any | None]:
+    ) -> tuple[LLMTurnRuntime | SegmentLLMRuntime | None, Mapping[str, object], Any | None]:
         """Compose the real LLM runtime and its pre-manifest callback.
 
         The callback is invoked only after the pure prompt builder has
@@ -470,8 +479,6 @@ class SqlTurnPreparer:
             ) from exc
         outbound_manifest = getattr(self.llm, "outbound_manifest", None)
         if outbound_manifest is None:
-            from app.providers.llm_privacy import LLMOutboundManifestV1
-
             # The Real-Core Demo used to force a one-shot envelope so a fixed
             # seven-request budget could never be exceeded.  The acceptance
             # budget is now derived from the Debate's own shape, so the standard
@@ -481,6 +488,13 @@ class SqlTurnPreparer:
             # that misses a phase field instead of failing the whole Debate.
             outbound_manifest = LLMOutboundManifestV1()
             self.llm.outbound_manifest = outbound_manifest
+        if uses_segment_protocol(debate):
+            outbound_manifest = replace(
+                outbound_manifest,
+                field_classes=tuple(
+                    sorted(set(outbound_manifest.field_classes) | {"anonymous_classroom_barrage"})
+                ),
+            )
         runtime = LLMTurnRuntime(
             ledger=repository,
             adapter=self.llm,
@@ -523,6 +537,186 @@ class SqlTurnPreparer:
                 )
             ),
         }
+
+        if uses_segment_protocol(debate):
+            # ``segments_v2`` has a different logical request and result
+            # contract.  Keep it on a sibling runtime so the legacy runtime
+            # cannot accidentally reinterpret paragraphs as claims.
+            segment_adapter = SegmentLLMAdapter(
+                self.llm.config,
+                self.llm.transport,
+                tokenizer=self.llm.tokenizer,
+                price_card=self.llm.price_card,
+                identity_tokens=tuple(static_options["identity_tokens"]),  # type: ignore[arg-type]
+                outbound_manifest=outbound_manifest,
+            )
+            segment_manifest = cast(LLMOutboundManifestV1, outbound_manifest)
+            segment_runtime = SegmentLLMRuntime(
+                ledger=repository,
+                adapter=segment_adapter,
+                stage_store=publication,
+                publication=publication,
+                defer_publication=True,
+            )
+
+            def prepare_segment_manifest(
+                snapshot: object,
+                context: GenerationContext,
+                _receipts: object,
+                _queries: object,
+            ) -> Mapping[str, object]:
+                # The callback receives the exact immutable snapshot that will
+                # be sent.  Hash only its logical groups; neither provider
+                # headers nor request body metadata enters the disclosure.
+                input_hash = str(getattr(snapshot, "input_hash", ""))
+                receipt_hash = str(getattr(snapshot, "receipt_hash", ""))
+                persona_payload: object = getattr(
+                    getattr(snapshot, "persona", None), "as_payload", lambda: {}
+                )()
+                history_payload: list[object] = [
+                    getattr(item, "as_payload", lambda: {})()
+                    for item in tuple(getattr(snapshot, "history", ()))
+                ]
+                source_payload: list[object] = [
+                    getattr(item, "as_payload", lambda: {})()
+                    for item in tuple(getattr(snapshot, "sources", ()))
+                ]
+                barrage_payload: list[object] = [
+                    getattr(item, "as_payload", lambda: {})()
+                    for item in tuple(getattr(snapshot, "barrages", ()))
+                ]
+
+                def digest(value: object) -> str:
+                    return hashlib.sha256(
+                        json.dumps(
+                            value,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            allow_nan=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+
+                logical_build: dict[str, object] = {
+                    "protocol": "segments_v2",
+                    "debate_id": str(context.debate_id),
+                    "turn_id": str(context.turn.turn_id),
+                    "input_hash": input_hash,
+                    "receipt_hash": receipt_hash,
+                    "round": getattr(getattr(snapshot, "round", None), "as_payload", lambda: {})(),
+                    "persona_spec_hash": str(getattr(version, "persona_spec_hash", "")),
+                }
+                build_manifest_hash = digest(logical_build)
+                model_key = str(getattr(segment_adapter.config, "model", LLM_MODEL_KEY))
+                persona_spec_hash = str(getattr(version, "persona_spec_hash", ""))
+                if len(persona_spec_hash) != 64:
+                    persona_spec_hash = digest(persona_payload)
+                field_values: dict[str, object] = {
+                    "topic_and_platform_rules": {
+                        "topic": getattr(snapshot, "topic", ""),
+                        "phase": getattr(snapshot, "phase", ""),
+                        "round": getattr(
+                            getattr(snapshot, "round", None), "as_payload", lambda: {}
+                        )(),
+                    },
+                    "confirmed_structured_persona": persona_payload,
+                    "public_predecessor_speech": history_payload,
+                    "current_evidence_excerpt": source_payload,
+                    "opaque_local_id": {
+                        "debate_id": str(context.debate_id),
+                        "turn_id": str(context.turn.turn_id),
+                    },
+                    "anonymous_classroom_barrage": barrage_payload,
+                    "server_authored_structure_repair_feedback": {
+                        "version": getattr(outbound_manifest, "repair_policy_version", ""),
+                        "hash": getattr(outbound_manifest, "repair_policy_hash", ""),
+                    },
+                }
+                fields = tuple(
+                    ExportFieldV1(
+                        field_class=str(field_class),
+                        value_sha256=digest(field_values[field_class]),
+                    )
+                    for field_class in segment_manifest.field_classes
+                )
+                manifest = ExportManifestV1(
+                    scope_id=str(debate.id),
+                    provider_operation="llm_debate_turn",
+                    model_key=model_key,
+                    policy_hash=policy_hash,
+                    build_manifest_hash=build_manifest_hash,
+                    persona_spec_hash=persona_spec_hash,
+                    fields=fields,
+                    debate_id=str(debate.id),
+                    turn_id=str(turn.id),
+                    max_attempts=segment_manifest.max_attempts,
+                    max_total_tokens=LLM_INPUT_TOKEN_CAP + LLM_RESERVED_OUTPUT_TOKEN_CAP,
+                    max_cost_cny=float(LLM_REQUEST_COST_CAP),
+                    repair_policy_version=(
+                        segment_manifest.repair_policy_version
+                        if segment_manifest.max_attempts == 2
+                        else None
+                    ),
+                    repair_policy_hash=(
+                        segment_manifest.repair_policy_hash
+                        if segment_manifest.max_attempts == 2
+                        else None
+                    ),
+                )
+                try:
+                    repository.ensure_export_manifest(
+                        manifest,
+                        policy_snapshot_id=str(policy_row_id),
+                        course_id=str(group.course_id),
+                        group_id=str(group.id),
+                        agent_version_id=str(version.id),
+                        debate_id=str(debate.id),
+                        turn_id=str(turn.id),
+                    )
+                except Exception as exc:
+                    raise PlatformError(
+                        "provider_preflight_blocked",
+                        "The exact LLM export manifest could not be persisted.",
+                        503,
+                    ) from exc
+                persisted = repository.get_export_manifest(manifest.manifest_hash)
+                if persisted is None:
+                    raise PlatformError(
+                        "provider_preflight_blocked",
+                        "The exact LLM export manifest could not be loaded.",
+                        503,
+                    )
+                confirmed = False
+                confirmation_revision = int(persisted.operation_revision)
+                try:
+                    require_exact_confirmation(
+                        db,
+                        persisted,
+                        policy,
+                        course_id=str(group.course_id),
+                        group_id=str(group.id),
+                        agent_version_id=str(version.id),
+                    )
+                except ProductPublicationError as exc:
+                    if exc.code not in {
+                        "provider_confirmation_required",
+                        "provider_confirmation_stale",
+                    }:
+                        raise
+                    confirmed = _standing_provider_consent(
+                        repository, persisted, policy, self.settings
+                    )
+                else:
+                    confirmed = True
+                return {
+                    **static_options,
+                    "manifest_hash": persisted.manifest_hash,
+                    "build_manifest_hash": persisted.build_manifest_hash,
+                    "confirmation_revision": confirmation_revision,
+                    "confirmed": confirmed,
+                }
+
+            return segment_runtime, static_options, prepare_segment_manifest
 
         def prepare_manifest(
             prompt: object,
@@ -614,17 +808,289 @@ class SqlTurnPreparer:
         context: GenerationContext,
         expected_fence: PreparedGenerationFence,
         cancellation_generation: int,
-        runtime: LLMTurnRuntime,
+        runtime: LLMTurnRuntime | SegmentLLMRuntime,
         publication: SqlLLMPublication,
         participants: tuple[ParticipantContext, ...],
     ) -> PreparedTurn | None:
         operation_id = self._accepted_operation_id(db, str(turn.id))
         if operation_id is None:
             return None
+
+        if context.turn_protocol == "segments_v2":
+            # v2 recovery is deliberately independent of the v1 recovery
+            # envelope.  The accepted stage contains only the canonical
+            # paragraph result; the frozen request loader supplies the full
+            # source receipt snapshot needed to restore local S references.
+            if getattr(runtime, "protocol", None) != "segments_v2":
+                raise PlatformError(
+                    "llm_recovery_failed",
+                    "The accepted segment runtime is unavailable.",
+                    503,
+                )
+
+            def typed_recovery_input(value: object) -> SegmentRecoveryInputV2 | None:
+                if isinstance(value, SegmentRecoveryInputV2):
+                    return value
+                candidate = (
+                    value.get("recovery_input")
+                    if isinstance(value, Mapping)
+                    else getattr(value, "recovery_input", None)
+                )
+                if isinstance(candidate, SegmentRecoveryInputV2):
+                    return candidate
+                # A SQL row is the only mapping shape accepted here.  Do not
+                # recursively search provider output or arbitrary envelopes.
+                row = value if isinstance(value, Mapping) else None
+                if row is None or row.get("input_version") != "segment_recovery_input_v2":
+                    return None
+                try:
+                    return SegmentRecoveryInputV2(
+                        operation_id=str(row["operation_id"]),
+                        turn_id=str(row["turn_id"]),
+                        attempt_no=int(row["attempt_no"]),
+                        input_version="segment_recovery_input_v2",
+                        input_json=str(row["input_json"]),
+                        input_hash=str(row["input_hash"]),
+                    )
+                except (KeyError, TypeError, ValueError):
+                    return None
+
+            stage_getter = getattr(publication, "get_llm_accepted_stage", None)
+            stage = stage_getter(operation_id) if callable(stage_getter) else None
+            bundle_loader = getattr(publication, "load_accepted_bundle", None)
+            bundle = bundle_loader(operation_id) if callable(bundle_loader) else None
+            recovery_input = typed_recovery_input(bundle)
+            if recovery_input is None:
+                # This query is a compatibility bridge for a repository that
+                # already stores a versioned frozen request in the existing
+                # recovery table.  A v1 envelope is never accepted here.
+                try:
+                    row = db.execute(
+                        text(
+                            "SELECT operation_id, turn_id, attempt_no, input_version, "
+                            "input_json, input_hash FROM llm_recovery_inputs "
+                            "WHERE operation_id=:operation_id ORDER BY attempt_no DESC LIMIT 1"
+                        ),
+                        {"operation_id": operation_id},
+                    ).first()
+                except Exception:
+                    row = None
+                if row is not None:
+                    recovery_input = typed_recovery_input(dict(row._mapping))
+            if recovery_input is None and stage is not None:
+                recovery_input = typed_recovery_input(getattr(stage, "recovery_input", None))
+            if stage is None or recovery_input is None:
+                raise PlatformError(
+                    "llm_recovery_input_unavailable",
+                    "The accepted segment recovery input is unavailable.",
+                    503,
+                )
+            try:
+                recovery_input.__post_init__()
+                frozen_request = recovery_input.frozen_request
+            except Exception as exc:
+                raise PlatformError(
+                    "llm_recovery_input_unavailable",
+                    "The accepted segment recovery input is invalid.",
+                    503,
+                ) from exc
+
+            stage_operation_id = str(getattr(stage, "operation_id", ""))
+            if stage_operation_id != operation_id:
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted operation is stale.", 503
+                )
+            if (
+                frozen_request.debate_id != str(context.debate_id)
+                or frozen_request.turn_id != str(turn.id)
+                or frozen_request.snapshot.snapshot_id != str(turn.knowledge_snapshot_id)
+                or str(getattr(stage, "turn_id", "")) != str(turn.id)
+            ):
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted turn owner is stale.", 503
+                )
+
+            expected_generation_fence = hashlib.sha256(
+                json.dumps(
+                    {
+                        "predecessor_turn_ids": list(expected_fence.predecessor_turn_ids),
+                        "transcript_hash": expected_fence.transcript_hash,
+                        "cutoff_turn_index": expected_fence.cutoff_turn_index,
+                        "generation": cancellation_generation,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            stage_identity = (
+                ("request_hash", frozen_request.request_hash),
+                ("prompt_hash", frozen_request.prompt_hash),
+                ("schema_hash", frozen_request.schema_hash),
+                ("policy_hash", frozen_request.policy_hash),
+                ("export_manifest_hash", frozen_request.export_manifest_hash),
+                ("build_manifest_hash", frozen_request.build_manifest_hash),
+                ("generation_fence", expected_generation_fence),
+                ("receipt_hash", frozen_request.snapshot.receipt_hash),
+                ("transcript_hash", expected_fence.transcript_hash),
+            )
+            if (
+                any(str(getattr(stage, name, "")) != expected for name, expected in stage_identity)
+                or str(getattr(stage, "prompt_contract_version", "")) != "segment_prompt_v2"
+            ):
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted segment request is stale.", 503
+                )
+            if int(getattr(stage, "attempt_no", 0)) != frozen_request.attempt_no:
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted attempt is stale.", 503
+                )
+
+            operation_row = (
+                db.execute(
+                    text(
+                        "SELECT scope_id, logical_item_id, attempt_no, request_hash, policy_hash, "
+                        "export_manifest_hash, build_manifest_hash, model_key, state, "
+                        "staged_response_hash FROM provider_operations WHERE id=:operation_id"
+                    ),
+                    {"operation_id": operation_id},
+                )
+                .mappings()
+                .first()
+            )
+            if operation_row is None or (
+                str(operation_row["scope_id"]) != str(context.debate_id)
+                or str(operation_row["logical_item_id"]) != str(turn.id)
+                or int(operation_row["attempt_no"]) != frozen_request.attempt_no
+                or str(operation_row["request_hash"]) != frozen_request.request_hash
+                or str(operation_row["policy_hash"]) != frozen_request.policy_hash
+                or str(operation_row["export_manifest_hash"]) != frozen_request.export_manifest_hash
+                or str(operation_row["build_manifest_hash"]) != frozen_request.build_manifest_hash
+                or str(operation_row["model_key"]) != LLM_MODEL_KEY
+                or str(operation_row["state"]) not in {"accepted", "succeeded"}
+                or str(operation_row["staged_response_hash"] or "")
+                != str(getattr(stage, "output_hash", ""))
+            ):
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted operation is stale.", 503
+                )
+
+            persona_hash = hashlib.sha256(
+                json.dumps(
+                    frozen_request.snapshot.persona.as_payload(),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            if str(getattr(stage, "persona_spec_hash", "")) != persona_hash:
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted Persona is stale.", 503
+                )
+
+            try:
+                result_loader = getattr(runtime, "resume_accepted_stage", None)
+                if not callable(result_loader):
+                    raise ValueError("segment recovery runtime is unavailable")
+                outcome = result_loader(
+                    stage,
+                    snapshot=frozen_request.snapshot,
+                    context=context,
+                    recovery_input=recovery_input,
+                )
+            except Exception as exc:
+                raise PlatformError(
+                    "llm_recovery_failed",
+                    "The accepted segment turn cannot be resumed locally.",
+                    503,
+                ) from exc
+            if (
+                getattr(outcome, "status", None) != "succeeded"
+                or getattr(outcome, "final_ready", None) is None
+            ):
+                raise PlatformError(
+                    str(getattr(outcome, "safe_error_code", None) or "llm_recovery_failed"),
+                    "The accepted segment turn cannot be resumed locally.",
+                    503,
+                )
+            final = outcome.final_ready
+            if (
+                final.turn_id != str(turn.id)
+                or final.participant_id != str(turn.participant_id)
+                or final.snapshot_id != str(turn.knowledge_snapshot_id)
+                or final.predecessor_turn_ids
+                != tuple(str(item) for item in expected_fence.predecessor_turn_ids)
+                or final.transcript_hash != expected_fence.transcript_hash
+                or final.cutoff_turn_index != expected_fence.cutoff_turn_index
+            ):
+                raise PlatformError(
+                    "llm_recovery_fence_stale", "The accepted turn fence is stale.", 503
+                )
+            for receipt in final.used_receipts:
+                chunk = db.execute(
+                    text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
+                    {"chunk_id": receipt.chunk_id},
+                ).first()
+                if (
+                    chunk is None
+                    or str(chunk[0]) != receipt.snapshot_id
+                    or str(chunk[0]) != str(turn.knowledge_snapshot_id)
+                    or str(chunk[1]) != receipt.text
+                ):
+                    raise PlatformError(
+                        "llm_recovery_fence_stale", "The accepted evidence is stale.", 503
+                    )
+            voice_kind = str(getattr(turn, "actual_tts_voice_kind", "mock_sentinel"))
+            voice_profile_id = getattr(turn, "actual_tts_voice_profile_id", None)
+            voice_token = str(voice_profile_id) if voice_kind == "platform_profile" else "mock"
+            return PreparedTurn(
+                speech=final.speech,
+                sources=tuple(
+                    RetrievalSourceDTO(
+                        source_filename=item.source_filename,
+                        chunk_id=UUID(item.chunk_id),
+                    )
+                    for item in final.public_sources
+                ),
+                retrieval_status=final.retrieval_status,
+                grounding_mode=final.grounding_mode,
+                structured=_structured_payload(final.structured),
+                voice_token=voice_token,
+                actual_voice_kind=voice_kind,
+                actual_voice_profile_id=(str(voice_profile_id) if voice_profile_id else None),
+                source_receipts=tuple(
+                    PreparedSource(
+                        snapshot_id=receipt.snapshot_id,
+                        query_kind=receipt.query_kind,
+                        query_hash=receipt.query_hash,
+                        threshold_key=receipt.threshold_key,
+                        source_filename=receipt.source_filename,
+                        chunk_id=receipt.chunk_id,
+                        evidence_id=receipt.resolved_evidence_id(),
+                        rank=receipt.rank,
+                        score=receipt.score,
+                        text=receipt.text,
+                        source_document_id=receipt.source_document_id,
+                        source_start_offset=receipt.source_start_offset,
+                        source_end_offset=receipt.source_end_offset,
+                        excerpt=receipt.excerpt,
+                        query_id=receipt.query_id,
+                    )
+                    for receipt in final.used_receipts
+                ),
+                predecessor_turn_ids=final.predecessor_turn_ids,
+                transcript_hash=final.transcript_hash,
+                cutoff_turn_index=final.cutoff_turn_index,
+                word_count=_prepared_word_count(final),
+                generation_attempt=final.attempt,
+                evidence_trace=(),
+                llm_publication=getattr(outcome, "deferred_publication", None),
+            )
+
         recovery = LLMRecoveryService(
             ProviderRepository(db, require_export_confirmation=False),
             stage_store=publication,
-            runtime=runtime,
+            runtime=cast(LLMTurnRuntime, runtime),
             recovery_store=publication,
             adapter=self.llm,
         )
@@ -656,6 +1122,20 @@ class SqlTurnPreparer:
             context.participant.persona_spec_hash or ""
         ):
             raise PlatformError("llm_recovery_fence_stale", "The accepted Persona is stale.", 503)
+        deferred = outcome.deferred_publication
+        recovery_input = getattr(deferred, "recovery_input", None)
+        if recovery_input is None:
+            raise PlatformError(
+                "llm_recovery_input_unavailable",
+                "The accepted recovery input is unavailable.",
+                503,
+            )
+        # Compare the accepted request with its immutable input, never with
+        # the smaller set of sources the model ultimately chose to cite.
+        frozen_prompt_request = PromptRequestV1.model_validate(
+            request_from_recovery_input(recovery_input)
+        )
+        candidate_receipts = receipts_from_recovery_input(recovery_input)
         receipts = tuple(
             PreparedSource(
                 snapshot_id=receipt.snapshot_id,
@@ -677,21 +1157,16 @@ class SqlTurnPreparer:
             for receipt in final.used_receipts
         )
         if str(getattr(stage, "receipt_hash", "")) != compute_prompt_receipt_hash(
-            final.used_receipts
+            candidate_receipts
         ):
             raise PlatformError("llm_recovery_fence_stale", "The accepted evidence is stale.", 503)
         if str(getattr(stage, "transcript_hash", "")) != expected_fence.transcript_hash:
             raise PlatformError(
                 "llm_recovery_fence_stale", "The accepted transcript is stale.", 503
             )
-        expected_prompt = build_provider_prompt(
-            context,
-            persona=context.participant.persona,
-            receipts=final.used_receipts,
-        )
         if (
-            str(getattr(stage, "prompt_hash", "")) != expected_prompt.request.request_hash
-            or str(getattr(stage, "rule_set_hash", "")) != expected_prompt.request.rule_set_hash
+            str(getattr(stage, "prompt_hash", "")) != frozen_prompt_request.request_hash
+            or str(getattr(stage, "rule_set_hash", "")) != frozen_prompt_request.rule_set_hash
         ):
             raise PlatformError("llm_recovery_fence_stale", "The accepted prompt is stale.", 503)
         operation_row = (
@@ -716,7 +1191,7 @@ class SqlTurnPreparer:
             != str(getattr(stage, "export_manifest_hash", ""))
             or str(operation_row["build_manifest_hash"])
             != str(getattr(stage, "build_manifest_hash", ""))
-            or str(operation_row["model_key"]) != "qwen3.7-plus-2026-05-26"
+            or str(operation_row["model_key"]) != str(recovery_input.identity()["model_key"])
         ):
             raise PlatformError("llm_recovery_fence_stale", "The accepted operation is stale.", 503)
         expected_generation_fence = hashlib.sha256(
@@ -734,14 +1209,6 @@ class SqlTurnPreparer:
         ).hexdigest()
         if str(getattr(stage, "generation_fence", "")) != expected_generation_fence:
             raise PlatformError("llm_recovery_fence_stale", "The accepted fence is stale.", 503)
-        deferred = outcome.deferred_publication
-        recovery_input = getattr(deferred, "recovery_input", None)
-        if recovery_input is None:
-            raise PlatformError(
-                "llm_recovery_input_unavailable",
-                "The accepted recovery input is unavailable.",
-                503,
-            )
         input_json = getattr(recovery_input, "input_json", None)
         try:
             recovery_payload = json.loads(str(input_json))
@@ -791,7 +1258,7 @@ class SqlTurnPreparer:
             ),
             retrieval_status=final.retrieval_status,
             grounding_mode=final.grounding_mode,
-            structured=final.structured.model_dump(mode="json"),
+            structured=_structured_payload(final.structured),
             voice_token=voice_token,
             actual_voice_kind=voice_kind,
             actual_voice_profile_id=(str(voice_profile_id) if voice_profile_id else None),
@@ -799,12 +1266,7 @@ class SqlTurnPreparer:
             predecessor_turn_ids=final.predecessor_turn_ids,
             transcript_hash=final.transcript_hash,
             cutoff_turn_index=final.cutoff_turn_index,
-            word_count=count_turn_words(
-                final.speech,
-                final.structured.question.text
-                if final.structured.question.type != "none"
-                else None,
-            ),
+            word_count=_prepared_word_count(final),
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
             llm_publication=outcome.deferred_publication,
@@ -878,6 +1340,11 @@ class SqlTurnPreparer:
             else turn_rows[: current.turn_index]
         )
         predecessors = tuple(self._final_ready(db, row) for row in predecessor_rows)
+        barrages: tuple[Mapping[str, object], ...] = ()
+        if uses_segment_protocol(debate) and plan.is_final_round:
+            from app.modules.debates.final_input import final_barrages_for_generation
+
+            barrages = final_barrages_for_generation(debate, predecessor_rows)
         context = GenerationContext(
             debate_id=debate_id,
             topic=str(debate.topic),
@@ -886,6 +1353,9 @@ class SqlTurnPreparer:
             participants=participants,
             predecessors=predecessors,
             output_language=debate_output_language(debate),
+            turn_protocol="segments_v2" if uses_segment_protocol(debate) else "legacy_v1",
+            round_count=round_count,
+            barrages=barrages,
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
             db,
@@ -921,11 +1391,21 @@ class SqlTurnPreparer:
             )
             if resumed is not None:
                 return resumed
+        if uses_segment_protocol(debate) and current.speech and current.structured_json:
+            cached = self._final_ready(db, current, text_only=True)
+            if (
+                cached.predecessor_turn_ids != expected_fence.predecessor_turn_ids
+                or cached.transcript_hash != expected_fence.transcript_hash
+                or cached.cutoff_turn_index != expected_fence.cutoff_turn_index
+            ):
+                raise ValueError("saved paragraph text has a stale generation fence")
+            return self._prepared_result(cached, participant_row, publication=None)
         query_embeddings = self._query_embedding_service(
             db,
             debate=debate,
             turn=current,
             participant_row=participant_row,
+            participants=participants,
             context=context,
             transcript_hash=expected_fence.transcript_hash,
         )
@@ -951,6 +1431,12 @@ class SqlTurnPreparer:
             or final.cutoff_turn_index != expected_fence.cutoff_turn_index
         ):
             raise ValueError("generation result does not match the prepared prefix fence")
+        return self._prepared_result(final, participant_row, publication=generated.llm_publication)
+
+    @staticmethod
+    def _prepared_result(
+        final: FinalReadyTurn, participant_row: DebateParticipant, *, publication: object | None
+    ) -> PreparedTurn:
         sources = tuple(
             RetrievalSourceDTO(
                 source_filename=source.source_filename,
@@ -992,7 +1478,7 @@ class SqlTurnPreparer:
             sources=sources,
             retrieval_status=final.retrieval_status,
             grounding_mode=final.grounding_mode,
-            structured=final.structured.model_dump(mode="json"),
+            structured=_structured_payload(final.structured),
             voice_token=voice_token,
             actual_voice_kind=voice_kind,
             actual_voice_profile_id=(str(voice_profile_id) if voice_profile_id else None),
@@ -1000,15 +1486,10 @@ class SqlTurnPreparer:
             predecessor_turn_ids=final.predecessor_turn_ids,
             transcript_hash=final.transcript_hash,
             cutoff_turn_index=final.cutoff_turn_index,
-            word_count=count_turn_words(
-                final.speech,
-                final.structured.question.text
-                if final.structured.question.type != "none"
-                else None,
-            ),
+            word_count=_prepared_word_count(final),
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
-            llm_publication=generated.llm_publication,
+            llm_publication=publication,
         )
 
     def _query_embedding_service(
@@ -1018,6 +1499,7 @@ class SqlTurnPreparer:
         debate: Any,
         turn: DebateTurn,
         participant_row: DebateParticipant,
+        participants: tuple[ParticipantContext, ...],
         context: GenerationContext,
         transcript_hash: str,
     ) -> QueryEmbeddingService:
@@ -1087,9 +1569,22 @@ class SqlTurnPreparer:
             if operation.provider_operation == "embedding_query"
             and operation.logical_item_id == logical_item_id
         )
+        # A disclosure preflight intentionally creates a zero-use ``prepared``
+        # row before a teacher (or standing Demo consent) confirms it. That
+        # row is not a provider attempt and must be reservable after consent;
+        # charged/accepted/unknown attempts remain terminal below.
+        prior_attempts = tuple(
+            operation
+            for operation in operations
+            if not (
+                operation.state == "prepared"
+                and operation.request_count == 0
+                and operation.charged_request_count == 0
+            )
+        )
         attempt_no = 1
-        if operations:
-            latest = max(operations, key=lambda operation: operation.attempt_no)
+        if prior_attempts:
+            latest = max(prior_attempts, key=lambda operation: operation.attempt_no)
             if _dual_real(self.settings) and latest.state != "succeeded":
                 raise PlatformError(
                     "provider_retry_forbidden",
@@ -1102,6 +1597,11 @@ class SqlTurnPreparer:
                 attempt_no = latest.attempt_no
         try:
             total_tokens = sum(count_tokens(text) for text in query_plan.query_texts)
+            query_request_cap = _query_request_cap(
+                self.settings,
+                debate,
+                participant_count=len(participants),
+            )
             pending_control = SqlAlchemyQueryControlAdapter(
                 db,
                 scope_id=str(debate.id),
@@ -1113,11 +1613,7 @@ class SqlTurnPreparer:
                 query_hashes=query_plan.query_hashes,
                 attempt_no=attempt_no,
                 logical_item_id=logical_item_id,
-                max_requests=(
-                    REAL_CORE_DEMO_QUERY_MAX_REQUESTS
-                    if _dual_real(self.settings)
-                    else SQL_QUERY_MAX_REQUESTS
-                ),
+                max_requests=query_request_cap,
                 repository=ProviderRepository(db, require_export_confirmation=False),
             )
             pending_control.prepare_disclosure_operation(
@@ -1142,7 +1638,22 @@ class SqlTurnPreparer:
                 agent_version_id=version.id,
             )
         except ProductPublicationError as error:
-            if error.code == "provider_confirmation_required":
+            if error.code not in {
+                "provider_confirmation_required",
+                "provider_confirmation_stale",
+            }:
+                raise PlatformError(
+                    "provider_preflight_blocked",
+                    "The exact real query confirmation is unavailable.",
+                    503,
+                ) from error
+            standing_confirmed = _standing_provider_consent(
+                repository,
+                query_plan.manifest,
+                policy,
+                self.settings,
+            )
+            if not standing_confirmed and error.code == "provider_confirmation_required":
                 raise conflict(
                     "provider_confirmation_required",
                     "The course teacher must confirm the exact query disclosure.",
@@ -1151,11 +1662,39 @@ class SqlTurnPreparer:
                         "turn_id": str(turn.id),
                     },
                 ) from error
-            raise PlatformError(
-                "provider_preflight_blocked",
-                "The exact real query confirmation is stale.",
-                503,
-            ) from error
+            if not standing_confirmed:
+                raise PlatformError(
+                    "provider_preflight_blocked",
+                    "The exact real query confirmation is stale.",
+                    503,
+                ) from error
+            # Standing consent writes the same immutable confirmation a
+            # teacher would submit. Re-run the owner-bound check so consent
+            # cannot bypass manifest, policy, or course/group/version CAS.
+            try:
+                confirmation = require_exact_confirmation(
+                    db,
+                    query_plan.manifest,
+                    policy,
+                    course_id=group.course_id,
+                    group_id=group.id,
+                    agent_version_id=version.id,
+                )
+            except ProductPublicationError as confirmed_error:
+                if confirmed_error.code == "provider_confirmation_required":
+                    raise conflict(
+                        "provider_confirmation_required",
+                        "The course teacher must confirm the exact query disclosure.",
+                        {
+                            "manifest_hash": query_plan.manifest.manifest_hash,
+                            "turn_id": str(turn.id),
+                        },
+                    ) from confirmed_error
+                raise PlatformError(
+                    "provider_preflight_blocked",
+                    "The exact real query confirmation is stale.",
+                    503,
+                ) from confirmed_error
         selected_provider = select_embedding_provider(cast(Settings, self.settings))
         config = getattr(selected_provider, "config", None)
         if not isinstance(config, DashScopeEmbeddingConfig):
@@ -1186,11 +1725,7 @@ class SqlTurnPreparer:
             attempt_no=attempt_no,
             logical_item_id=logical_item_id,
             confirmation_revision=confirmation.confirmation_revision,
-            max_requests=(
-                REAL_CORE_DEMO_QUERY_MAX_REQUESTS
-                if _dual_real(self.settings)
-                else SQL_QUERY_MAX_REQUESTS
-            ),
+            max_requests=query_request_cap,
         )
         stage_store = SqlAlchemyEmbeddingStageStore(db)
         controlled_provider = controlled_query_provider(
@@ -1367,7 +1902,7 @@ class SqlTurnPreparer:
         cls,
         db: Session,
         row: DebateTurn,
-        structured: StructuredTurnResult | MutualLearningTurnResultV1,
+        structured: StructuredTurnResult | MutualLearningTurnResultV1 | StoredSegmentTurnResult,
     ) -> tuple[SnapshotRetrievalReceipt, ...] | None:
         raw = getattr(row, "retrieval_receipts_json", None)
         if raw is None:
@@ -1403,15 +1938,31 @@ class SqlTurnPreparer:
         return receipts
 
     @classmethod
-    def _final_ready(cls, db: Session, row: DebateTurn) -> FinalReadyTurn:
-        if row.generation_status != "final_ready" or not row.speech or not row.structured_json:
+    def _final_ready(
+        cls, db: Session, row: DebateTurn, *, text_only: bool = False
+    ) -> FinalReadyTurn:
+        if (
+            (not text_only and row.generation_status != "final_ready")
+            or not row.speech
+            or not row.structured_json
+        ):
             raise ValueError("the final-ready predecessor prefix is incomplete")
         try:
             structured_value = json.loads(row.structured_json)
         except (TypeError, ValueError) as exc:
             raise ValueError("a predecessor structured result is invalid JSON") from exc
-        structured: StructuredTurnResult | MutualLearningTurnResultV1
-        if isinstance(structured_value, dict) and "key_claims" in structured_value:
+        if text_only and (
+            not isinstance(structured_value, dict)
+            or structured_value.get("schema_version") != "segment_turn_v2"
+        ):
+            raise ValueError("only saved paragraph results support audio-only recovery")
+        structured: StructuredTurnResult | MutualLearningTurnResultV1 | StoredSegmentTurnResult
+        if (
+            isinstance(structured_value, dict)
+            and structured_value.get("schema_version") == "segment_turn_v2"
+        ):
+            structured = load_stored_segment_turn_result(structured_value)
+        elif isinstance(structured_value, dict) and "key_claims" in structured_value:
             structured = MutualLearningTurnResultV1.model_validate(structured_value)
         else:
             structured = StructuredTurnResult.model_validate(structured_value)

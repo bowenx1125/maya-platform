@@ -13,6 +13,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.debates.generation.evidence_trace import EvidenceTraceV1
+from app.modules.debates.schemas import SegmentSourceDetail, SegmentTurnPublic
 
 
 class ClosedModel(BaseModel):
@@ -47,6 +48,7 @@ class RetrievalSourceDTO(ClosedModel):
 
 
 class PublicTurnDTO(ClosedModel):
+    audio_ready: bool | None = None
     id: UUID
     participant_id: UUID
     round_no: int = Field(ge=1)
@@ -58,6 +60,8 @@ class PublicTurnDTO(ClosedModel):
     grounding_mode: Literal["rag_grounded", "mixed", "general_reasoning"]
     sources: list[RetrievalSourceDTO]
     evidence_trace: list[EvidenceTraceV1] | None = None
+    segment_turn: SegmentTurnPublic | None = None
+    source_details: list[SegmentSourceDetail] = Field(default_factory=list)
 
 
 class AvatarStateDTO(ClosedModel):
@@ -81,6 +85,7 @@ class DebatePlaybackResourceDTO(ClosedModel):
 
 
 class PlaybackStartedPayload(ClosedModel):
+    audio_ready: bool | None = None
     turn_id: UUID
     slot: Literal["A", "B", "C", "D", "E"] | None = None
     round_no: int | None = Field(default=None, ge=1)
@@ -89,6 +94,8 @@ class PlaybackStartedPayload(ClosedModel):
     speech: str = Field(min_length=1)
     sources: list[RetrievalSourceDTO]
     evidence_trace: list[EvidenceTraceV1] | None = None
+    segment_turn: SegmentTurnPublic | None = None
+    source_details: list[SegmentSourceDetail] = Field(default_factory=list)
     playback_url: str = Field(
         pattern=(
             r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
@@ -318,6 +325,7 @@ class DebateTerminalPayload(ClosedModel):
 
 
 class SnapshotPayload(ClosedModel):
+    final_input_frozen: bool = False
     debate_status: Literal["draft", "running", "debate_finished", "completed", "failed", "stopped"]
     playback_status: PlaybackStatus
     interaction_status: Literal["closed", "open", "finalized"]

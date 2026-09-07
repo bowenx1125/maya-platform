@@ -50,8 +50,20 @@ export function ScholarScene({
 }: ScholarSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<import("./scholar-stage").ScholarStage | null>(null);
+  const latestCharactersRef = useRef(characters);
+  const latestVisualsRef = useRef(visuals);
+  const latestRestingRef = useRef(resting);
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
+
+  // This effect runs before the stage-import effect below. Keeping the latest
+  // values outside the async callback prevents a roster change during GLB
+  // loading from being lost when the callback eventually resolves.
+  useEffect(() => {
+    latestCharactersRef.current = characters;
+    latestVisualsRef.current = visuals;
+    latestRestingRef.current = resting;
+  }, [characters, resting, visuals]);
 
   const handleAnchors = useCallback((next: StageAnchor[]) => {
     setAnchors(next);
@@ -60,6 +72,27 @@ export function ScholarScene({
   useEffect(() => {
     anchorsRef.current = handleAnchors;
   }, [handleAnchors]);
+
+  const applyStageVisuals = useCallback(
+    (stage: import("./scholar-stage").ScholarStage) => {
+      for (const character of latestCharactersRef.current) {
+        stage.setVisual(
+          character.id,
+          latestVisualsRef.current[character.id] ?? "idle",
+        );
+      }
+    },
+    [],
+  );
+
+  const syncStageRoster = useCallback(
+    (stage: import("./scholar-stage").ScholarStage) => {
+      stage.setCharacters(latestCharactersRef.current);
+      applyStageVisuals(stage);
+      stage.setResting(latestRestingRef.current);
+    },
+    [applyStageVisuals],
+  );
 
   useEffect(() => {
     let active = true;
@@ -70,12 +103,28 @@ export function ScholarScene({
       .then(({ ScholarStage }) => {
         if (!active) return;
         try {
-          stageRef.current = new ScholarStage({
+          const stage = new ScholarStage({
             canvas,
-            onReady: () => active && setStatus("ready"),
+            onReady: () => {
+              if (!active) return;
+              const readyStage = stageRef.current;
+              if (readyStage) syncStageRoster(readyStage);
+              setStatus("ready");
+            },
             onError: () => active && setStatus("failed"),
-            onAnchors: (next) => anchorsRef.current(next),
+            onAnchors: (next) => {
+              if (active) anchorsRef.current(next);
+            },
           });
+          if (!active) {
+            stage.dispose();
+            return;
+          }
+          stageRef.current = stage;
+          // setCharacters stores the roster while the GLB is loading. The
+          // onReady callback syncs it again so prop changes during that load
+          // cannot leave the renderer with an empty or stale bench.
+          syncStageRoster(stage);
         } catch {
           if (active) setStatus("failed");
         }
@@ -88,7 +137,7 @@ export function ScholarScene({
       stageRef.current?.dispose();
       stageRef.current = null;
     };
-  }, []);
+  }, [syncStageRoster]);
 
   // Rebuilding the bench is keyed on identity, not on the array reference the
   // parent happens to hand over each render.
@@ -96,12 +145,13 @@ export function ScholarScene({
     .map((item) => `${item.id}:${item.config.material_theme}`)
     .join("|");
   useEffect(() => {
-    stageRef.current?.setCharacters(characters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosterKey]);
+    const stage = stageRef.current;
+    if (!stage) return;
+    syncStageRoster(stage);
+  }, [rosterKey, syncStageRoster]);
 
   useEffect(() => {
-    stageRef.current?.setResting(resting);
+    stageRef.current?.setResting(latestRestingRef.current);
   }, [resting]);
 
   const visualKey = characters
@@ -110,11 +160,8 @@ export function ScholarScene({
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    for (const character of characters) {
-      stage.setVisual(character.id, visuals[character.id] ?? "idle");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visualKey]);
+    applyStageVisuals(stage);
+  }, [applyStageVisuals, visualKey]);
 
   const anchorById = new Map(anchors.map((anchor) => [anchor.id, anchor]));
   const speaking = speakingId ? anchorById.get(speakingId) : undefined;
@@ -130,64 +177,66 @@ export function ScholarScene({
         className={styles.backdrop}
         style={{ backgroundImage: `url(${STAGE_BACKDROP_ASSET})` }}
       />
-      <canvas
-        className={styles.canvas}
-        ref={canvasRef}
-        hidden={status === "failed"}
-      />
+      <div className={styles.canvasViewport}>
+        <canvas
+          className={styles.canvas}
+          ref={canvasRef}
+          hidden={status === "failed"}
+        />
 
-      {status === "loading" ? (
-        <p className={styles.sceneNotice}>{loadingLabel}</p>
-      ) : null}
+        {status === "loading" ? (
+          <p className={styles.sceneNotice}>{loadingLabel}</p>
+        ) : null}
 
-      {status === "failed" ? (
-        <div className={styles.sceneFallback}>
-          <p>{unavailableLabel}</p>
-          <ul>
-            {characters.map((character) => (
-              <li
-                key={character.id}
-                data-state={visuals[character.id] ?? "idle"}
-              >
-                <span>{character.slot}</span>
-                {character.name}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+        {status === "failed" ? (
+          <div className={styles.sceneFallback}>
+            <p>{unavailableLabel}</p>
+            <ul>
+              {characters.map((character) => (
+                <li
+                  key={character.id}
+                  data-state={visuals[character.id] ?? "idle"}
+                >
+                  <span>{character.slot}</span>
+                  {character.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-      {status === "ready"
-        ? characters.map((character) => {
-            const anchor = anchorById.get(character.id);
-            if (!anchor?.visible) return null;
-            return (
-              <span
-                className={styles.namePlate}
-                data-current={character.id === speakingId ? "true" : "false"}
-                key={character.id}
-                style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}
-              >
-                <b>{character.slot}</b>
-                {character.name}
-              </span>
-            );
-          })
-        : null}
+        {status === "ready"
+          ? characters.map((character) => {
+              const anchor = anchorById.get(character.id);
+              if (!anchor?.visible) return null;
+              return (
+                <span
+                  className={styles.namePlate}
+                  data-current={character.id === speakingId ? "true" : "false"}
+                  key={character.id}
+                  style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}
+                >
+                  <b>{character.slot}</b>
+                  {character.name}
+                </span>
+              );
+            })
+          : null}
 
-      {status === "ready" && speaking?.visible && bubbleText ? (
-        <div
-          aria-live="polite"
-          className={styles.bubble}
-          data-side={bubbleSide}
-          style={{ left: `${speaking.x}px`, top: `${speaking.y}px` }}
-        >
-          <span className={styles.bubbleWho}>
-            {speakingCharacter?.slot} · {speakingCharacter?.name}
-          </span>
-          {bubbleText}
-        </div>
-      ) : null}
+        {status === "ready" && speaking?.visible && bubbleText ? (
+          <div
+            aria-live="polite"
+            className={styles.bubble}
+            data-side={bubbleSide}
+            style={{ left: `${speaking.x}px`, top: `${speaking.y}px` }}
+          >
+            <span className={styles.bubbleWho}>
+              {speakingCharacter?.slot} · {speakingCharacter?.name}
+            </span>
+            {bubbleText}
+          </div>
+        ) : null}
+      </div>
 
       {overlay}
     </div>
