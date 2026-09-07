@@ -933,7 +933,6 @@ class PlaybackPreparationMixin(PlaybackCore):
             "provider_confirmation_required",
             "provider_not_sent",
             "acceptance_unknown",
-            "segment_length_invalid",
             "question_route_invalid",
             "discussion_memory_invalid",
             "segment_shape_invalid",

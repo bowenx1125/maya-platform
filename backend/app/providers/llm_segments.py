@@ -73,7 +73,7 @@ SEGMENT_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 # The schema is optional-field compatible: old frozen requests retain their
 # persisted schema hash and remain readable during recovery, while new
 # requests bind this updated wire schema hash.
-SEGMENT_SCHEMA_SHA256 = "6725669e8093e543844c7801b329bbec7c10ec8394670a666805db9d5e6dc6f7"
+SEGMENT_SCHEMA_SHA256 = "aca03345f91e4e34c07fa9bbdc02020131bafc972778fc4cc3dd67a2ca52a26b"
 
 
 def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
@@ -751,6 +751,7 @@ class SegmentLLMAdapter:
         if repair_feedback is not None:
             system += (
                 " Repair the prior output using the same frozen input and this server feedback;"
+                " follow the prompt's upper-length guidance without padding the answer;"
                 " return the complete corrected JSON once: " + _canonical(repair_feedback)
             )
         messages = (

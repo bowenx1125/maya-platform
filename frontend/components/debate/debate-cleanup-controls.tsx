@@ -231,10 +231,10 @@ export function DebateCleanupControls({
           {generatingAudio ? "Preparing audio…" : "Deleting…"}
         </span>
       ) : null}
-      {pending ? (
+      {pending && !showDeleteControls ? (
         <span role="status">Cleanup pending. Retry this action.</span>
       ) : null}
-      {error ? <span role="alert">{error}</span> : null}
+      {error && !showDeleteControls ? <span role="alert">{error}</span> : null}
     </div>
   );
 }

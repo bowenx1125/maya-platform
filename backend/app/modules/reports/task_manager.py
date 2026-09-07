@@ -127,7 +127,7 @@ class ReportTaskManager:
                     self._run_insight(debate_id, owner_id)
                 else:
                     self._run_report(debate_id, owner_id)
-            except Exception:
+            except Exception as exc:
                 # An unexpected failure used to escape into the asyncio task
                 # and die there as "Task exception was never retrieved". The
                 # Job stayed ``running`` and the revision ``generating``
@@ -135,7 +135,11 @@ class ReportTaskManager:
                 # resolve and Regenerate only added another stuck revision.
                 # A failure has to be recorded where the teacher can see it and
                 # act on it; the loop stops so a broken job cannot spin.
-                LOGGER.exception("Report chain failed for debate %s", debate_id)
+                LOGGER.error(
+                    "Report chain failed for debate %s error_type=%s",
+                    debate_id,
+                    type(exc).__name__,
+                )
                 self._fail_stuck_job(debate_id, operation, owner_id)
                 return
 

@@ -95,7 +95,12 @@ def read_final_input(debate: Debate) -> Mapping[str, Any] | None:
     if (
         not isinstance(value, dict)
         or value.get("version") != "final_input_v1"
-        or value.get("generation") != debate.cancellation_generation
+        # Completed classroom inputs remain immutable when a later replay is
+        # released. Live generation still requires the exact cancellation fence.
+        or (
+            getattr(debate, "status", None) not in {"debate_finished", "completed"}
+            and value.get("generation") != debate.cancellation_generation
+        )
         or value.get("language") != debate.output_language
     ):
         raise conflict("final_input_changed", "The saved final input is stale.")

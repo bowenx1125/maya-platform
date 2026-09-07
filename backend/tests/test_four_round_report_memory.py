@@ -1,6 +1,13 @@
+import hashlib
+import json
 from dataclasses import replace
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from app.core.errors import PlatformError
+from app.modules.debates.final_input import read_final_input
+from app.modules.debates.models import Debate
 from app.modules.reports.real_prompt import build_report_request
 from app.modules.reports.real_schema import ReportBoundaryError, validate_report_request
 from app.modules.reports.schemas import ReportDiscussionMemory
@@ -51,6 +58,22 @@ def test_memory_projection_rejects_unknown_agents_and_private_text():
         validate_report_request(payload)
 
 
+def test_report_preserves_source_urls_evidence_and_classroom_text():
+    context = _context()
+    source = replace(
+        context.sources[0],
+        chunk_text="A dated record supports this point. https://example.org/research",
+    )
+    enriched = replace(context, sources=(source, *context.sources[1:]))
+    request = build_real_report_request(enriched)
+    assert request.sources[0].excerpt == source.chunk_text
+    assert (
+        request.sources[0].evidence_id == build_real_report_request(context).sources[0].evidence_id
+    )
+    assert request.speeches == build_real_report_request(context).speeches
+    assert enriched.sources[0].chunk_text.endswith("https://example.org/research")
+
+
 def test_report_manifest_hash_binds_memory_and_keeps_absent_memory_compatible():
     manifest = _context().manifest
     original = manifest.canonical_payload()
@@ -58,3 +81,18 @@ def test_report_manifest_hash_binds_memory_and_keeps_absent_memory_compatible():
     with_memory = type(manifest).model_validate({**original, "discussion_memories": [_memory()]})
     assert with_memory.input_hash() != manifest.input_hash()
     assert with_memory.canonical_payload()["discussion_memories"][0]["slot"] == "A"
+
+
+def test_report_keeps_frozen_final_input_after_replay_release_but_live_fence_stays_strict():
+    frozen = json.dumps({"version": "final_input_v1", "generation": 0, "language": "en"})
+    debate = SimpleNamespace(
+        final_input_json=frozen,
+        final_input_hash=hashlib.sha256(frozen.encode()).hexdigest(),
+        cancellation_generation=1,
+        output_language="en",
+        status="completed",
+    )
+    assert read_final_input(cast(Debate, debate))["generation"] == 0
+    debate.status = "running"
+    with pytest.raises(PlatformError):
+        read_final_input(cast(Debate, debate))

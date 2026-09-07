@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 
 TEACHING_PROTOCOL = "four_round_v1"
 BODY_LIMITS = {
-    "zh": ((100, 160), (80, 140), (100, 160), (120, 180)),
-    "en": ((65, 100), (50, 90), (65, 100), (75, 115)),
+    "zh": ((0, 160), (0, 140), (0, 160), (0, 180)),
+    "en": ((0, 100), (0, 90), (0, 100), (0, 115)),
 }
 ENGLISH_WORD = re.compile(r"[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*")
 
@@ -174,7 +174,25 @@ STAGE_PROMPTS = (
 
 
 def system_prompt(round_number: int, language: str) -> str:
-    low, high = BODY_LIMITS[language][round_number - 1]
+    _, high = BODY_LIMITS[language][round_number - 1]
+    routing = (
+        "本轮每段reply_to必须为JSON null，不能填Agent编号、名字、问题目标或字符串null。"
+        if round_number < 4
+        else ("reply_to只用于回应barrages里的B编号；回应其他Agent仍用null。无弹幕时全部为null。")
+    )
+    question = (
+        "question={target_agent_id,text}，目标逐字复制discussion.question_target_id，"
+        "text为正文中提出的同一问题，至多400字符。"
+        if round_number == 2
+        else "本轮question必须为JSON null；回答旧问题不等于提出新question。"
+    )
+    memory = (
+        "discussion_memory={position,change,reason,influence,unresolved_question}，"
+        "change只能retained/qualified/revised；influence为{agent_id,point}或null，"
+        "确无未解决问题用空字符串；记忆各文本至多400字符。"
+        if round_number == 3
+        else "本轮discussion_memory必须为JSON null。"
+    )
     count = (
         "中文非空白字符（包含标点）"
         if language == "zh"
@@ -186,16 +204,17 @@ def system_prompt(round_number: int, language: str) -> str:
         + STAGE_PROMPTS[round_number - 1]
         + "\n"
         + (
-            f"正文必须使用{'中文' if language == 'zh' else '英文'}，总计{low}–{high}个{count}。"
+            f"正文必须使用{'中文' if language == 'zh' else '英文'}，最多{high}个{count}，"
+            "没有字数下限。"
+            "有效说明观点即可，不要为长度添加内容；完成后核对不超过上限，再返回JSON。"
             "只计算segments的text，不计JSON、来源ID、问题路由和记忆。"
             "资料不足时解释证据缺口或判断边界，不得凑字数编造，不截断或套模板。"
             "只返回JSON：segments为1–8个段落，每项{text,source_ids,reply_to,support_mode}，每段至多6个S来源ID。"
             "direct(+5)表示来源直接支持，contextual(+2)表示相关背景支持，两者必须引用提供的S编号；no_match(+0)必须source_ids=[]。"
             "这些分数只是证据支持类别，有引用不等于已验证事实正确。引用不得冒充事实依据；来源编号不写入正文。"
-            "非弹幕回应reply_to=null。question与弹幕reply_to严格分开："
-            "第二轮question={target_agent_id,text}，text至多400字符，目标必须为指定稳定ID；其他轮question=null。"
-            "第三轮discussion_memory={position,change,reason,influence,unresolved_question}，change只能retained/qualified/revised；"
-            "influence为{agent_id,point}或null，确无未解决问题用空字符串；记忆各文本至多400字符。其他轮discussion_memory=null。"
             "不得输出分析、策略、自评或思维过程。"
         )
+        + routing
+        + question
+        + memory
     )

@@ -25,12 +25,32 @@ from app.modules.debates.setup.rules import build_turn_plan
 from app.modules.debates.setup.service import commit_start_plan, create_debate_draft
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.orm import Session
 
 from tests.test_wave2_setup import COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, _insert_published_agent
 
 RULE_SET = "ordered_multi_expert_mutual_learning_v1"
 TEACHING = "four_round_v1"
+
+
+def test_unattempted_recovery_never_retries_an_existing_llm_operation():
+    engine = create_engine("sqlite://")
+    with Session(engine) as db:
+        db.execute(
+            text(
+                "CREATE TABLE provider_operations (id TEXT, scope_id TEXT, "
+                "logical_item_id TEXT, provider_operation TEXT)"
+            )
+        )
+        repo = SqlPlaybackRepository()
+        assert repo.unattempted_llm_turn(db, "debate", "turn")
+        db.execute(
+            text("INSERT INTO provider_operations VALUES ('op','debate','turn','llm_debate_turn')")
+        )
+        assert not repo.unattempted_llm_turn(db, "debate", "turn")
+        assert repo.unattempted_llm_turn(db, "debate", "other-turn")
+    engine.dispose()
 
 
 @pytest.mark.parametrize("count", [2, 3, 4, 5])

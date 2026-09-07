@@ -3099,6 +3099,7 @@ export function BetaDebateStage({
       : null;
   const bubbleTurn =
     activeVisibleTurn ??
+    publicTurns.find((turn) => turn.id === playback.current_turn_id) ??
     (playback.status === "completed"
       ? publicTurns[publicTurns.length - 1]
       : null);

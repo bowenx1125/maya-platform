@@ -55,8 +55,7 @@
         "properties": {
           "text": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 8000
+            "minLength": 1
           },
           "source_ids": {
             "type": "array",

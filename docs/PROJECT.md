@@ -33,19 +33,23 @@ order rotates but identities/question targets stay stable. Scheduling, SQL Next,
 input hashes and recovery use the same prefix. Completed results/accepted stages
 are reused rather than charged again.
 
-| Round       | Chinese non-whitespace characters including punctuation | English words |
-| ----------- | ------------------------------------------------------- | ------------- |
-| RAG Opening | 100–160                                                 | 65–100        |
-| Discussion  | 80–140                                                  | 50–90         |
-| Response    | 100–160                                                 | 65–100        |
-| Conclusion  | 120–180                                                 | 75–115        |
+| Round       | Chinese upper guidance | English upper guidance |
+| ----------- | ---------------------- | ---------------------- |
+| RAG Opening | 160 characters         | 100 words              |
+| Discussion  | 140 characters         | 90 words               |
+| Response    | 160 characters         | 100 words              |
+| Conclusion  | 180 characters         | 115 words              |
 
-Only displayed segment text counts. English counts alphanumeric runs with
-internal apostrophes/hyphens as one word. Prompt and validator share these limits.
-No truncation or padding rewrites provider text. Length, structure and reference
-errors share one authorized repair with frozen input and explicit feedback.
-One-call authorization cannot gain another call. Failed repairs retain diagnostics
-and recoverable preparation state; unknown acceptance is never silently resent.
+The owner's latest decision removes all backend speech-length validation and
+all minimum lengths. These upper bounds appear in the actual System Prompt only.
+Chinese guidance counts non-whitespace characters including punctuation; English
+counts alphanumeric runs with internal apostrophes/hyphens as one word. Only
+segment text counts. The backend neither rejects nor repairs a response because
+of its length, and never truncates or pads it. Nonempty text, structure, source
+references, question routing and state integrity remain enforced. Structure and
+reference errors share at most one authorized repair with frozen input and
+explicit feedback. One-call authorization cannot gain another call; unknown
+acceptance is never silently resent.
 
 Question routing is separate from barrage reply_to. Third-round memory contains
 position/change/reason/influence/unresolved_question, never classroom speech/TTS,
@@ -66,6 +70,11 @@ disagreement; string similarity and keyword counts are not hard failure gates.
 
 ## Report loading correction
 
+The owner removed the blanket `https://` rejection from Report input checks.
+Original bibliographic URLs and source prose now pass unchanged; there is no URL
+omission projection. A real Report with these URLs completed successfully.
+Unexpected task logs now record exception type rather than validation input bodies.
+
 An unexpected task failure previously failed the revision/job but left its
 aggregate generating. A sanitized live read found two generating aggregates
 with zero generating revisions, alongside three ready reports. The fix updates
@@ -74,48 +83,71 @@ Provider call, preserving valid in-progress jobs. The frontend independently
 reads Report status, ignores stale responses and prevents a failed/hung revision
 history read from masking success. Report remains a separate Conclude operation.
 
-## Verification and delivery boundary
+## Verification and delivery boundary — September 8 continuation
 
-Stopped at the owner's **30% remaining quota boundary** with implementation
-integrated but real acceptance incomplete:
+The four-round real case `a2e6b748-91d7-40ce-b1db-70525224bde1` completed
+all eight speeches, retained audio, frozen classroom messages, final-round replies
+and the HTTP/WebSocket playback sequence. Its six Preview turns took about 38s.
+Eight Debate LLM operations and four query-Embedding operations succeeded on
+attempt one. No completed speech was regenerated. Independent Report revision 3
+is ready with original source URLs preserved. Two Report calls succeeded in total:
+one tested an intermediate URL-omission projection, the second tested the final
+owner-approved removal of the blanket URL check. The first failed revision never
+reached the Report Provider. Supplier billing and the operation ledger are authoritative.
 
-- Frontend: 261 tests and typecheck passed; lint zero errors, four existing
-  warnings. Backend Ruff and mypy (187 modules) passed after integration fixes.
-- Initial full backend run: 62 failures, including obsolete two-round creation
-  fixtures/schema-head assertions and new integration defects. The current-flow
-  batch covered 84 cases; its one synthetic fixture mismatch was fixed and the
-  focused recheck passed. The entire old backend suite is NOT green.
-- Current checks cover length boundaries, routing, sequential context, targeted
-  retrieval, memory/hash propagation, one repair cap, accepted recovery, shared
-  sources, EN/ZH Mock lessons, audio retention and Report state correction.
-- Real case 731791c9-7f85-46a3-b529-8c22a369a23e saved two opening speeches with
-  four succeeded Provider operations, all attempt one. Round two failed before
-  its LLM call: the no-retrieval phase still built an empty query manifest.
-  This step is now removed and rebuilt. Resume of that failed record returned
-  invalid_state. No completed speech was regenerated. Full real acceptance
-  FAILED and remains outstanding; this was not a successful classroom test.
-- The runner's initial empty Preview-plan race was corrected. Its first setup
-  used an unreachable LAN origin; localhost transport with the configured
-  Origin header reached the API without changing configuration.
-- Docker is healthy at schema 0024. Two orphan Report aggregates now show failed,
-  not endless generating; three prior ready reports remain ready.
-- The task's database backup was deleted as requested. No backups, runtime
-  records, credentials or raw provider responses are committed.
+The browser showed all eight public speeches, two 3D figures, the speech bubble,
+separate scrolling speech/control areas and Conclude. A retained-audio replay began
+successfully; restarting Docker during replay exposed an existing recovery issue:
+controls can remain disabled until an explicit release/reload. A complete eight-turn
+browser audio replay has NOT been accepted. Report can now read the original frozen
+final input after a completed lesson's replay is released; live generation still
+requires the cancellation fence. Never treat replay's control generation as a reason
+to regenerate the already frozen classroom messages.
 
-Next after explicit quota resumption: remove obsolete two-round/old-protocol
-tests and write constraints while retaining effective authorization, integrity
-and cost checks; fix recovery of the failed no-query-manifest case; complete one
-four-round real lesson through barrages and Report. Latest UI request is pending:
-Delete Voice/All failures must restore the row without explanations, like Resume.
-Do not claim all requested work or classroom/content acceptance complete.
+Current checks:
 
-The owner now requests all implementation first, then one consolidated validation
-batch and necessary failure fixes. Paid/browser tests are authorized but should
-be limited to useful acceptance evidence, not repetitive expensive experiments.
-The latest quota stop is **30% remaining**: finish the nearest atomic boundary,
-push GitHub, restart Docker, inspect current status and report precise limitations.
-No quota reset is authorized. The real-call results above are observed evidence;
-the supplier billing console and operation ledger remain authoritative.
+- 63 focused backend generation/routing/recovery tests passed, including one real
+  SQL accepted-stage recovery with a fake supplier proving one LLM call only.
+- 26 focused Report tests passed, including source URL preservation, memory,
+  orphan status reconciliation and completed-history/live-fence separation.
+- Full frontend: 264 tests passed; typecheck passed; lint has zero errors and
+  four existing warnings. Backend Ruff/mypy passed (187 modules); formatter
+  checked 319 files. Backend/frontend Docker builds and health checks passed.
+- Full backend suite still has 47 failing cases. Many depend on obsolete two-round
+  creation or old protocol fixtures; others need investigation. Current-contract
+  tests passing does not make that suite green. Only the shared recovery fixture
+  needed by the current SQL test was migrated to explicit four-round Preview.
+- Formatting, document-authority and repository secret/runtime boundaries passed.
+  No database backups or runtime/provider payloads are added to Git.
+
+Other observed cases are failures, not successful lessons:
+`731791c9-7f85-46a3-b529-8c22a369a23e` has five of six Preview speeches saved;
+its last response exhausted its two attempts on question/barrage routing errors.
+The repaired Prompt now states only the current phase's metadata requirements,
+with explicit null values and actionable repair feedback. Its ledger has four
+succeeded query operations, five succeeded LLM operations and four failed LLM
+operations. `34d0a285-c148-4a9e-8098-2b9891d963ae` reached seven speeches; its
+last request has acceptance_unknown and was not resent. That incomplete test was
+ended through the normal API. A Chinese case failed at 96/77 characters under the
+old 100-character floor; no speech-length rejection remains in the paragraph path.
+
+Remaining: migrate/remove obsolete tests while preserving current authorization,
+cost, source and concurrency coverage; repair interrupted browser replay recovery;
+review RAG teaching quality with topic-matched Persona/knowledge fixtures. The real
+case above intentionally exposed mismatched relationship-psychology material for a
+classroom-history topic: some answers correctly acknowledged the gap, one opening
+followed the Persona's unrelated scenario, and later conclusions were repetitive.
+This is functional run evidence, NOT evidence that RAG relevance, natural debate
+quality, all requirements or a universal 100% success rate have been accepted.
+
+Work is paused at the owner's explicit request after this atomic change; do not
+start new development or paid tests until the owner resumes it.
+The owner prefers consolidated validation and proportionate failure follow-ups.
+Paid and browser tests are authorized. The quota stop boundary is removed; future
+Chat GPT-6 continuation uses Bridge MCP and can continue until usage is exhausted.
+No quota reset is authorized. The owner explicitly requested the external
+`/Users/xubosmell/Desktop/Maya/HANDOFF.md` be overwritten with operational state
+and parallel Luna Max ownership/integration instructions; no Codex access setup.
 
 ## Runtime and established UI
 

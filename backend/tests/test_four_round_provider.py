@@ -120,7 +120,7 @@ def test_four_round_wire_requires_explicit_field_consent_and_versions_recovery()
     assert request.prompt_contract_version == FOUR_ROUND_SEGMENT_PROMPT_VERSION
     assert segment_prompt_version(_snapshot()) == SEGMENT_PROMPT_VERSION
     assert json.loads(request.user_message.content)["discussion"]["self_id"] == PUBLIC_ID
-    assert "65–100" in request.system_message.content
+    assert "最多100" in request.system_message.content
     assert set(request.body["response_format"]["json_schema"]["schema"]["properties"]) == {
         "segments",
         "question",
@@ -186,7 +186,7 @@ def test_length_and_structure_share_one_frozen_repair_and_completed_output_is_re
 ):
     frozen = snapshot()
     second = output(65) if repair_success else {"segments": []}
-    provider = OfflineAdapter([output(1), second])
+    provider = OfflineAdapter([{"segments": []}, second])
     ledger = InMemoryProviderOperationRepository(
         default_budget=ProviderScopeBudgetV1(
             max_requests=4,
@@ -210,9 +210,7 @@ def test_length_and_structure_share_one_frozen_repair_and_completed_output_is_re
     assert [request.attempt_no for request in provider.requests] == [1, 2]
     assert provider.requests[1].retrieval_reused
     assert provider.requests[0].user_message.content == provider.requests[1].user_message.content
-    assert '"actual":1' in provider.requests[1].system_message.content
-    assert '"minimum":65' in provider.requests[1].system_message.content
-    assert '"maximum":100' in provider.requests[1].system_message.content
+    assert '"code":"segment_shape_invalid"' in provider.requests[1].system_message.content
     assert result.status == ("succeeded" if repair_success else "failed")
     if repair_success:
         resumed = runtime.resume_accepted_stage(result.stage, snapshot=frozen, context=context)
@@ -220,9 +218,9 @@ def test_length_and_structure_share_one_frozen_repair_and_completed_output_is_re
         assert len(provider.requests) == 2
 
 
-def test_one_attempt_manifest_does_not_gain_a_length_repair():
+def test_one_attempt_manifest_accepts_long_speech_without_length_repair():
     frozen = snapshot()
-    provider = OfflineAdapter([output(1)])
+    provider = OfflineAdapter([output(101)])
     provider.outbound_manifest = LLMOutboundManifestV1(
         field_classes=manifest().field_classes,
         max_attempts=1,
@@ -248,6 +246,6 @@ def test_one_attempt_manifest_does_not_gain_a_length_repair():
     )
     context = opening_context()
     result = runtime.run(prepared, context=context, confirmed=True)
-    assert result.status == "failed"
-    assert result.safe_error_code == "segment_length_invalid"
+    assert result.status == "succeeded"
+    assert result.safe_error_code is None
     assert len(provider.requests) == 1

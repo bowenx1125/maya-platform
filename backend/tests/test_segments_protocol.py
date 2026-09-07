@@ -406,7 +406,7 @@ def test_final_turn_requires_one_valid_reply_only_when_pool_is_nonempty() -> Non
     assert result.final_reply_to is None
 
 
-def test_output_rejects_extra_fields_duplicate_refs_and_oversize_join() -> None:
+def test_output_rejects_extra_fields_duplicate_refs_but_preserves_long_text() -> None:
     snapshot = _snapshot()
     with pytest.raises(SegmentProtocolError):
         validate_segment_output(
@@ -421,9 +421,8 @@ def test_output_rejects_extra_fields_duplicate_refs_and_oversize_join() -> None:
     long_segments: list[dict[str, object]] = [
         {"text": "x" * 1000, "source_ids": [], "reply_to": None} for _ in range(8)
     ]
-    with pytest.raises(SegmentProtocolError) as error:
-        validate_segment_output({"segments": long_segments}, snapshot)
-    assert error.value.code == "segment_text_too_large"
+    result = validate_segment_output({"segments": long_segments}, snapshot)
+    assert result.speech == "\n\n".join(str(item["text"]) for item in long_segments)
 
 
 def test_freeze_barrages_applies_cutoff_round_barrier_identity_redaction_and_dedupe() -> None:
@@ -641,13 +640,16 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
         nonlocal calls
         calls += 1
         output = {
+            "question": None,
+            "discussion_memory": None,
             "segments": [
                 {
                     "text": "A stored paragraph grounded in the frozen snapshot.",
                     "source_ids": ["S1"],
                     "reply_to": None,
+                    "support_mode": "direct",
                 }
-            ]
+            ],
         }
         return SegmentAcceptedCandidateV2(
             request=request,

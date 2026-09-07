@@ -702,6 +702,20 @@ class SqlPlaybackRepository(PlaybackRepository):
         ).all()
         return tuple((str(row[0]), str(row[1])) for row in rows)
 
+    def unattempted_llm_turn(self, db: Any, debate_id: str, turn_id: str) -> bool:
+        if not self._has_table(db, "provider_operations"):
+            return False
+        return (
+            db.execute(
+                text(
+                    "SELECT id FROM provider_operations WHERE scope_id=:debate "
+                    "AND logical_item_id=:turn AND provider_operation='llm_debate_turn' LIMIT 1"
+                ),
+                {"debate": debate_id, "turn": turn_id},
+            ).first()
+            is None
+        )
+
     def audio_swap_journals(self, db: Any) -> list[SqlRow]:
         if not self._has_table(db, "file_operations"):
             return []
@@ -2759,10 +2773,15 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         debate_id = str(debate.id)
         turn_id = str(turn.id)
-        if code == "turn_generation_failed" and (
-            debate_id,
-            turn_id,
-        ) not in self.recoverable_llm_turns(db):
+        if (
+            code == "turn_generation_failed"
+            and (
+                debate_id,
+                turn_id,
+            )
+            not in self.recoverable_llm_turns(db)
+            and not self.unattempted_llm_turn(db, debate_id, turn_id)
+        ):
             return False
         cached_segment = code in _TTS_DEFERRED_CODES and _has_cached_segment_fence(turn)
         if code in _TTS_DEFERRED_CODES and not cached_segment:

@@ -198,11 +198,18 @@ def _seed_running_product_debate(
                     {"agent_id": bowen_id, "stance_mode": "assigned", "assigned_stance": "support"},
                     {"agent_id": kaikai_id, "stance_mode": "assigned", "assigned_stance": "oppose"},
                 ],
-                "round_count": 2,
+                "round_count": 4,
             },
         )
         assert response.status_code == 201, response.text
         debate_id = response.json()["id"]
+        # Tests disable background warming; prepare the current four-round
+        # Preview explicitly before exercising the live recovery boundary.
+        scheduler = app.state.prewarm_scheduler
+        for preview_id, ready in scheduler._plan(debate_id):
+            if not ready:
+                assert client.portal is not None
+                client.portal.call(scheduler._prepare, debate_id, preview_id)
         started = client.post(
             f"/api/v1/debates/{debate_id}/start",
             headers=_headers(

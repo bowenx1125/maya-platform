@@ -89,12 +89,11 @@ _PRIVATE_ID_RE = re.compile(
 # ordinary classroom prose.  A seeded Agent's own evidence file says "a
 # well-built model could become harder to revise than the practice it
 # described", and that one sentence made every real report on that debate
-# impossible to generate.  So match identifier shapes, not vocabulary: a URL,
-# the supplier and model-family names, a workspace token, or one of those words
-# used as a key rather than a noun.
+# impossible to generate. Match the supplier and model-family names, a
+# workspace token, or one of those words
+# used as a key rather than a noun. Ordinary source URLs are allowed.
 _PROVIDER_INTERNAL_RE = re.compile(
-    r"(?i)(?:https?://"
-    r"|(?:^|\W)(?:dashscope|qwen)(?:$|\W)"
+    r"(?i)(?:(?:^|\W)(?:dashscope|qwen)(?:$|\W)"
     r"|(?:^|\W)ws-[a-z0-9]{8,}(?:$|\W)"
     r"|\b(?:model|endpoint|workspace|provider)[ _-]?(?:id|key|name|url|host)\b"
     r"|\b(?:model|endpoint|workspace|provider)\s*[:=]"

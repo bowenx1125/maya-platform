@@ -12,6 +12,42 @@ import type { DebateDetail, PlatformApi } from "../lib/api";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(cleanup);
 
+it.each(["Delete Voice", "Delete All"])(
+  "keeps %s failures quiet",
+  async (label) => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fail = vi
+      .fn()
+      .mockRejectedValue(new Error("internal failure details"));
+    const detail = {
+      id: "debate",
+      revision: 1,
+      playback: { control_version: 1 },
+    } as DebateDetail;
+    render(
+      <DebateCleanupControls
+        detail={detail}
+        api={{
+          deleteDebateVoice: fail,
+          deleteDebateAll: fail,
+          regenerateDebateTurnAudio: vi.fn(),
+        }}
+        onVoiceDeleted={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: label })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("internal failure details")).toBeNull();
+    vi.restoreAllMocks();
+  },
+);
+
 it("regenerates only missing saved audio and shows immediate progress", async () => {
   let finish: (value: unknown) => void = () => undefined;
   const generate = vi.fn(

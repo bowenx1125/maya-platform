@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -32,7 +33,7 @@ from app.providers.llm_segments import (
 )
 from app.providers.llm_transport import LLMAcceptanceUnknown, LLMTransportNotSent
 
-from .four_round import BODY_LIMITS, body_count, visible_predecessors
+from .four_round import visible_predecessors
 from .mutual_learning_prompts import compute_mutual_transcript_hash
 from .segments import (
     SegmentInputSnapshot,
@@ -52,6 +53,7 @@ from .types import (
 from .validator import final_ready_turn
 
 SEGMENT_MAX_ATTEMPTS = 2
+LOGGER = logging.getLogger(__name__)
 SEGMENT_REPAIR_CODES = frozenset(
     {
         "json_invalid",
@@ -59,11 +61,9 @@ SEGMENT_REPAIR_CODES = frozenset(
         "segment_shape_invalid",
         "segment_count_invalid",
         "segment_text_invalid",
-        "segment_text_too_large",
         "source_reference_invalid",
         "barrage_reference_invalid",
         "final_reply_missing",
-        "segment_length_invalid",
         "question_route_invalid",
         "discussion_memory_invalid",
         "support_mode_invalid",
@@ -73,30 +73,27 @@ SEGMENT_REPAIR_CODES = frozenset(
 
 
 def _repair_feedback(
-    candidate: SegmentAcceptedCandidateV2, code: str, pointers: Sequence[str]
+    _candidate: SegmentAcceptedCandidateV2, code: str, pointers: Sequence[str]
 ) -> dict[str, object]:
-    feedback: dict[str, object] = {"code": code, "json_pointers": list(pointers)}
-    snapshot = candidate.request.snapshot
-    if getattr(snapshot, "discussion_json", None) is not None:
-        low, high = BODY_LIMITS[snapshot.language][snapshot.round.number - 1]
-        output = candidate.provider_output
-        segments = output.get("segments") if isinstance(output, Mapping) else None
-        text = (
-            "\n\n".join(
-                str(item["text"])
-                for item in segments
-                if isinstance(item, Mapping) and isinstance(item.get("text"), str)
-            )
-            if isinstance(segments, list)
-            else None
-        )
-        feedback["body_length"] = {
-            "actual": body_count(text, snapshot.language) if text is not None else None,
-            "minimum": low,
-            "maximum": high,
-            "unit": "non_whitespace_characters" if snapshot.language == "zh" else "english_words",
-        }
-    return feedback
+    guidance = {
+        "barrage_reference_invalid": (
+            "reply_to is only a supplied barrage B ID, never an Agent ID. "
+            "Without barrages every reply_to must be JSON null."
+        ),
+        "question_route_invalid": (
+            "Only round 2 has question: copy discussion.question_target_id exactly. "
+            "Every other round must use question:null, including when answering old questions."
+        ),
+        "discussion_memory_invalid": (
+            "Only round 3 has discussion_memory; use the exact fields and enum in the "
+            "System Prompt. All other rounds use null."
+        ),
+    }
+    return {
+        "code": code,
+        "json_pointers": list(pointers),
+        **({"instruction": guidance[code]} if code in guidance else {}),
+    }
 
 
 class SegmentRuntimeError(RuntimeError):
@@ -671,7 +668,19 @@ class SegmentLLMRuntime:
             transcript_hash = compute_mutual_transcript_hash(visible)
             try:
                 stage = self._stage(current, candidate, transcript_hash=transcript_hash)
-            except Exception:
+            except Exception as exc:
+                cause: BaseException = exc
+                while cause.__cause__ is not None:
+                    cause = cause.__cause__
+                trace = cause.__traceback__
+                while trace is not None and trace.tb_next is not None:
+                    trace = trace.tb_next
+                LOGGER.error(
+                    "Segment stage failed error_type=%s safe_code=%s line=%s",
+                    type(cause).__name__,
+                    getattr(cause, "code", "segment_stage_failed"),
+                    trace.tb_lineno if trace is not None else 0,
+                )
                 self._transition(operation_id, "mark_failed", code="segment_stage_failed")
                 return SegmentRunOutcome(
                     "failed",

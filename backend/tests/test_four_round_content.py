@@ -89,18 +89,15 @@ def output(snapshot, count):
 def test_exact_body_boundaries_count_only_displayed_paragraphs(language, round_no):
     ctx = context(round_no, language)
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
-    low, high = BODY_LIMITS[language][round_no - 1]
-    for count in (low, high):
+    _, high = BODY_LIMITS[language][round_no - 1]
+    for count in (1, high, high + 1):
         value = output(snapshot, count)
         result = validate_segment_output(value, snapshot)
         assert body_count(result.speech, language) == count
         assert result.speech == value["segments"][0]["text"]
         loaded = load_segment_turn_result(result.as_stored_payload(), snapshot)
         assert loaded.output == result.output
-    for count in (low - 1, high + 1):
-        with pytest.raises(SegmentProtocolError, match="body length"):
-            validate_segment_output(output(snapshot, count), snapshot)
-    assert f"{low}–{high}" in build_segment_system_prompt(snapshot)
+    assert f"最多{high}" in build_segment_system_prompt(snapshot)
 
 
 def test_counter_punctuation_whitespace_and_english_compounds():

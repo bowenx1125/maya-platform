@@ -550,7 +550,10 @@ class PlaybackControlMixin(PlaybackCore):
                             accepted = (debate_id, turn_id) in tuple(recoverable(db))
                         except Exception:
                             accepted = False
-                    if not accepted:
+                    unattempted = getattr(self.repository, "unattempted_llm_turn", None)
+                    if not accepted and not (
+                        callable(unattempted) and unattempted(db, debate_id, turn_id)
+                    ):
                         raise invalid_state("The selected turn has no verified local recovery.")
                 elif (
                     code

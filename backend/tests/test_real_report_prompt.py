@@ -233,7 +233,7 @@ def test_request_rejects_private_text_and_identity_shaped_values() -> None:
         "api_key=secret-value",
         "student_id=42",
         "/Users/private/report.txt",
-        "https://provider.invalid/report",
+        "endpoint: https://provider.invalid/report",
     ):
         payload = _raw_request()
         participant = cast(list[dict[str, object]], payload["participants"])[0]
@@ -312,6 +312,7 @@ def test_the_outbound_guard_reads_identity_not_vocabulary() -> None:
         "the provider of local knowledge",
         "each endpoint of the argument",
         "a shared workspace for students",
+        "https://example.org/research",
     ):
         assert _text_error(allowed) is None, allowed
 
@@ -319,7 +320,7 @@ def test_the_outbound_guard_reads_identity_not_vocabulary() -> None:
         "model=qwen3.7-plus",
         "endpoint: something",
         "workspace_id abc",
-        "https://ws-abc.example.com/v1",
+        "https://ws-abcdefgh.example.com/v1",
         "ws-t5imcyzsu4d6rd1b",
         "we used dashscope",
     ):

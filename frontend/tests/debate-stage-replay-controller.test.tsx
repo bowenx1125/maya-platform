@@ -283,6 +283,23 @@ describe("terminal segments replay controller", () => {
     expect(screen.queryByRole("heading", { name: initial.topic })).toBeNull();
   });
 
+  it("beta restores the current speech bubble when opened while waiting for Next", async () => {
+    const initial = detail();
+    initial.status = "running";
+    initial.playback = {
+      ...initial.playback,
+      status: "waiting_next",
+      current_turn_id: turnId,
+    };
+    const socket = new ReplaySocket();
+    render(renderStage("beta", initial, apiFor(initial), socket));
+    await waitFor(() =>
+      expect(screen.getByTestId("speech-bubble").textContent).toContain(
+        "A retained paragraph",
+      ),
+    );
+  });
+
   it("beta keeps the bubble after audio ends and releases authority until an explicit Replay", async () => {
     const initial = detail();
     initial.status = "running";
