@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -10,6 +16,11 @@ import type {
   KnowledgeSnapshot,
 } from "../lib/api";
 import { LocaleProvider } from "../components/locale";
+import { TeacherDebateList } from "../components/debate/setup/debate-setup";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 vi.mock("../components/session-provider", () => ({
   useSession: vi.fn(),
@@ -120,6 +131,54 @@ describe("PW3-E teacher shell and responsive contract", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("keeps the stalled row unchanged when Resume fails", async () => {
+    const api = {
+      debates: vi.fn().mockResolvedValue([
+        {
+          id: "debate-resume",
+          topic: "A stalled classroom",
+          status: "draft",
+          created_at: "2026-09-08T00:00:00Z",
+          round_count: 2,
+          preview: { prepared_turns: 1, expected_turns: 2, ready: false },
+          stall: {
+            turn_id: "turn-resume",
+            round_no: 1,
+            safe_error_code: "invalid_state",
+          },
+        },
+      ]),
+      debate: vi.fn().mockResolvedValue({ playback: { control_version: 4 } }),
+      retryDebatePreparation: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("That action is not available in the current state."),
+        ),
+    };
+    mockedUseSession.mockReturnValue({
+      api,
+      user: { courses: [{ course_id: courseId, role: "teacher" }] },
+    } as never);
+    render(
+      <LocaleProvider initialLocale="en">
+        <TeacherDebateList />
+      </LocaleProvider>,
+    );
+    const resume = await screen.findByRole("button", { name: "Resume" });
+    fireEvent.click(resume);
+    await waitFor(() =>
+      expect(api.retryDebatePreparation).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() => expect(resume).toHaveProperty("disabled", false));
+    expect(resume.textContent).toBe("Resume");
+    expect(screen.getByText("A stalled classroom")).toBeTruthy();
+    expect(screen.getByText("Stalled")).toBeTruthy();
+    expect(
+      screen.queryByText("That action is not available in the current state."),
+    ).toBeNull();
+    expect(api.debates).toHaveBeenCalledTimes(1);
   });
 
   it.each([{ locale: "en" as const }, { locale: "zh" as const }])(

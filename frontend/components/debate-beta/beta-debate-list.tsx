@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useLocale } from "../locale";
 import { useSession } from "../session-provider";
-import { ErrorNotice, LoadingCard, PageIntro } from "../ui";
+import { ErrorNotice, LoadingCard, PageIntro, SectionCard } from "../ui";
 import { statusLabel } from "../../lib/i18n";
 import type { DebateSummary } from "../../lib/api";
 import styles from "./beta-debate-list.module.css";
@@ -87,41 +87,46 @@ export function BetaDebateList() {
       ) : null}
 
       {!loading && !error ? (
-        debates.length === 0 ? (
-          <p className={styles.empty}>{copy.empty}</p>
-        ) : (
-          <ul className={styles.list}>
-            {debates.map((debate) => (
-              <li className={styles.row} key={debate.id}>
-                <div className={styles.rowMain}>
-                  <h2>{debate.topic}</h2>
-                  <span className={styles.meta}>
-                    <span className={styles.status} data-status={debate.status}>
-                      {debate.preview?.ready && debate.status === "draft"
-                        ? "Ready"
-                        : statusLabel(debate.status, locale)}
-                    </span>
-                    {debate.expected_turns > 0 ? (
-                      <span className={styles.progress}>
-                        {debate.preview?.prepared_turns ??
-                          debate.prepared_turns}
-                        /
-                        {debate.preview?.expected_turns ??
-                          debate.expected_turns}
+        <SectionCard>
+          {debates.length === 0 ? (
+            <p className={styles.empty}>{copy.empty}</p>
+          ) : (
+            <ul className={styles.list}>
+              {debates.map((debate) => (
+                <li className={styles.row} key={debate.id}>
+                  <div className={styles.rowMain}>
+                    <h2>{debate.topic}</h2>
+                    <span className={styles.meta}>
+                      <span
+                        className={styles.status}
+                        data-status={debate.status}
+                      >
+                        {debate.preview?.ready && debate.status === "draft"
+                          ? "Ready"
+                          : statusLabel(debate.status, locale)}
                       </span>
-                    ) : null}
-                  </span>
-                </div>
-                <Link
-                  className={styles.openAction}
-                  href={`/teacher/debates-beta/${debate.id}/control`}
-                >
-                  {copy.open}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )
+                      {debate.expected_turns > 0 ? (
+                        <span className={styles.progress}>
+                          {debate.preview?.prepared_turns ??
+                            debate.prepared_turns}
+                          /
+                          {debate.preview?.expected_turns ??
+                            debate.expected_turns}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <Link
+                    className={styles.openAction}
+                    href={`/teacher/debates-beta/${debate.id}/control`}
+                  >
+                    {copy.open}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
       ) : null}
     </>
   );

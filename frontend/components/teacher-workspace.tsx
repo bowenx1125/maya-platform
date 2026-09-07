@@ -90,18 +90,20 @@ export function TeacherDashboard() {
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
-        <div className="published-grid">
-          {published.map((item) => (
-            <PublishedAgentCard
-              groupName={
-                groups.find((group) => group.id === item.agent.group_id)
-                  ?.name ?? null
-              }
-              item={item}
-              key={item.agent.id}
-            />
-          ))}
-        </div>
+        <SectionCard>
+          <div className="published-grid">
+            {published.map((item) => (
+              <PublishedAgentCard
+                groupName={
+                  groups.find((group) => group.id === item.agent.group_id)
+                    ?.name ?? null
+                }
+                item={item}
+                key={item.agent.id}
+              />
+            ))}
+          </div>
+        </SectionCard>
       )}
     </>
   );
@@ -125,16 +127,10 @@ function PublishedAgentCard({
   return (
     <Link className="published-card" href={`/teacher/agents/${item.agent.id}`}>
       <div className="published-card-top">
-        <div className="avatar-orb" aria-hidden="true">
-          {item.agent.name.slice(0, 1).toUpperCase()}
-        </div>
         <div>
           <h2>{item.agent.name}</h2>
           <p>{item.agent.description}</p>
         </div>
-        <span className="row-arrow" aria-hidden="true">
-          →
-        </span>
       </div>
       <div className="published-card-meta">
         {/* The version and the group that made it. Green means the published
@@ -146,7 +142,7 @@ function PublishedAgentCard({
         >
           {version.version_label}
         </span>
-        {groupName ? <span className="agent-pill">{groupName}</span> : null}
+        {groupName ? <span>{groupName}</span> : null}
       </div>
     </Link>
   );

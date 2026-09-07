@@ -297,9 +297,7 @@ function ResumeButton({
 }) {
   const t = useT();
   const { api } = useSession();
-  const { locale } = useLocale();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   return (
     <>
@@ -308,7 +306,6 @@ function ResumeButton({
         disabled={busy}
         onClick={() => {
           setBusy(true);
-          setError(null);
           // The retry is guarded by the playback control version, which only
           // the debate's own snapshot carries; the list never had a reason to
           // hold one until now.
@@ -325,14 +322,14 @@ function ResumeButton({
               ),
             )
             .then(() => onResumed())
-            .catch((cause: unknown) => setError(localizeError(cause, locale)))
+            // A failed resume leaves the existing stalled row unchanged.
+            .catch(() => undefined)
             .finally(() => setBusy(false));
         }}
         type="button"
       >
         {busy ? t("debateWarmResuming") : t("debateWarmResume")}
       </button>
-      {error ? <span role="status">{error}</span> : null}
     </>
   );
 }

@@ -87,8 +87,13 @@
 
 .openAction:hover {
   color: #382d19;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  background: rgba(196, 164, 104, 0.16);
+  text-decoration: none;
+}
+
+.openAction:focus-visible {
+  outline: 2px solid #a78342;
+  outline-offset: 3px;
 }
 
 @media (max-width: 560px) {

@@ -79,15 +79,16 @@ Delivery artifacts: a 13-page Chinese Word proposal and a 53-row Excel table
 the approved 37-session/72-answer criteria. Manual ownership/blank-plan edits were
 preserved. Updated pages and worksheet regions were visually checked.
 
-### UI follow-up (September 7)
+### UI follow-up (September 8)
 
-The Bench title is left-aligned. Delete Voice/All sit beside Resume in the warm
-Debate list card. Stage list, Dashboard, creation and Preview use warm yellow;
-Stage rows have only Open Stage. Preview navigation is inline, Audio Ready
-replaces Saved, and its progress card is removed; list preparation shows x / y
-turns. Open Message/Hide toggles the same QR without closing interaction.
-Conclude opens the report; grades appear only there. Duplicate insight/report
-status cards are removed. The owner delegates final classroom testing to himself.
+Bench titles align left. Delete Voice/All sit beside Resume. Stage and Dashboard
+use white paper behind yellow rows; Dashboard has no arrows or avatar circles.
+Open Stage uses Delete-style color hover, without underlining. Failed Resume
+keeps the Stalled row unchanged, with no error text. Five focused tests and
+typecheck passed. Creation/Preview stay yellow with inline navigation; Audio Ready
+replaces Saved, and list progress shows x / y turns. Open Message/Hide preserves
+the QR session. Conclude contains grades; duplicate report status cards are gone.
+The owner performs final classroom acceptance.
 
 ### Implementation checkpoint (September 7, not release acceptance)
 
