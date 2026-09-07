@@ -23,7 +23,6 @@ import {
 } from "../../../lib/api";
 import { localizeError, type MessageKey } from "../../../lib/i18n";
 import { validateDebateTopic } from "../../../lib/debate-topic";
-import { turnsForShape } from "../../../lib/debate-rounds";
 import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
@@ -338,15 +337,11 @@ type StanceValue = "support" | "oppose" | "neutral";
 // A new Debate is always ordered multi-expert mutual learning. The legacy demo
 // RuleSets remain readable on existing Debates but can no longer be created.
 type DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
-type MutualRoundCount = 2 | 3 | 4 | 5;
-
-/** The RuleSet's accepted round counts, listed once. */
-const MUTUAL_ROUND_CHOICES: readonly MutualRoundCount[] = [2, 3, 4, 5];
 type SetupDraftPayload = Omit<
   DebateDraftRequest,
   "round_count" | "rule_set_id"
 > & {
-  round_count: MutualRoundCount;
+  round_count: 4;
   rule_set_id: DebateRuleSetId;
 };
 type ParticipantDraft = {
@@ -390,7 +385,6 @@ export function TeacherDebateCreate({
   const [topic, setTopic] = useState("");
   const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("en");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
-  const [roundCount, setRoundCount] = useState<MutualRoundCount>(2);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -499,10 +493,7 @@ export function TeacherDebateCreate({
           teacher_note: draft.note,
         };
       }),
-      round_count:
-        ruleSetId === "ordered_multi_expert_mutual_learning_v1"
-          ? roundCount
-          : 2,
+      round_count: 4,
       rule_set_id: ruleSetId,
       total_duration_seconds: null,
       turn_duration_seconds: null,
@@ -729,8 +720,6 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        {/* The card names the protocol, so the line inside it can be the one
-            fact a teacher needs: the shape of a round. */}
         <SectionCard title={copy(t, "debateMutualLearningRuleSet")}>
           <label className={styles.roundField}>
             <span className={styles.roundLabel}>Language</span>
@@ -754,40 +743,6 @@ export function TeacherDebateCreate({
             >
               {copy(t, "debateMutualLearningRules")}
             </p>
-            {/* A segmented row, not a select: four values the teacher should be
-                able to hit in one tap and read at a glance. The legacy branch
-                that used to wrap this is gone - ruleSetId is a const of one
-                value, so every arm of that ternary but this one was dead. */}
-            <div className={styles.roundField}>
-              <span className={styles.roundLabel}>
-                {copy(t, "debateRoundCount")}
-              </span>
-              <div
-                aria-label={copy(t, "debateRoundCount")}
-                className={styles.roundChoices}
-                role="radiogroup"
-              >
-                {MUTUAL_ROUND_CHOICES.map((value) => (
-                  <button
-                    aria-checked={value === roundCount}
-                    className={styles.roundChoice}
-                    disabled={busy}
-                    key={value}
-                    onClick={() => setRoundCount(value)}
-                    role="radio"
-                    type="button"
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-              <span className={styles.fieldHint}>
-                {copy(t, "debateRoundCountHint").replace(
-                  "{turns}",
-                  String(turnsForShape(selectedIds.length, roundCount)),
-                )}
-              </span>
-            </div>
           </div>
           {formError ? (
             <div className="form-error" role="alert">

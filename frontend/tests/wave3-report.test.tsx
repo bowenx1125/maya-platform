@@ -16,7 +16,10 @@ import {
   type ReportRevision,
 } from "../components/report";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const debateId = "11111111-1111-4111-8111-111111111111";
 const revisionId = "22222222-2222-4222-8222-222222222222";
@@ -187,6 +190,143 @@ describe("Wave 3 M14 ReportPanel", () => {
     expect(screen.getByLabelText("Current report").textContent).toContain(
       "Civilization Mutual Learning Report",
     );
+  });
+
+  it.each(["ready", "failed"] as const)(
+    "renders terminal %s status despite a failed revision-history request",
+    async (status) => {
+      vi.useFakeTimers();
+      const generating = {
+        ...readyReport(),
+        generation_status: "generating",
+        latest_attempt_status: "generating",
+        current_success_revision: null,
+      } as Report;
+      const terminal = {
+        ...readyReport(),
+        generation_status: status,
+        latest_attempt_status: status,
+      } as Report;
+      const getCurrentReport = vi
+        .fn<ReportPanelApi["getCurrentReport"]>()
+        .mockResolvedValueOnce(generating)
+        .mockResolvedValue(terminal);
+      const api = apiMock({
+        getCurrentReport,
+        listReportRevisions: vi
+          .fn()
+          .mockRejectedValue(new Error("History unavailable")),
+      });
+      render(
+        <LocaleProvider initialLocale="en">
+          <ReportPanel debateId={debateId} api={api} />
+        </LocaleProvider>,
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText("Generating report…")).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(screen.queryByText("Generating report…")).toBeNull();
+      expect(screen.getByLabelText("Current report").textContent).toContain(
+        "Civilization Mutual Learning Report",
+      );
+      if (status === "failed") {
+        expect(
+          screen.getByText(
+            "Report generation failed; earlier revisions remain.",
+          ),
+        ).toBeTruthy();
+      }
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(getCurrentReport).toHaveBeenCalledTimes(2);
+      expect(api.regenerateReport).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps polling status while revision history is pending", async () => {
+    vi.useFakeTimers();
+    const getCurrentReport = vi
+      .fn<ReportPanelApi["getCurrentReport"]>()
+      .mockResolvedValueOnce({
+        ...readyReport(),
+        generation_status: "generating",
+        latest_attempt_status: "generating",
+        current_success_revision: null,
+      } as Report)
+      .mockResolvedValue(readyReport());
+    const api = apiMock({
+      getCurrentReport,
+      listReportRevisions: vi.fn<ReportPanelApi["listReportRevisions"]>(
+        () => new Promise(() => {}),
+      ),
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <ReportPanel debateId={debateId} api={api} />
+      </LocaleProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText("Generating report…")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.queryByText("Generating report…")).toBeNull();
+    expect(screen.getByLabelText("Current report")).toBeTruthy();
+    expect(getCurrentReport).toHaveBeenCalledTimes(2);
+    expect(api.regenerateReport).not.toHaveBeenCalled();
+  });
+
+  it("does not let an older poll replace a ready report after Refresh", async () => {
+    vi.useFakeTimers();
+    const generating = {
+      ...readyReport(),
+      generation_status: "generating",
+      latest_attempt_status: "generating",
+      current_success_revision: null,
+    } as Report;
+    let resolveOldPoll!: (value: Report) => void;
+    const oldPoll = new Promise<Report>((resolve) => {
+      resolveOldPoll = resolve;
+    });
+    const getCurrentReport = vi
+      .fn<ReportPanelApi["getCurrentReport"]>()
+      .mockResolvedValueOnce(generating)
+      .mockReturnValueOnce(oldPoll)
+      .mockResolvedValue(readyReport());
+    const api = apiMock({ getCurrentReport });
+    render(
+      <LocaleProvider initialLocale="en">
+        <ReportPanel debateId={debateId} api={api} />
+      </LocaleProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    });
+    expect(screen.getByLabelText("Current report")).toBeTruthy();
+    await act(async () => {
+      resolveOldPoll(generating);
+    });
+    expect(screen.queryByText("Generating report…")).toBeNull();
+    expect(screen.getByLabelText("Current report")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(getCurrentReport).toHaveBeenCalledTimes(3);
+    expect(api.regenerateReport).not.toHaveBeenCalled();
   });
 
   it("regenerates through the platform adapter and reloads status", async () => {

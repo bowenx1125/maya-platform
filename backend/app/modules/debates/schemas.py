@@ -74,7 +74,7 @@ class DebateDraftRequest(_ClosedModel):
         ),
     )
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
-    round_count: int = Field(ge=2, le=5)
+    round_count: Literal[4] = 4
     output_language: Literal["en", "zh"] = "en"
     turn_protocol: Literal["segments_v2"] | None = None
     rule_set_id: RuleSetId = NEW_DEBATE_RULE_SET_ID
@@ -88,8 +88,8 @@ class DebateDraftRequest(_ClosedModel):
         ids = [item.agent_id for item in self.participants]
         if len(set(ids)) != len(ids):
             raise ValueError("participants must be unique")
-        if self.rule_set_id in {RULE_SET_ID_V1, RULE_SET_ID_V2} and self.round_count != 2:
-            raise ValueError("legacy Demo RuleSets require exactly two rounds")
+        if self.rule_set_id in {RULE_SET_ID_V1, RULE_SET_ID_V2}:
+            raise ValueError("new debates require the four-round teaching rules")
         return self
 
 
@@ -297,6 +297,7 @@ class Transcript(_ClosedModel):
 
 
 class DebateDetail(DebateSummary):
+    teaching_protocol: Literal["four_round_v1"] | None = None
     output_language: Literal["en", "zh"] = "en"
     turn_protocol: Literal["segments_v2"] | None = None
     preview_turns: list[PreviewTurn] = Field(default_factory=list)
@@ -351,6 +352,7 @@ class DebateRuleSnapshot(_ClosedModel):
     retrieval_policy_id: Literal["mock_lexical_anchor_v2"] | None = MOCK_RETRIEVAL_POLICY_ID
     round_count: int = Field(default=2, ge=2, le=5)
     turn_protocol: Literal["segments_v2"] | None = None
+    teaching_protocol: Literal["four_round_v1"] | None = None
     min_participants: Literal[2] = 2
     max_participants: Literal[5] = 5
     min_words: Literal[80] = 80

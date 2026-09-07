@@ -14,6 +14,7 @@ from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNIN
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
 from app.modules.debates.round_count import (
     debate_round_count,
+    debate_teaching_protocol,
     preview_turn_count,
     uses_segment_protocol,
 )
@@ -793,6 +794,7 @@ class PlaybackControlMixin(PlaybackCore):
                 turns,
                 current,
                 rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+                teaching_protocol=debate_teaching_protocol(debate),
             ):
                 raise conflict(
                     "invalid_state",
@@ -1135,6 +1137,7 @@ class PlaybackControlMixin(PlaybackCore):
                     turns,
                     current,
                     rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+                    teaching_protocol=debate_teaching_protocol(debate),
                 ):
                     raise conflict(
                         "invalid_state",

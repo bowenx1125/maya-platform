@@ -16,7 +16,7 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from .schemas import ReportScoreSummary, ReportSectionOutput
+from .schemas import ReportDiscussionMemory, ReportScoreSummary, ReportSectionOutput
 
 REPORT_SECTION_FIELDS: Final[tuple[str, ...]] = (
     "debate_overview",
@@ -327,9 +327,33 @@ class ReportRequestV2(ReportRequest):
     # Code-owned, deterministic classroom grading.  Omit for an older stored
     # v2 manifest so its request hash remains stable during recovery.
     score_summary: ReportScoreSummary | None = None
+    discussion_memories: tuple[ReportDiscussionMemory, ...] = ()
 
     @model_validator(mode="after")
     def validate_v2_semantics(self) -> ReportRequestV2:
+        slots = {item.slot for item in self.participants}
+        memory_slots = [item.slot for item in self.discussion_memories]
+        if len(memory_slots) != len(set(memory_slots)) or not set(memory_slots).issubset(slots):
+            raise ReportBoundaryError("report_memory_projection")
+        for memory in self.discussion_memories:
+            if memory.influence is not None and memory.influence.slot not in slots:
+                raise ReportBoundaryError("report_memory_projection")
+            values = [memory.position, memory.reason, memory.unresolved_question]
+            if memory.influence is not None:
+                values.append(memory.influence.point)
+            for value in values:
+                if (
+                    value
+                    and (
+                        error := _text_error(
+                            value,
+                            allow_cjk=self.source_language == "zh",
+                            allow_authoritative_text=True,
+                        )
+                    )
+                    is not None
+                ):
+                    raise ReportBoundaryError(error)
         for item in self.classroom_barrages:
             error = _text_error(
                 item.text,
@@ -360,6 +384,13 @@ class ReportRequestV2(ReportRequest):
 
     def canonical_payload(self) -> dict[str, object]:
         payload = super().canonical_payload()
+        if not payload.get("discussion_memories"):
+            payload.pop("discussion_memories", None)
+        else:
+            payload["discussion_memories"] = sorted(
+                cast(list[dict[str, object]], payload["discussion_memories"]),
+                key=lambda row: str(row["slot"]),
+            )
         if payload.get("score_summary") is None:
             payload.pop("score_summary", None)
         elif isinstance(payload.get("score_summary"), dict):

@@ -419,12 +419,6 @@ class TurnSource(Base):
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(
-            ["participant_id", "snapshot_id"],
-            ["debate_participants.id", "debate_participants.knowledge_snapshot_id"],
-            name="fk_turn_sources_participant_snapshot",
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
             ["chunk_id", "snapshot_id"],
             ["knowledge_chunks.id", "knowledge_chunks.snapshot_id"],
             name="fk_turn_sources_chunk_snapshot",

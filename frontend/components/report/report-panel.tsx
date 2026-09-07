@@ -94,6 +94,7 @@ export function ReportPanel({
   const [error, setError] = useState<string | null>(null);
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const pollStartedAt = useRef<number | null>(null);
+  const loadVersion = useRef(0);
 
   const copy = useMemo(
     () =>
@@ -143,27 +144,40 @@ export function ReportPanel({
 
   const load = useCallback(
     async ({ quiet = false } = {}) => {
+      const version = ++loadVersion.current;
       if (!quiet) setLoading(true);
       if (!quiet) setPollTimedOut(false);
       setError(null);
+      const loadRevisions = () => {
+        // History is supplementary; its failure must not hide a completed report
+        // or prevent the authoritative status from continuing to poll.
+        void api.listReportRevisions(debateId).then(
+          (nextRevisions) => {
+            if (loadVersion.current === version) setRevisions(nextRevisions);
+          },
+          (cause: unknown) => {
+            if (loadVersion.current === version)
+              setError(apiErrorMessage(cause));
+          },
+        );
+      };
+      if (!quiet) loadRevisions();
       try {
-        const [nextReport, nextRevisions] = await Promise.all([
-          api.getCurrentReport(debateId),
-          api.listReportRevisions(debateId),
-        ]);
+        const nextReport = await api.getCurrentReport(debateId);
+        if (loadVersion.current !== version) return;
         setReport(nextReport);
-        setRevisions(nextRevisions);
         if (!quiet) setSelectedRevision(null);
         if (
           nextReport.generation_status !== "generating" &&
           nextReport.insight.status !== "generating"
         ) {
           setPollTimedOut(false);
+          if (quiet) loadRevisions();
         }
       } catch (cause) {
-        setError(apiErrorMessage(cause));
+        if (loadVersion.current === version) setError(apiErrorMessage(cause));
       } finally {
-        if (!quiet) setLoading(false);
+        if (loadVersion.current === version) setLoading(false);
       }
     },
     [api, debateId],
@@ -171,7 +185,10 @@ export function ReportPanel({
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      loadVersion.current += 1;
+    };
   }, [load]);
 
   useEffect(() => {

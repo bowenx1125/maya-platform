@@ -58,6 +58,7 @@ from app.modules.debates.round_count import (
 from app.modules.debates.round_count import (
     expected_turn_count as planned_turn_count,
 )
+from app.modules.debates.source_lineage import receipt_scope_is_valid
 from app.modules.interactions.models import BarrageMessage
 from app.providers.control import (
     LLM_MAYA_REPORT_BUCKET,
@@ -117,6 +118,7 @@ from .schemas import (
     ReadyReportRevision,
     Report,
     ReportAgentScore,
+    ReportDiscussionMemory,
     ReportInputManifestV1,
     ReportInputManifestV2,
     ReportRevision,
@@ -552,6 +554,7 @@ class ReportContext:
     replies: tuple[ReportReplyContext, ...] = ()
     protocol_version: str = "legacy_v1"
     score_summary: ReportScoreSummary | None = None
+    discussion_memories: tuple[ReportDiscussionMemory, ...] = ()
 
 
 class ReportInsightEnqueuer:
@@ -1193,6 +1196,14 @@ def _report_context(
     segment_sources_by_turn: dict[str, tuple[str, ...]] = {}
     segment_replies_by_turn: dict[str, tuple[tuple[int, str], ...]] = {}
     segment_values_by_turn: dict[str, tuple[object, ...]] = {}
+    discussion_memories: list[ReportDiscussionMemory] = []
+    participant_slots = {str(row.id): str(row.slot) for row in participants}
+    try:
+        teaching_mode = (
+            json.loads(debate.rule_snapshot_json).get("teaching_protocol") == "four_round_v1"
+        )
+    except (TypeError, ValueError, AttributeError):
+        teaching_mode = False
     manifest_turns: list[ManifestTurn | ManifestTurnV2] = []
     turn_context: list[ReportTurnContext] = []
     turn_ids = {row.id for row in turns}
@@ -1206,6 +1217,25 @@ def _report_context(
             segment_sources_by_turn[row.id] = source_ids
             segment_replies_by_turn[row.id] = replies
             segment_values_by_turn[row.id] = segment_values
+            if teaching_mode and row.round_no == 3:
+                try:
+                    saved = json.loads(str(row.structured_json))
+                    memory = saved.get("discussion_memory")
+                    if not isinstance(memory, Mapping):
+                        raise ValueError("round three memory is missing")
+                    projection = dict(memory)
+                    projection["slot"] = participant_slots[str(row.participant_id)]
+                    influence = projection.get("influence")
+                    if influence is not None:
+                        if not isinstance(influence, Mapping):
+                            raise ValueError("memory influence is invalid")
+                        projection["influence"] = {
+                            "slot": participant_slots[str(influence.get("agent_id", ""))],
+                            "point": influence.get("point"),
+                        }
+                    discussion_memories.append(ReportDiscussionMemory.model_validate(projection))
+                except (TypeError, ValueError, KeyError):
+                    raise invalid_state("A response turn has invalid discussion memory.") from None
         turn_class = ManifestTurnV2 if segment_mode else ManifestTurn
         manifest_turns.append(
             turn_class(
@@ -1254,10 +1284,25 @@ def _report_context(
             or chunk is None
             or source.id in seen_source_ids
             or source.participant_id != turn.participant_id
-            or source.snapshot_id != turn.knowledge_snapshot_id
             or chunk.snapshot_id != source.snapshot_id
         ):
             raise invalid_state("A report source is not an immutable used turn source.")
+        if source.snapshot_id != turn.knowledge_snapshot_id:
+            try:
+                receipts = json.loads(str(turn.retrieval_receipts_json or "[]"))
+                receipt = next(
+                    item
+                    for item in receipts
+                    if isinstance(item, Mapping)
+                    and item.get("evidence_id") == source.evidence_id
+                    and item.get("chunk_id") == source.chunk_id
+                    and item.get("snapshot_id") == source.snapshot_id
+                    and item.get("text") == chunk.chunk_text
+                )
+            except (TypeError, ValueError, StopIteration):
+                raise invalid_state("A report source has no original evidence receipt.") from None
+            if not receipt_scope_is_valid(db, turn, receipt):
+                raise invalid_state("A report source is outside the completed discussion.")
         source_evidence_id = str(source.evidence_id or "").strip()
         if segment_mode:
             expected_ids = set(segment_sources_by_turn.get(source.turn_id, ()))
@@ -1478,6 +1523,7 @@ def _report_context(
                 for item in reply_context
             ],
             score_summary=score_summary,
+            discussion_memories=discussion_memories,
         )
     else:
         manifest = ReportInputManifestV1(
@@ -1500,6 +1546,7 @@ def _report_context(
         replies=tuple(reply_context),
         protocol_version="segments_v2" if segment_mode else "legacy_v1",
         score_summary=score_summary,
+        discussion_memories=tuple(discussion_memories),
     )
 
 
@@ -1613,6 +1660,7 @@ def build_real_report_request(context: ReportContext) -> ReportRequest | ReportR
                 for item in context.replies
             ),
             score_summary=context.score_summary,
+            discussion_memories=context.discussion_memories,
         )
     return ReportRequest(**common)
 
@@ -2230,6 +2278,16 @@ def _report_manifest(
                     _report_field_hash(request.score_summary.model_dump(mode="json")),
                 ),
             )
+        if request.discussion_memories:
+            fields = (
+                *fields,
+                ExportFieldV1(
+                    "session_discussion_memory",
+                    _report_field_hash(
+                        [item.model_dump(mode="json") for item in request.discussion_memories]
+                    ),
+                ),
+            )
     estimated_cost = wire.estimated_cost_cny
     budget = wire.budget
     max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
@@ -2255,7 +2313,13 @@ def _report_manifest(
             else "real_report_persona_absent_v1"
         ),
         fields=fields,
-        operation_revision=2 if isinstance(request, ReportRequestV2) else 1,
+        operation_revision=(
+            3
+            if isinstance(request, ReportRequestV2) and request.discussion_memories
+            else 2
+            if isinstance(request, ReportRequestV2)
+            else 1
+        ),
         max_attempts=1,
         max_total_tokens=max_tokens,
         max_cost_cny=max_cost,
@@ -3316,6 +3380,60 @@ def download_current_report(
     return revision.english_markdown, f"civilization-mutual-learning-report--{debate_id}.md"
 
 
+def reconcile_orphaned_report_statuses(db: Session) -> int:
+    """Repair aggregate-only spinners from durable results without generating."""
+
+    repaired = 0
+    reports = db.scalars(
+        select(CivilizationReport).where(CivilizationReport.generation_status == "generating")
+    ).all()
+    for report in reports:
+        active_revision = db.scalar(
+            select(CivilizationReportRevision.id)
+            .where(
+                CivilizationReportRevision.report_id == report.id,
+                CivilizationReportRevision.status == "generating",
+            )
+            .limit(1)
+        )
+        active_job = db.scalar(
+            select(Job.id)
+            .where(
+                Job.debate_id == report.debate_id,
+                Job.operation.in_(("barrage_insight.generate", REPORT_GENERATE_OPERATION)),
+                Job.state.in_(("pending", "running", "interrupted")),
+            )
+            .limit(1)
+        )
+        if active_revision is not None or active_job is not None:
+            continue
+        latest = db.scalar(
+            select(CivilizationReportRevision)
+            .where(
+                CivilizationReportRevision.report_id == report.id,
+            )
+            .order_by(CivilizationReportRevision.revision_no.desc())
+            .limit(1)
+        )
+        pointer = db.get(CivilizationReportCurrentSuccess, report.id)
+        current = (
+            db.get(CivilizationReportRevision, pointer.revision_id) if pointer is not None else None
+        )
+        has_success = (
+            current is not None
+            and current.status == "ready"
+            and current.debate_id == report.debate_id
+        )
+        report.generation_status = "ready" if has_success else "failed"
+        report.latest_attempt_status = (
+            "ready" if has_success and latest is not None and latest.status == "ready" else "failed"
+        )
+        report.updated_at = utc_now()
+        repaired += 1
+    db.flush()
+    return repaired
+
+
 def recover_report_jobs(db: Session) -> int:
     """Fail running M14 jobs after process restart; never rerun ready rows."""
 
@@ -3371,7 +3489,7 @@ def recover_report_jobs(db: Session) -> int:
         job.updated_at = utc_now()
         recovered += 1
     db.flush()
-    return recovered
+    return recovered + reconcile_orphaned_report_statuses(db)
 
 
 __all__ = [

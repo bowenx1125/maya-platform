@@ -42,6 +42,7 @@ from app.providers.llm_price_card import (
 )
 from app.providers.llm_privacy import (
     LLM_ANONYMOUS_BARRAGE_FIELD_CLASS,
+    LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS,
     LLMOutboundManifestV1,
     LLMOutboundPrivacyError,
     scan_segment_outbound_messages,
@@ -62,6 +63,7 @@ from app.providers.llm_transport import (
 
 SEGMENT_PROTOCOL: Literal["segments_v2"] = "segments_v2"
 SEGMENT_PROMPT_VERSION = "segment_prompt_v2"
+FOUR_ROUND_SEGMENT_PROMPT_VERSION = "segment_prompt_four_round_v1"
 SEGMENT_OUTPUT_SCHEMA_ID = "maya_llm_turn_output_v2"
 SEGMENT_OPERATION = "llm_debate_turn"
 SEGMENT_ENDPOINT_PATH = "/compatible-mode/v1/chat/completions"
@@ -71,7 +73,15 @@ SEGMENT_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 # The schema is optional-field compatible: old frozen requests retain their
 # persisted schema hash and remain readable during recovery, while new
 # requests bind this updated wire schema hash.
-SEGMENT_SCHEMA_SHA256 = "3b449edcdb9e4d12e1d56d4f7deab686a89b41c78823fcd0988fc81d5841ba7b"
+SEGMENT_SCHEMA_SHA256 = "6725669e8093e543844c7801b329bbec7c10ec8394670a666805db9d5e6dc6f7"
+
+
+def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
+    return (
+        FOUR_ROUND_SEGMENT_PROMPT_VERSION
+        if getattr(snapshot, "discussion_json", None) is not None
+        else SEGMENT_PROMPT_VERSION
+    )
 
 
 def _schema_candidates() -> tuple[Path, Path]:
@@ -230,6 +240,7 @@ class SegmentLLMRequestV2:
     identity_tokens: tuple[str, ...] = ()
     outbound_field_classes: tuple[str, ...] = ()
     queries: tuple[Mapping[str, object], ...] = ()
+    authorized_max_attempts: int = 2
 
     @property
     def system_message(self) -> SegmentMessageV2:
@@ -483,7 +494,9 @@ class SegmentRecoveryInputV2:
             actual = getattr(stage, name, None)
             if str(actual) != str(value):
                 raise LLMAdapterError(code="llm_recovery_input_identity_mismatch")
-        if getattr(stage, "prompt_contract_version", None) != SEGMENT_PROMPT_VERSION:
+        if getattr(stage, "prompt_contract_version", None) != segment_prompt_version(
+            request.snapshot
+        ):
             raise LLMAdapterError(code="llm_recovery_input_identity_mismatch")
         if operation is not None:
             for name, value in (
@@ -724,6 +737,11 @@ class SegmentLLMAdapter:
             raise LLMAdapterError(code="llm_attempt_exceeds_manifest")
         if snapshot.barrages and LLM_ANONYMOUS_BARRAGE_FIELD_CLASS not in manifest.field_classes:
             raise LLMAdapterError(code="llm_anonymous_barrage_manifest_missing")
+        if (
+            getattr(snapshot, "discussion_json", None) is not None
+            and LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS not in manifest.field_classes
+        ):
+            raise LLMAdapterError(code="llm_discussion_manifest_missing")
         self._validate_local_ports()
         resolved_tokens = tuple(
             self.identity_tokens if identity_tokens is None else identity_tokens
@@ -731,8 +749,9 @@ class SegmentLLMAdapter:
         query_catalog = tuple(_query_record(item) for item in queries)
         system = build_segment_system_prompt(snapshot)
         if repair_feedback is not None:
-            system += " Repair the prior structure using only this server feedback: " + _canonical(
-                repair_feedback
+            system += (
+                " Repair the prior output using the same frozen input and this server feedback;"
+                " return the complete corrected JSON once: " + _canonical(repair_feedback)
             )
         messages = (
             SegmentMessageV2(role="system", content=system),
@@ -756,7 +775,19 @@ class SegmentLLMAdapter:
             )
         except (LLMOutboundPrivacyError, PromptBudgetError, LLMTokenizerError, ValueError) as exc:
             raise LLMAdapterError(code=getattr(exc, "code", "llm_request_invalid")) from exc
-        schema = _wire_schema(_schema())
+        schema_value = _schema()
+        properties = cast(dict[str, object], schema_value["properties"])
+        if getattr(snapshot, "discussion_json", None) is not None:
+            schema_value["required"] = ["segments", "question", "discussion_memory"]
+            segment_items = cast(
+                dict[str, object], cast(dict[str, object], properties["segments"])["items"]
+            )
+            segment_items["required"] = ["text", "source_ids", "reply_to", "support_mode"]
+        else:
+            # Legacy requests keep their original closed output surface.
+            properties.pop("question", None)
+            properties.pop("discussion_memory", None)
+        schema = _wire_schema(schema_value)
         body: dict[str, object] = {
             "model": getattr(self.config, "model", "qwen3.7-plus-2026-05-26"),
             "messages": [{"role": item.role, "content": item.content} for item in messages],
@@ -786,6 +817,7 @@ class SegmentLLMAdapter:
                 "build_manifest_hash": build_manifest_hash,
                 "repair_policy_hash": repair_policy_hash,
                 "attempt_no": attempt_no,
+                "authorized_max_attempts": manifest.max_attempts,
                 "retrieval_reused": retrieval_reused,
                 "queries": query_catalog,
             }
@@ -800,6 +832,7 @@ class SegmentLLMAdapter:
             request_hash=request_hash,
             schema_hash=schema_hash,
             prompt_hash=snapshot.input_hash,
+            prompt_contract_version=segment_prompt_version(snapshot),
             debate_id=debate_id,
             turn_id=turn_id,
             generation_fence=generation_fence,
@@ -812,6 +845,7 @@ class SegmentLLMAdapter:
             identity_tokens=resolved_tokens,
             outbound_field_classes=tuple(manifest.field_classes),
             queries=query_catalog,
+            authorized_max_attempts=manifest.max_attempts,
         )
 
     prepare = build_request
@@ -1092,6 +1126,8 @@ __all__ = [
     "SEGMENT_OPERATION",
     "SEGMENT_OUTPUT_SCHEMA_ID",
     "SEGMENT_PROMPT_VERSION",
+    "FOUR_ROUND_SEGMENT_PROMPT_VERSION",
+    "segment_prompt_version",
     "SEGMENT_PROTOCOL",
     "SEGMENT_RECOVERY_INPUT_BYTES_LIMIT",
     "SEGMENT_RECOVERY_INPUT_VERSION",

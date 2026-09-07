@@ -1,4 +1,4 @@
-"""Deterministic ordered two-round Debate rule set."""
+"""Deterministic versioned Debate plans and immutable rule snapshots."""
 
 from __future__ import annotations
 
@@ -62,6 +62,7 @@ def build_turn_plan(
     *,
     round_count: int = 2,
     rule_set_id: str = RULE_SET_ID,
+    teaching_protocol: str | None = None,
 ) -> tuple[TurnPlanEntry, ...]:
     """Build round-major turns with no model/provider decision points.
 
@@ -76,9 +77,10 @@ def build_turn_plan(
         # The generation policy is the single owner of phase and barrier
         # semantics.  Setup only adapts its ordered entries to UUID DTOs.
         plan = MutualLearningPolicy().plan(
-            [str(item) for item in participants], round_count=round_count
+            [str(item) for item in participants],
+            round_count=round_count,
+            teaching_protocol=teaching_protocol,
         )
-        participant_count = len(participants)
         return tuple(
             TurnPlanEntry(
                 participant_id=UUID(entry.participant_id),
@@ -86,8 +88,8 @@ def build_turn_plan(
                 order_index=entry.order_index,
                 round_no=entry.round_no,
                 turn_index=entry.turn_index,
-                predecessor_turn_indexes=tuple(range((entry.round_no - 1) * participant_count)),
-                question_type=("agent" if entry.phase == "exchange" else "none"),
+                predecessor_turn_indexes=tuple(range(len(entry.predecessor_ids))),
+                question_type=("agent" if entry.next_participant_id is not None else "none"),
                 question_target_participant_id=(
                     UUID(entry.next_participant_id)
                     if entry.next_participant_id is not None
@@ -171,6 +173,7 @@ def canonical_rule_snapshot_json(
     ] = RULE_SET_ID,
     round_count: int = 2,
     turn_protocol: Literal["segments_v2"] | None = None,
+    teaching_protocol: Literal["four_round_v1"] | None = None,
 ) -> str:
     """Serialize the rule snapshot deterministically for a Debate row."""
 
@@ -178,10 +181,17 @@ def canonical_rule_snapshot_json(
         mode="json"
     )
     payload.pop("turn_protocol", None)
+    payload.pop("teaching_protocol", None)
     if turn_protocol is not None:
         if rule_set_id != RULE_SET_ID_MUTUAL_LEARNING:
             raise RuleViolation("rule_set_unavailable", "Segments require mutual learning.")
         payload["turn_protocol"] = turn_protocol
+    if teaching_protocol is not None:
+        if turn_protocol != "segments_v2" or round_count != 4:
+            raise RuleViolation(
+                "teaching_protocol_invalid", "Teaching requires four segment rounds."
+            )
+        payload["teaching_protocol"] = teaching_protocol
     if rule_set_id == RULE_SET_ID_V1:
         # Preserve the byte-shape of the historical v1 canonical snapshot;
         # the retrieval policy field did not exist when those rows were made.

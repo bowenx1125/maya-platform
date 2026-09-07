@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useLocale } from "../../locale";
+import { teachingRoundLabel } from "../../../lib/debate-rounds";
 import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
@@ -48,6 +50,7 @@ export type DebatePreviewParticipant = {
 };
 
 export type DebatePreviewSnapshot = {
+  teaching_protocol?: "four_round_v1" | null;
   topic: string;
   participants: readonly DebatePreviewParticipant[];
   preview: DebatePreviewProgress | null;
@@ -125,6 +128,7 @@ export function DebatePreview({
               }
               retryBusy={retryingTurnId !== null}
               retrying={retryingTurnId === turn.id}
+              teachingProtocol={detail.teaching_protocol === "four_round_v1"}
               turn={turn}
               onRetry={onRetryTurn}
             />
@@ -141,13 +145,16 @@ function PreviewTurnCard({
   retryBusy,
   retrying,
   onRetry,
+  teachingProtocol,
 }: {
   turn: DebatePreviewTurn;
   participantName: string;
   retryBusy: boolean;
   retrying: boolean;
   onRetry?: (turnId: string) => void;
+  teachingProtocol?: boolean;
 }) {
+  const { locale } = useLocale();
   const failed =
     turn.generation_status === "failed" || Boolean(turn.safe_error_code);
   const savedSpeech = Boolean(turn.speech.trim());
@@ -158,7 +165,12 @@ function PreviewTurnCard({
     >
       <div className={styles.turnHeader}>
         <div>
-          <span className={styles.turnRound}>Round {turn.round_no}</span>
+          <span className={styles.turnRound}>
+            Round {turn.round_no}
+            {teachingProtocol
+              ? ` · ${teachingRoundLabel(turn.round_no, locale)}`
+              : ""}
+          </span>
           <h2>{participantName}</h2>
         </div>
         <div className={styles.turnStatus}>

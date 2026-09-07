@@ -1,323 +1,153 @@
 # Maya Platform
 
-Maya is a local-first teaching platform. Student groups build culture-focused
-Agents from an authored persona and an immutable Markdown knowledge snapshot. A
-teacher picks 2–5 published Agents in click order, runs a versioned 2–5-round
-mutual-learning session, opens anonymous classroom interaction, and
-generates a civilization mutual-learning report.
+Maya is a local teaching platform: groups publish culture-focused Agents with
+Persona and immutable Markdown knowledge; teachers run multi-Agent lessons,
+collect classroom messages and conclude with an independent Report.
+This file is the progress authority. [AGENTS.md](../AGENTS.md) defines repository
+work; the user's latest explicit instruction overrides older plans.
 
-This file is the authority for what the product is and where it stands.
-[AGENTS.md](../AGENTS.md) is the authority for how to work on it. When two sources
-disagree, use the user's latest explicit decision, then this file, then the
-contracts under [contracts/](contracts/) and [docs/contracts/](contracts/),
-then the ADRs under [docs/adr/](adr/), then
-[ARCHITECTURE.md](ARCHITECTURE.md).
+## Approved four-round teaching flow — September 8, 2026
 
-## Next Wave proposal updated 2026-09-07
+New debates have exactly four rounds and two to five Agents. The complete round
+selector is removed. New snapshots record `teaching_protocol=four_round_v1`;
+paragraph storage remains `segments_v2`. The owner waived historical playback
+and recovery compatibility. Existing records are not silently regenerated/deleted.
 
-Status: **PLAN AND ACCEPTANCE APPROVED / IMPLEMENTATION IN PROGRESS**.
-The complete proposal is [NEXT_WAVE_PLAN.md](contracts/NEXT_WAVE_PLAN.md).
-The owner's latest clarification supersedes both the earlier first-round-only
-preview and the earlier all-classroom-provider-free proposal:
+1. RAG Opening: independent claim, own-KB evidence and its relevance. Culture is
+   a perspective, not proof; acknowledge missing evidence.
+2. Discussion: no new retrieval. Respond to specific earlier claims with their
+   linked evidence. Ask a clear question of a cyclically assigned stable Agent
+   ID. No moderator or question-planning model is added.
+3. Response: prioritize round-two questions. Query the speaker's own knowledge
+   with the actual question or challenged point. State retained, qualified or
+   revised position and why. Save concise session memory in the same LLM output.
+4. Conclusion: no new retrieval. Use history, shared evidence and session memory;
+   name another Agent's point, explain agreement/criticism and learning. Freeze
+   earlier barrages once; each Agent substantively answers one eligible message
+   when available. No messages means no invented reply; disagreement may remain.
 
-- Preview prepares and retains every turn in rounds 1 through N-1, including
-  speech and audio. The first round is independent; middle rounds use earlier
-  rounds. The final round is generated live in the 3D Bench.
-- Every non-final turn accepts classroom barrages. One final-round action freezes
-  all eligible prior-turn messages. Every Agent chooses and substantively answers
-  at least one available barrage in its final speech; an empty eligible pool
-  requires no reply. No Agent reads same-round final speeches.
-- Report generation is explicitly initiated from the 3D Bench after Conclude,
-  through a separate Provider interface. Its failure does not fail the debate.
-- New Agent Markdown drops Debate strategy and Boundaries. Five remaining Persona
-  sections feed generation; legacy published versions remain immutable/readable.
-- The owner has approved segments with text, source_ids, reply_to and optional
-  support_mode (September 8: restore direct +5/contextual +2/no_match 0 grades).
-  Seven compact input groups replace verbose metadata and duplicated
-  output analysis. The candidate segment prompt/schema is deployed for debugging; model configuration is unchanged.
-- Delete existing debate-owned run records while preserving authored Agents,
-  knowledge/snapshots, accounts and Provider configuration. Authorized offline cleanup completed on September 7.
-- Unify UI with Teacher Debates and remove explanatory chrome. 古月 owns 3D
-  faces and voice/TTS; Kaikai owns account management and student-workspace UI;
-  徐伯闻 owns the remaining modules and accepts every delivery.
-  The colleague workbook uses the exact Chinese owner name 徐伯闻.
-- Target DDL is 2026-09-10. Main-agent diagnosis/audit/integration and bounded Luna
-  Max coding may run alongside independent UI work after plan confirmation.
-  Contracts, migrations, cleanup and deployment remain serial.
+Preview saves exact text and Mock audio for rounds one through three; round four
+is generated live. Opening is independent. Later turns see all successful prior
+turns, including the same round, with complete previous-round barriers. Speaking
+order rotates but identities/question targets stay stable. Scheduling, SQL Next,
+input hashes and recovery use the same prefix. Completed results/accepted stages
+are reused rather than charged again.
 
-The owner now requires RAG teaching quality and a 100% real acceptance result.
-Approved on September 7, with real debugging under way: 32 bilingual shape cases plus five fresh
-consecutive 2x2 sessions (37 complete sessions, 412 turns, 37 reports), and
-72 controlled RAG answers across relevant, disabled, irrelevant and updated
-knowledge conditions. Predeclared factual targets and source support, not citation
-counts, determine RAG quality. Normal cases require no manual rescue; one disclosed
-structure repair is allowed and first-attempt success is reported separately.
-Fault injection tests require correct recovery. On September 8 the owner kept
-TTS/Voice Mock and took over real classroom/browser acceptance personally.
-Section 14 of the proposal defines the
-approved criteria and debug loop. The owner explicitly authorized implementation,
-runtime cleanup and the agreed real acceptance work. Luna Max workers handle bounded
-coding tasks; the main agent owns shared contracts, integration and real testing.
+| Round       | Chinese non-whitespace characters including punctuation | English words |
+| ----------- | ------------------------------------------------------- | ------------- |
+| RAG Opening | 100–160                                                 | 65–100        |
+| Discussion  | 80–140                                                  | 50–90         |
+| Response    | 100–160                                                 | 65–100        |
+| Conclusion  | 120–180                                                 | 75–115        |
 
-The new flow requires replacing terminal-status-only Bench eligibility with
-complete non-final preview readiness, a final-input freeze and live final-turn
-preparation. It also deliberately changes the meaning of the old claim-level
-EvidenceTrace/scoring contract and adds an anonymous classroom-message outbound
-class; these changes need explicit versioned implementation and acceptance.
+Only displayed segment text counts. English counts alphanumeric runs with
+internal apostrophes/hyphens as one word. Prompt and validator share these limits.
+No truncation or padding rewrites provider text. Length, structure and reference
+errors share one authorized repair with frozen input and explicit feedback.
+One-call authorization cannot gain another call. Failed repairs retain diagnostics
+and recoverable preparation state; unknown acceptance is never silently resent.
 
-### Evidence and limits
+Question routing is separate from barrage reply_to. Third-round memory contains
+position/change/reason/influence/unresolved_question, never classroom speech/TTS,
+Agent.md, published versions or knowledge. Round four and Report read it under a
+separate session_discussion_memory outbound manifest class.
 
-Previous release baseline is 1cea562 on debates-beta-stage, with matching backend sources
-and an exact-head successful CI on PR #27. The earlier same-session audit passed
-1,067 backend and 216 frontend tests, lint/types/format, contracts and routes;
-that is not new-protocol or real-browser acceptance. The runtime audit found 14
-accepted unpublished operations, one acceptance-unknown, and seven incomplete
-public plans admitted by the beta status filter. These are pre-cleanup historical findings.
+Cross-Agent source reuse requires an originating validated own-KB receipt in a
+successful preceding turn of the same debate. Aliases deduplicate snapshot/chunk.
+Migration 0024 removes only the obsolete speaker/snapshot FK, retaining turn
+ownership, chunk/snapshot and unique constraints. direct +5, contextual +2 and
+no_match +0 are evidence-support categories, not factual correctness scores.
 
-Delivery artifacts: a 13-page Chinese Word proposal and a 53-row Excel table
-(43 徐伯闻, 4 古月, 6 Kaikai), all accepted by 徐伯闻 with DDL 9.10. They include
-the approved 37-session/72-answer criteria. Manual ownership/blank-plan edits were
-preserved. Updated pages and worksheet regions were visually checked.
+Actual outbound prompts and synthetic I/O:
+[FOUR_ROUND_PROMPTS.md](contracts/FOUR_ROUND_PROMPTS.md),
+[four-round-example.json](contracts/four-round-example.json).
+Content acceptance reviews actual answers, new points, evidence and reasoned
+disagreement; string similarity and keyword counts are not hard failure gates.
 
-### UI follow-up (September 8)
+## Report loading correction
 
-Bench titles are removed. Its speech stream uses the actual beta layout and
-scrolls above a gold two-column control grid; bubbles remain until Next. Preview
-now says Open Stage. Entry acquisition resynchronizes a stale version once and
-accepts an epoch grant without rolling back newer public state. Terminal playback
-releases authority until explicit Replay; Conclude refreshes the durable window.
-34 focused tests and typecheck passed. Delete Voice/All sit beside Resume; Open
-Stage shares their action CSS. Stage/Dashboard use white paper and yellow rows.
-Failed Resume preserves Stalled. Audio Ready replaces Saved; progress is x / y
-turns. Open Message/Hide preserves the QR. Conclude contains grades. Classroom
-acceptance remains the owner's manual task.
+An unexpected task failure previously failed the revision/job but left its
+aggregate generating. A sanitized live read found two generating aggregates
+with zero generating revisions, alongside three ready reports. The fix updates
+aggregate failure and reconciles orphan states at startup without another
+Provider call, preserving valid in-progress jobs. The frontend independently
+reads Report status, ignores stale responses and prevents a failed/hung revision
+history read from masking success. Report remains a separate Conclude operation.
 
-### Implementation checkpoint (September 7, not release acceptance)
+## Verification and delivery boundary
 
-The owner requested GitHub delivery and Docker restart. Backend grading/replay
-checks are complete; no new real-provider run was started. Removing a usage stop
-never authorizes reset credits.
+Stopped at the owner's **30% remaining quota boundary** with implementation
+integrated but real acceptance incomplete:
 
-- Five-section Persona, paragraphs and accepted-result recovery are integrated.
-  Five synthetic Agents have real Embedding snapshots; three baseline Agents use Mock.
-- Preview retains non-final text/audio; final freezes barrages and generates live.
-  Competing queues were removed. TTS staging/claim fences preserve saved text.
-- Authorized offline cleanup removed 45 old debates, 227 turns and 67 runtime
-  files, preserving authored Agents/knowledge, accounts and configuration.
-  New scoped Delete Voice/All endpoints include durable file journals. Actual
-  HTTP deletion of four audio files, identical repeated deletion and regeneration
-  of all four passed, preserving speech, RAG and Report hashes with unchanged
-  LLM/Embedding counters. Partial-delete and cancellation replay counts were fixed.
-- One fresh normal 2x2 session completed creation, Preview, HTTP/WS playback,
-  barrage/final round, Conclude and Report download without manual rescue.
-  Its nine successful operations were four query, four LLM and one Report,
-  all attempt one, zero repairs. Preview took 21.4s; Report 10.2s. TTS was Mock.
-- RAG formal01 stopped after 31/72 answers on query acceptance-unknown (77 ledger
-  charged reservations); formal02 stopped after 21/72 on snapshot unknown (52).
-  Neither operation was resent. Independent review passes the 21 completed
-  formal02 answers, including current/updated facts and appropriate uncertainty.
-  Full RAG acceptance remains incomplete; execution and semantic review are separate.
-- Diagnostic07 stopped at its first selected case: snapshot/query succeeded,
-  LLM connect failed as not_sent. Its ledger counts three charged reservations,
-  which does not prove three supplier-accepted requests. No answer was produced.
-  DNS/TCP/TLS/HEAD probes later passed; historical cause remains unproven.
-  Safe transport diagnostics were added without retry.
-- The Report UUID-only citation bug was fixed. New v2 reports no longer append
-  repeated filler to reach 600 words; the 900-word ceiling, six sections, exact
-  sources and interaction totals remain. Migration 0023 preserves legacy rules.
-  The actual database migration had zero FK violations and a private backup.
-  A new real Report completed in 13.5s with 397 words and no padding.
-- Headless Chrome verified fixes for missing/obscured figures, lost RAG fields,
-  oversized headings and failed drafts labeled Thinking. Report dialog/Escape
-  works. Inspected desktop pages had no horizontal overflow or page errors.
-- Replay readiness now supports completed debates and shares StoredFile/WAV
-  path, hash, size and duration validation with media access. Six focused SQL/HTTP
-  checks cover ordered Replay, missing/corrupt audio and actual DeleteVoice.
-  Whole classroom replay remains for the owner's manual acceptance.
-- Paragraph support_mode restores direct +5/contextual +2/no_match 0; missing
-  legacy grades remain ungraded. The same saved grades feed Check RAG and Report.
-  Per-turn evidence IDs are validated before report source deduplication, fixing
-  a false rejection when one chunk is reused across rounds. Focused checks pass.
-- Typed public UUIDs no longer trigger phone detection; actual identity tokens
-  and phone prose still fail. This privacy fix is included in the rebuilt backend.
-- Backend regression: 1,244 passed; the sole sandbox-blocked localhost wire test
-  passed separately with port access. New grading/report checks (43), Replay (6)
-  and runner checks passed. Frontend: 253 passed before the final progress-copy
-  edit; subsequent classroom tests waived by owner. Ruff/mypy/format and contracts
-  passed: 82 declared routes, 61 implemented, no placeholders. Schema head: 0023.
+- Frontend: 261 tests and typecheck passed; lint zero errors, four existing
+  warnings. Backend Ruff and mypy (187 modules) passed after integration fixes.
+- Initial full backend run: 62 failures, including obsolete two-round creation
+  fixtures/schema-head assertions and new integration defects. The current-flow
+  batch covered 84 cases; its one synthetic fixture mismatch was fixed and the
+  focused recheck passed. The entire old backend suite is NOT green.
+- Current checks cover length boundaries, routing, sequential context, targeted
+  retrieval, memory/hash propagation, one repair cap, accepted recovery, shared
+  sources, EN/ZH Mock lessons, audio retention and Report state correction.
+- Real case 731791c9-7f85-46a3-b529-8c22a369a23e saved two opening speeches with
+  four succeeded Provider operations, all attempt one. Round two failed before
+  its LLM call: the no-retrieval phase still built an empty query manifest.
+  This step is now removed and rebuilt. Resume of that failed record returned
+  invalid_state. No completed speech was regenerated. Full real acceptance
+  FAILED and remains outstanding; this was not a successful classroom test.
+- The runner's initial empty Preview-plan race was corrected. Its first setup
+  used an unreachable LAN origin; localhost transport with the configured
+  Origin header reached the API without changing configuration.
+- Docker is healthy at schema 0024. Two orphan Report aggregates now show failed,
+  not endless generating; three prior ready reports remain ready.
+- The task's database backup was deleted as requested. No backups, runtime
+  records, credentials or raw provider responses are committed.
 
-Delivered to main (code merge f2e8b1b); other local/remote branches are deleted.
-Docker backend/frontend/gateway were recreated and became healthy. TTS/Voice stay
-Mock. Next: owner-led manual classroom/RAG acceptance. Preserve failed ledgers;
-private artifacts and backups remain outside Git in Maya outputs.
+Next after explicit quota resumption: remove obsolete two-round/old-protocol
+tests and write constraints while retaining effective authorization, integrity
+and cost checks; fix recovery of the failed no-query-manifest case; complete one
+four-round real lesson through barrages and Report. Latest UI request is pending:
+Delete Voice/All failures must restore the row without explanations, like Resume.
+Do not claim all requested work or classroom/content acceptance complete.
 
-## Product boundaries
+The owner now requests all implementation first, then one consolidated validation
+batch and necessary failure fixes. Paid/browser tests are authorized but should
+be limited to useful acceptance evidence, not repetitive expensive experiments.
+The latest quota stop is **30% remaining**: finish the nearest atomic boundary,
+push GitHub, restart Docker, inspect current status and report precise limitations.
+No quota reset is authorized. The real-call results above are observed evidence;
+the supplier billing console and operation ledger remain authoritative.
 
-These are settled decisions, not open questions.
+## Runtime and established UI
 
-- **Organization.** One seeded course, one teacher (Maya) and one group of
-  three students (Bowen, Kaikai, Jade). Course and group membership are
-  read-only.
-- **Authorization.** Students are scoped to their group. Teachers see published
-  immutable history, never drafts. Cross-group objects return not found.
-- **Agent versions.** Published and superseded versions and their knowledge
-  snapshots are immutable. New persona or knowledge needs a new version.
-- **Knowledge.** Markdown only. A draft enables group documents explicitly;
-  publishing freezes source bytes, chunks, vector metadata and lineage.
-- **Debate.** A new Debate is always `ordered_multi_expert_mutual_learning_v1`
-  with 2–5 Agents in slots A–E and 2–5 rounds. The two legacy demo RuleSets
-  stay readable so existing Debates keep working, but no surface creates them.
-  The rules engine, not the model, chooses the order.
-- **Context.** A mutual-learning turn receives the complete text of every
-  public turn from earlier rounds, exactly once, and never a same-round turn.
-  Visible speech is never summarized.
-- **Evidence.** Only server-selected receipts actually used by a validated turn
-  become public sources. `no_match` uses general reasoning with no source.
-- **Playback.** Replay reuses retained immutable content and never calls a
-  provider. The next Wave prepares all non-final rounds in Preview and creates
-  the final round live in Bench; the candidate flow is under real acceptance.
-- **Interaction.** Public votes and named local barrages remain independent.
-  The next Wave exports only reviewed anonymous barrage text for final-round
-  replies and Bench reports. Nicknames and account identities stay local; this
-  new outbound class is versioned in new manifests; legacy manifests remain unchanged.
-- **Language.** Current debate generation supports English and Chinese, selected
-  at creation before prewarming in the new protocol. The former
-  derived-translation feature has been removed. The report language path must be
-  checked with the new language-lock acceptance cases.
-- **Runtime.** Next.js, FastAPI, SQLite and local files behind one Caddy
-  origin. No Redis, Celery, PostgreSQL or cloud storage.
+Next.js, FastAPI, SQLite/local files and Caddy share port 8080. Inspect active
+SQLite only inside its container. Preserve private configuration, knowledge and
+runtime data. TTS/Voice remain Mock; Debate LLM, Embedding and Report are configured
+real DashScope adapters with independent authorization. Current Embedding is
+text-embedding-v4, 1024 dimensions.
 
-## Demo composition
+Teacher lists/creation use yellow rows on white paper. Delete Voice/All sit beside
+Resume; Open Stage uses their action styling. Failed Resume preserves Stalled.
+Stage titles are removed; speech scrolls above compact gold controls and bubbles
+persist until Next. Open Message/Hide preserves its QR session. Conclude contains
+Report and scores; Audio Ready indicates retained audio. This change adds only
+fixed-four-round and phase-label UI work.
 
-| Component                           | Mode                                                |
-| ----------------------------------- | --------------------------------------------------- |
-| Snapshot embedding, retrieval query | Real DashScope `text-embedding-v4`, 1024 dimensions |
-| Debate LLM                          | Real fixed Qwen structured output                   |
-| Maya Report                         | Real fixed Qwen structured output                   |
-| TTS, Voice                          | Mock                                                |
+## Prior evidence and remaining work
 
-Every delivery surface must label this Real/Mock split honestly.
+The previous protocol baseline recorded 1,244 backend and 253 frontend checks
+before later UI patches. One real two-Agent/two-round lesson completed with four
+query, four LLM and one Report operations, all first attempt; a later real Report
+also completed. That evidence does not validate this new four-round protocol.
+Formal RAG experiments stopped at 31/72 and 21/72 on acceptance-unknown and were
+not resent. Full RAG quality acceptance remains incomplete. Ledgers and private
+artifacts/backups stay outside Git.
 
-The provider call count is derived from the Debate's own shape, not fixed:
+[NEXT_WAVE_PLAN.md](contracts/NEXT_WAVE_PLAN.md) remains history; this plan
+supersedes conflicting old barriers, retrieval/round and length rules. The module
+workbook uses DDL 9.10 and acceptance owner 徐伯闻. 古月 owns 3D/voice/TTS, Kaikai
+owns accounts/student UI, 徐伯闻 owns remaining modules.
 
-```
-calls = 1 snapshot
-      + (Agents with a real Snapshot) × rounds   retrieval queries
-      + Agents × rounds                          debate LLM turns
-      + 1 report
-```
-
-A 2-Agent, 2-round Demo is 8 calls; 3 Agents over 2 rounds is 10. Each turn may
-additionally spend one structure-repair attempt. `demo_acceptance_expected_calls`
-in `app/providers/control.py` is the single definition.
-
-## Where the product stands
-
-### Working, verified by running it
-
-- Student agent, version, knowledge, voice and publish surfaces; teacher
-  debate setup, playback control, interaction, provider approvals and
-  disclosures; classroom page; Real/Mock composition strip.
-- Three seeded demo Agents — Socrates, Plato and Laozi, one confirmed by each
-  student — so a teacher can open a multi-Agent Debate from an empty runtime
-  with no setup.
-- The complete all-Mock chain end to end: multi-Agent, two-round mutual
-  learning with an evidence trace per public turn, transcript, interaction open
-  and close, insight, and a 600–900 word English report that names no winner.
-- Real Snapshot embedding and real Debate LLM turns against DashScope,
-  including a structure-repair attempt that recovers a turn whose first reply
-  missed a rule.
-
-### In progress
-
-Round two is on `debates-beta-stage`. Its landed changes are:
-
-- Distinct Stopped / Completed / Running / Waiting labels, with Stalled and
-  single-turn Resume for failures projected by the list. The draft reset path
-  still needs the diagnostic correction recorded in the September 7 plan.
-- One presentation-tolerant claim/speech matcher; English per-turn length is
-  60-320 words. The latest commit makes prompt, generation and playback share
-  the same bound and logs safe exception source positions.
-- `prepare_turn` performs a second local preparation pass only when an accepted
-  stage exists and the turn is not ready. Fresh real end-to-end acceptance is
-  pending; old-stage rejection does not establish new-run reliability.
-- The beta bench uses `female_1.glb`, with mouth/expression morphs and no animation
-  clips, replacing the old bodies. Stage assets are about 3.8 MB. Browser visual
-  acceptance remains pending; public asset licensing is a separate boundary.
-- Beta has a combined Start/Next button and filters terminal status names. The
-  filter still admits incomplete historical plans and the primary button is
-  not yet a replay Start for finished debates. Full classroom separation,
-  audio retention, deletion, interaction/summary assembly and UI cleanup follow
-  the revised next-Wave plan above.
-
-Real-Core acceptance, real browser end-to-end and the final startup/reset/recovery
-package remain incomplete. Repair feedback already carries JSON pointers; adding
-an explicit rule identifier is conditional on observed fresh-run failures and
-requires a policy/schema migration.
-
-### Not started
-
-Production hardening: multi-process recovery, classroom-scale load, public
-deployment, monitoring, backup and restore, production TTS and Voice, real
-translation, data-governance and licensing review. None of these may block the
-Demo.
-
-## Provider accounting
-
-The supplier console is the billing authority. New runs retain their runtime
-ProviderOperation and acceptance ledgers for reservation, duplicate-call prevention
-and recovery. This document does not maintain a second approximate call list.
-Old-run deletion remains planned.
-
-## Recorded deviations from the frozen Wave 4 contracts
-
-Each is a deliberate decision, reversible, and scoped to the Demo.
-
-1. **Supplier-tokenizer gate removed.** `LLM_A_RUNTIME_V1` and
-   `PROMPT_BUDGET_V1` required a reviewed supplier tokenizer before a real LLM
-   request, but none was ever pinned into the runtime, which made the real
-   Debate LLM and real Report unreachable. The conservative UTF-8 counter
-   over-counts, so it can only reject an over-large request; its exact id and
-   asset hash are still recorded with every request. Pinning a real supplier
-   tokenizer is deferred.
-2. **Derived call budget.** The fixed seven/eight-call plan is replaced by the
-   shape-derived plan above, which is what allows a structure repair.
-3. **Structure repair enabled for the real composition.** A repair inherits its
-   first attempt's acceptance run and takes the next ordinal, so a charged
-   repair can never escape the ledger.
-4. **Provider dialect projection.** The supplier rejects a `response_format`
-   schema that constrains an array with `uniqueItems`, so the wire copy drops
-   those keywords. The frozen schema stays the hash-checked authority for
-   validating the response, and local validation still enforces them.
-5. **`position_update_reason` may be empty.** The frozen schema required it
-   non-empty in every phase while the domain validator only requires it for
-   exchange and final integration. The schema now matches the domain rule.
-6. **Configuration faults stay terminal.** `llm_tokenizer_unauthorized` and
-   `provider_preflight_blocked` remain outside the safe generation codes, so a
-   misconfiguration fails a Debate closed rather than parking it.
-
-7. **The beta stage is a fork, not a refactor.** `components/debate-beta/stage`
-   copies the classic stage rather than parameterising it, so Debates (beta)
-   cannot regress Debates while both are changing. The duplication is the cost
-   of that guarantee and is meant to end when beta either graduates or is
-   dropped; the pure protocol, label and speech-stream modules are imported
-   from the classic stage rather than copied.
-8. **`DEBATES_BETA_LIVE_INTERACTION` splits one gate into two.** Opening
-   classroom interaction required a finished debate and a complete round
-   matrix. Finalising still does. With the switch on, opening also accepts a
-   running debate with at least two Agents, which is what puts the join code on
-   the beta stage. The switch is off by default, so the classic surface keeps
-   the after-the-debate rule. **While it is on the vote is a running tally, not
-   a verdict taken once every Agent has spoken — report it that way.**
-
-## Document map
-
-- [AGENTS.md](../AGENTS.md) — how to work on this repository.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — stable system and data boundaries.
-- [contracts/](../contracts/) — machine-readable OpenAPI and WebSocket contracts.
-- [docs/contracts/](contracts/) — human contracts and provenance.
-- [docs/adr/](adr/) — one durable decision per file.
-- [docs/requirements/original.md](requirements/original.md) — historical
-  source requirements, not the current contract.
-- [docs/investigations/](investigations/) — open questions with the
-  evidence gathered so far.
+Production concurrency, classroom-scale load, public deployment, monitoring,
+backup/restore, real speech and data/licensing governance remain outside this
+local Demo scope. [ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/)
+and [ADRs](adr/) retain stable design references.

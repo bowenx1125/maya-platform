@@ -13,6 +13,7 @@ from app.modules.knowledge.mock_lexical import (
     MockLexicalAnchorV2,
 )
 
+from .four_round import TEACHING_PROTOCOL, received_questions, visible_predecessors
 from .segments import SegmentBarrage, SegmentPersona, coerce_persona
 from .types import (
     GenerationContext,
@@ -479,6 +480,31 @@ def build_segment_subqueries(
     in the LLM input.
     """
 
+    if context.teaching_protocol == TEACHING_PROTOCOL:
+        if context.turn.round_no in {2, 4}:
+            return ()
+        if context.turn.round_no == 3:
+            questions = received_questions(context)
+            if questions:
+                actual = "\n".join(item["text"] for item in questions)
+            else:
+                challenges = [
+                    item.speech
+                    for item in visible_predecessors(context)
+                    if item.round_no == 2
+                    and item.participant_id != context.participant.participant_id
+                ]
+                if not challenges:
+                    raise RAGRetrievalError(
+                        "Response round has no question or specific discussion point.",
+                        technical=False,
+                    )
+                actual = challenges[-1]
+            return (
+                TurnSubquery(
+                    "pending_question", f"{context.topic}\n回答这个实际问题或论点：\n{actual}"
+                ),
+            )
     if not isinstance(context, GenerationContext):
         raise RAGRetrievalError("segment retrieval needs a typed context.", technical=False)
     topic = context.topic.strip()

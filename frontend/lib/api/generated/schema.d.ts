@@ -1617,7 +1617,7 @@ export interface components {
              */
             output_language: "en" | "zh";
             /**
-             * @description Current clients send segments_v2; omission preserves legacy callers.
+             * @description New debates use the four-round teaching protocol with paragraph output.
              * @default null
              * @enum {string|null}
              */
@@ -1628,7 +1628,11 @@ export interface components {
              * @enum {string}
              */
             rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
-            round_count: number;
+            /**
+             * @default 4
+             * @constant
+             */
+            round_count: 4;
             total_duration_seconds?: null;
             turn_duration_seconds?: null;
         };
@@ -1815,6 +1819,8 @@ export interface components {
              * @enum {string|null}
              */
             turn_protocol: "segments_v2" | null;
+            /** @enum {string|null} */
+            teaching_protocol?: "four_round_v1" | null;
             /** @default false */
             final_input_frozen: boolean;
             preview_turns?: components["schemas"]["PreviewTurn"][];

@@ -927,16 +927,27 @@ class PlaybackPreparationMixin(PlaybackCore):
             if staged_audio is None and audio is not None and self.audio_store is not None:
                 self.audio_store.remove_turn(debate_id, turn_id)
         error_code = getattr(last_error, "code", None) or getattr(last_error, "safe_code", None)
+        from app.modules.debates.generation.segments_runtime import SEGMENT_REPAIR_CODES
+
         recoverable_provider_error = error_code in {
             "provider_confirmation_required",
             "provider_not_sent",
             "acceptance_unknown",
+            "segment_length_invalid",
+            "question_route_invalid",
+            "discussion_memory_invalid",
+            "segment_shape_invalid",
+            "support_mode_invalid",
+            "final_reply_missing",
         }
         recoverable_tts_error = (
             isinstance(error_code, str)
             and error_code.startswith("tts_")
             and prepared is not None
             and (prepared.llm_publication is not None or uses_segment_protocol(debate))
+        )
+        recoverable_provider_error = recoverable_provider_error or (
+            uses_segment_protocol(debate) and error_code in SEGMENT_REPAIR_CODES
         )
         if (
             recoverable_provider_error or recoverable_tts_error

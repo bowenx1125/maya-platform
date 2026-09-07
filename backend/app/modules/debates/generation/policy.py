@@ -94,11 +94,14 @@ class TurnPolicy:
         participants: Sequence[ParticipantContext | str],
         *,
         round_count: int = ROUND_COUNT,
+        teaching_protocol: str | None = None,
     ) -> tuple[TurnPlan, ...]:
         if self.rule_set_id == RULE_SET_ID_MUTUAL_LEARNING:
             from .mutual_learning_policy import MutualLearningPolicy
 
-            return MutualLearningPolicy().plan(participants, round_count=round_count)
+            return MutualLearningPolicy().plan(
+                participants, round_count=round_count, teaching_protocol=teaching_protocol
+            )
         normalized = self._normalize_participants(participants)
         if round_count != ROUND_COUNT:
             raise TurnPolicyError(
@@ -149,6 +152,7 @@ class TurnPolicy:
         turn_ids: Sequence[str],
         *,
         round_count: int = ROUND_COUNT,
+        teaching_protocol: str | None = None,
     ) -> tuple[TurnPlan, ...]:
         """Plan turns and replace stable placeholders with persisted IDs."""
 
@@ -156,7 +160,10 @@ class TurnPolicy:
             from .mutual_learning_policy import MutualLearningPolicy
 
             return MutualLearningPolicy().plan_with_ids(
-                participants, turn_ids, round_count=round_count
+                participants,
+                turn_ids,
+                round_count=round_count,
+                teaching_protocol=teaching_protocol,
             )
 
         plans = self.plan(participants, round_count=round_count)

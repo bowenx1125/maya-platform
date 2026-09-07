@@ -179,6 +179,16 @@ def _structured_public_payload(turn: FinalReadyTurn) -> dict[str, object]:
     # Pydantic models expose model_dump; keeping this adapter structural lets
     # replay fixtures use a frozen dictionary without importing an ORM row.
     dumped = value.model_dump(mode="json") if hasattr(value, "model_dump") else {}
+    if getattr(value, "protocol_version", None) == "segments_v2":
+        serializer = getattr(value, "as_stored_payload", None) or getattr(value, "as_payload", None)
+        return {
+            "turn_id": turn.turn_id,
+            "participant_id": turn.participant_id,
+            "round_no": turn.round_no,
+            "turn_index": turn.turn_index,
+            "speech": turn.speech,
+            "segment_result": serializer() if callable(serializer) else {},
+        }
     return {
         "turn_id": turn.turn_id,
         "participant_id": turn.participant_id,

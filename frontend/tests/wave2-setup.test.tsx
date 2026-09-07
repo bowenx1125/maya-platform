@@ -161,7 +161,7 @@ describe("Wave 2 teacher debate setup", () => {
     expect(screen.getByText("2 rounds")).toBeTruthy();
   });
 
-  it("preserves click order and sends the frozen two-round request", async () => {
+  it("preserves click order and sends the fixed four-round request", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
     const controller: DebateCreateController = {
@@ -190,7 +190,7 @@ describe("Wave 2 teacher debate setup", () => {
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     const payload = create.mock.calls[0][1];
-    expect(payload.round_count).toBe(2);
+    expect(payload.round_count).toBe(4);
     expect(payload.total_duration_seconds).toBeNull();
     expect(payload.turn_duration_seconds).toBeNull();
     expect(

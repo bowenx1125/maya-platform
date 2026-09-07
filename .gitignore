@@ -45,6 +45,8 @@ backend/data.quarantine-*/
 .DS_Store
 .idea/
 .vscode/
+*.swp
+*.swo
 
 # Local Docker/coverage artifacts
 docker-compose.override.yml

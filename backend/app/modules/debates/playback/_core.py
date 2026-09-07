@@ -27,7 +27,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.evidence_trace import public_evidence_trace
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.round_phase import phase_for_round
-from app.modules.debates.round_count import uses_segment_protocol
+from app.modules.debates.round_count import debate_teaching_protocol, uses_segment_protocol
 from app.providers.tts import MockTTSProvider, TTSProvider
 
 from .audio import AudioMetadata, AudioStore, MediaTicketBinding, MediaTicketStore
@@ -975,6 +975,7 @@ class PlaybackCore:
         turn: Any,
         *,
         rule_set_id: str | None = None,
+        teaching_protocol: str | None = None,
     ) -> bool:
         """Check the persisted M11 prefix fence when the row carries one.
 
@@ -1020,11 +1021,13 @@ class PlaybackCore:
             except (TypeError, ValueError):
                 return False
         ordered = [candidate for _index, candidate in sorted(indexed, key=lambda item: item[0])]
-        is_mutual = rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
         try:
             current_round = int(cls._get(turn, "round_no", default=1) or 1)
         except (TypeError, ValueError):
             return False
+        is_mutual = rule_set_id == MUTUAL_LEARNING_RULE_SET_ID and not (
+            teaching_protocol == "four_round_v1" and current_round > 1
+        )
         if is_mutual:
             expected_rows = [
                 candidate
@@ -1105,11 +1108,14 @@ class PlaybackCore:
         if self._turn_public(successor):
             return False
         rule_set_id = str(self._get(debate, "rule_set_id", default=""))
+        teaching_protocol = debate_teaching_protocol(debate)
         if not self._turn_ready(successor) or not self._turn_fence_ready(
-            turns, successor, rule_set_id=rule_set_id
+            turns, successor, rule_set_id=rule_set_id, teaching_protocol=teaching_protocol
         ):
             return False
-        if not self._has_public_predecessor_prefix(turns, successor, rule_set_id=rule_set_id):
+        if not self._has_public_predecessor_prefix(
+            turns, successor, rule_set_id=rule_set_id, teaching_protocol=teaching_protocol
+        ):
             return False
         if self._validated_turn_audio(db, debate, successor) is None:
             return False
@@ -1221,6 +1227,7 @@ class PlaybackCore:
         turn: Any,
         *,
         rule_set_id: str | None = None,
+        teaching_protocol: str | None = None,
     ) -> bool:
         """Return whether every planned predecessor is already public.
 
@@ -1237,11 +1244,13 @@ class PlaybackCore:
             return False
         if current_index < 0:
             return False
-        is_mutual = rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
         try:
             current_round = int(cls._get(turn, "round_no", default=1) or 1)
         except (TypeError, ValueError):
             return False
+        is_mutual = rule_set_id == MUTUAL_LEARNING_RULE_SET_ID and not (
+            teaching_protocol == "four_round_v1" and current_round > 1
+        )
         predecessors: list[Any] = []
         for candidate in turns:
             try:
@@ -1271,6 +1280,7 @@ class PlaybackCore:
         action: Literal["start", "resume", "next", "replay"],
         *,
         rule_set_id: str | None = None,
+        teaching_protocol: str | None = None,
     ) -> None:
         """Fail closed when the browser action does not match the item context.
 
@@ -1301,7 +1311,9 @@ class PlaybackCore:
                 raise conflict(
                     "invalid_state", "Next action does not match the current unpublished item."
                 )
-            if not cls._has_public_predecessor_prefix(turns, turn, rule_set_id=rule_set_id):
+            if not cls._has_public_predecessor_prefix(
+                turns, turn, rule_set_id=rule_set_id, teaching_protocol=teaching_protocol
+            ):
                 raise conflict(
                     "invalid_state",
                     "The live turn cannot be published before its public predecessor prefix.",
@@ -1316,7 +1328,9 @@ class PlaybackCore:
                 raise conflict("invalid_state", "A public live turn can only be resumed.")
         elif not public:
             raise conflict("invalid_state", "An unpublished live turn can only be started.")
-        if not cls._has_public_predecessor_prefix(turns, turn, rule_set_id=rule_set_id):
+        if not cls._has_public_predecessor_prefix(
+            turns, turn, rule_set_id=rule_set_id, teaching_protocol=teaching_protocol
+        ):
             raise conflict(
                 "invalid_state",
                 "The live turn cannot be published before its public predecessor prefix.",

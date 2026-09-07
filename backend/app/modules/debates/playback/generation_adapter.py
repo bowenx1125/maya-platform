@@ -50,6 +50,7 @@ from app.modules.debates.generation import (
     compute_transcript_hash,
     public_evidence_trace,
 )
+from app.modules.debates.generation.four_round import body_count
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
@@ -73,7 +74,12 @@ from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
-from app.modules.debates.round_count import uses_segment_protocol
+from app.modules.debates.round_count import (
+    debate_teaching_protocol,
+    uses_four_round_protocol,
+    uses_segment_protocol,
+    visible_turn_predecessors,
+)
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
@@ -128,7 +134,11 @@ from app.providers.llm_price_card import (
     real_core_demo_budget_cap,
 )
 from app.providers.llm_privacy import LLMOutboundManifestV1
-from app.providers.llm_segments import SegmentLLMAdapter, SegmentRecoveryInputV2
+from app.providers.llm_segments import (
+    SegmentLLMAdapter,
+    SegmentRecoveryInputV2,
+    segment_prompt_version,
+)
 from app.providers.standing_consent import (
     apply_standing_provider_consent as _standing_provider_consent,
 )
@@ -153,7 +163,9 @@ def _structured_payload(
     return value.model_dump(mode="json")
 
 
-def _prepared_word_count(final: FinalReadyTurn) -> int:
+def _prepared_word_count(final: FinalReadyTurn, language: str = "en") -> int:
+    if isinstance(final.structured, (SegmentTurnResult, StoredSegmentTurnResult)):
+        return body_count(final.speech, language)
     question = getattr(final.structured, "question", None)
     return count_turn_words(
         final.speech,
@@ -542,6 +554,19 @@ class SqlTurnPreparer:
             # ``segments_v2`` has a different logical request and result
             # contract.  Keep it on a sibling runtime so the legacy runtime
             # cannot accidentally reinterpret paragraphs as claims.
+            if uses_four_round_protocol(debate):
+                previous_manifest = cast(LLMOutboundManifestV1, outbound_manifest)
+                outbound_manifest = LLMOutboundManifestV1(
+                    field_classes=tuple(
+                        dict.fromkeys(
+                            (*previous_manifest.field_classes, "session_discussion_memory")
+                        )
+                    ),
+                    max_attempts=previous_manifest.max_attempts,
+                    repair_policy_version=previous_manifest.repair_policy_version,
+                    repair_policy_hash=previous_manifest.repair_policy_hash,
+                )
+                static_options["outbound_manifest"] = outbound_manifest
             segment_adapter = SegmentLLMAdapter(
                 self.llm.config,
                 self.llm.transport,
@@ -632,6 +657,10 @@ class SqlTurnPreparer:
                         "hash": getattr(outbound_manifest, "repair_policy_hash", ""),
                     },
                 }
+                if getattr(snapshot, "discussion_json", None) is not None:
+                    field_values["session_discussion_memory"] = getattr(
+                        snapshot, "discussion", None
+                    )
                 fields = tuple(
                     ExportFieldV1(
                         field_class=str(field_class),
@@ -934,9 +963,10 @@ class SqlTurnPreparer:
                 ("receipt_hash", frozen_request.snapshot.receipt_hash),
                 ("transcript_hash", expected_fence.transcript_hash),
             )
-            if (
-                any(str(getattr(stage, name, "")) != expected for name, expected in stage_identity)
-                or str(getattr(stage, "prompt_contract_version", "")) != "segment_prompt_v2"
+            if any(
+                str(getattr(stage, name, "")) != expected for name, expected in stage_identity
+            ) or str(getattr(stage, "prompt_contract_version", "")) != segment_prompt_version(
+                frozen_request.snapshot
             ):
                 raise PlatformError(
                     "llm_recovery_fence_stale", "The accepted segment request is stale.", 503
@@ -1027,6 +1057,8 @@ class SqlTurnPreparer:
                     "llm_recovery_fence_stale", "The accepted turn fence is stale.", 503
                 )
             for receipt in final.used_receipts:
+                from app.modules.debates.source_lineage import receipt_scope_is_valid
+
                 chunk = db.execute(
                     text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
                     {"chunk_id": receipt.chunk_id},
@@ -1034,7 +1066,7 @@ class SqlTurnPreparer:
                 if (
                     chunk is None
                     or str(chunk[0]) != receipt.snapshot_id
-                    or str(chunk[0]) != str(turn.knowledge_snapshot_id)
+                    or not receipt_scope_is_valid(db, turn, receipt)
                     or str(chunk[1]) != receipt.text
                 ):
                     raise PlatformError(
@@ -1081,7 +1113,7 @@ class SqlTurnPreparer:
                 predecessor_turn_ids=final.predecessor_turn_ids,
                 transcript_hash=final.transcript_hash,
                 cutoff_turn_index=final.cutoff_turn_index,
-                word_count=_prepared_word_count(final),
+                word_count=_prepared_word_count(final, context.output_language),
                 generation_attempt=final.attempt,
                 evidence_trace=(),
                 llm_publication=getattr(outcome, "deferred_publication", None),
@@ -1266,7 +1298,7 @@ class SqlTurnPreparer:
             predecessor_turn_ids=final.predecessor_turn_ids,
             transcript_hash=final.transcript_hash,
             cutoff_turn_index=final.cutoff_turn_index,
-            word_count=_prepared_word_count(final),
+            word_count=_prepared_word_count(final, context.output_language),
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
             llm_publication=outcome.deferred_publication,
@@ -1332,19 +1364,20 @@ class SqlTurnPreparer:
             participants,
             [row.id for row in turn_rows],
             round_count=round_count,
+            teaching_protocol=debate_teaching_protocol(debate),
         )
         plan = plans[current.turn_index]
-        predecessor_rows = (
-            [row for row in turn_rows if int(row.round_no) < int(current.round_no)]
-            if is_mutual
-            else turn_rows[: current.turn_index]
-        )
+        if plan.participant_id != current.participant_id or plan.round_no != current.round_no:
+            raise ValueError("persisted turn owner does not match the frozen schedule")
+        predecessor_rows = visible_turn_predecessors(debate, current, turn_rows)
         predecessors = tuple(self._final_ready(db, row) for row in predecessor_rows)
         barrages: tuple[Mapping[str, object], ...] = ()
         if uses_segment_protocol(debate) and plan.is_final_round:
             from app.modules.debates.final_input import final_barrages_for_generation
 
-            barrages = final_barrages_for_generation(debate, predecessor_rows)
+            barrages = final_barrages_for_generation(
+                debate, [row for row in predecessor_rows if row.round_no < round_count]
+            )
         context = GenerationContext(
             debate_id=debate_id,
             topic=str(debate.topic),
@@ -1355,6 +1388,7 @@ class SqlTurnPreparer:
             output_language=debate_output_language(debate),
             turn_protocol="segments_v2" if uses_segment_protocol(debate) else "legacy_v1",
             round_count=round_count,
+            teaching_protocol=debate_teaching_protocol(debate),
             barrages=barrages,
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(
@@ -1399,7 +1433,9 @@ class SqlTurnPreparer:
                 or cached.cutoff_turn_index != expected_fence.cutoff_turn_index
             ):
                 raise ValueError("saved paragraph text has a stale generation fence")
-            return self._prepared_result(cached, participant_row, publication=None)
+            return self._prepared_result(
+                cached, participant_row, publication=None, language=context.output_language
+            )
         query_embeddings = self._query_embedding_service(
             db,
             debate=debate,
@@ -1431,11 +1467,20 @@ class SqlTurnPreparer:
             or final.cutoff_turn_index != expected_fence.cutoff_turn_index
         ):
             raise ValueError("generation result does not match the prepared prefix fence")
-        return self._prepared_result(final, participant_row, publication=generated.llm_publication)
+        return self._prepared_result(
+            final,
+            participant_row,
+            publication=generated.llm_publication,
+            language=context.output_language,
+        )
 
     @staticmethod
     def _prepared_result(
-        final: FinalReadyTurn, participant_row: DebateParticipant, *, publication: object | None
+        final: FinalReadyTurn,
+        participant_row: DebateParticipant,
+        *,
+        publication: object | None,
+        language: str = "en",
     ) -> PreparedTurn:
         sources = tuple(
             RetrievalSourceDTO(
@@ -1486,7 +1531,7 @@ class SqlTurnPreparer:
             predecessor_turn_ids=final.predecessor_turn_ids,
             transcript_hash=final.transcript_hash,
             cutoff_turn_index=final.cutoff_turn_index,
-            word_count=_prepared_word_count(final),
+            word_count=_prepared_word_count(final, language),
             generation_attempt=final.attempt,
             evidence_trace=tuple(dict(item) for item in final.evidence_trace),
             llm_publication=publication,
@@ -1503,6 +1548,9 @@ class SqlTurnPreparer:
         context: GenerationContext,
         transcript_hash: str,
     ) -> QueryEmbeddingService:
+        if context.teaching_protocol == "four_round_v1" and context.turn.round_no in {2, 4}:
+            # These stages never retrieve; do not create an empty paid query manifest.
+            return QueryEmbeddingService()
         snapshot = db.get(KnowledgeSnapshot, str(participant_row.knowledge_snapshot_id))
         if snapshot is None:
             raise ValueError("the immutable query Snapshot is unavailable")
@@ -1923,7 +1971,9 @@ class SqlTurnPreparer:
         if actual_ids != expected_ids:
             raise ValueError("persisted receipts do not match used evidence IDs")
         for receipt in receipts:
-            if receipt.snapshot_id != str(row.knowledge_snapshot_id):
+            from app.modules.debates.source_lineage import receipt_scope_is_valid
+
+            if not receipt_scope_is_valid(db, row, receipt):
                 raise ValueError("persisted receipt crossed the participant snapshot")
             chunk = db.get(KnowledgeChunk, receipt.chunk_id)
             if chunk is None or str(chunk.snapshot_id) != receipt.snapshot_id:
@@ -2050,32 +2100,17 @@ def generation_fence(db: Session, debate: Any, turn: Any) -> PreparedGenerationF
         round_count = SqlTurnPreparer._round_count(debate)
         if int(current.round_no) > round_count:
             raise ValueError("turn round exceeds the frozen mutual-learning plan")
-    expected_rows = (
-        [row for row in rows if int(row.round_no) < int(current.round_no)]
-        if is_mutual
-        else rows[: current.turn_index]
-    )
+    expected_rows = visible_turn_predecessors(debate, current, rows)
     expected_ids = tuple(str(row.id) for row in expected_rows)
     if _decode_predecessor_ids(current) != expected_ids:
         raise ValueError("persisted turn predecessor prefix is not exact")
     predecessors = tuple(SqlTurnPreparer._final_ready(db, row) for row in expected_rows)
-    for index, predecessor in enumerate(predecessors):
-        if is_mutual:
-            expected_predecessors = tuple(
-                item.turn_id for item in predecessors if item.round_no < predecessor.round_no
-            )
-        else:
-            expected_predecessors = tuple(item.turn_id for item in predecessors[:index])
+    for predecessor in predecessors:
+        visible = tuple(visible_turn_predecessors(debate, predecessor, list(predecessors)))
+        expected_predecessors = tuple(item.turn_id for item in visible)
         if predecessor.predecessor_turn_ids != expected_predecessors:
             raise ValueError("a predecessor has a stale predecessor prefix")
-        expected_cutoff = (
-            max(
-                (item.turn_index for item in predecessors if item.round_no < predecessor.round_no),
-                default=-1,
-            )
-            if is_mutual
-            else index - 1
-        )
+        expected_cutoff = max((item.turn_index for item in visible), default=-1)
         if predecessor.cutoff_turn_index != expected_cutoff:
             raise ValueError("a predecessor has a stale cutoff index")
         if is_mutual:
@@ -2083,10 +2118,9 @@ def generation_fence(db: Session, debate: Any, turn: Any) -> PreparedGenerationF
                 compute_mutual_transcript_hash,
             )
 
-            visible = tuple(item for item in predecessors if item.round_no < predecessor.round_no)
             expected_predecessor_hash = compute_mutual_transcript_hash(visible)
         else:
-            expected_predecessor_hash = compute_transcript_hash(predecessors[:index])
+            expected_predecessor_hash = compute_transcript_hash(visible)
         if predecessor.transcript_hash != expected_predecessor_hash:
             raise ValueError("a predecessor has a stale transcript hash")
     if is_mutual:

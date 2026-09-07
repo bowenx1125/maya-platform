@@ -40,11 +40,11 @@ def _normalize_participants(
 
 
 class MutualLearningPolicy:
-    """Deterministic round-major plan for two through five protocol rounds.
+    """Plan frozen historical rounds or the explicitly marked four-stage lesson.
 
-    The plan remains ordered by the teacher's click order, but its predecessor
-    fence is round-scoped.  Thus every turn in an exchange or final round sees
-    the same completed earlier-round set, regardless of A-E generation order.
+    Historical plans retain click order and earlier-round context. The teaching
+    plan rotates speaking order while keeping identity and question routing
+    stable, with independent opening turns and sequential discussion context.
     """
 
     rule_set_id = MUTUAL_LEARNING_RULE_SET_ID
@@ -74,8 +74,12 @@ class MutualLearningPolicy:
         participants: Sequence[ParticipantContext | str],
         *,
         round_count: int = MUTUAL_LEARNING_MIN_ROUNDS,
+        teaching_protocol: str | None = None,
     ) -> tuple[TurnPlan, ...]:
         count_rounds = self._round_count(round_count)
+        four_round = teaching_protocol == "four_round_v1"
+        if teaching_protocol not in {None, "four_round_v1"} or (four_round and count_rounds != 4):
+            raise TurnPolicyError("The teaching protocol requires exactly four rounds.")
         normalized = _normalize_participants(participants)
         if not MIN_PARTICIPANTS <= len(normalized) <= MAX_PARTICIPANTS:
             raise TurnPolicyError(
@@ -93,14 +97,17 @@ class MutualLearningPolicy:
         for round_no in range(1, count_rounds + 1):
             phase = phase_for_round(round_no, count_rounds)
             final_round = phase is RoundPhase.FINAL_INTEGRATION
-            for order_index, participant in enumerate(normalized):
+            offset = (round_no - 1) % len(normalized) if four_round else 0
+            speaking_order = tuple(range(offset, len(normalized))) + tuple(range(offset))
+            for speaking_index, order_index in enumerate(speaking_order):
+                participant = normalized[order_index]
                 turn_index = len(plans)
-                # Questions are answered in the next protocol round.  The
-                # cyclic target keeps every non-final exchange useful without
-                # coupling semantics to a particular round number.
+                # Routing follows stable click-order identities, even when
+                # generation order rotates. Everyone therefore receives one
+                # discussion question before the response round begins.
                 next_participant_id = (
                     normalized[(order_index + 1) % len(normalized)].participant_id
-                    if phase is RoundPhase.EXCHANGE
+                    if phase is RoundPhase.EXCHANGE and (not four_round or round_no == 2)
                     else None
                 )
                 plans.append(
@@ -113,13 +120,18 @@ class MutualLearningPolicy:
                         turn_index=turn_index,
                         phase=phase.value,
                         next_participant_id=next_participant_id,
-                        is_final=(final_round and order_index == len(normalized) - 1),
+                        is_final=(final_round and speaking_index == len(normalized) - 1),
                         # This is intentionally empty for opening turns and
                         # never falls back to a lower-index same-round prefix.
                         predecessor_ids=tuple(
-                            f"turn-{index}" for index in range((round_no - 1) * len(normalized))
+                            f"turn-{index}"
+                            for index in range(
+                                turn_index
+                                if four_round and round_no > 1
+                                else (round_no - 1) * len(normalized)
+                            )
                         ),
-                        barrier="round",
+                        barrier="prefix" if four_round and round_no > 1 else "round",
                         is_final_round=final_round,
                     )
                 )
@@ -131,16 +143,18 @@ class MutualLearningPolicy:
         turn_ids: Sequence[str],
         *,
         round_count: int = MUTUAL_LEARNING_MIN_ROUNDS,
+        teaching_protocol: str | None = None,
     ) -> tuple[TurnPlan, ...]:
-        plans = self.plan(participants, round_count=round_count)
+        plans = self.plan(
+            participants, round_count=round_count, teaching_protocol=teaching_protocol
+        )
         if len(plans) != len(turn_ids) or any(not value for value in turn_ids):
             raise TurnPolicyError("The persisted turn ID list does not match the plan.")
-        participant_count = len(_normalize_participants(participants))
         return tuple(
             replace(
                 plan,
                 turn_id=turn_ids[index],
-                predecessor_ids=tuple(turn_ids[: (plan.round_no - 1) * participant_count]),
+                predecessor_ids=tuple(turn_ids[: len(plan.predecessor_ids)]),
             )
             for index, plan in enumerate(plans)
         )

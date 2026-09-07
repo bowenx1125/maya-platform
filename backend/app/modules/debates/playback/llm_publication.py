@@ -585,14 +585,20 @@ class SqlLLMPublication:
         ):
             raise RuntimeError("LLM publication generation fence is stale")
         for receipt in frozen.snapshot.receipts:
+            from app.modules.debates.models import DebateTurn
+            from app.modules.debates.source_lineage import receipt_scope_is_valid
+
+            source_turn = self.db.get(DebateTurn, turn_id)
             chunk = self.db.execute(
                 text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
                 {"chunk_id": receipt.chunk_id},
             ).first()
             if (
                 chunk is None
-                or str(chunk[0]) != str(frozen.snapshot.snapshot_id)
+                or str(chunk[0]) != receipt.snapshot_id
                 or str(chunk[1]) != receipt.text
+                or source_turn is None
+                or not receipt_scope_is_valid(self.db, source_turn, receipt)
             ):
                 raise RuntimeError("LLM publication recovery receipt crossed its snapshot")
         stored_value = _read(kwargs.get("final_ready"), "structured")

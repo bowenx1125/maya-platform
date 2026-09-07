@@ -575,7 +575,10 @@ class PlaybackController:
             if not isinstance(source_ids, list):
                 raise RunnerFailure("segment_sources_invalid")
             if self.require_grades:
-                if any(not isinstance(source_id, str) or not source_id.strip() for source_id in source_ids):
+                if any(
+                    not isinstance(source_id, str) or not source_id.strip()
+                    for source_id in source_ids
+                ):
                     raise RunnerFailure("segment_sources_invalid")
                 support_mode = row.get("support_mode")
                 if support_mode not in {"direct", "contextual", "no_match"}:
@@ -772,6 +775,15 @@ def _preview_poll(
         response = transport.request("GET", path, csrf=False)
         detail = _mapping(response.data, "http_response_invalid")
         last_detail = detail
+        if (
+            detail.get("preview_turns") == []
+            and isinstance(detail.get("preview"), Mapping)
+            and not detail["preview"].get("ready")
+        ):
+            if clock() - started > overall_timeout_seconds:
+                raise RunnerFailure("preview_turn_stalled")
+            sleeper(poll_interval_seconds)
+            continue
         rows = _preview_poll_rows(detail, expected)
         all_ready = True
         for row in rows:

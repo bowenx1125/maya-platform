@@ -311,6 +311,10 @@ class SqlAudioRegenerationRepository:
             )
 
         receipt_rows = _json_list(row["retrieval_receipts_json"], code="receipt_invalid")
+        from app.modules.debates.models import DebateTurn
+        from app.modules.debates.source_lineage import receipt_scope_is_valid
+
+        saved_turn = db.get(DebateTurn, turn_id)
         receipt_ids: list[str] = []
         for item in receipt_rows:
             if not isinstance(item, Mapping):
@@ -323,7 +327,8 @@ class SqlAudioRegenerationRepository:
                 not isinstance(evidence_id, str)
                 or not evidence_id
                 or not isinstance(receipt_snapshot, str)
-                or receipt_snapshot != snapshot_id
+                or saved_turn is None
+                or not receipt_scope_is_valid(db, saved_turn, item)
                 or not isinstance(chunk_id, str)
                 or not isinstance(receipt_text, str)
             ):
@@ -332,7 +337,7 @@ class SqlAudioRegenerationRepository:
                 text("SELECT snapshot_id, text FROM knowledge_chunks WHERE id=:chunk_id"),
                 {"chunk_id": chunk_id},
             ).first()
-            if chunk is None or str(chunk[0]) != snapshot_id or str(chunk[1]) != receipt_text:
+            if chunk is None or str(chunk[0]) != receipt_snapshot or str(chunk[1]) != receipt_text:
                 raise AudioRegenerationError(
                     "saved receipt crossed its snapshot", code="receipt_scope_invalid"
                 )
@@ -359,7 +364,15 @@ class SqlAudioRegenerationRepository:
                 not isinstance(evidence_id, str)
                 or not evidence_id
                 or str(source["participant_id"]) != str(row["participant_id"])
-                or str(source["snapshot_id"]) != snapshot_id
+                or (
+                    str(source["snapshot_id"]) != snapshot_id
+                    and not any(
+                        isinstance(item, Mapping)
+                        and item.get("evidence_id") == evidence_id
+                        and item.get("snapshot_id") == str(source["snapshot_id"])
+                        for item in receipt_rows
+                    )
+                )
             ):
                 raise AudioRegenerationError(
                     "turn source ownership is invalid", code="receipt_scope_invalid"

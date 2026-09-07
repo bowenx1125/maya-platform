@@ -22,7 +22,10 @@ import {
   SpeechStream,
   type StreamTurn,
 } from "../../debate/stage/speech-stream";
-import { expectedTurnCount } from "../../../lib/debate-rounds";
+import {
+  expectedTurnCount,
+  teachingRoundLabel,
+} from "../../../lib/debate-rounds";
 import {
   AVATAR_EXPRESSIONS,
   AVATAR_EXPRESSION_STRENGTHS,
@@ -3485,6 +3488,9 @@ export function BetaDebateStage({
             labels={labels}
             status={visibleStatus}
             phaseOf={(turn) => {
+              if (detailState.teaching_protocol === "four_round_v1") {
+                return teachingRoundLabel(turn.round_no, outputLanguage);
+              }
               const phase = visibleRoundPhase(
                 turn as unknown as VisiblePlaybackTurn,
                 detailState,

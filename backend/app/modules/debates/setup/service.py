@@ -44,9 +44,11 @@ from app.modules.agents.persona_service import is_persona_confirmed
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.round_count import (
+    debate_teaching_protocol,
     expected_turn_count,
     preview_turn_count,
     uses_segment_protocol,
+    visible_turn_predecessors,
 )
 from app.modules.debates.schemas import (
     RULE_SET_ID_MUTUAL_LEARNING,
@@ -219,12 +221,8 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
     except (TypeError, ValueError):
         return False
     is_mutual = str(debate.rule_set_id) == RULE_SET_ID_MUTUAL_LEARNING
-    if is_mutual:
-        expected_ids = [row.id for row in turns if int(row.round_no) < int(successor.round_no)]
-        visible_predecessors = [row for row in turns if int(row.round_no) < int(successor.round_no)]
-    else:
-        expected_ids = [row.id for row in turns if row.turn_index < successor.turn_index]
-        visible_predecessors = [row for row in turns if row.turn_index < successor.turn_index]
+    visible_predecessors = visible_turn_predecessors(debate, successor, turns)
+    expected_ids = [row.id for row in visible_predecessors]
     expected_cutoff = (
         max((int(row.turn_index) for row in visible_predecessors), default=-1)
         if is_mutual
@@ -601,12 +599,17 @@ def _participant_row(
     )
 
 
-def _ensure_payload(payload: DebateDraftRequest) -> None:
+def _ensure_payload(payload: DebateDraftRequest, *, teaching_protocol: str | None = None) -> None:
+    if teaching_protocol == "four_round_v1" and payload.round_count != 4:
+        raise validation_failure(
+            "The teaching protocol requires exactly four rounds.", code="teaching_protocol_invalid"
+        )
     try:
         build_turn_plan(
             [str(item.agent_id) for item in payload.participants],
             round_count=payload.round_count,
             rule_set_id=payload.rule_set_id,
+            teaching_protocol=teaching_protocol,
         )
     except RuleViolation as exc:
         raise validation_failure(exc.message, code=exc.code) from exc
@@ -999,6 +1002,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "round_count": _round_count_from_snapshot(debate),
             "output_language": debate.output_language,
             "turn_protocol": "segments_v2" if uses_segment_protocol(debate) else None,
+            "teaching_protocol": debate_teaching_protocol(debate),
             "final_input_frozen": bool(debate.final_input_json),
             # The list projection has carried these since pre-warm landed; the
             # detail did not, so a debate's own page reported 0/0 and the
@@ -1073,7 +1077,11 @@ def create_debate_draft(
     require_teacher_course(db, actor_user_id, course_id)
     _find_course(db, course_id)
     topic = _validated_topic(payload.topic, payload.output_language)
-    _ensure_payload(payload)
+    if payload.round_count != 4:
+        raise validation_failure(
+            "New debates require exactly four rounds.", code="teaching_protocol_invalid"
+        )
+    _ensure_payload(payload, teaching_protocol="four_round_v1")
     body_hash = _canonical_hash(
         {
             "course_id": course_id,
@@ -1102,7 +1110,8 @@ def create_debate_draft(
         rule_snapshot_json=canonical_rule_snapshot_json(
             rule_set_id=payload.rule_set_id,
             round_count=payload.round_count,
-            turn_protocol=payload.turn_protocol,
+            turn_protocol="segments_v2",
+            teaching_protocol="four_round_v1",
         ),
         status="draft",
         revision=0,
@@ -1306,7 +1315,8 @@ def update_debate_draft(
     if debate.status != "draft":
         raise invalid_state("Only a draft Debate can be updated.")
     topic = _validated_topic(payload.topic, payload.output_language)
-    _ensure_payload(payload)
+    teaching_protocol = debate_teaching_protocol(debate)
+    _ensure_payload(payload, teaching_protocol=teaching_protocol)
     timestamp = utc_now()
     # A draft warms its turns in the background, so an edit has to discard
     # them: the plan freezes the speaking order and every turn's predecessor
@@ -1328,7 +1338,8 @@ def update_debate_draft(
             rule_snapshot_json=canonical_rule_snapshot_json(
                 rule_set_id=payload.rule_set_id,
                 round_count=payload.round_count,
-                turn_protocol=payload.turn_protocol,
+                turn_protocol="segments_v2" if teaching_protocol else payload.turn_protocol,
+                teaching_protocol=teaching_protocol,
             ),
             revision=Debate.revision + 1,
             updated_at=timestamp,
@@ -1437,6 +1448,7 @@ def commit_start_plan(
             [row.id for row in participants],
             round_count=_round_count_from_snapshot(debate),
             rule_set_id=str(debate.rule_set_id),
+            teaching_protocol=debate_teaching_protocol(debate),
         )
     except RuleViolation as exc:
         raise validation_failure(exc.message, code=exc.code) from exc
@@ -1448,8 +1460,9 @@ def commit_start_plan(
     turn_ids = [str(uuid4()) for _entry in plan]
     timestamp = utc_now()
     turns: list[DebateTurn] = []
+    participants_by_id = {row.id: row for row in participants}
     for entry, turn_id in zip(plan, turn_ids, strict=True):
-        participant = participants[entry.order_index]
+        participant = participants_by_id[str(entry.participant_id)]
         turns.append(
             DebateTurn(
                 id=turn_id,

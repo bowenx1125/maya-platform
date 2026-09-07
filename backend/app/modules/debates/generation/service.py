@@ -17,6 +17,7 @@ from .evidence_trace import (
     derive_exact_speech_span,
 )
 from .fencing import GenerationFence, GenerationFenceError, TurnClaim
+from .four_round import body_count, visible_predecessors
 from .mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from .mutual_learning_prompts import (
     compute_mutual_transcript_hash,
@@ -38,6 +39,7 @@ from .prompt_request import (
 from .prompts import make_turn_prompt_input
 from .retrieval import (
     RAGRetrievalError,
+    RetrievalResult,
     SnapshotRetriever,
     TurnSubquery,
     build_turn_subqueries,
@@ -271,26 +273,9 @@ class TurnGenerationService:
 
         attempts: list[GenerationAttempt] = []
         active_claim = claim
-        visible_predecessor_ids = tuple(
-            item.turn_id
-            for item in sorted(
-                (item for item in context.predecessors if item.round_no < context.turn.round_no),
-                key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-            )
-        )
-        transcript_hash = compute_mutual_transcript_hash(
-            tuple(
-                item
-                for item in sorted(
-                    (
-                        item
-                        for item in context.predecessors
-                        if item.round_no < context.turn.round_no
-                    ),
-                    key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-                )
-            )
-        )
+        visible = visible_predecessors(context)
+        visible_predecessor_ids = tuple(item.turn_id for item in visible)
+        transcript_hash = compute_mutual_transcript_hash(visible)
         try:
             persona = context.participant.persona
             if persona is None:
@@ -298,7 +283,10 @@ class TurnGenerationService:
                     "segments_v2 requires a compiled Persona", code="persona_missing"
                 )
             subqueries = build_turn_subqueries(context)
-            if self.mock_retrieval_policy_id is None:
+            retrieval: object
+            if not subqueries:
+                retrieval = RetrievalResult(context.participant.snapshot_id, (), (), 0, 0)
+            elif self.mock_retrieval_policy_id is None:
                 retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
             elif isinstance(self.retriever, SnapshotRetriever):
                 retrieval = self.retriever.retrieve(
@@ -339,6 +327,7 @@ class TurnGenerationService:
         if isinstance(self.llm, DashScopeLLMAdapter):
             raise GenerationFailed("segments_v2 requires the durable provider runtime.", attempt=1)
 
+        feedback: dict[str, object] | None = None
         for attempt in (1, 2):
             record = GenerationAttempt(
                 attempt=attempt,
@@ -353,7 +342,7 @@ class TurnGenerationService:
                         transcript_hash=transcript_hash,
                         predecessor_turn_ids=visible_predecessor_ids,
                     )
-                raw = self._segment_generate(snapshot, attempt=attempt)
+                raw = self._segment_generate(snapshot, attempt=attempt, repair_feedback=feedback)
                 record = replace(record, provider_called=True)
                 segment_result = (
                     raw
@@ -377,7 +366,7 @@ class TurnGenerationService:
                         )
                         for item in segment_result.used_receipts
                     ),
-                    word_count=len(segment_result.speech.split()),
+                    word_count=body_count(segment_result.speech, snapshot.language),
                 )
                 final = final_ready_turn(
                     validated,
@@ -388,11 +377,7 @@ class TurnGenerationService:
                     turn_index=context.turn.turn_index,
                     predecessor_turn_ids=visible_predecessor_ids,
                     cutoff_turn_index=max(
-                        (
-                            item.turn_index
-                            for item in context.predecessors
-                            if item.round_no < context.turn.round_no
-                        ),
+                        (item.turn_index for item in visible),
                         default=-1,
                     ),
                     transcript_hash=transcript_hash,
@@ -415,6 +400,7 @@ class TurnGenerationService:
                 raise
             except SegmentProtocolError as exc:
                 attempts.append(replace(record, failure_code=exc.code))
+                feedback = {"code": exc.code, "json_pointers": list(exc.json_pointers)}
                 if attempt == 2:
                     if self.fence is not None and active_claim is not None:
                         self.fence.release(active_claim)
@@ -563,17 +549,7 @@ class TurnGenerationService:
             )
         if (
             final.predecessor_turn_ids
-            != tuple(
-                item.turn_id
-                for item in sorted(
-                    (
-                        item
-                        for item in context.predecessors
-                        if item.round_no < context.turn.round_no
-                    ),
-                    key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-                )
-            )
+            != tuple(item.turn_id for item in visible_predecessors(context))
             or final.transcript_hash != transcript_hash
         ):
             raise GenerationDiscarded("The segment runtime returned a stale fence.")
@@ -583,7 +559,13 @@ class TurnGenerationService:
             getattr(outcome, "deferred_publication", None),
         )
 
-    def _segment_generate(self, snapshot: SegmentInputSnapshot, *, attempt: int) -> object:
+    def _segment_generate(
+        self,
+        snapshot: SegmentInputSnapshot,
+        *,
+        attempt: int,
+        repair_feedback: Mapping[str, object] | None = None,
+    ) -> object:
         generator = getattr(self.llm, "generate_segments", None)
         if not callable(generator):
             generator = getattr(self.llm, "generate_turn", None)
@@ -605,7 +587,8 @@ class TurnGenerationService:
         ):
             return generator(
                 snapshot,
-                repair_feedback={"code": "segment_structure_invalid", "json_pointers": ["/"]},
+                repair_feedback=repair_feedback
+                or {"code": "segment_structure_invalid", "json_pointers": ["/"]},
             )
         return generator(snapshot)
 

@@ -949,6 +949,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "successor_turn_id": successor_turn_id,
             "teacher_user_id": teacher_user_id,
             "mutual_rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+            "teaching_protocol": "four_round_v1",
         }
         try:
             # Do not issue a SELECT (or any other statement) before this
@@ -984,6 +985,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "WHERE prefix.debate_id=ps.debate_id "
                     "AND prefix.turn_index < current_turn.turn_index "
                     "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                    "= :teaching_protocol AND current_turn.round_no > 1) "
                     "OR prefix.round_no < current_turn.round_no) "
                     "AND prefix.publication_status <> 'public') "
                     "AND (SELECT COUNT(*) FROM debate_turns AS prefix_count "
@@ -996,6 +999,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                     # below.  Counting against the current turn's round makes
                     # every round boundary unclaimable.
                     "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                    "= :teaching_protocol AND successor.round_no > 1) "
                     "OR prefix_count.round_no < successor.round_no)) "
                     "= CASE WHEN d.rule_set_id=:mutual_rule_set_id "
                     "THEN json_array_length(successor.predecessor_turn_ids_json) "
@@ -1016,6 +1021,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND successor.transcript_hash IS NOT NULL "
                     "AND trim(successor.transcript_hash) <> '' "
                     "AND successor.cutoff_turn_index=CASE "
+                    "WHEN d.rule_set_id=:mutual_rule_set_id "
+                    "AND json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                    "= :teaching_protocol AND successor.round_no > 1 "
+                    "THEN successor.turn_index - 1 "
                     "WHEN d.rule_set_id=:mutual_rule_set_id THEN COALESCE(("
                     "SELECT MAX(prior.turn_index) FROM debate_turns AS prior "
                     "WHERE prior.debate_id=ps.debate_id "
@@ -1028,6 +1037,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "WHERE debate_id=ps.debate_id "
                     "AND turn_index < successor.turn_index "
                     "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                    "= :teaching_protocol AND successor.round_no > 1) "
                     "OR round_no < successor.round_no) "
                     "ORDER BY turn_index, id"
                     ") AS prefix_ids) "
@@ -1973,8 +1984,10 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if claim_token is None or prepared.transcript_hash is None:
             return False
+        from app.modules.debates.source_lineage import receipt_scope_is_valid
+
         for source in prepared.source_receipts:
-            if source.snapshot_id != str(turn.knowledge_snapshot_id):
+            if not receipt_scope_is_valid(db, turn, source):
                 return False
             chunk = db.execute(
                 text("SELECT text FROM knowledge_chunks WHERE id=:id AND snapshot_id=:snapshot"),
@@ -2124,9 +2137,11 @@ class SqlPlaybackRepository(PlaybackRepository):
         ):
             return False
         receipt_payload: list[dict[str, Any]] = []
+        from app.modules.debates.source_lineage import receipt_scope_is_valid
+
         for source in prepared.source_receipts:
             if (
-                source.snapshot_id != str(turn.values.get("knowledge_snapshot_id", ""))
+                not receipt_scope_is_valid(db, turn, source)
                 or source.rank < 1
                 or source.rank > 6
                 or len(source.query_hash) != 64
@@ -2320,11 +2335,18 @@ class SqlPlaybackRepository(PlaybackRepository):
                 chunk_id = getattr(source, "chunk_id", None)
                 if chunk_id is None:
                     continue
+                if prepared.source_receipts:
+                    from app.modules.debates.source_lineage import receipt_scope_is_valid
+
+                    if not receipt_scope_is_valid(db, turn, source):
+                        raise ValueError("turn source has no valid evidence origin")
                 source_values = {
                     "id": str(uuid4()),
                     "turn_id": str(turn.id),
                     "participant_id": str(turn.values.get("participant_id", "")),
-                    "snapshot_id": str(turn.values.get("knowledge_snapshot_id", "")),
+                    "snapshot_id": str(
+                        getattr(source, "snapshot_id", turn.values.get("knowledge_snapshot_id", ""))
+                    ),
                     "chunk_id": str(chunk_id),
                     "evidence_id": getattr(
                         source, "evidence_id", f"source-{turn.id}-{fallback_rank}"

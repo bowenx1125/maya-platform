@@ -495,6 +495,7 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "public_agent_name",
         "anonymous_insight_summary",
         "anonymous_classroom_barrage",
+        "session_discussion_memory",
         "aggregate_vote_count",
         "aggregate_evidence_grade",
         "current_tts_speech",

@@ -348,6 +348,22 @@ class ReportInputManifestV1(_ReportInputManifestBase):
     turn_sources: list[ManifestTurnSource]
 
 
+class ReportDiscussionInfluence(ClosedModel):
+    slot: Literal["A", "B", "C", "D", "E"]
+    point: str = Field(min_length=1, max_length=400)
+
+
+class ReportDiscussionMemory(ClosedModel):
+    """Session-only reflection; never a Persona update or classroom speech."""
+
+    slot: Literal["A", "B", "C", "D", "E"]
+    position: str = Field(min_length=1, max_length=400)
+    change: Literal["retained", "qualified", "revised"]
+    reason: str = Field(min_length=1, max_length=400)
+    influence: ReportDiscussionInfluence | None = None
+    unresolved_question: str = Field(max_length=400)
+
+
 class ReportInputManifestV2(_ReportInputManifestBase):
     """Versioned manifest for segment turns and anonymous final input."""
 
@@ -360,6 +376,7 @@ class ReportInputManifestV2(_ReportInputManifestBase):
     # Optional so manifests written before paragraph grading retain their
     # exact canonical bytes and input hash.
     score_summary: ReportScoreSummary | None = None
+    discussion_memories: list[ReportDiscussionMemory] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_segment_manifest(self) -> ReportInputManifestV2:
@@ -386,10 +403,27 @@ class ReportInputManifestV2(_ReportInputManifestBase):
             score_slots = {item.slot for item in self.score_summary.agents}
             if score_slots != participant_slots:
                 raise ValueError("segment report score rows do not match participants")
+        known_slots = {item.slot for item in self.participants}
+        memory_slots = [item.slot for item in self.discussion_memories]
+        if len(memory_slots) != len(set(memory_slots)) or not set(memory_slots).issubset(
+            known_slots
+        ):
+            raise ValueError("discussion memories do not match participants")
+        if any(
+            item.influence is not None and item.influence.slot not in known_slots
+            for item in self.discussion_memories
+        ):
+            raise ValueError("discussion memory influence is outside the debate")
         return self
 
     def canonical_payload(self) -> dict[str, Any]:
         payload = super().canonical_payload()
+        if not payload.get("discussion_memories"):
+            payload.pop("discussion_memories", None)
+        else:
+            payload["discussion_memories"] = sorted(
+                payload["discussion_memories"], key=lambda row: str(row["slot"])
+            )
         if payload.get("score_summary") is None:
             payload.pop("score_summary", None)
         elif isinstance(payload.get("score_summary"), dict):

@@ -1,0 +1,97 @@
+{
+  "说明": "合成离线示例，不是供应商真实生成或课堂质量验收。历史填充发言仅演示字段。",
+  "input": {
+    "topic": "How should shared water be managed?",
+    "language": "en",
+    "round": {
+      "number": 3,
+      "total": 4
+    },
+    "persona": {
+      "identity": {
+        "name": "River Keeper",
+        "role": "Watershed steward",
+        "historical_or_cultural_context": "A fictional community keeper."
+      },
+      "cultural_lens": ["Intergenerational responsibility"],
+      "core_values": ["Reciprocity"],
+      "initial_position": "Protect shared resources through careful stewardship.",
+      "speaking_style": {
+        "tone": "Calm and reflective",
+        "argument_pattern": "Start with context, then weigh consequences",
+        "concession_style": "Acknowledge valid concerns before qualifying them",
+        "question_style": "Ask one open question about long-term effects"
+      }
+    },
+    "history": [
+      {
+        "speaker": "River Keeper",
+        "round": 1,
+        "text": "An already completed discussion point.",
+        "participant_id": "participant-0",
+        "source_ids": []
+      },
+      {
+        "speaker": "Other Persona",
+        "round": 1,
+        "text": "An already completed discussion point.",
+        "participant_id": "participant-1",
+        "source_ids": []
+      },
+      {
+        "speaker": "Other Persona",
+        "round": 2,
+        "text": "An already completed discussion point.",
+        "participant_id": "participant-1",
+        "source_ids": []
+      },
+      {
+        "speaker": "River Keeper",
+        "round": 2,
+        "text": "An already completed discussion point.",
+        "participant_id": "participant-0",
+        "source_ids": []
+      }
+    ],
+    "sources": [],
+    "barrages": [],
+    "discussion": {
+      "agents": [
+        {
+          "id": "participant-0",
+          "name": "River Keeper"
+        },
+        {
+          "id": "participant-1",
+          "name": "Other Persona"
+        }
+      ],
+      "memories": [],
+      "protocol": "four_round_v1",
+      "question_target_id": null,
+      "received_questions": [],
+      "self_id": "participant-0"
+    }
+  },
+  "output": {
+    "segments": [
+      {
+        "text": "Agent B, a documented case in which the safeguard excludes a relevant perspective would make me change it. That answers the question about what could alter my position. I retain the proposal with a new condition: the class must check who can question its evidence and record any unanswered objection. The available material does not settle how often exclusion occurs. Your concern therefore changes the test I propose, without requiring either of us to claim that our present judgment is universally correct.",
+        "source_ids": [],
+        "reply_to": null,
+        "support_mode": "no_match"
+      }
+    ],
+    "question": null,
+    "discussion_memory": {
+      "position": "Retain a revisable classroom trial.",
+      "change": "qualified",
+      "reason": "Check whose objections remain unanswered.",
+      "influence": {
+        "agent_id": "participant-1",
+        "point": "Test who can challenge the evidence."
+      },
+      "unresolved_question": "Who remains excluded?"
+    }
+  }
+}

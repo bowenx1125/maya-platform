@@ -14,6 +14,7 @@ from app.core.models import Job
 
 from .models import (
     BarrageInsightSnapshot,
+    CivilizationReport,
     CivilizationReportCurrentSuccess,
     CivilizationReportRevision,
 )
@@ -165,6 +166,10 @@ class ReportTaskManager:
                     if revision is not None and revision.status == "generating":
                         revision.status = "failed"
                         revision.safe_error_code = "report_generation_failed"
+                        report = db.get(CivilizationReport, revision.report_id)
+                        if report is not None:
+                            report.generation_status = "failed"
+                            report.latest_attempt_status = "failed"
                 else:
                     snapshot = db.get(BarrageInsightSnapshot, owner_id)
                     if snapshot is not None and snapshot.status == "generating":

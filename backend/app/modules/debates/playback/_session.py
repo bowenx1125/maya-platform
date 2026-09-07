@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
-from app.modules.debates.round_count import uses_segment_protocol
+from app.modules.debates.round_count import debate_teaching_protocol, uses_segment_protocol
 
 from ._core import (
     AudioAuthorization,
@@ -238,6 +238,7 @@ class PlaybackSessionMixin(PlaybackCore):
                 turns,
                 action,
                 rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+                teaching_protocol=debate_teaching_protocol(debate),
             )
             if not self._turn_ready(turn):
                 raise not_found()
@@ -458,6 +459,7 @@ class PlaybackSessionMixin(PlaybackCore):
                 turns,
                 action,
                 rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+                teaching_protocol=debate_teaching_protocol(debate),
             )
             ticket = self._find_ticket(
                 session_hash=session_hash,
@@ -601,6 +603,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     turns,
                     current,
                     rule_set_id=str(self._get(debate, "rule_set_id", default="")),
+                    teaching_protocol=debate_teaching_protocol(debate),
                 ):
                     raise conflict(
                         "invalid_state",

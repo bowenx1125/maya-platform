@@ -409,6 +409,8 @@ class MockLLMProvider:
             raise LLMStructuredOutputError("mock malformed segment output")
         if failure == "long":
             return {"segments": [{"text": "x" * 8_001, "source_ids": [], "reply_to": None}]}
+        if snapshot.discussion_json is not None:
+            return self._four_round_segments(snapshot, failure=failure)
         source_ids = ["S1"] if snapshot.sources else []
         support_mode = "direct" if source_ids else "no_match"
         reply_to = (
@@ -447,6 +449,121 @@ class MockLLMProvider:
                 }
             )
         return {"segments": segments}
+
+    @staticmethod
+    def _four_round_segments(
+        snapshot: SegmentInputSnapshot, *, failure: str | None = None
+    ) -> dict[str, object]:
+        """Small authored offline fixtures, never a fallback for real generation."""
+
+        discussion = snapshot.discussion
+        if discussion is None:
+            raise LLMStructuredOutputError("the teaching snapshot has no discussion context")
+        agents = cast(list[dict[str, str]], discussion["agents"])
+        peer = next(agent for agent in agents if agent["id"] != discussion["self_id"])
+        if snapshot.round.number == 2:
+            peer = next(
+                agent for agent in agents if agent["id"] == discussion["question_target_id"]
+            )
+        received = cast(list[dict[str, str]], discussion["received_questions"])
+        if snapshot.round.number == 3 and received:
+            peer = next(agent for agent in agents if agent["id"] == received[0]["from_id"])
+        peer_label = f"Agent {chr(65 + agents.index(peer))}"
+        question_text = (
+            "什么证据会让你修改所提出的保障措施？"
+            if snapshot.language == "zh"
+            else "What evidence would change your proposed safeguard?"
+        )
+        english = (
+            "My main position is that classroom decisions should remain open to correction. "
+            "The available material provides a limited starting point; it cannot establish how "
+            "every community behaves. I distinguish that evidence boundary from my judgment "
+            "that learners should explain why a claim follows from a source. A cultural "
+            "perspective can suggest useful questions, but it cannot replace support. Where "
+            "the record is incomplete, we should identify the missing information before "
+            "treating a proposed classroom practice as reliable.",
+            f"{peer_label}, I agree that a proposed safeguard needs an explicit reason. "
+            "Your argument becomes less convincing if one example is treated as a universal "
+            "rule. The evidence already shared can support a limited classroom trial, while "
+            "the broader claim remains uncertain. I would add a condition: learners should "
+            "record an outcome that could challenge the proposal. " + question_text,
+            f"{peer_label}, a documented case in which the safeguard excludes a relevant "
+            "perspective would make me change it. That answers the question about what "
+            "could alter my position. I retain the proposal with a new condition: the "
+            "class must check who can question its evidence and record any unanswered "
+            "objection. The available material does not settle how often exclusion occurs. "
+            "Your concern therefore changes the test I propose, without requiring either "
+            "of us to claim that our present judgment is universally correct.",
+            f"{peer_label}, I support your demand that a safeguard should remain open to "
+            "challenge, because that makes its limits visible to the class. I still reject "
+            "treating a single example as a rule for every culture. My final position is "
+            "to try the proposal with an explicit opportunity to question its evidence. "
+            "This discussion changed my criterion for success: participation now matters "
+            "alongside the immediate result. We have a practical next step, while the "
+            "unanswered question about who remains excluded preserves a reasonable disagreement.",
+        )
+        chinese = (
+            "我的主要观点是，课堂判断应当允许根据证据修正。现有资料只能提供有限的观察起点，不能证明每个群体都会采用相同做法。"
+            "我把资料能够支持的事实，与自己主张公开说明判断理由的建议分开。文化身份帮助我们提出问题，却不能代替事实依据。"
+            "缺少资料时，应说明尚未知道什么，再决定是否尝试一种课堂安排，不能把个人理解包装成普遍规律。",
+            f"{peer_label}，我认可你要求为保障措施说明理由的观点，但一个例子还不足以成为所有群体都应遵守的规则。"
+            "已经公开的证据可以支持有限尝试，不能替我们排除其他解释。我建议记录可能挑战方案的结果，避免只有赞同意见得到重视。"
+            + question_text,
+            f"{peer_label}，如果出现有记录的案例，表明这项保障排除了相关意见，我会修改方案。这回答了什么证据能够改变判断的问题。"
+            "我保留原来的建议，但增加条件：课堂必须检查谁能质疑证据，并记录尚未回答的异议。现有资料无法判断排除现象有多普遍。"
+            "你的问题改变了我检验方案的标准，却不要求我们把当前判断说成必然正确。",
+            f"{peer_label}，我赞同你提出让保障措施接受质疑的观点，因为这样能够让全班看见方案的限制。"
+            "我仍反对把单一例子推广为所有文化的共同规则。最终立场是保留尝试，同时明确提出证据异议的机会。"
+            "讨论使我把参与机会加入成功标准，不能只关注眼前结果。谁仍可能被排除尚未解决，我们可以据此继续观察，保留有理由的分歧。",
+        )
+        speech = (chinese if snapshot.language == "zh" else english)[snapshot.round.number - 1]
+        reply_to = None
+        if snapshot.round.number == 4 and snapshot.barrages:
+            reply_to = snapshot.barrages[0].id
+            speech += (
+                "回应课堂提问：先公开判断标准，再记录反例，发现排除就调整。"
+                if snapshot.language == "zh"
+                else " To answer the classroom question, publish the criterion "
+                "and revise the trial when an excluded perspective appears."
+            )
+        source_ids = ["S1"] if snapshot.sources and failure != "matched_but_unused" else []
+        segment = {
+            "text": "短。"
+            if failure in {"short", "word"} and snapshot.language == "zh"
+            else "Short."
+            if failure in {"short", "word"}
+            else speech,
+            "source_ids": source_ids,
+            "reply_to": None if failure == "rule" else reply_to,
+            "support_mode": "contextual" if source_ids else "no_match",
+        }
+        question = (
+            {"target_agent_id": discussion["question_target_id"], "text": question_text}
+            if snapshot.round.number == 2
+            else None
+        )
+        memory = (
+            {
+                "position": "Retain a revisable classroom trial.",
+                "change": "qualified",
+                "reason": "Check whose objections remain unanswered.",
+                "influence": {
+                    "agent_id": peer["id"],
+                    "point": "Test who can challenge the evidence.",
+                },
+                "unresolved_question": "Who remains excluded?",
+            }
+            if snapshot.round.number == 3
+            else None
+        )
+        if memory is not None and snapshot.language == "zh":
+            memory.update(
+                position="保留能够修正的课堂尝试。",
+                reason="检查谁的异议仍未得到回答。",
+                influence={"agent_id": peer["id"], "point": "检验谁能够质疑证据。"},
+                unresolved_question="谁仍然可能被排除？",
+            )
+        return {"segments": [segment], "question": question, "discussion_memory": memory}
 
     def _mutual_result(
         self,

@@ -28,9 +28,11 @@ from app.providers.llm_segments import (
     SegmentLLMAdapter,
     SegmentLLMRequestV2,
     SegmentRecoveryInputV2,
+    segment_prompt_version,
 )
 from app.providers.llm_transport import LLMAcceptanceUnknown, LLMTransportNotSent
 
+from .four_round import BODY_LIMITS, body_count, visible_predecessors
 from .mutual_learning_prompts import compute_mutual_transcript_hash
 from .segments import (
     SegmentInputSnapshot,
@@ -50,6 +52,51 @@ from .types import (
 from .validator import final_ready_turn
 
 SEGMENT_MAX_ATTEMPTS = 2
+SEGMENT_REPAIR_CODES = frozenset(
+    {
+        "json_invalid",
+        "schema_invalid",
+        "segment_shape_invalid",
+        "segment_count_invalid",
+        "segment_text_invalid",
+        "segment_text_too_large",
+        "source_reference_invalid",
+        "barrage_reference_invalid",
+        "final_reply_missing",
+        "segment_length_invalid",
+        "question_route_invalid",
+        "discussion_memory_invalid",
+        "support_mode_invalid",
+        "support_mode_source_mismatch",
+    }
+)
+
+
+def _repair_feedback(
+    candidate: SegmentAcceptedCandidateV2, code: str, pointers: Sequence[str]
+) -> dict[str, object]:
+    feedback: dict[str, object] = {"code": code, "json_pointers": list(pointers)}
+    snapshot = candidate.request.snapshot
+    if getattr(snapshot, "discussion_json", None) is not None:
+        low, high = BODY_LIMITS[snapshot.language][snapshot.round.number - 1]
+        output = candidate.provider_output
+        segments = output.get("segments") if isinstance(output, Mapping) else None
+        text = (
+            "\n\n".join(
+                str(item["text"])
+                for item in segments
+                if isinstance(item, Mapping) and isinstance(item.get("text"), str)
+            )
+            if isinstance(segments, list)
+            else None
+        )
+        feedback["body_length"] = {
+            "actual": body_count(text, snapshot.language) if text is not None else None,
+            "minimum": low,
+            "maximum": high,
+            "unit": "non_whitespace_characters" if snapshot.language == "zh" else "english_words",
+        }
+    return feedback
 
 
 class SegmentRuntimeError(RuntimeError):
@@ -432,7 +479,7 @@ class SegmentLLMRuntime:
             attempt_no=prepared.attempt_no,
             request_hash=prepared.request.request_hash,
             prompt_hash=prepared.request.prompt_hash,
-            prompt_contract_version="segment_prompt_v2",
+            prompt_contract_version=segment_prompt_version(prepared.snapshot),
             schema_hash=prepared.request.schema_hash,
             tokenizer_id=tokenizer_id,
             tokenizer_hash=tokenizer_hash,
@@ -489,12 +536,7 @@ class SegmentLLMRuntime:
     def _final_ready(
         self, result: SegmentTurnResult, context: GenerationContext, attempt: int
     ) -> FinalReadyTurn:
-        visible = tuple(
-            sorted(
-                (item for item in context.predecessors if item.round_no < context.turn.round_no),
-                key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-            )
-        )
+        visible = visible_predecessors(context)
         validated = ValidatedTurn(
             result=result,
             retrieval_status="matched" if result.snapshot.receipts else "no_match",
@@ -625,16 +667,7 @@ class SegmentLLMRuntime:
                     safe_error_code="acceptance_unknown",
                 )
 
-            visible = tuple(
-                sorted(
-                    (
-                        item
-                        for item in context.predecessors
-                        if item.round_no < context.turn.round_no
-                    ),
-                    key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-                )
-            )
+            visible = visible_predecessors(context)
             transcript_hash = compute_mutual_transcript_hash(visible)
             try:
                 stage = self._stage(current, candidate, transcript_hash=transcript_hash)
@@ -672,15 +705,8 @@ class SegmentLLMRuntime:
                 if (
                     current.attempt_no == 1
                     and self.max_attempts == 2
-                    and code
-                    in {
-                        "json_invalid",
-                        "schema_invalid",
-                        "segment_shape_invalid",
-                        "source_reference_invalid",
-                        "barrage_reference_invalid",
-                        "final_reply_missing",
-                    }
+                    and current.request.authorized_max_attempts == 2
+                    and code in SEGMENT_REPAIR_CODES
                 ):
                     current = self.prepare(
                         current.snapshot,
@@ -697,10 +723,7 @@ class SegmentLLMRuntime:
                         attempt_no=2,
                         retrieval_reused=True,
                         queries=current.request.queries,
-                        repair_feedback={
-                            "code": code,
-                            "json_pointers": list(candidate.json_pointers),
-                        },
+                        repair_feedback=_repair_feedback(candidate, code, candidate.json_pointers),
                     )
                     continue
                 return SegmentRunOutcome(
@@ -731,7 +754,12 @@ class SegmentLLMRuntime:
                 operation = (
                     self._transition(operation_id, "mark_failed", code=exc.code) or operation
                 )
-                if current.attempt_no == 1 and self.max_attempts == 2:
+                if (
+                    current.attempt_no == 1
+                    and self.max_attempts == 2
+                    and current.request.authorized_max_attempts == 2
+                    and exc.code in SEGMENT_REPAIR_CODES
+                ):
                     current = self.prepare(
                         current.snapshot,
                         debate_id=current.debate_id,
@@ -746,10 +774,7 @@ class SegmentLLMRuntime:
                         attempt_no=2,
                         retrieval_reused=True,
                         queries=current.request.queries,
-                        repair_feedback={
-                            "code": exc.code,
-                            "json_pointers": list(exc.json_pointers),
-                        },
+                        repair_feedback=_repair_feedback(candidate, exc.code, exc.json_pointers),
                     )
                     continue
                 return SegmentRunOutcome(
@@ -833,20 +858,11 @@ class SegmentLLMRuntime:
                 safe_error_code="segment_stage_unavailable",
             )
         try:
-            if _read(stage, "prompt_contract_version") != "segment_prompt_v2":
+            if _read(stage, "prompt_contract_version") != segment_prompt_version(snapshot):
                 raise SegmentProtocolError("stored segment prompt version is stale")
             if _read(stage, "receipt_hash") != snapshot.receipt_hash:
                 raise SegmentProtocolError("stored segment receipts are stale")
-            visible = tuple(
-                sorted(
-                    (
-                        item
-                        for item in context.predecessors
-                        if item.round_no < context.turn.round_no
-                    ),
-                    key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-                )
-            )
+            visible = visible_predecessors(context)
             if _read(stage, "transcript_hash") != compute_mutual_transcript_hash(visible):
                 raise SegmentProtocolError("stored segment transcript is stale")
             if stored_result is None:

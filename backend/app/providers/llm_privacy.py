@@ -20,6 +20,7 @@ LLM_REPAIR_FEEDBACK_POLICY_HASH: Final = (
 LLM_REPAIR_FEEDBACK_POLICY_VERSION: Final = "repair_feedback_v1"
 LLM_REPAIR_FEEDBACK_FIELD_CLASS: Final = "server_authored_structure_repair_feedback"
 LLM_ANONYMOUS_BARRAGE_FIELD_CLASS: Final = "anonymous_classroom_barrage"
+LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS: Final = "session_discussion_memory"
 
 LLM_ALLOWED_OUTBOUND_FIELD_CLASSES: Final = frozenset(
     {
@@ -30,6 +31,7 @@ LLM_ALLOWED_OUTBOUND_FIELD_CLASSES: Final = frozenset(
         "opaque_local_id",
         LLM_REPAIR_FEEDBACK_FIELD_CLASS,
         LLM_ANONYMOUS_BARRAGE_FIELD_CLASS,
+        LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS,
     }
 )
 LLM_REQUIRED_OUTBOUND_FIELD_CLASSES: Final = frozenset(
@@ -460,6 +462,16 @@ def validate_anonymous_barrage_text(
 def _path_allows_uuid(path: tuple[str, ...]) -> bool:
     if not path:
         return False
+    if path[:1] == ("discussion",):
+        normalized = tuple("[]" if item.isdigit() else item for item in path)
+        return normalized in {
+            ("discussion", "self_id"),
+            ("discussion", "question_target_id"),
+            ("discussion", "agents", "[]", "id"),
+            ("discussion", "received_questions", "[]", "from_id"),
+            ("discussion", "memories", "[]", "agent_id"),
+            ("discussion", "memories", "[]", "memory", "influence", "agent_id"),
+        }
     if path[-1] in _UUID_ID_KEYS:
         return True
     return len(path) > 1 and path[-2] in _UUID_ID_KEYS and path[-1].isdigit()
@@ -564,6 +576,7 @@ def scan_segment_outbound_messages(
     """Scan the exact system/user bytes for the closed ``segments_v2`` shape."""
 
     parts = _message_parts(messages)
+    classes = tuple(dict.fromkeys(str(value) for value in field_classes))
     tokens = tuple(
         str(token) for token in identity_tokens if isinstance(token, str) and token.strip()
     )
@@ -576,8 +589,21 @@ def scan_segment_outbound_messages(
         )
     except (TypeError, ValueError, json.JSONDecodeError):
         _reject(code="llm_outbound_json_invalid")
-    if not isinstance(decoded, Mapping) or set(decoded) != _SEGMENT_INPUT_KEYS:
+    if not isinstance(decoded, Mapping) or set(decoded) not in (
+        _SEGMENT_INPUT_KEYS,
+        _SEGMENT_INPUT_KEYS | {"discussion"},
+    ):
         _reject(code="llm_outbound_field_forbidden")
+    discussion = decoded.get("discussion")
+    if "discussion" in decoded:
+        from app.modules.debates.generation.four_round import validate_discussion
+
+        try:
+            validate_discussion(discussion)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            _reject(code="llm_outbound_field_forbidden")
+        if LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS not in classes:
+            _reject(code="llm_discussion_manifest_missing")
     round_value = decoded.get("round")
     if isinstance(round_value, Mapping) and set(round_value) != _SEGMENT_ROUND_KEYS:
         _reject(code="llm_outbound_field_forbidden")
@@ -596,11 +622,12 @@ def scan_segment_outbound_messages(
         if not isinstance(values, list):
             _reject(code="llm_outbound_json_invalid")
         allowed = {"speaker", "round", "text"} if key == "history" else {"id", "text"}
+        if key == "history" and discussion is not None:
+            allowed |= {"participant_id", "source_ids"}
         for item in values:
             if not isinstance(item, Mapping) or set(item) != allowed:
                 _reject(code="llm_outbound_field_forbidden")
     _scan_value(decoded, path=(), identity_tokens=tokens, workspace_id=workspace_id)
-    classes = tuple(dict.fromkeys(str(value) for value in field_classes))
     if any(value not in LLM_ALLOWED_OUTBOUND_FIELD_CLASSES for value in classes):
         _reject(code="llm_manifest_field_forbidden")
     raw = "\x1e".join(content for _role, content in parts).encode("utf-8")
@@ -624,6 +651,7 @@ validate_real_llm_messages = scan_llm_outbound_messages
 __all__ = [
     "LLM_ALLOWED_OUTBOUND_FIELD_CLASSES",
     "LLM_ANONYMOUS_BARRAGE_FIELD_CLASS",
+    "LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS",
     "LLMOutboundManifestV1",
     "LLMOutboundPrivacyError",
     "LLMOutboundScanResult",

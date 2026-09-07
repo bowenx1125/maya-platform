@@ -16,7 +16,7 @@ from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
-ALEMBIC_HEAD = "0023_segment_report_wordcount"
+ALEMBIC_HEAD = "0024_shared_discussion_evidence"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

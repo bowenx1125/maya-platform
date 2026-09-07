@@ -2493,7 +2493,7 @@ components:
         teacher_note: { type: string, default: "" }
     DebateDraftRequest:
       type: object
-      required: [topic, participants, round_count]
+      required: [topic, participants]
       properties:
         topic:
           type: string
@@ -2506,7 +2506,7 @@ components:
           type: [string, "null"]
           enum: [segments_v2, null]
           default: null
-          description: Current clients send segments_v2; omission preserves legacy callers.
+          description: New debates use the four-round teaching protocol with paragraph output.
         participants:
           type: array
           minItems: 2
@@ -2525,7 +2525,7 @@ components:
               ordered_multi_agent_rounds_demo_v2,
               ordered_multi_expert_mutual_learning_v1,
             ]
-        round_count: { type: integer, minimum: 2, maximum: 5 }
+        round_count: { type: integer, const: 4, default: 4 }
         total_duration_seconds: { type: "null" }
         turn_duration_seconds: { type: "null" }
     DebateDraftUpdateRequest:
@@ -2870,6 +2870,7 @@ components:
             round_count: { type: integer, minimum: 2, maximum: 5 }
             output_language: { type: string, enum: [en, zh], default: en }
             turn_protocol: { type: [string, "null"], enum: [segments_v2, null], default: null }
+            teaching_protocol: { type: [string, "null"], enum: [four_round_v1, null] }
             final_input_frozen: { type: boolean, default: false }
             preview_turns:
               type: array

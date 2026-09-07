@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path
 
 import pytest
 from app.modules.debates.generation import (
@@ -154,21 +153,16 @@ def test_complete_generation_matrix_has_one_opening_exchange_span_and_final(
     )
 
 
-def test_mutual_rule_modules_do_not_encode_a_round_two_business_branch() -> None:
-    """Keep fixed-round assumptions out of the versioned protocol path."""
+def test_only_marked_teaching_plan_limits_questions_to_its_discussion_round() -> None:
+    """The approved four-stage plan must not change old exchange-round semantics."""
 
-    module_dir = Path(__file__).parents[1] / "app/modules/debates/generation"
-    paths = (
-        module_dir / "round_phase.py",
-        module_dir / "mutual_learning_policy.py",
-        module_dir / "mutual_learning_prompts.py",
-        module_dir / "mutual_learning_validator.py",
-        module_dir / "mutual_learning_synthesis.py",
+    legacy = MutualLearningPolicy().plan(["a", "b"], round_count=4)
+    teaching = MutualLearningPolicy().plan(
+        ["a", "b"], round_count=4, teaching_protocol="four_round_v1"
     )
-    forbidden = ("round_no == 2", "round_no==2", "round_no != 2", "round_no!=2")
-    for path in paths:
-        source = path.read_text(encoding="utf-8").lower()
-        assert not any(token in source for token in forbidden), path.name
+    assert all(entry.next_participant_id for entry in legacy if entry.phase == "exchange")
+    assert all(entry.next_participant_id for entry in teaching if entry.round_no == 2)
+    assert all(entry.next_participant_id is None for entry in teaching if entry.round_no == 3)
 
 
 def test_turn_policy_dispatches_new_rule_without_changing_legacy_fixed_plan() -> None:
@@ -277,7 +271,7 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
                     {"agent_id": second_agent, "stance_mode": "open"},
                 ],
                 "rule_set_id": RULE_SET,
-                "round_count": 2,
+                "round_count": 4,
             },
         )
         assert response.status_code == 201, response.text
@@ -285,6 +279,11 @@ def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
         with database.session() as db:
             debate = db.get(Debate, debate_id)
             assert debate is not None
+            from app.modules.debates.setup.rules import canonical_rule_snapshot_json
+
+            debate.rule_snapshot_json = canonical_rule_snapshot_json(
+                rule_set_id=RULE_SET, round_count=2
+            )
             turns = commit_start_plan(db, debate_id=debate_id)
             assert len(turns) == 4
             assert turns[0].round_no == turns[1].round_no == 1
@@ -346,6 +345,8 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
 ) -> None:
     """Setup/detail reads the persisted snapshot rather than defaulting to two."""
 
+    from app.modules.debates.models import Debate
+    from app.modules.debates.setup.rules import canonical_rule_snapshot_json
     from fastapi.testclient import TestClient
 
     from tests.conftest import login
@@ -383,19 +384,24 @@ def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
                     {"agent_id": second_agent, "stance_mode": "open"},
                 ],
                 "rule_set_id": RULE_SET,
-                "round_count": round_count,
+                "round_count": 4,
             },
         )
         assert response.status_code == 201, response.text
         payload = response.json()
         assert payload["rule_set_id"] == RULE_SET
-        assert payload["round_count"] == round_count
+        assert payload["round_count"] == 4
+        with database.session() as db:
+            debate = db.get(Debate, payload["id"])
+            debate.rule_snapshot_json = canonical_rule_snapshot_json(
+                rule_set_id=RULE_SET, round_count=round_count
+            )
         detail = client.get(f"/api/v1/debates/{payload['id']}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["round_count"] == round_count
 
 
-def test_every_new_debate_requires_confirmed_persona_but_legacy_history_stays_compatible(
+def test_new_debate_requires_confirmed_persona_and_legacy_creation_is_unavailable(
     app_factory: object,
 ) -> None:
     from fastapi.testclient import TestClient
@@ -432,7 +438,7 @@ def test_every_new_debate_requires_confirmed_persona_but_legacy_history_stays_co
                 {"agent_id": second, "stance_mode": "open"},
             ],
             "rule_set_id": RULE_SET,
-            "round_count": 2,
+            "round_count": 4,
         }
         rejected = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",
@@ -450,8 +456,8 @@ def test_every_new_debate_requires_confirmed_persona_but_legacy_history_stays_co
                 "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
             },
         )
-        assert legacy.status_code == 422, legacy.text
-        assert legacy.json()["code"] == "persona_confirmation_required"
+        assert legacy.status_code == 400, legacy.text
+        assert legacy.json()["code"] == "malformed_request"
 
 
 def _opening_result(turn_id: str, evidence_ids: Sequence[str] = ()) -> MutualLearningTurnResultV1:

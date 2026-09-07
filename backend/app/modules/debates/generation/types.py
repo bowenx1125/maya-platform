@@ -682,6 +682,7 @@ class GenerationContext:
     turn_protocol: Literal["legacy_v1", "segments_v2"] = "legacy_v1"
     round_count: int | None = None
     barrages: tuple[Mapping[str, object], ...] = ()
+    teaching_protocol: str | None = None
 
     def __post_init__(self) -> None:
         if self.turn_protocol not in {"legacy_v1", "segments_v2"}:

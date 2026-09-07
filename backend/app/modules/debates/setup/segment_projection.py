@@ -11,6 +11,7 @@ from app.core.errors import invalid_state
 from app.core.models import Job, KnowledgeChunk, SnapshotDocument, StoredFile
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.schemas import PreviewTurn, SegmentSourceDetail, SegmentTurnPublic
+from app.modules.debates.source_lineage import receipt_scope_is_valid
 
 
 def segment_projection(
@@ -22,7 +23,15 @@ def segment_projection(
         raw = json.loads(turn.structured_json)
         if raw.get("schema_version") != "segment_turn_v2":
             return None, []
-        result = SegmentTurnPublic.model_validate(raw)
+        from app.modules.debates.generation.segments import load_stored_segment_turn_result
+
+        stored = load_stored_segment_turn_result(raw)
+        result = SegmentTurnPublic.model_validate(
+            {
+                "schema_version": stored.schema_version,
+                "segments": [item.as_payload() for item in stored.segments],
+            }
+        )
         if turn.speech != "\n\n".join(row.text for row in result.segments):
             raise ValueError("paragraph text mismatch")
         receipts = json.loads(turn.retrieval_receipts_json or "[]")
@@ -52,15 +61,15 @@ def segment_projection(
             chunk = db.get(KnowledgeChunk, receipt["chunk_id"])
             if (
                 chunk is None
-                or receipt["snapshot_id"] != turn.knowledge_snapshot_id
-                or chunk.snapshot_id != turn.knowledge_snapshot_id
+                or not receipt_scope_is_valid(db, turn, receipt)
+                or chunk.snapshot_id != receipt["snapshot_id"]
                 or chunk.text != receipt["text"]
             ):
                 raise ValueError("source snapshot mismatch")
             document = db.get(SnapshotDocument, chunk.snapshot_document_id)
             if (
                 document is None
-                or document.snapshot_id != turn.knowledge_snapshot_id
+                or document.snapshot_id != receipt["snapshot_id"]
                 or document.source_filename != receipt["source_filename"]
             ):
                 raise ValueError("source document mismatch")
@@ -70,12 +79,30 @@ def segment_projection(
                     source_filename=receipt["source_filename"],
                     excerpt=receipt["text"],
                     query_text=query_texts.get(receipt["query_hash"]),
-                    version_label=participant.version_label,
+                    version_label=(
+                        participant.version_label
+                        if receipt["snapshot_id"] == turn.knowledge_snapshot_id
+                        else _source_version_label(db, turn, receipt["snapshot_id"])
+                    ),
                 )
             )
         return result, sources
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise invalid_state("The saved paragraph sources are invalid.") from exc
+
+
+def _source_version_label(db: Session, turn: DebateTurn, snapshot_id: str) -> str:
+    participant = db.scalar(
+        select(DebateParticipant)
+        .where(
+            DebateParticipant.debate_id == turn.debate_id,
+            DebateParticipant.knowledge_snapshot_id == snapshot_id,
+        )
+        .order_by(DebateParticipant.order_index)
+    )
+    if participant is None:
+        raise ValueError("source snapshot has no classroom participant")
+    return participant.version_label
 
 
 def preview_turn_projection(

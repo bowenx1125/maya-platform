@@ -5584,8 +5584,7 @@
         "type": "object",
         "required": [
           "topic",
-          "participants",
-          "round_count"
+          "participants"
         ],
         "properties": {
           "topic": {
@@ -5611,7 +5610,7 @@
               null
             ],
             "default": null,
-            "description": "Current clients send segments_v2; omission preserves legacy callers."
+            "description": "New debates use the four-round teaching protocol with paragraph output."
           },
           "participants": {
             "type": "array",
@@ -5632,8 +5631,8 @@
           },
           "round_count": {
             "type": "integer",
-            "minimum": 2,
-            "maximum": 5
+            "const": 4,
+            "default": 4
           },
           "total_duration_seconds": {
             "type": "null"
@@ -6309,6 +6308,16 @@
                   null
                 ],
                 "default": null
+              },
+              "teaching_protocol": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "four_round_v1",
+                  null
+                ]
               },
               "final_input_frozen": {
                 "type": "boolean",

@@ -24,6 +24,16 @@ from app.modules.agents.persona import (
     PersonaSpecV2,
 )
 
+from .four_round import (
+    BODY_LIMITS,
+    TEACHING_PROTOCOL,
+    body_count,
+    discussion_context,
+    system_prompt,
+    validate_discussion,
+    validate_memory,
+    visible_predecessors,
+)
 from .types import GenerationContext, SnapshotRetrievalReceipt
 
 SegmentLanguage = Literal["en", "zh"]
@@ -272,6 +282,8 @@ class SegmentHistory:
     speaker: str
     round: int
     text: str
+    participant_id: str | None = None
+    source_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _text(self.speaker, "history.speaker")
@@ -279,14 +291,26 @@ class SegmentHistory:
         _text(self.text, "history.text")
 
     def as_payload(self) -> dict[str, object]:
-        return {"speaker": self.speaker, "round": self.round, "text": self.text}
+        return {
+            "speaker": self.speaker,
+            "round": self.round,
+            "text": self.text,
+            **(
+                {"participant_id": self.participant_id, "source_ids": list(self.source_ids)}
+                if self.participant_id
+                else {}
+            ),
+        }
 
 
 def _history(value: object, index: int) -> SegmentHistory:
     if isinstance(value, SegmentHistory):
         return value
     raw = _object(value, "history item")
-    if set(raw) != {"speaker", "round", "text"}:
+    if set(raw) not in (
+        {"speaker", "round", "text"},
+        {"speaker", "round", "text", "participant_id", "source_ids"},
+    ):
         raise _error(
             "history items must contain speaker, round and text only.",
             code="history_invalid",
@@ -296,6 +320,8 @@ def _history(value: object, index: int) -> SegmentHistory:
         speaker=_text(raw.get("speaker"), "history.speaker"),
         round=_integer(raw.get("round"), "history.round", minimum=1),
         text=_text(raw.get("text"), "history.text"),
+        participant_id=cast(str | None, raw.get("participant_id")),
+        source_ids=tuple(cast(list[str], raw.get("source_ids", []))),
     )
 
 
@@ -457,6 +483,7 @@ class SegmentInputSnapshot:
     source_bindings: tuple[SegmentSourceBinding, ...]
     snapshot_id: str | None = None
     receipt_hash: str = ""
+    discussion_json: str | None = None
 
     @classmethod
     def from_user_payload(
@@ -474,7 +501,7 @@ class SegmentInputSnapshot:
         a local alias rather than a provider-visible evidence identity.
         """
 
-        if set(payload) != {
+        if set(payload) - {"discussion"} != {
             "topic",
             "language",
             "round",
@@ -498,12 +525,19 @@ class SegmentInputSnapshot:
             number=_integer(round_raw.get("number"), "round.number", minimum=1),
             total=_integer(round_raw.get("total"), "round.total", minimum=SEGMENT_MIN_ROUNDS),
         )
+        discussion = validate_discussion(payload["discussion"]) if "discussion" in payload else None
+        if discussion is not None and round_value.total != 4:
+            raise _error("the teaching protocol requires four rounds", code="round_invalid")
         history = tuple(
             _history(item, index)
             for index, item in enumerate(_list(payload.get("history"), "history"))
         )
         for item in history:
-            if item.round >= round_value.number:
+            if (
+                item.round > round_value.number
+                or (item.round == round_value.number and discussion is None)
+                or (round_value.number == 1 and discussion is not None)
+            ):
                 raise _error(
                     "history may contain earlier rounds only.", code="history_round_barrier"
                 )
@@ -547,6 +581,7 @@ class SegmentInputSnapshot:
             receipts=receipt_values,
             source_bindings=bindings,
             snapshot_id=snapshot_id,
+            discussion_json=_canonical(discussion) if discussion is not None else None,
         )
 
     @classmethod
@@ -568,6 +603,7 @@ class SegmentInputSnapshot:
         receipts: Sequence[SnapshotRetrievalReceipt] = (),
         barrages: Sequence[object] = (),
         snapshot_id: str | None = None,
+        discussion: Mapping[str, object] | None = None,
     ) -> SegmentInputSnapshot:
         """Create a snapshot from compact fields without provider access."""
 
@@ -587,6 +623,8 @@ class SegmentInputSnapshot:
                 item.as_payload() if isinstance(item, SegmentBarrage) else item for item in barrages
             ],
         }
+        if discussion is not None:
+            raw["discussion"] = dict(discussion)
         return cls.from_user_payload(raw, receipts=receipts, snapshot_id=snapshot_id)
 
     def __post_init__(self) -> None:
@@ -601,7 +639,12 @@ class SegmentInputSnapshot:
         receipts = tuple(self.receipts)
         bindings = tuple(self.source_bindings)
         for item in history:
-            if not isinstance(item, SegmentHistory) or item.round >= self.round.number:
+            if (
+                not isinstance(item, SegmentHistory)
+                or item.round > self.round.number
+                or (item.round == self.round.number and self.discussion_json is None)
+                or (self.round.number == 1 and self.discussion_json is not None)
+            ):
                 raise _error(
                     "history may contain earlier rounds only.", code="history_round_barrier"
                 )
@@ -625,13 +668,15 @@ class SegmentInputSnapshot:
         ):
             raise _error("barrage IDs must map in B1 order.", code="barrage_invalid")
         receipt_snapshots = {item.snapshot_id for item in receipts}
-        if len(receipt_snapshots) > 1:
+        if len(receipt_snapshots) > 1 and self.discussion_json is None:
             raise _error("receipts crossed snapshot scope.", code="receipt_scope_invalid")
         resolved_snapshot = self.snapshot_id
         if resolved_snapshot is None and receipt_snapshots:
             resolved_snapshot = next(iter(receipt_snapshots))
-        if resolved_snapshot is not None and any(
-            item.snapshot_id != resolved_snapshot for item in receipts
+        if (
+            self.discussion_json is None
+            and resolved_snapshot is not None
+            and any(item.snapshot_id != resolved_snapshot for item in receipts)
         ):
             raise _error(
                 "receipt does not belong to the participant snapshot.",
@@ -660,6 +705,10 @@ class SegmentInputSnapshot:
         object.__setattr__(self, "source_bindings", bindings)
         object.__setattr__(self, "snapshot_id", resolved_snapshot)
         object.__setattr__(self, "receipt_hash", digest)
+
+    @property
+    def discussion(self) -> dict[str, object] | None:
+        return json.loads(self.discussion_json) if self.discussion_json else None
 
     @property
     def phase(self) -> SegmentPhase:
@@ -694,6 +743,7 @@ class SegmentInputSnapshot:
             "history": [item.as_payload() for item in self.history],
             "sources": [item.as_payload() for item in self.sources],
             "barrages": [item.as_payload() for item in self.barrages],
+            **({"discussion": self.discussion} if self.discussion_json is not None else {}),
         }
 
     def to_user_json(self) -> str:
@@ -798,23 +848,36 @@ def build_segment_input(
         item.participant_id: item.agent_name
         for item in (*context.participants, context.participant)
     }
-    predecessors = sorted(
-        context.predecessors,
-        key=lambda item: (item.round_no, item.turn_index, item.turn_id),
-    )
+    predecessors = visible_predecessors(context)
+    teaching = context.teaching_protocol == TEACHING_PROTOCOL
+    pooled = list(receipts)
+    if teaching:
+        ids = {(receipt.snapshot_id, receipt.chunk_id) for receipt in pooled}
+        for predecessor in predecessors:
+            for receipt in predecessor.used_receipts:
+                if (receipt.snapshot_id, receipt.chunk_id) not in ids:
+                    pooled.append(receipt)
+                    ids.add((receipt.snapshot_id, receipt.chunk_id))
+    aliases = {
+        (receipt.snapshot_id, receipt.chunk_id): f"S{index}"
+        for index, receipt in enumerate(pooled, 1)
+    }
     history = tuple(
         SegmentHistory(
             speaker=names[item.participant_id],
             round=item.round_no,
             text=item.speech,
+            participant_id=item.participant_id if teaching else None,
+            source_ids=tuple(
+                dict.fromkeys(aliases[(r.snapshot_id, r.chunk_id)] for r in item.used_receipts)
+            )
+            if teaching
+            else (),
         )
         for item in predecessors
-        if item.round_no < context.turn.round_no and item.participant_id in names
+        if item.participant_id in names
     )
-    if any(
-        item.round_no < context.turn.round_no and item.participant_id not in names
-        for item in predecessors
-    ):
+    if any(item.participant_id not in names for item in predecessors):
         raise _error(
             "a visible predecessor has no safe display name.",
             code="history_speaker_invalid",
@@ -826,9 +889,10 @@ def build_segment_input(
         round_total=_context_round_total(context, round_total),
         persona=persona,
         history=history,
-        receipts=receipts,
+        receipts=pooled,
         barrages=barrages,
         snapshot_id=context.participant.snapshot_id or None,
+        discussion=discussion_context(context) if teaching else None,
     )
 
 
@@ -897,6 +961,8 @@ def build_segment_system_prompt(
     """Return the short human-readable system brief for the segment contract."""
 
     if isinstance(snapshot_or_language, SegmentInputSnapshot):
+        if snapshot_or_language.discussion_json is not None:
+            return system_prompt(snapshot_or_language.round.number, snapshot_or_language.language)
         language = snapshot_or_language.language
         current_phase = snapshot_or_language.phase
     else:
@@ -1102,6 +1168,8 @@ class StoredSegmentTurnResult:
 
     segments: tuple[StoredSegment, ...]
     speech: str
+    question: Mapping[str, str] | None = None
+    discussion_memory: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         segments = tuple(self.segments)
@@ -1169,6 +1237,10 @@ class StoredSegmentTurnResult:
         }
         if include_lineage:
             value["lineage"] = [item.as_payload() for item in self.lineage]
+        if self.question is not None:
+            value["question"] = dict(self.question)
+        if self.discussion_memory is not None:
+            value["discussion_memory"] = dict(self.discussion_memory)
         return value
 
 
@@ -1201,7 +1273,7 @@ def _stored_segment(value: object, index: int) -> StoredSegment:
 def load_stored_segment_turn_result(value: Mapping[str, object]) -> StoredSegmentTurnResult:
     """Parse persisted v2 paragraphs without needing the original snapshot."""
 
-    if not isinstance(value, Mapping) or set(value) not in (
+    if not isinstance(value, Mapping) or set(value) - {"question", "discussion_memory"} not in (
         {"schema_version", "segments"},
         {"schema_version", "segments", "lineage"},
     ):
@@ -1211,7 +1283,22 @@ def load_stored_segment_turn_result(value: Mapping[str, object]) -> StoredSegmen
     raw_segments = value.get("segments")
     if not isinstance(raw_segments, list):
         raise _error("stored segments are invalid.", code="stored_result_invalid")
+    question = value.get("question")
+    if question is not None and (
+        not isinstance(question, Mapping)
+        or set(question) != {"target_agent_id", "text"}
+        or any(
+            not isinstance(question[key], str) or not str(question[key]).strip()
+            for key in ("target_agent_id", "text")
+        )
+        or len(str(question["text"])) > 400
+    ):
+        raise _error("stored question is invalid", code="stored_result_invalid")
     result = StoredSegmentTurnResult(
+        question=cast(Mapping[str, str] | None, question),
+        discussion_memory=validate_memory(value["discussion_memory"])
+        if value.get("discussion_memory") is not None
+        else None,
         segments=tuple(_stored_segment(item, index) for index, item in enumerate(raw_segments)),
         speech="\n\n".join(
             item.get("text", "")
@@ -1268,6 +1355,8 @@ class SegmentTurnResult:
     used_source_ids: tuple[str, ...]
     used_receipts: tuple[SnapshotRetrievalReceipt, ...]
     replied_barrage_ids: tuple[str, ...]
+    question: Mapping[str, str] | None = None
+    discussion_memory: Mapping[str, object] | None = None
 
     @property
     def schema_version(self) -> Literal["segment_turn_v2"]:
@@ -1281,12 +1370,26 @@ class SegmentTurnResult:
 
     @property
     def output(self) -> dict[str, object]:
-        return {"segments": [item.as_payload() for item in self.segments]}
+        return {
+            "segments": [item.as_payload() for item in self.segments],
+            **(
+                {
+                    "question": dict(self.question) if self.question else None,
+                    "discussion_memory": dict(self.discussion_memory)
+                    if self.discussion_memory
+                    else None,
+                }
+                if self.snapshot.discussion_json
+                else {}
+            ),
+        }
 
     def to_stored_result(self) -> StoredSegmentTurnResult:
         """Project validated local references to canonical persisted IDs."""
 
         return StoredSegmentTurnResult(
+            question=self.question,
+            discussion_memory=self.discussion_memory,
             segments=tuple(
                 StoredSegment(
                     text=item.text,
@@ -1365,7 +1468,17 @@ def load_segment_turn_result(
                 **({"support_mode": item.support_mode} if item.support_mode is not None else {}),
             }
         )
-    return validate_segment_output({"segments": local_segments}, snapshot)
+    return validate_segment_output(
+        {
+            "segments": local_segments,
+            **(
+                {"question": stored.question, "discussion_memory": stored.discussion_memory}
+                if snapshot.discussion_json
+                else {}
+            ),
+        },
+        snapshot,
+    )
 
 
 SegmentTurnResultV2 = SegmentTurnResult
@@ -1476,7 +1589,9 @@ def validate_segment_output(value: object, snapshot: SegmentInputSnapshot) -> Se
         if isinstance(value, str)
         else _object(value, "segment output")
     )
-    if set(raw) != {"segments"}:
+    if set(raw) != (
+        {"segments", "question", "discussion_memory"} if snapshot.discussion_json else {"segments"}
+    ):
         raise _error(
             "segment output must contain only segments.",
             code="segment_shape_invalid",
@@ -1491,6 +1606,61 @@ def validate_segment_output(value: object, snapshot: SegmentInputSnapshot) -> Se
         )
     segments = tuple(_output_segment(item, index) for index, item in enumerate(values))
     speech = "\n\n".join(item.text for item in segments)
+    question = None
+    memory = None
+    discussion = snapshot.discussion
+    if discussion is not None:
+        count = body_count(speech, snapshot.language)
+        low, high = BODY_LIMITS[snapshot.language][snapshot.round.number - 1]
+        if not low <= count <= high:
+            raise _error(
+                f"body length {count}; required {low}-{high} ({snapshot.language})",
+                code="segment_length_invalid",
+                pointer="/segments",
+            )
+        if any(item.support_mode is None for item in segments):
+            raise _error(
+                "support_mode is required", code="support_mode_invalid", pointer="/segments"
+            )
+        question = raw.get("question")
+        if snapshot.round.number == 2:
+            if (
+                not isinstance(question, Mapping)
+                or set(question) != {"target_agent_id", "text"}
+                or question.get("target_agent_id") != discussion["question_target_id"]
+                or not isinstance(question.get("text"), str)
+                or not str(question["text"]).strip()
+                or len(str(question["text"])) > 400
+            ):
+                raise _error(
+                    "question must target the assigned Agent and contain text",
+                    code="question_route_invalid",
+                    pointer="/question",
+                )
+        elif question is not None:
+            raise _error(
+                "question is only emitted in round two",
+                code="question_route_invalid",
+                pointer="/question",
+            )
+        memory = raw.get("discussion_memory")
+        if snapshot.round.number == 3:
+            try:
+                memory = validate_memory(
+                    memory, {str(a["id"]) for a in cast(list[dict[str, str]], discussion["agents"])}
+                )
+            except ValueError as exc:
+                raise _error(
+                    "invalid discussion memory",
+                    code="discussion_memory_invalid",
+                    pointer="/discussion_memory",
+                ) from exc
+        elif memory is not None:
+            raise _error(
+                "discussion memory is only emitted in round three",
+                code="discussion_memory_invalid",
+                pointer="/discussion_memory",
+            )
     if len(speech) > SEGMENT_MAX_TEXT_CHARS:
         raise _error(
             "joined speech exceeds 8000 characters.",
@@ -1549,6 +1719,8 @@ def validate_segment_output(value: object, snapshot: SegmentInputSnapshot) -> Se
             )
 
     return SegmentTurnResult(
+        question=cast(Mapping[str, str] | None, question),
+        discussion_memory=cast(Mapping[str, object] | None, memory),
         segments=segments,
         speech=speech,
         lineage=_lineage(segments),

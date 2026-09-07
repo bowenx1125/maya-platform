@@ -13,6 +13,14 @@ const MIN_ROUND_COUNT = 2;
 const MAX_ROUND_COUNT = 5;
 const DEFAULT_ROUND_COUNT = 2;
 
+export function teachingRoundLabel(round: number, locale: "en" | "zh"): string {
+  const labels =
+    locale === "zh"
+      ? ["RAG 立论", "讨论", "回应", "总结"]
+      : ["RAG Opening", "Discussion", "Response", "Conclusion"];
+  return labels[round - 1] ?? "";
+}
+
 function valid(value: unknown): number | null {
   return typeof value === "number" &&
     Number.isInteger(value) &&
