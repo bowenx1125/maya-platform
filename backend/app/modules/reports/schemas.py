@@ -107,6 +107,9 @@ class Report(ClosedModel):
     generation_status: ReportStatus
     latest_attempt_status: ReportStatus
     insight: BarrageInsight
+    # Present for new segment manifests; absent on older reports whose
+    # paragraph output had no support_mode field.
+    score_summary: ReportScoreSummary | None = None
     active_revision_id: UUID | None = None
     current_success_revision: ReadyReportRevision | None = None
 
@@ -215,6 +218,50 @@ class ManifestVote(ClosedModel):
     count: int = Field(ge=0)
 
 
+class ReportAgentScore(ClosedModel):
+    """Code-owned evidence grade counts for one public Agent slot."""
+
+    slot: Literal["A", "B", "C", "D", "E"]
+    direct_count: int = Field(ge=0)
+    contextual_count: int = Field(ge=0)
+    no_match_count: int = Field(ge=0)
+    ungraded_count: int = Field(ge=0)
+    total_points: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_points(self) -> ReportAgentScore:
+        expected = self.direct_count * 5 + self.contextual_count * 2
+        if self.total_points != expected:
+            raise ValueError("score total does not match grade counts")
+        return self
+
+
+class ReportScoreSummary(ClosedModel):
+    """Deterministic per-Agent grade summary carried by new v2 reports."""
+
+    agents: list[ReportAgentScore] = Field(min_length=2, max_length=5)
+    direct_count: int = Field(ge=0)
+    contextual_count: int = Field(ge=0)
+    no_match_count: int = Field(ge=0)
+    ungraded_count: int = Field(ge=0)
+    total_points: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_totals(self) -> ReportScoreSummary:
+        if len({item.slot for item in self.agents}) != len(self.agents):
+            raise ValueError("score summary has duplicate Agent slots")
+        expected = {
+            "direct_count": sum(item.direct_count for item in self.agents),
+            "contextual_count": sum(item.contextual_count for item in self.agents),
+            "no_match_count": sum(item.no_match_count for item in self.agents),
+            "ungraded_count": sum(item.ungraded_count for item in self.agents),
+            "total_points": sum(item.total_points for item in self.agents),
+        }
+        if any(getattr(self, key) != value for key, value in expected.items()):
+            raise ValueError("score summary totals do not match Agent rows")
+        return self
+
+
 class ManifestInsightItem(ClosedModel):
     item_id: UUID
     order_index: int = Field(ge=0)
@@ -310,6 +357,9 @@ class ReportInputManifestV2(_ReportInputManifestBase):
     turn_sources: list[ManifestTurnSourceV2]
     classroom_barrages: list[ManifestBarrage] = Field(default_factory=list)
     replies: list[ManifestReply] = Field(default_factory=list)
+    # Optional so manifests written before paragraph grading retain their
+    # exact canonical bytes and input hash.
+    score_summary: ReportScoreSummary | None = None
 
     @model_validator(mode="after")
     def validate_segment_manifest(self) -> ReportInputManifestV2:
@@ -331,10 +381,23 @@ class ReportInputManifestV2(_ReportInputManifestBase):
         used_ids = {evidence_id for turn in self.turns for evidence_id in turn.used_evidence_ids}
         if not used_ids.issubset(source_ids):
             raise ValueError("segment report manifest evidence is outside source rows")
+        if self.score_summary is not None:
+            participant_slots = {item.slot for item in self.participants}
+            score_slots = {item.slot for item in self.score_summary.agents}
+            if score_slots != participant_slots:
+                raise ValueError("segment report score rows do not match participants")
         return self
 
     def canonical_payload(self) -> dict[str, Any]:
         payload = super().canonical_payload()
+        if payload.get("score_summary") is None:
+            payload.pop("score_summary", None)
+        elif isinstance(payload.get("score_summary"), dict):
+            score_summary = payload["score_summary"]
+            if isinstance(score_summary.get("agents"), list):
+                score_summary["agents"] = sorted(
+                    score_summary["agents"], key=lambda row: str(row["slot"])
+                )
         payload["classroom_barrages"] = sorted(
             payload["classroom_barrages"],
             key=lambda row: (str(row["barrage_id"]), int(row["turn_index"])),
@@ -399,6 +462,8 @@ __all__ = [
     "ContinueRealReportRequest",
     "ReportInputManifestV1",
     "ReportInputManifestV2",
+    "ReportAgentScore",
+    "ReportScoreSummary",
     "ReportRevisionSummary",
     "ReportSectionOutput",
 ]

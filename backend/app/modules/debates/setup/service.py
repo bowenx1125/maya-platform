@@ -89,10 +89,10 @@ def _as_uuid(value: str | UUID) -> UUID:
 def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
     """Derive the closed public readiness bit without persisting a column."""
 
-    if playback.status != "waiting_next" or playback.mode != "live" or not playback.current_turn_id:
+    if playback.status != "waiting_next" or not playback.current_turn_id:
         return False
     debate = db.get(Debate, debate_id)
-    if debate is None or debate.status != "running":
+    if debate is None:
         return False
     turns = list(
         db.scalars(
@@ -101,10 +101,108 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
             .order_by(DebateTurn.turn_index, DebateTurn.id)
         ).all()
     )
-    current = next((row for row in turns if row.id == playback.current_turn_id), None)
-    if current is None:
+
+    if playback.mode == "replay":
+        if (
+            debate.status not in {"debate_finished", "completed"}
+            or playback.replay_scope != "all"
+            or playback.replay_index is None
+        ):
+            return False
+        queue_ids: list[str] = []
+        raw_queue = getattr(playback, "replay_turn_ids_json", None)
+        if raw_queue:
+            try:
+                parsed_queue = json.loads(str(raw_queue))
+            except (TypeError, ValueError):
+                return False
+            if not isinstance(parsed_queue, list):
+                return False
+            queue_ids = [str(item) for item in parsed_queue]
+        if queue_ids:
+            if len(set(queue_ids)) != len(queue_ids):
+                return False
+            by_id = {str(row.id): row for row in turns}
+            if any(item not in by_id for item in queue_ids):
+                return False
+            queue = [by_id[item] for item in queue_ids]
+        else:
+            # Migrations before the durable queue column are still readable.
+            queue = [
+                row
+                for row in turns
+                if row.publication_status == "public" and row.generation_status == "final_ready"
+            ]
+        if not queue or any(row.publication_status != "public" for row in queue):
+            return False
+        try:
+            indexes = [int(row.turn_index) for row in queue]
+            replay_index = int(playback.replay_index)
+        except (TypeError, ValueError):
+            return False
+        if indexes != list(range(len(queue))) or not 0 <= replay_index < len(queue):
+            return False
+        current = queue[replay_index]
+        if str(current.id) != str(playback.current_turn_id):
+            return False
+        if replay_index + 1 >= len(queue):
+            return False
+        successor = queue[replay_index + 1]
+        adjacent = [row for row in turns if row.turn_index == current.turn_index + 1]
+        if len(adjacent) != 1 or str(adjacent[0].id) != str(successor.id):
+            return False
+        if successor.generation_status != "final_ready" or not successor.audio_file_id:
+            return False
+        if not uses_segment_protocol(debate):
+            retained = db.scalar(
+                select(Course.current_audio_debate_id).where(Course.id == debate.course_id)
+            )
+            if str(retained) != str(debate_id):
+                return False
+        try:
+            from app.modules.debates.generation.evidence_trace import public_evidence_trace
+
+            for row in (current, successor):
+                raw_trace = getattr(row, "evidence_trace_json", None)
+                if isinstance(raw_trace, str):
+                    if not raw_trace.strip():
+                        return False
+                    raw_trace = json.loads(raw_trace)
+                public_evidence_trace([] if raw_trace is None else raw_trace)
+        except (TypeError, ValueError):
+            return False
+        stored = db.get(StoredFile, successor.audio_file_id)
+        if stored is None:
+            return False
+        settings = db.info.get("maya_settings")
+        data_root = getattr(settings, "resolved_data_root", None)
+        if data_root is None:
+            return False
+        from app.modules.debates.playback._core import PlaybackCore
+        from app.modules.debates.playback.audio import AudioStore
+
+        return (
+            PlaybackCore._validate_retained_audio_facts(
+                AudioStore(data_root),
+                course_id=str(debate.course_id),
+                debate_id=str(debate.id),
+                turn_id=str(successor.id),
+                record_kind=stored.kind,
+                record_state=stored.state,
+                relative_path=stored.relative_path,
+                expected_sha256=stored.sha256,
+                expected_size=stored.size_bytes,
+                expected_duration_ms=successor.audio_duration_ms,
+            )
+            is not None
+        )
+
+    if playback.mode != "live" or debate.status != "running":
         return False
-    successors = [row for row in turns if row.turn_index == current.turn_index + 1]
+    live_current = next((row for row in turns if row.id == playback.current_turn_id), None)
+    if live_current is None:
+        return False
+    successors = [row for row in turns if row.turn_index == live_current.turn_index + 1]
     if len(successors) != 1:
         return False
     successor = successors[0]

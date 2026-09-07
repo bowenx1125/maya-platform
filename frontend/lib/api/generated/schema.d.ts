@@ -1725,6 +1725,8 @@ export interface components {
             speaking_style: components["schemas"]["PersonaSpeakingStyle"];
         };
         DebateSegment: {
+            /** @enum {string|null} */
+            support_mode?: "direct" | "contextual" | "no_match" | null;
             reply_to: string | null;
             source_ids: string[];
             text: string;
@@ -2087,8 +2089,26 @@ export interface components {
             /** @enum {string} */
             latest_attempt_status: "not_started" | "generating" | "ready" | "failed";
             insight: components["schemas"]["BarrageInsight"];
+            score_summary?: components["schemas"]["ReportScoreSummary"] | null;
             active_revision_id?: components["schemas"]["Uuid"] | null;
             current_success_revision?: components["schemas"]["ReadyReportRevision"] | null;
+        };
+        ReportAgentScore: {
+            /** @enum {string} */
+            slot: "A" | "B" | "C" | "D" | "E";
+            direct_count: number;
+            contextual_count: number;
+            no_match_count: number;
+            ungraded_count: number;
+            total_points: number;
+        };
+        ReportScoreSummary: {
+            agents: components["schemas"]["ReportAgentScore"][];
+            direct_count: number;
+            contextual_count: number;
+            no_match_count: number;
+            ungraded_count: number;
+            total_points: number;
         };
         JobStatus: {
             id: components["schemas"]["Uuid"];

@@ -88,7 +88,7 @@ function teacherPageApi() {
 }
 
 describe("Wave 3 dedicated teacher page", () => {
-  it("hides legacy claim scores for the segments protocol", async () => {
+  it("restores Agent scores for the segments protocol", async () => {
     const detail = {
       ...finishedDetail(),
       turn_protocol: "segments_v2" as const,
@@ -103,7 +103,10 @@ describe("Wave 3 dedicated teacher page", () => {
     );
 
     await screen.findByText("Report");
-    expect(screen.queryByRole("heading", { name: "Agent scores" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Agent scores" })).toBeTruthy();
+    expect(screen.getByText("Direct evidence +5")).toBeTruthy();
+    expect(screen.getByText("Indirect evidence +2")).toBeTruthy();
+    expect(screen.getByText("No match +0")).toBeTruthy();
   });
 
   it("does not mount any downstream reader for a partial Finish", async () => {

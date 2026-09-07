@@ -15,6 +15,30 @@ export type EvidenceSupportMode =
 
 export type EvidenceGrade = "direct" | "indirect" | "none";
 
+export type SegmentEvidence = {
+  source_ids: readonly string[];
+  support_mode?: "direct" | "contextual" | "no_match" | null;
+};
+
+/** Older cited paragraphs did not record a grade; never invent one. */
+export function segmentEvidenceGrade(
+  segment: SegmentEvidence,
+): EvidenceGrade | null {
+  if (!segment.support_mode) return null;
+  if (segment.source_ids.length === 0) {
+    return segment.support_mode === "no_match" ? "none" : null;
+  }
+  if (segment.support_mode === "direct") return "direct";
+  if (segment.support_mode === "contextual") return "indirect";
+  return null;
+}
+
+export const EVIDENCE_GRADE_LABELS: Record<EvidenceGrade, string> = {
+  direct: "Direct evidence +5",
+  indirect: "Indirect evidence +2",
+  none: "No match +0",
+};
+
 /** Points awarded per graded claim when scoring an Agent. */
 export const EVIDENCE_GRADE_POINTS: Record<EvidenceGrade, number> = {
   direct: 5,

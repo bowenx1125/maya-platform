@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
+from app.modules.debates.round_count import uses_segment_protocol
 
 from ._core import (
     AudioAuthorization,
@@ -248,6 +249,7 @@ class PlaybackSessionMixin(PlaybackCore):
             metadata = self._validated_turn_audio(db, debate, turn)
             if (
                 action == "replay"
+                and not uses_segment_protocol(debate)
                 and self.repository.current_audio_debate_id(db, self._course_id(debate))
                 != debate_id
             ):
@@ -313,6 +315,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     post_metadata = self._validated_turn_audio(db, debate, turn)
                     pointer_matches = (
                         action != "replay"
+                        or uses_segment_protocol(debate)
                         or self.repository.current_audio_debate_id(db, self._course_id(debate))
                         == debate_id
                     )
@@ -916,7 +919,6 @@ class PlaybackSessionMixin(PlaybackCore):
         if self.audio_store is None:
             raise not_found()
         current_pointer = self.repository.current_audio_debate_id(db, self._course_id(debate))
-        from app.modules.debates.round_count import uses_segment_protocol
 
         if not uses_segment_protocol(debate) and current_pointer != debate_id:
             raise PlatformError("audio_not_retained", "This audio is no longer retained.", 410)

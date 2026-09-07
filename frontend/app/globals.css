@@ -926,7 +926,7 @@ details > summary {
 .agent-row:hover,
 .published-card:hover {
   border-color: #cfc5e6;
-  background: #fff;
+  background: #fff9ed;
 }
 
 .list-row > span:first-child,
@@ -1112,10 +1112,10 @@ details > summary {
 .published-card {
   min-width: 0;
   padding: 22px;
-  border: 1px solid var(--line);
+  border: 1px solid #e5d8bf;
   border-radius: 22px;
   color: inherit;
-  background: rgba(255, 255, 255, 0.8);
+  background: #fbf4e5;
   box-shadow: 0 14px 38px rgba(72, 61, 105, 0.05);
   text-decoration: none;
 }

@@ -416,10 +416,20 @@ function normaliseSegment(
     isNonEmptyString(sourceId) ? sourceId : null,
   );
   if (sourceIds.some((sourceId) => sourceId === null)) return null;
+  const supportMode = value.support_mode;
+  if (
+    supportMode !== undefined &&
+    supportMode !== null &&
+    supportMode !== "direct" &&
+    supportMode !== "contextual" &&
+    supportMode !== "no_match"
+  )
+    return null;
   return {
     text: value.text,
     source_ids: sourceIds as string[],
     reply_to: value.reply_to as string | null,
+    ...(supportMode !== undefined ? { support_mode: supportMode } : {}),
   };
 }
 

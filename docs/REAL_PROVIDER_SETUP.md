@@ -1,7 +1,7 @@
 # Turning on the real providers
 
-All six selectors ship as `mock`, and the Demo runs end to end that way. Three
-of them can run against DashScope: `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
+The Demo ships in Mock mode. Three selectors can run against DashScope:
+`LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
 `EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
 Demo.
 
@@ -20,9 +20,10 @@ That row is **operator data, not repository data**. It records which supplier
 documents were read and when — the privacy notice, service terms and FAQ URLs,
 their retrieval timestamps, and the SHA-256 of each document as retrieved. It
 is deliberately not committed: it names a workspace resource, and its content
-is an attestation that a person reviewed those documents. It also lives only in
-the runtime database, so **deleting `data/` deletes it** and it has to be
-imported again.
+is an attestation that a person reviewed those documents. Policies imported by
+the reviewing helper are also saved under the ignored
+`backend/config/provider-policies/` directory and restored on startup. A policy
+imported only into the database must be backed up separately before resetting data.
 
 Keep your reviewed policy JSON outside the repository and back it up.
 
@@ -94,9 +95,10 @@ policy fails before it reaches the database.
 1. Set the three selectors to `dashscope` in `.env`.
 2. `docker compose up -d` and confirm the composition strip reports `REAL` for
    Embedding, Debate LLM and Maya Report.
-3. Run one debate. The provider disclosure the teacher confirms is reached
-   through `/provider/data-call/pending`, keyed by the manifest the turn
-   creates.
+3. Publish a new Agent version with a real knowledge snapshot, then create a
+   new Preview. Complete the teacher disclosure for that publication/debate;
+   the UI opens the exact manifest requiring confirmation. Generate Report
+   explicitly after the final classroom round and Conclude.
 
 Seeded Agents keep Mock embedding identity by design. A real Snapshot embedding
 belongs to an Agent a student publishes, never to a seeded one.

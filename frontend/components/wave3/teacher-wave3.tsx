@@ -262,12 +262,10 @@ export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
               vote totals, the barrages, the whole transcript and the report
               history underneath, in a second copy that read as a different
               screen. */}
-          {detail.turn_protocol !== "segments_v2" ? (
-            <AgentScores
-              participants={detail.participants}
-              turns={transcript?.turns ?? []}
-            />
-          ) : null}
+          <AgentScores
+            participants={detail.participants}
+            turns={transcript?.turns ?? detail.public_turns}
+          />
 
           <ReportPanel
             key={`${debateId}-${report?.latest_attempt_status ?? "none"}`}

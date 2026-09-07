@@ -5975,6 +5975,18 @@
       "DebateSegment": {
         "additionalProperties": false,
         "properties": {
+          "support_mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "direct",
+              "contextual",
+              "no_match",
+              null
+            ]
+          },
           "reply_to": {
             "type": [
               "string",
@@ -7590,6 +7602,16 @@
           "insight": {
             "$ref": "#/components/schemas/BarrageInsight"
           },
+          "score_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportScoreSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "active_revision_id": {
             "oneOf": [
               {
@@ -7609,6 +7631,92 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "ReportAgentScore": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slot",
+          "direct_count",
+          "contextual_count",
+          "no_match_count",
+          "ungraded_count",
+          "total_points"
+        ],
+        "properties": {
+          "slot": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E"
+            ]
+          },
+          "direct_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contextual_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "no_match_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ungraded_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_points": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ReportScoreSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agents",
+          "direct_count",
+          "contextual_count",
+          "no_match_count",
+          "ungraded_count",
+          "total_points"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/ReportAgentScore"
+            }
+          },
+          "direct_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contextual_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "no_match_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ungraded_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_points": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },

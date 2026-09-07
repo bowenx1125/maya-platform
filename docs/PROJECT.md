@@ -31,8 +31,9 @@ preview and the earlier all-classroom-provider-free proposal:
   through a separate Provider interface. Its failure does not fail the debate.
 - New Agent Markdown drops Debate strategy and Boundaries. Five remaining Persona
   sections feed generation; legacy published versions remain immutable/readable.
-- The owner has approved segments with text, source_ids and
-  reply_to. Seven compact input groups replace verbose metadata and duplicated
+- The owner has approved segments with text, source_ids, reply_to and optional
+  support_mode (September 8: restore direct +5/contextual +2/no_match 0 grades).
+  Seven compact input groups replace verbose metadata and duplicated
   output analysis. The candidate segment prompt/schema is deployed for debugging; model configuration is unchanged.
 - Delete existing debate-owned run records while preserving authored Agents,
   knowledge/snapshots, accounts and Provider configuration. Authorized offline cleanup completed on September 7.
@@ -51,12 +52,12 @@ consecutive 2x2 sessions (37 complete sessions, 412 turns, 37 reports), and
 knowledge conditions. Predeclared factual targets and source support, not citation
 counts, determine RAG quality. Normal cases require no manual rescue; one disclosed
 structure repair is allowed and first-attempt success is reported separately.
-Fault injection tests require correct recovery. Real audio/3D browser acceptance
-cannot be replaced with Mock results. Section 14 of the proposal defines the
+Fault injection tests require correct recovery. On September 8 the owner kept
+TTS/Voice Mock and took over real classroom/browser acceptance personally.
+Section 14 of the proposal defines the
 approved criteria and debug loop. The owner explicitly authorized implementation,
-runtime cleanup and the agreed real acceptance work. Three Luna Max workers now
-own Persona v2, the pure segment protocol and acceptance fixtures respectively;
-the main agent owns recovery fixes, shared contracts, integration and testing.
+runtime cleanup and the agreed real acceptance work. Luna Max workers handle bounded
+coding tasks; the main agent owns shared contracts, integration and real testing.
 
 The new flow requires replacing terminal-status-only Bench eligibility with
 complete non-final preview readiness, a final-input freeze and live final-turn
@@ -80,19 +81,20 @@ preserved. Updated pages and worksheet regions were visually checked.
 
 ### UI follow-up (September 7)
 
-At the owner's request, the Bench title is left-aligned within the figure area.
-Delete Voice/Delete All now live beside Resume in the Debate list, sharing its
-warm card and a vertical separator; playback/Preview retain only audio generation
-when needed. Deletion fetches current revision/control values only on click and
-refreshes the list afterward. The owner explicitly waived tests for this bounded
-UI follow-up and requested a GitHub push; prior acceptance gaps remain unchanged.
+The Bench title is left-aligned. Delete Voice/All sit beside Resume in the warm
+Debate list card. Stage list, Dashboard, creation and Preview use warm yellow;
+Stage rows have only Open Stage. Preview navigation is inline, Audio Ready
+replaces Saved, and its progress card is removed; list preparation shows x / y
+turns. Open Message/Hide toggles the same QR without closing interaction.
+Conclude opens the report; grades appear only there. Duplicate insight/report
+status cards are removed. The owner delegates final classroom testing to himself.
 
 ### Implementation checkpoint (September 7, not release acceptance)
 
-The owner requested a CLI usage check and pause at an atomic boundary
-when 8% remains, then a GitHub upload. CLI `/status` confirmed 14%; the
-later account reading reached 8%. New implementation and paid tests stopped at
-that threshold. Complete real acceptance remains pending.
+The owner resumed after the September 7 pause and requested GitHub delivery plus
+a final Docker restart. Backend grading/replay checks are complete; classroom
+acceptance remains the owner's manual task. No new real-provider test run was
+started during this resume. Removing a usage stop never authorizes reset credits.
 
 - Five-section Persona, paragraphs and accepted-result recovery are integrated.
   Five synthetic Agents have real Embedding snapshots; three baseline Agents use Mock.
@@ -126,25 +128,25 @@ that threshold. Complete real acceptance remains pending.
 - Headless Chrome verified fixes for missing/obscured figures, lost RAG fields,
   oversized headings and failed drafts labeled Thinking. Report dialog/Escape
   works. Inspected desktop pages had no horizontal overflow or page errors.
-- Replay now waits for WebSocket opening before acquiring control. A missing
-  audio_ready field in the runtime WS DTO was then fixed. Actual browser Replay
-  returned HTTP 200, audio 206 and playing/ended events for its first saved clip.
-  Continuing the remaining replay turns timed out waiting for Next; this remains
-  unresolved and must be investigated before claiming whole-replay acceptance.
-- A full regression exposed a phone-shaped numeric suffix inside an allowed
-  public UUID. The privacy gate now exempts only a complete UUID in typed public
-  ID fields from the phone scan; real identity tokens and phone prose still fail.
-  Focused and full regression tests pass.
-- Latest full passing baseline: 1,211 backend and 250 frontend tests, lint/types,
-  format, generated API/WS and route checks (82 declared, 61 implemented, no
-  placeholders). Final schema/privacy follow-ups passed the full regression.
-  Local backend/frontend are healthy; schema head 0023. LLM/Embedding/Report are
-  DashScope, Voice/TTS are Mock. The last UUID privacy fix is not yet in the image.
+- Replay readiness now supports completed debates and shares StoredFile/WAV
+  path, hash, size and duration validation with media access. Six focused SQL/HTTP
+  checks cover ordered Replay, missing/corrupt audio and actual DeleteVoice.
+  Whole classroom replay remains for the owner's manual acceptance.
+- Paragraph support_mode restores direct +5/contextual +2/no_match 0; missing
+  legacy grades remain ungraded. The same saved grades feed Check RAG and Report.
+  Per-turn evidence IDs are validated before report source deduplication, fixing
+  a false rejection when one chunk is reused across rounds. Focused checks pass.
+- Typed public UUIDs no longer trigger phone detection; actual identity tokens
+  and phone prose still fail. This privacy fix is included in the rebuilt backend.
+- Backend regression: 1,244 passed; the sole sandbox-blocked localhost wire test
+  passed separately with port access. New grading/report checks (43), Replay (6)
+  and runner checks passed. Frontend: 253 passed before the final progress-copy
+  edit; subsequent classroom tests waived by owner. Ruff/mypy/format and contracts
+  passed: 82 declared routes, 61 implemented, no placeholders. Schema head: 0023.
 
-Next: fix completed-debate replay readiness, repeat browser checks, diagnose
-provider connections, then run all 37 sessions and 72 RAG answers. Real TTS remains
-an external gate. Keep failed ledgers and never resend unknown operations. Private
-artifacts/backups and updated Word/Excel remain outside Git in Maya outputs.
+Next: GitHub delivery and Docker restart, then owner-led manual classroom/RAG
+acceptance. TTS/Voice stay Mock. Keep failed ledgers and never resend unknown
+operations. Private artifacts and backups remain outside Git in Maya outputs.
 
 ## Product boundaries
 

@@ -255,17 +255,18 @@
   }
 }
 
-/* ---------- corner join card ---------- */
-
 .joinCard {
   position: absolute;
   z-index: 9;
-  top: 20px;
-  left: 20px;
-  display: flex;
+  top: 50%;
+  left: calc((100% - 480px) / 2);
+  transform: translate(-50%, -50%);
+  display: grid;
   align-items: center;
+  justify-items: center;
+  width: min(390px, calc(100% - 520px));
   gap: 11px;
-  padding: 9px 13px 9px 9px;
+  padding: 20px;
   border: 1px solid rgba(38, 31, 24, 0.12);
   border-radius: 12px;
   background: rgba(252, 250, 245, 0.94);
@@ -274,9 +275,9 @@
 
 .joinCard svg {
   display: block;
-  width: 62px;
-  height: 62px;
-  border-radius: 4px;
+  width: min(340px, 100%, calc(100dvh - 230px));
+  height: auto;
+  border-radius: 10px;
 }
 
 .joinCopy {
@@ -309,7 +310,7 @@
   position: absolute;
   z-index: 9;
   left: 20px;
-  top: 116px;
+  bottom: 20px;
   padding: 6px 12px 7px;
   border: 1px solid rgba(38, 31, 24, 0.14);
   border-radius: 999px;
@@ -340,9 +341,19 @@
     max-height: calc(100% - 24px);
   }
 
+  .joinCard {
+    top: 22dvh;
+    left: 50%;
+    width: min(310px, calc(100% - 32px));
+    padding: 12px;
+  }
+
   .joinCard svg {
-    width: 46px;
-    height: 46px;
+    width: min(250px, calc(44dvh - 110px));
+  }
+
+  .barrageToggle {
+    bottom: calc(56dvh + 24px);
   }
 
   .joinCopy {

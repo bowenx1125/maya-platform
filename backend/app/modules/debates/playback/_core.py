@@ -797,6 +797,55 @@ class PlaybackCore:
             except TypeError:
                 return None
 
+    @staticmethod
+    def _validate_retained_audio_facts(
+        audio_store: AudioStore,
+        *,
+        course_id: str,
+        debate_id: str,
+        turn_id: str,
+        record_kind: Any,
+        record_state: Any,
+        relative_path: Any,
+        expected_sha256: Any,
+        expected_size: Any,
+        expected_duration_ms: Any,
+    ) -> AudioMetadata | None:
+        """Validate one retained audio row and the bytes it names.
+
+        Setup detail and playback controls must make the same decision. Keep
+        the canonical-path, digest, size and WAV validation in this shared
+        seam; callers only resolve the durable row shape for their adapter.
+        """
+
+        if record_kind != "debate_audio" or record_state != "active":
+            return None
+        try:
+            canonical = audio_store.relative_path(course_id, debate_id, turn_id)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(relative_path, str) or relative_path != canonical:
+            return None
+        try:
+            size_value = int(expected_size) if expected_size is not None else None
+            duration_value = int(expected_duration_ms) if expected_duration_ms is not None else None
+        except (TypeError, ValueError):
+            return None
+        if duration_value is None or duration_value <= 0:
+            return None
+        metadata = audio_store.validate_file(
+            course_id=course_id,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            relative_path=relative_path,
+            expected_sha256=(str(expected_sha256) if expected_sha256 is not None else None),
+            expected_size_bytes=size_value,
+            expected_duration_ms=duration_value,
+        )
+        if metadata is not None:
+            audio_store.rehydrate(metadata)
+        return metadata
+
     def _validated_turn_audio(
         self,
         db: Any,
@@ -818,11 +867,7 @@ class PlaybackCore:
         turn_id = str(self._get(turn, "id", default=""))
         if not turn_id:
             return None
-        try:
-            course_id = self._course_id(debate)
-            canonical = self.audio_store.relative_path(course_id, debate_id, turn_id)
-        except (TypeError, ValueError):
-            return None
+        course_id = self._course_id(debate)
 
         record = self._retained_audio_record(db, debate, turn)
         if record is not None:
@@ -831,10 +876,8 @@ class PlaybackCore:
                 file_id is not None and str(self._get(record, "id", default="")) != str(file_id)
             ):
                 return None
-            if self._get(record, "kind", default=None) != "debate_audio":
-                return None
-            if self._get(record, "state", default=None) != "active":
-                return None
+            record_kind = self._get(record, "kind", default=None)
+            record_state = self._get(record, "state", default=None)
             relative_path = self._get(record, "relative_path", default=None)
             expected_sha256 = self._get(record, "sha256", default=None)
             expected_size = self._get(record, "size_bytes", "size", default=None)
@@ -854,6 +897,8 @@ class PlaybackCore:
             # tests and controller doubles.
             if not isinstance(self.repository, MemoryPlaybackRepository):
                 return None
+            record_kind = "debate_audio"
+            record_state = "active"
             relative_path = self._get(turn, "audio_relative_path", default=None)
             expected_sha256 = self._get(turn, "audio_sha256", default=None)
             expected_size = self._get(turn, "audio_size_bytes", default=None)
@@ -865,25 +910,18 @@ class PlaybackCore:
                         expected_size if expected_size is not None else cached.size_bytes
                     )
 
-        if not isinstance(relative_path, str) or relative_path != canonical:
-            return None
-        try:
-            size_value = int(expected_size) if expected_size is not None else None
-        except (TypeError, ValueError):
-            return None
-        metadata = self.audio_store.validate_file(
+        return self._validate_retained_audio_facts(
+            self.audio_store,
             course_id=course_id,
             debate_id=debate_id,
             turn_id=turn_id,
+            record_kind=record_kind,
+            record_state=record_state,
             relative_path=relative_path,
-            expected_sha256=(str(expected_sha256) if expected_sha256 is not None else None),
-            expected_size_bytes=size_value,
+            expected_sha256=expected_sha256,
+            expected_size=expected_size,
+            expected_duration_ms=self._get(turn, "audio_duration_ms", default=None),
         )
-        if metadata is not None:
-            # Rehydration happens only after the DB facts and bytes have both
-            # passed validation; a stale cache can never grant eligibility.
-            self.audio_store.rehydrate(metadata)
-        return metadata
 
     def _replay_audio_ready(self, db: Any, debate: Any, turn: Any) -> bool:
         try:
@@ -1147,7 +1185,8 @@ class PlaybackCore:
         """
 
         if (
-            state.mode != "replay"
+            self._get(debate, "status", default="") not in {"debate_finished", "completed"}
+            or state.mode != "replay"
             or state.status != "waiting_next"
             or state.current_turn_id is None
             or state.replay_index is None
@@ -1156,7 +1195,10 @@ class PlaybackCore:
         queue, valid = self._replay_queue(db, debate, state)
         if not valid:
             return False
-        index = int(state.replay_index)
+        try:
+            index = int(state.replay_index)
+        except (TypeError, ValueError):
+            return False
         if index < 0 or index >= len(queue):
             return False
         current = queue[index]

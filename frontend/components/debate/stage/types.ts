@@ -138,6 +138,7 @@ export type SegmentTurnPublic = {
   segments: Array<{
     text: string;
     source_ids: string[];
+    support_mode?: "direct" | "contextual" | "no_match" | null;
     reply_to: string | null;
   }>;
 };

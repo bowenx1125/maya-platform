@@ -1285,6 +1285,7 @@ def _execute_enabled_case(
             build_manifest_hash=manifest.build_manifest_hash,
             confirmation_revision=manifest.operation_revision,
             outbound_manifest=LLMOutboundManifestV1(),
+            queries=subqueries,
         )
         outcome = runtime.run(prepared, context=context, confirmed=True)
         if outcome.status != "succeeded" or not isinstance(outcome.result, SegmentTurnResult):

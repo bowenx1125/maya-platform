@@ -26,14 +26,14 @@ const COPY = {
     title: "Classroom Stage",
     unavailable: "No teacher course is available for this account.",
     empty: "No prepared debates.",
-    open: "Open on the bench",
+    open: "Open Stage",
   },
   zh: {
     eyebrow: "Debates（beta）",
     title: "课堂讲席",
     unavailable: "当前账号没有可用的教师课程。",
     empty: "还没有准备好的辩论。",
-    open: "在讲席上打开",
+    open: "打开讲席",
   },
 } as const;
 
@@ -113,7 +113,7 @@ export function BetaDebateList() {
                   </span>
                 </div>
                 <Link
-                  className="primary-action"
+                  className={styles.openAction}
                   href={`/teacher/debates-beta/${debate.id}/control`}
                 >
                   {copy.open}

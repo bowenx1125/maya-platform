@@ -410,6 +410,7 @@ class MockLLMProvider:
         if failure == "long":
             return {"segments": [{"text": "x" * 8_001, "source_ids": [], "reply_to": None}]}
         source_ids = ["S1"] if snapshot.sources else []
+        support_mode = "direct" if source_ids else "no_match"
         reply_to = (
             snapshot.barrages[0].id
             if snapshot.phase == "final_integration" and snapshot.barrages
@@ -419,13 +420,33 @@ class MockLLMProvider:
             reply_to = None
         if failure == "matched_but_unused":
             source_ids = []
+            support_mode = "no_match"
         text = (
-            f"{snapshot.persona.name} considers the topic carefully and keeps the response "
-            "grounded in the discussion."
+            (f'The record states, "{_complete_excerpt(snapshot.sources[0].text, max_words=24)}."')
+            if source_ids
+            else (
+                f"{snapshot.persona.name} considers the topic carefully and keeps the response "
+                "grounded in the discussion."
+            )
         )
-        if reply_to is not None:
-            text += " I will address the classroom question directly."
-        return {"segments": [{"text": text, "source_ids": source_ids, "reply_to": reply_to}]}
+        segments: list[dict[str, object]] = [
+            {
+                "text": text,
+                "source_ids": source_ids,
+                "reply_to": None if source_ids and reply_to is not None else reply_to,
+                "support_mode": support_mode,
+            }
+        ]
+        if source_ids and reply_to is not None:
+            segments.append(
+                {
+                    "text": "I will address the classroom question directly.",
+                    "source_ids": [],
+                    "reply_to": reply_to,
+                    "support_mode": "no_match",
+                }
+            )
+        return {"segments": segments}
 
     def _mutual_result(
         self,

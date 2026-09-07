@@ -114,7 +114,12 @@ describe("segments_v2 playback read model", () => {
       segment_turn: {
         schema_version: "segment_turn_v2",
         segments: [
-          { text: "A paragraph.", source_ids: ["source-a"], reply_to: null },
+          {
+            text: "A paragraph.",
+            source_ids: ["source-a"],
+            reply_to: null,
+            support_mode: "direct",
+          },
         ],
       },
       source_details: [
@@ -129,6 +134,7 @@ describe("segments_v2 playback read model", () => {
     });
 
     expect(raw?.segment_turn?.segments[0]?.text).toBe("A paragraph.");
+    expect(raw?.segment_turn?.segments[0]?.support_mode).toBe("direct");
     expect(raw?.source_details?.[0]).toMatchObject({
       source_id: "source-a",
       query_text: null,
@@ -144,6 +150,9 @@ describe("segments_v2 playback read model", () => {
     });
     expect(started?.segment_turn).toEqual(raw?.segment_turn);
     expect(started?.source_details).toEqual(raw?.source_details);
+    if (started) renderStream([started]);
+    fireEvent.click(screen.getByText("Check RAG"));
+    expect(screen.getByText("Direct evidence +5")).toBeTruthy();
   });
 
   it("does not let malformed structured fields hide a readable speech", () => {

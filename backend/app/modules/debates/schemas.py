@@ -241,6 +241,9 @@ class DebateSegment(_ClosedModel):
     text: str
     source_ids: list[str]
     reply_to: str | None
+    # Optional for byte-compatible reads of older segment_turn_v2 results.
+    # New provider output includes the mode; omitted values remain ungraded.
+    support_mode: Literal["direct", "contextual", "no_match"] | None = None
 
 
 class SegmentTurnPublic(_ClosedModel):

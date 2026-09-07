@@ -259,11 +259,7 @@ function PrewarmBadge({
 }) {
   const t = useT();
   const complete = expected > 0 && prepared >= expected;
-  const percent =
-    expected > 0 ? Math.min(100, Math.round((prepared / expected) * 100)) : 0;
-  // A draft whose warming gave up keeps its percentage forever. Reporting that
-  // frozen number as progress is what made a dead draft look like a thinking
-  // one, so a stall outranks both other readings.
+  // A stalled task must not look as if its preparation count will advance.
   if (stall) {
     return (
       <span
@@ -284,9 +280,7 @@ function PrewarmBadge({
       data-prewarm={complete ? "ready" : "thinking"}
     >
       <span aria-hidden="true" />
-      {complete
-        ? t("debatePrewarmReady")
-        : `${t("debatePrewarming")} ${percent}%`}
+      {complete ? t("debatePrewarmReady") : `${prepared} / ${expected} turns`}
     </span>
   );
 }

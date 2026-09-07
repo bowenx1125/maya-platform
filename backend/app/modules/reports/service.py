@@ -43,6 +43,11 @@ from app.core.models import (
     ProviderPolicySnapshot,
 )
 from app.modules.debates.final_input import read_final_input
+from app.modules.debates.generation.segment_grading import (
+    AgentGradeSummary,
+    SegmentGradingError,
+    aggregate_agent_scores,
+)
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, TurnSource
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
@@ -111,10 +116,12 @@ from .schemas import (
     MockBarrageInsightResult,
     ReadyReportRevision,
     Report,
+    ReportAgentScore,
     ReportInputManifestV1,
     ReportInputManifestV2,
     ReportRevision,
     ReportRevisionSummary,
+    ReportScoreSummary,
     ReportSectionOutput,
 )
 from .schemas import (
@@ -447,7 +454,9 @@ class ReportReplyContext:
     paragraph_index: int
 
 
-def _segment_turn_payload(turn: DebateTurn) -> tuple[tuple[str, ...], tuple[tuple[int, str], ...]]:
+def _segment_turn_payload(
+    turn: DebateTurn,
+) -> tuple[tuple[str, ...], tuple[tuple[int, str], ...], tuple[object, ...]]:
     """Read the closed persisted segment shape without inventing legacy fields."""
 
     from app.modules.debates.generation.segments import load_stored_segment_turn_result
@@ -459,10 +468,14 @@ def _segment_turn_payload(turn: DebateTurn) -> tuple[tuple[str, ...], tuple[tupl
             raise ValueError("paragraph text differs from saved speech")
     except (TypeError, ValueError):
         raise invalid_state("A segment turn has invalid saved paragraphs.") from None
-    return result.used_evidence_ids, tuple(
-        (index, segment.reply_to)
-        for index, segment in enumerate(result.segments)
-        if segment.reply_to is not None
+    return (
+        result.used_evidence_ids,
+        tuple(
+            (index, segment.reply_to)
+            for index, segment in enumerate(result.segments)
+            if segment.reply_to is not None
+        ),
+        result.segments,
     )
 
 
@@ -538,6 +551,7 @@ class ReportContext:
     classroom_barrages: tuple[ReportBarrageContext, ...] = ()
     replies: tuple[ReportReplyContext, ...] = ()
     protocol_version: str = "legacy_v1"
+    score_summary: ReportScoreSummary | None = None
 
 
 class ReportInsightEnqueuer:
@@ -1178,6 +1192,7 @@ def _report_context(
     participant_names = {row.id: row.agent_name for row in participants}
     segment_sources_by_turn: dict[str, tuple[str, ...]] = {}
     segment_replies_by_turn: dict[str, tuple[tuple[int, str], ...]] = {}
+    segment_values_by_turn: dict[str, tuple[object, ...]] = {}
     manifest_turns: list[ManifestTurn | ManifestTurnV2] = []
     turn_context: list[ReportTurnContext] = []
     turn_ids = {row.id for row in turns}
@@ -1187,9 +1202,10 @@ def _report_context(
         if not row.speech:
             raise invalid_state("A public final-ready turn has no speech.")
         if segment_mode:
-            source_ids, replies = _segment_turn_payload(row)
+            source_ids, replies, segment_values = _segment_turn_payload(row)
             segment_sources_by_turn[row.id] = source_ids
             segment_replies_by_turn[row.id] = replies
+            segment_values_by_turn[row.id] = segment_values
         turn_class = ManifestTurnV2 if segment_mode else ManifestTurn
         manifest_turns.append(
             turn_class(
@@ -1229,6 +1245,7 @@ def _report_context(
     seen_source_ids: set[str] = set()
     source_by_chunk: dict[tuple[str, str], str] = {}
     evidence_aliases: dict[str, str] = {}
+    grading_source_ids_by_turn: dict[str, set[str]] = {}
     for source in source_rows:
         turn = turns_by_id.get(source.turn_id)
         chunk = db.get(KnowledgeChunk, source.chunk_id)
@@ -1249,6 +1266,7 @@ def _report_context(
         else:
             source_evidence_id = str(source.id)
         seen_source_ids.add(source.id)
+        grading_source_ids_by_turn.setdefault(str(source.turn_id), set()).add(source_evidence_id)
         chunk_hash = _sha256(chunk.chunk_text)
         source_key = (
             (str(source.snapshot_id), str(source.chunk_id))
@@ -1316,6 +1334,11 @@ def _report_context(
         )
         for item in turn_context
     ]
+    has_explicit_segment_grade = segment_mode and any(
+        getattr(segment, "support_mode", None) is not None
+        for values in segment_values_by_turn.values()
+        for segment in values
+    )
     if segment_mode:
         # Persist the same deduplicated canonical evidence IDs that the
         # ReportRequest will expose.  Keeping a local S alias here would make
@@ -1331,6 +1354,59 @@ def _report_context(
             )
             for turn in turns
         ]
+
+    score_summary: ReportScoreSummary | None = None
+    if has_explicit_segment_grade:
+        try:
+            score_rows = [
+                {
+                    "turn_id": str(turn.id),
+                    "participant_id": str(turn.participant_id),
+                    "segments": segment_values_by_turn.get(turn.id, ()),
+                }
+                for turn in turns
+            ]
+            valid_sources = {
+                str(turn.id): tuple(grading_source_ids_by_turn.get(str(turn.id), ()))
+                for turn in turns
+            }
+            scores = aggregate_agent_scores(
+                score_rows,
+                valid_source_ids_by_turn=valid_sources,
+            )
+        except SegmentGradingError:
+            raise invalid_state("A public segment has inconsistent grading data.") from None
+        score_by_participant = {item.participant_id: item for item in scores}
+        empty_score = AgentGradeSummary("", 0, 0, 0, 0)
+        score_agents = [
+            ReportAgentScore(
+                slot=cast(Any, participant.slot),
+                direct_count=(
+                    score_by_participant.get(str(participant.id), empty_score).direct_count
+                ),
+                contextual_count=(
+                    score_by_participant.get(str(participant.id), empty_score).contextual_count
+                ),
+                no_match_count=(
+                    score_by_participant.get(str(participant.id), empty_score).no_match_count
+                ),
+                ungraded_count=(
+                    score_by_participant.get(str(participant.id), empty_score).ungraded_count
+                ),
+                total_points=(
+                    score_by_participant.get(str(participant.id), empty_score).total_points
+                ),
+            )
+            for participant in participants
+        ]
+        score_summary = ReportScoreSummary(
+            agents=score_agents,
+            direct_count=sum(item.direct_count for item in score_agents),
+            contextual_count=sum(item.contextual_count for item in score_agents),
+            no_match_count=sum(item.no_match_count for item in score_agents),
+            ungraded_count=sum(item.ungraded_count for item in score_agents),
+            total_points=sum(item.total_points for item in score_agents),
+        )
 
     classroom_barrages: tuple[ReportBarrageContext, ...] = ()
     reply_context: list[ReportReplyContext] = []
@@ -1401,6 +1477,7 @@ def _report_context(
                 )
                 for item in reply_context
             ],
+            score_summary=score_summary,
         )
     else:
         manifest = ReportInputManifestV1(
@@ -1422,6 +1499,7 @@ def _report_context(
         classroom_barrages=classroom_barrages,
         replies=tuple(reply_context),
         protocol_version="segments_v2" if segment_mode else "legacy_v1",
+        score_summary=score_summary,
     )
 
 
@@ -1534,6 +1612,7 @@ def build_real_report_request(context: ReportContext) -> ReportRequest | ReportR
                 )
                 for item in context.replies
             ),
+            score_summary=context.score_summary,
         )
     return ReportRequest(**common)
 
@@ -2143,6 +2222,14 @@ def _report_manifest(
                 ),
             ),
         )
+        if request.score_summary is not None:
+            fields = (
+                *fields,
+                ExportFieldV1(
+                    "aggregate_evidence_grade",
+                    _report_field_hash(request.score_summary.model_dump(mode="json")),
+                ),
+            )
     estimated_cost = wire.estimated_cost_cny
     budget = wire.budget
     max_tokens = int(getattr(budget, "input_tokens", 0)) + LLM_RESERVED_OUTPUT_TOKEN_CAP
@@ -2790,11 +2877,23 @@ def _report_dto(db: Session, debate_id: str) -> Report:
             current = db.get(CivilizationReportRevision, current_pointer.revision_id)
             if current is None or current.status != "ready" or current.debate_id != debate_id:
                 current = None
+    score_summary: ReportScoreSummary | None = None
+    for revision in (current, active):
+        if revision is None or not revision.input_manifest_json:
+            continue
+        try:
+            manifest = _load_report_manifest(revision.input_manifest_json)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(manifest, ReportInputManifestV2) and manifest.score_summary is not None:
+            score_summary = manifest.score_summary
+            break
     return Report(
         debate_id=_uuid(debate_id),
         generation_status=cast(Any, report.generation_status if report else "not_started"),
         latest_attempt_status=cast(Any, report.latest_attempt_status if report else "not_started"),
         insight=_insight_dto(db, debate_id),
+        score_summary=score_summary,
         active_revision_id=_uuid(active.id) if active else None,
         current_success_revision=(
             cast(ReadyReportRevision, _revision_dto(db, current)) if current else None

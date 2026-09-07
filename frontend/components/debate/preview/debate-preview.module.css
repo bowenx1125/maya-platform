@@ -36,9 +36,21 @@
   max-width: 100%;
 }
 
+.navigationActions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.navigationActions > a {
+  flex: 1 1 auto;
+}
+
 .progressCard {
   display: grid;
   gap: 0.8rem;
+  background: #fbf4e5;
 }
 
 .progressLine {
@@ -82,7 +94,7 @@
 }
 
 .turnCard {
-  background: var(--panel);
+  background: #fbf4e5;
   border: 1px solid var(--line);
   border-radius: 1.25rem;
   box-shadow: 0 12px 32px rgba(72, 61, 105, 0.07);
@@ -230,11 +242,11 @@
 
   .headerActions {
     align-items: stretch;
-    flex-direction: column;
+    flex: 0 1 auto;
+    justify-content: stretch;
   }
 
-  .headerActions .primary-action,
-  .headerActions .secondary-action {
+  .navigationActions {
     width: 100%;
   }
 
