@@ -26,6 +26,7 @@ import { validateDebateTopic } from "../../../lib/debate-topic";
 import { turnsForShape } from "../../../lib/debate-rounds";
 import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
+import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { ReleaseButton } from "../release-button";
 import {
   EmptyCard,
@@ -187,26 +188,37 @@ export function TeacherDebateList({
                     <StatusBadge status={debate.status} />
                   )}
                 </Link>
-                {/* Regenerating the one turn that stopped is a single provider
+                <div className={styles.debateActions}>
+                  {/* Regenerating the one turn that stopped is a single provider
                     call, where rebuilding the debate is all of them. */}
-                {stalled(debate) ? (
-                  <ResumeButton
-                    debateId={debate.id}
-                    onResumed={() => void load()}
-                    turnId={
-                      (debate.stall as NonNullable<typeof debate.stall>).turn_id
-                    }
-                  />
-                ) : null}
-                {/* A lesson left running blocks every later debate on this
+                  {stalled(debate) ? (
+                    <ResumeButton
+                      debateId={debate.id}
+                      onResumed={() => void load()}
+                      turnId={
+                        (debate.stall as NonNullable<typeof debate.stall>)
+                          .turn_id
+                      }
+                    />
+                  ) : null}
+                  {/* A lesson left running blocks every later debate on this
                     course, and clearing it used to need a shell on the server.
                     The recovery belongs beside the thing that needs it. */}
-                {debate.status === "running" ? (
-                  <ReleaseButton
-                    debateId={debate.id}
-                    onReleased={() => void load()}
+                  {debate.status === "running" ? (
+                    <ReleaseButton
+                      debateId={debate.id}
+                      onReleased={() => void load()}
+                    />
+                  ) : null}
+                  <DebateCleanupControls
+                    api={api}
+                    loadDetail={() => api.debate(debate.id)}
+                    onVoiceDeleted={load}
+                    onAllDeleted={load}
+                    className={styles.listCleanup}
+                    showGenerateAudio={false}
                   />
-                ) : null}
+                </div>
               </div>
             ))}
           </div>

@@ -364,6 +364,7 @@ export default function TeacherDebateControlPage() {
             <DebatePreview
               actions={
                 <DebateCleanupControls
+                  showDeleteControls={false}
                   detail={detail}
                   api={api}
                   onVoiceDeleted={async () => {

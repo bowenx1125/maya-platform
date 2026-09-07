@@ -78,6 +78,15 @@ Delivery artifacts: a 13-page Chinese Word proposal and a 53-row Excel table
 the approved 37-session/72-answer criteria. Manual ownership/blank-plan edits were
 preserved. Updated pages and worksheet regions were visually checked.
 
+### UI follow-up (September 7)
+
+At the owner's request, the Bench title is left-aligned within the figure area.
+Delete Voice/Delete All now live beside Resume in the Debate list, sharing its
+warm card and a vertical separator; playback/Preview retain only audio generation
+when needed. Deletion fetches current revision/control values only on click and
+refreshes the list afterward. The owner explicitly waived tests for this bounded
+UI follow-up and requested a GitHub push; prior acceptance gaps remain unchanged.
+
 ### Implementation checkpoint (September 7, not release acceptance)
 
 The owner requested a CLI usage check and pause at an atomic boundary

@@ -13,6 +13,7 @@ import {
 } from "../../lib/api";
 
 type Intent = {
+  debateId: string;
   mode: "voice" | "all";
   body: DebateCleanupRequest;
   key: IdempotencyHandle;
@@ -23,8 +24,18 @@ export function DebateCleanupControls({
   api,
   onVoiceDeleted,
   backHref = "/teacher/debates",
+  loadDetail,
+  onAllDeleted,
+  className = "row-actions",
+  showDeleteControls = true,
+  showGenerateAudio = true,
 }: {
-  detail: DebateDetail;
+  detail?: DebateDetail;
+  loadDetail?: () => Promise<DebateDetail>;
+  onAllDeleted?: () => void | Promise<void>;
+  className?: string;
+  showDeleteControls?: boolean;
+  showGenerateAudio?: boolean;
   api: Pick<
     PlatformApi,
     "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
@@ -43,7 +54,7 @@ export function DebateCleanupControls({
   const audioRequests = useRef(new Map<string, IdempotencyHandle>());
   const [generatingAudio, setGeneratingAudio] = useState(false);
   const missingAudio =
-    detail.turn_protocol === "segments_v2"
+    detail?.turn_protocol === "segments_v2"
       ? [
           ...new Set([
             ...(detail.preview_turns ?? [])
@@ -62,7 +73,7 @@ export function DebateCleanupControls({
       : [];
 
   async function generateAudio() {
-    if (active.current || lockedMode !== null) return;
+    if (!detail || active.current || lockedMode !== null) return;
     active.current = true;
     setBusy(true);
     setGeneratingAudio(true);
@@ -111,14 +122,28 @@ export function DebateCleanupControls({
         )
       )
         return;
-      request = {
-        mode,
-        key: createIdempotencyHandle(),
-        body: {
-          expected_revision: detail.revision,
-          expected_control_version: detail.playback.control_version,
-        },
-      };
+      active.current = true;
+      setBusy(true);
+      setError(null);
+      try {
+        const snapshot = detail ?? (await loadDetail?.());
+        if (!snapshot)
+          throw new Error("Debate is unavailable. Refresh and try again.");
+        request = {
+          debateId: snapshot.id,
+          mode,
+          key: createIdempotencyHandle(),
+          body: {
+            expected_revision: snapshot.revision,
+            expected_control_version: snapshot.playback.control_version,
+          },
+        };
+      } catch (cause) {
+        setError(apiErrorMessage(cause));
+        active.current = false;
+        setBusy(false);
+        return;
+      }
       intent.current = request;
       setLockedMode(mode);
     }
@@ -131,7 +156,7 @@ export function DebateCleanupControls({
         mode === "voice"
           ? api.deleteDebateVoice.bind(api)
           : api.deleteDebateAll.bind(api)
-      )(detail.id, request.body, { idempotency: request.key });
+      )(request.debateId, request.body, { idempotency: request.key });
       if (result.cleanup_status === "pending") {
         setPending(true);
         return;
@@ -139,8 +164,10 @@ export function DebateCleanupControls({
       intent.current = null;
       setPending(false);
       setLockedMode(null);
-      if (mode === "all") router.push(backHref);
-      else await onVoiceDeleted();
+      if (mode === "all") {
+        if (onAllDeleted) await onAllDeleted();
+        else router.push(backHref);
+      } else await onVoiceDeleted();
     } catch (cause) {
       setError(apiErrorMessage(cause));
       if (
@@ -158,25 +185,38 @@ export function DebateCleanupControls({
     }
   }
 
+  if (
+    !showDeleteControls &&
+    (!showGenerateAudio || missingAudio.length === 0) &&
+    !busy &&
+    !error &&
+    !pending
+  )
+    return null;
+
   return (
-    <div className="row-actions">
-      <button
-        className="secondary-action"
-        type="button"
-        disabled={busy || (lockedMode !== null && lockedMode !== "voice")}
-        onClick={() => void remove("voice")}
-      >
-        Delete Voice
-      </button>
-      <button
-        className="secondary-action"
-        type="button"
-        disabled={busy || (lockedMode !== null && lockedMode !== "all")}
-        onClick={() => void remove("all")}
-      >
-        Delete All
-      </button>
-      {missingAudio.length > 0 ? (
+    <div className={className}>
+      {showDeleteControls ? (
+        <>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={busy || (lockedMode !== null && lockedMode !== "voice")}
+            onClick={() => void remove("voice")}
+          >
+            Delete Voice
+          </button>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={busy || (lockedMode !== null && lockedMode !== "all")}
+            onClick={() => void remove("all")}
+          >
+            Delete All
+          </button>
+        </>
+      ) : null}
+      {showGenerateAudio && missingAudio.length > 0 ? (
         <button
           className="secondary-action"
           type="button"

@@ -343,15 +343,88 @@
   opacity: 0.5;
 }
 
-/* A row is the card plus whatever recovery that debate currently needs. */
+/* The topic and actions share one warm card, separated by a single rule. */
 .debateRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  border: 1px solid #e5d8bf;
+  border-radius: 16px;
+  background: #fbf4e5;
 }
 
 .debateRow > .debateCard {
   flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.debateRow > .debateCard:hover {
+  background: rgba(219, 196, 151, 0.12);
+}
+
+.debateActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 44%;
+  margin: 12px 8px 12px 0;
+  padding-left: 12px;
+  border-left: 1px solid #deceb0;
+}
+
+.listCleanup {
+  display: contents;
+}
+
+.debateActions button {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: #655332;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.debateActions button:hover:not(:disabled) {
+  background: rgba(196, 164, 104, 0.16);
+  color: #382d19;
+  box-shadow: none;
+}
+
+.debateActions button:disabled {
+  opacity: 0.5;
+}
+
+.debateActions [role="alert"],
+.debateActions [role="status"] {
+  flex-basis: 100%;
+  max-width: 280px;
+  color: #806044;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .debateRow {
+    flex-wrap: wrap;
+  }
+
+  .debateRow > .debateCard {
+    flex-basis: 100%;
+  }
+
+  .debateActions {
+    max-width: none;
+    margin: 0 16px 12px;
+  }
 }
 
 .releaseSlot {

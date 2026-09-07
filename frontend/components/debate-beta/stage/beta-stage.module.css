@@ -885,12 +885,12 @@
   position: absolute;
   z-index: 9;
   top: 20px;
-  left: 50%;
+  left: 22px;
   /* Wide enough for a real topic, and two lines rather than an ellipsis: a
      question the room is about to argue over must be readable in full. */
   max-width: min(760px, calc(100vw - 520px));
   padding: 9px 20px 11px;
-  transform: translateX(-50%);
+  text-align: left;
   border: 1px solid rgba(38, 31, 24, 0.1);
   border-radius: 999px;
   background: rgba(252, 250, 245, 0.9);
@@ -1059,6 +1059,7 @@
   }
 
   .stageTitleCard {
+    left: 12px;
     max-width: calc(100vw - 40px);
   }
 

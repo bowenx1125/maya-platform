@@ -519,6 +519,7 @@ export default function TeacherDebateControlPage() {
               <>
                 {detail.turn_protocol === "segments_v2" ? (
                   <DebateCleanupControls
+                    showDeleteControls={false}
                     detail={detail}
                     api={api}
                     backHref="/teacher/debates-beta"
