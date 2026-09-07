@@ -879,42 +879,6 @@
   font-family: var(--script);
 }
 
-/* The debate's own name, where a room would put it: on the wall, not in a
-   header band that would cost the bench its height. */
-.stageTitleCard {
-  position: absolute;
-  z-index: 9;
-  top: 20px;
-  left: 22px;
-  /* Wide enough for a real topic, and two lines rather than an ellipsis: a
-     question the room is about to argue over must be readable in full. */
-  max-width: min(760px, calc(100vw - 520px));
-  padding: 9px 20px 11px;
-  text-align: left;
-  border: 1px solid rgba(38, 31, 24, 0.1);
-  border-radius: 999px;
-  background: rgba(252, 250, 245, 0.9);
-  box-shadow: 0 8px 22px rgba(58, 46, 30, 0.1);
-  pointer-events: none;
-}
-
-.stageTitleCard h1 {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  margin: 0;
-  overflow: hidden;
-  color: var(--ink-deep);
-  font-family: var(--brush);
-  font-size: 1.24rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1.45;
-  text-wrap: balance;
-  -webkit-text-stroke: 0.3px rgba(34, 24, 17, 0.3);
-}
-
 /* ---------- the floating panel ---------- */
 
 .stageColumns {
@@ -928,9 +892,9 @@
   gap: 0;
   width: min(436px, calc(100vw - 44px));
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.42);
+  border: 1px solid #e5d8bf;
   border-radius: 24px;
-  background: rgba(253, 251, 246, 0.62);
+  background: rgba(253, 251, 246, 0.94);
   box-shadow: 0 22px 54px rgba(48, 38, 24, 0.16);
   backdrop-filter: blur(16px) saturate(1.15);
   -webkit-backdrop-filter: blur(16px) saturate(1.15);
@@ -958,12 +922,15 @@
   flex: 0 0 auto;
   grid-template-rows: none;
   gap: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 253, 249, 0.42);
+  border-top: 1px solid #deceb0;
+  background: #fbf4e5;
 }
 
 .stagePanel {
-  padding: 14px 18px 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 12px;
   border: none;
   border-radius: 0;
   background: none;
@@ -992,6 +959,73 @@
   padding-right: 8px;
   padding-bottom: 26px;
   scroll-padding-bottom: 26px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.stagePanel .controlsArea,
+.stagePanel .controlButtons,
+.stagePanel .panelActions {
+  display: contents;
+}
+
+.stagePanel .statusCluster:empty {
+  display: none;
+}
+
+.stagePanel .statusCluster,
+.stagePanel [role="status"],
+.stagePanel [role="alert"] {
+  grid-column: 1 / -1;
+}
+
+.stagePanel :is(button, a) {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: #655332;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.stagePanel :is(button, a):hover:not(:disabled) {
+  background: rgba(196, 164, 104, 0.16);
+  color: #382d19;
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.stagePanel button:disabled {
+  opacity: 0.5;
+}
+
+.streamHeader {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.streamParagraphs {
+  display: grid;
+  gap: 14px;
+}
+
+.streamState {
+  color: #80673d;
+}
+
+.streamReplayAll:hover:not(:disabled) {
+  border-color: #deceb0;
+  background: rgba(196, 164, 104, 0.16);
+  color: #382d19;
 }
 
 .streamHeader h2 {
@@ -1056,11 +1090,6 @@
     width: auto;
     height: 56dvh;
     min-height: 300px;
-  }
-
-  .stageTitleCard {
-    left: 12px;
-    max-width: calc(100vw - 40px);
   }
 
   .connectionOverlay {

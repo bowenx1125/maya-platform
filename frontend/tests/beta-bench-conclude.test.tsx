@@ -259,15 +259,19 @@ function pageApi(
   afterClose = interaction("finalized"),
   detail = finishedSegmentsDetail(),
 ) {
+  let current = initial;
   return {
     debate: vi.fn().mockResolvedValue(detail),
     course: vi.fn().mockResolvedValue({ current_audio_debate_id: debateId }),
-    teacherInteraction: vi
-      .fn()
-      .mockResolvedValueOnce(initial)
-      .mockResolvedValue(afterClose),
-    openInteraction: vi.fn().mockResolvedValue(interaction("open")),
-    closeInteraction: vi.fn().mockResolvedValue(afterClose),
+    teacherInteraction: vi.fn().mockImplementation(async () => current),
+    openInteraction: vi.fn().mockImplementation(async () => {
+      current = interaction("open");
+      return current;
+    }),
+    closeInteraction: vi.fn().mockImplementation(async () => {
+      current = afterClose;
+      return current;
+    }),
     finishDebate: vi.fn(),
   };
 }
@@ -283,6 +287,30 @@ afterEach(() => {
 });
 
 describe("segments_v2 Bench Conclude and Report", () => {
+  it("refreshes a stale closed window before Conclude without leaving the stage", async () => {
+    const api = pageApi(interaction("closed"));
+    renderPage(api);
+    const conclude = await screen.findByRole("button", { name: "Conclude" });
+    api.teacherInteraction
+      .mockResolvedValueOnce(interaction("open"))
+      .mockResolvedValueOnce(interaction("open"));
+    fireEvent.click(conclude);
+    expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
+    expect(api.openInteraction).not.toHaveBeenCalled();
+    expect(api.closeInteraction).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an already-finalized report discovered on Conclude", async () => {
+    const api = pageApi(interaction("closed"));
+    renderPage(api);
+    const conclude = await screen.findByRole("button", { name: "Conclude" });
+    api.teacherInteraction.mockResolvedValue(interaction("finalized"));
+    fireEvent.click(conclude);
+    expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
+    expect(api.openInteraction).not.toHaveBeenCalled();
+    expect(api.closeInteraction).not.toHaveBeenCalled();
+  });
+
   it("uses public paragraph grades for Conclude totals and never counts a replay twice", async () => {
     const detail = finishedSegmentsDetail();
     const first = detail.public_turns[0]!;

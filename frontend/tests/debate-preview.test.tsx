@@ -84,7 +84,7 @@ describe("teacher debate preview", () => {
     expect(screen.queryByText("tts_failed")).toBeNull();
     expect(screen.getByRole("button", { name: "Retry turn" })).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Open Classroom" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Open Stage" }).getAttribute("href"),
     ).toBe("/teacher/debates-beta/debate-a/control");
 
     fireEvent.click(screen.getByText("Check RAG"));
@@ -105,10 +105,10 @@ describe("teacher debate preview", () => {
       preview: { prepared_turns: 1, expected_turns: 2, ready: false },
     });
 
-    expect(screen.queryByRole("link", { name: "Open Classroom" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open Stage" })).toBeNull();
     expect(
       screen.getByText("A saved speech remains available for teacher review."),
     ).toBeTruthy();
-    expect(screen.getByText("1 / 2 turns ready")).toBeTruthy();
+    expect(screen.queryByText("Preview progress")).toBeNull();
   });
 });

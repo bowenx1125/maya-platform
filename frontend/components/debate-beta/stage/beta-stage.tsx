@@ -619,6 +619,7 @@ export function BetaDebateStage({
   const socketCleanupRef = useRef<(() => void) | null>(null);
   const controllerEpochRef = useRef<string | null>(null);
   const controllerReadyRef = useRef(false);
+  const acquireResyncUsedRef = useRef(false);
   const acquirePendingRef = useRef(false);
   const controllerAcquireBlockedRef = useRef(false);
   const terminalReplayAcquirePendingRef = useRef(false);
@@ -1160,14 +1161,18 @@ export function BetaDebateStage({
           ) {
             return;
           }
-          if (message.control_version < controlVersionRef.current) return;
+          // Public preparation events can advance the version before this
+          // private grant arrives; the granted epoch still owns this socket.
           controllerEpochRef.current = message.controller_epoch;
-          controlVersionRef.current = message.control_version;
+          controlVersionRef.current = Math.max(
+            controlVersionRef.current,
+            message.control_version,
+          );
           acquirePendingRef.current = false;
           terminalReplayAcquirePendingRef.current = false;
           markControllerReady(true);
           setFailure(null);
-          applyPlayback({ control_version: message.control_version });
+          applyPlayback({ control_version: controlVersionRef.current });
           if (playbackRef.current.status === "ready") {
             scheduleMediaPrepare();
           }
@@ -1276,8 +1281,9 @@ export function BetaDebateStage({
                   ? "terminal"
                   : "network";
           controllerAcquireBlockedRef.current = revocationIssue !== "network";
-          terminalReplayAcquirePendingRef.current =
-            message.reason === "debate_terminal";
+          // Completion releases authority for Conclude. A later explicit
+          // Replay click, not this revocation, may request another epoch.
+          terminalReplayAcquirePendingRef.current = false;
           if (revocationIssue === "terminal") {
             setVisible(null);
             setActiveParticipant(null);
@@ -1299,8 +1305,26 @@ export function BetaDebateStage({
           return;
         }
         case "command.rejected":
-        case "command.duplicate":
+        case "command.duplicate": {
+          const wasAcquiring = acquirePendingRef.current;
           acquirePendingRef.current = false;
+          if (
+            wasAcquiring &&
+            message.message_type === "command.rejected" &&
+            message.code === "stale_control_version" &&
+            message.current_control_version !== undefined &&
+            !acquireResyncUsedRef.current &&
+            !controllerAcquireBlockedRef.current &&
+            !isProductTerminalDetail(detailRef.current)
+          ) {
+            acquireResyncUsedRef.current = true;
+            controlVersionRef.current = Math.max(
+              controlVersionRef.current,
+              message.current_control_version,
+            );
+            scheduleControllerAcquire();
+            return;
+          }
           if (message.message_type === "command.rejected") {
             settlePendingReplayAcquire(
               new Error(message.code ?? labelsRef.current.connectionError),
@@ -1342,6 +1366,7 @@ export function BetaDebateStage({
             }
           }
           return;
+        }
       }
     },
     [
@@ -1353,6 +1378,7 @@ export function BetaDebateStage({
       markControllerReady,
       pauseAudio,
       scheduleMediaPrepare,
+      scheduleControllerAcquire,
       sendCommand,
       sendPlayFailure,
       settlePendingReplayAcquire,
@@ -2183,10 +2209,7 @@ export function BetaDebateStage({
           setVisible(null);
           setAvatars([]);
           setActiveParticipant(null);
-          // The terminal replay event is followed by one same-socket
-          // controller renewal. Set the intent before the async snapshot so
-          // either event order converges on exactly one acquire.
-          terminalReplayAcquirePendingRef.current = true;
+          terminalReplayAcquirePendingRef.current = false;
           if (!refreshSnapshot) {
             // Observation-only/test integrations may not provide an HTTP
             // reader. The final replay event is still terminal locally.
@@ -2377,6 +2400,7 @@ export function BetaDebateStage({
         socketGenerationRef.current === socketGeneration;
       const onOpen = () => {
         if (!isCurrentSocket()) return;
+        acquireResyncUsedRef.current = false;
         // Terminal debates do not acquire a controller on connect.  A teacher
         // may still press Replay while the socket is connecting, though; the
         // request is intentionally held until the browser reports OPEN so a
@@ -3045,7 +3069,9 @@ export function BetaDebateStage({
       detailState.status === "completed") &&
     playback.mode === "live" &&
     playback.status === "completed" &&
-    connectionIssue === null &&
+    connection !== "disconnected" &&
+    connection !== "reconnecting" &&
+    (connectionIssue === null || connectionIssue === "terminal") &&
     (controllerReady || replayableTerminalSource);
   // Before anything has been said the only move is Start; afterwards it is
   // always Next, so the pair collapses into one control.
@@ -3068,6 +3094,11 @@ export function BetaDebateStage({
     visibleTurn && visibleTurn.id === playback.current_turn_id
       ? visibleTurn
       : null;
+  const bubbleTurn =
+    activeVisibleTurn ??
+    (playback.status === "completed"
+      ? publicTurns[publicTurns.length - 1]
+      : null);
   // Only whoever is speaking. Three idle faces beside the speeches told a
   // classroom nothing and took the width the speeches needed; before anyone
   // speaks the first participant stands in so the column is never empty.
@@ -3209,16 +3240,8 @@ export function BetaDebateStage({
         </div>
       ) : null}
 
-      <div className={styles.stageTitleCard}>
-        <h1>{detailState.topic}</h1>
-      </div>
-
       <ScholarScene
-        bubbleText={
-          playback.status === "playing" && activeVisibleTurn
-            ? bubbleLineFrom(activeVisibleTurn.speech)
-            : ""
-        }
+        bubbleText={bubbleTurn ? bubbleLineFrom(bubbleTurn.speech) : ""}
         characters={stageCharacters}
         loadingLabel={beta.sceneLoading}
         overlay={
@@ -3256,7 +3279,7 @@ export function BetaDebateStage({
           phase === "stopped" ||
           phase === "failed"
         }
-        speakingId={currentParticipantId}
+        speakingId={bubbleTurn?.participant_id ?? currentParticipantId}
         unavailableLabel={beta.sceneUnavailable}
         visuals={stageVisuals}
       />
@@ -3450,6 +3473,7 @@ export function BetaDebateStage({
               thing twice and pushed the first speech down. */}
 
           <SpeechStream
+            styles={styles}
             describe={(participantId) => {
               const owner = participantById.get(participantId);
               return {

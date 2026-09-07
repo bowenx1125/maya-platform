@@ -81,21 +81,22 @@ preserved. Updated pages and worksheet regions were visually checked.
 
 ### UI follow-up (September 8)
 
-Bench titles align left. Delete Voice/All sit beside Resume. Stage and Dashboard
-use white paper behind yellow rows; Dashboard has no arrows or avatar circles.
-Open Stage shares Delete's action CSS, animation and separate divider. Failed Resume
-keeps the Stalled row unchanged, with no error text. Five focused tests and
-typecheck passed. Creation/Preview stay yellow with inline navigation; Audio Ready
-replaces Saved, and list progress shows x / y turns. Open Message/Hide preserves
-the QR session. Conclude contains grades; duplicate report status cards are gone.
-The owner performs final classroom acceptance.
+Bench titles are removed. Its speech stream uses the actual beta layout and
+scrolls above a gold two-column control grid; bubbles remain until Next. Preview
+now says Open Stage. Entry acquisition resynchronizes a stale version once and
+accepts an epoch grant without rolling back newer public state. Terminal playback
+releases authority until explicit Replay; Conclude refreshes the durable window.
+34 focused tests and typecheck passed. Delete Voice/All sit beside Resume; Open
+Stage shares their action CSS. Stage/Dashboard use white paper and yellow rows.
+Failed Resume preserves Stalled. Audio Ready replaces Saved; progress is x / y
+turns. Open Message/Hide preserves the QR. Conclude contains grades. Classroom
+acceptance remains the owner's manual task.
 
 ### Implementation checkpoint (September 7, not release acceptance)
 
-The owner resumed after the September 7 pause and requested GitHub delivery plus
-a final Docker restart. Backend grading/replay checks are complete; classroom
-acceptance remains the owner's manual task. No new real-provider test run was
-started during this resume. Removing a usage stop never authorizes reset credits.
+The owner requested GitHub delivery and Docker restart. Backend grading/replay
+checks are complete; no new real-provider run was started. Removing a usage stop
+never authorizes reset credits.
 
 - Five-section Persona, paragraphs and accepted-result recovery are integrated.
   Five synthetic Agents have real Embedding snapshots; three baseline Agents use Mock.

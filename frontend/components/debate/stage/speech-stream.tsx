@@ -8,7 +8,7 @@ import {
   type SegmentRagSegment,
   type SegmentRagSource,
 } from "../../evidence";
-import styles from "./debate-stage.module.css";
+import defaultStyles from "./debate-stage.module.css";
 import type { PlaybackStageLabels } from "./types";
 
 /** One published turn, in the shape the stream needs to render it. */
@@ -29,6 +29,7 @@ export type StreamTurn = {
 };
 
 type SpeechStreamProps = {
+  styles?: Record<string, string>;
   turns: StreamTurn[];
   labels: PlaybackStageLabels;
   /** Slot letter and Agent name for a participant id. */
@@ -103,12 +104,14 @@ function useTypedSpeech(speech: string, animate: boolean): string {
 }
 
 function StreamItem({
+  styles,
   turn,
   labels,
   describe,
   phaseOf,
   animate,
 }: {
+  styles: Record<string, string>;
   turn: StreamTurn;
   labels: PlaybackStageLabels;
   describe: SpeechStreamProps["describe"];
@@ -208,6 +211,7 @@ function StreamItem({
  * the room looking in one place.
  */
 export function SpeechStream({
+  styles = defaultStyles,
   turns,
   labels,
   describe,
@@ -274,6 +278,7 @@ export function SpeechStream({
         <div className={styles.streamList} ref={listRef}>
           {turns.map((turn) => (
             <StreamItem
+              styles={styles}
               animate={turn.id === typingId}
               describe={describe}
               key={turn.id}

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -18,6 +19,12 @@ import type { DebateDetail, DebatePlaybackState } from "../lib/api";
 vi.mock("../components/avatar/avatar-preview", () => ({
   AvatarPreview: ({ fallbackLabel }: { fallbackLabel?: string }) => (
     <div>{fallbackLabel ?? "avatar"}</div>
+  ),
+}));
+
+vi.mock("../components/stage3d/scholar-scene", () => ({
+  ScholarScene: ({ bubbleText }: { bubbleText?: string }) => (
+    <aside data-testid="speech-bubble">{bubbleText}</aside>
   ),
 }));
 
@@ -228,6 +235,124 @@ function renderStage(
 }
 
 describe("terminal segments replay controller", () => {
+  it("beta recovers a stale entry acquire and keeps newer public state when its grant arrives", async () => {
+    const initial = detail();
+    initial.status = "running";
+    initial.playback = {
+      ...initial.playback,
+      status: "waiting_next",
+      current_turn_id: turnId,
+      next_turn_ready: true,
+    };
+    const socket = new ReplaySocket();
+    const api = apiFor(initial);
+    const authority = vi.fn();
+    render(
+      <BetaDebateStage
+        api={api}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+        onAuthorityChange={authority}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    act(() => socket.emitOpen());
+    expect(socket.commands()).toHaveLength(1);
+    act(() =>
+      socket.emitMessage({
+        ...acquired(),
+        message_type: "command.rejected",
+        code: "stale_control_version",
+        current_control_version: 9,
+      }),
+    );
+    await waitFor(() => expect(socket.commands()).toHaveLength(2));
+    expect(socket.commands()[1]?.expected_control_version).toBe(9);
+    // A public event may already have advanced the locally known version.
+    act(() => socket.emitMessage({ ...acquired(), control_version: 8 }));
+    await waitFor(() =>
+      expect(authority).toHaveBeenLastCalledWith(
+        expect.objectContaining({ controllerReady: true }),
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Next" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(screen.queryByRole("heading", { name: initial.topic })).toBeNull();
+  });
+
+  it("beta keeps the bubble after audio ends and releases authority until an explicit Replay", async () => {
+    const initial = detail();
+    initial.status = "running";
+    initial.playback = {
+      ...initial.playback,
+      status: "playing",
+      current_turn_id: turnId,
+    };
+    const socket = new ReplaySocket();
+    const api = apiFor(initial);
+    render(renderStage("beta", initial, api, socket));
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    act(() => socket.emitOpen());
+    act(() => socket.emitMessage(acquired()));
+    const emit = (
+      type: string,
+      sequence: number,
+      payload: Record<string, unknown>,
+    ) =>
+      socket.emitMessage({
+        event_id: `90000000-0000-4000-8000-${String(sequence).padStart(12, "0")}`,
+        event_type: type,
+        event_version: 1,
+        debate_id: debateId,
+        sequence,
+        occurred_at: "2026-09-08T00:00:00Z",
+        payload,
+      });
+    act(() =>
+      emit("playback.completed", 5, { turn_id: turnId, control_version: 8 }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("speech-bubble").textContent).toContain(
+        "A retained paragraph",
+      ),
+    );
+    act(() => emit("debate.completed", 6, {}));
+    act(() =>
+      socket.emitMessage({
+        ...acquired(),
+        message_type: "controller.revoked",
+        reason: "debate_terminal",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Replay whole debate" }),
+      ).toHaveProperty("disabled", false),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      socket
+        .commands()
+        .filter((item) => item.command_type === "playback.controller.acquire"),
+    ).toHaveLength(1);
+    expect(screen.getByTestId("speech-bubble").textContent).toContain(
+      "A retained paragraph",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replay whole debate" }),
+    );
+    expect(
+      socket
+        .commands()
+        .filter((item) => item.command_type === "playback.controller.acquire"),
+    ).toHaveLength(2);
+    act(() => socket.emitMessage({ ...acquired(), control_version: 9 }));
+    await waitFor(() => expect(api.replayDebate).toHaveBeenCalledTimes(1));
+  });
+
   it.each(["classic", "beta"] as const)(
     "%s waits for an opening socket before acquiring replay control",
     async (kind) => {

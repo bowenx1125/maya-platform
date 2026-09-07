@@ -352,10 +352,15 @@ export default function TeacherDebateControlPage() {
     setInteractionBusy(true);
     setInteractionError(null);
     try {
-      let current = interaction;
-      if (!current) current = await readInteraction();
+      // Conclude must use the durable end-of-lesson state, not the interaction
+      // cached when this page was first opened or before the final round.
+      const latest = await refreshSnapshot();
+      if (!canConcludeSegments(latest)) return;
+      let current = await api.teacherInteraction(debateId);
+      setInteraction(current);
       if (current?.status === "finalized") {
         setInteraction(current);
+        setReportOpen(true);
         return;
       }
       if (!current || current.status === "closed") {
@@ -385,6 +390,7 @@ export default function TeacherDebateControlPage() {
       if (current.status === "finalized") {
         setInteraction(current);
         setJoinUrl(null);
+        setReportOpen(true);
         return;
       }
       if (current.status !== "open") {
@@ -413,15 +419,7 @@ export default function TeacherDebateControlPage() {
       interactionInFlight.current = false;
       setInteractionBusy(false);
     }
-  }, [
-    api,
-    debateId,
-    detail,
-    interaction,
-    locale,
-    readInteraction,
-    refreshSnapshot,
-  ]);
+  }, [api, debateId, detail, locale, readInteraction, refreshSnapshot]);
 
   const finish = useCallback(async () => {
     if (

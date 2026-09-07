@@ -102,7 +102,7 @@ export function DebatePreview({
             ) : null}
             {progress.ready ? (
               <Link className="primary-action" href={openClassroomHref}>
-                Open Classroom
+                Open Stage
               </Link>
             ) : null}
           </div>
