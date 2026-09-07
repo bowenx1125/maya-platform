@@ -9,6 +9,7 @@ import { ErrorNotice, LoadingCard, PageIntro, SectionCard } from "../ui";
 import { statusLabel } from "../../lib/i18n";
 import type { DebateSummary } from "../../lib/api";
 import styles from "./beta-debate-list.module.css";
+import listStyles from "../debate/setup/debate-setup.module.css";
 
 /** Mirrors the classic list's lookup; the shared surface stays untouched. */
 function teacherCourseId(
@@ -116,12 +117,14 @@ export function BetaDebateList() {
                       ) : null}
                     </span>
                   </div>
-                  <Link
-                    className={styles.openAction}
-                    href={`/teacher/debates-beta/${debate.id}/control`}
-                  >
-                    {copy.open}
-                  </Link>
+                  <div className={listStyles.debateActions}>
+                    <Link
+                      className="secondary-action"
+                      href={`/teacher/debates-beta/${debate.id}/control`}
+                    >
+                      {copy.open}
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>

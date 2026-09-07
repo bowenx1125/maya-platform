@@ -381,7 +381,7 @@
   display: contents;
 }
 
-.debateActions button {
+.debateActions :is(button, a) {
   min-height: 36px;
   padding: 8px 10px;
   border: 0;
@@ -394,7 +394,7 @@
   white-space: nowrap;
 }
 
-.debateActions button:hover:not(:disabled) {
+.debateActions :is(button, a):hover:not(:disabled) {
   background: rgba(196, 164, 104, 0.16);
   color: #382d19;
   box-shadow: none;

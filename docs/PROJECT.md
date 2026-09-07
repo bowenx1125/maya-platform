@@ -83,7 +83,7 @@ preserved. Updated pages and worksheet regions were visually checked.
 
 Bench titles align left. Delete Voice/All sit beside Resume. Stage and Dashboard
 use white paper behind yellow rows; Dashboard has no arrows or avatar circles.
-Open Stage uses Delete-style color hover, without underlining. Failed Resume
+Open Stage shares Delete's action CSS, animation and separate divider. Failed Resume
 keeps the Stalled row unchanged, with no error text. Five focused tests and
 typecheck passed. Creation/Preview stay yellow with inline navigation; Audio Ready
 replaces Saved, and list progress shows x / y turns. Open Message/Hide preserves
