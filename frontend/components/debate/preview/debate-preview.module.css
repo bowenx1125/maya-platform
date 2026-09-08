@@ -1,3 +1,7 @@
+:global(body):has(.page) {
+  background: #fbf4e5;
+}
+
 .page {
   display: grid;
   gap: var(--workspace-gap);
@@ -95,18 +99,17 @@
   padding: var(--workspace-inset);
   border: 1px solid #e5d8bf;
   border-radius: 20px;
-  background: #fbf4e5;
+  background: #fff;
 }
 
 .turnCard {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 1.25rem;
-  box-shadow: 0 12px 32px rgba(72, 61, 105, 0.07);
+  background: #fbf4e5;
+  border: 1px solid #e5d8bf;
+  border-radius: 14px;
   display: grid;
   gap: 0.9rem;
   min-width: 0;
-  padding: clamp(1rem, 2.2vw, 1.5rem);
+  padding: 16px;
 }
 
 .turnHeader {
@@ -139,10 +142,6 @@
 }
 
 .speech {
-  padding: 16px;
-  border: 1px solid #e5d8bf;
-  border-radius: 14px;
-  background: #fbf4e5;
   color: var(--ink);
   line-height: 1.65;
   margin: 0;

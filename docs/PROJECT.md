@@ -288,7 +288,7 @@ are block elements to avoid baseline gaps. Shared title line-height is 1.4. All 
 stacked heading/card margins removed. New page title is Debates.
 Home tiles show name/group above version/description; service tiles are pale yellow.
 New uses white Topic/Background, pale-yellow Ruleset text and white cards; stance shares the
-language switch styles. Preview uses pale-yellow outer/body panels and white speech cards.
+language switch styles. Preview: yellow page, white outer panel, yellow speech cards; unboxed text.
 
 
 3D Replay is hidden before completion; Interact/Hide toggles the existing QR session.
