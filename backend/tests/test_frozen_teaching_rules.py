@@ -89,6 +89,7 @@ def test_blank_markdown_does_not_restore_old_teaching_rules():
     assert "# Execution contract" in system
     assert "initial_position" not in system
     assert "question_target_id" in system
+    assert "S IDs are internal metadata only" in system
 
 
 def test_generation_context_binds_prompt_into_snapshot_identity():

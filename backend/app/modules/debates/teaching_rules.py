@@ -53,6 +53,8 @@ def compile_system_prompt(markdown: str, round_number: int, language: str) -> st
         "Return only JSON with segments, question and discussion_memory. "
         "segments contains 1–8 paragraphs, each {text,source_ids,reply_to,support_mode}. "
         "source_ids contains at most six supplied S IDs per paragraph. "
+        "S IDs are internal metadata only; never include or read identifiers such as S1 or S2 "
+        "in paragraph text. Refer to the evidence naturally instead. "
         "direct (+5) denotes direct source support; contextual (+2) denotes background support; "
         "both link to supplied S IDs. no_match (+0) uses source_ids=[]. "
         "These are support categories, not verification of factual truth. "

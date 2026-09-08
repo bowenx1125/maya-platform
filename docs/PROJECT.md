@@ -214,24 +214,10 @@ and data/licensing governance remain outside this local Demo scope.
 [ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/) and [ADRs](adr/)
 retain stable design references.
 
-Latest Prompt guidance treats speeches as substantive essay answers: relevant
-explanation, evidence and direct answers earn credit; repetition, digression and
-padding do not. Persona shapes priorities, criteria and recommendations, never
-invented facts. RAG material is selected for complementary relevance and explained,
-not merely named. Expanded language-specific upper guidance appears above; no
-minimum or runtime length rejection was restored. Provider request/token ceilings
-remain unchanged. An additional 21 four-round backend checks and 11 Preview/Stage
-frontend checks passed after this change; frontend types passed. These checks
-do not validate model answer depth or teaching quality. Preview and Stage Check RAG now count unique evidence source IDs,
-not paragraphs, using the same badge treatment. Saved speeches remain unchanged.
-
-Stage connection wording has been replaced by the turn-progress bubble. Controller
-waiting and Finish-blocked prose, generic 3D error text, redundant confirmation
-labels and the Stage audio replacement browser dialog are removed. Connection,
-control, Provider authorization and mutation guards remain enforced.
-Targeted UI/connection checks: 26 passed; types passed and lint had no errors
-(four existing warnings). Broader playback checks also exposed unresolved native
-ended-ack and hidden-turn-index assertions; no claim of full playback acceptance.
+Preview and Stage Check RAG count unique evidence sources. Waiting/Finish-blocked
+prose, generic 3D error text and audio replacement dialogs are removed; control
+and cost guards remain. Older broad Wave2 playback tests retain two unresolved
+native-ended/hidden-index assertions; targeted Beta checks are not a full-suite pass.
 
 ## Topic and Background — September 8
 
@@ -252,10 +238,7 @@ Creation uses a yellow Topic textarea, an optional Background below it, English/
 Chinese click choices above Agents, and Create Debate Draft beside Back. No extra
 Provider call or automatic regeneration of existing records was introduced.
 
-Verification: 37 topic/setup checks, 7 database/seed/initial-report checks, 19
-background/report checks (overlap with the topic set), and 36 frontend setup checks
-passed. Frontend types, targeted backend mypy and OpenAPI semantic/generated
-contracts passed. No paid generation or real browser classroom test was run.
+Topic/Background persistence, retrieval, Report and setup checks passed offline.
 
 ## Frozen Markdown Ruleset and current Report repair
 
@@ -305,3 +288,20 @@ Stage frontend checks and 37 Report checks passed. Report fixtures verify six
 long evidence chunks reach actual request construction unchanged; live retained
 chunks reproduced the original limit. Types, targeted lint/mypy and contract
 checks pass. No new paid or full browser classroom acceptance was performed.
+
+## Real ruleset effect check
+
+A controlled Chinese opening comparison used identical synthetic Topic, Persona
+and RAG, changing only frozen Markdown: default produced five paragraphs; custom
+produced the requested Decision/Evidence/Review structure with numerical allocation
+and one-week monitoring. Two valid calls used 3287 tokens. One preceding accepted
+call was lost to an experiment recording bug; actual total is three calls, not
+two. No classroom records or Provider settings changed. Full outputs and limits:
+[Ruleset effect evidence](validation/RULESET_EFFECT_2026-09-08.md).
+
+The custom answer exposed S1 after its teacher rules omitted citation wording.
+New execution Prompts now reserve S IDs for metadata; no backend text filter was
+added. Existing frozen lessons are unchanged; this addition has offline coverage,
+not another paid rerun. One opening comparison is not four-round quality acceptance.
+Ruleset styling now uses gold card, white documents/switch, gold selection and
+purple actions. Thirteen frozen-rule checks and two editor checks passed.
