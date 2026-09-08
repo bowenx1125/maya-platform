@@ -1260,6 +1260,31 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                     safe_error_code=str(code or "turn_generation_failed"),
                 ),
             )
+        now = datetime.now(UTC)
+        for state, current in db.execute(
+            select(PlaybackState, DebateTurn)
+            .join(DebateTurn, DebateTurn.id == PlaybackState.current_turn_id)
+            .join(Debate, Debate.id == PlaybackState.debate_id)
+            .where(Debate.id.in_(ids), Debate.status == "running", PlaybackState.mode == "live")
+        ):
+            updated = (
+                state.updated_at.replace(tzinfo=UTC)
+                if state.updated_at.tzinfo is None
+                else state.updated_at
+            )
+            age = (now - updated).total_seconds()
+            media_stalled = (state.status in {"ready", "paused"} and age >= 15) or (
+                state.status == "playing" and age >= max(30, state.audio_duration_ms / 1000 + 15)
+            )
+            if media_stalled:
+                stall_by_debate.setdefault(
+                    str(state.debate_id),
+                    DebateStall(
+                        turn_id=UUID(current.id),
+                        round_no=current.round_no,
+                        safe_error_code="playback_recovery_available",
+                    ),
+                )
     for row in rows:
         summaries.append(
             debate_summary(

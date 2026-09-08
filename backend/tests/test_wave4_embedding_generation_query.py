@@ -258,7 +258,7 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
                     {"agent_id": second_agent_id, "stance_mode": "open"},
                 ],
                 "rule_set_id": MUTUAL_LEARNING_RULE_SET_ID,
-                "round_count": 2,
+                "round_count": 4,
             },
         )
         assert created.status_code == 201, created.text
@@ -371,7 +371,7 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
                 assert prepared.retrieval_status == "matched"
                 assert prepared.sources
                 assert prepared.source_receipts
-                assert prepared.evidence_trace
+                assert prepared.evidence_trace == ()
         assert len(transport.calls) == 1
         assert transport.calls[0]["parameters"] == {"dimension": 1024}
         assert "api_key" not in transport.calls[0]
@@ -384,13 +384,13 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
         assert raw_private_marker in projected.agent_md
         opening_queries = original_build_turn_subqueries(observed_contexts[0])
         assert opening_queries[0].query_kind == "viewpoint"
-        assert initial_position in opening_queries[0].text
+        assert opening_queries[0].text == "How should recommendation systems be governed?"
         assert raw_private_marker not in opening_queries[0].text
         nested = transport.calls[0]["input"]
         assert isinstance(nested, dict)
         query_texts = nested["texts"]
         assert isinstance(query_texts, list) and len(query_texts) == 1
-        assert initial_position in query_texts[0]
+        assert query_texts == ["How should recommendation systems be governed?"]
         assert raw_private_marker not in query_texts[0]
         operations = ProviderRepository(database).operations(scope_id=debate_id)
         query_operations = [

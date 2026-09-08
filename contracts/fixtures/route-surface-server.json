@@ -2058,6 +2058,122 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/rebirth": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DebateId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "rebirthDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateCleanupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Classroom reset committed; saved Preview is retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateCleanupResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/remake": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DebateId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "remakeDebate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateCleanupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current-turn recovery committed without stopping the classroom.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebateCleanupResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/start": {
       "parameters": [
         {
@@ -4318,8 +4434,7 @@
           },
           "word_count": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 900
+            "minimum": 0
           },
           "safe_error_code": {
             "type": "null"
@@ -7432,8 +7547,7 @@
               "integer",
               "null"
             ],
-            "minimum": 1,
-            "maximum": 900
+            "minimum": 0
           },
           "safe_error_code": {
             "type": [
@@ -7527,8 +7641,7 @@
           },
           "word_count": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 900
+            "minimum": 0
           },
           "safe_error_code": {
             "type": "null"

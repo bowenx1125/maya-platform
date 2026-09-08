@@ -216,7 +216,6 @@ export function ScholarScene({
                   key={character.id}
                   style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}
                 >
-                  <b>{character.slot}</b>
                   {character.name}
                 </span>
               );
@@ -230,9 +229,7 @@ export function ScholarScene({
             data-side={bubbleSide}
             style={{ left: `${speaking.x}px`, top: `${speaking.y}px` }}
           >
-            <span className={styles.bubbleWho}>
-              {speakingCharacter?.slot} · {speakingCharacter?.name}
-            </span>
+            <span className={styles.bubbleWho}>{speakingCharacter?.name}</span>
             {bubbleText}
           </div>
         ) : null}

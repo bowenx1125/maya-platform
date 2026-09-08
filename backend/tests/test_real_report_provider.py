@@ -344,14 +344,14 @@ def test_reviewed_price_card_cost_ceiling_is_zero_call() -> None:
         ("debate_overview", "The final vote total is 2.", "report_output_vote_total"),
     ),
 )
-def test_output_language_markdown_winner_and_vote_total_fail_without_retry(
+def test_output_content_is_preserved_without_an_extra_provider_call(
     field: str, value: str, expected: str
 ) -> None:
     sections = _sections()
     sections[field] = value
     transport = FakeTransport(_response(json.dumps(sections)))
-    with pytest.raises(ReportProviderError, match=expected):
-        _provider(transport).execute(_request())
+    result = _provider(transport).execute(_request())
+    assert result.model_dump()[field] == value
     assert transport.calls == 1
 
 

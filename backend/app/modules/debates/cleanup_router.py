@@ -16,6 +16,7 @@ from app.modules.debates.models import Debate, DebateParticipant
 from app.modules.debates.playback.audio_regeneration import CachedSegmentTurn, regenerate_turn_audio
 from app.modules.debates.playback.protocols import ResolvedTurnVoice
 from app.modules.debates.playback.router import get_playback_service
+from app.modules.debates.rebirth import rebirth_debate, remake_debate
 from app.modules.debates.schemas import (
     DebateCleanupRequest,
     DebateCleanupResult,
@@ -132,6 +133,97 @@ async def delete_all_route(
         payload=payload,
         remove_all=True,
         key=idempotency_key,
+    )
+
+
+async def _reset_classroom(
+    action: Any,
+    request: Request,
+    context: AuthContext,
+    db: Session,
+    settings: Settings,
+    debate_id: UUID,
+    payload: DebateCleanupRequest,
+    key: str,
+) -> DebateCleanupResult:
+    result = await action(
+        db,
+        actor_user_id=str(context.user.id),
+        debate_id=str(debate_id),
+        expected_revision=payload.expected_revision,
+        expected_control_version=payload.expected_control_version,
+        data_root=settings.resolved_data_root,
+        idempotency_key=key,
+        playback_service=get_playback_service(request),
+        report_task_manager=getattr(request.app.state, "report_task_manager", None),
+    )
+    scheduler = getattr(request.app.state, "prewarm_scheduler", None)
+    if scheduler is not None:
+        scheduler.release(str(debate_id))
+    return DebateCleanupResult(
+        debate_id=UUID(result.debate_id),
+        cleanup_status=result.cleanup_status,
+        revision=result.revision,
+        control_version=result.control_version,
+        deleted_file_count=result.deleted_file_count,
+        pending_file_count=result.pending_file_count,
+        regenerable_turn_ids=[],
+    )
+
+
+@router.post(
+    "/debates/{debate_id}/rebirth",
+    response_model=DebateCleanupResult,
+    operation_id="rebirthDebate",
+    responses=_RESPONSES,
+)
+async def rebirth_route(
+    debate_id: UUID,
+    payload: DebateCleanupRequest,
+    request: Request,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DebateCleanupResult:
+    return await _reset_classroom(
+        rebirth_debate,
+        request,
+        context,
+        db,
+        settings,
+        debate_id,
+        payload,
+        idempotency_key,
+    )
+
+
+@router.post(
+    "/debates/{debate_id}/remake",
+    response_model=DebateCleanupResult,
+    operation_id="remakeDebate",
+    responses=_RESPONSES,
+)
+async def remake_route(
+    debate_id: UUID,
+    payload: DebateCleanupRequest,
+    request: Request,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DebateCleanupResult:
+    return await _reset_classroom(
+        remake_debate,
+        request,
+        context,
+        db,
+        settings,
+        debate_id,
+        payload,
+        idempotency_key,
     )
 
 

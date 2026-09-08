@@ -799,13 +799,13 @@ class PlaybackSessionMixin(PlaybackCore):
             if failure_phase == "pre_ack":
                 if state.status != "ready":
                     raise invalid_state("A pre-play failure requires ready playback.")
-                self._save(db, debate, state)
-                self._commit(db)
-                return self._state_dto(state, db, debate)
-            if state.status != "playing":
-                raise invalid_state("A post-play failure requires playing playback.")
-            self._set_nonplaying(state, "ready", cursor_ms)
-            state.control_version += 1
+            else:
+                if state.status != "playing":
+                    raise invalid_state("A post-play failure requires playing playback.")
+                self._set_nonplaying(state, "ready", cursor_ms)
+                state.control_version += 1
+            # Pre-ack failures also need a committed event so the browser can
+            # recover after its failed media ticket has been cleared.
             self._save(db, debate, state)
             payload = {
                 "code": "playback_failed",

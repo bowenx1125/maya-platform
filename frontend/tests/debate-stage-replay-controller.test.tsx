@@ -424,4 +424,285 @@ describe("terminal segments replay controller", () => {
       await waitFor(() => expect(replay).toHaveProperty("disabled", true));
     },
   );
+
+  it.each(["classic", "beta"] as const)(
+    "%s offers reconnect when the network drops during retained replay",
+    async (kind) => {
+      const initial = detail();
+      const api = apiFor(initial);
+      const socket = new ReplaySocket();
+      render(renderStage(kind, initial, api, socket));
+      const replay = await screen.findByRole("button", {
+        name: "Replay whole debate",
+      });
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+
+      act(() => socket.emitOpen());
+      fireEvent.click(replay);
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .filter(
+              (command) =>
+                command.command_type === "playback.controller.acquire",
+            ),
+        ).toHaveLength(1),
+      );
+      act(() => socket.emitMessage(acquired()));
+      await waitFor(() => expect(api.replayDebate).toHaveBeenCalledTimes(1));
+
+      act(() => socket.emitClose(1006));
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Reconnect" })).toBeTruthy(),
+      );
+      expect(api.replayDebate).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
+describe("saved media failure recovery", () => {
+  it.each(["classic", "beta"] as const)(
+    "%s recovers a refused Next in place without regeneration",
+    async (kind) => {
+      const initial = detail();
+      initial.status = "running";
+      initial.playback = {
+        ...initial.playback,
+        status: "waiting_next",
+        current_turn_id: turnId,
+        next_turn_ready: true,
+      };
+      const refreshed = {
+        ...initial,
+        playback: { ...initial.playback, control_version: 8 },
+      };
+      const refreshSnapshot = vi.fn().mockResolvedValue(refreshed);
+      const socket = new ReplaySocket();
+      const api = apiFor(initial);
+      vi.mocked(api.advanceDebatePlayback).mockRejectedValueOnce(
+        new Error("The platform request could not be completed."),
+      );
+      const props = {
+        api,
+        debateId,
+        detail: initial,
+        socketFactory: () => socket,
+        refreshSnapshot,
+      };
+      render(
+        kind === "beta" ? (
+          <BetaDebateStage {...props} />
+        ) : (
+          <DebateStage {...props} />
+        ),
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => socket.emitOpen());
+      act(() => socket.emitMessage(acquired()));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Next" })).toHaveProperty(
+          "disabled",
+          false,
+        ),
+      );
+      expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("The platform request could not be completed."),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
+      expect(
+        screen.queryByText("Playback did not start. You can retry this turn."),
+      ).toBeNull();
+    },
+  );
+
+  it.each(["classic", "beta"] as const)(
+    "%s ignores duplicated prepared media and retries a failed media ticket once",
+    async (kind) => {
+      const initial = detail();
+      initial.status = "running";
+      initial.public_turns = [];
+      initial.playback = {
+        ...initial.playback,
+        status: "ready",
+        current_turn_id: turnId,
+      };
+      const refreshed = { ...initial, last_sequence: 5 };
+      const refreshSnapshot = vi.fn().mockResolvedValue(refreshed);
+      const socket = new ReplaySocket();
+      const api = apiFor(initial);
+      let rejectPlay: (reason: unknown) => void = () => {};
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, "play")
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((_resolve, reject) => {
+              rejectPlay = reject;
+            }),
+        )
+        .mockResolvedValue(undefined);
+      const props = {
+        api,
+        debateId,
+        detail: initial,
+        socketFactory: () => socket,
+        refreshSnapshot,
+      };
+      render(
+        kind === "beta" ? (
+          <BetaDebateStage {...props} />
+        ) : (
+          <DebateStage {...props} />
+        ),
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => socket.emitOpen());
+      act(() => socket.emitMessage(acquired()));
+      const prepared = {
+        ...acquired(),
+        message_type: "media.prepared",
+        turn_id: turnId,
+        media_url: `/api/v1/debates/${debateId}/audio/${turnId}?media_ticket=${"a".repeat(43)}`,
+      };
+      act(() => {
+        socket.emitMessage(prepared);
+        socket.emitMessage(prepared);
+      });
+      expect(play).toHaveBeenCalledTimes(1);
+      await act(async () =>
+        rejectPlay(new DOMException("Interrupted", "AbortError")),
+      );
+      expect(
+        socket
+          .commands()
+          .filter((x) => x.command_type === "playback.play_failed"),
+      ).toHaveLength(1);
+      act(() =>
+        socket.emitMessage({
+          event_id: "90000000-0000-4000-8000-000000000005",
+          event_type: "error",
+          event_version: 1,
+          debate_id: debateId,
+          sequence: 5,
+          occurred_at: "2026-09-08T00:00:00Z",
+          payload: { code: "playback_failed", recoverable: true },
+        }),
+      );
+      await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .filter((x) => x.command_type === "playback.media.prepare").length,
+        ).toBeGreaterThanOrEqual(1),
+      );
+      act(() =>
+        socket.emitMessage({
+          ...prepared,
+          media_url: `/api/v1/debates/${debateId}/audio/${turnId}?media_ticket=${"b".repeat(43)}`,
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .filter((x) => x.command_type === "playback.started_ack"),
+        ).toHaveLength(1),
+      );
+      expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("Playback did not start. You can retry this turn."),
+      ).toBeNull();
+      play.mockRestore();
+    },
+  );
+});
+
+describe("ready state media handoff", () => {
+  it.each(["classic", "beta"] as const)(
+    "%s prepares the next saved audio when refreshed detail arrives before the REST callback",
+    async (kind) => {
+      const initial = detail();
+      initial.status = "running";
+      initial.playback = {
+        ...initial.playback,
+        status: "waiting_next",
+        current_turn_id: turnId,
+        next_turn_ready: true,
+      };
+      const successor = "40000000-0000-4000-8000-000000000002";
+      const next = {
+        ...initial,
+        playback: {
+          ...initial.playback,
+          status: "ready" as const,
+          current_turn_id: successor,
+          control_version: 8,
+          next_turn_ready: false,
+        },
+      };
+      const socket = new ReplaySocket();
+      const api = apiFor(initial);
+      let resolveNext!: (state: DebatePlaybackState) => void;
+      vi.mocked(api.advanceDebatePlayback).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveNext = resolve;
+          }),
+      );
+      const refreshSnapshot = vi.fn().mockResolvedValue(next);
+      const factory = () => socket;
+      const view = (value: DebateDetail) => {
+        const props = {
+          api,
+          debateId,
+          detail: value,
+          socketFactory: factory,
+          refreshSnapshot,
+        };
+        return kind === "beta" ? (
+          <BetaDebateStage {...props} />
+        ) : (
+          <DebateStage {...props} />
+        );
+      };
+      const rendered = render(view(initial));
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => socket.emitOpen());
+      act(() => socket.emitMessage(acquired()));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() =>
+        expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
+      );
+      rendered.rerender(view(next));
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .filter(
+              (command) =>
+                command.command_type === "playback.media.prepare" &&
+                command.turn_id === successor,
+            ),
+        ).toHaveLength(1),
+      );
+      await act(async () => resolveNext(next.playback));
+      await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
+      expect(
+        socket
+          .commands()
+          .filter(
+            (command) =>
+              command.command_type === "playback.media.prepare" &&
+              command.turn_id === successor,
+          ),
+      ).toHaveLength(1);
+      expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1);
+      expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+    },
+  );
 });

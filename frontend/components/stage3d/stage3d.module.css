@@ -124,36 +124,22 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px 4px;
+  padding: 5px 14px 6px;
   transform: translate(-50%, -190%);
   border-radius: 999px;
   background: rgba(252, 250, 245, 0.86);
   color: #2a251f;
-  font-size: 0.76rem;
+  font-size: clamp(0.95rem, 1.2vw, 1.15rem);
+  font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
   transition: background-color 200ms ease;
 }
 
-.namePlate b {
-  display: inline-grid;
-  width: 17px;
-  height: 17px;
-  place-items: center;
-  border-radius: 5px;
-  background: rgba(213, 171, 76, 0.34);
-  font-size: 0.68rem;
-  font-weight: 850;
-}
-
 .namePlate[data-current="true"] {
   background: #2b2620;
   color: #f7f2e8;
-}
-
-.namePlate[data-current="true"] b {
-  background: rgba(233, 199, 116, 0.4);
 }
 
 /* The bubble hangs off the speaking head and flips side near the edges, so a
@@ -182,10 +168,10 @@
   display: block;
   margin-bottom: 5px;
   color: #8a7a5f;
-  font-size: 0.68rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 /* ---------- barrage ---------- */

@@ -72,8 +72,8 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Final-input freezing and two cleanup commands extend the previous surface.
-  if (platformOperationCount !== 82 || placeholderCount !== 0) {
+  // Rebirth and Remake extend the existing classroom command surface.
+  if (platformOperationCount !== 84 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

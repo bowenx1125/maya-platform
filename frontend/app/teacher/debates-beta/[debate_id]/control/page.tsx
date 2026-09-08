@@ -491,6 +491,7 @@ export default function TeacherDebateControlPage() {
   const showOpenInteraction =
     Boolean(detail) &&
     detail?.status !== "draft" &&
+    detail?.playback.mode !== "replay" &&
     interaction?.status !== "finalized" &&
     (Boolean(joinUrl) || !segmentsProtocol || detail?.status === "running");
 
@@ -590,6 +591,7 @@ export default function TeacherDebateControlPage() {
                 {showSegmentsReport ? (
                   <button
                     className="secondary-action"
+                    disabled={detail.playback.mode === "replay"}
                     type="button"
                     onClick={() => setReportOpen(true)}
                   >
@@ -615,7 +617,9 @@ export default function TeacherDebateControlPage() {
             api={api}
             betaLabels={betaLabels}
             joinUrl={joinUrl}
-            joinCodeVisible={joinCodeVisible}
+            joinCodeVisible={
+              joinCodeVisible && detail.playback.mode !== "replay"
+            }
             onInteractionOpened={() => void readInteraction()}
             debateId={debateId}
             detail={detail}

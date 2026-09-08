@@ -77,6 +77,7 @@
 
 .report {
   border-top: 1px solid var(--line);
+  white-space: normal;
   padding-top: 12px;
   font-family: inherit;
 }

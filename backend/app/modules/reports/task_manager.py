@@ -90,6 +90,13 @@ class ReportTaskManager:
                 pass
             raise
 
+    async def request_cancel_debate(self, debate_id: str) -> None:
+        """Stop future work after Destroy without holding its HTTP response."""
+        self._rewake.discard(debate_id)
+        task = self._tasks.get(debate_id)
+        if task is not None and not task.done():
+            task.cancel()
+
     async def cancel_debate(self, debate_id: str) -> None:
         self._rewake.discard(debate_id)
         task = self._tasks.get(debate_id)

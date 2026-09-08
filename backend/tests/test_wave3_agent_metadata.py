@@ -641,7 +641,7 @@ def test_description_metadata_does_not_mutate_release_or_debate_inputs(
                 {"agent_id": first_id, "stance_mode": "open"},
                 {"agent_id": second_id, "stance_mode": "open"},
             ],
-            "round_count": 2,
+            "round_count": 4,
         },
     )
     assert debate.status_code == 201, debate.text
@@ -776,7 +776,7 @@ def test_delete_and_create_debate_race_is_fk_safe(
     )
     payload = DebateDraftRequest(
         topic="Can a race preserve frozen inputs?",
-        round_count=2,
+        round_count=4,
         participants=[
             DebateParticipantInput(agent_id=UUID(first_agent_id), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(second_agent_id), stance_mode="open"),

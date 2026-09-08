@@ -6,6 +6,7 @@ import type { components } from "../../lib/api/generated/schema";
 import { apiErrorMessage, type IdempotencyHandle } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import { useLocale } from "../locale";
+import { ReportMarkdown } from "./report-markdown";
 
 import styles from "./report.module.css";
 
@@ -107,7 +108,7 @@ export function ReportPanel({
             refresh: "刷新",
             generate: "生成报告",
             regenerate: "重新生成",
-            download: "下载英文 Markdown",
+            download: "下载 Markdown",
             loading: "正在读取报告状态…",
             noReport: "还没有报告。",
             noHistory: "还没有报告修订。",
@@ -127,7 +128,7 @@ export function ReportPanel({
             refresh: "Refresh",
             generate: "Generate Report",
             regenerate: "Regenerate",
-            download: "Download English Markdown",
+            download: "Download Markdown",
             loading: "Reading report status…",
             noReport: "No report yet.",
             noHistory: "No report revisions yet.",
@@ -361,9 +362,9 @@ export function ReportPanel({
           ) : null}
         </div>
         {displayed?.status === "ready" ? (
-          <pre className={styles.markdown} aria-label={copy.report}>
+          <ReportMarkdown className={styles.markdown} label={copy.report}>
             {displayed.english_markdown}
-          </pre>
+          </ReportMarkdown>
         ) : displayed?.status === "failed" ? (
           <p className={styles.notice} role="status">
             {displayed.safe_error_code}

@@ -22,6 +22,7 @@ from app.core.models import (
 from app.modules.agents.persona import compile_persona
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
 from app.modules.debates.generation import (
+    MUTUAL_LEARNING_RULE_SET_ID,
     GenerationContext,
     ParticipantContext,
     TurnGenerationService,
@@ -547,8 +548,8 @@ def test_sql_turn_preparer_applies_v2_anchor_and_leaves_persisted_v1_unfiltered(
                         {"agent_id": first_agent_id, "stance_mode": "open"},
                         {"agent_id": partner_agent, "stance_mode": "open"},
                     ],
-                    "round_count": 2,
-                    "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+                    "round_count": 4,
+                    "rule_set_id": MUTUAL_LEARNING_RULE_SET_ID,
                 },
             )
             assert response.status_code == 201, response.text
@@ -556,11 +557,11 @@ def test_sql_turn_preparer_applies_v2_anchor_and_leaves_persisted_v1_unfiltered(
             with database.session() as db:
                 debate = db.get(Debate, debate_id)
                 assert debate is not None
-                if legacy_v1:
-                    debate.rule_set_id = RULE_SET_ID_V1
-                    debate.rule_snapshot_json = canonical_rule_snapshot_json(
-                        rule_set_id=RULE_SET_ID_V1
-                    )
+                persisted_rule_set_id = RULE_SET_ID_V1 if legacy_v1 else RULE_SET_ID_V2
+                debate.rule_set_id = persisted_rule_set_id
+                debate.rule_snapshot_json = canonical_rule_snapshot_json(
+                    rule_set_id=persisted_rule_set_id
+                )
                 turns = commit_start_plan(db, debate_id=debate_id)
                 assert turns
                 return SqlTurnPreparer(settings=settings)(

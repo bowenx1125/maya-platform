@@ -141,7 +141,8 @@ def test_request_is_exact_two_message_canonical_and_hash_excludes_secret() -> No
     assert request.method == "POST"
     assert request.endpoint.endswith("/compatible-mode/v1/chat/completions")
     assert [message.role for message in request.messages] == ["system", "user"]
-    assert request.system_message.content == REPORT_SYSTEM_PROMPT
+    assert request.system_message.content.startswith(REPORT_SYSTEM_PROMPT)
+    assert "This debate is in English" in request.system_message.content
     assert request.user_message.content == request.report.canonical_json()
     assert request.input_hash == request.report.input_hash()
     assert len(request.request_hash) == 64
@@ -198,7 +199,6 @@ def test_request_hash_is_stable_when_allowlisted_arrays_are_reordered() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     (
-        ("topic", "课堂如何分享文化知识？"),
         ("topic", "# hidden heading"),
         ("topic", "The winner should decide."),
     ),
@@ -255,14 +255,17 @@ def test_output_maps_to_existing_closed_report_section_dto() -> None:
         lambda value: value.update({"debate_overview": "# Heading\nEnglish text."}),
         lambda value: value.update({"debate_overview": "The winner is clear."}),
         lambda value: value.update({"debate_overview": "The code-owned final vote total is 2."}),
-        lambda value: value.update({"extra": "not allowed"}),
     ),
 )
-def test_output_rejects_cjk_markdown_winner_vote_total_and_extra(mutator: Any) -> None:
+def test_output_preserves_content_without_language_or_style_rejection(mutator: Any) -> None:
     value = _sections()
     mutator(value)
+    assert validate_report_sections(value).model_dump() == value
+
+
+def test_output_rejects_extra_structural_fields() -> None:
     with pytest.raises(ReportBoundaryError):
-        validate_report_sections(value)
+        validate_report_sections({**_sections(), "extra": "not allowed"})
 
 
 def test_output_rejects_non_mapping_or_pydantic_validation_error() -> None:

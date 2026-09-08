@@ -16,7 +16,7 @@ from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
-ALEMBIC_HEAD = "0024_shared_discussion_evidence"
+ALEMBIC_HEAD = "0025_report_prompt_only_content"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

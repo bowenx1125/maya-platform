@@ -13,10 +13,11 @@ import json
 import logging
 from collections.abc import Mapping
 from dataclasses import replace
+from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -72,7 +73,7 @@ from app.modules.debates.generation.segments import (
 from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
-from app.modules.debates.models import DebateParticipant, DebateTurn
+from app.modules.debates.models import AuditLog, DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.round_count import (
     debate_teaching_protocol,
@@ -474,12 +475,45 @@ class SqlTurnPreparer:
                 if dual_real
                 else debate_budget_cap(len(participants), round_count=debate_rounds)
             )
-            repository.ensure_scope_budget(
+            cycles = int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(AuditLog)
+                    .where(
+                        AuditLog.debate_id == str(debate.id),
+                        AuditLog.event_type == "debate.rebirth",
+                    )
+                )
+                or 0
+            )
+            remakes = int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(AuditLog)
+                    .where(
+                        AuditLog.debate_id == str(debate.id),
+                        AuditLog.event_type == "debate.remake",
+                        AuditLog.details_json == '{"regenerated":true}',
+                    )
+                )
+                or 0
+            )
+            # Only explicit actions extend the cap; previous costs stay allocated.
+            extra_turns = cycles * len(participants) + remakes
+            original_turns = debate_rounds * len(participants)
+            extra_requests = extra_turns * (cap.max_requests // original_turns)
+            ensure_budget = (
+                repository.raise_scope_budget if extra_turns else repository.ensure_scope_budget
+            )
+            ensure_budget(
                 str(debate.id),
                 ProviderScopeBudgetV1(
-                    max_requests=cap.max_requests,
-                    max_total_tokens=cap.max_total_tokens,
-                    max_cost_cny=float(cap.max_cost_cny),
+                    max_requests=cap.max_requests + extra_requests,
+                    max_total_tokens=cap.max_total_tokens
+                    + extra_turns * (cap.max_total_tokens // original_turns),
+                    max_cost_cny=float(
+                        Decimal(cap.max_cost_cny) * (original_turns + extra_turns) / original_turns
+                    ),
                     budget_bucket=LLM_DEBATE_TURN_BUCKET,
                 ),
             )

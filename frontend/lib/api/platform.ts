@@ -1434,6 +1434,48 @@ export class PlatformApi {
     );
   }
 
+  async remakeDebate(
+    debateId: string,
+    body: DebateCleanupRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateCleanupResult> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/remake", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
+  }
+
+  async rebirthDebate(
+    debateId: string,
+    body: DebateCleanupRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<DebateCleanupResult> {
+    return commitMutation(options.idempotency, async (key) =>
+      unwrap(
+        await this.client.POST("/debates/{debate_id}/rebirth", {
+          params: {
+            path: { debate_id: debateId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        }),
+      ),
+    );
+  }
+
   async replayDebate(
     debateId: string,
     expectedControlVersion: number,

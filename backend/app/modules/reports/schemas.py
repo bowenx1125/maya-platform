@@ -52,7 +52,7 @@ class ReportRevisionSummary(ClosedModel):
     id: UUID
     revision_no: int = Field(ge=1)
     status: Literal["generating", "ready", "failed"]
-    word_count: int | None = Field(default=None, ge=1, le=900)
+    word_count: int | None = Field(default=None, ge=0)
     safe_error_code: str | None = None
     created_at: datetime
 
@@ -84,7 +84,7 @@ class ReadyReportRevision(ClosedModel):
     revision_no: int = Field(ge=1)
     status: Literal["ready"]
     english_markdown: str = Field(min_length=1)
-    word_count: int = Field(ge=1, le=900)
+    word_count: int = Field(ge=0)
     safe_error_code: None = None
     created_at: datetime
 

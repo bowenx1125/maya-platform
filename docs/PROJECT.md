@@ -104,7 +104,7 @@ final input after a completed lesson's replay is released; live generation still
 requires the cancellation fence. Never treat replay's control generation as a reason
 to regenerate the already frozen classroom messages.
 
-Current checks:
+Previous delivery checks (before this classroom audit):
 
 - 63 focused backend generation/routing/recovery tests passed, including one real
   SQL accepted-stage recovery with a fake supplier proving one LLM call only.
@@ -140,14 +140,107 @@ followed the Persona's unrelated scenario, and later conclusions were repetitive
 This is functional run evidence, NOT evidence that RAG relevance, natural debate
 quality, all requirements or a universal 100% success rate have been accepted.
 
-Work is paused at the owner's explicit request after this atomic change; do not
-start new development or paid tests until the owner resumes it.
+The owner resumed work for the playback, live-list, bilingual Report and Stage
+changes below. Preserve the other window's existing test/replay edits.
 The owner prefers consolidated validation and proportionate failure follow-ups.
-Paid and browser tests are authorized. The quota stop boundary is removed; future
+A paid Chinese Report check was authorized and completed. The latest owner decision
+leaves actual browser/classroom acceptance to the owner; do not run further browser
+tests for this delivery. The quota stop boundary is removed; future
 Chat GPT-6 continuation uses Bridge MCP and can continue until usage is exhausted.
 No quota reset is authorized. The owner explicitly requested the external
 `/Users/xubosmell/Desktop/Maya/HANDOFF.md` be overwritten with operational state
 and parallel Luna Max ownership/integration instructions; no Codex access setup.
+
+## Current requested fixes — September 8 classroom audit
+
+Implemented: Next media failures recover in place using saved audio, with no
+Regenerate or generic playback-failure card. Duplicate prepared-media messages
+do not restart the same audio element. A committed recovery event is now published
+even when audio fails before started_ack. Lists refresh progress every two seconds
+while visible and on focus.
+
+The owner reproduced a further silent Next failure in their own browser. A
+read-only runtime check found the server already on successor turn index 6 in
+ready state with no pending media command. The frontend now drives media preparation
+from committed ready state, including detail updates that beat the REST response.
+Stale successful Next callbacks reconcile state without repeating Next, creating
+a second pending ticket or regenerating speech. A classic/Beta race regression
+covers this order. This final fix still needs the owner's actual-browser acceptance.
+
+Content requirements (language, length, wording, source aliases) are prompt-only.
+Speech prompts reserve S IDs for metadata and ask for natural references to RAG.
+No backend S-token detection/replacement is added; saved speeches stay unchanged.
+Report language follows the frozen debate language: Chinese for zh, English for en.
+Report prose is no longer rejected for language, length, Markdown or rhetorical
+rules; schema 0025 also removes the old database word-count publication limits.
+Only parsing/shape, authorization, source bindings, cost and state integrity remain.
+
+The report is rendered as Markdown, including headings/lists/tables, with raw HTML
+execution disabled. Stage uses larger Agent names without A/B/C. Retained replay
+uses saved text/audio and hides Open Message; no new barrages are collected.
+A lone second-row action spans the controls. Conclude becomes available after
+replay completes. One newly authorized real Report for Chinese debate
+`c0e48278-c094-4c1f-8b6f-080b48b13767` completed in about 14 seconds;
+revision 3 is ready with a Chinese title and 1,007 Chinese characters. No Debate
+LLM or TTS regeneration was requested for this playback audit. The earlier partial
+browser replay is not a complete replay acceptance result.
+
+## Classroom actions — final owner decisions
+
+- **Unvoice** removes saved audio; speech and sources survive.
+- **Destroy** deletes the target debate regardless of draft/running/stalled/terminal
+  state. Its writer transaction uses current revisions, so a stale list cannot
+  block the destructive intent. The list sends the ID without depending on a
+  successful detail projection and removes the row after the delete commits,
+  even if file cleanup is pending. Other active classrooms no longer block a
+  scoped deletion. An absent legacy playback row is materialized transactionally.
+  Workers receive cancellation after the durable deletion fence; the HTTP response
+  does not wait for an external supplier to return. Teacher/course authorization,
+  shared-file ownership and path safety remain enforced. This cannot retract a
+  request already sent to a supplier, and late work cannot recreate the deleted graph.
+- **Rebirth** is available on completed lessons in live mode. It preserves the
+  first three rounds' exact text, evidence, discussion memory and audio, unpublishes
+  them for classroom replay, removes final-round turns/audio and classroom/report
+  data, creates a fresh closed message window, and returns to a Preview-ready draft.
+  New final turns have new identities. Cost operations survive. Each explicit
+  Rebirth funds only one additional final round (within the existing per-turn
+  attempt cap); it does not call a Provider itself or regenerate Preview.
+- **Remake** supersedes Resume/Release in the list. The owner's later correction
+  explicitly supersedes the earlier stop-to-Stopped proposal: Remake recovers a
+  current/adjacent failed turn and leaves the classroom resumable; End remains stop.
+  Saved speech/audio are reused; missing saved audio uses the dedicated TTS path.
+  A settled failed paid turn can get a new identity and a bounded new attempt on
+  the teacher's explicit click, while old charge records remain. Accepted results
+  are recovered locally. Sending/acceptance-unknown requests are not duplicated.
+  Remake appears for a failed generation or stale media state (ready/paused after
+  15 seconds, playing beyond its expected duration plus a margin). No generic
+  failure prose is inserted into the list.
+
+The new POST `/rebirth` and `/remake` endpoints use teacher authentication,
+CSRF, idempotency and current-revision/control checks. Only Destroy intentionally
+ignores old version values. Frozen OpenAPI, generated client and route fixtures
+were updated together. Audit records distinguish fresh generation authorization
+from media-only recovery; scope budgets preserve earlier allocated costs.
+
+## Latest consolidated verification
+
+- 131 focused backend checks passed: current lifecycle/cleanup, four-round
+  generation, prompt-only prose, bilingual Reports, migration, recovery and
+  related API behavior. This includes Rebirth preserving six saved Preview turns
+  and successfully starting again, Destroy removing a running debate despite
+  stale versions, and Remake preserving the paid operation while replacing only
+  the failed turn. Exact repeated reset requests do not generate twice.
+- All 276 frontend tests passed. Typecheck passed. Backend Ruff and mypy passed
+  (188 modules), and 320 Python files passed format checks. Contract generation,
+  route comparison and production image builds are part of this delivery.
+- An earlier full backend run in this audit had 1,271 passes and 43 failures.
+  The subsequent focused pass corrects the report-length/schema-head expectations
+  and verifies the new lifecycle work; the entire backend suite was not rerun
+  after those changes. Remaining old protocol/recovery fixtures are not declared
+  green. No full-suite or universal classroom-success claim is made.
+- The one real Chinese Report run above succeeded. The owner specifically reserved
+  final browser/audio/3D/classroom acceptance for manual audit. No further paid
+  classroom or browser test was performed after that instruction.
 
 ## Runtime and established UI
 
@@ -157,8 +250,8 @@ runtime data. TTS/Voice remain Mock; Debate LLM, Embedding and Report are config
 real DashScope adapters with independent authorization. Current Embedding is
 text-embedding-v4, 1024 dimensions.
 
-Teacher lists/creation use yellow rows on white paper. Delete Voice/All sit beside
-Resume; Open Stage uses their action styling. Failed Resume preserves Stalled.
+Teacher lists/creation use yellow rows on white paper. Unvoice/Destroy sit beside
+Remake/Rebirth; Open Stage uses their action styling. Failed actions preserve the row.
 Stage titles are removed; speech scrolls above compact gold controls and bubbles
 persist until Next. Open Message/Hide preserves its QR session. Conclude contains
 Report and scores; Audio Ready indicates retained audio. This change adds only

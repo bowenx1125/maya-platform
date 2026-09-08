@@ -2625,6 +2625,13 @@ async def test_play_failure_is_recoverable_but_stop_is_terminal(tmp_path: Path) 
         safe_client_code="autoplay_blocked",
     )
     assert pre_ack.status == "ready"
+    failures = [
+        event
+        for event in service.event_hub.store.events_after(debate.id, 0)
+        if event.event_type == "error"
+    ]
+    assert failures[-1].payload["code"] == "playback_failed"
+    assert failures[-1].payload["recoverable"] is True
     assert debate.turns[0].publication_status == "unpublished"
     await service.media_prepare(
         None,

@@ -71,6 +71,8 @@ const implemented = new Set([
   "deleteDebateVoice",
   "regenerateDebateTurnAudio",
   "deleteDebateAll",
+  "rebirthDebate",
+  "remakeDebate",
   "pauseDebate",
   "resumeDebate",
   "finishDebate",

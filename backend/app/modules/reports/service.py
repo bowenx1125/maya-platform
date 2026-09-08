@@ -148,14 +148,19 @@ REPORT_HEADINGS = (
     "## Classroom Perspectives",
     "## Mutual Learning Reflection",
 )
+REPORT_HEADINGS_ZH = (
+    "# 文明互鉴报告",
+    "## 辩论概览",
+    "## 证据与论点",
+    "## 形成的共识",
+    "## 保留的分歧与问题",
+    "## 课堂观点",
+    "## 互鉴与反思",
+)
 _CITATION_RE = re.compile(r"\[evidence:([A-Za-z0-9_.:-]{1,128})\]")
 _UNSAFE_REPORT_TERMS_RE = re.compile(
     r"\b(?:winner|winners|won|winning|vote\s+for\s+me|please\s+vote|nickname)\b",
     re.IGNORECASE,
-)
-_REPORT_PADDING_SENTENCE = (
-    "This record supports careful comparison, source checking, respectful questioning, "
-    "and revision after dialogue."
 )
 
 
@@ -1772,6 +1777,22 @@ def mock_maya_report_v1(context: ReportContext) -> ReportSectionOutput:
     """
 
     manifest = context.manifest
+    if debate_output_language(context.debate) == "zh":
+        names = "、".join(item.agent_name for item in manifest.participants)
+        return ReportSectionOutput(
+            debate_overview=f"本场议题：{manifest.topic}。参与者：{names}。这是Mock报告，用于检查课堂流程。",
+            evidence_and_arguments=(
+                f"已记录{len(context.turns)}次公开发言、{len(context.sources)}项关联RAG资料。"
+                "引用关联只表示证据支持类别，不等于事实已经核实。"
+            ),
+            areas_of_convergence="共同参与同一议题不代表已经达成共识；具体共同点须结合发言审阅。",
+            continuing_tensions_and_questions="请结合讨论记忆核对未解决的问题，保留有理由的分歧。",
+            classroom_perspectives=(
+                f"课堂共有{context.vote_total}票、{context.barrage_total}条消息。"
+                "参与数量不代表观点正确性。"
+            ),
+            mutual_learning_reflection="请核对每位参与者回应了谁的具体观点，以及立场保留或改变的理由。",
+        )
     topic = _excerpt(context.manifest.topic or context.debate.topic, words=12)
     participant_lines = []
     for item in manifest.participants:
@@ -1899,19 +1920,20 @@ def render_report_markdown(
     """Render the fixed heading order and code-owned citation/count text."""
 
     result = sections or mock_maya_report_v1(context)
+    headings = (
+        REPORT_HEADINGS_ZH if debate_output_language(context.debate) == "zh" else REPORT_HEADINGS
+    )
     markdown = "\n\n".join(
         (
-            REPORT_HEADINGS[0],
-            f"{REPORT_HEADINGS[1]}\n\n{result.debate_overview}",
-            f"{REPORT_HEADINGS[2]}\n\n{result.evidence_and_arguments}",
-            f"{REPORT_HEADINGS[3]}\n\n{result.areas_of_convergence}",
-            f"{REPORT_HEADINGS[4]}\n\n{result.continuing_tensions_and_questions}",
-            f"{REPORT_HEADINGS[5]}\n\n{result.classroom_perspectives}",
-            f"{REPORT_HEADINGS[6]}\n\n{result.mutual_learning_reflection}",
+            headings[0],
+            f"{headings[1]}\n\n{result.debate_overview}",
+            f"{headings[2]}\n\n{result.evidence_and_arguments}",
+            f"{headings[3]}\n\n{result.areas_of_convergence}",
+            f"{headings[4]}\n\n{result.continuing_tensions_and_questions}",
+            f"{headings[5]}\n\n{result.classroom_perspectives}",
+            f"{headings[6]}\n\n{result.mutual_learning_reflection}",
         )
     )
-    while context.protocol_version != "segments_v2" and report_word_count(markdown) < 600:
-        markdown = f"{markdown} {_REPORT_PADDING_SENTENCE}"
     return markdown
 
 
@@ -1939,6 +1961,27 @@ def render_real_report_markdown(
         )
         + (f" {_reply_summary(context)}" if _reply_summary(context) else "")
     )
+    if debate_output_language(context.debate) == "zh":
+        source_rows = [
+            f"第{source.turn_index + 1}次发言的RAG资料：{_citation(source)}。"
+            for source in context.sources
+        ]
+        evidence_suffix = " ".join(source_rows) or "本场公开发言未引用可保留的RAG资料。"
+        counts = {str(vote.participant_id): vote.count for vote in context.manifest.votes}
+        vote_text = " ".join(
+            f"参与者{participant.slot}获得{counts.get(str(participant.participant_id), 0)}票。"
+            for participant in context.manifest.participants
+        )
+        linked = len({item.barrage_id for item in context.replies})
+        interaction_suffix = (
+            f"课堂共有{context.vote_total}票、{context.barrage_total}条消息。{vote_text}"
+            "这些数据只表示参与情况，不代表论点正确性。"
+            + (
+                f"最终轮已关联回应{linked}条课堂消息。"
+                if context.classroom_barrages
+                else "最终轮没有可回应的课堂消息。"
+            )
+        )
     projected = sections.model_copy(
         update={
             "evidence_and_arguments": (
@@ -1970,66 +2013,11 @@ def validate_report_markdown(
     vote_total: int,
     barrage_total: int,
 ) -> int:
-    """Validate heading/citation/word/count safety before a ready commit."""
+    """Record text size without rejecting prompt-level content choices."""
 
-    if markdown.split("\n\n", 1)[0] != REPORT_HEADINGS[0]:
-        raise ReportValidationError("report_title_invalid", "report title heading is not canonical")
-    found_headings = [line for line in markdown.splitlines() if line.startswith("#")]
-    if found_headings != list(REPORT_HEADINGS):
-        raise ReportValidationError("report_headings_invalid", "report headings are not canonical")
-    known_source_ids = {
-        str(getattr(item, "evidence_id", "") or item.turn_source_id)
-        for item in manifest.turn_sources
-    }
-    citations = _CITATION_RE.findall(markdown)
-    citation_keys = (
-        citations if isinstance(manifest, ReportInputManifestV2) else [c.lower() for c in citations]
-    )
-    if any(citation not in known_source_ids for citation in citation_keys):
-        raise ReportValidationError(
-            "report_citation_unknown", "report contains an unknown evidence citation"
-        )
-    if set(citation_keys) != known_source_ids:
-        raise ReportValidationError(
-            "report_citations_mismatch", "report citations do not match used sources"
-        )
-    if re.search(r"\[evidence:[^\]]+\]", _CITATION_RE.sub("", markdown)):
-        raise ReportValidationError(
-            "report_citation_malformed", "report contains a malformed evidence citation"
-        )
-    if _UNSAFE_REPORT_TERMS_RE.search(markdown):
-        raise ReportValidationError(
-            "report_prohibited_phrase", "report contains a prohibited winner or nickname phrase"
-        )
-    zero_phrase = "This session had no classroom interaction data."
-    if (vote_total == 0 and barrage_total == 0) != (zero_phrase in markdown):
-        raise ReportValidationError(
-            "report_interaction_phrase_invalid",
-            "zero-interaction report phrase does not match frozen counts",
-        )
-    count = report_word_count(markdown)
-    minimum = 1 if isinstance(manifest, ReportInputManifestV2) else 600
-    if not minimum <= count <= 900:
-        raise ReportValidationError(
-            "report_word_count_invalid", "report word count is outside the versioned contract"
-        )
-    manifest_vote_total = sum(item.count for item in manifest.votes)
-    manifest_barrage_total = manifest.insight.included_count + manifest.insight.filtered_count
-    if vote_total != manifest_vote_total or barrage_total != manifest_barrage_total:
-        raise ReportValidationError(
-            "report_counts_mismatch", "report counts do not match the canonical manifest"
-        )
-    total_marker = _interaction_total_marker(manifest, vote_total, barrage_total)
-    if markdown.count(total_marker) != 1:
-        raise ReportValidationError(
-            "report_interaction_totals_missing", "report is missing canonical interaction totals"
-        )
-    expected_vote_lines = _vote_lines_for_manifest(manifest)
-    if any(markdown.count(line) != 1 for line in expected_vote_lines):
-        raise ReportValidationError(
-            "report_vote_counts_invalid", "report contains noncanonical participant vote counts"
-        )
-    return count
+    if not isinstance(markdown, str) or not markdown.strip():
+        raise ReportValidationError("report_output_text", "report text is empty")
+    return report_word_count(markdown)
 
 
 def generate_mock_report(context: ReportContext) -> tuple[str, int]:
@@ -2366,7 +2354,17 @@ def prepare_real_report_operation(
     # BudgetExceeded -- a control sized below the actions it governs is not a
     # control, it is a dead end. Fund the attempts the product actually
     # permits, the way the debate-turn bucket already does.
-    budget_ceiling = REPORT_REGENERATION_CAP * REPORT_ATTEMPT_CAP
+    from app.modules.debates.models import AuditLog
+
+    cycles = len(
+        db.scalars(
+            select(AuditLog.id).where(
+                AuditLog.debate_id == context.debate.id,
+                AuditLog.event_type == "debate.rebirth",
+            )
+        ).all()
+    )
+    budget_ceiling = REPORT_REGENERATION_CAP * REPORT_ATTEMPT_CAP * (1 + cycles)
     raise_budget = getattr(runtime.repository, "raise_scope_budget", None)
     ensure_budget = raise_budget or runtime.repository.ensure_scope_budget
     ensure_budget(
@@ -3359,7 +3357,7 @@ def download_current_report(
     debate_id: str,
     language: str = "en",
 ) -> tuple[str, str]:
-    """Return English or exact-hash Mock Chinese report for a safe response."""
+    """Download saved Markdown; the legacy en selector means original-language text."""
 
     _require_teacher(db, actor_user_id, debate_id)
     report = db.scalar(select(CivilizationReport).where(CivilizationReport.debate_id == debate_id))

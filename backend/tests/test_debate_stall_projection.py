@@ -47,7 +47,7 @@ def _draft_debate(app_factory: Callable[..., Any]) -> tuple[Any, Any, str]:
                 {"agent_id": second, "stance_mode": "open"},
             ],
             "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
-            "round_count": 2,
+            "round_count": 4,
         },
     )
     assert response.status_code == 201, response.text

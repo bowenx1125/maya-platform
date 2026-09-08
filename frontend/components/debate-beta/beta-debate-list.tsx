@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLocale } from "../locale";
 import { useSession } from "../session-provider";
@@ -46,37 +46,63 @@ export function BetaDebateList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const courseId = teacherCourseId(user);
+  const loadSequence = useRef(0);
 
-  const load = useCallback(async () => {
-    if (!courseId) {
-      setError(new Error(copy.unavailable));
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const all = await api.debates(courseId);
-      setDebates(
-        all.filter((debate) =>
-          debate.preview
-            ? debate.preview.ready &&
-              !["failed", "stopped"].includes(debate.status)
-            : ["debate_finished", "completed"].includes(debate.status) &&
-              debate.expected_turns > 0 &&
-              debate.prepared_turns === debate.expected_turns,
-        ),
-      );
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, copy.unavailable, courseId]);
+  const load = useCallback(
+    async (silent = false) => {
+      const sequence = ++loadSequence.current;
+      if (!courseId) {
+        setError(new Error(copy.unavailable));
+        setLoading(false);
+        return;
+      }
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const all = await api.debates(courseId);
+        if (sequence !== loadSequence.current) return;
+        setDebates(
+          all.filter((debate) =>
+            debate.preview
+              ? debate.preview.ready &&
+                !["failed", "stopped"].includes(debate.status)
+              : ["debate_finished", "completed"].includes(debate.status) &&
+                debate.expected_turns > 0 &&
+                debate.prepared_turns === debate.expected_turns,
+          ),
+        );
+      } catch (cause) {
+        if (!silent && sequence === loadSequence.current) setError(cause);
+      } finally {
+        if (sequence === loadSequence.current) setLoading(false);
+      }
+    },
+    [api, copy.unavailable, courseId],
+  );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    let stopped = false;
+    let timer: number;
+    const poll = async (initial = false) => {
+      if (initial || document.visibilityState !== "hidden")
+        await load(!initial);
+      if (!stopped) timer = window.setTimeout(() => void poll(), 2000);
+    };
+    const refreshVisible = () => {
+      if (document.visibilityState !== "hidden") void load(true);
+    };
+    timer = window.setTimeout(() => void poll(true), 0);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      stopped = true;
+      loadSequence.current += 1;
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, [load]);
 
   return (

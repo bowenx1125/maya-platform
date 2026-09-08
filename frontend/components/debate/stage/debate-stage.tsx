@@ -113,7 +113,7 @@ function isTerminalConnectionContext(
 ): boolean {
   return (
     detail.status === "stopped" ||
-    detail.status === "completed" ||
+    (detail.status === "completed" && detail.playback.mode !== "replay") ||
     (detail.playback.mode !== "replay" &&
       TERMINAL_PLAYBACK.includes(detail.playback.status))
   );
@@ -1041,6 +1041,116 @@ export function DebateStage({
     }, 0);
   }, [ensureMediaPrepare]);
 
+  // A detail/snapshot update can win the race with the REST response. Drive
+  // the saved-audio handshake from committed state as well as command callbacks.
+  useEffect(() => {
+    if (controllerReady && playback.status === "ready") {
+      scheduleMediaPrepare();
+    }
+  }, [
+    controllerReady,
+    playback.status,
+    playback.current_turn_id,
+    playback.control_version,
+    scheduleMediaPrepare,
+  ]);
+
+  const syncRefreshedSnapshot = useCallback(
+    (next: DebateDetail, minimumSequence = 0) => {
+      if (!mountedRef.current || closingRef.current) return;
+      if (
+        !Number.isInteger(next.last_sequence) ||
+        next.last_sequence < minimumSequence
+      ) {
+        return false;
+      }
+      commitDetail(next, false);
+      const committedSequence = next.last_sequence;
+      sequenceRef.current = committedSequence;
+      setLastSequence(committedSequence);
+      const synced = {
+        ...detailRef.current,
+        last_sequence: committedSequence,
+      };
+      detailRef.current = synced;
+      setDetailState(synced);
+      onDetailChange?.(synced);
+      const turns = publicTurnsRef.current;
+      const snapshotTurn = publicTurnById(turns, next.playback.current_turn_id);
+      if (
+        snapshotTurn &&
+        (next.playback.status === "playing" ||
+          next.playback.status === "paused" ||
+          next.playback.status === "waiting_next")
+      ) {
+        setActiveParticipant(snapshotTurn.participant_id);
+        setVisible(snapshotTurn);
+      } else if (
+        next.playback.status === "playing" ||
+        next.playback.status === "paused" ||
+        next.playback.status === "waiting_next"
+      ) {
+        setActiveParticipant(null);
+        setVisible(null);
+      }
+      if (TERMINAL_PLAYBACK.includes(next.playback.status)) {
+        pauseAudio(true);
+        setVisible(null);
+        setAvatars([]);
+        setActiveParticipant(null);
+      } else if (next.playback.status === "paused") {
+        pauseAudio(false);
+      }
+      setFailure(null);
+      return true;
+    },
+    [
+      commitDetail,
+      onDetailChange,
+      pauseAudio,
+      setActiveParticipant,
+      setAvatars,
+      setVisible,
+    ],
+  );
+
+  const playbackRefreshInFlight = useRef(false);
+  const automaticMediaRetry = useRef<string | null>(null);
+  const [mediaRetryNeeded, setMediaRetryNeeded] = useState(false);
+
+  const recoverPlayback = useCallback(async () => {
+    if (!refreshSnapshot || playbackRefreshInFlight.current) return;
+    playbackRefreshInFlight.current = true;
+    const epoch = controllerEpochRef.current;
+    try {
+      const next = await refreshSnapshot();
+      if (
+        !mountedRef.current ||
+        closingRef.current ||
+        epoch !== controllerEpochRef.current ||
+        next.playback.control_version < controlVersionRef.current ||
+        !syncRefreshedSnapshot(next, sequenceRef.current)
+      )
+        return;
+      setControlError(null);
+      setMediaRetryNeeded(["ready", "paused"].includes(next.playback.status));
+      // Retry only the saved media handshake, once per turn. Never regenerate
+      // speech or repeat a possibly successful Next mutation automatically.
+      const key = `${next.playback.mode}:${next.playback.current_turn_id}`;
+      if (
+        next.playback.status === "ready" &&
+        automaticMediaRetry.current !== key
+      ) {
+        automaticMediaRetry.current = key;
+        scheduleMediaPrepare();
+      }
+    } catch {
+      setMediaRetryNeeded(true);
+    } finally {
+      playbackRefreshInFlight.current = false;
+    }
+  }, [refreshSnapshot, scheduleMediaPrepare, syncRefreshedSnapshot]);
+
   const sendPlayFailure = useCallback(
     (
       code:
@@ -1075,7 +1185,8 @@ export function DebateStage({
       });
       prepareKeyRef.current = null;
       preparedMediaKeyRef.current = null;
-      setFailure(labelsRef.current.retryReason);
+      setFailure(null);
+      setMediaRetryNeeded(true);
       pauseAudio(false);
     },
     [debateId, pauseAudio, readOnly, sendCommand],
@@ -1131,7 +1242,8 @@ export function DebateStage({
           }
           const action = pendingActionRef.current;
           const key = `${message.turn_id}:${action}:${current.control_version}`;
-          const mediaGeneration = mediaGenerationRef.current;
+          if (preparedMediaKeyRef.current === key) return;
+          const mediaGeneration = ++mediaGenerationRef.current;
           preparedMediaKeyRef.current = key;
           audioTurnRef.current = message.turn_id;
           audioActionRef.current = action;
@@ -1170,6 +1282,8 @@ export function DebateStage({
                 return;
               }
               startedAckRef.current = true;
+              setMediaRetryNeeded(false);
+              setFailure(null);
               sendCommand({
                 command_id: makeId(),
                 command_type: "playback.started_ack",
@@ -1237,7 +1351,9 @@ export function DebateStage({
           return;
         }
         case "command.rejected":
-        case "command.duplicate":
+        case "command.duplicate": {
+          if (message.message_type === "command.duplicate") return;
+          const wasAcquiring = acquirePendingRef.current;
           acquirePendingRef.current = false;
           if (message.message_type === "command.rejected") {
             settlePendingReplayAcquire(
@@ -1245,17 +1361,16 @@ export function DebateStage({
             );
           }
           if (message.current_control_version !== undefined) {
-            controlVersionRef.current = message.current_control_version;
+            controlVersionRef.current = Math.max(
+              controlVersionRef.current,
+              message.current_control_version,
+            );
           }
-          // A raw safe code is an internal identifier, not a message. Show the
-          // teacher a sentence and keep the code for the logs.
-          setControlError(
-            message.code
-              ? (labelsRef.current.localizeCode?.(message.code) ?? message.code)
-              : (labelsRef.current.connectionError ?? null),
-          );
-          if (message.recoverable) {
-            setFailure(labelsRef.current.retryReason);
+          if (message.recoverable && !wasAcquiring) {
+            setFailure(null);
+            setControlError(null);
+            setMediaRetryNeeded(true);
+            void recoverPlayback();
           }
           if (
             message.message_type === "command.rejected" &&
@@ -1280,6 +1395,7 @@ export function DebateStage({
             }
           }
           return;
+        }
       }
     },
     [
@@ -1293,6 +1409,7 @@ export function DebateStage({
       scheduleMediaPrepare,
       sendCommand,
       sendPlayFailure,
+      recoverPlayback,
       settlePendingReplayAcquire,
       setActiveParticipant,
       setAvatars,
@@ -1393,65 +1510,6 @@ export function DebateStage({
       setVisible,
       markPlaybackItem,
       updatePublicTurns,
-    ],
-  );
-
-  const syncRefreshedSnapshot = useCallback(
-    (next: DebateDetail, minimumSequence = 0) => {
-      if (!mountedRef.current || closingRef.current) return;
-      if (
-        !Number.isInteger(next.last_sequence) ||
-        next.last_sequence < minimumSequence
-      ) {
-        return false;
-      }
-      commitDetail(next, false);
-      const committedSequence = next.last_sequence;
-      sequenceRef.current = committedSequence;
-      setLastSequence(committedSequence);
-      const synced = {
-        ...detailRef.current,
-        last_sequence: committedSequence,
-      };
-      detailRef.current = synced;
-      setDetailState(synced);
-      onDetailChange?.(synced);
-      const turns = publicTurnsRef.current;
-      const snapshotTurn = publicTurnById(turns, next.playback.current_turn_id);
-      if (
-        snapshotTurn &&
-        (next.playback.status === "playing" ||
-          next.playback.status === "paused" ||
-          next.playback.status === "waiting_next")
-      ) {
-        setActiveParticipant(snapshotTurn.participant_id);
-        setVisible(snapshotTurn);
-      } else if (
-        next.playback.status === "playing" ||
-        next.playback.status === "paused" ||
-        next.playback.status === "waiting_next"
-      ) {
-        setActiveParticipant(null);
-        setVisible(null);
-      }
-      if (TERMINAL_PLAYBACK.includes(next.playback.status)) {
-        pauseAudio(true);
-        setVisible(null);
-        setAvatars([]);
-        setActiveParticipant(null);
-      } else if (next.playback.status === "paused") {
-        pauseAudio(false);
-      }
-      setFailure(null);
-      return true;
-    },
-    [
-      commitDetail,
-      onDetailChange,
-      pauseAudio,
-      setActiveParticipant,
-      setAvatars,
-      setVisible,
     ],
   );
 
@@ -2228,7 +2286,9 @@ export function DebateStage({
             void refreshProviderGate(code);
           } else if (payload.recoverable === true) {
             setProviderGate(null);
-            applyPlayback({ status: "ready" });
+            setFailure(null);
+            setMediaRetryNeeded(true);
+            void recoverPlayback();
           } else {
             setProviderGate(null);
           }
@@ -2255,6 +2315,7 @@ export function DebateStage({
       pauseAudio,
       recoverFromStartedTurnMismatch,
       refreshSnapshot,
+      recoverPlayback,
       catalogTurnById,
       setActiveParticipant,
       requestReconnect,
@@ -2614,12 +2675,6 @@ export function DebateStage({
     [],
   );
 
-  // Which turn a Regenerate would act on: the one playback is parked at.
-  const retryableTurnId =
-    failure !== null && playback.current_turn_id
-      ? playback.current_turn_id
-      : null;
-
   const runControl = useCallback(
     async (action: ControlAction) => {
       if (readOnly || busyAction !== null || controlRequestRef.current !== null)
@@ -2641,6 +2696,17 @@ export function DebateStage({
           !replayAudioReady)
       ) {
         return;
+      }
+      if (action === "next" && mediaRetryNeeded && controllerReadyRef.current) {
+        if (playbackRef.current.status === "ready") {
+          prepareKeyRef.current = null;
+          preparedMediaKeyRef.current = null;
+          setFailure(null);
+          setControlError(null);
+          scheduleMediaPrepare();
+          return;
+        }
+        if (playbackRef.current.status === "paused") action = "resume";
       }
       if (
         action === "next" &&
@@ -2763,7 +2829,10 @@ export function DebateStage({
             expected_control_version: current.control_version,
             expected_current_turn_id: expectedCurrentTurnId,
           });
-          if (!isCurrentRequest()) return;
+          if (!isCurrentRequest()) {
+            await recoverPlayback();
+            return;
+          }
           // Next only authorizes the adjacent server-selected turn.  Its
           // speech/source/media remain private until playback.started arrives.
           setVisible(null);
@@ -2870,8 +2939,16 @@ export function DebateStage({
         }
       } catch (cause) {
         if (controlRequestRef.current === requestToken) {
-          setControlError(errorText(cause, labelsRef.current.connectionError));
-          setBlockedBy(blockingDebate(cause));
+          if (action === "next" || action === "resume") {
+            setControlError(null);
+            setFailure(null);
+            await recoverPlayback();
+          } else {
+            setControlError(
+              errorText(cause, labelsRef.current.connectionError),
+            );
+            setBlockedBy(blockingDebate(cause));
+          }
         }
       } finally {
         if (controlRequestRef.current === requestToken) {
@@ -2883,6 +2960,8 @@ export function DebateStage({
     },
     [
       api,
+      recoverPlayback,
+      mediaRetryNeeded,
       applyPlayback,
       audioPointer,
       busyAction,
@@ -2970,9 +3049,10 @@ export function DebateStage({
         ? "Preparing final…"
         : labels.next;
   const canAdvance =
-    playback.status === "waiting_next" &&
-    (playback.next_turn_ready ||
-      (finalBoundary && !detailState.final_input_frozen)) &&
+    ((mediaRetryNeeded && ["ready", "paused"].includes(playback.status)) ||
+      (playback.status === "waiting_next" &&
+        (playback.next_turn_ready ||
+          (finalBoundary && !detailState.final_input_frozen)))) &&
     controllerReady &&
     busyAction === null &&
     (playback.mode === "live" || playback.mode === "replay");
@@ -3248,22 +3328,9 @@ export function DebateStage({
         </div>
 
         <div className={styles.speechColumn}>
-          {failure ? (
+          {failure && failure !== labels.retryReason ? (
             <div className={styles.failureCard} role="alert">
               <span>{failure}</span>
-              {/* A turn whose generation died used to say "you can retry this
-                  turn" and offer nothing to press. The retry endpoint has
-                  existed all along; this is the button that reaches it. */}
-              {!readOnly && retryableTurnId ? (
-                <button
-                  className="secondary-action"
-                  disabled={providerRetryBusy}
-                  onClick={() => void retryProviderPreparation(retryableTurnId)}
-                  type="button"
-                >
-                  {labels.regenerate}
-                </button>
-              ) : null}
             </div>
           ) : null}
 

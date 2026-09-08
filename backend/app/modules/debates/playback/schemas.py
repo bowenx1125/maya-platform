@@ -215,7 +215,7 @@ class SnapshotReportDTO(ClosedModel):
     insight: SnapshotInsightDTO
     active_revision_id: UUID | None
     current_success_revision_id: UUID | None
-    current_success_word_count: int | None = Field(ge=600, le=900)
+    current_success_word_count: int | None = Field(ge=0)
 
 
 class InteractionOpenedPayload(ClosedModel):
@@ -282,7 +282,7 @@ class ReportCompletedPayload(ClosedModel):
     status: Literal["ready"]
     current_success_revision_id: UUID
     latest_attempt_status: Literal["ready"]
-    word_count: int = Field(ge=600, le=900)
+    word_count: int = Field(ge=0)
 
 
 class ReportFailedPayload(ClosedModel):

@@ -134,7 +134,7 @@ def _query_setup(
                     {"agent_id": second_agent_id, "stance_mode": "open"},
                 ],
                 "rule_set_id": MUTUAL_LEARNING_RULE_SET_ID,
-                "round_count": 2,
+                "round_count": 4,
                 "turn_protocol": "segments_v2",
             },
         )
@@ -204,7 +204,7 @@ def test_standing_query_consent_confirms_exact_owner_manifest_and_runs_once(
     assert operations[0].request_count == 1
     assert operations[0].charged_request_count == 1
     budget = ProviderRepository(database).get_scope_budget(debate_id)
-    assert budget is not None and budget.max_requests == 4
+    assert budget is not None and budget.max_requests == 8
     confirmation = ProviderRepository(database).get_export_confirmation(
         operations[0].export_manifest_hash
     )

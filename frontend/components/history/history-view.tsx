@@ -1,5 +1,7 @@
 "use client";
 
+import { ReportMarkdown } from "../report/report-markdown";
+
 import type { ReactNode } from "react";
 
 import { statusLabel } from "../../lib/i18n";
@@ -228,7 +230,9 @@ function RevisionCard({ revision }: { revision: ReportRevisionView }) {
           <p className={styles.muted}>
             {revision.word_count} {label(locale, { en: "words", zh: "词" })}
           </p>
-          <pre className={styles.report}>{revision.english_markdown}</pre>
+          <ReportMarkdown className={styles.report}>
+            {revision.english_markdown}
+          </ReportMarkdown>
         </>
       ) : revision.safe_error_code ? (
         <p className={styles.muted}>

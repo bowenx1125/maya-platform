@@ -969,6 +969,13 @@
   display: contents;
 }
 
+.stagePanel .panelActions > button:last-child:nth-child(even) {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-self: stretch;
+  text-align: center;
+}
+
 .stagePanel .statusCluster:empty {
   display: none;
 }
@@ -1046,7 +1053,7 @@
 
 .streamWho {
   font-family: var(--brush);
-  font-size: 0.98rem;
+  font-size: 1.1rem;
   letter-spacing: 0.03em;
 }
 

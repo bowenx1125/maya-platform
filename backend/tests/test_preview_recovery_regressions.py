@@ -227,7 +227,7 @@ def test_chinese_draft_locks_language_before_preview_and_start(app_factory):
                 json={
                     "topic": "社区如何平衡公共资源与个人选择？",
                     "output_language": "zh",
-                    "round_count": 2,
+                    "round_count": 4,
                     "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
                 },
             )

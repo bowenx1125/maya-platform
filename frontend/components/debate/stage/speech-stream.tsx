@@ -130,7 +130,8 @@ function StreamItem({
     <article className={styles.streamItem}>
       <div className={styles.streamItemTop}>
         <span className={styles.streamWho}>
-          {who.slot} · {who.name}
+          {who.slot ? `${who.slot} · ` : ""}
+          {who.name}
         </span>
         <span className={styles.streamMeta}>
           {labels.round} {turn.round_no}

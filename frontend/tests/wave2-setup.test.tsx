@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -290,4 +291,39 @@ describe("Wave 2 teacher debate setup", () => {
     expect((input as HTMLTextAreaElement).value).toBe(invalidTopic);
     expect(create).not.toHaveBeenCalled();
   });
+});
+
+it("updates debate progress in place without opening the debate", async () => {
+  vi.useFakeTimers();
+  try {
+    useSessionMock.mockReturnValue(teacherSession());
+    const initial = {
+      id: "progress-debate",
+      course_id: courseId,
+      topic: "A live preview",
+      status: "draft",
+      created_at: "2026-09-08T00:00:00Z",
+      prepared_turns: 1,
+      expected_turns: 6,
+    } as DebateSummary;
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce([initial])
+      .mockResolvedValue([{ ...initial, prepared_turns: 4 }]);
+    render(<TeacherDebateList controller={{ load }} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByRole("link", { name: /A live preview/ }).textContent,
+    ).toContain("4 / 6");
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
 });

@@ -216,6 +216,10 @@ class PlaybackControlMixin(PlaybackCore):
                 )
             course_id = self._course_id(debate)
             current_pointer = self.repository.current_audio_debate_id(db, course_id)
+            if output_language is not None and output_language != self._get(
+                debate, "output_language", default="en"
+            ):
+                raise conflict("output_language_locked", "The lesson language was set in Preview.")
             segment_mode = uses_segment_protocol(debate)
             if segment_mode:
                 preview_turns = [
@@ -241,10 +245,6 @@ class PlaybackControlMixin(PlaybackCore):
                     "previous_audio_cleanup_confirmation_required",
                     "Confirm removal of the previous retained audio before starting.",
                 )
-            if output_language is not None and output_language != self._get(
-                debate, "output_language", default="en"
-            ):
-                raise conflict("output_language_locked", "The lesson language was set in Preview.")
             if self.repository.course_running(db, course_id, except_debate_id=debate_id):
                 # Name the debate holding the slot. Without it a teacher was
                 # told something else was running and had to go looking, and

@@ -388,9 +388,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       </LocaleProvider>,
     );
     await screen.findByText("Report");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download English Markdown" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Download Markdown" }));
     await waitFor(() =>
       expect(api.downloadCurrentReport).toHaveBeenCalledWith(debateId, "en"),
     );
@@ -399,7 +397,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       expect(api.getReportRevision).toHaveBeenCalledWith(debateId, revisionId),
     );
     expect(
-      screen.queryByRole("button", { name: "Download English Markdown" }),
+      screen.queryByRole("button", { name: "Download Markdown" }),
     ).toBeNull();
   });
 });

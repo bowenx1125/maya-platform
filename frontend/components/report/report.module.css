@@ -139,7 +139,7 @@
   max-height: 42rem;
   margin: 1rem 0 0;
   overflow: auto;
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: anywhere;
   font: inherit;
   line-height: 1.65;

@@ -21,6 +21,7 @@ type Intent = {
 
 export function DebateCleanupControls({
   detail,
+  debateId,
   api,
   onVoiceDeleted,
   backHref = "/teacher/debates",
@@ -31,6 +32,7 @@ export function DebateCleanupControls({
   showGenerateAudio = true,
 }: {
   detail?: DebateDetail;
+  debateId?: string;
   loadDetail?: () => Promise<DebateDetail>;
   onAllDeleted?: () => void | Promise<void>;
   className?: string;
@@ -126,7 +128,14 @@ export function DebateCleanupControls({
       setBusy(true);
       setError(null);
       try {
-        const snapshot = detail ?? (await loadDetail?.());
+        const snapshot =
+          mode === "all" && (debateId || detail?.id)
+            ? {
+                id: debateId ?? detail!.id,
+                revision: 0,
+                playback: { control_version: 0 },
+              }
+            : (detail ?? (await loadDetail?.()));
         if (!snapshot)
           throw new Error("Debate is unavailable. Refresh and try again.");
         request = {
@@ -158,6 +167,11 @@ export function DebateCleanupControls({
           : api.deleteDebateAll.bind(api)
       )(request.debateId, request.body, { idempotency: request.key });
       if (result.cleanup_status === "pending") {
+        if (mode === "all") {
+          if (onAllDeleted) await onAllDeleted();
+          else router.push(backHref);
+          return;
+        }
         setPending(true);
         return;
       }
@@ -204,7 +218,7 @@ export function DebateCleanupControls({
             disabled={busy || (lockedMode !== null && lockedMode !== "voice")}
             onClick={() => void remove("voice")}
           >
-            Delete Voice
+            Unvoice
           </button>
           <button
             className="secondary-action"
@@ -212,7 +226,7 @@ export function DebateCleanupControls({
             disabled={busy || (lockedMode !== null && lockedMode !== "all")}
             onClick={() => void remove("all")}
           >
-            Delete All
+            Destroy
           </button>
         </>
       ) : null}

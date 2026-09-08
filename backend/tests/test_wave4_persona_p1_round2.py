@@ -365,7 +365,7 @@ def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provide
                     {"agent_id": second, "stance_mode": "open"},
                 ],
                 "rule_set_id": _RULE_SET,
-                "round_count": 2,
+                "round_count": 4,
             },
         )
         assert created.status_code == 201, created.text
@@ -378,7 +378,7 @@ def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provide
             # running row: old Persona columns are all NULL and only pending
             # turns remain.  No historical row is rewritten by production code.
             turns = commit_start_plan(db, debate_id=debate_id)
-            assert len(turns) == 4
+            assert len(turns) == 8
             debate.rule_set_id = rule_set_id
             debate.rule_snapshot_json = canonical_rule_snapshot_json(
                 rule_set_id=rule_set_id  # type: ignore[arg-type]

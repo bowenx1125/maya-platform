@@ -1,0 +1,53 @@
+.document {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.75;
+}
+
+.document :is(h1, h2, h3) {
+  line-height: 1.35;
+  margin: 1.5em 0 0.6em;
+  color: var(--ink);
+}
+
+.document h1 {
+  font-size: 1.5rem;
+}
+.document h2 {
+  font-size: 1.2rem;
+}
+.document h3 {
+  font-size: 1.05rem;
+}
+.document > :first-child {
+  margin-top: 0;
+}
+.document p {
+  margin: 0.7em 0;
+}
+.document :is(ul, ol) {
+  padding-left: 1.5em;
+}
+.document a {
+  color: #80632e;
+  text-decoration: underline;
+}
+.document blockquote {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 2px solid #d6c49d;
+}
+.document table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.document :is(th, td) {
+  border-bottom: 1px solid #e3d9c4;
+  padding: 0.5em;
+  text-align: left;
+}
+.document pre {
+  overflow-x: auto;
+  padding: 1em;
+  background: #f7f3e9;
+}

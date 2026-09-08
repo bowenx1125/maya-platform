@@ -933,6 +933,56 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/rebirth:
+    parameters:
+      - $ref: "#/components/parameters/DebateId"
+    post:
+      tags: [Debates]
+      operationId: rebirthDebate
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DebateCleanupRequest" }
+      responses:
+        "200":
+          description: Classroom reset committed; saved Preview is retained.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateCleanupResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /debates/{debate_id}/remake:
+    parameters:
+      - $ref: "#/components/parameters/DebateId"
+    post:
+      tags: [Debates]
+      operationId: remakeDebate
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DebateCleanupRequest" }
+      responses:
+        "200":
+          description: Current-turn recovery committed without stopping the classroom.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebateCleanupResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /debates/{debate_id}/start:
     parameters:
       - $ref: "#/components/parameters/DebateId"
@@ -2017,7 +2067,7 @@ components:
         revision_no: { type: integer, minimum: 1 }
         status: { type: string, const: ready }
         english_markdown: { type: string, minLength: 1 }
-        word_count: { type: integer, minimum: 1, maximum: 900 }
+        word_count: { type: integer, minimum: 0 }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ContinueFailedReportRevision:
@@ -3319,7 +3369,7 @@ components:
         id: { $ref: "#/components/schemas/Uuid" }
         revision_no: { type: integer, minimum: 1 }
         status: { type: string, enum: [generating, ready, failed] }
-        word_count: { type: [integer, "null"], minimum: 1, maximum: 900 }
+        word_count: { type: [integer, "null"], minimum: 0 }
         safe_error_code: { type: [string, "null"] }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     ReportRevision:
@@ -3366,7 +3416,7 @@ components:
         revision_no: { type: integer, minimum: 1 }
         status: { type: string, const: ready }
         english_markdown: { type: string, minLength: 1 }
-        word_count: { type: integer, minimum: 1, maximum: 900 }
+        word_count: { type: integer, minimum: 0 }
         safe_error_code: { type: "null" }
         created_at: { $ref: "#/components/schemas/IsoTime" }
     FailedReportRevision:

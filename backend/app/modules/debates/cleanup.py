@@ -8,9 +8,9 @@ operate on one Debate at a time:
   retrieval receipts, source rows, paragraph fences and final-input snapshot
   untouched.  The Debate cancellation generation is intentionally unchanged;
   revision and playback control version are the media fences.
-* ``delete_all`` cancels and removes one Debate graph.  It is scope based and
-  refuses to temporarily disable an immutable recovery trigger while another
-  Debate/provider operation is active.
+* ``delete_all`` cancels and removes one Debate graph regardless of playback
+  state or a stale list revision. The SQLite writer transaction fences scoped
+  deletion and trigger restoration while other classrooms remain untouched.
 
 The service owns its short transaction because physical files are staged in a
 private quarantine before the transaction commits.  A failed transaction puts
@@ -93,6 +93,8 @@ _DEBATE_IDEMPOTENCY_OPERATIONS = frozenset(
         "report.generate",
         "deleteVoice",
         "deleteAll",
+        "rebirthDebate",
+        "remakeDebate",
     }
 )
 
@@ -1004,7 +1006,27 @@ def _revise_cleanup_receipt(
 def _load_playback(db: Session, debate_id: str) -> PlaybackState:
     playback = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
     if playback is None:
-        raise conflict("playback_state_unavailable", "The Debate playback state is unavailable.")
+        debate = db.get(Debate, debate_id)
+        if debate is None:
+            raise conflict(
+                "playback_state_unavailable", "The Debate playback state is unavailable."
+            )
+        # Older/incomplete records may expose a virtual version-zero snapshot.
+        # Materialize it inside this writer transaction for scoped cleanup.
+        now = datetime.now(UTC)
+        playback = PlaybackState(
+            id=str(uuid4()),
+            debate_id=debate_id,
+            status="preparing",
+            mode="live",
+            control_version=0,
+            cursor_ms=0,
+            playback_rate=1.0,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(playback)
+        db.flush()
     return playback
 
 
@@ -1016,6 +1038,7 @@ def _fence_debate(
     expected_revision: int,
     expected_control_version: int,
     delete_all: bool,
+    advance_revision: bool = True,
 ) -> tuple[int, int, int]:
     """CAS both rows and return the new revision/control/generation."""
 
@@ -1034,7 +1057,7 @@ def _fence_debate(
             {"current_control_version": current_control},
         )
     now = datetime.now(UTC)
-    new_revision = current_revision + 1
+    new_revision = current_revision + int(advance_revision)
     new_control = current_control + 1
     new_generation = int(debate.cancellation_generation or 0) + (1 if delete_all else 0)
     debate_values: dict[str, Any] = {"revision": new_revision, "updated_at": now}
@@ -1515,13 +1538,15 @@ async def _cancel_runtime(
     task_manager: Any | None = None,
     ticket_store: Any | None = None,
     report_task_manager: Any | None = None,
+    wait_for_workers: bool = True,
 ) -> None:
     """Interrupt process-local work after DB rows have been fenced."""
 
     if playback_service is not None:
         task_manager = task_manager or getattr(playback_service, "task_manager", None)
         ticket_store = ticket_store or getattr(playback_service, "ticket_store", None)
-    cancel = getattr(task_manager, "cancel_debate", None)
+    cancel = getattr(task_manager, "request_cancel_debate", None) if not wait_for_workers else None
+    cancel = cancel or getattr(task_manager, "cancel_debate", None)
     if callable(cancel):
         value = cancel(str(debate_id))
         if inspect.isawaitable(value):
@@ -1531,7 +1556,12 @@ async def _cancel_runtime(
         value = revoke(str(debate_id))
         if inspect.isawaitable(value):
             await value
-    cancel_reports = getattr(report_task_manager, "cancel_debate", None)
+    cancel_reports = (
+        getattr(report_task_manager, "request_cancel_debate", None)
+        if not wait_for_workers
+        else None
+    )
+    cancel_reports = cancel_reports or getattr(report_task_manager, "cancel_debate", None)
     if callable(cancel_reports):
         value = cancel_reports(str(debate_id))
         if inspect.isawaitable(value):
@@ -1959,17 +1989,14 @@ async def delete_all(
         debate = _load_debate(db, debate_id, actor_user_id)
         playback = _load_playback(db, debate_id)
         graph = _build_graph(db, debate, root)
-        if _active_other_runtime(db, graph):
-            raise conflict(
-                "cleanup_deferred",
-                "Debate cleanup is deferred while another runtime operation is active.",
-            )
+        # BEGIN IMMEDIATE holds the writer boundary through scoped deletion
+        # and trigger restoration. Another classroom need not be stopped.
         _fence_debate(
             db,
             debate,
             playback,
-            expected_revision=expected_revision,
-            expected_control_version=expected_control_version,
+            expected_revision=int(debate.revision),
+            expected_control_version=int(playback.control_version),
             delete_all=True,
         )
         interrupted_jobs = _interrupt_jobs(db, debate_id, "debate_deleted")
@@ -2044,6 +2071,7 @@ async def delete_all(
             task_manager=task_manager,
             ticket_store=ticket_store,
             report_task_manager=report_task_manager,
+            wait_for_workers=False,
         )
     except Exception as exc:
         runtime_cancelled = False

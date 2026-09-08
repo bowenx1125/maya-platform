@@ -12,41 +12,36 @@ import type { DebateDetail, PlatformApi } from "../lib/api";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(cleanup);
 
-it.each(["Delete Voice", "Delete All"])(
-  "keeps %s failures quiet",
-  async (label) => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const fail = vi
-      .fn()
-      .mockRejectedValue(new Error("internal failure details"));
-    const detail = {
-      id: "debate",
-      revision: 1,
-      playback: { control_version: 1 },
-    } as DebateDetail;
-    render(
-      <DebateCleanupControls
-        detail={detail}
-        api={{
-          deleteDebateVoice: fail,
-          deleteDebateAll: fail,
-          regenerateDebateTurnAudio: vi.fn(),
-        }}
-        onVoiceDeleted={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: label }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: label })).toHaveProperty(
-        "disabled",
-        false,
-      ),
-    );
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("internal failure details")).toBeNull();
-    vi.restoreAllMocks();
-  },
-);
+it.each(["Unvoice", "Destroy"])("keeps %s failures quiet", async (label) => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const fail = vi.fn().mockRejectedValue(new Error("internal failure details"));
+  const detail = {
+    id: "debate",
+    revision: 1,
+    playback: { control_version: 1 },
+  } as DebateDetail;
+  render(
+    <DebateCleanupControls
+      detail={detail}
+      api={{
+        deleteDebateVoice: fail,
+        deleteDebateAll: fail,
+        regenerateDebateTurnAudio: vi.fn(),
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: label })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("internal failure details")).toBeNull();
+  vi.restoreAllMocks();
+});
 
 it("regenerates only missing saved audio and shows immediate progress", async () => {
   let finish: (value: unknown) => void = () => undefined;
@@ -110,4 +105,29 @@ it("regenerates only missing saved audio and shows immediate progress", async ()
   finish({ status: "completed", audio_ready: true });
   await waitFor(() => expect(refresh).toHaveBeenCalled());
   expect(generate).toHaveBeenCalledTimes(1);
+});
+
+it("destroys a list row without loading a potentially broken detail, even when file cleanup is pending", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const loadDetail = vi.fn().mockRejectedValue(new Error("broken detail"));
+  const removed = vi.fn();
+  const destroy = vi.fn().mockResolvedValue({ cleanup_status: "pending" });
+  render(
+    <DebateCleanupControls
+      debateId="debate"
+      loadDetail={loadDetail}
+      api={{
+        deleteDebateAll: destroy,
+        deleteDebateVoice: vi.fn(),
+        regenerateDebateTurnAudio: vi.fn(),
+      }}
+      onAllDeleted={removed}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Destroy" }));
+  await waitFor(() => expect(removed).toHaveBeenCalledTimes(1));
+  expect(loadDetail).not.toHaveBeenCalled();
+  expect(destroy).toHaveBeenCalledTimes(1);
+  vi.restoreAllMocks();
 });

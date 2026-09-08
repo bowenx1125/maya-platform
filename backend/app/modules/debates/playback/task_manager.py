@@ -65,6 +65,13 @@ class TaskManager:
                 if current is asyncio.current_task():
                     self._tasks.pop(key, None)
 
+    async def request_cancel_debate(self, debate_id: str) -> None:
+        """Signal already-fenced work without waiting on an external supplier."""
+        async with self._lock:
+            tasks = [task for key, task in self._tasks.items() if key.debate_id == debate_id]
+        for task in tasks:
+            task.cancel()
+
     async def cancel_debate(self, debate_id: str) -> None:
         """Cancel all pending local work for one debate."""
 

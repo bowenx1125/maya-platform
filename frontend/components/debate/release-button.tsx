@@ -4,16 +4,11 @@ import { useState } from "react";
 
 import { useSession } from "../session-provider";
 import { useT } from "../locale";
-import { ErrorNotice } from "../ui";
+import { createIdempotencyHandle } from "../../lib/api";
+
 import styles from "./release-button.module.css";
 
-/**
- * Recover one stuck classroom playback, with a confirmation step.
- *
- * Two presses, not a dialog: the first press says what will happen, the second
- * does it. That is the browser's equivalent of the `--confirm RESET` token the
- * CLI required, and it keeps an accidental click from ending a live lesson.
- */
+/** Explicit current-turn recovery; saved text is reused whenever available. */
 export function ReleaseButton({
   debateId,
   onReleased,
@@ -27,17 +22,24 @@ export function ReleaseButton({
   const { api } = useSession();
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<unknown>(null);
 
   const release = async () => {
     setBusy(true);
-    setFailure(null);
+
     try {
-      await api.releaseDebate(debateId);
+      const detail = await api.debate(debateId);
+      await api.remakeDebate(
+        debateId,
+        {
+          expected_revision: detail.revision,
+          expected_control_version: detail.playback.control_version,
+        },
+        { idempotency: createIdempotencyHandle() },
+      );
       setArmed(false);
       onReleased();
-    } catch (cause) {
-      setFailure(cause);
+    } catch {
+      setArmed(false);
     } finally {
       setBusy(false);
     }
@@ -57,7 +59,6 @@ export function ReleaseButton({
       >
         {armed ? t("debateReleaseConfirm") : (label ?? t("debateRelease"))}
       </button>
-      {failure ? <ErrorNotice error={failure} /> : null}
     </span>
   );
 }

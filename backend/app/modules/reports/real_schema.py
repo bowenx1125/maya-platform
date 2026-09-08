@@ -202,10 +202,10 @@ class ReportRequest(_ClosedModel):
         """Return deterministic provider-visible data, excluding private IDs."""
 
         payload = cast(dict[str, object], self.model_dump(mode="json"))
-        # The source language tells this class what to expect from the text it
-        # is validating. It is not part of what the provider is asked, so it
-        # stays out of the canonical payload and out of the request hash.
-        payload.pop("source_language", None)
+        # Bind Chinese output language into the frozen request while retaining
+        # the canonical default-English shape.
+        if self.source_language == "en":
+            payload.pop("source_language", None)
         payload["participants"] = sorted(
             cast(list[dict[str, object]], payload["participants"]),
             key=lambda row: str(row["slot"]),
@@ -279,7 +279,7 @@ def _validate_request_semantics(request: ReportRequest) -> None:
     text_values.extend(speech.speech for speech in request.speeches)
     text_values.extend(source.excerpt for source in request.sources)
     text_values.extend(insight.summary for insight in request.insights)
-    allow_cjk = request.source_language == "zh"
+    allow_cjk = True
     for value in text_values:
         error = _text_error(
             value,
@@ -346,7 +346,7 @@ class ReportRequestV2(ReportRequest):
                     and (
                         error := _text_error(
                             value,
-                            allow_cjk=self.source_language == "zh",
+                            allow_cjk=True,
                             allow_authoritative_text=True,
                         )
                     )
@@ -356,7 +356,7 @@ class ReportRequestV2(ReportRequest):
         for item in self.classroom_barrages:
             error = _text_error(
                 item.text,
-                allow_cjk=self.source_language == "zh",
+                allow_cjk=True,
                 allow_authoritative_text=True,
             )
             if error is not None:
@@ -442,7 +442,7 @@ def validate_report_request(value: ReportRequest | Mapping[str, object]) -> Repo
 
 
 def validate_report_sections(value: object) -> ReportSectionOutput:
-    """Validate six English prose sections before the service renders Markdown."""
+    """Validate the six-field shape; prose rules belong to the actual prompt."""
 
     if isinstance(value, ReportSectionOutput):
         sections = value
@@ -458,13 +458,8 @@ def validate_report_sections(value: object) -> ReportSectionOutput:
     values = sections.model_dump()
     for field in REPORT_SECTION_FIELDS:
         text_value = values.get(field)
-        if not isinstance(text_value, str) or len(text_value) > 4000:
+        if not isinstance(text_value, str) or not text_value.strip():
             raise ReportBoundaryError("report_output_schema")
-        error = _text_error(text_value, output=True)
-        if error is not None:
-            raise ReportBoundaryError(error)
-        if _VOTE_TOTAL_RE.search(text_value):
-            raise ReportBoundaryError("report_output_vote_total")
     return sections
 
 

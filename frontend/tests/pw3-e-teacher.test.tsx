@@ -133,7 +133,8 @@ describe("PW3-E teacher shell and responsive contract", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the stalled row unchanged when Resume fails", async () => {
+  it("keeps the stalled row unchanged when Remake fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = {
       debates: vi.fn().mockResolvedValue([
         {
@@ -150,8 +151,10 @@ describe("PW3-E teacher shell and responsive contract", () => {
           },
         },
       ]),
-      debate: vi.fn().mockResolvedValue({ playback: { control_version: 4 } }),
-      retryDebatePreparation: vi
+      debate: vi
+        .fn()
+        .mockResolvedValue({ revision: 1, playback: { control_version: 4 } }),
+      remakeDebate: vi
         .fn()
         .mockRejectedValue(
           new Error("That action is not available in the current state."),
@@ -166,13 +169,11 @@ describe("PW3-E teacher shell and responsive contract", () => {
         <TeacherDebateList />
       </LocaleProvider>,
     );
-    const resume = await screen.findByRole("button", { name: "Resume" });
+    const resume = await screen.findByRole("button", { name: "Remake" });
     fireEvent.click(resume);
-    await waitFor(() =>
-      expect(api.retryDebatePreparation).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(api.remakeDebate).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(resume).toHaveProperty("disabled", false));
-    expect(resume.textContent).toBe("Resume");
+    expect(resume.textContent).toBe("Remake");
     expect(screen.getByText("A stalled classroom")).toBeTruthy();
     expect(screen.getByText("Stalled")).toBeTruthy();
     expect(

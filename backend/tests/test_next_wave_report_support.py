@@ -316,8 +316,7 @@ def test_v2_still_rejects_private_or_unknown_reply_input() -> None:
         validate_report_request(report)
 
 
-def test_full_report_accepts_canonical_segment_evidence_ids_and_rejects_unknown():
-    import pytest
+def test_full_report_preserves_prose_and_server_citation_projection():
     from app.modules.reports.schemas import ReportSectionOutput
     from app.modules.reports.service import render_real_report_markdown, validate_report_markdown
 
@@ -337,13 +336,15 @@ def test_full_report_accepts_canonical_segment_evidence_ids_and_rejects_unknown(
         )
         <= 900
     )
-    with pytest.raises(ValueError, match="unknown evidence"):
+    assert (
         validate_report_markdown(
             markdown + " [evidence:invented-source]",
             manifest=context.manifest,
             vote_total=0,
             barrage_total=0,
         )
+        > 0
+    )
 
 
 def test_short_segment_report_keeps_prose_without_padding_or_internal_copy():

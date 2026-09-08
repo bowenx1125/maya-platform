@@ -26,7 +26,7 @@ import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
-import { ReleaseButton } from "../release-button";
+
 import {
   EmptyCard,
   ErrorNotice,
@@ -85,30 +85,56 @@ export function TeacherDebateList({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const courseId = teacherCourseId(user);
+  const loadSequence = useRef(0);
 
-  const load = useCallback(async () => {
-    if (!courseId) {
-      setError(new Error(t("debateCreateUnavailable")));
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const next = controller
-        ? await controller.load(courseId)
-        : await api.debates(courseId);
-      setDebates(next);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, controller, courseId, t]);
+  const load = useCallback(
+    async (silent = false) => {
+      const sequence = ++loadSequence.current;
+      if (!courseId) {
+        setError(new Error(t("debateCreateUnavailable")));
+        setLoading(false);
+        return;
+      }
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const next = controller
+          ? await controller.load(courseId)
+          : await api.debates(courseId);
+        if (sequence !== loadSequence.current) return;
+        setDebates(next);
+      } catch (cause) {
+        if (!silent && sequence === loadSequence.current) setError(cause);
+      } finally {
+        if (sequence === loadSequence.current) setLoading(false);
+      }
+    },
+    [api, controller, courseId, t],
+  );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    let stopped = false;
+    let timer: number;
+    const poll = async (initial = false) => {
+      if (initial || document.visibilityState !== "hidden")
+        await load(!initial);
+      if (!stopped) timer = window.setTimeout(() => void poll(), 2000);
+    };
+    const refreshVisible = () => {
+      if (document.visibilityState !== "hidden") void load(true);
+    };
+    timer = window.setTimeout(() => void poll(true), 0);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      stopped = true;
+      loadSequence.current += 1;
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, [load]);
 
   if (loading) return <LoadingCard />;
@@ -188,32 +214,31 @@ export function TeacherDebateList({
                   )}
                 </Link>
                 <div className={styles.debateActions}>
-                  {/* Regenerating the one turn that stopped is a single provider
-                    call, where rebuilding the debate is all of them. */}
-                  {stalled(debate) ? (
-                    <ResumeButton
+                  {stalled(debate) || debate.status === "failed" ? (
+                    <ClassroomResetButton
                       debateId={debate.id}
-                      onResumed={() => void load()}
-                      turnId={
-                        (debate.stall as NonNullable<typeof debate.stall>)
-                          .turn_id
-                      }
+                      action="remake"
+                      onDone={() => void load(true)}
                     />
                   ) : null}
-                  {/* A lesson left running blocks every later debate on this
-                    course, and clearing it used to need a shell on the server.
-                    The recovery belongs beside the thing that needs it. */}
-                  {debate.status === "running" ? (
-                    <ReleaseButton
+                  {["completed", "debate_finished"].includes(debate.status) ? (
+                    <ClassroomResetButton
                       debateId={debate.id}
-                      onReleased={() => void load()}
+                      action="rebirth"
+                      onDone={() => void load(true)}
                     />
                   ) : null}
                   <DebateCleanupControls
                     api={api}
+                    debateId={debate.id}
                     loadDetail={() => api.debate(debate.id)}
                     onVoiceDeleted={load}
-                    onAllDeleted={load}
+                    onAllDeleted={() => {
+                      loadSequence.current += 1;
+                      setDebates((rows) =>
+                        rows.filter((row) => row.id !== debate.id),
+                      );
+                    }}
                     className={styles.listCleanup}
                     showGenerateAudio={false}
                   />
@@ -284,52 +309,54 @@ function PrewarmBadge({
   );
 }
 
-/** Generate the one turn warming stopped at, so the draft can warm on. */
-function ResumeButton({
+function ClassroomResetButton({
   debateId,
-  turnId,
-  onResumed,
+  action,
+  onDone,
 }: {
   debateId: string;
-  turnId: string;
-  onResumed: () => void;
+  action: "remake" | "rebirth";
+  onDone: () => void;
 }) {
-  const t = useT();
   const { api } = useSession();
   const [busy, setBusy] = useState(false);
-
+  const label = action === "rebirth" ? "Rebirth" : "Remake";
   return (
-    <>
-      <button
-        className="secondary-action"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          // The retry is guarded by the playback control version, which only
-          // the debate's own snapshot carries; the list never had a reason to
-          // hold one until now.
-          api
-            .debate(debateId)
-            .then((detail) =>
-              api.retryDebatePreparation(
-                debateId,
-                {
-                  turn_id: turnId,
-                  expected_control_version: detail.playback.control_version,
-                },
-                { idempotency: createIdempotencyHandle() },
-              ),
-            )
-            .then(() => onResumed())
-            // A failed resume leaves the existing stalled row unchanged.
-            .catch(() => undefined)
-            .finally(() => setBusy(false));
-        }}
-        type="button"
-      >
-        {busy ? t("debateWarmResuming") : t("debateWarmResume")}
-      </button>
-    </>
+    <button
+      className="secondary-action"
+      disabled={busy}
+      type="button"
+      onClick={async () => {
+        if (busy) return;
+        if (
+          !window.confirm(
+            action === "rebirth"
+              ? "Keep Preview and reset this classroom? Messages, Report and the final round will be removed."
+              : "Recover this turn and continue the debate? Failed generation may call the provider again.",
+          )
+        )
+          return;
+        setBusy(true);
+        try {
+          const detail = await api.debate(debateId);
+          await api[action === "rebirth" ? "rebirthDebate" : "remakeDebate"](
+            debateId,
+            {
+              expected_revision: detail.revision,
+              expected_control_version: detail.playback.control_version,
+            },
+            { idempotency: createIdempotencyHandle() },
+          );
+          onDone();
+        } catch {
+          // A refused action leaves the row unchanged.
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

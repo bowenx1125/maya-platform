@@ -211,7 +211,11 @@ def system_prompt(round_number: int, language: str) -> str:
             "资料不足时解释证据缺口或判断边界，不得凑字数编造，不截断或套模板。"
             "只返回JSON：segments为1–8个段落，每项{text,source_ids,reply_to,support_mode}，每段至多6个S来源ID。"
             "direct(+5)表示来源直接支持，contextual(+2)表示相关背景支持，两者必须引用提供的S编号；no_match(+0)必须source_ids=[]。"
-            "这些分数只是证据支持类别，有引用不等于已验证事实正确。引用不得冒充事实依据；来源编号不写入正文。"
+            "这些分数只是证据支持类别，有引用不等于已验证事实正确。引用不得冒充事实依据。"
+            "S1、S2、S5等来源编号只填source_ids，不能写进text，也不要说来源S2、括号S5或朗读编号。"
+            "引用自己的资料时自然表述为‘RAG资料显示’或‘根据RAG检索到的资料’；"
+            "英文用‘The RAG evidence indicates’。引用他人公开证据时说‘对方引用的RAG资料’，"
+            "不要冒充自己的检索结果。没有证据支持时不要声称RAG证实了观点。"
             "不得输出分析、策略、自评或思维过程。"
         )
         + routing

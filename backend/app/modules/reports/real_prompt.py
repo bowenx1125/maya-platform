@@ -180,6 +180,15 @@ def build_report_request(
     system = (
         REPORT_SYSTEM_PROMPT_V2 if isinstance(report, ReportRequestV2) else REPORT_SYSTEM_PROMPT
     )
+    if report.source_language == "zh":
+        system = system.replace("concise English prose only", "简洁的中文正文")
+        system = system.replace("within 600 words", "within 1800 Chinese characters")
+        system += " 本场辩论为中文：六个JSON字段的正文全部使用中文，字段名保持不变。"
+    else:
+        system += (
+            " This debate is in English. Write every section in English; translate Chinese "
+            "quotations and use an English name or participant slot for Chinese names."
+        )
     if isinstance(report, ReportRequestV2) and report.score_summary is not None:
         system += (
             " The optional score_summary is a code-owned count of paragraph support modes. "

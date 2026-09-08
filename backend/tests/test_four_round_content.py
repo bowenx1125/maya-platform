@@ -105,6 +105,17 @@ def test_counter_punctuation_whitespace_and_english_compounds():
     assert body_count("Don't re-read evidence-based claims, please!", "en") == 5
 
 
+def test_source_alias_guidance_is_prompt_only_and_does_not_rewrite_speech():
+    ctx = context(1, "zh")
+    snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
+    prompt = build_segment_system_prompt(snapshot)
+    assert "RAG资料显示" in prompt
+    assert "不能写进text" in prompt
+    value = output(snapshot, 1)
+    value["segments"][0]["text"] = "S2和S5的正文保持原样。"
+    assert validate_segment_output(value, snapshot).speech == "S2和S5的正文保持原样。"
+
+
 def test_context_is_independent_then_sequential_with_linked_sources():
     own = _receipt("snapshot-0", "chunk-a", "A shared canal is maintained in winter.")
     other = _receipt("snapshot-1", "chunk-b", "Dry seasons reduce the flow.")

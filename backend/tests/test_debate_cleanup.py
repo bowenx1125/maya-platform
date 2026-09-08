@@ -513,7 +513,7 @@ def test_delete_all_removes_only_target_graph_and_restores_recovery_guards(migra
         assert "BEFORE DELETE ON llm_recovery_inputs" in triggers[cleanup._RECOVERY_DELETE_TRIGGER]
 
 
-def test_delete_all_defers_when_other_runtime_is_active(migrated_database):
+def test_delete_all_preserves_other_active_classroom(migrated_database):
     database, ids, data_root = migrated_database
     other_debate_id = _uid(70)
     now = datetime.now(UTC)
@@ -540,26 +540,24 @@ def test_delete_all_defers_when_other_runtime_is_active(migrated_database):
             started_at=now,
             finished_at=None,
         )
-        # The target remains completed in the fixture; the other running row
-        # is enough to prove the trigger-drop boundary fails closed.
+        # Another running classroom must not block this scoped deletion.
     with database.session() as session:
-        with pytest.raises(PlatformError) as deferred:
-            asyncio.run(
-                cleanup.delete_all(
-                    session,
-                    actor_user_id=ids["teacher"],
-                    debate_id=ids["debate"],
-                    expected_revision=1,
-                    expected_control_version=1,
-                    data_root=data_root,
-                )
+        asyncio.run(
+            cleanup.delete_all(
+                session,
+                actor_user_id=ids["teacher"],
+                debate_id=ids["debate"],
+                expected_revision=1,
+                expected_control_version=1,
+                data_root=data_root,
             )
-        assert deferred.value.code == "cleanup_deferred"
-        assert session.get(Debate, ids["debate"]) is not None
-        assert session.execute(text("SELECT count(*) FROM llm_recovery_inputs")).scalar_one() == 1
+        )
+        assert session.get(Debate, ids["debate"]) is None
+        assert session.get(Debate, other_debate_id).status == "running"
+        assert session.execute(text("SELECT count(*) FROM llm_recovery_inputs")).scalar_one() == 0
 
 
-def test_delete_all_defers_for_an_active_shared_provider_operation(migrated_database):
+def test_delete_all_preserves_an_active_shared_provider_operation(migrated_database):
     database, ids, data_root = migrated_database
     with database.session() as session:
         session.execute(
@@ -567,19 +565,17 @@ def test_delete_all_defers_for_an_active_shared_provider_operation(migrated_data
             {"id": ids["operation_shared"]},
         )
     with database.session() as session:
-        with pytest.raises(PlatformError) as deferred:
-            asyncio.run(
-                cleanup.delete_all(
-                    session,
-                    actor_user_id=ids["teacher"],
-                    debate_id=ids["debate"],
-                    expected_revision=1,
-                    expected_control_version=1,
-                    data_root=data_root,
-                )
+        asyncio.run(
+            cleanup.delete_all(
+                session,
+                actor_user_id=ids["teacher"],
+                debate_id=ids["debate"],
+                expected_revision=1,
+                expected_control_version=1,
+                data_root=data_root,
             )
-        assert deferred.value.code == "cleanup_deferred"
-        assert session.get(Debate, ids["debate"]) is not None
+        )
+        assert session.get(Debate, ids["debate"]) is None
         assert (
             session.execute(
                 text("SELECT state FROM provider_operations WHERE id=:id"),
