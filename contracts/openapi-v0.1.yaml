@@ -2976,7 +2976,7 @@ components:
         control_version: { type: integer, minimum: 0 }
         next_turn_ready:
           type: boolean
-          description: Derived readiness of the deterministic adjacent live successor; always false outside live waiting_next.
+          description: Derived readiness of the adjacent live or retained replay successor while playing, paused, or waiting_next; Next may interrupt the current published speech.
     DebateTurn:
       type: object
       required:

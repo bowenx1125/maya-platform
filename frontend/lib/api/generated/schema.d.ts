@@ -1880,7 +1880,7 @@ export interface components {
             cursor_ms: number;
             playback_rate: number;
             control_version: number;
-            /** @description Derived readiness of the deterministic adjacent live successor; always false outside live waiting_next. */
+            /** @description Derived readiness of the adjacent live or retained replay successor while playing, paused, or waiting_next; Next may interrupt the current published speech. */
             next_turn_ready: boolean;
         };
         DebateTurn: {

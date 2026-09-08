@@ -992,8 +992,13 @@ class InteractionService:
         from app.modules.debates.final_input import freeze_final_input
 
         session = _begin_writer(self.session_factory)
+        event: PostCommitInteractionEvent | None = None
         try:
             debate = _require_teacher(session, actor_user_id, debate_id)
+            playback = session.scalar(
+                select(PlaybackState).where(PlaybackState.debate_id == debate.id)
+            )
+            previous_version = playback.control_version if playback is not None else None
             users = session.scalars(
                 select(User)
                 .join(CourseMember, CourseMember.user_id == User.id)
@@ -1012,13 +1017,27 @@ class InteractionService:
                 barrage_count=len(frozen["barrages"]),
                 cutoff_sequence=frozen["cutoff_sequence"],
             )
+            if playback is not None and playback.control_version != previous_version:
+                event = _event(
+                    session,
+                    debate,
+                    "playback.waiting_next",
+                    {
+                        "mode": "live",
+                        "completed_turn_id": playback.current_turn_id,
+                        "control_version": playback.control_version,
+                        "next_turn_ready": False,
+                    },
+                )
             session.commit()
-            return result
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
+        if event is not None:
+            _publish(self.event_publisher, event)
+        return result
 
     def public_form(self, *, access_token: str) -> PublicInteractionForm:
         parsed = _window_token(self.settings, access_token)

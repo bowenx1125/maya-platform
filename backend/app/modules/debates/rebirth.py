@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict
@@ -133,7 +133,42 @@ async def rebirth_debate(
         manifests = cleanup._children(db, "provider_export_manifests", "id", "turn_id", final_ids)
         remove("provider_export_confirmations", "manifest_id", manifests)
         remove("provider_export_manifests", "id", manifests)
-        remove("jobs", "debate_id", {debate_id})
+        # SQL Next requires a completed preparation receipt for its successor.
+        # Rebirth reuses Preview, so retain/rebind those receipts to the new
+        # classroom fence instead of leaving Start working but every Next blocked.
+        preview_ids = {turn.id for turn in preview}
+        preview_jobs = list(
+            db.scalars(
+                select(Job).where(
+                    Job.debate_id == debate_id,
+                    Job.turn_id.in_(preview_ids),
+                    Job.operation == "debate_turn_prepare",
+                    Job.state == "completed",
+                )
+            )
+        )
+        keep_job_ids = {job.id for job in preview_jobs}
+        db.execute(delete(Job).where(Job.debate_id == debate_id, Job.id.not_in(keep_job_ids)))
+        for job in preview_jobs:
+            job.cancellation_generation = generation
+        covered = {job.turn_id for job in preview_jobs}
+        for turn in preview:
+            if turn.id in covered:
+                continue
+            db.add(
+                Job(
+                    id=str(uuid4()),
+                    debate_id=debate_id,
+                    turn_id=turn.id,
+                    idempotency_key=f"rebirth-preview:{debate_id}:{revision}:{turn.id}",
+                    cancellation_generation=generation,
+                    operation="debate_turn_prepare",
+                    state="completed",
+                    attempt=turn.attempt,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+            )
         for table in (
             "interaction_final_barrages",
             "interaction_final_vote_counts",
@@ -319,7 +354,8 @@ async def remake_debate(
         operations = list(
             db.scalars(
                 select(ProviderOperation).where(
-                    ProviderOperation.logical_item_id == target.id,
+                    ProviderOperation.scope_id == debate_id,
+                    ProviderOperation.logical_item_id.in_((target.id, f"turn:{target.id}")),
                 )
             )
         )
@@ -361,7 +397,14 @@ async def remake_debate(
             if (
                 not accepted
                 and not cached_text
-                and any(op.charged_request_count for op in operations)
+                and any(
+                    (op.logical_item_id == target.id and op.charged_request_count)
+                    or (
+                        op.provider_operation == "embedding_query"
+                        and op.state in {"failed", "not_sent", "abandoned"}
+                    )
+                    for op in operations
+                )
             ):
                 # Explicit Remake starts a new bounded turn identity. The old
                 # cost operations stay in the ledger and cannot be retried.

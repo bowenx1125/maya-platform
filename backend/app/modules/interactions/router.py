@@ -72,6 +72,9 @@ async def freeze_final_input_route(
     )
     from app.modules.debates.playback.router import get_playback_service
 
+    # freeze_final commits through its own writer session; enqueue from that
+    # committed state rather than this request's earlier authentication read.
+    db.rollback()
     await get_playback_service(request).enqueue_frozen_final(db, str(debate_id))
     return result
 

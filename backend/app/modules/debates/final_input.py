@@ -137,7 +137,7 @@ def freeze_final_input(
         debate.status != "running"
         or playback is None
         or playback.mode != "live"
-        or playback.status != "waiting_next"
+        or playback.status not in {"playing", "paused", "waiting_next"}
         or playback.control_version != expected_control_version
     ):
         raise conflict("final_input_not_ready", "Finish the prepared rounds before Final.")
@@ -191,6 +191,20 @@ def freeze_final_input(
         "barrages": candidates,
         "message_ids": message_ids,
     }
+    if playback.status in {"playing", "paused"}:
+        # Final also interrupts the last published Preview speech. Keep the
+        # cutoff and media invalidation under the same teacher/version lock.
+        playback.status = "waiting_next"
+        playback.control_version += 1
+        playback.cursor_ms = 0
+        playback.server_started_at = None
+        playback.pending_action = None
+        playback.pending_ticket_hash = None
+        playback.pending_media_command_id = None
+        playback.audio_duration_ms = 0
+        playback.replay_scope = None
+        playback.replay_index = None
+        playback.updated_at = datetime.now(UTC)
     debate.final_input_json = _canonical(value)
     debate.final_input_hash = hashlib.sha256(debate.final_input_json.encode()).hexdigest()
     debate.final_frozen_at = datetime.now(UTC)

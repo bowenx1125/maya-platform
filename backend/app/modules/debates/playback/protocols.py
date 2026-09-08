@@ -348,7 +348,7 @@ class MemoryPlaybackRepository:
         return bool(
             state.control_version == expected_control_version
             and state.current_turn_id == expected_current_turn_id
-            and state.status == "waiting_next"
+            and state.status in {"playing", "paused", "waiting_next"}
             and state.mode == "live"
         )
 

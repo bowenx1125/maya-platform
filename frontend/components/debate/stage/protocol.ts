@@ -558,10 +558,14 @@ export function visibleTurnFromPlaybackStarted(
     typeof payload.round_no === "number" && Number.isInteger(payload.round_no)
       ? payload.round_no
       : (existing?.round_no ?? 1);
+  // Public started events arrive in turn order. A participant's fixed slot
+  // is not a turn index: discussion rounds rotate their speaking order.
   const turnIndex =
     existing?.turn_index ??
-    Math.max(0, roundNo - 1) * participants.length +
-      (participant?.order_index ?? 0);
+    (typeof payload.turn_index === "number" &&
+    Number.isInteger(payload.turn_index)
+      ? payload.turn_index
+      : Math.max(-1, ...publicTurns.map((turn) => turn.turn_index)) + 1);
   const segmentTurn =
     normaliseSegmentTurn(payload.segment_turn) ?? existing?.segment_turn;
   const sourceDetails = normaliseSourceDetails(payload.source_details);

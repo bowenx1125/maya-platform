@@ -552,16 +552,11 @@ async def debate_events_route(
     receive_task: asyncio.Task[Any] | None = None
     try:
         event_task = asyncio.create_task(stream.__anext__())
+        receive_task = asyncio.create_task(websocket.receive_json())
         while True:
-            receive_task = asyncio.create_task(websocket.receive_json())
-            done, pending = await asyncio.wait(
+            done, _ = await asyncio.wait(
                 {event_task, receive_task}, return_when=asyncio.FIRST_COMPLETED
             )
-            if event_task in pending:
-                # A command arrived first; preserve the event subscription.
-                pass
-            elif receive_task in pending:
-                receive_task.cancel()
             if event_task in done:
                 try:
                     event = event_task.result()
@@ -588,6 +583,7 @@ async def debate_events_route(
                 event_task = asyncio.create_task(stream.__anext__())
             if receive_task in done:
                 raw = receive_task.result()
+                receive_task = asyncio.create_task(websocket.receive_json())
                 command_id = uuid4()
                 try:
                     command: WSCommand = TypeAdapter(WSCommand).validate_python(raw)
@@ -710,7 +706,7 @@ async def debate_events_route(
                                             command_db,
                                             service._get_debate(command_db, str(debate_id)),
                                         ).status
-                                        if before != "playing" or after == before:
+                                        if before not in {"playing", "paused"} or after == before:
                                             result = await service.command_duplicate_or_rejected(
                                                 command_db,
                                                 str(debate_id),
@@ -750,8 +746,9 @@ async def debate_events_route(
                 if close_for_revocation:
                     await _close_ws(websocket, 4401)
                     break
-                if event_task is None or event_task.done():
-                    event_task = asyncio.create_task(stream.__anext__())
+                # Handling an ack can finish event_task by publishing its
+                # started/waiting event. Keep that result until the next loop
+                # sends it; replacing a done task here silently loses the event.
     except (WebSocketDisconnect, RuntimeError, PlatformError):
         pass
     finally:
@@ -759,6 +756,10 @@ async def debate_events_route(
             event_task.cancel()
         if receive_task is not None:
             receive_task.cancel()
+        await asyncio.gather(
+            *(task for task in (event_task, receive_task) if task is not None),
+            return_exceptions=True,
+        )
         if epoch is not None:
             service.unregister_connection(epoch)
             with contextlib.suppress(Exception):

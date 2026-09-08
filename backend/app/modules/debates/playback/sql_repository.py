@@ -890,7 +890,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         successor_turn_id: str,
         teacher_user_id: str | None = None,
     ) -> bool:
-        """Atomically claim the live waiting successor transition.
+        """Atomically claim the live successor transition, interrupting audio if needed.
 
         The application request session may already hold a read snapshot after
         resolving the playback DTO.  SQLite WAL cannot promote that snapshot
@@ -914,8 +914,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "UPDATE playback_states SET status='ready', mode='live', "
                 "current_turn_id=:successor_turn_id, cursor_ms=0, "
                 "control_version=:next_control_version, server_started_at=NULL, "
+                "pending_action=NULL, pending_ticket_hash=NULL, "
+                "pending_media_command_id=NULL, audio_duration_ms=0, "
                 "updated_at=:updated_at WHERE debate_id=:debate_id "
-                "AND status='waiting_next' AND mode='live' "
+                "AND status IN ('playing','paused','waiting_next') AND mode='live' "
                 "AND current_turn_id=:expected_current_turn_id "
                 "AND control_version=:expected_control_version "
                 "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=:debate_id "
@@ -982,13 +984,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND successor.debate_id=ps.debate_id "
                     "AND successor.turn_index=current_turn.turn_index + 1 "
                     "WHERE ps.debate_id=:debate_id "
-                    "AND ps.status='waiting_next' AND ps.mode='live' "
+                    "AND ps.status IN ('playing','paused','waiting_next') AND ps.mode='live' "
                     "AND ps.current_turn_id=:expected_current_turn_id "
                     "AND ps.control_version=:expected_control_version "
                     "AND ps.replay_scope IS NULL AND ps.replay_index IS NULL "
-                    "AND ps.pending_action IS NULL "
-                    "AND ps.pending_ticket_hash IS NULL "
-                    "AND ps.pending_media_command_id IS NULL "
                     "AND d.status='running' "
                     "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
@@ -1083,12 +1082,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "pending_media_command_id=NULL, audio_duration_ms=0, "
                     "updated_at=:updated_at WHERE rowid=:claim_rowid "
                     "AND debate_id=:debate_id "
-                    "AND status='waiting_next' AND mode='live' "
+                    "AND status IN ('playing','paused','waiting_next') AND mode='live' "
                     "AND current_turn_id=:expected_current_turn_id "
                     "AND control_version=:expected_control_version "
-                    "AND replay_scope IS NULL AND replay_index IS NULL "
-                    "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
-                    "AND pending_media_command_id IS NULL"
+                    "AND replay_scope IS NULL AND replay_index IS NULL"
                 ),
                 {
                     **params,
@@ -1455,14 +1452,12 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "JOIN debate_turns AS successor ON successor.id=:successor_turn_id "
                     "AND successor.debate_id=ps.debate_id "
                     "AND successor.turn_index=current_turn.turn_index + 1 "
-                    "WHERE ps.debate_id=:debate_id AND ps.status='waiting_next' "
+                    "WHERE ps.debate_id=:debate_id "
+                    "AND ps.status IN ('playing','paused','waiting_next') "
                     "AND ps.mode='replay' AND ps.replay_scope='all' "
                     "AND ps.replay_index=:expected_replay_index "
                     "AND ps.current_turn_id=:expected_current_turn_id "
                     "AND ps.control_version=:expected_control_version "
-                    "AND ps.pending_action IS NULL "
-                    "AND ps.pending_ticket_hash IS NULL "
-                    "AND ps.pending_media_command_id IS NULL "
                     "AND d.status IN ('debate_finished','completed') "
                     "AND (c.current_audio_debate_id=d.id OR "
                     "json_extract(d.rule_snapshot_json, '$.turn_protocol')='segments_v2') "
@@ -1503,12 +1498,10 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "pending_media_command_id=NULL, audio_duration_ms=0, "
                     "control_version=:next_control_version, updated_at=:updated_at "
                     "WHERE rowid=:claim_rowid AND debate_id=:debate_id "
-                    "AND status='waiting_next' AND mode='replay' "
+                    "AND status IN ('playing','paused','waiting_next') AND mode='replay' "
                     "AND replay_scope='all' AND replay_index=:expected_replay_index "
                     "AND current_turn_id=:expected_current_turn_id "
-                    "AND control_version=:expected_control_version "
-                    "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
-                    "AND pending_media_command_id IS NULL"
+                    "AND control_version=:expected_control_version"
                 ),
                 {
                     **params,

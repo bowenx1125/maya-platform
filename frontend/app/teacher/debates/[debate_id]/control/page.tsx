@@ -218,6 +218,8 @@ export default function TeacherDebateControlPage() {
   );
   const finishInFlight = useRef(false);
   const finishKey = useRef<IdempotencyHandle | null>(null);
+  const snapshotRequest = useRef(0);
+  const loadRequest = useRef(0);
 
   const updatePlaybackAuthority = useCallback(
     (next: PlaybackAuthorityState) => {
@@ -227,47 +229,52 @@ export default function TeacherDebateControlPage() {
     [],
   );
 
+  const readSnapshot = useCallback(
+    async (includeCourse: boolean) => {
+      if (!debateId) throw new Error("Debate id is missing.");
+      const request = ++snapshotRequest.current;
+      const next = await api.debate(debateId);
+      if (request !== snapshotRequest.current) return next;
+      setDetail((current) =>
+        current?.id === next.id &&
+        (current.revision > next.revision ||
+          current.last_sequence > next.last_sequence ||
+          current.playback.control_version > next.playback.control_version)
+          ? current
+          : next,
+      );
+      setError(null);
+      if (includeCourse) {
+        try {
+          const course = await api.course(next.course_id);
+          if (request === snapshotRequest.current)
+            setCurrentAudioDebateId(course.current_audio_debate_id ?? null);
+        } catch {
+          // Unknown retention state must fail closed for replay.
+          if (request === snapshotRequest.current)
+            setCurrentAudioDebateId(undefined);
+        }
+      }
+      return next;
+    },
+    [api, debateId],
+  );
+
+  const refreshSnapshot = useCallback(() => readSnapshot(true), [readSnapshot]);
+
   const load = useCallback(async () => {
-    if (!debateId) {
-      setError(new Error("Debate id is missing."));
-      setLoading(false);
-      return null;
-    }
+    const request = ++loadRequest.current;
     setError(null);
     setLoading(true);
     try {
-      const next = await api.debate(debateId);
-      setDetail(next);
-      try {
-        const course = await api.course(next.course_id);
-        setCurrentAudioDebateId(course.current_audio_debate_id ?? null);
-      } catch {
-        // The debate snapshot remains usable if the optional course pointer cannot be read.
-        setCurrentAudioDebateId(undefined);
-      }
-      return next;
+      return await refreshSnapshot();
     } catch (cause) {
-      setError(cause);
+      if (request === loadRequest.current) setError(cause);
       return null;
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
-  }, [api, debateId]);
-
-  const refreshSnapshot = useCallback(async () => {
-    if (!debateId) throw new Error("Debate id is missing.");
-    const next = await api.debate(debateId);
-    setDetail(next);
-    try {
-      const course = await api.course(next.course_id);
-      setCurrentAudioDebateId(course.current_audio_debate_id ?? null);
-    } catch {
-      // Unknown retention state must fail closed for replay.
-      setCurrentAudioDebateId(undefined);
-    }
-    setError(null);
-    return next;
-  }, [api, debateId]);
+  }, [refreshSnapshot]);
 
   const finish = useCallback(async () => {
     if (
@@ -321,8 +328,47 @@ export default function TeacherDebateControlPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      loadRequest.current += 1;
+      snapshotRequest.current += 1;
+      window.clearTimeout(timer);
+    };
   }, [load]);
+
+  const showingPreview = detail?.turn_protocol === "segments_v2";
+  useEffect(() => {
+    if (!showingPreview) return;
+    let stopped = false;
+    let inFlight = false;
+    let timer: number;
+    const refreshPreview = async () => {
+      if (stopped || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        // Preview does not mount the classroom WebSocket controller.
+        await readSnapshot(false);
+      } catch {
+        // Keep saved turns visible while the next background read recovers.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const poll = async () => {
+      await refreshPreview();
+      if (!stopped) timer = window.setTimeout(() => void poll(), 2000);
+    };
+    const refreshVisible = () => void refreshPreview();
+    timer = window.setTimeout(() => void poll(), 2000);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      stopped = true;
+      snapshotRequest.current += 1;
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [readSnapshot, showingPreview]);
 
   const finishAllowed = detail
     ? canFinishWithAuthority(detail, playbackAuthority)

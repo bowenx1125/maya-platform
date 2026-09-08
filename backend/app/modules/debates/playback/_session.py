@@ -592,7 +592,7 @@ class PlaybackSessionMixin(PlaybackCore):
             state = self._state(db, debate)
             self._check_control(state, expected_control_version)
             self._check_epoch(state, epoch=epoch, session_hash=session_hash)
-            if state.status != "playing" or state.current_turn_id != turn_id:
+            if state.status not in {"playing", "paused"} or state.current_turn_id != turn_id:
                 # Duplicate ended events are intentionally no-op/private at
                 # the transport layer; callers can inspect the unchanged DTO.
                 return self._state_dto(state, db, debate)
@@ -790,18 +790,17 @@ class PlaybackSessionMixin(PlaybackCore):
             self._check_epoch(state, epoch=epoch, session_hash=session_hash)
             if state.current_turn_id != turn_id:
                 raise not_found()
+            if failure_phase == "pre_ack" and state.status != "ready":
+                raise invalid_state("A pre-play failure requires ready playback.")
+            if failure_phase == "post_ack" and state.status != "playing":
+                raise invalid_state("A post-play failure requires playing playback.")
             self.ticket_store.revoke_item(debate_id, turn_id)
             state.pending_action = None
             state.pending_ticket_hash = None
             state.pending_media_command_id = None
             state.audio_duration_ms = 0
             self._clear_media_results(debate_id)
-            if failure_phase == "pre_ack":
-                if state.status != "ready":
-                    raise invalid_state("A pre-play failure requires ready playback.")
-            else:
-                if state.status != "playing":
-                    raise invalid_state("A post-play failure requires playing playback.")
+            if failure_phase == "post_ack":
                 self._set_nonplaying(state, "ready", cursor_ms)
                 state.control_version += 1
             # Pre-ack failures also need a committed event so the browser can

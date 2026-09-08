@@ -1072,7 +1072,8 @@ class PlaybackControlMixin(PlaybackCore):
         Live and replay use the same teacher/CAS boundary, but they never
         share a queue or generation path. Replay Next only moves an already
         public retained turn; the browser performs the media handshake for
-        that newly current item.
+        that newly current item. A teacher may interrupt the published current
+        speech without waiting for its audio to finish.
         """
 
         async with self._lock:
@@ -1087,8 +1088,8 @@ class PlaybackControlMixin(PlaybackCore):
                     {"current_current_turn_id": state.current_turn_id},
                 )
             debate_status = str(self._get(debate, "status", default=""))
-            if state.status != "waiting_next":
-                raise invalid_state("Playback is not waiting for the teacher's next command.")
+            if state.status not in {"playing", "paused", "waiting_next"}:
+                raise invalid_state("Playback has no published current turn to advance.")
 
             turns = sorted(
                 self._turns(db, debate),
@@ -1208,6 +1209,8 @@ class PlaybackControlMixin(PlaybackCore):
                         "The playback transition was claimed by another controller.",
                         {"current_control_version": state.control_version},
                     )
+                self.ticket_store.revoke_item(debate_id, expected_current_turn_id)
+                self._clear_media_results(debate_id)
                 # Discard the old read snapshot before rebuilding the DTO from
                 # the committed claim.  No stale runtime mutation is written.
                 self._rollback(db)
@@ -1271,6 +1274,8 @@ class PlaybackControlMixin(PlaybackCore):
             state.control_version += 1
             self._save(db, debate, state)
             self._commit(db)
+            self.ticket_store.revoke_item(debate_id, expected_current_turn_id)
+            self._clear_media_results(debate_id)
             return self._state_dto(state, db, debate)
 
     async def stop(

@@ -1086,12 +1086,12 @@ class PlaybackCore:
         return candidates[0], True
 
     def _next_turn_ready(self, db: Any, debate: Any, state: PlaybackRuntime) -> bool:
-        """Derive readiness only for a live waiting state; never persist it."""
+        """Derive a ready successor for a published live item; never persist it."""
 
         if (
             self._get(debate, "status", default="running") != "running"
             or state.mode != "live"
-            or state.status != "waiting_next"
+            or state.status not in {"playing", "paused", "waiting_next"}
             or not state.current_turn_id
         ):
             return False
@@ -1100,7 +1100,7 @@ class PlaybackCore:
             (item for item in turns if str(getattr(item, "id", "")) == state.current_turn_id),
             None,
         )
-        if current is None:
+        if current is None or not self._turn_public(current):
             return False
         successor, unique = self._adjacent_successor(turns, current)
         if successor is None or not unique:
@@ -1193,7 +1193,7 @@ class PlaybackCore:
         if (
             self._get(debate, "status", default="") not in {"debate_finished", "completed"}
             or state.mode != "replay"
-            or state.status != "waiting_next"
+            or state.status not in {"playing", "paused", "waiting_next"}
             or state.current_turn_id is None
             or state.replay_index is None
         ):

@@ -91,7 +91,7 @@ def _as_uuid(value: str | UUID) -> UUID:
 def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
     """Derive the closed public readiness bit without persisting a column."""
 
-    if playback.status != "waiting_next" or not playback.current_turn_id:
+    if playback.status not in {"playing", "paused", "waiting_next"} or not playback.current_turn_id:
         return False
     debate = db.get(Debate, debate_id)
     if debate is None:
@@ -202,7 +202,7 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
     if playback.mode != "live" or debate.status != "running":
         return False
     live_current = next((row for row in turns if row.id == playback.current_turn_id), None)
-    if live_current is None:
+    if live_current is None or live_current.publication_status != "public":
         return False
     successors = [row for row in turns if row.turn_index == live_current.turn_index + 1]
     if len(successors) != 1:

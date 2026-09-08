@@ -471,40 +471,14 @@ def build_segment_subqueries(
 ) -> tuple[TurnSubquery, ...]:
     """Build the bounded deterministic query set for ``segments_v2``.
 
-    Queries stay focused for embedding quality.  Opening starts with the exact
-    topic and a short Persona focus query; later turns use the current
-    position.  The complete earlier-round speech remains in the LLM history
-    group, while one final query contains every frozen barrage candidate so a
-    final turn cannot silently omit a classroom question.  No query-planning
-    model runs here, and no history or barrage text is summarized or truncated
-    in the LLM input.
+    Every teaching round queries the speaker's own knowledge: opening grounds
+    the claim, discussion compares the speaker's opening with its question
+    target, response uses actual questions, and conclusion checks the considered
+    position and frozen classroom questions.  Queries share one embedding batch.
+    Complete visible speech remains in the LLM history; no query-planning model
+    runs here and no history or barrage text is summarized or truncated there.
     """
 
-    if context.teaching_protocol == TEACHING_PROTOCOL:
-        if context.turn.round_no in {2, 4}:
-            return ()
-        if context.turn.round_no == 3:
-            questions = received_questions(context)
-            if questions:
-                actual = "\n".join(item["text"] for item in questions)
-            else:
-                challenges = [
-                    item.speech
-                    for item in visible_predecessors(context)
-                    if item.round_no == 2
-                    and item.participant_id != context.participant.participant_id
-                ]
-                if not challenges:
-                    raise RAGRetrievalError(
-                        "Response round has no question or specific discussion point.",
-                        technical=False,
-                    )
-                actual = challenges[-1]
-            return (
-                TurnSubquery(
-                    "pending_question", f"{context.topic}\n回答这个实际问题或论点：\n{actual}"
-                ),
-            )
     if not isinstance(context, GenerationContext):
         raise RAGRetrievalError("segment retrieval needs a typed context.", technical=False)
     topic = context.topic.strip()
@@ -523,6 +497,98 @@ def build_segment_subqueries(
         raise RAGRetrievalError(
             "segments_v2 retrieval Persona is invalid.", technical=False
         ) from exc
+
+    if context.teaching_protocol == TEACHING_PROTOCOL and context.turn.round_no > 1:
+        visible = visible_predecessors(context)
+        own_id = context.participant.participant_id
+        own_turns = [item for item in visible if item.participant_id == own_id]
+        opening = next((item.speech for item in own_turns if item.round_no == 1), "")
+        own_position = opening or segment_persona.initial_position
+        if context.turn.round_no == 2:
+            agents = sorted(context.participants, key=lambda item: item.order_index)
+            ids = [item.participant_id for item in agents]
+            target_id = ids[(ids.index(own_id) + 1) % len(ids)]
+            target_opening = next(
+                (
+                    item.speech
+                    for item in visible
+                    if item.round_no == 1 and item.participant_id == target_id
+                ),
+                "",
+            )
+            return (
+                TurnSubquery(
+                    "rebuttal",
+                    f"{topic}\nMy opening position and evidence:\n{own_position}\n"
+                    f"The other Agent's opening to discuss and question:\n{target_opening}\n"
+                    "Find a focused source that supports, qualifies or challenges this comparison.",
+                ),
+            )
+        if context.turn.round_no == 3:
+            questions = received_questions(context)
+            if questions:
+                actual = "\n".join(item["text"] for item in questions)
+            else:
+                challenges = [
+                    item.speech
+                    for item in visible
+                    if item.round_no == 2 and item.participant_id != own_id
+                ]
+                if not challenges:
+                    raise RAGRetrievalError(
+                        "Response round has no question or specific discussion point.",
+                        technical=False,
+                    )
+                actual = challenges[-1]
+            return (
+                TurnSubquery(
+                    "pending_question",
+                    f"{topic}\nMy opening position:\n{own_position}\n"
+                    f"Answer these actual questions or challenged points:\n{actual}",
+                ),
+            )
+        memory: Mapping[str, object] | None = next(
+            (
+                cast(Mapping[str, object], getattr(item.structured, "discussion_memory"))
+                for item in reversed(own_turns)
+                if item.round_no == 3
+                and isinstance(getattr(item.structured, "discussion_memory", None), Mapping)
+            ),
+            None,
+        )
+        last_position = own_turns[-1].speech if own_turns else own_position
+        final_position = str(memory["position"]) if memory is not None else last_position
+        unresolved = str(memory["unresolved_question"]) if memory is not None else ""
+        influence = memory.get("influence") if memory is not None else None
+        other_point = str(influence["point"]) if isinstance(influence, Mapping) else ""
+        if not other_point:
+            other_point = next(
+                (item.speech for item in reversed(visible) if item.participant_id != own_id), ""
+            )
+        queries = [
+            TurnSubquery(
+                "updated_position",
+                f"{topic}\nMy considered position after discussion:\n{final_position}\n"
+                "Find evidence that supports or limits this final judgment.",
+            ),
+            TurnSubquery(
+                "rebuttal",
+                f"{topic}\nThe other Agent's specific point to assess:\n{other_point}\n"
+                f"Unresolved question:\n{unresolved}\n"
+                "Find evidence for agreement, criticism or a remaining uncertainty.",
+            ),
+        ]
+        frozen_barrages = _segment_barrage_rows(barrages)
+        if frozen_barrages:
+            barrage_text = "\n\n".join(f"[{item.id}] {item.text}" for item in frozen_barrages)
+            queries.append(
+                TurnSubquery(
+                    "barrage",
+                    f"{topic}\nFrozen classroom questions for the conclusion:\n{barrage_text}\n"
+                    "Find evidence relevant to the questions without inventing missing facts.",
+                )
+            )
+        return tuple(queries)
 
     if context.turn.round_no == 1 or getattr(context.turn, "phase", "") == "opening":
         queries = [

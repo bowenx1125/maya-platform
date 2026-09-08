@@ -103,7 +103,9 @@ from app.modules.knowledge.providers.query_manifest import (
 from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
 from app.modules.knowledge.providers.sql_query import (
     REAL_CORE_DEMO_QUERY_MAX_REQUESTS,
+    SQL_QUERY_MAX_COST_CNY,
     SQL_QUERY_MAX_REQUESTS,
+    SQL_QUERY_MAX_TOTAL_TOKENS,
     SqlAlchemyQueryControlAdapter,
     SqlQueryError,
     controlled_query_provider,
@@ -112,12 +114,13 @@ from app.modules.knowledge.providers.sql_stage import SqlAlchemyEmbeddingStageSt
 from app.modules.knowledge.providers.tokenizer import TokenizerError, count_tokens
 from app.modules.knowledge.vector import IdentityVectorStore, StoredVectorRow
 from app.providers.control import (
+    EMBEDDING_QUERY_BUCKET,
     LLM_DEBATE_TURN_BUCKET,
     ExportFieldV1,
     ExportManifestV1,
     ProviderScopeBudgetV1,
 )
-from app.providers.control_repository import ProviderRepository
+from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
 from app.providers.factory import (
     embedding_provider as select_embedding_provider,
 )
@@ -246,6 +249,33 @@ def _query_request_cap(
     if isinstance(participant_count, bool) or participant_count < 1:
         raise ValueError("segment query participant count is invalid")
     return participant_count * _debate_round_count(debate)
+
+
+def _authorized_extra_turns(db: Session, debate_id: str, participant_count: int) -> int:
+    cycles = int(
+        db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.debate_id == debate_id,
+                AuditLog.event_type == "debate.rebirth",
+            )
+        )
+        or 0
+    )
+    remakes = int(
+        db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.debate_id == debate_id,
+                AuditLog.event_type == "debate.remake",
+                AuditLog.details_json == '{"regenerated":true}',
+            )
+        )
+        or 0
+    )
+    return cycles * participant_count + remakes
 
 
 def _assert_llm_provider_endpoint(
@@ -475,31 +505,8 @@ class SqlTurnPreparer:
                 if dual_real
                 else debate_budget_cap(len(participants), round_count=debate_rounds)
             )
-            cycles = int(
-                db.scalar(
-                    select(func.count())
-                    .select_from(AuditLog)
-                    .where(
-                        AuditLog.debate_id == str(debate.id),
-                        AuditLog.event_type == "debate.rebirth",
-                    )
-                )
-                or 0
-            )
-            remakes = int(
-                db.scalar(
-                    select(func.count())
-                    .select_from(AuditLog)
-                    .where(
-                        AuditLog.debate_id == str(debate.id),
-                        AuditLog.event_type == "debate.remake",
-                        AuditLog.details_json == '{"regenerated":true}',
-                    )
-                )
-                or 0
-            )
             # Only explicit actions extend the cap; previous costs stay allocated.
-            extra_turns = cycles * len(participants) + remakes
+            extra_turns = _authorized_extra_turns(db, str(debate.id), len(participants))
             original_turns = debate_rounds * len(participants)
             extra_requests = extra_turns * (cap.max_requests // original_turns)
             ensure_budget = (
@@ -1582,9 +1589,6 @@ class SqlTurnPreparer:
         context: GenerationContext,
         transcript_hash: str,
     ) -> QueryEmbeddingService:
-        if context.teaching_protocol == "four_round_v1" and context.turn.round_no in {2, 4}:
-            # These stages never retrieve; do not create an empty paid query manifest.
-            return QueryEmbeddingService()
         snapshot = db.get(KnowledgeSnapshot, str(participant_row.knowledge_snapshot_id))
         if snapshot is None:
             raise ValueError("the immutable query Snapshot is unavailable")
@@ -1684,6 +1688,20 @@ class SqlTurnPreparer:
                 debate,
                 participant_count=len(participants),
             )
+            extra_turns = _authorized_extra_turns(db, str(debate.id), len(participants))
+            query_request_cap += extra_turns
+            if extra_turns:
+                # Rebirth/Remake authorize new turns, not retries of charged queries.
+                # Keep the existing token and money caps while adding one batch per turn.
+                repository.raise_scope_budget(
+                    str(debate.id),
+                    ProviderScopeBudgetV1(
+                        max_requests=query_request_cap,
+                        max_total_tokens=SQL_QUERY_MAX_TOTAL_TOKENS,
+                        max_cost_cny=SQL_QUERY_MAX_COST_CNY,
+                        budget_bucket=EMBEDDING_QUERY_BUCKET,
+                    ),
+                )
             pending_control = SqlAlchemyQueryControlAdapter(
                 db,
                 scope_id=str(debate.id),
@@ -1704,7 +1722,7 @@ class SqlTurnPreparer:
                 query_hashes=query_plan.query_hashes,
                 total_tokens=total_tokens,
             )
-        except (TokenizerError, SqlQueryError) as error:
+        except (TokenizerError, SqlQueryError, ProviderRepositoryError) as error:
             raise PlatformError(
                 "provider_preflight_blocked",
                 "The exact real query disclosure could not be persisted.",
