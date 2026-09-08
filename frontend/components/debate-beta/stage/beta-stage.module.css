@@ -768,28 +768,6 @@
   }
 }
 
-/* Whole-session replay is a review action; it belongs with the speeches, not
-   in the row of controls that drive a live lesson. */
-.streamReplayAll {
-  padding: 5px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-
-.streamReplayAll:hover:not(:disabled) {
-  border-color: var(--indigo);
-  color: var(--indigo);
-}
-
-.streamReplayAll:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .streamSources {
   display: grid;
   gap: 4px;
@@ -954,11 +932,9 @@
   min-height: 0;
   /* The panel's own height is the bound now, not a viewport fraction. */
   max-height: none;
-  /* Room under the last speech for its evidence panel to open into. Without
-     it, expanding Check RAG on the newest turn put it behind the controls. */
   padding-right: 8px;
-  padding-bottom: 26px;
-  scroll-padding-bottom: 26px;
+  padding-bottom: 0;
+  scroll-padding-bottom: 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -967,13 +943,6 @@
 .stagePanel .controlButtons,
 .stagePanel .panelActions {
   display: contents;
-}
-
-.stagePanel .panelActions > button:last-child:nth-child(even) {
-  grid-column: 1 / -1;
-  width: 100%;
-  justify-self: stretch;
-  text-align: center;
 }
 
 .stagePanel .statusCluster:empty {
@@ -1027,12 +996,6 @@
 
 .streamState {
   color: #80673d;
-}
-
-.streamReplayAll:hover:not(:disabled) {
-  border-color: #deceb0;
-  background: rgba(196, 164, 104, 0.16);
-  color: #382d19;
 }
 
 .streamHeader h2 {
@@ -1108,6 +1071,8 @@
 }
 
 .turnProgress {
+  margin-left: auto;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -1122,4 +1087,9 @@
 .turnProgress[data-connected="false"] {
   color: #963c34;
   background: #f8e1dd;
+}
+
+.streamItem details > summary {
+  min-height: 0;
+  padding: 0;
 }

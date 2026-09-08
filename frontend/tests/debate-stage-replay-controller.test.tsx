@@ -237,6 +237,37 @@ function renderStage(
 }
 
 describe("terminal segments replay controller", () => {
+  it("places terminal Replay between Back and Conclude while Next is disabled", () => {
+    const initial = detail();
+    render(
+      <BetaDebateStage
+        api={apiFor(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => new ReplaySocket()}
+        headerActions={(replayButton) => (
+          <>
+            <a href="/teacher/debates">Back</a>
+            {replayButton}
+            <button>Conclude</button>
+          </>
+        )}
+      />,
+    );
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(next).toHaveProperty("disabled", true);
+    const panel = next.closest('[class*="stagePanel"]')!;
+    expect(
+      Array.from(panel.querySelectorAll("button,a")).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["Next", "Back", "Replay", "Conclude"]);
+    expect(
+      screen.queryByRole("button", { name: "Replay whole debate" }),
+    ).toBeNull();
+    expect(panel.querySelector('[class*="turnProgress"]')).toBeNull();
+  });
+
   it("beta recovers a stale entry acquire and keeps newer public state when its grant arrives", async () => {
     const initial = detail();
     initial.status = "running";
@@ -258,6 +289,7 @@ describe("terminal segments replay controller", () => {
         onAuthorityChange={authority}
       />,
     );
+    expect(screen.queryByRole("button", { name: /^Replay/ })).toBeNull();
     await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
     act(() => socket.emitOpen());
     expect(socket.commands()).toHaveLength(1);
@@ -348,7 +380,7 @@ describe("terminal segments replay controller", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Replay whole debate" }),
+        screen.getByRole("button", { name: /^Replay(?: whole debate)?$/ }),
       ).toHaveProperty("disabled", false),
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -361,7 +393,7 @@ describe("terminal segments replay controller", () => {
       "A retained paragraph",
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Replay whole debate" }),
+      screen.getByRole("button", { name: /^Replay(?: whole debate)?$/ }),
     );
     expect(
       socket
@@ -381,7 +413,7 @@ describe("terminal segments replay controller", () => {
       render(renderStage(kind, initial, api, socket));
 
       const replay = await screen.findByRole("button", {
-        name: "Replay whole debate",
+        name: /^Replay(?: whole debate)?$/,
       });
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       fireEvent.click(replay);
@@ -405,9 +437,13 @@ describe("terminal segments replay controller", () => {
       await waitFor(() =>
         expect(api.replayDebate).toHaveBeenCalledWith(debateId, 7),
       );
-      expect(
-        screen.getByRole("button", { name: "Replay whole debate" }),
-      ).toBeTruthy();
+      if (kind === "beta") {
+        expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
+      } else {
+        expect(
+          screen.getByRole("button", { name: "Replay whole debate" }),
+        ).toBeTruthy();
+      }
     },
   );
 
@@ -418,7 +454,7 @@ describe("terminal segments replay controller", () => {
       const socket = new ReplaySocket();
       render(renderStage(kind, initial, apiFor(initial), socket));
       const replay = await screen.findByRole("button", {
-        name: "Replay whole debate",
+        name: /^Replay(?: whole debate)?$/,
       });
       socket.emitOpen();
       socket.emitClose();
@@ -435,7 +471,7 @@ describe("terminal segments replay controller", () => {
       const socket = new ReplaySocket();
       render(renderStage(kind, initial, api, socket));
       const replay = await screen.findByRole("button", {
-        name: "Replay whole debate",
+        name: /^Replay(?: whole debate)?$/,
       });
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
 

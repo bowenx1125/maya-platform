@@ -440,15 +440,19 @@ export default function TeacherDebateControlPage() {
     : false;
   const segmentsProtocol = detail?.turn_protocol === "segments_v2";
   const segmentsPlanComplete = detail ? canConcludeSegments(detail) : false;
+  const playbackComplete = detail?.playback.status === "completed";
   const showSegmentsConclude =
-    segmentsPlanComplete && interaction?.status !== "finalized";
+    playbackComplete &&
+    segmentsPlanComplete &&
+    interaction?.status !== "finalized";
   const showSegmentsReport =
-    segmentsProtocol && interaction?.status === "finalized";
+    playbackComplete && segmentsProtocol && interaction?.status === "finalized";
   useEffect(() => {
     if (reportOpen && showSegmentsReport) reportDialogRef.current?.showModal();
   }, [reportOpen, showSegmentsReport]);
   const showOpenInteraction =
     Boolean(detail) &&
+    !playbackComplete &&
     detail?.status !== "draft" &&
     detail?.playback.mode !== "replay" &&
     interaction?.status !== "finalized" &&
@@ -477,12 +481,13 @@ export default function TeacherDebateControlPage() {
             </div>
           ) : null}
           <BetaDebateStage
-            headerActions={
+            headerActions={(replayButton) => (
               <>
                 <Link className="secondary-action" href="/teacher/debates">
                   {t("debateBack")}
                 </Link>
-                {detail.status === "running" &&
+                {!playbackComplete &&
+                detail.status === "running" &&
                 detail.playback.mode === "live" ? (
                   <>
                     <button
@@ -518,6 +523,7 @@ export default function TeacherDebateControlPage() {
                         : betaLabels.openInteraction}
                   </button>
                 ) : null}
+                {replayButton}
                 {showSegmentsConclude ? (
                   <button
                     className="primary-action"
@@ -555,12 +561,14 @@ export default function TeacherDebateControlPage() {
                   </Link>
                 ) : null}
               </>
-            }
+            )}
             api={api}
             betaLabels={betaLabels}
             joinUrl={joinUrl}
             joinCodeVisible={
-              joinCodeVisible && detail.playback.mode !== "replay"
+              joinCodeVisible &&
+              !playbackComplete &&
+              detail.playback.mode !== "replay"
             }
             onInteractionOpened={() => void readInteraction()}
             debateId={debateId}

@@ -27,7 +27,7 @@ export const defaultBetaStageLabels: BetaStageLabels = {
   barragePause: "Pause messages",
   barrageResume: "Resume messages",
   barrageCount: (count) => `${count} message${count === 1 ? "" : "s"}`,
-  openInteraction: "Open Message",
+  openInteraction: "Interact",
   hideInteraction: "Hide",
   interactionOpening: "Opening…",
   interactionClosedHint:

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -504,7 +505,8 @@ function deriveClassroomPhase(
   return "in_progress";
 }
 
-export type BetaStageProps = DebateStageProps & {
+export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
+  headerActions?: ReactNode | ((replayButton: ReactNode) => ReactNode);
   /** The classroom join URL, once a teacher has opened interaction. */
   joinUrl?: string | null;
   /** Display only; hiding the code never closes the classroom entry. */
@@ -3234,6 +3236,19 @@ export function BetaDebateStage({
     connection !== "reconnecting" &&
     (connectionIssue === null || connectionIssue === "terminal") &&
     (controllerReady || replayableTerminalSource);
+  const replayButton =
+    !readOnly &&
+    playback.status === "completed" &&
+    ["debate_finished", "completed"].includes(detailState.status) ? (
+      <button
+        className="secondary-action"
+        type="button"
+        disabled={busyAction !== null || !canReplay}
+        onClick={() => void runControl("replay")}
+      >
+        Replay
+      </button>
+    ) : null;
   // Before anything has been said the only move is Start; afterwards it is
   // always Next, so the pair collapses into one control.
   const canStart = detailState.status === "draft";
@@ -3432,16 +3447,6 @@ export function BetaDebateStage({
               instead of in bands of their own above the columns, so the
               stage reads as two rectangles ending on the same line. */}
           <div className={styles.stagePanel}>
-            <div className={styles.statusCluster}>
-              <span
-                className={styles.turnProgress}
-                data-connected={connection === "connected"}
-                aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
-                role="status"
-              >
-                {currentTurnNumber}/{totalTurns}
-              </span>
-            </div>
             {!readOnly ? (
               <div className={styles.controlsArea}>
                 <div
@@ -3475,8 +3480,19 @@ export function BetaDebateStage({
                 the other things a teacher presses, and the header had grown a
                 row of links that repeated what the stage already offered. */}
             {headerActions ? (
-              <div className={styles.panelActions}>{headerActions}</div>
-            ) : null}
+              <div className={styles.panelActions}>
+                {typeof headerActions === "function" ? (
+                  headerActions(replayButton)
+                ) : (
+                  <>
+                    {headerActions}
+                    {replayButton}
+                  </>
+                )}
+              </div>
+            ) : (
+              replayButton
+            )}
 
             <audio
               ref={audioRef}
@@ -3599,8 +3615,16 @@ export function BetaDebateStage({
               );
               return phase ? phaseLabel(phase, labels) : null;
             }}
-            onReplayAll={readOnly ? undefined : () => void runControl("replay")}
-            replayAllDisabled={busyAction !== null || !canReplay}
+            headerAction={
+              <span
+                className={styles.turnProgress}
+                data-connected={connection === "connected"}
+                aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
+                role="status"
+              >
+                {currentTurnNumber}/{totalTurns}
+              </span>
+            }
             turns={publicTurns as unknown as StreamTurn[]}
           />
         </div>

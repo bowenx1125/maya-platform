@@ -95,7 +95,8 @@ S IDs remain metadata. Report language follows the debate, renders Markdown
 without executing raw HTML, and does not reject prose for rhetorical/length
 rules. Schema 0025 removed old report word-count publication limits. Larger Stage
 names omit A/B/C. Replay uses saved text/audio, hides Open Message and collects
-no new barrages; a lone second-row action fills the row.
+no new barrages. 3D controls stay in two columns: Next/Back then End/Interact
+during live playback, and disabled Next/Back then Replay/Conclude at completion.
 
 ## Classroom actions
 
@@ -152,33 +153,21 @@ revision. Deleted diagnostic records are not recreated.
 
 ## Recovery and output boundaries
 
-Auxiliary model metadata cannot reject a readable speech. Invalid question,
-memory, source, support or barrage bindings are omitted/ungraded, never invented.
-Consent, cost, identity, state and readable JSON/text boundaries remain. No body
-truncation, padding or automatic wording replacement is performed.
-
-Rebirth preserves Preview/audio, resets final dependencies, and changes frozen
-final input inside a writer transaction that restores its immutability trigger.
-Rollback restores both data and trigger. Remake respects unknown/in-flight paid
-requests and other active classrooms. Healthy completed speech is reused.
-Devocalize/Revocalize retain their respective action after failures. Agent version
-pills sit left of the divider, Group right without hover. Recovery has targeted
-checks and in-memory live-schema reproductions, not universal service guarantees.
+Readable speech survives unusable auxiliary metadata; invalid bindings remain
+ungraded. Consent/cost/identity/state/readable-output guards remain. No text
+truncation, padding or automatic rewriting. Rebirth resets final dependencies in
+one writer transaction, restoring immutability triggers on success or rollback.
+Remake respects in-flight/unknown paid requests and reuses healthy saved results.
+Devocalize/Revocalize preserve their action after failures. Recovery checks do not
+establish universal real-service acceptance.
 
 ## Prompt-only repetition correction
 
-Actual Prompts anchor each speaker in its own Persona, opening, RAG and questions.
-Later turns contribute evidence, answers or judgment rather than paraphrasing the
-previous speaker. Agreement is allowed; no similarity rejection or text rewriting
-was added. New model output still requires manual teaching-quality review.
+Prompts anchor each speaker in its own Persona, RAG and prior position, asking
+later turns to add evidence, answers or judgment. Agreement is allowed; no
+similarity rejection or rewriting. Teaching quality still needs manual review.
 
-## Other delivered repairs
-
-Destroy handles scoped staging audio safely. Global Remake queues recovery without
-stealing active Preview ownership. Conclude creates the first Report once;
-Regenerate explicitly creates another revision. Stage/Debate lists share status
-badges; Report shows word count and Review, without Ready. A separate Embedding
-connection issue remains deferred at the owner's request.
+A separate Embedding connection issue remains deferred at the owner’s request.
 
 ## Runtime and established UI
 
@@ -249,7 +238,8 @@ The last includes independent LLM reasoning with assumptions/grounds, not invent
 facts. These are editable Prompt instructions only, not output rejection rules.
 
 3D Stage removes the transcript header count and visible connection wording.
-A single current/total bubble follows the displayed turn (e.g. 4/12): green when
+A single current/total bubble sits at the transcript top right, outside controls,
+following the displayed turn (e.g. 4/12): green when
 connected, red otherwise, with accessible nonvisual connection text. Existing
 reconnect actions remain available without explanatory notices.
 
@@ -306,7 +296,8 @@ off-white panel contains title, service grid,
 then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
 Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
-Top navigation uses 9px rounded rectangles and lifts 1px with the Immerse hover shadow; language/Edit also lift.
+Top navigation keeps its button size, 9px corners, 6px inter-button gap and 1px
+hover lift with Destroy-style darker gold background, without a shadow; language/Edit also lift.
 Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.
@@ -315,3 +306,9 @@ New uses white Topic/Background/Ruleset text areas and cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
 
 Live DOM: Home/Create/list insets 25px including border; divider gaps 16px.
+
+3D Replay is hidden before completion; Interact/Hide toggles the existing QR session.
+Conclude waits for playback completion. Check RAG summary has no inherited minimum
+height/padding, and transcript bottom padding no longer adds 26px. Replay recovery
+uses existing controller acquisition and saved media; no generation protocol changed.
+34 targeted Stage/replay checks and types passed; no paid or full classroom test.

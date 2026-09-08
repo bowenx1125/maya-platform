@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   EvidenceTraceInspector,
@@ -40,6 +40,7 @@ type SpeechStreamProps = {
   /** The lesson's state, shown with the heading rather than in a pill of its own. */
   status?: string;
   showTurnCount?: boolean;
+  headerAction?: ReactNode;
   /** Replay the whole session, when the viewer may control playback. */
   onReplayAll?: () => void;
   replayAllDisabled?: boolean;
@@ -221,6 +222,7 @@ export function SpeechStream({
   emptyMessage,
   status,
   showTurnCount = true,
+  headerAction,
   onReplayAll,
   replayAllDisabled,
 }: SpeechStreamProps) {
@@ -261,6 +263,7 @@ export function SpeechStream({
         {showTurnCount && turns.length ? (
           <span className={styles.streamCount}>{turns.length}</span>
         ) : null}
+        {headerAction}
         {onReplayAll ? (
           // Replaying the whole session is a review action, not one of the
           // three controls that drive a live lesson, so it sits with the

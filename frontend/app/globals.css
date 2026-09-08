@@ -576,7 +576,7 @@ details > summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
+  gap: 4px 6px;
   min-width: 0;
   margin-right: auto;
 }
@@ -624,8 +624,9 @@ details > summary {
 .nav-logout:hover:not(:disabled) {
   transform: translateY(-1px);
   border: 0;
-  box-shadow: 0 12px 22px rgba(84, 73, 166, 0.23);
-  background: transparent;
+  box-shadow: none;
+  color: #382d19;
+  background: rgba(196, 164, 104, 0.16);
 }
 
 .account-name {
