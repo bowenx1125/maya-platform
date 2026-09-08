@@ -219,7 +219,7 @@ only Topic. Before LLM/RAG/Report input, NFC/control cleanup and whitespace
 folding preserve meaningful punctuation and word separators. Background is
 scenario data, not verified evidence or system instructions. The former Report
 1200-character title limit is removed; total Provider budgets remain. Draft edits
-invalidate old Preview plans. Creation uses the combined white/pale-yellow card described
+invalidate old Preview plans. Creation uses the combined white card described
 below, with Done beside Back and language selection inside Ruleset.
 
 ## Frozen Markdown Ruleset and current Report repair
@@ -230,7 +230,7 @@ endpoint. Agents Order is followed by one Debate Ruleset row: compact language
 switch and Edit. Selected-language Markdown is always rendered full-width;
 Edit shows raw text; Save updates that language in this form and returns to rendered mode. Done is disabled while
 editing. The old Multi-round Civilization/phase block is removed; Topic and
-Background inputs use pale-yellow textareas on white.
+Background inputs use white textareas.
 
 Create freezes both authored Markdown files and eight complete System messages
 (four for each language) in rule_snapshot_json. Markdown is sent intact, with no
@@ -279,7 +279,7 @@ The custom answer exposed S1 after its teacher rules omitted citation wording.
 New execution Prompts now reserve S IDs for metadata; no backend text filter was
 added. Existing frozen lessons are unchanged; this addition has offline coverage,
 not another paid rerun. One opening comparison is not four-round quality acceptance.
-Ruleset uses white cards, pale-yellow documents and purple actions.
+Ruleset uses white cards/documents and purple actions.
 
 Creation now defaults to Chinese in both form and API. Ruleset language can change
 whenever Edit is inactive; CN/EN text remains independently saved in the form,
@@ -289,7 +289,7 @@ that omit output_language. Topic, Background, Agents Order and Ruleset share one
 caption is removed; its button remains. Language switching and frozen selection
 have targeted offline coverage.
 
-Creation has a combined two-column Topic/Background card: white ground, pale-yellow
+Creation has a combined two-column Topic/Background card: white ground and
 textareas, Background optional status only in its placeholder. Published Agents
 and Selected Order merge into Agents Order. The existing published-agent endpoint
 sorts by Agent.created_at descending (stable ID tie-break) and joins Group.name in
@@ -312,6 +312,6 @@ baseline status below its title, beside the component grid. Published/count/Agen
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
 Navigation has a 1px hover lift without border/shadow. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
-New uses Agent-row pale yellow (#fbf4e5) inside white cards; stance shares the
+New uses white Topic/Background/Ruleset text areas and cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
 Palette refinement: 55 frontend checks and types passed.
