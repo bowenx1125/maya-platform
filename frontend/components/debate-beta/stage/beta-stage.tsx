@@ -671,7 +671,6 @@ export function BetaDebateStage({
     ),
   );
   const catalogDebateIdRef = useRef(debateId);
-  const [reconnectBusy, setReconnectBusy] = useState(false);
   const socketGenerationRef = useRef(0);
   const connectAttemptRef = useRef(0);
   const recoveryFenceRef = useRef<{
@@ -2649,7 +2648,6 @@ export function BetaDebateStage({
             markConnectionIssue("session_expired");
             pauseAudio(true);
             setFailure(null);
-            setReconnectBusy(false);
             socketGenerationRef.current += 1;
             const staleSocket = socketRef.current;
             socketRef.current = null;
@@ -2666,7 +2664,6 @@ export function BetaDebateStage({
               : "network",
           );
           setFailure(errorText(cause, labelsRef.current.connectionError));
-          setReconnectBusy(false);
           return;
         }
       }
@@ -2692,8 +2689,6 @@ export function BetaDebateStage({
         markConnection("disconnected");
         markConnectionIssue("network");
         setFailure(errorText(cause, labelsRef.current.connectionError));
-      } finally {
-        if (refresh) setReconnectBusy(false);
       }
     },
     [
@@ -2710,34 +2705,6 @@ export function BetaDebateStage({
     ],
   );
 
-  const reconnect = useCallback(() => {
-    if (
-      readOnly ||
-      !mountedRef.current ||
-      closingRef.current ||
-      reconnectBusy ||
-      connection === "connected" ||
-      connection === "connecting" ||
-      (connectionIssue !== "network" && connectionIssue !== "sequence_gap")
-    ) {
-      return;
-    }
-    setReconnectBusy(true);
-    markConnection("reconnecting");
-    void connect(true).catch((cause: unknown) => {
-      if (!mountedRef.current || closingRef.current) return;
-      markConnection("disconnected");
-      setFailure(errorText(cause, labelsRef.current.connectionError));
-      setReconnectBusy(false);
-    });
-  }, [
-    connect,
-    connection,
-    connectionIssue,
-    markConnection,
-    readOnly,
-    reconnectBusy,
-  ]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       // Ignore our own parent echo; independent HTTP snapshots use exactly
@@ -3327,13 +3294,8 @@ export function BetaDebateStage({
       (connectionIssue === null ||
         connectionIssue === "network" ||
         connectionIssue === "sequence_gap"));
-  const canReconnectConnection =
-    !readOnly &&
-    connection === "disconnected" &&
-    (connectionIssue === "network" || connectionIssue === "sequence_gap");
-  // Every cause named an issue but only two of them offered anything to press,
-  // so a teacher read an accurate diagnosis and had no way to act on it. Each
-  // cause gets the one action that actually resolves it.
+  // Network recovery uses Back and re-entry. Authentication conflicts retain
+  // their dedicated sign-in or reload action.
   const connectionRecovery: {
     label: string;
     kind: "sign-in" | "reload";
@@ -3367,33 +3329,21 @@ export function BetaDebateStage({
           controls under the face. A second copy of the title told a reader
           nothing and pushed the debate itself further down. */}
 
-      {!suppressConnectionUi &&
-      (canReconnectConnection || connectionRecovery) ? (
+      {!suppressConnectionUi && connectionRecovery ? (
         <div className={styles.connectionOverlay} role="status">
-          {canReconnectConnection ? (
-            <button
-              className={styles.reconnectButton}
-              type="button"
-              onClick={reconnect}
-              disabled={reconnectBusy}
-            >
-              {reconnectBusy ? labels.connectionReconnecting : labels.reconnect}
-            </button>
-          ) : connectionRecovery ? (
-            <button
-              className={styles.reconnectButton}
-              onClick={() => {
-                if (connectionRecovery.kind === "sign-in") {
-                  window.location.href = "/";
-                } else {
-                  window.location.reload();
-                }
-              }}
-              type="button"
-            >
-              {connectionRecovery.label}
-            </button>
-          ) : null}
+          <button
+            className={styles.reconnectButton}
+            onClick={() => {
+              if (connectionRecovery.kind === "sign-in") {
+                window.location.href = "/";
+              } else {
+                window.location.reload();
+              }
+            }}
+            type="button"
+          >
+            {connectionRecovery.label}
+          </button>
         </div>
       ) : null}
 

@@ -421,21 +421,17 @@
 }
 
 .topicCard.topicCard {
+  margin: 0;
   background: #fff;
   border-color: var(--line);
 }
 .topicColumns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-}
-.topicColumn {
-  min-width: 0;
-}
-.topicColumn > :global(.section-card-header) + * {
-  margin-top: var(--section-content-gap);
+  gap: var(--workspace-gap);
 }
 .contextInput.contextInput {
+  resize: vertical;
   display: block;
   width: 100%;
   min-height: 120px;

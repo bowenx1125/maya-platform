@@ -492,9 +492,15 @@ describe("terminal segments replay controller", () => {
 
       act(() => socket.emitClose(1006));
 
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Reconnect" })).toBeTruthy(),
-      );
+      if (kind === "beta") {
+        expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+      } else {
+        await waitFor(() =>
+          expect(
+            screen.getByRole("button", { name: "Reconnect" }),
+          ).toBeTruthy(),
+        );
+      }
       expect(api.replayDebate).toHaveBeenCalledTimes(1);
     },
   );

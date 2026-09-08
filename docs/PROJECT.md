@@ -204,7 +204,7 @@ Topics accept arbitrary visible scripts/symbols. Topic/optional Background are
 stored separately (migration0026); titles display Topic only. Outbound text uses
 NFC/control cleanup and whitespace folding without removing meaningful punctuation.
 Background is unverified scenario data. Total Provider budgets remain; draft edits
-invalidate old Preview plans. Creation has a combined white card, Done beside Back,
+invalidate old Preview plans. Creation has separate white Topic/Background cards, Done beside Back,
 and language selection in Ruleset.
 
 ## Frozen Markdown Ruleset and current Report repair
@@ -239,7 +239,7 @@ facts. These are editable Prompt instructions only, not output rejection rules.
 A single current/total bubble sits at the transcript top right, outside controls,
 following the displayed turn (e.g. 4/12): green when
 connected, red otherwise, with accessible nonvisual connection text. Existing
-reconnect actions remain available without explanatory notices.
+3D network recovery uses Back/re-entry; authentication sign-in/reload actions remain.
 
 Report inputs previously rejected six retained evidence chunks (4127–4408 chars)
 under an obsolete 2400-char limit. Removing it preserves complete evidence within
@@ -266,13 +266,11 @@ Creation defaults to Chinese; language changes outside Edit preserve independent
 CN/EN drafts and only the selected language drives generation. Draft updates that
 omit language preserve it. Create section title dividers share one style.
 
-Creation has a combined two-column Topic/Background card: white ground and
-textareas, Background optional status only in its placeholder. Published Agents
-and Selected Order merge into Agents Order. The existing published-agent endpoint
-sorts by Agent.created_at descending (stable ID tie-break) and joins Group.name in
-the same query. Only active published Agents remain eligible. Rows show +/selection number, name, version/group; selected rows reveal stance
-and note controls without toggling selection. Reselect preserves edits and appends
-to order. Unselected drafts are not submitted; internal IDs/rules are unchanged.
+Creation has separate side-by-side Topic/Background cards with white textareas.
+ResizeObserver links textarea height changes in both directions after form mount;
+mobile stacks the cards. Agents Order lists published Agents newest-first with
+version/group, numeric selection order and per-selected-Agent stance/notes.
+Reselect preserves edits and appends order; internal IDs/rules are unchanged.
 
 Teacher navigation now has Home and Classroom; its list title is Debates with New.
 The separate Beta list is removed (old URL redirects); nested 3D controls remain.
@@ -291,7 +289,8 @@ hover lift with Destroy-style darker gold background, without a shadow; language
 Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.
-Linked Agent tiles have name/ellipsized small description above version/group.
+Home Agent tiles show name/group above version/description, giving descriptions
+more width. Provider component tiles use the same pale-yellow background.
 New uses white Topic/Background, pale-yellow Ruleset text and white cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
 
@@ -315,3 +314,6 @@ or Download RAG header remains. No source text is edited or republished.
 was canceled by the owner after Destroy; no pending playback changes were retained.
 Live UI confirmed equal Persona/Profile height, whole-body framing and one-file
 Check expansion inside its row; 390px view has no horizontal overflow.
+68 targeted setup/Home/playback checks and types passed; frontend deployed healthy.
+Topic/Background are separate cards with linked heights; Beta Reconnect is removed.
+Report logs show input ValidationError; no retained revisions remain to reproduce it.

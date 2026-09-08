@@ -717,7 +717,7 @@ details > summary {
   padding: 6px 10px;
   border: 1px solid rgba(222, 216, 239, 0.9);
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.72);
+  background: #fbf4e5;
   font-size: 0.76rem;
 }
 
@@ -1200,6 +1200,7 @@ details > summary {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.published-card-top .published-card-group,
 .published-card p {
   flex: 1 1 0;
   min-width: 0;
@@ -1210,6 +1211,9 @@ details > summary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.published-card-meta p {
+  flex: 1 1 0;
 }
 .published-card-meta {
   display: flex;

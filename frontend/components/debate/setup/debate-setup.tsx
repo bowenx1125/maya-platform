@@ -417,6 +417,8 @@ export function TeacherDebateCreate({
   >({});
   const [topic, setTopic] = useState("");
   const [background, setBackground] = useState("");
+  const topicInputRef = useRef<HTMLTextAreaElement>(null);
+  const backgroundInputRef = useRef<HTMLTextAreaElement>(null);
   const [teachingPrompts, setTeachingPrompts] = useState<TeachingPrompts>({
     zh: "",
     en: "",
@@ -430,6 +432,29 @@ export function TeacherDebateCreate({
   const [error, setError] = useState<unknown>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
+  useEffect(() => {
+    if (loading || typeof ResizeObserver === "undefined") return;
+    const inputs = [topicInputRef.current, backgroundInputRef.current].filter(
+      (input): input is HTMLTextAreaElement => input !== null,
+    );
+    let height = Math.max(
+      120,
+      ...inputs.map((input) => input.getBoundingClientRect().height),
+    );
+    for (const input of inputs) input.style.height = `${height}px`;
+    const observer = new ResizeObserver((entries) => {
+      const resized = entries.find(
+        (entry) =>
+          Math.abs(entry.target.getBoundingClientRect().height - height) > 0.5,
+      );
+      if (!resized) return;
+      height = Math.max(120, resized.target.getBoundingClientRect().height);
+      for (const input of inputs) input.style.height = `${height}px`;
+    });
+    inputs.forEach((input) => observer.observe(input));
+    return () => observer.disconnect();
+  }, [loading]);
+
   const createMutation = useRef<{
     requestHash: string;
     handle: IdempotencyHandle;
@@ -596,59 +621,56 @@ export function TeacherDebateCreate({
         className={styles.pageStack}
         onSubmit={submit}
       >
-        <SectionCard className={`${styles.topicCard} ${sectionStyles.section}`}>
-          <div className={styles.topicColumns}>
-            <div className={styles.topicColumn}>
-              <div className="section-card-header">
-                <h2>{copy(t, "debateTopic")}</h2>
-              </div>
-              <label className="stack-form">
-                <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
-                <textarea
-                  aria-label={copy(t, "debateTopic")}
-                  aria-describedby={
-                    topicError ? "debate-topic-error" : undefined
-                  }
-                  aria-invalid={topicError !== null}
-                  disabled={busy}
-                  id="debate-topic"
-                  className={styles.contextInput}
-                  onChange={(event) => {
-                    setTopic(event.target.value);
-                    if (topicError) setTopicError(null);
-                  }}
-                  placeholder={copy(t, "debateTopicPlaceholder")}
-                  required
-                  rows={3}
-                  value={topic}
-                />
-                {topicError ? (
-                  <span
-                    className={styles.fieldError}
-                    id="debate-topic-error"
-                    role="alert"
-                  >
-                    {topicError}
-                  </span>
-                ) : null}
-              </label>
-            </div>
-            <div className={styles.topicColumn}>
-              <div className="section-card-header">
-                <h2>Background</h2>
-              </div>
+        <div className={styles.topicColumns}>
+          <SectionCard
+            title={copy(t, "debateTopic")}
+            className={`${styles.topicCard} ${sectionStyles.section}`}
+          >
+            <div>
               <textarea
-                aria-label="Background"
-                className={styles.contextInput}
+                ref={topicInputRef}
+                aria-label={copy(t, "debateTopic")}
+                aria-describedby={topicError ? "debate-topic-error" : undefined}
+                aria-invalid={topicError !== null}
                 disabled={busy}
-                placeholder="Optional context"
+                id="debate-topic"
+                className={styles.contextInput}
+                onChange={(event) => {
+                  setTopic(event.target.value);
+                  if (topicError) setTopicError(null);
+                }}
+                placeholder={copy(t, "debateTopicPlaceholder")}
+                required
                 rows={3}
-                value={background}
-                onChange={(event) => setBackground(event.target.value)}
+                value={topic}
               />
+              {topicError ? (
+                <span
+                  className={styles.fieldError}
+                  id="debate-topic-error"
+                  role="alert"
+                >
+                  {topicError}
+                </span>
+              ) : null}
             </div>
-          </div>
-        </SectionCard>
+          </SectionCard>
+          <SectionCard
+            title="Background"
+            className={`${styles.topicCard} ${sectionStyles.section}`}
+          >
+            <textarea
+              ref={backgroundInputRef}
+              aria-label="Background"
+              className={styles.contextInput}
+              disabled={busy}
+              placeholder="Optional context"
+              rows={3}
+              value={background}
+              onChange={(event) => setBackground(event.target.value)}
+            />
+          </SectionCard>
+        </div>
 
         <SectionCard className={sectionStyles.section} title="Agents Order">
           {candidates.length === 0 ? (

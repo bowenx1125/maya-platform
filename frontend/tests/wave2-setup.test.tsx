@@ -220,6 +220,69 @@ describe("Wave 2 teacher debate setup", () => {
     },
   );
 
+  it("uses separate Topic and Background cards with bidirectional height synchronization", async () => {
+    let resized: ResizeObserverCallback | undefined;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resized = callback;
+        }
+        observe() {}
+        disconnect = disconnect;
+      },
+    );
+    try {
+      useSessionMock.mockReturnValue(teacherSession());
+      const view = render(
+        <TeacherDebateCreate
+          controller={{
+            loadRuleset: vi
+              .fn()
+              .mockResolvedValue({ zh: "# 中文", en: "# English" }),
+            loadCandidates: vi.fn().mockResolvedValue([]),
+            create: vi.fn(),
+          }}
+        />,
+      );
+      const topic = (await screen.findByRole("textbox", {
+        name: "Topic",
+      })) as HTMLTextAreaElement;
+      const background = screen.getByRole("textbox", {
+        name: "Background",
+      }) as HTMLTextAreaElement;
+      expect(topic.closest("section")).not.toBe(background.closest("section"));
+      for (const input of [topic, background]) {
+        const bounds = input.getBoundingClientRect();
+        vi.spyOn(input, "getBoundingClientRect").mockImplementation(() => ({
+          ...bounds,
+          height: parseFloat(input.style.height),
+        }));
+      }
+      topic.style.height = "208px";
+      act(() =>
+        resized?.(
+          [{ target: topic }] as unknown as ResizeObserverEntry[],
+          {} as ResizeObserver,
+        ),
+      );
+      expect(background.style.height).toBe("208px");
+      background.style.height = "260px";
+      act(() =>
+        resized?.(
+          [{ target: background }] as unknown as ResizeObserverEntry[],
+          {} as ResizeObserver,
+        ),
+      );
+      expect(topic.style.height).toBe("260px");
+      view.unmount();
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("preserves click order and sends the fixed four-round request", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());

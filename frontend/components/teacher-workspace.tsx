@@ -129,9 +129,9 @@ function PublishedAgentCard({
     <Link className="published-card" href={`/teacher/agents/${item.agent.id}`}>
       <div className="published-card-top">
         <h2>{item.agent.name}</h2>
-        <p title={item.agent.description ?? undefined}>
-          {item.agent.description}
-        </p>
+        <span className="published-card-group" title={groupName ?? undefined}>
+          {groupName}
+        </span>
       </div>
       <div className="published-card-meta">
         <span
@@ -140,7 +140,9 @@ function PublishedAgentCard({
         >
           {version.version_label}
         </span>
-        <span className="published-card-group">{groupName}</span>
+        <p title={item.agent.description ?? undefined}>
+          {item.agent.description}
+        </p>
       </div>
     </Link>
   );
