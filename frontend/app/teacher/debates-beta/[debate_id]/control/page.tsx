@@ -23,7 +23,7 @@ import {
   type TeacherInteraction,
 } from "../../../../../lib/api";
 import { useLocale, useT } from "../../../../../components/locale";
-import { localizeError, type Locale } from "../../../../../lib/i18n";
+import { localizeError } from "../../../../../lib/i18n";
 import { expectedTurnCount } from "../../../../../lib/debate-rounds";
 import styles from "./control.module.css";
 
@@ -50,54 +50,6 @@ function canFinishWithAuthority(
     authority.connectionIssue === null &&
     authority.controllerReady
   );
-}
-
-function finishBlockedCopy(
-  detail: DebateDetail,
-  authority: PlaybackAuthorityState,
-  locale: Locale,
-): string {
-  const zh = locale === "zh";
-  switch (authority.connectionIssue) {
-    case "superseded":
-      return zh
-        ? "暂不可结束：另一个教师页面已取得控制权"
-        : "Finish unavailable: another teacher page has control.";
-    case "session_expired":
-      return zh
-        ? "暂不可结束：登录已失效，请重新登录"
-        : "Finish unavailable: please sign in again.";
-    case "origin_mismatch":
-      return zh
-        ? "暂不可结束：课堂访问地址与服务器配置不一致"
-        : "Finish unavailable: the classroom address does not match the server configuration.";
-    case "terminal":
-      return zh
-        ? "暂不可结束：辩论正在结束"
-        : "Finish unavailable: the debate is already ending.";
-    case "network":
-      return zh
-        ? "连接恢复后才能结束辩论"
-        : "Finish unavailable until the connection is restored.";
-    case "sequence_gap":
-      return zh
-        ? "课堂状态重新同步后才能结束辩论"
-        : "Finish unavailable until classroom state is resynchronized.";
-    default:
-      if (
-        authority.commandBusy === true ||
-        detail.playback.mode !== "live" ||
-        detail.playback.status === "completed" ||
-        detail.playback.status === "stopped"
-      ) {
-        return zh
-          ? "本场辩论已结束或已停止"
-          : "This debate has already ended or been stopped.";
-      }
-      return zh
-        ? "当前页面取得教师控制权后才能结束辩论"
-        : "Finish unavailable until this page has active teacher control.";
-  }
 }
 
 /**
@@ -534,9 +486,6 @@ export default function TeacherDebateControlPage() {
                 detail.playback.mode === "live" ? (
                   <>
                     <button
-                      aria-describedby={
-                        finishAllowed ? undefined : "finish-authority-message"
-                      }
                       className="primary-action"
                       disabled={finishBusy || !finishAllowed}
                       onClick={() => void finish()}
@@ -548,11 +497,6 @@ export default function TeacherDebateControlPage() {
                           : "Finishing…"
                         : stageLabels.finish}
                     </button>
-                    {finishAllowed ? null : (
-                      <span id="finish-authority-message" role="status">
-                        {finishBlockedCopy(detail, playbackAuthority, locale)}
-                      </span>
-                    )}
                   </>
                 ) : null}
                 {/* Beta opens classroom messages during the debate, not

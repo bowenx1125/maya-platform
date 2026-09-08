@@ -223,7 +223,7 @@ describe("Wave 3 dedicated teacher page", () => {
       expect(api.teacherInteraction).toHaveBeenCalledTimes(1),
     );
     TeacherPageSocket.instances[0]?.emitClose(1006);
-    await screen.findByText(/Connection lost/);
+    await screen.findByText(/unconnected/);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(TeacherPageSocket.instances).toHaveLength(1);
     expect(api.teacherInteraction).toHaveBeenCalledTimes(1);

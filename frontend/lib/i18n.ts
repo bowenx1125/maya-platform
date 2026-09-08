@@ -156,7 +156,7 @@ const enMessages = {
   debateAudioPaused: "Audio is paused until the server confirms resume.",
   debateConnectionReady: "Connected",
   debateConnectionReconnecting: "Reconnecting…",
-  debateConnectionDisconnected: "Connection lost",
+  debateConnectionDisconnected: "unconnected",
   debateConnectionSequenceGap: "Classroom state needs to be resynchronized.",
   debateConnectionSessionExpired:
     "Your login has expired. Please sign in again.",
@@ -164,12 +164,12 @@ const enMessages = {
     "The classroom address does not match the server configuration.",
   debateConnectionSuperseded: "Another teacher page has taken control.",
   debateConnectionError: "The classroom connection needs attention.",
-  wave3ConnectionNetwork: "Connection lost",
+  wave3ConnectionNetwork: "unconnected",
   wave3Reconnect: "Reconnect",
   wave3Reconnecting: "Reconnecting…",
   wave3DownstreamUnavailable:
     "Partial or unfinished debates keep generated turns for audit, but classroom interaction, reports, history and replay are unavailable.",
-  debateControllerWaiting: "Waiting for the teacher controller…",
+  debateControllerWaiting: "",
   debateControlBusy: "Updating classroom playback…",
   debateRetryReason: "Playback did not start. You can retry this turn.",
   debateProviderSetupIncomplete:
@@ -180,7 +180,7 @@ const enMessages = {
   debateProviderGateReview: "Review exact disclosure",
   debateProviderGateReviewAll: "Review all turn approvals",
   debateProviderGateConfirmed: "Disclosure confirmed",
-  debateProviderGateRefresh: "Refresh confirmation",
+  debateProviderGateRefresh: "Refresh",
   debateProviderGateRetry: "Retry this turn",
   debateApprovalTitle: "Debate turn approvals",
   debateApprovalLoading: "Loading debate turn approvals…",

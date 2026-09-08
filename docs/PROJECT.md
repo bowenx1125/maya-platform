@@ -80,18 +80,12 @@ calling the Provider, preserving active jobs. Frontend status reads ignore stale
 responses and failed revision-history reads cannot hide a ready report. Logs
 contain safe codes and exception types, never response bodies.
 
-## Prior verification boundary
+## Verification boundary
 
-Earlier real four-round case `a2e6b748-91d7-40ce-b1db-70525224bde1`
-completed eight speeches and Report revision 3. Eight LLM and four query calls
-succeeded first attempt under the earlier retrieval policy. Other cases failed on
-routing or acceptance_unknown. Full replay, RAG relevance and classroom quality
-were not accepted. No partial test pass establishes universal success.
-
-The owner authorizes main delivery and Docker updates, with final manual classroom
-audit.
-No usage reset is authorized. The external `/Users/xubosmell/Desktop/Maya/HANDOFF.md`
-is owner-requested and can contain operational continuation instructions.
+Previous partial real runs do not establish complete RAG/classroom acceptance.
+The owner authorizes main delivery and Docker updates; final classroom audit is
+manual. No usage reset is authorized. The external owner-requested HANDOFF.md
+contains continuation instructions.
 
 ## Current requested fixes — September 8 classroom audit
 
@@ -234,18 +228,10 @@ Provider-generation test or destructive browser action was performed.
 
 ## Prompt-only repetition correction
 
-The owner supplied three final speeches that only changed the named agreement
-partner and repeated the same argument. Actual System/stage Prompts now anchor
-each Agent in its own opening, received question and RAG rationale. Same-round
-history identifies already-covered points; it is not a continuation template.
-Round two asks about unresolved conditions/evidence; round three directly answers
-what was asked. Round four briefly responds to another speaker, then develops its
-own retained/changed judgment and one useful condition, limitation, action detail
-or unresolved issue. Agreement is allowed; superficial paraphrase and invented
-disagreement are discouraged. No similarity detector, rejection, retry or text
-rewriting was added. New calls use this guidance; saved text is unchanged.
-Actual generated Prompt documentation is refreshed. Model diversity/teaching
-quality still requires a new real classroom observation.
+Actual Prompts anchor each speaker in its own Persona, opening, RAG and questions.
+Later turns contribute evidence, answers or judgment rather than paraphrasing the
+previous speaker. Agreement is allowed; no similarity rejection or text rewriting
+was added. New model output still requires manual teaching-quality review.
 
 ## Latest delivery additions
 
@@ -311,3 +297,11 @@ remain unchanged. An additional 21 four-round backend checks and 11 Preview/Stag
 frontend checks passed after this change; frontend types passed. These checks
 do not validate model answer depth or teaching quality. Preview and Stage Check RAG now count unique evidence source IDs,
 not paragraphs, using the same badge treatment. Saved speeches remain unchanged.
+
+Stage presentation now uses “unconnected” for network disconnection. Controller
+waiting and Finish-blocked prose, generic 3D error text, redundant confirmation
+labels and the Stage audio replacement browser dialog are removed. Connection,
+control, Provider authorization and mutation guards remain enforced.
+Targeted UI/connection checks: 26 passed; types passed and lint had no errors
+(four existing warnings). Broader playback checks also exposed unresolved native
+ended-ack and hidden-turn-index assertions; no claim of full playback acceptance.

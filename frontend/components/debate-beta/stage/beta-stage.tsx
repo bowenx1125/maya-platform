@@ -595,7 +595,7 @@ export function BetaDebateStage({
     null,
   );
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [, setFailure] = useState<string | null>(null);
   const [mediaRetryNeeded, setMediaRetryNeeded] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
   // Which debate is holding this course's running slot, when that is why a
@@ -2892,13 +2892,6 @@ export function BetaDebateStage({
         const current = playbackRef.current;
         if (action === "start") {
           pendingActionRef.current = "start";
-          if (
-            audioPointer &&
-            detailRef.current.turn_protocol !== "segments_v2" &&
-            !window.confirm(labelsRef.current.replaceRetainedAudioConfirm)
-          ) {
-            return;
-          }
           const idempotency =
             startIdempotencyRef.current ?? createIdempotencyHandle();
           startIdempotencyRef.current = idempotency;
@@ -3498,19 +3491,7 @@ export function BetaDebateStage({
                     {labels.controlBusy}
                   </p>
                 ) : null}
-                {!controllerReady &&
-                detailState.status !== "draft" &&
-                detailState.status !== "stopped" &&
-                detailState.status !== "failed" &&
-                !isProductTerminalDetail(detailState) &&
-                connectionIssue !== "superseded" &&
-                connectionIssue !== "terminal" &&
-                connectionIssue !== "session_expired" &&
-                connectionIssue !== "origin_mismatch" ? (
-                  <p className={styles.controllerMessage} role="status">
-                    {labels.controllerWaiting}
-                  </p>
-                ) : null}
+
               </div>
             ) : null}
 
@@ -3534,11 +3515,6 @@ export function BetaDebateStage({
         </div>
 
         <div className={styles.speechColumn}>
-          {failure && failure !== labels.retryReason ? (
-            <div className={styles.failureCard} role="alert">
-              <span>{failure}</span>
-            </div>
-          ) : null}
 
           {providerGate ? (
             <section
@@ -3546,7 +3522,6 @@ export function BetaDebateStage({
               data-testid="provider-query-gate"
               aria-label={labels.providerGateTitle}
             >
-              <strong>{labels.providerGateTitle}</strong>
               <a
                 href={`/teacher/provider-approvals/debates/${debateId}`}
                 target="_blank"
@@ -3557,7 +3532,7 @@ export function BetaDebateStage({
               {providerGate.loading ? (
                 <span>{labels.providerGateLoading}</span>
               ) : providerGate.error ? (
-                <span role="alert">{providerGate.error}</span>
+                null
               ) : providerGate.value?.items.length ? (
                 <ul>
                   {providerGate.value.items
@@ -3569,7 +3544,7 @@ export function BetaDebateStage({
                     .map((item) => (
                       <li key={item.manifest_hash}>
                         {item.confirmed ? (
-                          <span>{labels.providerGateConfirmed}</span>
+                          null
                         ) : (
                           <a
                             href={`/teacher/provider-disclosures/${item.manifest_hash}`}
@@ -3608,9 +3583,8 @@ export function BetaDebateStage({
             </section>
           ) : null}
 
-          {controlError ? (
-            <div className={styles.failureCard} role="alert">
-              <span>{controlError}</span>
+          {controlError && blockedBy ? (
+            <div className={styles.failureCard}>
               {blockedBy ? (
                 <>
                   <span className={styles.blockingTopic}>

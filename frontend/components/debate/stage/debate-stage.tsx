@@ -2782,13 +2782,6 @@ export function DebateStage({
         const current = playbackRef.current;
         if (action === "start") {
           pendingActionRef.current = "start";
-          if (
-            audioPointer &&
-            detailRef.current.turn_protocol !== "segments_v2" &&
-            !window.confirm(labelsRef.current.replaceRetainedAudioConfirm)
-          ) {
-            return;
-          }
           const idempotency =
             startIdempotencyRef.current ?? createIdempotencyHandle();
           startIdempotencyRef.current = idempotency;
@@ -3382,19 +3375,7 @@ export function DebateStage({
                     {labels.controlBusy}
                   </p>
                 ) : null}
-                {!controllerReady &&
-                detailState.status !== "draft" &&
-                detailState.status !== "stopped" &&
-                detailState.status !== "failed" &&
-                !isProductTerminalDetail(detailState) &&
-                connectionIssue !== "superseded" &&
-                connectionIssue !== "terminal" &&
-                connectionIssue !== "session_expired" &&
-                connectionIssue !== "origin_mismatch" ? (
-                  <p className={styles.controllerMessage} role="status">
-                    {labels.controllerWaiting}
-                  </p>
-                ) : null}
+
               </div>
             ) : null}
 

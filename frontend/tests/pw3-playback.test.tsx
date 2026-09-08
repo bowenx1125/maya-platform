@@ -307,7 +307,7 @@ describe("PW3-D three-control playback", () => {
     expect(
       screen.queryByText("Waiting for the teacher controller…"),
     ).toBeNull();
-    expect(screen.queryByText("Connection lost")).toBeNull();
+    expect(screen.queryByText("unconnected")).toBeNull();
     expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
   });
 
@@ -343,7 +343,7 @@ describe("PW3-D three-control playback", () => {
     expect(
       screen.queryByText("Waiting for the teacher controller…"),
     ).toBeNull();
-    expect(screen.queryByText("Connection lost")).toBeNull();
+    expect(screen.queryByText("unconnected")).toBeNull();
     expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
   });
 

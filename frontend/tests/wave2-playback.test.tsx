@@ -406,7 +406,7 @@ describe("Wave 2 M12 playback stage", () => {
     ).toBe(false);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Refresh confirmation" }),
+      screen.getByRole("button", { name: "Refresh" }),
     );
     await waitFor(() =>
       expect(
@@ -498,8 +498,8 @@ describe("Wave 2 M12 playback stage", () => {
       ).toHaveLength(1),
     );
     expect(
-      screen.getByText("Waiting for the teacher controller…"),
-    ).toBeTruthy();
+      screen.queryByText("Waiting for the teacher controller…"),
+    ).toBeNull();
     expect(
       socket
         .commands()
@@ -766,7 +766,7 @@ describe("Wave 2 M12 playback stage", () => {
     );
     expect(container.querySelector("[data-state]")).toBeNull();
     expect(screen.queryByRole("button", { name: /Reconnect/ })).toBeNull();
-    expect(screen.queryByText("Connection lost")).toBeNull();
+    expect(screen.queryByText("unconnected")).toBeNull();
     socket.emit("message", envelope("debate.stopped", 1, {}));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(
@@ -1530,7 +1530,7 @@ describe("Wave 2 M12 playback stage", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(refreshSnapshot).not.toHaveBeenCalled();
     expect(socketFactory).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByText("Connection lost")).not.toHaveLength(0);
+    expect(screen.getAllByText("unconnected")).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: /Reconnect/ }));
     await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(secondSocket.hasListeners("open")).toBe(true));
@@ -1921,7 +1921,7 @@ describe("Wave 2 M12 playback stage", () => {
     expect(
       screen.getAllByText(/Classroom state needs to be resynchronized/),
     ).not.toHaveLength(0);
-    expect(screen.queryByText("Connection lost")).toBeNull();
+    expect(screen.queryByText("unconnected")).toBeNull();
     expect(screen.getByRole("button", { name: /Reconnect/ })).toBeTruthy();
   });
 
