@@ -37,6 +37,7 @@ import {
   PageIntro,
   SectionCard,
 } from "../../ui";
+import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
@@ -700,12 +701,11 @@ export function TeacherDebateCreate({
                         className={`${styles.orderControls} ${draft.mode === "open" ? styles.orderControlsOpen : ""}`}
                       >
                         <div
-                          className={styles.choiceGroup}
+                          className={rulesetStyles.languageSwitch}
                           aria-label={copy(t, "debateStance") as string}
                         >
                           <button
                             aria-pressed={draft.mode === "assigned"}
-                            className={`${styles.choice} ${draft.mode === "assigned" ? styles.choiceActive : ""}`}
                             disabled={busy}
                             onClick={() =>
                               updateParticipant(id, {
@@ -719,7 +719,6 @@ export function TeacherDebateCreate({
                           </button>
                           <button
                             aria-pressed={draft.mode === "open"}
-                            className={`${styles.choice} ${draft.mode === "open" ? styles.choiceActive : ""}`}
                             disabled={busy}
                             onClick={() =>
                               updateParticipant(id, {

@@ -16,7 +16,6 @@ import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
-import debateStyles from "./debate/setup/debate-setup.module.css";
 import {
   EmptyCard,
   ErrorNotice,
@@ -128,21 +127,19 @@ function PublishedAgentCard({
   return (
     <Link className="published-card" href={`/teacher/agents/${item.agent.id}`}>
       <div className="published-card-top">
-        <div>
-          <h2>{item.agent.name}</h2>
-          <p>{item.agent.description}</p>
-        </div>
+        <h2>{item.agent.name}</h2>
+        <p title={item.agent.description ?? undefined}>
+          {item.agent.description}
+        </p>
       </div>
-      <span
-        className="agent-pill"
-        data-pending={hasUnpublishedWork ? "true" : "false"}
-      >
-        {version.version_label}
-      </span>
       <div className="published-card-meta">
-        <span className={`secondary-action ${debateStyles.listAction}`}>
-          {groupName}
+        <span
+          className="agent-pill"
+          data-pending={hasUnpublishedWork ? "true" : "false"}
+        >
+          {version.version_label}
         </span>
+        <span className="published-card-group">{groupName}</span>
       </div>
     </Link>
   );

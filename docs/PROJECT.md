@@ -221,7 +221,7 @@ only Topic. Before LLM/RAG/Report input, NFC/control cleanup and whitespace
 folding preserve meaningful punctuation and word separators. Background is
 scenario data, not verified evidence or system instructions. The former Report
 1200-character title limit is removed; total Provider budgets remain. Draft edits
-invalidate old Preview plans. Creation uses the combined gold/white card described
+invalidate old Preview plans. Creation uses the combined white/pale-yellow card described
 below, with Done beside Back and language selection inside Ruleset.
 
 ## Frozen Markdown Ruleset and current Report repair
@@ -232,7 +232,7 @@ endpoint. Agents Order is followed by one Debate Ruleset row: compact language
 switch and Edit. Selected-language Markdown is always rendered full-width;
 Edit shows raw text; Save updates that language in this form and returns to rendered mode. Done is disabled while
 editing. The old Multi-round Civilization/phase block is removed; Topic and
-Background inputs use white textareas on gold.
+Background inputs use pale-yellow textareas on white.
 
 Create freezes both authored Markdown files and eight complete System messages
 (four for each language) in rule_snapshot_json. Markdown is sent intact, with no
@@ -281,7 +281,7 @@ The custom answer exposed S1 after its teacher rules omitted citation wording.
 New execution Prompts now reserve S IDs for metadata; no backend text filter was
 added. Existing frozen lessons are unchanged; this addition has offline coverage,
 not another paid rerun. One opening comparison is not four-round quality acceptance.
-Ruleset uses gold cards, white documents/switch, gold selection and purple actions.
+Ruleset uses white cards, pale-yellow documents and purple actions.
 
 Creation now defaults to Chinese in both form and API. Ruleset language can change
 whenever Edit is inactive; CN/EN text remains independently saved in the form,
@@ -291,7 +291,7 @@ that omit output_language. Topic, Background, Agents Order and Ruleset share one
 caption is removed; its button remains. 43 frontend and 25 backend targeted checks
 passed, including language switching and frozen-language selection; no paid retest.
 
-Creation now has a combined two-column Topic/Background card: gold ground, white
+Creation has a combined two-column Topic/Background card: white ground, pale-yellow
 textareas, Background optional status only in its placeholder. Published Agents
 and Selected Order merge into Agents Order. The existing published-agent endpoint
 sorts by Agent.created_at descending (stable ID tie-break) and joins Group.name in
@@ -301,13 +301,17 @@ Selected rows reveal stance/open controls and a wider Agent note input. Controls
 not toggle row selection. Deselect/reselect preserves notes/stance and appends to
 the selection order; unselected drafts are not submitted. Snapshot-fixed prose is
 removed. Existing IDs, round scheduling and per-language frozen rules are unchanged.
-44 frontend checks and backend ordering/authorization checks passed; no paid calls.
 
 Teacher navigation now has Home and Classroom; its list title is Debates with New.
 The separate Beta list is removed (old URL redirects); nested 3D controls remain.
 Immerse opens the same control route from ready Preview or each eligible list row.
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
-Ruleset has no Details toggle; Save restores rendered Markdown and language switching.
 84 focused frontend checks and TypeScript pass; lint has no errors and four existing
 Stage warnings. No paid calls or full browser classroom acceptance in this UI batch.
+
+Home uses Course, Composition, Providers and a centered Published/count/Agents badge.
+Linked Agent tiles have name/ellipsized small description above version/group.
+New uses Agent-row pale yellow (#fbf4e5) inside white cards; stance shares the
+language switch styles. Preview speech cards are white with symmetric edge spacing.
+55 focused frontend checks and types passed for this refinement; no paid calls.

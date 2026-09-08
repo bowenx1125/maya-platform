@@ -161,7 +161,7 @@ describe("Wave 2 teacher debate setup", () => {
     expect(link.getAttribute("href")).toBe(
       "/teacher/debates/debate-one/control",
     );
-    expect(screen.getByText("2 rounds")).toBeTruthy();
+    expect(screen.getByText("2 Rounds")).toBeTruthy();
   });
 
   it.each([

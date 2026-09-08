@@ -148,32 +148,6 @@
   align-items: center;
 }
 
-.choiceGroup {
-  display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fff;
-}
-
-.choice {
-  min-height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--muted);
-  background: transparent;
-  font-size: 0.76rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.choiceActive {
-  color: var(--indigo-dark);
-  background: var(--gold-soft);
-}
-
 .noteInput {
   min-height: 38px !important;
   padding: 8px 10px !important;
@@ -441,8 +415,8 @@
 }
 
 .topicCard.topicCard {
-  background: var(--gold-soft);
-  border-color: #ddc995;
+  background: #fff;
+  border-color: var(--line);
 }
 .topicColumns {
   display: grid;
@@ -458,7 +432,7 @@
 .contextInput.contextInput {
   width: 100%;
   min-height: 120px;
-  background: #fff;
+  background: #fbf4e5;
   border-color: #dccb9e;
 }
 .agentOrderList {
@@ -538,10 +512,6 @@
 }
 .orderControlsOpen {
   grid-template-columns: auto minmax(180px, 1fr);
-}
-.orderControls .choice {
-  padding: 0 8px;
-  font-size: 0.74rem;
 }
 .orderControls input {
   width: 100%;
