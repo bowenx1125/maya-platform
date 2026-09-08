@@ -261,11 +261,8 @@ Creation defaults to Chinese; language changes outside Edit preserve independent
 CN/EN drafts and only the selected language drives generation. Draft updates that
 omit language preserve it. Create section title dividers share one style.
 
-Creation has separate side-by-side Topic/Background cards with white textareas.
-ResizeObserver links textarea height changes in both directions after form mount;
-mobile stacks the cards. Agents Order lists published Agents newest-first with
-version/group, numeric selection order and per-selected-Agent stance/notes.
-Reselect preserves edits and appends order; internal IDs/rules are unchanged.
+Creation uses linked-height Topic/Background inputs and newest-first Agents Order
+with version/group, stable selection and per-Agent stance/notes; mobile stacks.
 
 Navigation: Home/Classroom; list: Debates/New.
 The separate Beta list is removed (old URL redirects); nested 3D controls remain.
@@ -315,3 +312,7 @@ enablement during ordinary polling. Types passed; browser acceptance remains man
 
 Evaluation uses green/gold/gray-purple grade cues and muted Agent bar colors, with
 purple scores. History uses a gold rule; idle actions are quiet. 16 UI checks passed.
+
+Agent.md now has only a 12,000-character total authorship budget. Field and list
+caps are removed from compiler, stored/provider models, and paragraph conversion.
+77 checks cover long fields, publication and 12,000/12,001. TCM passes unchanged.

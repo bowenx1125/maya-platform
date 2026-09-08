@@ -40,9 +40,8 @@ TEACHING_DIMENSIONS_V2 = (
     "concession_style",
     "question_style",
 )
-# The Persona compiler deliberately accepts rich authored fields (up to 240
-# characters for style/list items).  Those fields are useful in the provider
-# view, but should not be pasted wholesale into a bounded classroom sentence.
+# Authored fields share the whole Markdown budget. They remain complete in
+# the provider view, but need not be pasted into a bounded Mock sentence.
 # Keep this limit in the Mock projection rather than weakening the Persona
 # compiler or turn validator.  The projection uses word boundaries and emits a
 # complete, explicitly-labelled sentence for every dimension.

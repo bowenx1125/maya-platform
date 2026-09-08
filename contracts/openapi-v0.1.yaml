@@ -2334,19 +2334,19 @@ components:
       additionalProperties: false
       required: [name, role, historical_or_cultural_context]
       properties:
-        name: { type: string, minLength: 1, maxLength: 80 }
-        role: { type: string, minLength: 1, maxLength: 120 }
+        name: { type: string, minLength: 1 }
+        role: { type: string, minLength: 1 }
         historical_or_cultural_context:
-          { type: string, minLength: 1, maxLength: 1000 }
+          { type: string, minLength: 1 }
     PersonaSpeakingStyle:
       type: object
       additionalProperties: false
       required: [tone, argument_pattern, concession_style, question_style]
       properties:
-        tone: { type: string, minLength: 1, maxLength: 240 }
-        argument_pattern: { type: string, minLength: 1, maxLength: 240 }
-        concession_style: { type: string, minLength: 1, maxLength: 240 }
-        question_style: { type: string, minLength: 1, maxLength: 240 }
+        tone: { type: string, minLength: 1 }
+        argument_pattern: { type: string, minLength: 1 }
+        concession_style: { type: string, minLength: 1 }
+        question_style: { type: string, minLength: 1 }
     PersonaSpecV1:
       type: object
       additionalProperties: false
@@ -2366,15 +2366,15 @@ components:
           { type: string, const: persona_spec_v1, default: persona_spec_v1 }
         identity: { $ref: "#/components/schemas/PersonaIdentity" }
         cultural_lens:
-          { type: array, minItems: 1, maxItems: 8, items: { type: string } }
+          { type: array, minItems: 1, items: { type: string } }
         core_values:
-          { type: array, minItems: 1, maxItems: 8, items: { type: string } }
-        initial_position: { type: string, minLength: 1, maxLength: 1000 }
+          { type: array, minItems: 1, items: { type: string } }
+        initial_position: { type: string, minLength: 1 }
         speaking_style: { $ref: "#/components/schemas/PersonaSpeakingStyle" }
         debate_strategy:
-          { type: array, minItems: 1, maxItems: 8, items: { type: string } }
+          { type: array, minItems: 1, items: { type: string } }
         boundaries:
-          { type: array, minItems: 1, maxItems: 8, items: { type: string } }
+          { type: array, minItems: 1, items: { type: string } }
         source_agent_md_hash:
           { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
         compiler_version:
@@ -2735,19 +2735,16 @@ components:
         core_values:
           items:
             type: string
-          maxItems: 8
           minItems: 1
           type: array
         cultural_lens:
           items:
             type: string
-          maxItems: 8
           minItems: 1
           type: array
         identity:
           $ref: '#/components/schemas/PersonaIdentity'
         initial_position:
-          maxLength: 1000
           minLength: 1
           type: string
         schema_version:

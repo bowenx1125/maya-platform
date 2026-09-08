@@ -66,14 +66,14 @@ _V2_SECTIONS = (
 _LIST_SECTIONS = {"Cultural lens", "Core values", "Debate strategy", "Boundaries"}
 _SCALAR_SECTIONS = {
     "Identity": {
-        "Role": ("role", 120),
-        "Historical or cultural context": ("historical_or_cultural_context", 1_000),
+        "Role": "role",
+        "Historical or cultural context": "historical_or_cultural_context",
     },
     "Speaking style": {
-        "Tone": ("tone", 240),
-        "Argument pattern": ("argument_pattern", 240),
-        "Concession style": ("concession_style", 240),
-        "Question style": ("question_style", 240),
+        "Tone": "tone",
+        "Argument pattern": "argument_pattern",
+        "Concession style": "concession_style",
+        "Question style": "question_style",
     },
 }
 _HEADING_RE = re.compile(r"^#{1,6}(?:\s|$)")
@@ -90,16 +90,16 @@ class PersonaClosedModel(BaseModel):
 
 
 class PersonaIdentity(PersonaClosedModel):
-    name: str = Field(min_length=1, max_length=80)
-    role: str = Field(min_length=1, max_length=120)
-    historical_or_cultural_context: str = Field(min_length=1, max_length=1_000)
+    name: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    historical_or_cultural_context: str = Field(min_length=1)
 
 
 class PersonaSpeakingStyle(PersonaClosedModel):
-    tone: str = Field(min_length=1, max_length=240)
-    argument_pattern: str = Field(min_length=1, max_length=240)
-    concession_style: str = Field(min_length=1, max_length=240)
-    question_style: str = Field(min_length=1, max_length=240)
+    tone: str = Field(min_length=1)
+    argument_pattern: str = Field(min_length=1)
+    concession_style: str = Field(min_length=1)
+    question_style: str = Field(min_length=1)
 
 
 class PersonaSpecV1(PersonaClosedModel):
@@ -107,12 +107,12 @@ class PersonaSpecV1(PersonaClosedModel):
 
     schema_version: Literal["persona_spec_v1"] = PERSONA_SCHEMA_VERSION
     identity: PersonaIdentity
-    cultural_lens: tuple[str, ...] = Field(min_length=1, max_length=8)
-    core_values: tuple[str, ...] = Field(min_length=1, max_length=8)
-    initial_position: str = Field(min_length=1, max_length=1_000)
+    cultural_lens: tuple[str, ...] = Field(min_length=1)
+    core_values: tuple[str, ...] = Field(min_length=1)
+    initial_position: str = Field(min_length=1)
     speaking_style: PersonaSpeakingStyle
-    debate_strategy: tuple[str, ...] = Field(min_length=1, max_length=8)
-    boundaries: tuple[str, ...] = Field(min_length=1, max_length=8)
+    debate_strategy: tuple[str, ...] = Field(min_length=1)
+    boundaries: tuple[str, ...] = Field(min_length=1)
     source_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     compiler_version: Literal["persona_template_v1"] = PERSONA_COMPILER_VERSION
 
@@ -128,9 +128,9 @@ class PersonaSpecV2(PersonaClosedModel):
 
     schema_version: Literal["persona_spec_v2"] = PERSONA_SCHEMA_VERSION_V2
     identity: PersonaIdentity
-    cultural_lens: tuple[str, ...] = Field(min_length=1, max_length=8)
-    core_values: tuple[str, ...] = Field(min_length=1, max_length=8)
-    initial_position: str = Field(min_length=1, max_length=1_000)
+    cultural_lens: tuple[str, ...] = Field(min_length=1)
+    core_values: tuple[str, ...] = Field(min_length=1)
+    initial_position: str = Field(min_length=1)
     speaking_style: PersonaSpeakingStyle
     source_agent_md_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     compiler_version: Literal["persona_template_v2"] = PERSONA_COMPILER_VERSION_V2
@@ -141,12 +141,12 @@ class PersonaProviderViewV1(PersonaClosedModel):
 
     schema_version: Literal["persona_provider_view_v1"] = PERSONA_PROVIDER_VIEW_VERSION
     identity: PersonaIdentity
-    cultural_lens: tuple[str, ...] = Field(min_length=1, max_length=8)
-    core_values: tuple[str, ...] = Field(min_length=1, max_length=8)
-    initial_position: str = Field(min_length=1, max_length=1_000)
+    cultural_lens: tuple[str, ...] = Field(min_length=1)
+    core_values: tuple[str, ...] = Field(min_length=1)
+    initial_position: str = Field(min_length=1)
     speaking_style: PersonaSpeakingStyle
-    debate_strategy: tuple[str, ...] = Field(min_length=1, max_length=8)
-    boundaries: tuple[str, ...] = Field(min_length=1, max_length=8)
+    debate_strategy: tuple[str, ...] = Field(min_length=1)
+    boundaries: tuple[str, ...] = Field(min_length=1)
 
 
 class PersonaProviderViewV2(PersonaClosedModel):
@@ -154,9 +154,9 @@ class PersonaProviderViewV2(PersonaClosedModel):
 
     schema_version: Literal["persona_provider_view_v2"] = PERSONA_PROVIDER_VIEW_VERSION_V2
     identity: PersonaIdentity
-    cultural_lens: tuple[str, ...] = Field(min_length=1, max_length=8)
-    core_values: tuple[str, ...] = Field(min_length=1, max_length=8)
-    initial_position: str = Field(min_length=1, max_length=1_000)
+    cultural_lens: tuple[str, ...] = Field(min_length=1)
+    core_values: tuple[str, ...] = Field(min_length=1)
+    initial_position: str = Field(min_length=1)
     speaking_style: PersonaSpeakingStyle
 
 
@@ -502,13 +502,6 @@ def _compile_persona_v1(
             line=lines[0].number,
             source_hash=source_hash,
         )
-    if len(h1_text) > 80:
-        return _failed_result(
-            "name_too_long",
-            "The Agent display name exceeds 80 characters.",
-            line=lines[0].number,
-            source_hash=source_hash,
-        )
     if _has_forbidden_markup(h1[2:].strip()):
         return _failed_result(
             "unsupported_markup",
@@ -682,14 +675,6 @@ def compile_persona_v2(
         return _failed_result(
             "name_empty",
             "The Agent display name cannot be empty.",
-            line=lines[0].number,
-            source_hash=source_hash,
-            compiler_version=PERSONA_COMPILER_VERSION_V2,
-        )
-    if len(h1_text) > 80:
-        return _failed_result(
-            "name_too_long",
-            "The Agent display name exceeds 80 characters.",
             line=lines[0].number,
             source_hash=source_hash,
             compiler_version=PERSONA_COMPILER_VERSION_V2,
@@ -1158,14 +1143,12 @@ def _parse_scalar_section(
                 )
             )
             continue
-        cleaned, error = _value(
-            value, max_chars=expected[label][1], line=line.number, field=expected[label][0]
-        )
+        cleaned, error = _value(value, line=line.number, field=expected[label])
         if error is not None:
             diagnostics.append(error)
         elif cleaned is not None:
-            values[expected[label][0]] = cleaned
-    for _label, (field, _limit) in expected.items():
+            values[expected[label]] = cleaned
+    for field in expected.values():
         if field not in values:
             diagnostics.append(
                 _diagnostic("field_missing", "A required Persona field is missing.", field=field)
@@ -1202,9 +1185,7 @@ def _parse_list(section: str, lines: Sequence[_Line]) -> tuple[list[str], list[P
                 )
             )
             continue
-        cleaned, error = _value(
-            item, max_chars=240, line=line.number, field=_section_field(section)
-        )
+        cleaned, error = _value(item, line=line.number, field=_section_field(section))
         if error is not None:
             diagnostics.append(error)
             continue
@@ -1225,11 +1206,9 @@ def _parse_list(section: str, lines: Sequence[_Line]) -> tuple[list[str], list[P
         values.append(cleaned)
     if not values:
         diagnostics.append(
-            _diagnostic("list_missing", "Each Persona list must contain 1–8 items.", field=section)
-        )
-    elif len(values) > 8:
-        diagnostics.append(
-            _diagnostic("list_too_long", "Each Persona list must contain 1–8 items.", field=section)
+            _diagnostic(
+                "list_missing", "Each Persona list must contain at least one item.", field=section
+            )
         )
     return values, diagnostics
 
@@ -1307,20 +1286,10 @@ def _parse_initial_position(lines: Sequence[_Line]) -> tuple[str, list[PersonaDi
                 field="initial_position",
             )
         )
-    elif len(text) > 1_000:
-        diagnostics.append(
-            _diagnostic(
-                "value_too_long",
-                "Initial position exceeds 1,000 characters.",
-                field="initial_position",
-            )
-        )
     return text, diagnostics
 
 
-def _value(
-    raw: str, *, max_chars: int, line: int, field: str
-) -> tuple[str | None, PersonaDiagnostic | None]:
+def _value(raw: str, *, line: int, field: str) -> tuple[str | None, PersonaDiagnostic | None]:
     if _has_forbidden_markup(raw):
         return None, _diagnostic(
             "unsupported_markup",
@@ -1332,10 +1301,6 @@ def _value(
     if not cleaned:
         return None, _diagnostic(
             "value_missing", "Persona values cannot be empty.", line=line, field=field
-        )
-    if len(cleaned) > max_chars:
-        return None, _diagnostic(
-            "value_too_long", "A Persona value exceeds its character limit.", line=line, field=field
         )
     return cleaned, None
 

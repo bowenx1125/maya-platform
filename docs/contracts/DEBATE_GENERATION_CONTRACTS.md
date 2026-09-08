@@ -140,7 +140,7 @@ Rules are exact after trimming surrounding whitespace:
 - all seven H2 sections are required exactly once and in the shown order;
 - field labels are ASCII and case-sensitive;
 - Cultural lens, Core values, Debate strategy and Boundaries contain only flat bullet
-  items; each list contains 1–8 unique items;
+  items; each list contains at least one unique item;
 - Identity and Speaking style contain only their named flat bullet fields;
 - Initial position contains plain Markdown paragraphs but no headings, HTML or links;
 - prose outside the defined locations, unknown/duplicate headings, unknown fields,
@@ -148,9 +148,12 @@ Rules are exact after trimming surrounding whitespace:
 - Markdown emphasis and inline code are reduced to their visible text. Their delimiters
   never become instructions.
 
-Scalar limits are: name 80, role 120, cultural context 1,000, initial position 1,000,
-and each style field 240 characters. Every list item is 1–240 characters. Control and
-format characters other than normalized newline/tab are rejected.
+The September 8 owner revision removes per-field character and list-count caps.
+All authored fields share the 12,000-character Markdown limit, including headings,
+spaces and punctuation after newline normalization. Compiler, stored/provider
+schemas and paragraph-input conversion use this same policy. Nonempty values and
+section structure remain required. Control and format characters other than
+normalized newline/tab are rejected.
 
 ### Closed stored schema
 

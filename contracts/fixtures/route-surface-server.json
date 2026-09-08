@@ -5128,18 +5128,15 @@
         "properties": {
           "name": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 80
+            "minLength": 1
           },
           "role": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 120
+            "minLength": 1
           },
           "historical_or_cultural_context": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 1000
+            "minLength": 1
           }
         }
       },
@@ -5155,23 +5152,19 @@
         "properties": {
           "tone": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 240
+            "minLength": 1
           },
           "argument_pattern": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 240
+            "minLength": 1
           },
           "concession_style": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 240
+            "minLength": 1
           },
           "question_style": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 240
+            "minLength": 1
           }
         }
       },
@@ -5200,7 +5193,6 @@
           "cultural_lens": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 8,
             "items": {
               "type": "string"
             }
@@ -5208,15 +5200,13 @@
           "core_values": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 8,
             "items": {
               "type": "string"
             }
           },
           "initial_position": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 1000
+            "minLength": 1
           },
           "speaking_style": {
             "$ref": "#/components/schemas/PersonaSpeakingStyle"
@@ -5224,7 +5214,6 @@
           "debate_strategy": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 8,
             "items": {
               "type": "string"
             }
@@ -5232,7 +5221,6 @@
           "boundaries": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 8,
             "items": {
               "type": "string"
             }
@@ -6118,7 +6106,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 8,
             "minItems": 1,
             "type": "array"
           },
@@ -6126,7 +6113,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 8,
             "minItems": 1,
             "type": "array"
           },
@@ -6134,7 +6120,6 @@
             "$ref": "#/components/schemas/PersonaIdentity"
           },
           "initial_position": {
-            "maxLength": 1000,
             "minLength": 1,
             "type": "string"
           },

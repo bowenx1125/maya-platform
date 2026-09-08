@@ -205,10 +205,10 @@ class SegmentPersona:
 def _persona_list(value: Sequence[str], label: str) -> None:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         raise _error(f"{label} must be an array.", code="persona_invalid")
-    if not 1 <= len(value) <= 8:
-        raise _error(f"{label} must contain one to eight items.", code="persona_invalid")
+    if not value:
+        raise _error(f"{label} must contain at least one item.", code="persona_invalid")
     for item in value:
-        _text(item, label, max_chars=240)
+        _text(item, label)
 
 
 def coerce_persona(
@@ -259,11 +259,11 @@ def coerce_persona(
         for key in ("tone", "argument_pattern", "concession_style", "question_style")
     }
     cultural = tuple(
-        _text(item, "persona.cultural_lens", max_chars=240)
+        _text(item, "persona.cultural_lens")
         for item in _list(raw.get("cultural_lens"), "persona.cultural_lens")
     )
     values = tuple(
-        _text(item, "persona.core_values", max_chars=240)
+        _text(item, "persona.core_values")
         for item in _list(raw.get("core_values"), "persona.core_values")
     )
     return SegmentPersona(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import login
@@ -21,14 +22,18 @@ def _create_agent(client: TestClient, csrf: str) -> dict[str, Any]:
     return response.json()
 
 
+@pytest.mark.parametrize(
+    "role", ["Watershed steward", "A detailed professional perspective. " * 20]
+)
 def test_five_section_persona_compiles_confirms_and_publishes(
     client: TestClient,
+    role: str,
 ) -> None:
     _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf)
     version_id = agent["versions"][0]["id"]
     avatar = agent["versions"][0]["avatar_config"]
-    source = persona_v2_markdown()
+    source = persona_v2_markdown().replace("Watershed steward", role.strip())
 
     updated = client.patch(
         f"/api/v1/agent-versions/{version_id}",
@@ -57,6 +62,7 @@ def test_five_section_persona_compiles_confirms_and_publishes(
     assert compiled.status_code == 200, compiled.text
     compiled_body = compiled.json()
     assert compiled_body["compiled"] is True
+    assert compiled_body["persona_spec"]["identity"]["role"] == role.strip()
     assert compiled_body["compiler_version"] == "persona_template_v2"
     assert compiled_body["persona_spec"]["schema_version"] == "persona_spec_v2"
     assert "debate_strategy" not in compiled_body["persona_spec"]
