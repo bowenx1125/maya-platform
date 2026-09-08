@@ -176,9 +176,8 @@ text-embedding-v4, 1024 dimensions.
 Teacher lists/creation use yellow rows on white paper. Devocalize/Destroy sit beside
 Rebirth; global Refresh sits beside New; Immerse uses their action styling. Failed actions preserve the row.
 Stage titles are removed; speech scrolls above compact gold controls and bubbles
-persist until Next. Open Message/Hide preserves its QR session. Conclude contains
-Report and scores; Audio Ready indicates retained audio. This change adds only
-fixed-four-round and phase-label UI work.
+persist until Next. Interact/Hide preserves its QR session. Conclude shows Scores
+with numbered Agents and Report Version/History. Audio Ready indicates retained audio.
 
 ## Remaining scope
 

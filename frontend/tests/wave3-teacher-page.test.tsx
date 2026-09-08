@@ -105,7 +105,7 @@ describe("Wave 3 dedicated teacher page", () => {
     );
 
     await screen.findByText("Report");
-    expect(screen.getByRole("heading", { name: "Agent scores" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Scores" })).toBeTruthy();
     expect(screen.getByText("Direct evidence +5")).toBeTruthy();
     expect(screen.getByText("Indirect evidence +2")).toBeTruthy();
     expect(screen.getByText("No match +0")).toBeTruthy();

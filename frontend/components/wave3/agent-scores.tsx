@@ -45,9 +45,9 @@ export function agentScores(
       (byParticipant.get(turn.participant_id) ?? 0) + points,
     );
   }
-  return participants.map((participant) => ({
+  return participants.map((participant, index) => ({
     id: participant.id,
-    label: `${participant.slot} · ${participant.agent_name}`,
+    label: `${index + 1}. ${participant.agent_name}`,
     value: byParticipant.get(participant.id) ?? 0,
   }));
 }
@@ -69,7 +69,7 @@ export function AgentScores({
     <section aria-labelledby="agent-scores-title" className="section-card">
       <div className="section-card-header">
         <div>
-          <h2 id="agent-scores-title">{zh ? "Agent 评分" : "Agent scores"}</h2>
+          <h2 id="agent-scores-title">{zh ? "评分" : "Scores"}</h2>
         </div>
       </div>
       <div aria-label="Evidence grading" className={styles.legend}>

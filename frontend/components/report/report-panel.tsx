@@ -63,9 +63,7 @@ function reportStatusLabel(locale: "en" | "zh", status: string): string {
 }
 
 function revisionTitle(locale: "en" | "zh", revision: number): string {
-  return locale === "zh"
-    ? `报告修订 ${revision}`
-    : `Report revision ${revision}`;
+  return locale === "zh" ? `版本 ${revision}` : `Version ${revision}`;
 }
 
 function triggerDownload(content: string, filename: string): void {
@@ -104,12 +102,12 @@ export function ReportPanel({
             title: "报告",
             insight: "匿名课堂洞察",
             report: "当前报告",
-            history: "报告修订历史",
+            history: "历史",
             regenerate: "重新生成",
             download: "下载 Markdown",
             loading: "正在读取报告状态…",
             noReport: "还没有报告。",
-            noHistory: "还没有报告修订。",
+            noHistory: "还没有报告版本。",
             view: "查看",
             selected: "当前查看",
             generating: "报告生成中…",
@@ -122,12 +120,12 @@ export function ReportPanel({
             title: "Report",
             insight: "Anonymous classroom insight",
             report: "Current report",
-            history: "Report revision history",
+            history: "History",
             regenerate: "Regenerate",
             download: "Download Markdown",
             loading: "Reading report status…",
             noReport: "No report yet.",
-            noHistory: "No report revisions yet.",
+            noHistory: "No report versions yet.",
             view: "Review",
             selected: "Viewing",
             generating: "Generating report…",

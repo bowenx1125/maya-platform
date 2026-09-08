@@ -186,6 +186,10 @@ describe("Wave 3 M14 ReportPanel", () => {
 
     expect(await screen.findByText("Report")).toBeTruthy();
     expect(screen.getByText("Shared concern")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "History" })).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getAllByText("Version 1")).toHaveLength(2),
+    );
     expect(screen.queryByText("Anonymous classroom insight")).toBeNull();
     expect(screen.queryByText("Current report")).toBeNull();
     expect(screen.queryByText(/included.*filtered/)).toBeNull();

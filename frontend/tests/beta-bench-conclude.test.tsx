@@ -361,7 +361,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
     renderPage(api);
     fireEvent.click(await screen.findByRole("button", { name: "Conclude" }));
     await screen.findByRole("dialog", { name: "Report" });
-    expect(screen.getByRole("heading", { name: "Agent scores" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Scores" })).toBeTruthy();
     expect(screen.getByText("3 unscored")).toBeTruthy();
     expect(screen.getByText("Direct evidence +5")).toBeTruthy();
     expect(api.closeInteraction).toHaveBeenCalledTimes(1);
@@ -460,7 +460,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
     fireEvent.click(report);
     expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Report" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Agent scores" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scores" })).toBeNull();
     expect(api.closeInteraction).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Interaction" })).toBeNull();
   });
@@ -476,4 +476,14 @@ describe("segments_v2 Bench Conclude and Report", () => {
     );
     expect(screen.queryByRole("button", { name: "Conclude" })).toBeNull();
   });
+});
+
+it("numbers score labels in participant order without changing the names or totals", () => {
+  const detail = finishedSegmentsDetail();
+  const data = agentScores(detail.participants, detail.public_turns);
+  expect(data[0]?.label).toBe(`1. ${detail.participants[0].agent_name}`);
+  expect(data[1]?.label).toBe(`2. ${detail.participants[1].agent_name}`);
+  expect(data.map((row) => row.id)).toEqual(
+    detail.participants.map((row) => row.id),
+  );
 });
