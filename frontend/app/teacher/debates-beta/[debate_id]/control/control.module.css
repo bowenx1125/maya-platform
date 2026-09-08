@@ -32,7 +32,7 @@
 .reportDialog {
   width: min(1040px, calc(100vw - 40px));
   max-height: calc(100dvh - 48px);
-  padding: 24px;
+  padding: var(--workspace-inset);
   border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--paper, #fcfaf6);
@@ -48,7 +48,7 @@
 .reportActions {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 12px;
+  margin: 0 0 var(--workspace-gap);
 }
 
 @media (max-width: 900px) {
@@ -59,4 +59,8 @@
     left: 12px;
     width: auto;
   }
+}
+
+.reportDialog > section + section {
+  margin-top: var(--workspace-gap);
 }

@@ -97,6 +97,12 @@ describe("Wave 3 M14 ReportPanel", () => {
     );
 
     await screen.findByText("Report");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Generate Report" }),
@@ -125,6 +131,12 @@ describe("Wave 3 M14 ReportPanel", () => {
     );
 
     await screen.findByText("Report");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
     const button = screen.getByRole("button", { name: "Regenerate" });
     expect(button).toHaveProperty("disabled", false);
     fireEvent.click(button);
@@ -166,7 +178,9 @@ describe("Wave 3 M14 ReportPanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByText("Generating report…")).toBeTruthy();
+    expect(screen.getByText("Generating report...")).toBeTruthy();
+    expect(screen.getAllByText("Generating report...")).toHaveLength(1);
+    expect(screen.queryByText("No report yet.")).toBeNull();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
@@ -185,8 +199,16 @@ describe("Wave 3 M14 ReportPanel", () => {
     );
 
     expect(await screen.findByText("Report")).toBeTruthy();
-    expect(screen.getByText("Shared concern")).toBeTruthy();
+    expect(await screen.findByText("Shared concern")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "History" })).toBeTruthy();
+    const versionHeader = screen.getByRole("heading", {
+      name: "Version 1",
+    }).parentElement!;
+    expect(
+      Array.from(versionHeader.querySelectorAll("button")).map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["Regenerate", "Download"]);
     await waitFor(() =>
       expect(screen.getAllByText("Version 1")).toHaveLength(2),
     );
@@ -232,11 +254,11 @@ describe("Wave 3 M14 ReportPanel", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
-      expect(screen.getByText("Generating report…")).toBeTruthy();
+      expect(screen.getByText("Generating report...")).toBeTruthy();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1500);
       });
-      expect(screen.queryByText("Generating report…")).toBeNull();
+      expect(screen.queryByText("Generating report...")).toBeNull();
       expect(screen.getByLabelText("Current report").textContent).toContain(
         "Civilization Mutual Learning Report",
       );
@@ -280,11 +302,11 @@ describe("Wave 3 M14 ReportPanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByText("Generating report…")).toBeTruthy();
+    expect(screen.getByText("Generating report...")).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
-    expect(screen.queryByText("Generating report…")).toBeNull();
+    expect(screen.queryByText("Generating report...")).toBeNull();
     expect(screen.getByLabelText("Current report")).toBeTruthy();
     expect(getCurrentReport).toHaveBeenCalledTimes(2);
     expect(api.regenerateReport).not.toHaveBeenCalled();
@@ -333,7 +355,7 @@ describe("Wave 3 M14 ReportPanel", () => {
     await act(async () => {
       resolveOldPoll(generating);
     });
-    expect(screen.queryByText("Generating report…")).toBeNull();
+    expect(screen.queryByText("Generating report...")).toBeNull();
     expect(screen.getByLabelText("Current report")).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
@@ -359,6 +381,12 @@ describe("Wave 3 M14 ReportPanel", () => {
       </LocaleProvider>,
     );
     await screen.findByText("Report");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     await waitFor(() =>
       expect(api.regenerateReport).toHaveBeenCalledWith(
@@ -381,6 +409,12 @@ describe("Wave 3 M14 ReportPanel", () => {
       </LocaleProvider>,
     );
     await screen.findByText("Report");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     await waitFor(() => expect(regenerateReport).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
@@ -401,7 +435,13 @@ describe("Wave 3 M14 ReportPanel", () => {
       </LocaleProvider>,
     );
     await screen.findByText("Report");
-    fireEvent.click(screen.getByRole("button", { name: "Download Markdown" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Regenerate" })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
     await waitFor(() =>
       expect(api.downloadCurrentReport).toHaveBeenCalledWith(debateId, "en"),
     );
@@ -409,8 +449,6 @@ describe("Wave 3 M14 ReportPanel", () => {
     await waitFor(() =>
       expect(api.getReportRevision).toHaveBeenCalledWith(debateId, revisionId),
     );
-    expect(
-      screen.queryByRole("button", { name: "Download Markdown" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
   });
 });

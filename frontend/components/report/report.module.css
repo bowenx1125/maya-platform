@@ -1,10 +1,36 @@
 .panel {
   display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
-  border: 1px solid #e6d3aa;
-  border-radius: 1.25rem;
+  gap: var(--section-content-gap);
+  min-width: 0;
+  padding: var(--workspace-inset);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fff;
+}
+
+.content {
+  display: grid;
+  gap: var(--section-content-gap);
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e5d8bf;
+  border-radius: 14px;
   background: #fbf4e5;
+}
+
+.header {
+  padding-bottom: var(--section-content-gap);
+  border-bottom: 1px solid #e4d5b7;
+}
+
+.header h2 {
+  font-size: 1.24rem;
+  line-height: 1.4;
+}
+
+.cardHeading h3 {
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 .header,
@@ -40,38 +66,58 @@
   line-height: 1.55;
 }
 
-.actions,
-.cardHeading button {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 3px;
+  margin-left: auto;
+  padding: 3px;
+  border: 1px solid #ddccaa;
+  border-radius: 10px;
+  background: #fff;
 }
 
 .actions button,
-.cardHeading button,
 .history button {
-  min-height: 2.75rem;
-  padding: 0.55rem 0.85rem;
-  border: 1px solid #e6d3aa;
-  border-radius: 0.7rem;
-  background: transparent;
-  color: #6b542f;
-  cursor: pointer;
+  min-height: 27px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--gold-soft);
+  color: var(--indigo-dark);
   font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
 }
 
-.actions button:last-child,
-.cardHeading button {
-  border-color: #c8ad76;
+.actions button:hover:not(:disabled),
+.history button:hover:not(:disabled) {
+  transform: translateY(-1px);
   background: #e7d5aa;
-  color: #3d3121;
+}
+
+.actions button:active:not(:disabled),
+.history button:active:not(:disabled) {
+  transform: translateY(0);
+  background: #dac18a;
+}
+
+.actions button:focus-visible,
+.history button:focus-visible {
+  outline: 2px solid #b28b4a;
+  outline-offset: 2px;
 }
 
 .actions button:disabled,
-.cardHeading button:disabled,
 .history button:disabled {
-  cursor: wait;
-  opacity: 0.55;
+  cursor: default;
+  opacity: 0.4;
 }
 
 .reportCard,
@@ -80,7 +126,7 @@
   padding: 1rem;
   border: 1px solid #e6d3aa;
   border-radius: 0.95rem;
-  background: #fffaf0;
+  background: #fff;
 }
 
 .revisionStatus,
@@ -166,18 +212,12 @@
 
 @media (max-width: 680px) {
   .panel {
-    padding: 1rem;
+    padding: var(--workspace-inset);
   }
 
-  .header,
   .cardHeading {
-    flex-direction: column;
-  }
-
-  .actions,
-  .actions button,
-  .cardHeading button {
-    width: 100%;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .history li {

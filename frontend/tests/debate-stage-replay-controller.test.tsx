@@ -911,3 +911,50 @@ it("keeps immediate Next while playing and blocks a duplicate click until the su
   );
   expect(api.retryDebatePreparation).not.toHaveBeenCalled();
 });
+
+it("normal readiness polling does not briefly enable media retry before playback starts", async () => {
+  const initial = detail();
+  initial.status = "running";
+  initial.round_count = 4;
+  initial.playback = {
+    ...initial.playback,
+    status: "preparing",
+    mode: "live",
+    current_turn_id: turnId,
+  };
+  const ready = {
+    ...initial,
+    playback: { ...initial.playback, status: "ready" as const },
+  };
+  const socket = new ReplaySocket();
+  const api = apiFor(initial);
+  const refreshSnapshot = vi.fn().mockResolvedValue(ready);
+  render(
+    <BetaDebateStage
+      api={api}
+      debateId={debateId}
+      detail={initial}
+      socketFactory={() => socket}
+      refreshSnapshot={refreshSnapshot}
+    />,
+  );
+  await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+  act(() => socket.emitOpen());
+  act(() => socket.emitMessage(acquired()));
+  await waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1), {
+    timeout: 3000,
+  });
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-playback-status="ready"]'),
+    ).toBeTruthy(),
+  );
+  expect(screen.getByRole("button", { name: "Next" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+  expect(screen.getByText("Generating")).toBeTruthy();
+  expect(screen.queryByText("Waiting")).toBeNull();
+  expect(api.advanceDebatePlayback).not.toHaveBeenCalled();
+  expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+});

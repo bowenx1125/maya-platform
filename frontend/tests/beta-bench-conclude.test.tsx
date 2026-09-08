@@ -361,7 +361,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
     renderPage(api);
     fireEvent.click(await screen.findByRole("button", { name: "Conclude" }));
     await screen.findByRole("dialog", { name: "Report" });
-    expect(screen.getByRole("heading", { name: "Scores" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Evaluation" })).toBeTruthy();
     expect(screen.getByText("3 unscored")).toBeTruthy();
     expect(screen.getByText("Direct evidence +5")).toBeTruthy();
     expect(api.closeInteraction).toHaveBeenCalledTimes(1);
@@ -460,7 +460,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
     fireEvent.click(report);
     expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Report" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Scores" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Evaluation" })).toBeNull();
     expect(api.closeInteraction).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Interaction" })).toBeNull();
   });
@@ -478,12 +478,47 @@ describe("segments_v2 Bench Conclude and Report", () => {
   });
 });
 
-it("numbers score labels in participant order without changing the names or totals", () => {
+it("sorts evaluation by descending score and keeps names without numbering", () => {
   const detail = finishedSegmentsDetail();
-  const data = agentScores(detail.participants, detail.public_turns);
-  expect(data[0]?.label).toBe(`1. ${detail.participants[0].agent_name}`);
-  expect(data[1]?.label).toBe(`2. ${detail.participants[1].agent_name}`);
-  expect(data.map((row) => row.id)).toEqual(
-    detail.participants.map((row) => row.id),
-  );
+  const low = detail.participants[0];
+  const high = detail.participants[1];
+  const turns = [
+    {
+      ...detail.public_turns[0],
+      id: "low",
+      participant_id: low.id,
+      segment_turn: {
+        schema_version: "segment_turn_v2",
+        segments: [
+          {
+            text: "Low",
+            source_ids: [],
+            reply_to: null,
+            support_mode: "no_match",
+          },
+        ],
+      },
+    },
+    {
+      ...detail.public_turns[1],
+      id: "high",
+      participant_id: high.id,
+      segment_turn: {
+        schema_version: "segment_turn_v2",
+        segments: [
+          {
+            text: "High",
+            source_ids: ["S1"],
+            reply_to: null,
+            support_mode: "direct",
+          },
+        ],
+      },
+    },
+  ] as DebateDetail["public_turns"];
+  const data = agentScores(detail.participants, turns);
+  expect(data.map((row) => [row.label, row.value])).toEqual([
+    [high.agent_name, 5],
+    [low.agent_name, 0],
+  ]);
 });

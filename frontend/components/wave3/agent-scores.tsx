@@ -10,6 +10,7 @@ import {
 } from "../../lib/evidence-grading";
 import type { DebateParticipant, DebateTurn } from "../../lib/api";
 import styles from "./agent-scores.module.css";
+import panelStyles from "../report/report.module.css";
 
 function claimsOf(turn: DebateTurn): { support_mode: string }[] {
   // The chain is typed on the wire, but a turn from an older run may carry
@@ -45,11 +46,13 @@ export function agentScores(
       (byParticipant.get(turn.participant_id) ?? 0) + points,
     );
   }
-  return participants.map((participant, index) => ({
-    id: participant.id,
-    label: `${index + 1}. ${participant.agent_name}`,
-    value: byParticipant.get(participant.id) ?? 0,
-  }));
+  return participants
+    .map((participant) => ({
+      id: participant.id,
+      label: participant.agent_name,
+      value: byParticipant.get(participant.id) ?? 0,
+    }))
+    .sort((a, b) => b.value - a.value);
 }
 
 export function AgentScores({
@@ -66,24 +69,28 @@ export function AgentScores({
     .flatMap((turn) => turn.segment_turn?.segments ?? [])
     .filter((segment) => segmentEvidenceGrade(segment) === null).length;
   return (
-    <section aria-labelledby="agent-scores-title" className="section-card">
-      <div className="section-card-header">
+    <section aria-labelledby="agent-scores-title" className={panelStyles.panel}>
+      <div className={panelStyles.header}>
         <div>
-          <h2 id="agent-scores-title">{zh ? "评分" : "Scores"}</h2>
+          <h2 id="agent-scores-title">{zh ? "评价" : "Evaluation"}</h2>
         </div>
       </div>
-      <div aria-label="Evidence grading" className={styles.legend}>
-        {Object.entries(EVIDENCE_GRADE_LABELS).map(([grade, label]) => (
-          <span key={grade} data-grade={grade}>
-            {label}
-          </span>
-        ))}
-        {unscored > 0 ? <span>{unscored} unscored</span> : null}
+      <div className={panelStyles.content}>
+        <div className={panelStyles.reportCard}>
+          <div aria-label="Evidence grading" className={styles.legend}>
+            {Object.entries(EVIDENCE_GRADE_LABELS).map(([grade, label]) => (
+              <span key={grade} data-grade={grade}>
+                {label}
+              </span>
+            ))}
+            {unscored > 0 ? <span>{unscored} unscored</span> : null}
+          </div>
+          <BarChart
+            data={data}
+            emptyLabel={zh ? "还没有公开发言。" : "No public speeches yet."}
+          />
+        </div>
       </div>
-      <BarChart
-        data={data}
-        emptyLabel={zh ? "还没有公开发言。" : "No public speeches yet."}
-      />
     </section>
   );
 }

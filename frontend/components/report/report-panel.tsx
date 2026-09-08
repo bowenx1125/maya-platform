@@ -104,9 +104,7 @@ export function ReportPanel({
             report: "当前报告",
             history: "历史",
             regenerate: "重新生成",
-            download: "下载 Markdown",
-            loading: "正在读取报告状态…",
-            noReport: "还没有报告。",
+            download: "下载",
             noHistory: "还没有报告版本。",
             view: "查看",
             selected: "当前查看",
@@ -122,13 +120,11 @@ export function ReportPanel({
             report: "Current report",
             history: "History",
             regenerate: "Regenerate",
-            download: "Download Markdown",
-            loading: "Reading report status…",
-            noReport: "No report yet.",
+            download: "Download",
             noHistory: "No report versions yet.",
             view: "Review",
             selected: "Viewing",
-            generating: "Generating report…",
+            generating: "Generating report...",
             failed: "Report generation failed; earlier revisions remain.",
             included: "included",
             filtered: "filtered",
@@ -260,14 +256,6 @@ export function ReportPanel({
     }
   }
 
-  if (loading) {
-    return (
-      <section className={styles.panel} aria-busy="true">
-        <p className={styles.loading}>{copy.loading}</p>
-      </section>
-    );
-  }
-
   const insight = report?.insight;
   const current = report?.current_success_revision ?? null;
   const displayed = selectedRevision ?? current;
@@ -278,6 +266,7 @@ export function ReportPanel({
   return (
     <section
       className={styles.panel}
+      aria-busy={loading || polling}
       data-report-status={report?.generation_status ?? "not_started"}
       data-insight-status={insight?.status ?? "not_started"}
     >
@@ -285,117 +274,117 @@ export function ReportPanel({
         <div>
           <h2>{copy.title}</h2>
         </div>
-        <div className={styles.actions}>
-          <button
-            type="button"
-            onClick={() => void regenerate()}
-            disabled={busy || !canRegenerate || reportGenerating}
-          >
-            {copy.regenerate}
-          </button>
-        </div>
       </header>
 
-      {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {reportGenerating ? (
-        <p className={styles.notice} role="status">
-          {copy.generating}
-        </p>
-      ) : null}
-      {pollTimedOut && polling ? (
-        <p className={styles.notice} role="status">
-          {locale === "zh"
-            ? "报告仍在生成，请稍后重新打开。"
-            : "The report is still generating. Reopen this page later."}
-        </p>
-      ) : null}
-      {report?.generation_status === "failed" ||
-      insight?.status === "failed" ? (
-        <p className={styles.notice} role="status">
-          {copy.failed}
-        </p>
-      ) : null}
-
-      {insight?.items.length ? (
-        <ul className={styles.insightList} aria-label={copy.insight}>
-          {insight.items.map((item, index) => (
-            <li key={`${item.category}-${item.summary}-${index}`}>
-              <span>{item.category}</span>
-              <p>{item.summary}</p>
-              <strong>{item.count}</strong>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <div className={styles.reportCard}>
-        <div className={styles.cardHeading}>
-          {displayed ? (
-            <h3>{revisionTitle(locale, displayed.revision_no)}</h3>
-          ) : null}
-          {displayed?.status === "ready" && selectedRevision === null ? (
-            <button
-              type="button"
-              onClick={() => void download()}
-              disabled={busy}
-            >
-              {copy.download}
-            </button>
-          ) : null}
-        </div>
-        {displayed?.status === "ready" ? (
-          <ReportMarkdown className={styles.markdown} label={copy.report}>
-            {displayed.english_markdown}
-          </ReportMarkdown>
-        ) : displayed?.status === "failed" ? (
-          <p className={styles.notice} role="status">
-            {displayed.safe_error_code}
+      <div className={styles.content}>
+        {error ? (
+          <p className={styles.error} role="alert">
+            {error}
           </p>
-        ) : (
-          <p className={styles.empty}>{copy.noReport}</p>
-        )}
-      </div>
+        ) : null}
 
-      <div className={styles.history}>
-        <div className={styles.cardHeading}>
-          <h3>{copy.history}</h3>
-        </div>
-        {revisions.length === 0 ? (
-          <p className={styles.empty}>{copy.noHistory}</p>
-        ) : (
-          <ul>
-            {revisions.map((revision) => (
-              <li key={revision.id}>
-                <span>{revisionTitle(locale, revision.revision_no)}</span>
-                <span className={styles.revisionStatus}>
-                  {revision.status !== "ready"
-                    ? reportStatusLabel(locale, revision.status)
-                    : ""}
-                  {revision.word_count
-                    ? `${revision.status === "ready" ? "" : " · "}${revision.word_count} ${copy.words}`
-                    : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void selectRevision(revision.id)}
-                  disabled={busy}
-                  aria-current={
-                    selectedRevision?.id === revision.id ? "page" : undefined
-                  }
-                >
-                  {selectedRevision?.id === revision.id
-                    ? copy.selected
-                    : copy.view}
-                </button>
+        {pollTimedOut && polling ? (
+          <p className={styles.notice} role="status">
+            {locale === "zh"
+              ? "报告仍在生成，请稍后重新打开。"
+              : "The report is still generating. Reopen this page later."}
+          </p>
+        ) : null}
+        {report?.generation_status === "failed" ||
+        insight?.status === "failed" ? (
+          <p className={styles.notice} role="status">
+            {copy.failed}
+          </p>
+        ) : null}
+
+        {insight?.items.length ? (
+          <ul className={styles.insightList} aria-label={copy.insight}>
+            {insight.items.map((item, index) => (
+              <li key={`${item.category}-${item.summary}-${index}`}>
+                <span>{item.category}</span>
+                <p>{item.summary}</p>
+                <strong>{item.count}</strong>
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
+
+        <div className={styles.reportCard}>
+          <div className={styles.cardHeading}>
+            {displayed ? (
+              <h3>{revisionTitle(locale, displayed.revision_no)}</h3>
+            ) : null}
+            <div className={styles.actions}>
+              <button
+                type="button"
+                onClick={() => void regenerate()}
+                disabled={loading || busy || !canRegenerate || reportGenerating}
+              >
+                {copy.regenerate}
+              </button>
+
+              {displayed?.status === "ready" && selectedRevision === null ? (
+                <button
+                  type="button"
+                  onClick={() => void download()}
+                  disabled={busy}
+                >
+                  {copy.download}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {displayed?.status === "ready" ? (
+            <ReportMarkdown className={styles.markdown} label={copy.report}>
+              {displayed.english_markdown}
+            </ReportMarkdown>
+          ) : displayed?.status === "failed" ? (
+            <p className={styles.notice} role="status">
+              {displayed.safe_error_code}
+            </p>
+          ) : report?.generation_status === "failed" ? null : (
+            <p className={styles.empty} role="status">
+              {copy.generating}
+            </p>
+          )}
+        </div>
+
+        <div className={styles.history}>
+          <div className={styles.cardHeading}>
+            <h3>{copy.history}</h3>
+          </div>
+          {revisions.length === 0 ? (
+            <p className={styles.empty}>{copy.noHistory}</p>
+          ) : (
+            <ul>
+              {revisions.map((revision) => (
+                <li key={revision.id}>
+                  <span>{revisionTitle(locale, revision.revision_no)}</span>
+                  <span className={styles.revisionStatus}>
+                    {revision.status !== "ready"
+                      ? reportStatusLabel(locale, revision.status)
+                      : ""}
+                    {revision.word_count
+                      ? `${revision.status === "ready" ? "" : " · "}${revision.word_count} ${copy.words}`
+                      : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void selectRevision(revision.id)}
+                    disabled={busy}
+                    aria-current={
+                      selectedRevision?.id === revision.id ? "page" : undefined
+                    }
+                  >
+                    {selectedRevision?.id === revision.id
+                      ? copy.selected
+                      : copy.view}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </section>
   );

@@ -1190,38 +1190,45 @@ export function BetaDebateStage({
   const playbackRefreshInFlight = useRef(false);
   const automaticMediaRetry = useRef<string | null>(null);
 
-  const recoverPlayback = useCallback(async () => {
-    if (!refreshSnapshot || playbackRefreshInFlight.current) return;
-    playbackRefreshInFlight.current = true;
-    const epoch = controllerEpochRef.current;
-    try {
-      const next = await refreshSnapshot();
-      if (
-        !mountedRef.current ||
-        closingRef.current ||
-        epoch !== controllerEpochRef.current ||
-        next.playback.control_version < controlVersionRef.current ||
-        !syncRefreshedSnapshot(next, sequenceRef.current)
-      )
-        return;
-      setControlError(null);
-      setMediaRetryNeeded(["ready", "paused"].includes(next.playback.status));
-      // Retry only the saved media handshake, once per turn. Never regenerate
-      // speech or repeat a possibly successful Next mutation automatically.
-      const key = `${next.playback.mode}:${next.playback.current_turn_id}`;
-      if (
-        next.playback.status === "ready" &&
-        automaticMediaRetry.current !== key
-      ) {
-        automaticMediaRetry.current = key;
-        scheduleMediaPrepare();
+  const recoverPlayback = useCallback(
+    async (retryMedia = false) => {
+      if (!refreshSnapshot || playbackRefreshInFlight.current) return;
+      playbackRefreshInFlight.current = true;
+      const epoch = controllerEpochRef.current;
+      try {
+        const next = await refreshSnapshot();
+        if (
+          !mountedRef.current ||
+          closingRef.current ||
+          epoch !== controllerEpochRef.current ||
+          next.playback.control_version < controlVersionRef.current ||
+          !syncRefreshedSnapshot(next, sequenceRef.current)
+        )
+          return;
+        setControlError(null);
+        if (retryMedia) {
+          setMediaRetryNeeded(
+            ["ready", "paused"].includes(next.playback.status),
+          );
+        }
+        // Retry only the saved media handshake, once per turn. Never regenerate
+        // speech or repeat a possibly successful Next mutation automatically.
+        const key = `${next.playback.mode}:${next.playback.current_turn_id}`;
+        if (
+          next.playback.status === "ready" &&
+          automaticMediaRetry.current !== key
+        ) {
+          automaticMediaRetry.current = key;
+          scheduleMediaPrepare();
+        }
+      } catch {
+        if (retryMedia) setMediaRetryNeeded(true);
+      } finally {
+        playbackRefreshInFlight.current = false;
       }
-    } catch {
-      setMediaRetryNeeded(true);
-    } finally {
-      playbackRefreshInFlight.current = false;
-    }
-  }, [refreshSnapshot, scheduleMediaPrepare, syncRefreshedSnapshot]);
+    },
+    [refreshSnapshot, scheduleMediaPrepare, syncRefreshedSnapshot],
+  );
 
   useEffect(() => {
     if (
@@ -1498,7 +1505,7 @@ export function BetaDebateStage({
             setFailure(null);
             setControlError(null);
             setMediaRetryNeeded(true);
-            void recoverPlayback();
+            void recoverPlayback(true);
           }
           if (
             message.message_type === "command.rejected" &&
@@ -2015,7 +2022,7 @@ export function BetaDebateStage({
           break;
         case "turn.ready":
           if (playbackRef.current.status === "waiting_next") {
-            void recoverPlayback();
+            if (!playbackRef.current.next_turn_ready) void recoverPlayback();
             break;
           }
           if (
@@ -2424,7 +2431,7 @@ export function BetaDebateStage({
             setProviderGate(null);
             setFailure(null);
             setMediaRetryNeeded(true);
-            void recoverPlayback();
+            void recoverPlayback(true);
           } else {
             setProviderGate(null);
           }
@@ -3113,7 +3120,7 @@ export function BetaDebateStage({
             }
             setControlError(null);
             setFailure(null);
-            await recoverPlayback();
+            await recoverPlayback(true);
           } else {
             setControlError(
               errorText(cause, labelsRef.current.connectionError),

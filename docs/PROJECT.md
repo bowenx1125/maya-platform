@@ -176,8 +176,7 @@ text-embedding-v4, 1024 dimensions.
 Teacher lists/creation use yellow rows on white paper. Devocalize/Destroy sit beside
 Rebirth; global Refresh sits beside New; Immerse uses their action styling. Failed actions preserve the row.
 Stage titles are removed; speech scrolls above compact gold controls and bubbles
-persist until Next. Interact/Hide preserves its QR session. Conclude shows Scores
-with numbered Agents and Report Version/History. Audio Ready indicates retained audio.
+persist until Next. Interact/Hide preserves its QR session. Conclude shows Evaluation sorted by score without name prefixes, and Report Version/History. Audio Ready indicates retained audio.
 
 ## Remaining scope
 
@@ -275,12 +274,8 @@ Immerse opens the same control route from ready Preview or each eligible list ro
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
 
-Home uses Mayaform for the default course heading and shared login/navigation brand.
-Providers Composition shares the Published heading size and gold divider. Its
-off-white panel contains title, service grid,
-then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
-Published/count/Agents is one heading
-above the Agent tiles, separated by a gold rule; no separate header badge remains.
+Mayaform brands Home/login/navigation. Providers and Published share title size,
+gold dividers and 24/18px panel insets. Baseline status is below the service grid.
 Navigation uses 9px corners, 6px gaps, 1px hover lift and darker gold; language/Edit lift.
 Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
@@ -303,15 +298,19 @@ voice is green. Each RAG row has Check/Download with symmetric action padding;
 Check loads one immutable document into Markdown inside that same yellow row,
 without downloading a file. Selection/cache reset on version change. No file-count
 or Download RAG header remains. No source text is edited or republished.
-17 detail/file/avatar checks passed; live UI confirmed equal full-body panels,
-one-file Check expansion and no horizontal overflow at 390px.
 Stage label follows the Next gate: Waiting when enabled, otherwise Generating.
-36 UI checks cover Next/recovery/replay. Removed the transient playback busy notice.
+Evaluation/Report share white-yellow-white panels, 1.24rem titles, 24/18px insets
+and 16px dividers. Version actions sit top-right with compact hover/press feedback.
+Report generation has one inline placeholder, no duplicate banner.
 Topic/Background heights link; Beta Reconnect is removed.
 Report failure reproduced from a retained revision: RAG bibliographic numbers
 triggered report_input_private before any provider call. Removed Report prose
 scanners and keyword substitution; relationship/schema checks remain. Waiting
-Stage now reads snapshots every 1.5s and on turn.ready, never advancing/generating.
+Stage reads while waiting for readiness; ordinary reads do not enable media retry.
+Already-ready notifications skip refresh. Neither path generates or auto-advances.
 Live starts store no replay cursor; controller handoff clears legacy live cursors.
 59 backend and 17 Stage checks passed; types passed. Retained report input now validates. Full backend suite
 is blocked at collection by obsolete BODY_LIMITS import; not full acceptance.
+
+36 targeted Evaluation/Report/Stage checks passed, including no early media-retry
+enablement during ordinary polling. Types passed; real browser acceptance remains manual.
