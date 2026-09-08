@@ -607,6 +607,22 @@ details > summary {
   color: var(--indigo);
 }
 
+.nav-link,
+.nav-logout {
+  border: 0;
+  box-shadow: none;
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
+}
+.nav-link:hover,
+.nav-logout:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
 .account-name {
   color: var(--ink);
   font-size: 0.8rem;
@@ -1107,6 +1123,14 @@ details > summary {
   min-height: auto;
   cursor: pointer;
   opacity: 0;
+}
+
+.published-section > .section-card-header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4d5b7;
+}
+.published-section > .section-card-header h2 {
+  margin: 0;
 }
 
 .published-grid {

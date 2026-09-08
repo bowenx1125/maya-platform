@@ -288,8 +288,8 @@ whenever Edit is inactive; CN/EN text remains independently saved in the form,
 with no extra Prompt CN/EN headings. Editing Chinese then selecting English uses
 the untouched English prompt. Existing draft language is preserved on updates
 that omit output_language. Topic, Background, Agents Order and Ruleset share one title-divider style and alignment. The duplicate Open explanation
-caption is removed; its button remains. 43 frontend and 25 backend targeted checks
-passed, including language switching and frozen-language selection; no paid retest.
+caption is removed; its button remains. Language switching and frozen selection
+have targeted offline coverage.
 
 Creation has a combined two-column Topic/Background card: white ground, pale-yellow
 textareas, Background optional status only in its placeholder. Published Agents
@@ -307,11 +307,12 @@ The separate Beta list is removed (old URL redirects); nested 3D controls remain
 Immerse opens the same control route from ready Preview or each eligible list row.
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
-84 focused frontend checks and TypeScript pass; lint has no errors and four existing
-Stage warnings. No paid calls or full browser classroom acceptance in this UI batch.
+84 focused frontend checks and types passed; four existing Stage lint warnings.
 
-Home uses Course, Composition, Providers and a centered Published/count/Agents badge.
+Home uses Course, Composition and Providers. Published/count/Agents is one heading
+above the Agent tiles, separated by a gold rule; no separate header badge remains.
+Navigation has a 1px hover lift without border/shadow. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
 New uses Agent-row pale yellow (#fbf4e5) inside white cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
-55 focused frontend checks and types passed for this refinement; no paid calls.
+55 focused frontend checks and types passed for the palette refinement; no paid calls.

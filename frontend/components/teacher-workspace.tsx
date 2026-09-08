@@ -76,13 +76,6 @@ export function TeacherDashboard() {
       <PageIntro
         eyebrow={t("teacherCourse")}
         title={course?.name ?? t("publishedAgents")}
-        action={
-          <div className="course-context">
-            <span className="section-label">{t("publishedWork")}</span>
-            <strong>{published.length}</strong>
-            <span>{t("currentAgents")}</span>
-          </div>
-        }
       />
       {/* What is real and what is Mock, under the course it describes rather
           than above the title, so the page opens on its own heading. */}
@@ -90,7 +83,10 @@ export function TeacherDashboard() {
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
-        <SectionCard>
+        <SectionCard
+          title={`${t("publishedWork")} ${published.length} ${t("currentAgents")}`}
+          className="published-section"
+        >
           <div className="published-grid">
             {published.map((item) => (
               <PublishedAgentCard

@@ -77,7 +77,7 @@ const enMessages = {
   debates: "Classroom",
   debateList: "Debates",
   newDebate: "New",
-  newDebateTitle: "Set the question, then choose the speaking order.",
+  newDebateTitle: "Debates",
   debateTopic: "Topic",
   debateTopicPlaceholder:
     "e.g. Should the United States ban TikTok's recommendation algorithm?",
@@ -765,7 +765,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debates: "课堂",
   debateList: "辩论",
   newDebate: "新建",
-  newDebateTitle: "先设置议题，再按点击顺序选择发言者。",
+  newDebateTitle: "辩论",
   debateTopic: "议题",
   debateTopicPlaceholder:
     "例如：Should the United States ban TikTok's recommendation algorithm?",
