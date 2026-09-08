@@ -1232,6 +1232,30 @@ export function BetaDebateStage({
     }
   }, [refreshSnapshot, scheduleMediaPrepare, syncRefreshedSnapshot]);
 
+  useEffect(() => {
+    if (
+      !controllerReady ||
+      busyAction !== null ||
+      !refreshSnapshot ||
+      !(
+        playback.status === "preparing" ||
+        (playback.status === "waiting_next" && !playback.next_turn_ready)
+      )
+    )
+      return;
+    // A ready notification can be missed while generation commits. Read the
+    // authoritative snapshot without advancing or regenerating the lesson.
+    const timer = window.setInterval(() => void recoverPlayback(), 1500);
+    return () => window.clearInterval(timer);
+  }, [
+    controllerReady,
+    busyAction,
+    refreshSnapshot,
+    playback.status,
+    playback.next_turn_ready,
+    recoverPlayback,
+  ]);
+
   const sendPlayFailure = useCallback(
     (
       code:
@@ -1999,13 +2023,13 @@ export function BetaDebateStage({
           }
           break;
         case "turn.ready":
+          if (playbackRef.current.status === "waiting_next") {
+            void recoverPlayback();
+            break;
+          }
           if (
             isNonEmptyString(payload.turn_id) &&
             playbackRef.current.mode === "live" &&
-            !(
-              playbackRef.current.mode === "live" &&
-              playbackRef.current.status === "waiting_next"
-            ) &&
             !(
               playbackRef.current.current_turn_id &&
               playbackRef.current.current_turn_id !== payload.turn_id

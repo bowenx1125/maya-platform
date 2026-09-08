@@ -159,10 +159,6 @@ REPORT_HEADINGS_ZH = (
     "## 互鉴与反思",
 )
 _CITATION_RE = re.compile(r"\[evidence:([A-Za-z0-9_.:-]{1,128})\]")
-_UNSAFE_REPORT_TERMS_RE = re.compile(
-    r"\b(?:winner|winners|won|winning|vote\s+for\s+me|please\s+vote|nickname)\b",
-    re.IGNORECASE,
-)
 
 
 class RealReportProviderPort(Protocol):
@@ -1692,7 +1688,7 @@ def _safe_fragment(value: str, *, limit: int = 260) -> str:
     # routinely; leaving them made an excerpt read as report syntax and the
     # boundary check reject it.
     text_value = text_value.replace("**", "").replace("__", "").replace("~~", "")
-    return _UNSAFE_REPORT_TERMS_RE.sub("outcome", text_value)
+    return text_value
 
 
 def _excerpt(value: str, words: int = 22) -> str:

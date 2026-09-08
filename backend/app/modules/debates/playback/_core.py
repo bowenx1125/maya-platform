@@ -96,7 +96,7 @@ class PlaybackRuntime:
     audio_duration_ms: int = 0
     replay_scope: str | None = None
     replay_turn_ids: list[str] = field(default_factory=list)
-    replay_index: int | None = 0
+    replay_index: int | None = None
 
 
 @dataclass(frozen=True)

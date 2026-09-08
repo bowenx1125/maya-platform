@@ -866,7 +866,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "pending_media_command_id": None,
             "audio_duration_ms": 0,
             "replay_scope": None,
-            "replay_index": 0,
+            "replay_index": None,
             "replay_turn_ids_json": "[]",
             "created_at": _now(),
             "updated_at": _now(),

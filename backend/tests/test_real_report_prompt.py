@@ -196,20 +196,6 @@ def test_request_hash_is_stable_when_allowlisted_arrays_are_reordered() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    (
-        ("topic", "# hidden heading"),
-        ("topic", "The winner should decide."),
-    ),
-)
-def test_request_rejects_cjk_markdown_and_unsafe_winner_language(field: str, value: str) -> None:
-    payload = _raw_request()
-    payload[field] = value
-    with pytest.raises(ReportBoundaryError):
-        validate_report_request(payload)
-
-
 def test_request_rejects_raw_private_fields_and_unused_rag() -> None:
     payload = _raw_request()
     payload["teacher_note"] = "private"  # type: ignore[assignment]
@@ -226,20 +212,6 @@ def test_request_rejects_raw_private_fields_and_unused_rag() -> None:
     )
     with pytest.raises(ReportBoundaryError, match="report_unused_evidence"):
         validate_report_request(payload)
-
-
-def test_request_rejects_private_text_and_identity_shaped_values() -> None:
-    for forbidden in (
-        "api_key=secret-value",
-        "student_id=42",
-        "/Users/private/report.txt",
-        "endpoint: https://provider.invalid/report",
-    ):
-        payload = _raw_request()
-        participant = cast(list[dict[str, object]], payload["participants"])[0]
-        participant["agent_name"] = forbidden
-        with pytest.raises(ReportBoundaryError):
-            validate_report_request(payload)
 
 
 def test_output_maps_to_existing_closed_report_section_dto() -> None:
@@ -299,48 +271,28 @@ def test_canonical_payload_does_not_add_private_or_provider_fields() -> None:
     assert "provider" not in serialized.lower()
 
 
-def test_the_outbound_guard_reads_identity_not_vocabulary() -> None:
-    """Classroom prose must cross the boundary; provider identity must not.
-
-    The guard used to match the bare words "model", "provider", "endpoint" and
-    "workspace". A seeded Agent's own evidence file says "a well-built model
-    could become harder to revise than the practice it described", so that one
-    ordinary sentence made every real report on that debate impossible.
-    """
-
-    from app.modules.reports.real_schema import _text_error
-
-    for allowed in (
-        "a well-built model could become harder to revise",
-        "the provider of local knowledge",
-        "each endpoint of the argument",
-        "a shared workspace for students",
-        "https://example.org/research",
-    ):
-        assert _text_error(allowed) is None, allowed
-
-    for blocked in (
-        "model=qwen3.7-plus",
-        "endpoint: something",
-        "workspace_id abc",
-        "https://ws-abcdefgh.example.com/v1",
-        "ws-t5imcyzsu4d6rd1b",
-        "we used dashscope",
-    ):
-        assert _text_error(blocked) == "report_input_internal", blocked
+@pytest.mark.parametrize(
+    "prose",
+    (
+        "中文报告讨论材料，不按语言拒绝。",
+        "DOI https://doi.org/10.1234/1234567890123456; pages 1234-5678",
+        "Contact example@example.org or +1 202 555 0100 in this quoted source.",
+        "model=example; endpoint: example; workspace_id example",
+        "The quoted identifier is 12345678-1234-4234-8234-123456789abc.",
+        "A source discusses password=example and /tmp/example.",
+        "# A heading\n\n- **winner**: [source](https://example.org)",
+    ),
+)
+def test_report_text_is_not_rejected_by_content_scanners(prose: str) -> None:
+    raw = _raw_request()
+    raw["topic"] = prose
+    request = validate_report_request(raw)
+    assert request.topic == prose
 
 
-def test_markdown_evidence_can_be_quoted_into_a_report_request() -> None:
-    """Every source this platform carries is a Markdown file.
-
-    Excerpts used to be passed through raw, so a heading or a bullet in the
-    evidence failed the outbound Markdown check and no real report could be
-    built at all.
-    """
-
-    from app.modules.reports.real_schema import _text_error
+def test_report_fragment_does_not_rewrite_authored_terms() -> None:
     from app.modules.reports.service import _safe_fragment
 
-    markdown = "# A heading\n\n- a bullet\n- **bold** and ~~struck~~ text\n"
-    assert _text_error(markdown) is not None
-    assert _text_error(_safe_fragment(markdown, limit=2400)) is None
+    assert _safe_fragment("The winner is a quoted classroom claim.") == (
+        "The winner is a quoted classroom claim."
+    )

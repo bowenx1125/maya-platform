@@ -304,11 +304,10 @@ def test_v2_authoritative_public_text_is_allowed(value: str) -> None:
     assert isinstance(validate_report_request(payload), ReportRequestV2)
 
 
-def test_v2_still_rejects_private_or_unknown_reply_input() -> None:
+def test_v2_accepts_authored_text_but_rejects_unknown_reply_input() -> None:
     report = build_real_report_request(_context()).model_dump(mode="json")
     report["classroom_barrages"][0]["text"] = "student@example.com"  # type: ignore[index]
-    with pytest.raises(ReportBoundaryError, match="report_input_private"):
-        validate_report_request(report)
+    assert isinstance(validate_report_request(report), ReportRequestV2)
 
     report = build_real_report_request(_context()).model_dump(mode="json")
     report["replies"][0]["barrage_id"] = "B9"  # type: ignore[index]

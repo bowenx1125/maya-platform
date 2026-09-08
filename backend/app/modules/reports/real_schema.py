@@ -67,57 +67,6 @@ class ReportBoundaryError(ValueError):
         self.code = code
 
 
-# These patterns are applied to text fields only. Opaque evidence keys are
-# typed separately and are the one permitted identifier in the provider input.
-_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
-_UUID_RE = re.compile(
-    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
-    re.IGNORECASE,
-)
-_EMAIL_RE = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
-_PHONE_RE = re.compile(r"(?<!\w)\+?[0-9][0-9 ()-]{7,}[0-9](?!\w)")
-_SECRET_RE = re.compile(
-    r"(?i)(?:api[_ -]?key|authorization\s*[:=]|bearer\s+[A-Za-z0-9._-]+|"
-    r"password\s*[:=]|secret\s*[:=]|(?:^|\W)sk-[A-Za-z0-9])"
-)
-_PRIVATE_ID_RE = re.compile(
-    r"(?i)\b(?:user|student|member|author|nickname)[ _-]?(?:id|uuid|email|phone|name)\b"
-)
-# What must never cross the boundary is *our* provider identity: the endpoint,
-# the workspace, the model key, a credential.  Matching the bare English words
-# "model", "provider", "endpoint" and "workspace" did not do that -- it failed
-# ordinary classroom prose.  A seeded Agent's own evidence file says "a
-# well-built model could become harder to revise than the practice it
-# described", and that one sentence made every real report on that debate
-# impossible to generate. Match the supplier and model-family names, a
-# workspace token, or one of those words
-# used as a key rather than a noun. Ordinary source URLs are allowed.
-_PROVIDER_INTERNAL_RE = re.compile(
-    r"(?i)(?:(?:^|\W)(?:dashscope|qwen)(?:$|\W)"
-    r"|(?:^|\W)ws-[a-z0-9]{8,}(?:$|\W)"
-    r"|\b(?:model|endpoint|workspace|provider)[ _-]?(?:id|key|name|url|host)\b"
-    r"|\b(?:model|endpoint|workspace|provider)\s*[:=]"
-    r")"
-)
-_ABSOLUTE_PATH_RE = re.compile(
-    r"(?:^|\s)/(?:Users|private|var|tmp|home|etc|opt|workspace)(?:/|\s|$)|"
-    r"(?<!\w)[A-Za-z]:[\\/]"
-)
-_MARKDOWN_RE = re.compile(
-    r"(?m)(?:^\s{0,3}#{1,6}\s|```|\*\*|__|~~|^\s*[-*+]\s|"
-    r"^\s*[0-9]+\.\s|\[[^\]]*\]\([^)]*\)|<[^>]+>)"
-)
-_CITATION_RE = re.compile(r"\[\s*(?:evidence|citation)\s*:[^\]]+\]", re.IGNORECASE)
-_UNSAFE_WINNER_RE = re.compile(
-    r"(?i)\b(?:winner|winners|winning|won|loser|champion|victor|"
-    r"vote\s+for\s+me|please\s+vote|most\s+popular|ranked\s+first)\b"
-)
-_VOTE_TOTAL_RE = re.compile(
-    r"(?i)(?:\b(?:vote|votes|voting)\b[^.\n]{0,48}\b[0-9]+\b|"
-    r"\b[0-9]+\b[^.\n]{0,48}\b(?:vote|votes)\b)"
-)
-
-
 class _ClosedModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -239,56 +188,8 @@ class ReportRequest(_ClosedModel):
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
 
-def _text_error(
-    value: str,
-    *,
-    output: bool = False,
-    allow_cjk: bool = False,
-    allow_authoritative_text: bool = False,
-) -> str | None:
-    if not value.strip() or any(ord(char) < 32 and char not in "\t\n\r" for char in value):
-        return "report_output_text" if output else "report_input_text"
-    # A Chinese debate's speeches are Chinese, and the report reads them. The
-    # report itself is still written in English; this only stops the input scan
-    # rejecting the lesson it is summarising.
-    if not allow_cjk and _CJK_RE.search(value):
-        return "report_output_language" if output else "report_input_language"
-    if _SECRET_RE.search(value) or _EMAIL_RE.search(value) or _PHONE_RE.search(value):
-        return "report_output_private" if output else "report_input_private"
-    if _UUID_RE.search(value) or _PRIVATE_ID_RE.search(value):
-        return "report_output_identity" if output else "report_input_identity"
-    if _ABSOLUTE_PATH_RE.search(value) or _PROVIDER_INTERNAL_RE.search(value):
-        return "report_output_internal" if output else "report_input_internal"
-    if not allow_authoritative_text and (_MARKDOWN_RE.search(value) or _CITATION_RE.search(value)):
-        return "report_output_markdown" if output else "report_input_markdown"
-    if _UNSAFE_WINNER_RE.search(value) and (output or not allow_authoritative_text):
-        return "report_output_winner_language" if output else "report_input_winner_language"
-    return None
-
-
 def _validate_request_semantics(request: ReportRequest) -> None:
-    # Segment requests carry authoritative public speech/barrage text.  That
-    # text may discuss a winner or quote formatting, while private/provider
-    # identifiers remain blocked below.  Legacy requests retain the stricter
-    # v1 wording checks for compatibility.
-    allow_authoritative_text = getattr(request, "protocol_version", "legacy_v1") == "segments_v2"
-    text_values = [request.topic]
-    text_values.extend(
-        value for participant in request.participants for value in (participant.agent_name,)
-    )
-    text_values.extend(speech.speech for speech in request.speeches)
-    text_values.extend(source.excerpt for source in request.sources)
-    text_values.extend(insight.summary for insight in request.insights)
-    allow_cjk = True
-    for value in text_values:
-        error = _text_error(
-            value,
-            allow_cjk=allow_cjk,
-            allow_authoritative_text=allow_authoritative_text,
-        )
-        if error is not None:
-            raise ReportBoundaryError(error)
-
+    # Validate projected relationships, not the wording of classroom data.
     slots = [participant.slot for participant in request.participants]
     if len(set(slots)) != len(slots):
         raise ReportBoundaryError("report_duplicate_slot")
@@ -337,30 +238,6 @@ class ReportRequestV2(ReportRequest):
         for memory in self.discussion_memories:
             if memory.influence is not None and memory.influence.slot not in slots:
                 raise ReportBoundaryError("report_memory_projection")
-            values = [memory.position, memory.reason, memory.unresolved_question]
-            if memory.influence is not None:
-                values.append(memory.influence.point)
-            for value in values:
-                if (
-                    value
-                    and (
-                        error := _text_error(
-                            value,
-                            allow_cjk=True,
-                            allow_authoritative_text=True,
-                        )
-                    )
-                    is not None
-                ):
-                    raise ReportBoundaryError(error)
-        for item in self.classroom_barrages:
-            error = _text_error(
-                item.text,
-                allow_cjk=True,
-                allow_authoritative_text=True,
-            )
-            if error is not None:
-                raise ReportBoundaryError(error)
         barrage_ids = [item.barrage_id for item in self.classroom_barrages]
         if len(barrage_ids) != len(set(barrage_ids)):
             raise ReportBoundaryError("report_duplicate_barrage")

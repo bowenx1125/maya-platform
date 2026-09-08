@@ -296,7 +296,7 @@ class PlaybackControlMixin(PlaybackCore):
             state.cursor_ms = 0
             state.replay_scope = None
             state.replay_turn_ids = []
-            state.replay_index = 0
+            state.replay_index = None
             state.pending_action = None
             state.pending_ticket_hash = None
             state.pending_media_command_id = None

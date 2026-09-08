@@ -3,14 +3,12 @@
 Maya is a local teaching platform: groups publish culture-focused Agents with
 Persona and immutable Markdown knowledge; teachers run multi-Agent lessons,
 collect classroom messages and conclude with an independent Report.
-This file is the progress authority. [AGENTS.md](../AGENTS.md) defines repository
-work; the user's latest explicit instruction overrides older plans.
+Progress authority; [AGENTS.md](../AGENTS.md) defines work. Latest user decisions prevail.
 
 ## Approved four-round teaching flow — September 8, 2026
 
 New debates have exactly four rounds and two to five Agents. The complete round
-selector is removed. New snapshots record `teaching_protocol=four_round_v1`;
-paragraph storage remains `segments_v2`. The owner waived historical playback
+selector is removed. Snapshots use `four_round_v1` and `segments_v2`. The owner waived historical playback
 and recovery compatibility. Existing records are not silently regenerated/deleted.
 
 1. RAG Opening: high-priority own-KB evidence; independent claim and its relevance. Culture is
@@ -284,8 +282,7 @@ off-white panel contains title, service grid,
 then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
 Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
-Top navigation keeps its button size, 9px corners, 6px inter-button gap and 1px
-hover lift with Destroy-style darker gold background, without a shadow; language/Edit also lift.
+Navigation uses 9px corners, 6px gaps, 1px hover lift and darker gold; language/Edit lift.
 Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.
@@ -299,7 +296,6 @@ language switch styles. Preview speech cards are white with symmetric edge spaci
 Conclude waits for playback completion. Check RAG summary has no inherited minimum
 height/padding, and transcript bottom padding no longer adds 26px. Replay recovery
 uses existing controller acquisition and saved media; no generation protocol changed.
-34 targeted Stage/replay checks and types passed; no paid or full classroom test.
 
 Agent details use white cards, pale-yellow Persona/files, shared 24px insets and
 16px title dividers. Agent eyebrow replaces description; Back matches Debates.
@@ -309,10 +305,14 @@ voice is green. Each RAG row has Check/Download with symmetric action padding;
 Check loads one immutable document into Markdown inside that same yellow row,
 without downloading a file. Selection/cache reset on version change. No file-count
 or Download RAG header remains. No source text is edited or republished.
-17 targeted detail/file/avatar checks, types and lint passed. Playback debugging
-was canceled by the owner after Destroy; no pending playback changes were retained.
-Live UI confirmed equal Persona/Profile height, whole-body framing and one-file
-Check expansion inside its row; 390px view has no horizontal overflow.
+17 detail/file/avatar checks passed; live UI confirmed equal full-body panels,
+one-file Check expansion and no horizontal overflow at 390px.
 68 targeted setup/Home/playback checks and types passed; frontend deployed healthy.
-Topic/Background are separate cards with linked heights; Beta Reconnect is removed.
-Report logs show input ValidationError; no retained revisions remain to reproduce it.
+Topic/Background heights link; Beta Reconnect is removed.
+Report failure reproduced from a retained revision: RAG bibliographic numbers
+triggered report_input_private before any provider call. Removed Report prose
+scanners and keyword substitution; relationship/schema checks remain. Waiting
+Stage now reads snapshots every 1.5s and on turn.ready, never advancing/generating.
+Live starts store no replay cursor; controller handoff clears legacy live cursors.
+59 backend and 17 Stage checks passed; types passed. Retained report input now validates. Full backend suite
+is blocked at collection by obsolete BODY_LIMITS import; not full acceptance.

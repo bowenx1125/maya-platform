@@ -66,6 +66,12 @@ class PlaybackSessionMixin(PlaybackCore):
             if state.mode == "replay" and debate_status not in {"debate_finished", "completed"}:
                 raise invalid_state("Replay is available only after the debate finishes.")
             self._check_control(state, expected_control_version)
+            # Older live starts persisted a replay cursor, which makes the SQL
+            # Next claim fail. Repair it within the fenced controller handoff.
+            if state.mode == "live":
+                state.replay_scope = None
+                state.replay_index = None
+                state.replay_turn_ids = []
             previous_epoch = state.controller_epoch
             previous_connection = state.controller_connection_id
             version_advanced = False

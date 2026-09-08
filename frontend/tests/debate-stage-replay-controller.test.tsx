@@ -758,3 +758,52 @@ describe("ready state media handoff", () => {
     },
   );
 });
+
+describe("waiting generation reconciliation", () => {
+  it("enables Next from a committed snapshot when the ready notification was missed", async () => {
+    const initial = detail();
+    initial.status = "running";
+    initial.round_count = 4;
+    initial.playback = {
+      ...initial.playback,
+      status: "waiting_next",
+      mode: "live",
+      current_turn_id: turnId,
+      next_turn_ready: false,
+    };
+    const ready = {
+      ...initial,
+      playback: { ...initial.playback, next_turn_ready: true },
+    };
+    const socket = new ReplaySocket();
+    const api = apiFor(initial);
+    const refreshSnapshot = vi.fn().mockResolvedValue(ready);
+    render(
+      <BetaDebateStage
+        api={api}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+        refreshSnapshot={refreshSnapshot}
+      />,
+    );
+    await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+    act(() => socket.emitOpen());
+    act(() => socket.emitMessage(acquired()));
+    expect(
+      (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    await waitFor(
+      () =>
+        expect(
+          (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      { timeout: 3000 },
+    );
+    expect(refreshSnapshot).toHaveBeenCalledTimes(1);
+    expect(api.advanceDebatePlayback).not.toHaveBeenCalled();
+    expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+  });
+});
