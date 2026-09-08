@@ -213,14 +213,12 @@ native-ended/hidden-index assertions; targeted Beta checks are not a full-suite 
 
 ## Topic and Background
 
-Topics accept arbitrary scripts/symbols but require visible content. Topic and
-optional Background are stored separately (migration0026); display titles use
-only Topic. Before LLM/RAG/Report input, NFC/control cleanup and whitespace
-folding preserve meaningful punctuation and word separators. Background is
-scenario data, not verified evidence or system instructions. The former Report
-1200-character title limit is removed; total Provider budgets remain. Draft edits
-invalidate old Preview plans. Creation uses the combined white card described
-below, with Done beside Back and language selection inside Ruleset.
+Topics accept arbitrary visible scripts/symbols. Topic/optional Background are
+stored separately (migration0026); titles display Topic only. Outbound text uses
+NFC/control cleanup and whitespace folding without removing meaningful punctuation.
+Background is unverified scenario data. Total Provider budgets remain; draft edits
+invalidate old Preview plans. Creation has a combined white card, Done beside Back,
+and language selection in Ruleset.
 
 ## Frozen Markdown Ruleset and current Report repair
 
@@ -315,3 +313,5 @@ stacked heading/card margins removed. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
 New uses white Topic/Background/Ruleset text areas and cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
+
+Live DOM: Home/Create/list insets 25px including border; divider gaps 16px.
