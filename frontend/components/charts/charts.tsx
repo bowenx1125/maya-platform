@@ -18,6 +18,7 @@ export type ChartDatum = {
   id: string;
   label: string;
   value: number;
+  color?: string;
 };
 
 const SERIES = [
@@ -118,9 +119,11 @@ export function PieChart({
 export function BarChart({
   data,
   emptyLabel,
+  valueColor,
 }: {
   data: ChartDatum[];
   emptyLabel: string;
+  valueColor?: string;
 }) {
   if (data.length === 0) {
     return <p className={styles.empty}>{emptyLabel}</p>;
@@ -137,12 +140,14 @@ export function BarChart({
             <span
               className={styles.barFill}
               style={{
-                background: seriesColour(index),
+                background: item.color ?? seriesColour(index),
                 width: `${(item.value / peak) * 100}%`,
               }}
             />
           </span>
-          <span className={styles.barValue}>{item.value}</span>
+          <span className={styles.barValue} style={{ color: valueColor }}>
+            {item.value}
+          </span>
         </li>
       ))}
     </ul>

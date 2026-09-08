@@ -47,9 +47,10 @@ export function agentScores(
     );
   }
   return participants
-    .map((participant) => ({
+    .map((participant, index) => ({
       id: participant.id,
       label: participant.agent_name,
+      color: ["#9685b3", "#c3a366", "#789985", "#a28f7b", "#ac92ac"][index % 5],
       value: byParticipant.get(participant.id) ?? 0,
     }))
     .sort((a, b) => b.value - a.value);
@@ -87,6 +88,7 @@ export function AgentScores({
           </div>
           <BarChart
             data={data}
+            valueColor="var(--indigo-dark)"
             emptyLabel={zh ? "还没有公开发言。" : "No public speeches yet."}
           />
         </div>

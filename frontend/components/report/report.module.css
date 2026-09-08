@@ -3,7 +3,7 @@
   gap: var(--section-content-gap);
   min-width: 0;
   padding: var(--workspace-inset);
-  border: 1px solid var(--line);
+  border: 1px solid #e7ddcd;
   border-radius: 22px;
   background: #fff;
 }
@@ -13,7 +13,7 @@
   gap: var(--section-content-gap);
   min-width: 0;
   padding: 16px;
-  border: 1px solid #e5d8bf;
+  border: 1px solid transparent;
   border-radius: 14px;
   background: #fbf4e5;
 }
@@ -44,7 +44,7 @@
 .header h2,
 .cardHeading h3 {
   margin: 0;
-  color: var(--ink);
+  color: var(--indigo-dark);
 }
 
 .eyebrow {
@@ -84,7 +84,7 @@
   padding: 4px 9px;
   border: 0;
   border-radius: 7px;
-  background: var(--gold-soft);
+  background: transparent;
   color: var(--indigo-dark);
   font: inherit;
   font-size: 0.75rem;
@@ -194,6 +194,12 @@
 .history {
   display: grid;
   gap: 0.8rem;
+  padding-top: 16px;
+  border-top: 1px solid #e4d5b7;
+}
+
+.history h3 {
+  color: #826d49;
 }
 
 .history li {

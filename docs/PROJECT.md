@@ -1,8 +1,7 @@
 # Maya Platform
 
-Maya is a local teaching platform: groups publish culture-focused Agents with
-Persona and immutable Markdown knowledge; teachers run multi-Agent lessons,
-collect classroom messages and conclude with an independent Report.
+Maya teaches through published Agents, Persona/RAG knowledge, classroom debates,
+student messages and independent reports.
 Progress authority; [AGENTS.md](../AGENTS.md) defines work. Latest user decisions prevail.
 
 ## Approved four-round teaching flow — September 8, 2026
@@ -309,8 +308,10 @@ scanners and keyword substitution; relationship/schema checks remain. Waiting
 Stage reads while waiting for readiness; ordinary reads do not enable media retry.
 Already-ready notifications skip refresh. Neither path generates or auto-advances.
 Live starts store no replay cursor; controller handoff clears legacy live cursors.
-59 backend and 17 Stage checks passed; types passed. Retained report input now validates. Full backend suite
-is blocked at collection by obsolete BODY_LIMITS import; not full acceptance.
+Retained report input validates; full backend collection still has an obsolete BODY_LIMITS import.
 
 36 targeted Evaluation/Report/Stage checks passed, including no early media-retry
-enablement during ordinary polling. Types passed; real browser acceptance remains manual.
+enablement during ordinary polling. Types passed; browser acceptance remains manual.
+
+Evaluation uses green/gold/gray-purple grade cues and muted Agent bar colors, with
+purple scores. History uses a gold rule; idle actions are quiet. 16 UI checks passed.
