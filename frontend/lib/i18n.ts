@@ -132,8 +132,8 @@ const enMessages = {
   debateWarmResume: "Resume",
   debateWarmResuming: "Resuming…",
   debateStalledReason: "Warming stopped at round {round}: {code}",
-  debateRelease: "Remake",
-  debateReleaseConfirm: "Remake?",
+  debateRelease: "Refresh",
+  debateReleaseConfirm: "Refresh?",
   debatePause: "Pause",
   debateResume: "Continue",
   debateSkip: "Skip current turn",
@@ -819,7 +819,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateWarmResume: "继续生成",
   debateWarmResuming: "正在继续…",
   debateStalledReason: "预热停在第 {round} 轮：{code}",
-  debateRelease: "Remake",
+  debateRelease: "Refresh",
   debateReleaseConfirm: "确认恢复？",
   debatePause: "暂停",
   debateResume: "继续",
@@ -1341,7 +1341,7 @@ export const messages = {
 /** Terms intentionally shared by both locales because they are product or
  * technical names rather than translatable prose. */
 export const ALLOWED_IDENTICAL_TERMS = [
-  "Remake",
+  "Refresh",
   "Maya",
   "AGENT.md",
   "evidence.md",
