@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebateStage } from "../../../../../components/debate/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
 import { DebatePreview } from "../../../../../components/debate/preview";
-import { DebateCleanupControls } from "../../../../../components/debate/debate-cleanup-controls";
 import { AppShell } from "../../../../../components/app-shell";
 import {
   RouteGuard,
@@ -408,16 +407,6 @@ export default function TeacherDebateControlPage() {
         {detail && debateId ? (
           detail.turn_protocol === "segments_v2" ? (
             <DebatePreview
-              actions={
-                <DebateCleanupControls
-                  showDeleteControls={false}
-                  detail={detail}
-                  api={api}
-                  onVoiceDeleted={async () => {
-                    await refreshSnapshot();
-                  }}
-                />
-              }
               backHref="/teacher/debates"
               backLabel={t("debateBack")}
               detail={detail}

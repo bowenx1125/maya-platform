@@ -350,18 +350,18 @@ class ReportInputManifestV1(_ReportInputManifestBase):
 
 class ReportDiscussionInfluence(ClosedModel):
     slot: Literal["A", "B", "C", "D", "E"]
-    point: str = Field(min_length=1, max_length=400)
+    point: str = Field(min_length=1)
 
 
 class ReportDiscussionMemory(ClosedModel):
     """Session-only reflection; never a Persona update or classroom speech."""
 
     slot: Literal["A", "B", "C", "D", "E"]
-    position: str = Field(min_length=1, max_length=400)
+    position: str = Field(min_length=1)
     change: Literal["retained", "qualified", "revised"]
-    reason: str = Field(min_length=1, max_length=400)
+    reason: str = Field(min_length=1)
     influence: ReportDiscussionInfluence | None = None
-    unresolved_question: str = Field(max_length=400)
+    unresolved_question: str
 
 
 class ReportInputManifestV2(_ReportInputManifestBase):

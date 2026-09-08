@@ -9,7 +9,6 @@ import {
   resolveBetaStageLabels,
 } from "../../../../../components/debate-beta/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
-import { DebateCleanupControls } from "../../../../../components/debate/debate-cleanup-controls";
 import {
   RouteGuard,
   useSession,
@@ -520,17 +519,6 @@ export default function TeacherDebateControlPage() {
           <BetaDebateStage
             headerActions={
               <>
-                {detail.turn_protocol === "segments_v2" ? (
-                  <DebateCleanupControls
-                    showDeleteControls={false}
-                    detail={detail}
-                    api={api}
-                    backHref="/teacher/debates-beta"
-                    onVoiceDeleted={async () => {
-                      await refreshSnapshot();
-                    }}
-                  />
-                ) : null}
                 <Link className="secondary-action" href="/teacher/debates-beta">
                   {t("debateBack")}
                 </Link>

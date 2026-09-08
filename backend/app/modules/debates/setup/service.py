@@ -1009,6 +1009,17 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             # language it was generated in came back as null.
             "prepared_turns": prepared_turns,
             "expected_turns": expected_turn_count(debate, len(participant_dtos)),
+            "audio_restore_needed": db.scalar(
+                select(DebateTurn.id)
+                .where(
+                    DebateTurn.debate_id == debate.id,
+                    DebateTurn.generation_status == "final_ready",
+                    DebateTurn.speech.is_not(None),
+                    DebateTurn.audio_file_id.is_(None),
+                )
+                .limit(1)
+            )
+            is not None,
             "preview": preview,
             "preview_turns": [
                 preview_turn_projection(db, turn, participant_by_id[turn.participant_id])
@@ -1041,6 +1052,7 @@ def debate_summary(
     expected_turns: int = 0,
     stall: DebateStall | None = None,
     preview_prepared: int = 0,
+    audio_restore_needed: bool = False,
     participant_count: int = 0,
 ) -> DebateSummary:
     return DebateSummary.model_validate(
@@ -1051,6 +1063,7 @@ def debate_summary(
             "status": debate.status,
             "created_at": debate.created_at,
             "prepared_turns": prepared_turns,
+            "audio_restore_needed": audio_restore_needed,
             "expected_turns": expected_turns,
             "stall": stall,
             "preview": {
@@ -1194,6 +1207,7 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     # One query for every Debate's turns rather than one per row: the list is
     # the screen a teacher watches while a draft warms, and it is polled.
     summaries: list[DebateSummary] = []
+    audio_missing: set[str] = set()
     ready_by_debate: dict[str, int] = {}
     preview_by_debate: dict[str, int] = {}
     rounds_by_debate = {row.id: _round_count_from_snapshot(row) for row in rows}
@@ -1217,6 +1231,8 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
             )
         ):
             key = str(debate_id)
+            if not audio_ready:
+                audio_missing.add(key)
             ready_by_debate[key] = ready_by_debate.get(key, 0) + int(ready)
             if int(round_no) < rounds_by_debate[key] and audio_ready:
                 preview_by_debate[key] = preview_by_debate.get(key, 0) + int(ready)
@@ -1293,6 +1309,7 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                 expected_turns=expected_turn_count(row, participants_by_debate.get(str(row.id), 0)),
                 stall=stall_by_debate.get(str(row.id)),
                 preview_prepared=preview_by_debate.get(str(row.id), 0),
+                audio_restore_needed=str(row.id) in audio_missing,
                 participant_count=participants_by_debate.get(str(row.id), 0),
             )
         )

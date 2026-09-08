@@ -105,14 +105,12 @@ export function ReportPanel({
             insight: "匿名课堂洞察",
             report: "当前报告",
             history: "报告修订历史",
-            refresh: "刷新",
-            generate: "生成报告",
             regenerate: "重新生成",
             download: "下载 Markdown",
             loading: "正在读取报告状态…",
             noReport: "还没有报告。",
             noHistory: "还没有报告修订。",
-            view: "查看修订",
+            view: "查看",
             selected: "当前查看",
             generating: "报告生成中…",
             failed: "报告生成失败；既有成功修订仍会保留。",
@@ -125,14 +123,12 @@ export function ReportPanel({
             insight: "Anonymous classroom insight",
             report: "Current report",
             history: "Report revision history",
-            refresh: "Refresh",
-            generate: "Generate Report",
             regenerate: "Regenerate",
             download: "Download Markdown",
             loading: "Reading report status…",
             noReport: "No report yet.",
             noHistory: "No report revisions yet.",
-            view: "View revision",
+            view: "Review",
             selected: "Viewing",
             generating: "Generating report…",
             failed: "Report generation failed; earlier revisions remain.",
@@ -280,10 +276,6 @@ export function ReportPanel({
   const insightGenerating = insight?.status === "generating";
   const reportGenerating = report?.generation_status === "generating";
   const polling = insightGenerating || reportGenerating;
-  const actionLabel =
-    report?.generation_status === "not_started" || report === null
-      ? copy.generate
-      : copy.regenerate;
 
   return (
     <section
@@ -296,15 +288,12 @@ export function ReportPanel({
           <h2>{copy.title}</h2>
         </div>
         <div className={styles.actions}>
-          <button type="button" onClick={() => void load()} disabled={busy}>
-            {copy.refresh}
-          </button>
           <button
             type="button"
             onClick={() => void regenerate()}
             disabled={busy || !canRegenerate || reportGenerating}
           >
-            {actionLabel}
+            {copy.regenerate}
           </button>
         </div>
       </header>
@@ -323,8 +312,8 @@ export function ReportPanel({
       {pollTimedOut && polling ? (
         <p className={styles.notice} role="status">
           {locale === "zh"
-            ? "报告仍在生成，请刷新查看最新状态。"
-            : "The report is still generating. Refresh to check again."}
+            ? "报告仍在生成，请稍后重新打开。"
+            : "The report is still generating. Reopen this page later."}
         </p>
       ) : null}
       {report?.generation_status === "failed" ||

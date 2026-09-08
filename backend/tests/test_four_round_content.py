@@ -8,7 +8,6 @@ from app.modules.debates.generation.four_round import BODY_LIMITS, body_count, v
 from app.modules.debates.generation.mutual_learning_prompts import compute_mutual_transcript_hash
 from app.modules.debates.generation.retrieval import build_turn_subqueries
 from app.modules.debates.generation.segments import (
-    SegmentProtocolError,
     StoredSegment,
     StoredSegmentTurnResult,
     build_segment_input,
@@ -150,8 +149,11 @@ def test_context_is_independent_then_sequential_with_linked_sources():
     assert snapshot.history[0].source_ids == ("S1",)
     assert snapshot.history[1].source_ids == ("S2",)
     assert snapshot.receipts == (own, other)
-    assert build_turn_subqueries(discussion) == ()
-    assert build_turn_subqueries(context(4)) == ()
+    queries = build_turn_subqueries(discussion)
+    assert len(queries) == 1
+    assert "First opening" in queries[0].text
+    assert "Second opening" in queries[0].text
+    assert len(build_turn_subqueries(context(4))) == 2
 
 
 def test_response_query_contains_actual_question_and_memory_changes_hash():
@@ -196,11 +198,40 @@ def test_response_query_contains_actual_question_and_memory_changes_hash():
     assert "A changed rationale" not in result.speech
 
 
-def test_question_routing_cannot_use_a_barrage_id():
+@pytest.mark.parametrize(
+    "question",
+    [
+        None,
+        "B1",
+        {},
+        {"target_agent_id": "B1", "text": "Question?"},
+        {"target_agent_id": [], "text": "Question?"},
+    ],
+)
+def test_unusable_question_metadata_preserves_speech(question):
     ctx = context(2)
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
     value = output(snapshot, 60)
-    value["question"]["target_agent_id"] = "B1"
-    with pytest.raises(SegmentProtocolError) as error:
-        validate_segment_output(value, snapshot)
-    assert error.value.code == "question_route_invalid"
+    value["question"] = question
+    result = validate_segment_output(value, snapshot)
+    assert result.speech == value["segments"][0]["text"]
+    assert result.question is None
+    assert (
+        load_segment_turn_result(result.to_stored_result().as_payload(), snapshot).speech
+        == result.speech
+    )
+
+
+@pytest.mark.parametrize("memory", [None, "remember this", {}, {"change": []}])
+def test_unusable_memory_does_not_block_response_or_next_context(memory):
+    ctx = context(3)
+    snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
+    value = output(snapshot, 70)
+    value["discussion_memory"] = memory
+    result = validate_segment_output(value, snapshot)
+    assert result.speech == value["segments"][0]["text"]
+    assert result.discussion_memory is None
+    assert (
+        load_segment_turn_result(result.to_stored_result().as_payload(), snapshot).speech
+        == result.speech
+    )

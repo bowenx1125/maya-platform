@@ -43,7 +43,9 @@ AUDIO_FILE_OPERATION = "debate_turn_tts"
 AUDIO_REGENERATION_STALE_CODE = "audio_regeneration_stale"
 AUDIO_REGENERATION_INTERRUPTED_CODE = "audio_regeneration_interrupted"
 _REVISION_MARKER_PREFIX = "audio_regeneration_revision:"
-_REGENERABLE_DEBATE_STATES = frozenset({"draft", "running", "debate_finished", "completed"})
+_REGENERABLE_DEBATE_STATES = frozenset(
+    {"draft", "running", "debate_finished", "completed", "stopped", "failed"}
+)
 _REGENERABLE_TURN_STATES = frozenset(
     {"pending", "running", "final_ready", "ready", "completed", "failed", "turn_generation_failed"}
 )
@@ -720,7 +722,8 @@ class SqlAudioRegenerationRepository:
                     "AND audio_file_id IS NULL AND speech=:speech AND structured_json=:structured "
                     "AND EXISTS (SELECT 1 FROM debates WHERE id=:debate_id "
                     "AND revision=:revision AND cancellation_generation=:generation "
-                    "AND status IN ('draft','running','debate_finished','completed')) "
+                    "AND status IN ('draft','running','debate_finished','completed',"
+                    "'stopped','failed')) "
                     "AND EXISTS (SELECT 1 FROM jobs WHERE id=:operation_id "
                     "AND debate_id=:debate_id "
                     "AND turn_id=:turn_id AND state='running' AND claim_token=:claim_token "

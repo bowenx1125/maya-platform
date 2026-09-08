@@ -1240,7 +1240,8 @@ def _report_context(
                         }
                     discussion_memories.append(ReportDiscussionMemory.model_validate(projection))
                 except (TypeError, ValueError, KeyError):
-                    raise invalid_state("A response turn has invalid discussion memory.") from None
+                    # Optional model metadata must not block a report of saved speeches.
+                    pass
         turn_class = ManifestTurnV2 if segment_mode else ManifestTurn
         manifest_turns.append(
             turn_class(

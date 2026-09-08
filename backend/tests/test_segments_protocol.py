@@ -361,39 +361,30 @@ def test_empty_sources_and_short_text_are_valid_without_a_word_minimum() -> None
     assert result.speech == "x"
 
 
-def test_output_rejects_cross_snapshot_refs_and_too_many_source_ids() -> None:
+def test_unknown_source_metadata_does_not_discard_speech_or_bind_external_evidence() -> None:
     snapshot = _snapshot()
-    with pytest.raises(SegmentProtocolError) as error:
-        validate_segment_output(
-            {"segments": [{"text": "x", "source_ids": ["S3"], "reply_to": None}]}, snapshot
-        )
-    assert error.value.code == "source_reference_invalid"
-    with pytest.raises(SegmentProtocolError):
-        validate_segment_output(
-            {
-                "segments": [
-                    {
-                        "text": "x",
-                        "source_ids": [f"S{i}" for i in range(1, 8)],
-                        "reply_to": None,
-                    }
-                ]
-            },
-            snapshot,
-        )
+    result = validate_segment_output(
+        {
+            "segments": [
+                {"text": "x", "source_ids": [f"S{i}" for i in range(1, 8)], "reply_to": None}
+            ]
+        },
+        snapshot,
+    )
+    assert result.speech == "x"
+    assert result.segments[0].source_ids == ("S1", "S2")
 
 
-def test_final_turn_requires_one_valid_reply_only_when_pool_is_nonempty() -> None:
+def test_final_reply_is_prompt_only_and_valid_links_are_retained() -> None:
     with_barrage = _snapshot(
         round_number=3,
         barrages=({"id": "B1", "text": "What about local agency?"},),
     )
-    with pytest.raises(SegmentProtocolError) as error:
-        validate_segment_output(
-            {"segments": [{"text": "Conclusion.", "source_ids": [], "reply_to": None}]},
-            with_barrage,
-        )
-    assert error.value.code == "final_reply_missing"
+    without_reply = validate_segment_output(
+        {"segments": [{"text": "Conclusion.", "source_ids": [], "reply_to": None}]}, with_barrage
+    )
+    assert without_reply.speech == "Conclusion."
+    assert without_reply.final_reply_to is None
     result = validate_segment_output(
         {"segments": [{"text": "Conclusion.", "source_ids": [], "reply_to": "B1"}]},
         with_barrage,
@@ -406,18 +397,20 @@ def test_final_turn_requires_one_valid_reply_only_when_pool_is_nonempty() -> Non
     assert result.final_reply_to is None
 
 
-def test_output_rejects_extra_fields_duplicate_refs_but_preserves_long_text() -> None:
+def test_extra_fields_duplicate_refs_and_long_text_do_not_reject_speech() -> None:
     snapshot = _snapshot()
-    with pytest.raises(SegmentProtocolError):
-        validate_segment_output(
-            {"segments": [{"text": "x", "source_ids": [], "reply_to": None, "phase": "opening"}]},
-            snapshot,
-        )
-    with pytest.raises(SegmentProtocolError):
-        validate_segment_output(
-            {"segments": [{"text": "x", "source_ids": ["S1", "S1"], "reply_to": None}]},
-            snapshot,
-        )
+    result = validate_segment_output(
+        {
+            "extra": "metadata",
+            "segments": [
+                {"text": "x", "source_ids": ["S1", "S1"], "reply_to": "unknown", "phase": "opening"}
+            ],
+        },
+        snapshot,
+    )
+    assert result.speech == "x"
+    assert result.segments[0].source_ids == ("S1",)
+    assert result.segments[0].reply_to is None
     long_segments: list[dict[str, object]] = [
         {"text": "x" * 1000, "source_ids": [], "reply_to": None} for _ in range(8)
     ]

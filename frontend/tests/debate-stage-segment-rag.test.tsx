@@ -84,6 +84,7 @@ function detail(audioReady: boolean | null): DebateDetail {
     topic: "Should a classroom compare source-grounded perspectives?",
     status: "completed",
     created_at: "2026-09-07T00:00:00Z",
+    audio_restore_needed: false,
     prepared_turns: 1,
     expected_turns: 1,
     preview: null,

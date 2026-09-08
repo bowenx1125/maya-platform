@@ -132,18 +132,13 @@ function PublishedAgentCard({
           <p>{item.agent.description}</p>
         </div>
       </div>
-      <div className="published-card-meta">
-        {/* The version and the group that made it. Green means the published
-            release is the newest work; amber means a newer draft exists that
-            the class has not released yet. */}
-        <span
-          className="agent-pill"
-          data-pending={hasUnpublishedWork ? "true" : "false"}
-        >
-          {version.version_label}
-        </span>
-        {groupName ? <span>{groupName}</span> : null}
-      </div>
+      <span
+        className="agent-pill"
+        data-pending={hasUnpublishedWork ? "true" : "false"}
+      >
+        {version.version_label}
+      </span>
+      <div className="published-card-meta">{groupName}</div>
     </Link>
   );
 }

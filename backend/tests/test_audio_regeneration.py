@@ -82,9 +82,15 @@ def _delete_voice(database: Database, ids: dict[str, str], data_root: Path):
         )
 
 
-def test_delete_voice_then_regenerates_cached_segments_without_llm(retained_turn):
+@pytest.mark.parametrize("status", ["running", "stopped", "failed"])
+def test_delete_voice_then_regenerates_cached_segments_without_llm(retained_turn, status):
     database, ids, data_root, speech, structured = retained_turn
     deleted = _delete_voice(database, ids, data_root)
+    with database.session() as db:
+        db.execute(
+            text("UPDATE debates SET status=:status WHERE id=:id"),
+            {"status": status, "id": ids["debate"]},
+        )
     provider = _LanguageMock()
     session = database.session_factory()
     try:

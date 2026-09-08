@@ -1,6 +1,8 @@
 """Reset a completed classroom while retaining its paid Preview and cost ledger."""
 
 import asyncio
+import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -46,7 +48,7 @@ async def rebirth_debate(
             return claim.replay  # type: ignore[return-value]
         debate = cleanup._load_debate(db, debate_id, actor_user_id)
         playback = cleanup._load_playback(db, debate_id)
-        if debate.status not in {"completed", "debate_finished"} or playback.mode != "live":
+        if debate.status not in {"completed", "debate_finished"}:
             raise conflict("invalid_state", "Only a completed classroom can be reborn.")
         root = cleanup._safe_root(data_root)
         graph = cleanup._build_graph(db, debate, root, collect_files=False)
@@ -194,9 +196,10 @@ async def rebirth_debate(
         remove("turn_sources", "turn_id", final_ids)
         remove("position_history", "turn_id", final_ids)
         remove("file_references", "id", {ref.id for ref in refs})
+        replacement_ids = {turn.id: str(uuid4()) for turn in finals}
         replacements = [
             dict(
-                id=str(uuid4()),
+                id=replacement_ids[turn.id],
                 debate_id=debate_id,
                 participant_id=turn.participant_id,
                 knowledge_snapshot_id=turn.knowledge_snapshot_id,
@@ -205,6 +208,15 @@ async def rebirth_debate(
                 generation_status="pending",
                 publication_status="unpublished",
                 preparation_stage="generation",
+                predecessor_turn_ids_json=json.dumps(
+                    [
+                        replacement_ids.get(item, item)
+                        for item in json.loads(turn.predecessor_turn_ids_json)
+                    ],
+                    separators=(",", ":"),
+                ),
+                cutoff_turn_index=turn.cutoff_turn_index,
+                attempt=1,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
@@ -292,8 +304,10 @@ async def remake_debate(
     data_root: Path,
     playback_service: Any = None,
     report_task_manager: Any = None,
+    prewarm_scheduler: Any = None,
 ) -> cleanup.DeleteAllResult:
-    from app.core.models import LlmAcceptedStage, ProviderOperation
+    from app.core.models import Course, LlmAcceptedStage, ProviderOperation
+    from app.modules.debates.models import Debate
 
     cleanup._begin_immediate(db)
     target = None
@@ -313,11 +327,8 @@ async def remake_debate(
             db.commit()
             return claim.replay  # type: ignore[return-value]
         debate = cleanup._load_debate(db, debate_id, actor_user_id)
-        if debate.status not in {"draft", "running", "failed"}:
-            raise conflict("invalid_state", "This classroom has no recoverable turn.")
         playback = cleanup._load_playback(db, debate_id)
-        if playback.mode != "live":
-            raise conflict("invalid_state", "Retained replay cannot generate a turn.")
+        original_status = debate.status
         turns = list(
             db.scalars(
                 select(DebateTurn)
@@ -328,27 +339,37 @@ async def remake_debate(
             )
         )
         current = next((t for t in turns if t.id == playback.current_turn_id), None)
-        candidates = (
-            turns
-            if debate.status == "draft"
-            else [
-                t
-                for t in turns
-                if current is not None
-                and t.turn_index
-                in {
-                    current.turn_index,
-                    current.turn_index + 1,
-                }
-            ]
-        )
+        published = [
+            t
+            for t in turns
+            if t.publication_status == "public" and t.generation_status == "final_ready"
+        ]
+        if current is None:
+            current = published[-1] if published else None
+        if current is None and playback.mode == "live":
+            debate.status = "draft"
+        candidates = [
+            t
+            for t in turns
+            if playback.mode == "live"
+            and (t.round_no < debate_round_count(debate) or bool(debate.final_input_json))
+        ]
+        incomplete = next((t for t in candidates if t.generation_status != "final_ready"), None)
         target = (
-            current
-            if current is not None
-            and playback.status in {"ready", "playing", "paused"}
-            and current.generation_status == "final_ready"
-            else next((t for t in candidates if t.generation_status != "final_ready"), current)
+            incomplete
+            or current
+            or next((t for t in turns if t.generation_status == "final_ready"), None)
         )
+        if (
+            incomplete is not None
+            and current is not None
+            and current.turn_index > incomplete.turn_index
+        ):
+            current = next(
+                (t for t in reversed(published) if t.turn_index < incomplete.turn_index), None
+            )
+        if current is None and debate.status != "draft":
+            playback.current_turn_id = target.id if target is not None else None
         if target is None:
             raise conflict("invalid_state", "There is no stalled turn to recover.")
         operations = list(
@@ -361,24 +382,63 @@ async def remake_debate(
         )
         if any(op.state in {"sending", "acceptance_unknown"} for op in operations):
             raise conflict("provider_reconciliation_required", "The prior request is not settled.")
-        if target.generation_status == "running" and db.scalar(
-            select(Job.id)
-            .where(
-                Job.turn_id == target.id,
-                Job.state == "running",
+        if target.generation_status == "running":
+            local_keys = getattr(getattr(playback_service, "task_manager", None), "active_keys", ())
+            scheduler_task = getattr(prewarm_scheduler, "_task", None)
+            if any(key.turn_id == target.id for key in local_keys) or (
+                getattr(prewarm_scheduler, "owner", None) == debate_id
+                and scheduler_task is not None
+                and not scheduler_task.done()
+            ):
+                raise conflict("preparation_in_progress", "The existing request is still active.")
+        terminal_complete = (
+            original_status in {"completed", "debate_finished"} and incomplete is None
+        )
+        if debate.status != "draft" and playback.mode == "live" and not terminal_complete:
+            competing = db.scalar(
+                select(Debate.id)
+                .where(
+                    Debate.course_id == debate.course_id,
+                    Debate.id != debate_id,
+                    Debate.status == "running",
+                )
+                .limit(1)
             )
-            .limit(1)
-        ):
-            raise conflict("preparation_in_progress", "The turn is still being prepared.")
+            if competing is not None:
+                raise conflict("active_debate_exists", "Another classroom currently owns playback.")
+            course = db.get(Course, debate.course_id)
+            if course is not None:
+                course.current_audio_debate_id = debate_id
         revision, version, generation = cleanup._fence_debate(
             db,
             debate,
             playback,
-            expected_revision=expected_revision,
-            expected_control_version=expected_control_version,
+            expected_revision=debate.revision,
+            expected_control_version=playback.control_version,
             delete_all=False,
             advance_revision=False,
         )
+        # Stop/restart may advance the worker fence while retaining complete
+        # speeches. Their preparation receipts remain valid for saved playback.
+        db.execute(
+            update(Job)
+            .where(
+                Job.debate_id == debate_id,
+                Job.state == "completed",
+                Job.turn_id.in_([t.id for t in turns if t.generation_status == "final_ready"]),
+            )
+            .values(cancellation_generation=generation)
+        )
+        if debate.final_input_json and playback.mode == "live":
+            frozen = json.loads(debate.final_input_json)
+            if frozen.get("generation") != generation:
+                frozen["generation"] = generation
+                debate.final_input_json = json.dumps(
+                    frozen, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
+                debate.final_input_hash = hashlib.sha256(
+                    debate.final_input_json.encode()
+                ).hexdigest()
         fresh = False
         if target.generation_status != "final_ready":
             if any(
@@ -388,8 +448,10 @@ async def remake_debate(
                 raise conflict("invalid_state", "Later saved turns depend on this result.")
             accepted = db.scalar(
                 select(LlmAcceptedStage.operation_id)
+                .join(ProviderOperation, ProviderOperation.id == LlmAcceptedStage.operation_id)
                 .where(
                     LlmAcceptedStage.turn_id == target.id,
+                    ProviderOperation.state.in_(("accepted", "succeeded")),
                 )
                 .limit(1)
             )
@@ -417,6 +479,7 @@ async def remake_debate(
                     cleanup._drop_recovery_triggers(db, triggers)
                     cleanup._delete_rows(db, "llm_recovery_inputs", "turn_id", {old_id})
                     cleanup._restore_recovery_triggers(db, triggers)
+                cleanup._delete_rows(db, "llm_accepted_stages", "turn_id", {old_id})
                 manifests = cleanup._children(
                     db, "provider_export_manifests", "id", "turn_id", {old_id}
                 )
@@ -438,6 +501,9 @@ async def remake_debate(
                     generation_status="pending",
                     publication_status="unpublished",
                     preparation_stage="generation",
+                    predecessor_turn_ids_json=target.predecessor_turn_ids_json,
+                    cutoff_turn_index=target.cutoff_turn_index,
+                    attempt=1,
                     created_at=datetime.now(UTC),
                     updated_at=datetime.now(UTC),
                 )
@@ -445,11 +511,24 @@ async def remake_debate(
                 db.flush()
                 db.add(replacement)
                 target = replacement
+                # Later ungenerated inputs refer to stable turn IDs. Replace
+                # this one dependency without touching any saved speech.
+                for later in turns:
+                    if later.turn_index > target.turn_index:
+                        predecessors = json.loads(later.predecessor_turn_ids_json)
+                        later.predecessor_turn_ids_json = json.dumps(
+                            [target.id if item == old_id else item for item in predecessors],
+                            separators=(",", ":"),
+                        )
                 fresh = True
             else:
                 cleanup._delete_rows(db, "jobs", "turn_id", {target.id})
                 target.generation_status = "pending"
                 target.safe_error_code = None
+                if not cached_text:
+                    # A claimed input without published speech cannot pass the
+                    # fresh preparation CAS; accepted recovery rebuilds this fence.
+                    target.transcript_hash = None
             enqueue = True
         else:
             # Saved text needs only a fresh media handshake, or cached TTS.
@@ -461,7 +540,7 @@ async def remake_debate(
             if enqueue:
                 cleanup._delete_rows(db, "jobs", "turn_id", {target.id})
         if debate.status != "draft":
-            debate.status = "running"
+            debate.status = "running" if playback.mode == "live" else original_status
             if (
                 current is None
                 or current.id == target.id
@@ -473,7 +552,14 @@ async def remake_debate(
                 playback.status = "waiting_next"
             else:
                 playback.status = "ready"
+            if current is not None:
+                playback.current_turn_id = (
+                    target.id if target.turn_index <= current.turn_index else current.id
+                )
             playback.cursor_ms = 0
+            if terminal_complete and playback.mode == "live":
+                debate.status = original_status
+                playback.status = "completed"
         else:
             playback.status = "preparing"
             playback.current_turn_id = None
@@ -529,5 +615,8 @@ async def remake_debate(
             restored = await asyncio.to_thread(restore_audio)
             enqueue = restored.audio_ready
         if enqueue:
-            await playback_service._enqueue(debate, target)
+            if debate.status == "draft" and prewarm_scheduler is not None:
+                prewarm_scheduler.resume(debate_id)
+            else:
+                await playback_service._enqueue(debate, target)
     return result

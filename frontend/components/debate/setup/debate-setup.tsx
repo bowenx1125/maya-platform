@@ -214,13 +214,11 @@ export function TeacherDebateList({
                   )}
                 </Link>
                 <div className={styles.debateActions}>
-                  {stalled(debate) || debate.status === "failed" ? (
-                    <ClassroomResetButton
-                      debateId={debate.id}
-                      action="remake"
-                      onDone={() => void load(true)}
-                    />
-                  ) : null}
+                  <ClassroomResetButton
+                    debateId={debate.id}
+                    action="remake"
+                    onDone={() => void load(true)}
+                  />
                   {["completed", "debate_finished"].includes(debate.status) ? (
                     <ClassroomResetButton
                       debateId={debate.id}
@@ -240,7 +238,7 @@ export function TeacherDebateList({
                       );
                     }}
                     className={styles.listCleanup}
-                    showGenerateAudio={false}
+                    audioRestoreNeeded={debate.audio_restore_needed}
                   />
                 </div>
               </div>
@@ -320,6 +318,7 @@ function ClassroomResetButton({
 }) {
   const { api } = useSession();
   const [busy, setBusy] = useState(false);
+  const active = useRef(false);
   const label = action === "rebirth" ? "Rebirth" : "Remake";
   return (
     <button
@@ -327,7 +326,7 @@ function ClassroomResetButton({
       disabled={busy}
       type="button"
       onClick={async () => {
-        if (busy) return;
+        if (active.current) return;
         if (
           !window.confirm(
             action === "rebirth"
@@ -336,6 +335,7 @@ function ClassroomResetButton({
           )
         )
           return;
+        active.current = true;
         setBusy(true);
         try {
           const detail = await api.debate(debateId);
@@ -347,10 +347,16 @@ function ClassroomResetButton({
             },
             { idempotency: createIdempotencyHandle() },
           );
+          if (action === "remake" && detail.report_status === "failed") {
+            await api.regenerateReport(debateId, {
+              idempotency: createIdempotencyHandle(),
+            });
+          }
           onDone();
         } catch {
           // A refused action leaves the row unchanged.
         } finally {
+          active.current = false;
           setBusy(false);
         }
       }}

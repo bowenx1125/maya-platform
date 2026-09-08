@@ -111,7 +111,6 @@ def validate_discussion(value: object) -> dict[str, object]:
             or question["from_id"] not in ids
             or not isinstance(question["text"], str)
             or not question["text"].strip()
-            or len(question["text"]) > 400
         ):
             raise ValueError("invalid received question")
     for memory in result["memories"]:
@@ -137,10 +136,8 @@ def validate_memory(value: object, agent_ids: set[str] | None = None) -> dict[st
     if value["change"] not in {"retained", "qualified", "revised"}:
         raise ValueError("invalid position change")
     for key in ("position", "reason", "unresolved_question"):
-        if (
-            not isinstance(value[key], str)
-            or len(value[key]) > 400
-            or (key != "unresolved_question" and not value[key].strip())
+        if not isinstance(value[key], str) or (
+            key != "unresolved_question" and not value[key].strip()
         ):
             raise ValueError("invalid discussion memory text")
     influence = value["influence"]
@@ -149,11 +146,29 @@ def validate_memory(value: object, agent_ids: set[str] | None = None) -> dict[st
         or set(influence) != {"agent_id", "point"}
         or not isinstance(influence["point"], str)
         or not influence["point"].strip()
-        or len(influence["point"]) > 400
         or (agent_ids is not None and influence["agent_id"] not in agent_ids)
     ):
         raise ValueError("invalid discussion influence")
     return cast(dict[str, object], json.loads(json.dumps(dict(value), ensure_ascii=False)))
+
+
+def usable_question(value: object, agent_ids: set[str] | None = None) -> dict[str, str] | None:
+    """Unusable routing metadata must never discard a classroom speech."""
+    if not isinstance(value, Mapping):
+        return None
+    target, text = value.get("target_agent_id"), value.get("text")
+    if not isinstance(target, str) or not isinstance(text, str) or not text.strip():
+        return None
+    if not target or (agent_ids is not None and target not in agent_ids):
+        return None
+    return {"target_agent_id": target, "text": text}
+
+
+def usable_memory(value: object, agent_ids: set[str] | None = None) -> dict[str, object] | None:
+    try:
+        return validate_memory(value, agent_ids)
+    except (ValueError, TypeError, KeyError):
+        return None
 
 
 COMMON_PROMPT = (

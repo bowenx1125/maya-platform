@@ -1807,6 +1807,8 @@ export interface components {
             /** @enum {string} */
             status: "draft" | "running" | "debate_finished" | "completed" | "failed" | "stopped";
             created_at: components["schemas"]["IsoTime"];
+            /** @default false */
+            audio_restore_needed: boolean;
             /**
              * @description Turns already generated, including a draft warming in the background.
              * @default 0

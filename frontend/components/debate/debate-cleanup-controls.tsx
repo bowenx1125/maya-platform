@@ -1,9 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  apiErrorMessage,
   createIdempotencyHandle,
   PlatformApiError,
   type DebateDetail,
@@ -19,6 +18,25 @@ type Intent = {
   key: IdempotencyHandle;
 };
 
+function missingAudioIds(detail?: DebateDetail): string[] {
+  if (detail?.turn_protocol !== "segments_v2") return [];
+  return [
+    ...new Set([
+      ...(detail.preview_turns ?? [])
+        .filter(
+          (turn) =>
+            turn.speech &&
+            !turn.audio_ready &&
+            turn.generation_status === "final_ready",
+        )
+        .map((turn) => turn.id),
+      ...(detail.public_turns ?? [])
+        .filter((turn) => turn.speech && turn.audio_ready === false)
+        .map((turn) => turn.id),
+    ]),
+  ];
+}
+
 export function DebateCleanupControls({
   detail,
   debateId,
@@ -28,16 +46,14 @@ export function DebateCleanupControls({
   loadDetail,
   onAllDeleted,
   className = "row-actions",
-  showDeleteControls = true,
-  showGenerateAudio = true,
+  audioRestoreNeeded,
 }: {
   detail?: DebateDetail;
   debateId?: string;
   loadDetail?: () => Promise<DebateDetail>;
   onAllDeleted?: () => void | Promise<void>;
   className?: string;
-  showDeleteControls?: boolean;
-  showGenerateAudio?: boolean;
+  audioRestoreNeeded?: boolean;
   api: Pick<
     PlatformApi,
     "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
@@ -48,86 +64,94 @@ export function DebateCleanupControls({
   const router = useRouter();
   const intent = useRef<Intent | null>(null);
   const active = useRef(false);
+  const snapshotVersion = useRef(0);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const [lockedMode, setLockedMode] = useState<"voice" | "all" | null>(null);
-
-  const audioRequests = useRef(new Map<string, IdempotencyHandle>());
+  const [revoice, setRevoice] = useState(
+    () => audioRestoreNeeded ?? missingAudioIds(detail).length > 0,
+  );
   const [generatingAudio, setGeneratingAudio] = useState(false);
-  const missingAudio =
-    detail?.turn_protocol === "segments_v2"
-      ? [
-          ...new Set([
-            ...(detail.preview_turns ?? [])
-              .filter(
-                (turn) =>
-                  turn.speech &&
-                  !turn.audio_ready &&
-                  turn.generation_status === "final_ready",
-              )
-              .map((turn) => turn.id),
-            ...detail.public_turns
-              .filter((turn) => turn.speech && turn.audio_ready === false)
-              .map((turn) => turn.id),
-          ]),
-        ]
-      : [];
+  const audioRequests = useRef(new Map<string, IdempotencyHandle>());
+  const loadDetailRef = useRef(loadDetail);
+  useEffect(() => {
+    loadDetailRef.current = loadDetail;
+  }, [loadDetail]);
+
+  useEffect(() => {
+    const version = snapshotVersion.current;
+    const timer = window.setTimeout(() => {
+      if (!active.current && version === snapshotVersion.current)
+        setRevoice(audioRestoreNeeded ?? missingAudioIds(detail).length > 0);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [detail, debateId, audioRestoreNeeded]);
+
+  async function refresh() {
+    try {
+      await onVoiceDeleted();
+      if (loadDetailRef.current) {
+        const snapshot = await loadDetailRef.current();
+        setRevoice(missingAudioIds(snapshot).length > 0);
+      }
+    } catch {
+      /* A failed refresh does not undo a committed action. */
+    }
+  }
 
   async function generateAudio() {
-    if (!detail || active.current || lockedMode !== null) return;
+    if (active.current) return;
     active.current = true;
+    snapshotVersion.current += 1;
     setBusy(true);
     setGeneratingAudio(true);
-    setError(null);
     try {
-      for (const turnId of missingAudio) {
+      const snapshot = loadDetailRef.current
+        ? await loadDetailRef.current()
+        : detail;
+      if (!snapshot) return;
+      for (const turnId of missingAudioIds(snapshot)) {
         const key =
           audioRequests.current.get(turnId) ?? createIdempotencyHandle();
         audioRequests.current.set(turnId, key);
         const result = await api.regenerateDebateTurnAudio(
-          detail.id,
+          snapshot.id,
           turnId,
-          { expected_revision: detail.revision },
+          { expected_revision: snapshot.revision },
           { idempotency: key },
         );
         if (!result.audio_ready) {
           if (result.status !== "queued") audioRequests.current.delete(turnId);
-          throw new Error(
-            result.status === "queued"
-              ? "Audio is still preparing. Refresh to check progress."
-              : "Audio could not be prepared. Please try again.",
-          );
+          return;
         }
         audioRequests.current.delete(turnId);
-        await onVoiceDeleted();
       }
-    } catch (cause) {
-      setError(apiErrorMessage(cause));
+      setRevoice(false);
+    } catch {
+      /* Leave Revoice available when restoration fails. */
     } finally {
+      await refresh();
       active.current = false;
       setBusy(false);
       setGeneratingAudio(false);
-      await onVoiceDeleted();
     }
   }
 
   async function remove(mode: "voice" | "all") {
     if (active.current) return;
-    let request = intent.current;
-    if (!request) {
-      if (
-        !window.confirm(
-          mode === "voice"
-            ? "Delete saved audio? Speeches and sources will remain."
-            : "Delete this debate, audio, messages and report?",
-        )
+    let request = intent.current?.mode === mode ? intent.current : null;
+    if (
+      !request &&
+      !window.confirm(
+        mode === "voice"
+          ? "Delete saved audio? Speeches and sources will remain."
+          : "Delete this debate, audio, messages and report?",
       )
-        return;
-      active.current = true;
-      setBusy(true);
-      setError(null);
-      try {
+    )
+      return;
+    active.current = true;
+    snapshotVersion.current += 1;
+    setBusy(true);
+    try {
+      if (!request) {
         const snapshot =
           mode === "all" && (debateId || detail?.id)
             ? {
@@ -135,9 +159,10 @@ export function DebateCleanupControls({
                 revision: 0,
                 playback: { control_version: 0 },
               }
-            : (detail ?? (await loadDetail?.()));
-        if (!snapshot)
-          throw new Error("Debate is unavailable. Refresh and try again.");
+            : loadDetailRef.current
+              ? await loadDetailRef.current()
+              : detail;
+        if (!snapshot) return;
         request = {
           debateId: snapshot.id,
           mode,
@@ -147,51 +172,29 @@ export function DebateCleanupControls({
             expected_control_version: snapshot.playback.control_version,
           },
         };
-      } catch (cause) {
-        setError(apiErrorMessage(cause));
-        active.current = false;
-        setBusy(false);
-        return;
+        intent.current = request;
       }
-      intent.current = request;
-      setLockedMode(mode);
-    }
-    if (request.mode !== mode) return;
-    active.current = true;
-    setBusy(true);
-    setError(null);
-    try {
       const result = await (
         mode === "voice"
           ? api.deleteDebateVoice.bind(api)
           : api.deleteDebateAll.bind(api)
       )(request.debateId, request.body, { idempotency: request.key });
-      if (result.cleanup_status === "pending") {
-        if (mode === "all") {
-          if (onAllDeleted) await onAllDeleted();
-          else router.push(backHref);
-          return;
-        }
-        setPending(true);
-        return;
-      }
-      intent.current = null;
-      setPending(false);
-      setLockedMode(null);
       if (mode === "all") {
+        intent.current = null;
         if (onAllDeleted) await onAllDeleted();
         else router.push(backHref);
-      } else await onVoiceDeleted();
+      } else if (result.cleanup_status !== "pending") {
+        intent.current = null;
+        setRevoice(true);
+        await refresh();
+      }
     } catch (cause) {
-      setError(apiErrorMessage(cause));
       if (
         cause instanceof PlatformApiError &&
         (cause.code === "stale_revision" ||
           cause.code === "stale_control_version")
       ) {
         intent.current = null;
-        setLockedMode(null);
-        await onVoiceDeleted();
       }
     } finally {
       active.current = false;
@@ -199,56 +202,25 @@ export function DebateCleanupControls({
     }
   }
 
-  if (
-    !showDeleteControls &&
-    (!showGenerateAudio || missingAudio.length === 0) &&
-    !busy &&
-    !error &&
-    !pending
-  )
-    return null;
-
   return (
     <div className={className}>
-      {showDeleteControls ? (
-        <>
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={busy || (lockedMode !== null && lockedMode !== "voice")}
-            onClick={() => void remove("voice")}
-          >
-            Unvoice
-          </button>
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={busy || (lockedMode !== null && lockedMode !== "all")}
-            onClick={() => void remove("all")}
-          >
-            Destroy
-          </button>
-        </>
-      ) : null}
-      {showGenerateAudio && missingAudio.length > 0 ? (
-        <button
-          className="secondary-action"
-          type="button"
-          disabled={busy || lockedMode !== null}
-          onClick={() => void generateAudio()}
-        >
-          Generate Audio
-        </button>
-      ) : null}
-      {busy ? (
-        <span role="status">
-          {generatingAudio ? "Preparing audio…" : "Deleting…"}
-        </span>
-      ) : null}
-      {pending && !showDeleteControls ? (
-        <span role="status">Cleanup pending. Retry this action.</span>
-      ) : null}
-      {error && !showDeleteControls ? <span role="alert">{error}</span> : null}
+      <button
+        className="secondary-action"
+        type="button"
+        disabled={busy}
+        onClick={() => void (revoice ? generateAudio() : remove("voice"))}
+      >
+        {generatingAudio ? "Revoice..." : revoice ? "Revoice" : "Unvoice"}
+      </button>
+      <button
+        className="secondary-action"
+        type="button"
+        disabled={busy}
+        onClick={() => void remove("all")}
+      >
+        Destroy
+      </button>
+      {busy && !generatingAudio ? <span role="status">Deleting…</span> : null}
     </div>
   );
 }

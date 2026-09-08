@@ -61,13 +61,6 @@ SEGMENT_REPAIR_CODES = frozenset(
         "segment_shape_invalid",
         "segment_count_invalid",
         "segment_text_invalid",
-        "source_reference_invalid",
-        "barrage_reference_invalid",
-        "final_reply_missing",
-        "question_route_invalid",
-        "discussion_memory_invalid",
-        "support_mode_invalid",
-        "support_mode_source_mismatch",
     }
 )
 
@@ -75,25 +68,7 @@ SEGMENT_REPAIR_CODES = frozenset(
 def _repair_feedback(
     _candidate: SegmentAcceptedCandidateV2, code: str, pointers: Sequence[str]
 ) -> dict[str, object]:
-    guidance = {
-        "barrage_reference_invalid": (
-            "reply_to is only a supplied barrage B ID, never an Agent ID. "
-            "Without barrages every reply_to must be JSON null."
-        ),
-        "question_route_invalid": (
-            "Only round 2 has question: copy discussion.question_target_id exactly. "
-            "Every other round must use question:null, including when answering old questions."
-        ),
-        "discussion_memory_invalid": (
-            "Only round 3 has discussion_memory; use the exact fields and enum in the "
-            "System Prompt. All other rounds use null."
-        ),
-    }
-    return {
-        "code": code,
-        "json_pointers": list(pointers),
-        **({"instruction": guidance[code]} if code in guidance else {}),
-    }
+    return {"code": code, "json_pointers": list(pointers)}
 
 
 class SegmentRuntimeError(RuntimeError):

@@ -47,10 +47,11 @@ all minimum lengths. These upper bounds appear in the actual System Prompt only.
 Chinese guidance counts non-whitespace characters including punctuation; English
 counts alphanumeric runs with internal apostrophes/hyphens as one word. Only
 segment text counts. The backend neither rejects nor repairs a response because
-of its length, and never truncates or pads it. Nonempty text, structure, source
-references, question routing and state integrity remain enforced. Structure and
-reference errors share at most one authorized repair with frozen input and
-explicit feedback. One-call authorization cannot gain another call; unknown
+of its length, and never truncates or pads it. Only readable nonempty paragraph text is required from model output. Auxiliary
+question/memory/source/barrage/support metadata cannot reject a speech. Unusable
+metadata is omitted or left ungraded; valid source bindings and original text
+remain exact. Unreadable JSON/text shares at most one authorized repair with
+frozen input and feedback. One-call authorization cannot gain another call; unknown
 acceptance is never silently resent.
 
 Question routing is separate from barrage reply_to. Third-round memory contains
@@ -72,86 +73,25 @@ disagreement; string similarity and keyword counts are not hard failure gates.
 
 ## Report loading correction
 
-The owner removed the blanket `https://` rejection from Report input checks.
-Original bibliographic URLs and source prose now pass unchanged; there is no URL
-omission projection. A real Report with these URLs completed successfully.
-Unexpected task logs now record exception type rather than validation input bodies.
+Report inputs preserve bibliographic URLs after the owner removed the blanket
+`https://` rejection; a real call succeeded. Unexpected failures now fail both
+revision and aggregate. Startup reconciles orphan generating aggregates without
+calling the Provider, preserving active jobs. Frontend status reads ignore stale
+responses and failed revision-history reads cannot hide a ready report. Logs
+contain safe codes and exception types, never response bodies.
 
-An unexpected task failure previously failed the revision/job but left its
-aggregate generating. A sanitized live read found two generating aggregates
-with zero generating revisions, alongside three ready reports. The fix updates
-aggregate failure and reconciles orphan states at startup without another
-Provider call, preserving valid in-progress jobs. The frontend independently
-reads Report status, ignores stale responses and prevents a failed/hung revision
-history read from masking success. Report remains a separate Conclude operation.
+## Prior verification boundary
 
-## Verification and delivery boundary — September 8 continuation
+Earlier real four-round case `a2e6b748-91d7-40ce-b1db-70525224bde1`
+completed eight speeches and Report revision 3. Eight LLM and four query calls
+succeeded first attempt under the earlier retrieval policy. Other cases failed on
+routing or acceptance_unknown. Full replay, RAG relevance and classroom quality
+were not accepted. No partial test pass establishes universal success.
 
-The four-round real case `a2e6b748-91d7-40ce-b1db-70525224bde1` completed
-all eight speeches, retained audio, frozen classroom messages, final-round replies
-and the HTTP/WebSocket playback sequence. Its six Preview turns took about 38s.
-Eight Debate LLM operations and four query-Embedding operations succeeded on
-attempt one. No completed speech was regenerated. Independent Report revision 3
-is ready with original source URLs preserved. Two Report calls succeeded in total:
-one tested an intermediate URL-omission projection, the second tested the final
-owner-approved removal of the blanket URL check. The first failed revision never
-reached the Report Provider. Supplier billing and the operation ledger are authoritative.
-
-The browser showed all eight public speeches, two 3D figures, the speech bubble,
-separate scrolling speech/control areas and Conclude. A retained-audio replay began
-successfully; restarting Docker during replay exposed an existing recovery issue:
-controls can remain disabled until an explicit release/reload. A complete eight-turn
-browser audio replay has NOT been accepted. Report can now read the original frozen
-final input after a completed lesson's replay is released; live generation still
-requires the cancellation fence. Never treat replay's control generation as a reason
-to regenerate the already frozen classroom messages.
-
-Previous delivery checks (before this classroom audit):
-
-- 63 focused backend generation/routing/recovery tests passed, including one real
-  SQL accepted-stage recovery with a fake supplier proving one LLM call only.
-- 26 focused Report tests passed, including source URL preservation, memory,
-  orphan status reconciliation and completed-history/live-fence separation.
-- Full frontend: 264 tests passed; typecheck passed; lint has zero errors and
-  four existing warnings. Backend Ruff/mypy passed (187 modules); formatter
-  checked 319 files. Backend/frontend Docker builds and health checks passed.
-- Full backend suite still has 47 failing cases. Many depend on obsolete two-round
-  creation or old protocol fixtures; others need investigation. Current-contract
-  tests passing does not make that suite green. Only the shared recovery fixture
-  needed by the current SQL test was migrated to explicit four-round Preview.
-- Formatting, document-authority and repository secret/runtime boundaries passed.
-  No database backups or runtime/provider payloads are added to Git.
-
-Other observed cases are failures, not successful lessons:
-`731791c9-7f85-46a3-b529-8c22a369a23e` has five of six Preview speeches saved;
-its last response exhausted its two attempts on question/barrage routing errors.
-The repaired Prompt now states only the current phase's metadata requirements,
-with explicit null values and actionable repair feedback. Its ledger has four
-succeeded query operations, five succeeded LLM operations and four failed LLM
-operations. `34d0a285-c148-4a9e-8098-2b9891d963ae` reached seven speeches; its
-last request has acceptance_unknown and was not resent. That incomplete test was
-ended through the normal API. A Chinese case failed at 96/77 characters under the
-old 100-character floor; no speech-length rejection remains in the paragraph path.
-
-Remaining: migrate/remove obsolete tests while preserving current authorization,
-cost, source and concurrency coverage; repair interrupted browser replay recovery;
-review RAG teaching quality with topic-matched Persona/knowledge fixtures. The real
-case above intentionally exposed mismatched relationship-psychology material for a
-classroom-history topic: some answers correctly acknowledged the gap, one opening
-followed the Persona's unrelated scenario, and later conclusions were repetitive.
-This is functional run evidence, NOT evidence that RAG relevance, natural debate
-quality, all requirements or a universal 100% success rate have been accepted.
-
-The owner resumed work for the playback, live-list, bilingual Report and Stage
-changes below. Preserve the other window's existing test/replay edits.
-The owner prefers consolidated validation and proportionate failure follow-ups.
-A paid Chinese Report check was authorized and completed. The latest owner decision
-leaves actual browser/classroom acceptance to the owner; do not run further browser
-tests for this delivery. The quota stop boundary is removed; future
-Chat GPT-6 continuation uses Bridge MCP and can continue until usage is exhausted.
-No quota reset is authorized. The owner explicitly requested the external
-`/Users/xubosmell/Desktop/Maya/HANDOFF.md` be overwritten with operational state
-and parallel Luna Max ownership/integration instructions; no Codex access setup.
+The owner authorizes main delivery and Docker updates, with final manual classroom
+audit. A requested browser-click attempt was blocked by the Mac lock screen.
+No usage reset is authorized. The external `/Users/xubosmell/Desktop/Maya/HANDOFF.md`
+is owner-requested and can contain operational continuation instructions.
 
 ## Current requested fixes — September 8 classroom audit
 
@@ -161,21 +101,13 @@ do not restart the same audio element. A committed recovery event is now publish
 even when audio fails before started_ack. Lists refresh progress every two seconds
 while visible and on focus.
 
-The owner reproduced a further silent Next failure in their own browser. A
-read-only runtime check found the server already on successor turn index 6 in
-ready state with no pending media command. The frontend now drives media preparation
-from committed ready state, including detail updates that beat the REST response.
-Stale successful Next callbacks reconcile state without repeating Next, creating
-a second pending ticket or regenerating speech. A classic/Beta race regression
-covers this order. This final fix still needs the owner's actual-browser acceptance.
-
 Content requirements (language, length, wording, source aliases) are prompt-only.
 Speech prompts reserve S IDs for metadata and ask for natural references to RAG.
 No backend S-token detection/replacement is added; saved speeches stay unchanged.
 Report language follows the frozen debate language: Chinese for zh, English for en.
 Report prose is no longer rejected for language, length, Markdown or rhetorical
 rules; schema 0025 also removes the old database word-count publication limits.
-Only parsing/shape, authorization, source bindings, cost and state integrity remain.
+Only readable output, authorization, verified source bindings, cost and state integrity remain.
 
 The report is rendered as Markdown, including headings/lists/tables, with raw HTML
 execution disabled. Stage uses larger Agent names without A/B/C. Retained replay
@@ -184,8 +116,7 @@ A lone second-row action spans the controls. Conclude becomes available after
 replay completes. One newly authorized real Report for Chinese debate
 `c0e48278-c094-4c1f-8b6f-080b48b13767` completed in about 14 seconds;
 revision 3 is ready with a Chinese title and 1,007 Chinese characters. No Debate
-LLM or TTS regeneration was requested for this playback audit. The earlier partial
-browser replay is not a complete replay acceptance result.
+LLM or TTS regeneration was requested for this playback audit.
 
 ## Classroom actions — final owner decisions
 
@@ -200,7 +131,7 @@ browser replay is not a complete replay acceptance result.
   does not wait for an external supplier to return. Teacher/course authorization,
   shared-file ownership and path safety remain enforced. This cannot retract a
   request already sent to a supplier, and late work cannot recreate the deleted graph.
-- **Rebirth** is available on completed lessons in live mode. It preserves the
+- **Rebirth** is available on completed lessons, including retained replay. It preserves the
   first three rounds' exact text, evidence, discussion memory and audio, unpublishes
   them for classroom replay, removes final-round turns/audio and classroom/report
   data, creates a fresh closed message window, and returns to a Preview-ready draft.
@@ -214,8 +145,9 @@ browser replay is not a complete replay acceptance result.
   A settled failed paid turn can get a new identity and a bounded new attempt on
   the teacher's explicit click, while old charge records remain. Accepted results
   are recovered locally. Sending/acceptance-unknown requests are not duplicated.
-  Remake appears for a failed generation or stale media state (ready/paused after
-  15 seconds, playing beyond its expected duration plus a margin). No generic
+  Remake is always reachable in the list, including when no error classifier
+  has detected a stall. It follows the first incomplete eligible turn or the
+  retained playback checkpoint and uses current server versions. No generic
   failure prose is inserted into the list.
 
 The new POST `/rebirth` and `/remake` endpoints use teacher authentication,
@@ -224,25 +156,13 @@ ignores old version values. Frozen OpenAPI, generated client and route fixtures
 were updated together. Audit records distinguish fresh generation authorization
 from media-only recovery; scope budgets preserve earlier allocated costs.
 
-## Latest consolidated verification
+## Previous consolidated verification
 
-- 131 focused backend checks passed: current lifecycle/cleanup, four-round
-  generation, prompt-only prose, bilingual Reports, migration, recovery and
-  related API behavior. This includes Rebirth preserving six saved Preview turns
-  and successfully starting again, Destroy removing a running debate despite
-  stale versions, and Remake preserving the paid operation while replacing only
-  the failed turn. Exact repeated reset requests do not generate twice.
-- All 276 frontend tests passed. Typecheck passed. Backend Ruff and mypy passed
-  (188 modules), and 320 Python files passed format checks. Contract generation,
-  route comparison and production image builds are part of this delivery.
-- An earlier full backend run in this audit had 1,271 passes and 43 failures.
-  The subsequent focused pass corrects the report-length/schema-head expectations
-  and verifies the new lifecycle work; the entire backend suite was not rerun
-  after those changes. Remaining old protocol/recovery fixtures are not declared
-  green. No full-suite or universal classroom-success claim is made.
-- The one real Chinese Report run above succeeded. The owner specifically reserved
-  final browser/audio/3D/classroom acceptance for manual audit. No further paid
-  classroom or browser test was performed after that instruction.
+Before the subsequent manual-browser fixes: 131 focused backend and 276 frontend
+checks passed, alongside typing/lint/build checks. An earlier full backend suite
+had 1,271 passes and 43 failures; it was not rerun in full. These results do not
+accept the latest code or real classroom behavior. The Chinese Report call above
+succeeded; no universal classroom-success claim is made.
 
 ## Latest manual-browser corrections — September 8 continuation
 
@@ -298,6 +218,72 @@ are not rewritten; the RAG/Prompt changes govern newly generated turns.
 Deployment result and manual acceptance remain separate: the code is prepared
 for the owner's browser audit, not certified as universally successful.
 
+## Remake stalled Preview correction — September 8
+
+A sanitized live inspection of `a675c540-611f-46fd-bd0b-f4da552f5c99`
+found six ready speeches, followed by a pending seventh turn and a pending job
+without progress after Remake. Both paid LLM attempts for that turn had failed
+with `question_route_invalid`; their retained stage rows were incorrectly treated
+as recoverable success. The old transcript fence then prevented a fresh claim.
+The route also called scheduler release, permanently excluding this draft from
+Preview scheduling, and only attempted to enqueue one turn.
+
+Remake now checks the Provider operation state before reusing a staged response.
+Settled failed responses use the existing explicit fresh-turn allowance; their
+operation/charge records survive. The replacement keeps its input prefix and
+cutoff, and subsequent ungenerated dependencies reference the replacement ID.
+Local accepted-result recovery clears an unpublished claim fence while keeping
+cached valid speech unchanged. Draft Remake explicitly reopens the Preview
+scheduler and resumes the remaining sequence, rather than marking it ended.
+Repeated identical requests do not schedule a second recovery.
+
+Report now exposes only Regenerate (Conclude creates the first report); Refresh
+and Generate labels are removed, and View revision is renamed Review.
+
+The inspected failure debate was deleted during diagnosis and was not recreated.
+Current validation results are recorded below; they are not a guarantee of model
+quality or universal recovery from external failures.
+
+## Latest owner refinements
+
+All model auxiliary-output requirements are prompt guidance, not speech rejection
+or repair triggers. Wrong/missing question routing, optional discussion memory,
+source aliases, support modes and barrage replies preserve exact paragraph text.
+Only usable metadata is projected. Unknown source IDs never become evidence;
+inconsistent support is ungraded (zero points), while valid direct/contextual/
+no_match retain +5/+2/+0. No text is truncated, rewritten or padded. Missing
+optional response memory cannot block Conclude/Report; history remains available.
+Structural nonempty text/JSON parsing, consent, costs and database ownership/state
+fences remain. Prompt instructions still describe the expected output.
+
+Rebirth now accepts completed replay and binds new final-turn dependencies to the
+new IDs, keeping exact Preview/audio. Report has only Regenerate and Review.
+Generate Audio is removed from debate details. The list uses
+Unvoice → Revoice → Revoice... (disabled) → Unvoice; failures retain the respective
+retry action without an error message. List audio state is loaded from actual
+saved-turn audio, not an optimistic label on a failed deletion. Agent version
+pills are left of the divider, with Group on the right and aligned columns.
+Remake supports draft/failed/stopped/completed and replay checkpoints, repairs
+orphan job claims and rebinds retained completion receipts. Completed healthy
+history stays completed; failed Reports can be regenerated through the same
+explicit click. In-flight/unknown paid requests are not duplicated, and another
+active classroom's ownership is not silently taken away. These remain recovery
+boundaries, so universal one-click recovery from every external outage is not claimed.
+
+The list's additive audio_restore_needed field avoids fetching every detail
+(which would change the Preview scheduler owner). Frozen OpenAPI, generated
+client and fixtures are updated together; no database migration is needed.
+Revoice also restores saved audio in Stopped/Failed debates without restarting
+the lesson or calling the Debate LLM.
+
+Latest verification: 81 focused backend checks plus 9 cached-audio checks passed;
+17 frontend checks, typing, targeted lint/format and semantic contract comparison
+passed. Both production images built and were restarted. Browser navigation
+confirmed Agent pill/divider alignment, list actions and no detail Generate Audio.
+Two retained-replay Next clicks switched Elena → Mira → Rowan with matching text;
+this is a spot check, not full classroom or teaching-quality acceptance. No paid
+Provider-generation test or destructive browser action was performed.
+
 ## Runtime and established UI
 
 Next.js, FastAPI, SQLite/local files and Caddy share port 8080. Inspect active
@@ -313,22 +299,13 @@ persist until Next. Open Message/Hide preserves its QR session. Conclude contain
 Report and scores; Audio Ready indicates retained audio. This change adds only
 fixed-four-round and phase-label UI work.
 
-## Prior evidence and remaining work
+## Remaining scope
 
-The previous protocol baseline recorded 1,244 backend and 253 frontend checks
-before later UI patches. One real two-Agent/two-round lesson completed with four
-query, four LLM and one Report operations, all first attempt; a later real Report
-also completed. That evidence does not validate this new four-round protocol.
-Formal RAG experiments stopped at 31/72 and 21/72 on acceptance-unknown and were
-not resent. Full RAG quality acceptance remains incomplete. Ledgers and private
-artifacts/backups stay outside Git.
+Earlier two-round and partial RAG experiments do not validate this four-round
+protocol. Full RAG quality acceptance remains incomplete. Module DDL is 9.10; acceptance owner is 徐伯闻.
+古月 owns 3D/voice/TTS, Kaikai accounts/student UI, 徐伯闻 remaining modules.
 
-[NEXT_WAVE_PLAN.md](contracts/NEXT_WAVE_PLAN.md) remains history; this plan
-supersedes conflicting old barriers, retrieval/round and length rules. The module
-workbook uses DDL 9.10 and acceptance owner 徐伯闻. 古月 owns 3D/voice/TTS, Kaikai
-owns accounts/student UI, 徐伯闻 owns remaining modules.
-
-Production concurrency, classroom-scale load, public deployment, monitoring,
-backup/restore, real speech and data/licensing governance remain outside this
-local Demo scope. [ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/)
-and [ADRs](adr/) retain stable design references.
+Classroom-scale load, public deployment, monitoring, backup/restore, real speech
+and data/licensing governance remain outside this local Demo scope.
+[ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/) and [ADRs](adr/)
+retain stable design references.

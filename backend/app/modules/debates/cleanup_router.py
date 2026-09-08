@@ -156,9 +156,14 @@ async def _reset_classroom(
         idempotency_key=key,
         playback_service=get_playback_service(request),
         report_task_manager=getattr(request.app.state, "report_task_manager", None),
+        **(
+            {"prewarm_scheduler": getattr(request.app.state, "prewarm_scheduler", None)}
+            if action is remake_debate
+            else {}
+        ),
     )
     scheduler = getattr(request.app.state, "prewarm_scheduler", None)
-    if scheduler is not None:
+    if scheduler is not None and action is not remake_debate:
         scheduler.release(str(debate_id))
     return DebateCleanupResult(
         debate_id=UUID(result.debate_id),

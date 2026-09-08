@@ -1110,9 +1110,9 @@ details > summary {
 }
 
 .published-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 140px;
   align-items: center;
-  justify-content: space-between;
   gap: 18px;
   min-width: 0;
   padding: 16px 18px;
@@ -1160,13 +1160,15 @@ details > summary {
   overflow-wrap: anywhere;
 }
 
+.published-card > .agent-pill {
+  justify-self: end;
+}
+
 .published-card-meta {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px 12px;
-  max-width: 40%;
+  min-width: 0;
+  min-height: 32px;
   padding-left: 16px;
   border-left: 1px solid #deceb0;
   color: #655332;
@@ -1176,17 +1178,12 @@ details > summary {
 
 @media (max-width: 620px) {
   .published-card {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) 120px;
     gap: 12px;
   }
 
-  .published-card-meta {
-    justify-content: flex-start;
-    max-width: none;
-    padding: 10px 0 0;
-    border-left: 0;
-    border-top: 1px solid #deceb0;
+  .published-card-top {
+    grid-column: 1 / -1;
   }
 }
 

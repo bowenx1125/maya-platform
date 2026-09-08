@@ -103,6 +103,7 @@ function detail(): DebateDetail {
     topic: "How should a classroom balance memory and change?",
     status: "completed",
     created_at: "2026-09-07T00:00:00Z",
+    audio_restore_needed: false,
     prepared_turns: 2,
     expected_turns: 2,
     preview: null,

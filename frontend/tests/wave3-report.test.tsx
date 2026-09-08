@@ -77,7 +77,7 @@ function apiMock(overrides: Partial<ReportPanelApi> = {}): ReportPanelApi {
 }
 
 describe("Wave 3 M14 ReportPanel", () => {
-  it("labels the first explicit report action Generate Report", async () => {
+  it("offers only Regenerate even before the first report", async () => {
     const api = apiMock({
       getCurrentReport: vi.fn(
         async () =>
@@ -97,12 +97,14 @@ describe("Wave 3 M14 ReportPanel", () => {
     );
 
     await screen.findByText("Report");
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Generate Report" }),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Generate Report" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Regenerate" })).toBeTruthy();
   });
 
-  it("allows Generate Report while insight preparation is still running", async () => {
+  it("allows Regenerate while insight preparation is still running", async () => {
     const api = apiMock({
       getCurrentReport: vi.fn(
         async () =>
@@ -123,7 +125,7 @@ describe("Wave 3 M14 ReportPanel", () => {
     );
 
     await screen.findByText("Report");
-    const button = screen.getByRole("button", { name: "Generate Report" });
+    const button = screen.getByRole("button", { name: "Regenerate" });
     expect(button).toHaveProperty("disabled", false);
     fireEvent.click(button);
     await waitFor(() =>
@@ -284,7 +286,7 @@ describe("Wave 3 M14 ReportPanel", () => {
     expect(api.regenerateReport).not.toHaveBeenCalled();
   });
 
-  it("does not let an older poll replace a ready report after Refresh", async () => {
+  it("does not let an older poll replace a ready report after updated panel inputs", async () => {
     vi.useFakeTimers();
     const generating = {
       ...readyReport(),
@@ -302,7 +304,7 @@ describe("Wave 3 M14 ReportPanel", () => {
       .mockReturnValueOnce(oldPoll)
       .mockResolvedValue(readyReport());
     const api = apiMock({ getCurrentReport });
-    render(
+    const { rerender } = render(
       <LocaleProvider initialLocale="en">
         <ReportPanel debateId={debateId} api={api} />
       </LocaleProvider>,
@@ -314,7 +316,14 @@ describe("Wave 3 M14 ReportPanel", () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      rerender(
+        <LocaleProvider initialLocale="en">
+          <ReportPanel debateId={debateId} api={{ ...api }} />
+        </LocaleProvider>,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
     });
     expect(screen.getByLabelText("Current report")).toBeTruthy();
     await act(async () => {
@@ -392,7 +401,7 @@ describe("Wave 3 M14 ReportPanel", () => {
     await waitFor(() =>
       expect(api.downloadCurrentReport).toHaveBeenCalledWith(debateId, "en"),
     );
-    fireEvent.click(screen.getByRole("button", { name: "View revision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
     await waitFor(() =>
       expect(api.getReportRevision).toHaveBeenCalledWith(debateId, revisionId),
     );

@@ -12,7 +12,6 @@ from app.modules.debates.generation.segment_grading import (
     summarize_segments,
 )
 from app.modules.debates.generation.segments import (
-    SegmentProtocolError,
     build_segment_system_prompt,
     load_stored_segment_turn_result,
     validate_segment_output,
@@ -55,22 +54,18 @@ def test_segment_prompt_states_mode_definitions_and_legacy_omission_rule() -> No
 
 
 @pytest.mark.parametrize("mode", [None, [], {}, True, 7])
-def test_provider_mode_types_fail_with_safe_code(mode: object) -> None:
-    with pytest.raises(SegmentProtocolError) as error:
-        validate_segment_output(
-            {
-                "segments": [
-                    {
-                        "text": "A paragraph.",
-                        "source_ids": [],
-                        "reply_to": None,
-                        "support_mode": mode,
-                    }
-                ]
-            },
-            _snapshot(),
-        )
-    assert error.value.code == "support_mode_invalid"
+def test_unusable_provider_mode_keeps_speech_ungraded(mode: object) -> None:
+    result = validate_segment_output(
+        {
+            "segments": [
+                {"text": "A paragraph.", "source_ids": [], "reply_to": None, "support_mode": mode}
+            ]
+        },
+        _snapshot(),
+    )
+    assert result.speech == "A paragraph."
+    assert result.segments[0].support_mode is None
+    assert grade_segment(result.segments[0]).points == 0
 
 
 def test_missing_mode_is_ungraded_even_without_sources() -> None:

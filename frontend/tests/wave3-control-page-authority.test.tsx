@@ -81,6 +81,7 @@ function runningDetail(): DebateDetail {
     topic: "Should classrooms compare cultural perspectives?",
     status: "running",
     created_at: "2026-08-30T00:00:00Z",
+    audio_restore_needed: false,
     prepared_turns: 0,
     expected_turns: 0,
     preview: null,

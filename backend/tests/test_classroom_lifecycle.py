@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
 from app.core.models import ProviderOperation, StoredFile
 from app.modules.debates.models import AuditLog, Debate, DebateTurn, PlaybackState
 from app.modules.debates.playback.audio import AudioStore
@@ -84,13 +85,31 @@ def _body(client, debate_id):
     }
 
 
-def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory):
+@pytest.mark.parametrize("mode", ["live", "replay"])
+def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory, mode):
     app, database, settings = app_factory()
     try:
         with TestClient(app) as client:
             debate_id = _saved_classroom(database, settings)
             _, csrf = login(client)
             with database.session() as db:
+                playback = db.scalar(
+                    select(PlaybackState).where(PlaybackState.debate_id == debate_id)
+                )
+                playback.mode = mode
+                planned = list(
+                    db.scalars(
+                        select(DebateTurn)
+                        .where(DebateTurn.debate_id == debate_id)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+                for turn in planned:
+                    if turn.round_no == 4:
+                        turn.predecessor_turn_ids_json = json.dumps(
+                            [item.id for item in planned[: turn.turn_index]], separators=(",", ":")
+                        )
+                        turn.cutoff_turn_index = turn.turn_index - 1
                 before = [
                     (t.id, t.speech, t.structured_json, t.audio_file_id)
                     for t in db.scalars(
@@ -129,6 +148,19 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
                     )
                 ]
                 assert after == before
+                rebuilt = list(
+                    db.scalars(
+                        select(DebateTurn)
+                        .where(DebateTurn.debate_id == debate_id)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+                for turn in rebuilt:
+                    if turn.round_no == 4:
+                        assert json.loads(turn.predecessor_turn_ids_json) == [
+                            item.id for item in rebuilt[: turn.turn_index]
+                        ]
+                        assert turn.cutoff_turn_index == turn.turn_index - 1
                 assert db.get(Debate, debate_id).final_input_json is None
                 assert not set(
                     db.scalars(select(DebateTurn.id).where(DebateTurn.id.in_(final_ids)))
@@ -324,5 +356,217 @@ def test_remake_failed_turn_uses_new_identity_and_retains_paid_ledger(app_factor
                 assert state.current_turn_id == turns[-1].id
                 assert state.status == "preparing"
                 assert db.get(Debate, debate_id).status == "running"
+    finally:
+        database.dispose()
+
+
+def test_remake_failed_staged_preview_rebinds_prefix_and_resumes_chain(app_factory, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from app.core.models import LlmAcceptedStage
+    from app.modules.debates.playback.router import get_playback_service
+    from starlette.requests import Request
+
+    app, database, settings = app_factory()
+    try:
+        with TestClient(app) as client:
+            debate_id = _saved_classroom(database, settings)
+            with database.session() as db:
+                debate = db.get(Debate, debate_id)
+                debate.status = "draft"
+                turns = list(
+                    db.scalars(
+                        select(DebateTurn)
+                        .where(DebateTurn.debate_id == debate_id)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+                target = turns[2]
+                old_id = target.id
+                for turn in turns[2:]:
+                    turn.generation_status = "pending"
+                    turn.publication_status = "unpublished"
+                    turn.speech = turn.structured_json = turn.audio_file_id = None
+                    turn.predecessor_turn_ids_json = json.dumps(
+                        [t.id for t in turns[: turn.turn_index]], separators=(",", ":")
+                    )
+                    turn.cutoff_turn_index = turn.turn_index - 1
+                target.generation_status = "failed"
+                target.safe_error_code = "question_route_invalid"
+                target.transcript_hash = "a" * 64
+                expected_prefix = target.predecessor_turn_ids_json
+                state = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
+                state.status = "preparing"
+                state.current_turn_id = None
+                operation_id = str(uuid4())
+                db.add(
+                    ProviderOperation(
+                        id=operation_id,
+                        provider_operation="llm_debate_turn",
+                        scope_id=debate_id,
+                        logical_item_id=old_id,
+                        attempt_no=1,
+                        request_hash="a" * 64,
+                        max_tokens=100,
+                        max_cost_cny=0.01,
+                        policy_hash="b" * 64,
+                        export_manifest_hash="c" * 64,
+                        state="failed",
+                        request_count=1,
+                        charged_request_count=1,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                db.flush()
+                hashes = {
+                    name: "a" * 64
+                    for name in (
+                        "request_hash",
+                        "prompt_hash",
+                        "schema_hash",
+                        "tokenizer_hash",
+                        "rule_set_hash",
+                        "persona_spec_hash",
+                        "transcript_hash",
+                        "receipt_hash",
+                        "policy_hash",
+                        "export_manifest_hash",
+                        "build_manifest_hash",
+                        "output_hash",
+                    )
+                }
+                db.add(
+                    LlmAcceptedStage(
+                        operation_id=operation_id,
+                        turn_id=old_id,
+                        attempt_no=1,
+                        **hashes,
+                        prompt_contract_version="test",
+                        tokenizer_id="test",
+                        model_key="test",
+                        output_json='{"question":null}',
+                        prompt_tokens=1,
+                        cached_input_tokens=0,
+                        completion_tokens=1,
+                        total_tokens=2,
+                        price_card_version="test",
+                        input_price_cny_per_million=0,
+                        cached_input_price_cny_per_million=0,
+                        output_price_cny_per_million=0,
+                        estimated_cost_cny=0,
+                        retrieval_reused=False,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+            scheduler = SimpleNamespace(resume=Mock(), release=Mock())
+            monkeypatch.setattr(app.state, "prewarm_scheduler", scheduler)
+            service = get_playback_service(Request({"type": "http", "app": app}))
+            enqueue = AsyncMock(return_value=True)
+            monkeypatch.setattr(service, "_enqueue", enqueue)
+            _, csrf = login(client)
+            body = _body(client, debate_id)
+            headers = _headers(csrf, **{"Idempotency-Key": str(uuid4())})
+            response = client.post(
+                f"/api/v1/debates/{debate_id}/remake", json=body, headers=headers
+            )
+            assert response.status_code == 200, response.text
+            replay = client.post(f"/api/v1/debates/{debate_id}/remake", json=body, headers=headers)
+            assert replay.status_code == 200
+            scheduler.resume.assert_called_once_with(debate_id)
+            scheduler.release.assert_not_called()
+            enqueue.assert_not_awaited()
+            with database.session() as db:
+                assert db.get(DebateTurn, old_id) is None
+                assert db.get(ProviderOperation, operation_id).charged_request_count == 1
+                remaining = list(
+                    db.scalars(
+                        select(DebateTurn)
+                        .where(DebateTurn.debate_id == debate_id)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+                replacement = remaining[2]
+                assert replacement.predecessor_turn_ids_json == expected_prefix
+                assert replacement.cutoff_turn_index == 1
+                assert replacement.transcript_hash is None
+                assert all(old_id not in t.predecessor_turn_ids_json for t in remaining)
+                assert all(replacement.id in t.predecessor_turn_ids_json for t in remaining[3:])
+                assert all(t.generation_status == "final_ready" for t in remaining[:2])
+    finally:
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_remake_resume_reopens_released_preview_and_finishes_remaining_turns():
+    import asyncio
+
+    from app.modules.debates.playback.prewarm import PrewarmScheduler
+
+    completed = {"saved"}
+    prepared = []
+    finished = asyncio.Event()
+
+    def plan(_debate_id):
+        return [(turn_id, turn_id in completed) for turn_id in ("saved", "failed", "following")]
+
+    async def prepare(_debate_id, turn_id):
+        prepared.append(turn_id)
+        completed.add(turn_id)
+        if turn_id == "following":
+            finished.set()
+
+    scheduler = PrewarmScheduler(plan=plan, prepare=prepare)
+    scheduler.bind_running_loop()
+    scheduler.release("draft")
+    try:
+        scheduler.resume("draft")
+        await asyncio.wait_for(finished.wait(), timeout=2)
+        assert prepared == ["failed", "following"]
+    finally:
+        await scheduler.close()
+
+
+@pytest.mark.parametrize(
+    "status,mode",
+    [("stopped", "live"), ("completed", "live"), ("completed", "replay"), ("failed", "live")],
+)
+def test_remake_recovers_saved_checkpoint_across_states_and_stale_versions(
+    app_factory, status, mode
+):
+    app, database, settings = app_factory()
+    try:
+        with TestClient(app) as client:
+            debate_id = _saved_classroom(database, settings)
+            with database.session() as db:
+                debate = db.get(Debate, debate_id)
+                debate.status = status
+                state = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
+                last = db.scalar(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id)
+                    .order_by(DebateTurn.turn_index.desc())
+                )
+                state.current_turn_id = last.id
+                state.status = "stopped" if status == "stopped" else "paused"
+                state.mode = mode
+                saved = last.speech
+            _, csrf = login(client)
+            response = client.post(
+                f"/api/v1/debates/{debate_id}/remake",
+                json={"expected_revision": 0, "expected_control_version": 0},
+                headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+            )
+            assert response.status_code == 200, response.text
+            with database.session() as db:
+                state = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
+                assert db.get(DebateTurn, state.current_turn_id).speech == saved
+                assert state.status == (
+                    "completed" if status == "completed" and mode == "live" else "ready"
+                )
+                assert db.get(Debate, debate_id).status == (
+                    "completed" if status == "completed" else "running"
+                )
     finally:
         database.dispose()

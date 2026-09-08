@@ -72,6 +72,11 @@ class PrewarmScheduler:
             return
         loop.call_soon_threadsafe(self._focus, debate_id)
 
+    def resume(self, debate_id: str) -> None:
+        """An explicit Remake reopens a draft and resumes its whole Preview."""
+        self._ended.discard(debate_id)
+        self.focus(debate_id)
+
     def release(self, debate_id: str) -> None:
         """This Debate is over: never warm it again."""
 

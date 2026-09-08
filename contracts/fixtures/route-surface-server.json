@@ -6263,6 +6263,10 @@
           "created_at": {
             "$ref": "#/components/schemas/IsoTime"
           },
+          "audio_restore_needed": {
+            "type": "boolean",
+            "default": false
+          },
           "prepared_turns": {
             "type": "integer",
             "minimum": 0,

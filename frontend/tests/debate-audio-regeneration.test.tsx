@@ -94,8 +94,11 @@ it("regenerates only missing saved audio and shows immediate progress", async ()
       onVoiceDeleted={refresh}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Generate Audio" }));
-  expect(screen.getByRole("status").textContent).toBe("Preparing audio…");
+  fireEvent.click(screen.getByRole("button", { name: "Revoice" }));
+  expect(screen.getByRole("button", { name: "Revoice..." })).toHaveProperty(
+    "disabled",
+    true,
+  );
   expect(generate).toHaveBeenCalledTimes(1);
   expect(generate.mock.calls[0]?.slice(0, 3)).toEqual([
     "debate-a",
@@ -105,9 +108,15 @@ it("regenerates only missing saved audio and shows immediate progress", async ()
   finish({ status: "completed", audio_ready: true });
   await waitFor(() => expect(refresh).toHaveBeenCalled());
   expect(generate).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Unvoice" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
 });
 
-it("destroys a list row without loading a potentially broken detail, even when file cleanup is pending", async () => {
+it("destroys a list row without depending on a potentially broken detail, even when file cleanup is pending", async () => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
   const loadDetail = vi.fn().mockRejectedValue(new Error("broken detail"));
   const removed = vi.fn();
@@ -130,4 +139,75 @@ it("destroys a list row without loading a potentially broken detail, even when f
   expect(loadDetail).not.toHaveBeenCalled();
   expect(destroy).toHaveBeenCalledTimes(1);
   vi.restoreAllMocks();
+});
+
+it("switches Unvoice to Revoice only after successful deletion", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const remove = vi.fn().mockResolvedValue({ cleanup_status: "completed" });
+  render(
+    <DebateCleanupControls
+      detail={
+        {
+          id: "debate",
+          revision: 1,
+          playback: { control_version: 1 },
+        } as unknown as DebateDetail
+      }
+      api={{
+        deleteDebateVoice: remove,
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: vi.fn(),
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Unvoice" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Revoice" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  expect(screen.queryByText("Generate Audio")).toBeNull();
+  vi.restoreAllMocks();
+});
+
+it("returns to quiet Revoice when audio restoration fails", async () => {
+  const generate = vi.fn().mockRejectedValue(new Error("private details"));
+  render(
+    <DebateCleanupControls
+      detail={
+        {
+          id: "debate",
+          revision: 1,
+          turn_protocol: "segments_v2",
+          playback: { control_version: 1 },
+          public_turns: [],
+          preview_turns: [
+            {
+              id: "saved",
+              speech: "Kept text",
+              generation_status: "final_ready",
+              audio_ready: false,
+            },
+          ],
+        } as unknown as DebateDetail
+      }
+      api={{
+        deleteDebateVoice: vi.fn(),
+        deleteDebateAll: vi.fn(),
+        regenerateDebateTurnAudio: generate,
+      }}
+      onVoiceDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Revoice" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Revoice" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("private details")).toBeNull();
 });

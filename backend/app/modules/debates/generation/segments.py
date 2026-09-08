@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Literal, cast
 
@@ -28,8 +28,9 @@ from .four_round import (
     TEACHING_PROTOCOL,
     discussion_context,
     system_prompt,
+    usable_memory,
+    usable_question,
     validate_discussion,
-    validate_memory,
     visible_predecessors,
 )
 from .types import GenerationContext, SnapshotRetrievalReceipt
@@ -1030,8 +1031,6 @@ class Segment:
 
     def __post_init__(self) -> None:
         _text(self.text, "segment.text")
-        if len(self.source_ids) > SEGMENT_MAX_SOURCE_IDS:
-            raise _error("a segment cites too many sources.", code="source_limit")
         if len(self.source_ids) != len(set(self.source_ids)):
             raise _error(
                 "source_ids must be unique within a segment.",
@@ -1122,7 +1121,7 @@ class StoredSegment:
         source_ids = tuple(self.source_ids)
         if any(not isinstance(item, str) or not item.strip() for item in source_ids):
             raise _error("stored source IDs must be non-empty text.", code="stored_result_invalid")
-        if len(source_ids) > SEGMENT_MAX_SOURCE_IDS or len(source_ids) != len(set(source_ids)):
+        if len(source_ids) != len(set(source_ids)):
             raise _error("stored source IDs are invalid.", code="stored_result_invalid")
         if self.reply_to is not None and (
             not isinstance(self.reply_to, str) or _BARRAGE_ID_RE.fullmatch(self.reply_to) is None
@@ -1172,7 +1171,7 @@ class StoredSegmentTurnResult:
 
     def __post_init__(self) -> None:
         segments = tuple(self.segments)
-        if not SEGMENT_MIN_COUNT <= len(segments) <= SEGMENT_MAX_COUNT:
+        if not segments:
             raise _error("stored segment count is invalid.", code="stored_result_invalid")
         if any(not isinstance(item, StoredSegment) for item in segments):
             raise _error("stored segments are not typed.", code="stored_result_invalid")
@@ -1282,22 +1281,9 @@ def load_stored_segment_turn_result(value: Mapping[str, object]) -> StoredSegmen
     raw_segments = value.get("segments")
     if not isinstance(raw_segments, list):
         raise _error("stored segments are invalid.", code="stored_result_invalid")
-    question = value.get("question")
-    if question is not None and (
-        not isinstance(question, Mapping)
-        or set(question) != {"target_agent_id", "text"}
-        or any(
-            not isinstance(question[key], str) or not str(question[key]).strip()
-            for key in ("target_agent_id", "text")
-        )
-        or len(str(question["text"])) > 400
-    ):
-        raise _error("stored question is invalid", code="stored_result_invalid")
     result = StoredSegmentTurnResult(
-        question=cast(Mapping[str, str] | None, question),
-        discussion_memory=validate_memory(value["discussion_memory"])
-        if value.get("discussion_memory") is not None
-        else None,
+        question=usable_question(value.get("question")),
+        discussion_memory=usable_memory(value.get("discussion_memory")),
         segments=tuple(_stored_segment(item, index) for index, item in enumerate(raw_segments)),
         speech="\n\n".join(
             item.get("text", "")
@@ -1486,16 +1472,6 @@ SegmentTurnResultV2 = SegmentTurnResult
 def _output_segment(value: object, index: int) -> Segment:
     raw = _object(value, "segment")
     pointer = f"/segments/{index}"
-    if set(raw) not in (
-        {"text", "source_ids", "reply_to"},
-        {"text", "source_ids", "reply_to", "support_mode"},
-    ):
-        raise _error(
-            "segment objects must contain text, source_ids, reply_to and optional "
-            "support_mode only.",
-            code="segment_shape_invalid",
-            pointer=pointer,
-        )
     text = raw.get("text")
     if not isinstance(text, str) or not text.strip():
         raise _error(
@@ -1504,51 +1480,28 @@ def _output_segment(value: object, index: int) -> Segment:
             pointer=f"{pointer}/text",
         )
     source_values = raw.get("source_ids")
-    if not isinstance(source_values, list) or len(source_values) > SEGMENT_MAX_SOURCE_IDS:
-        raise _error(
-            "source_ids has an invalid size.",
-            code="source_reference_invalid",
-            pointer=f"{pointer}/source_ids",
-        )
-    source_ids: list[str] = []
-    for source_index, source_id in enumerate(source_values):
-        if not isinstance(source_id, str) or _SOURCE_ID_RE.fullmatch(source_id) is None:
-            raise _error(
-                "source reference is invalid.",
-                code="source_reference_invalid",
-                pointer=f"{pointer}/source_ids/{source_index}",
+    source_ids = (
+        tuple(
+            dict.fromkeys(
+                item
+                for item in source_values
+                if isinstance(item, str) and _SOURCE_ID_RE.fullmatch(item)
             )
-        source_ids.append(source_id)
-    if len(source_ids) != len(set(source_ids)):
-        raise _error(
-            "source_ids must be unique within a segment.",
-            code="source_reference_invalid",
-            pointer=f"{pointer}/source_ids",
         )
+        if isinstance(source_values, list)
+        else ()
+    )
     reply = raw.get("reply_to")
-    if reply is not None and (
-        not isinstance(reply, str) or _BARRAGE_ID_RE.fullmatch(reply) is None
-    ):
-        raise _error(
-            "reply_to must be a local B ID or null.",
-            code="barrage_reference_invalid",
-            pointer=f"{pointer}/reply_to",
-        )
-    support_mode = raw.get("support_mode")
-    if "support_mode" in raw and (
-        not isinstance(support_mode, str)
-        or support_mode not in {"direct", "contextual", "no_match"}
-    ):
-        raise _error(
-            "support_mode must be direct, contextual, no_match or omitted.",
-            code="support_mode_invalid",
-            pointer=f"{pointer}/support_mode",
-        )
+    if not isinstance(reply, str) or _BARRAGE_ID_RE.fullmatch(reply) is None:
+        reply = None
+    mode = raw.get("support_mode")
+    if not isinstance(mode, str) or mode not in {"direct", "contextual", "no_match"}:
+        mode = None
     return Segment(
         text=text,
-        source_ids=tuple(source_ids),
-        reply_to=reply if isinstance(reply, str) else None,
-        support_mode=cast(SegmentSupportMode | None, support_mode),
+        source_ids=source_ids,
+        reply_to=reply,
+        support_mode=cast(SegmentSupportMode | None, mode),
     )
 
 
@@ -1582,120 +1535,43 @@ def validate_segment_output(value: object, snapshot: SegmentInputSnapshot) -> Se
         if isinstance(value, str)
         else _object(value, "segment output")
     )
-    if set(raw) != (
-        {"segments", "question", "discussion_memory"} if snapshot.discussion_json else {"segments"}
-    ):
-        raise _error(
-            "segment output must contain only segments.",
-            code="segment_shape_invalid",
-            pointer="/",
-        )
     values = raw.get("segments")
-    if not isinstance(values, list) or not SEGMENT_MIN_COUNT <= len(values) <= SEGMENT_MAX_COUNT:
+    if not isinstance(values, list) or not values:
         raise _error(
-            "output must contain one to eight segments.",
+            "output must contain readable segments.",
             code="segment_count_invalid",
             pointer="/segments",
         )
-    segments = tuple(_output_segment(item, index) for index, item in enumerate(values))
-    speech = "\n\n".join(item.text for item in segments)
-    question = None
-    memory = None
-    discussion = snapshot.discussion
-    if discussion is not None:
-        if any(item.support_mode is None for item in segments):
-            raise _error(
-                "support_mode is required", code="support_mode_invalid", pointer="/segments"
-            )
-        question = raw.get("question")
-        if snapshot.round.number == 2:
-            if (
-                not isinstance(question, Mapping)
-                or set(question) != {"target_agent_id", "text"}
-                or question.get("target_agent_id") != discussion["question_target_id"]
-                or not isinstance(question.get("text"), str)
-                or not str(question["text"]).strip()
-                or len(str(question["text"])) > 400
-            ):
-                raise _error(
-                    "question must target the assigned Agent and contain text",
-                    code="question_route_invalid",
-                    pointer="/question",
-                )
-        elif question is not None:
-            raise _error(
-                "question is only emitted in round two",
-                code="question_route_invalid",
-                pointer="/question",
-            )
-        memory = raw.get("discussion_memory")
-        if snapshot.round.number == 3:
-            try:
-                memory = validate_memory(
-                    memory, {str(a["id"]) for a in cast(list[dict[str, str]], discussion["agents"])}
-                )
-            except ValueError as exc:
-                raise _error(
-                    "invalid discussion memory",
-                    code="discussion_memory_invalid",
-                    pointer="/discussion_memory",
-                ) from exc
-        elif memory is not None:
-            raise _error(
-                "discussion memory is only emitted in round three",
-                code="discussion_memory_invalid",
-                pointer="/discussion_memory",
-            )
-
+    parsed_segments = tuple(_output_segment(item, index) for index, item in enumerate(values))
     source_map = snapshot.source_map
     barrage_map = snapshot.barrage_map
-    used_sources: list[str] = []
-    replies: list[str] = []
-    for index, segment in enumerate(segments):
-        for source_id in segment.source_ids:
-            if source_id not in source_map:
-                raise _error(
-                    "source reference is outside this snapshot.",
-                    code="source_reference_invalid",
-                    pointer=f"/segments/{index}/source_ids",
-                )
-            if source_id not in used_sources:
-                used_sources.append(source_id)
-        if segment.support_mode in {"direct", "contextual"} and not segment.source_ids:
-            raise _error(
-                "direct or contextual support requires at least one bound source.",
-                code="support_mode_source_mismatch",
-                pointer=f"/segments/{index}/support_mode",
+    segments_list = []
+    for segment in parsed_segments:
+        sources = tuple(item for item in segment.source_ids if item in source_map)
+        mode = segment.support_mode
+        # An unusable evidence claim is ungraded, never a reason to lose text.
+        if (mode in {"direct", "contextual"} and not sources) or (mode == "no_match" and sources):
+            mode = None
+        segments_list.append(
+            replace(
+                segment,
+                source_ids=sources,
+                reply_to=segment.reply_to if segment.reply_to in barrage_map else None,
+                support_mode=mode,
             )
-        if segment.support_mode == "no_match" and segment.source_ids:
-            raise _error(
-                "no_match paragraphs cannot cite a source.",
-                code="support_mode_source_mismatch",
-                pointer=f"/segments/{index}/source_ids",
-            )
-        if segment.reply_to is not None:
-            if segment.reply_to not in barrage_map:
-                raise _error(
-                    "barrage reference is outside this frozen pool.",
-                    code="barrage_reference_invalid",
-                    pointer=f"/segments/{index}/reply_to",
-                )
-            if segment.reply_to not in replies:
-                replies.append(segment.reply_to)
-
-    if snapshot.phase == "final_integration":
-        if snapshot.barrages and not replies:
-            raise _error(
-                "a final turn must answer one eligible barrage.",
-                code="final_reply_missing",
-                pointer="/segments",
-            )
-        if not snapshot.barrages and replies:
-            raise _error(
-                "a final turn without barrages must use null reply_to.",
-                code="barrage_reference_invalid",
-                pointer="/segments",
-            )
+        )
+    segments = tuple(segments_list)
+    speech = "\n\n".join(item.text for item in segments)
+    discussion = snapshot.discussion
+    agent_ids = (
+        {str(a["id"]) for a in cast(list[dict[str, str]], discussion["agents"])}
+        if discussion
+        else None
+    )
+    question = usable_question(raw.get("question"), agent_ids)
+    memory = usable_memory(raw.get("discussion_memory"), agent_ids)
+    used_sources = list(dict.fromkeys(item for segment in segments for item in segment.source_ids))
+    replies = list(dict.fromkeys(segment.reply_to for segment in segments if segment.reply_to))
 
     return SegmentTurnResult(
         question=cast(Mapping[str, str] | None, question),
