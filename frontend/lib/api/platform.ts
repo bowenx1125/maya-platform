@@ -1555,13 +1555,14 @@ export class PlatformApi {
 
   async regenerateReport(
     debateId: string,
-    options: IdempotentMutationOptions = {},
+    options: IdempotentMutationOptions & { initial?: boolean } = {},
   ): Promise<CivilizationReport> {
     return commitMutation(options.idempotency, async (key) =>
       unwrap<CivilizationReport>(
         (await this.client.POST("/debates/{debate_id}/report/generate", {
           params: {
             path: { debate_id: debateId },
+            query: options.initial ? { initial: true } : undefined,
             header: {
               "Idempotency-Key": key,
               "X-CSRF-Token": this.csrfToken ?? "",

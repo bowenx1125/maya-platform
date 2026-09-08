@@ -26,6 +26,7 @@ import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
+import { DebateStatus } from "../debate-status";
 
 import {
   EmptyCard,
@@ -33,7 +34,6 @@ import {
   LoadingCard,
   PageIntro,
   SectionCard,
-  StatusBadge,
 } from "../../ui";
 import styles from "./debate-setup.module.css";
 
@@ -86,6 +86,8 @@ export function TeacherDebateList({
   const [error, setError] = useState<unknown>(null);
   const courseId = teacherCourseId(user);
   const loadSequence = useRef(0);
+  const remakeInFlight = useRef(false);
+  const [remaking, setRemaking] = useState(false);
 
   const load = useCallback(
     async (silent = false) => {
@@ -105,6 +107,7 @@ export function TeacherDebateList({
           : await api.debates(courseId);
         if (sequence !== loadSequence.current) return;
         setDebates(next);
+        setError(null);
       } catch (cause) {
         if (!silent && sequence === loadSequence.current) setError(cause);
       } finally {
@@ -137,8 +140,46 @@ export function TeacherDebateList({
     };
   }, [load]);
 
-  if (loading) return <LoadingCard />;
-  if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
+  const remakeAll = async () => {
+    if (remakeInFlight.current || !courseId) return;
+    remakeInFlight.current = true;
+    setRemaking(true);
+    try {
+      const latest = controller
+        ? await controller.load(courseId)
+        : await api.debates(courseId);
+      for (const row of latest) {
+        try {
+          if (stalled(row) || row.status === "failed") {
+            const snapshot = await api.debate(row.id);
+            await api.remakeDebate(
+              row.id,
+              {
+                expected_revision: snapshot.revision,
+                expected_control_version: snapshot.playback.control_version,
+              },
+              { idempotency: createIdempotencyHandle() },
+            );
+          }
+          if (["completed", "debate_finished"].includes(row.status)) {
+            const report = await api.getCurrentReport(row.id);
+            if (report.generation_status === "failed")
+              await api.regenerateReport(row.id, {
+                idempotency: createIdempotencyHandle(),
+              });
+          }
+        } catch {
+          /* One blocked request must not prevent refreshing other debates. */
+        }
+      }
+    } catch {
+      /* The final refresh retains the last visible list on connection loss. */
+    } finally {
+      await load(true);
+      remakeInFlight.current = false;
+      setRemaking(false);
+    }
+  };
 
   return (
     <div className={styles.pageStack}>
@@ -146,106 +187,90 @@ export function TeacherDebateList({
         eyebrow={t("debates")}
         title={t("debatePreviewTitle")}
         action={
-          <Link className="primary-action" href="/teacher/debates/new">
-            {t("newDebate")}
-          </Link>
-        }
-      />
-      <SectionCard>
-        {debates.length === 0 ? (
-          <div className={styles.emptyState}>
-            <strong>{t("debateNoDebates")}</strong>
-            <Link className="secondary-action" href="/teacher/debates/new">
+          <div className="row-actions">
+            <Link className="primary-action" href="/teacher/debates/new">
               {t("newDebate")}
             </Link>
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={remaking}
+              onClick={() => void remakeAll()}
+            >
+              {remaking ? "Remake..." : "Remake"}
+            </button>
           </div>
-        ) : (
-          <div className={styles.list}>
-            {debates.map((debate) => (
-              <div className={styles.debateRow} key={debate.id}>
-                <Link
-                  className={styles.debateCard}
-                  href={`/teacher/debates/${debate.id}/control`}
-                >
-                  <div>
-                    <h2>{debate.topic}</h2>
-                    <div className={styles.metaRow}>
-                      <span>{copy(t, "debateRounds")}</span>
-                      <span>
-                        {new Date(debate.created_at).toLocaleDateString()}
-                      </span>
+        }
+      />
+      {loading ? <LoadingCard /> : null}
+      {error ? (
+        <ErrorNotice error={error} onRetry={() => void remakeAll()} />
+      ) : null}
+      {!loading && !error ? (
+        <SectionCard>
+          {debates.length === 0 ? (
+            <div className={styles.emptyState}>
+              <strong>{t("debateNoDebates")}</strong>
+              <Link className="secondary-action" href="/teacher/debates/new">
+                {t("newDebate")}
+              </Link>
+            </div>
+          ) : (
+            <div className={styles.list}>
+              {debates.map((debate) => (
+                <div className={styles.debateRow} key={debate.id}>
+                  <Link
+                    className={styles.debateCard}
+                    href={`/teacher/debates/${debate.id}/control`}
+                  >
+                    <div>
+                      <h2>{debate.topic}</h2>
+                      <div className={styles.metaRow}>
+                        <span>{copy(t, "debateRounds")}</span>
+                        <span>
+                          {new Date(debate.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  {/* A draft is not idle: it is warming its turns in the
+                    {/* A draft is not idle: it is warming its turns in the
                       background, so the list says how far along it is rather
                       than only that it is a draft. */}
-                  {/* A stall outranks both other readings, and a running
+                    {/* A stall outranks both other readings, and a running
                       debate can stall too: the lesson that stopped generating
                       mid-round used to read Running with nothing to act on. */}
-                  {stalled(debate) ? (
-                    <PrewarmBadge
-                      expected={
-                        debate.preview?.expected_turns ??
-                        debate.expected_turns ??
-                        0
-                      }
-                      prepared={
-                        debate.preview?.prepared_turns ??
-                        debate.prepared_turns ??
-                        0
-                      }
-                      stall={debate.stall}
-                    />
-                  ) : debate.status === "draft" ? (
-                    <PrewarmBadge
-                      expected={
-                        debate.preview?.expected_turns ??
-                        debate.expected_turns ??
-                        0
-                      }
-                      prepared={
-                        debate.preview?.prepared_turns ??
-                        debate.prepared_turns ??
-                        0
-                      }
-                    />
-                  ) : (
-                    <StatusBadge status={debate.status} />
-                  )}
-                </Link>
-                <div className={styles.debateActions}>
-                  <ClassroomResetButton
-                    debateId={debate.id}
-                    action="remake"
-                    onDone={() => void load(true)}
-                  />
-                  {["completed", "debate_finished"].includes(debate.status) ? (
-                    <ClassroomResetButton
+                    <DebateStatus debate={debate} />
+                  </Link>
+                  <div className={styles.debateActions}>
+                    {["completed", "debate_finished"].includes(
+                      debate.status,
+                    ) ? (
+                      <ClassroomResetButton
+                        debateId={debate.id}
+                        action="rebirth"
+                        onDone={() => void load(true)}
+                      />
+                    ) : null}
+                    <DebateCleanupControls
+                      api={api}
                       debateId={debate.id}
-                      action="rebirth"
-                      onDone={() => void load(true)}
+                      loadDetail={() => api.debate(debate.id)}
+                      onVoiceDeleted={load}
+                      onAllDeleted={() => {
+                        loadSequence.current += 1;
+                        setDebates((rows) =>
+                          rows.filter((row) => row.id !== debate.id),
+                        );
+                      }}
+                      className={styles.listCleanup}
+                      audioRestoreNeeded={debate.audio_restore_needed}
                     />
-                  ) : null}
-                  <DebateCleanupControls
-                    api={api}
-                    debateId={debate.id}
-                    loadDetail={() => api.debate(debate.id)}
-                    onVoiceDeleted={load}
-                    onAllDeleted={() => {
-                      loadSequence.current += 1;
-                      setDebates((rows) =>
-                        rows.filter((row) => row.id !== debate.id),
-                      );
-                    }}
-                    className={styles.listCleanup}
-                    audioRestoreNeeded={debate.audio_restore_needed}
-                  />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      ) : null}
     </div>
   );
 }
@@ -267,43 +292,6 @@ function stalled(debate: DebateSummary): boolean {
   return (
     debate.stall != null &&
     (debate.status === "draft" || debate.status === "running")
-  );
-}
-
-function PrewarmBadge({
-  prepared,
-  expected,
-  stall,
-}: {
-  prepared: number;
-  expected: number;
-  stall?: DebateSummary["stall"];
-}) {
-  const t = useT();
-  const complete = expected > 0 && prepared >= expected;
-  // A stalled task must not look as if its preparation count will advance.
-  if (stall) {
-    return (
-      <span
-        className="status-badge status-bad"
-        data-prewarm="stalled"
-        title={t("debateStalledReason")
-          .replace("{round}", String(stall.round_no))
-          .replace("{code}", stall.safe_error_code)}
-      >
-        <span aria-hidden="true" />
-        {t("debateStalled")}
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`status-badge ${complete ? "status-good" : "status-warn"}`}
-      data-prewarm={complete ? "ready" : "thinking"}
-    >
-      <span aria-hidden="true" />
-      {complete ? t("debatePrewarmReady") : `${prepared} / ${expected} turns`}
-    </span>
   );
 }
 
@@ -352,12 +340,12 @@ function ClassroomResetButton({
               idempotency: createIdempotencyHandle(),
             });
           }
-          onDone();
         } catch {
           // A refused action leaves the row unchanged.
         } finally {
           active.current = false;
           setBusy(false);
+          onDone();
         }
       }}
     >

@@ -375,9 +375,11 @@ export function ReportPanel({
               <li key={revision.id}>
                 <span>{revisionTitle(locale, revision.revision_no)}</span>
                 <span className={styles.revisionStatus}>
-                  {reportStatusLabel(locale, revision.status)}
+                  {revision.status !== "ready"
+                    ? reportStatusLabel(locale, revision.status)
+                    : ""}
                   {revision.word_count
-                    ? ` · ${revision.word_count} ${copy.words}`
+                    ? `${revision.status === "ready" ? "" : " · "}${revision.word_count} ${copy.words}`
                     : ""}
                 </span>
                 <button

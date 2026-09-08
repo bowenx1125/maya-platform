@@ -50,6 +50,7 @@ def get_current_report_route(
 def regenerate_report_route(
     debate_id: UUID,
     request: Request,
+    initial: bool = Query(False),
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
@@ -60,6 +61,7 @@ def regenerate_report_route(
         actor_user_id=context.user.id,
         debate_id=str(debate_id),
         idempotency_key=idempotency_key,
+        initial_only=initial,
     )
     # The Job has to be durable before anything is told to look for it.
     # get_db commits only after this handler returns, so waking here left the

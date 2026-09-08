@@ -37,10 +37,10 @@ are reused rather than charged again.
 
 | Round       | Chinese upper guidance | English upper guidance |
 | ----------- | ---------------------- | ---------------------- |
-| RAG Opening | 160 characters         | 100 words              |
-| Discussion  | 140 characters         | 90 words               |
-| Response    | 160 characters         | 100 words              |
-| Conclusion  | 180 characters         | 115 words              |
+| RAG Opening | 500 characters         | 320 words              |
+| Discussion  | 450 characters         | 280 words               |
+| Response    | 550 characters         | 350 words              |
+| Conclusion  | 650 characters         | 420 words              |
 
 The owner's latest decision removes all backend speech-length validation and
 all minimum lengths. These upper bounds appear in the actual System Prompt only.
@@ -89,7 +89,7 @@ routing or acceptance_unknown. Full replay, RAG relevance and classroom quality
 were not accepted. No partial test pass establishes universal success.
 
 The owner authorizes main delivery and Docker updates, with final manual classroom
-audit. A requested browser-click attempt was blocked by the Mac lock screen.
+audit.
 No usage reset is authorized. The external `/Users/xubosmell/Desktop/Maya/HANDOFF.md`
 is owner-requested and can contain operational continuation instructions.
 
@@ -145,8 +145,9 @@ LLM or TTS regeneration was requested for this playback audit.
   A settled failed paid turn can get a new identity and a bounded new attempt on
   the teacher's explicit click, while old charge records remain. Accepted results
   are recovered locally. Sending/acceptance-unknown requests are not duplicated.
-  Remake is always reachable in the list, including when no error classifier
-  has detected a stall. It follows the first incomplete eligible turn or the
+  One global Remake sits beside New Debate; no per-row Remake remains. It
+  refreshes every record and recovers failed/stalled work, following the first
+  incomplete eligible turn or the
   retained playback checkpoint and uses current server versions. No generic
   failure prose is inserted into the list.
 
@@ -156,93 +157,30 @@ ignores old version values. Frozen OpenAPI, generated client and route fixtures
 were updated together. Audit records distinguish fresh generation authorization
 from media-only recovery; scope budgets preserve earlier allocated costs.
 
-## Previous consolidated verification
+## Earlier browser-state corrections
 
-Before the subsequent manual-browser fixes: 131 focused backend and 276 frontend
-checks passed, alongside typing/lint/build checks. An earlier full backend suite
-had 1,271 passes and 43 failures; it was not rerun in full. These results do not
-accept the latest code or real classroom behavior. The Chinese Report call above
-succeeded; no universal classroom-success claim is made.
+The owner reproduced stale Preview, silent Next and duplicate-looking Agent text.
+Corrections include visible-page Preview polling; preserving completed WS event
+and receive tasks until consumed; sequential public-event indices under rotated
+speaker order; atomic speech/speaker snapshot application; and rejecting stale
+media callbacks. Next can interrupt playing/paused audio and advance the adjacent
+ready turn under version/identity checks. A natural-ended race retries only after
+confirming the original source turn is still current. Final freezes the barrage
+cutoff transactionally. Rebirth preserves completed Preview job receipts.
 
-## Latest manual-browser corrections — September 8 continuation
+Every new turn retrieves from its own KB with Prompt priorities high/low/medium/
+high. Up to three queries share one Embedding batch per turn: 3N Preview plus N
+final, within the initial 4N ceiling. Explicit Rebirth/Remake add only their new
+query allowance under existing token/money/consent limits. Saved outputs are not
+rewritten. These changes were not universal browser or teaching-quality acceptance.
 
-The owner reported stale Preview detail, silent Next, and duplicate-looking
-Agent text under rapid Next after the preceding delivery. This invalidates any
-assumption that its unit-test pass accepted classroom playback. The owner now
-requests source/static audit only, with actual browser acceptance performed by
-the owner. No tests or paid/provider/browser trials were run for this continuation.
-Only deployment compilation is required to install the updated application.
+## Remake recovery
 
-Confirmed source causes and corrections:
-
-- The text Preview detail loaded only once and did not mount a classroom WS
-  subscription. It now silently polls while visible and refreshes on focus,
-  preserving cards and rejecting stale responses across requests/routes.
-- The WS loop overwrote a completed event task when a command published an event
-  during its handler. The event was persisted but never delivered. Both receive
-  and event tasks now survive until their results have actually been consumed.
-- The frontend inferred turn indices from fixed Agent order even though rounds
-  rotate speakers. It now uses existing identity or ordered public-event indices.
-  Full snapshot application updates visible speech and speaker together; old
-  callback/private replies cannot change a newer turn. The latest inspected
-  four-Agent case had 12 distinct stored speech hashes; that read is evidence
-  against exact database duplication, not an evaluation of semantic repetition.
-- Next explicitly interrupts playing/paused audio and advances one adjacent
-  ready turn under the same expected-turn/version CAS. Rapid duplicate requests
-  cannot skip an extra turn. A natural-ended version conflict is retried once
-  only after a fresh snapshot proves the original source turn is still current.
-  Unready successors leave playback waiting. On the final speech, Next completes
-  its existing playback; Final can stop the last Preview speech and freeze the
-  barrage cutoff in one transaction before the normal final-generation queue.
-- A delayed pre-play failure is validated before revoking a media ticket, so
-  an invalid old failure cannot invalidate current playback.
-
-The requested pre-delivery static audit also found two classroom blockers:
-Rebirth deleted the completed Preview jobs that SQL Next requires; it now
-preserves/rebinds their completion receipts to the new classroom fence, without
-regeneration. Remake now inspects both LLM turn IDs and `turn:<id>` query IDs:
-settled failed queries can restart on a fresh turn identity, successful query
-stages stay reusable, and sending/unknown requests remain protected.
-
-Every new four-round turn now retrieves from its own KB. Relative priorities in
-the actual stage Prompts are high / low / medium / high, not numeric neural
-attention weights. Opening/response anchors and stable question targets shape
-queries; final queries use discussion memory, specific disagreement and frozen
-barrages. At most three queries share one Embedding batch per turn. This changes
-normal query batches from 2N to 4N (3N Preview, N final) within the existing first-run
-4N ceiling, without extra LLM calls. Explicit Rebirth/Remake add only their new
-turn-query allowance; existing token/money limits and provider consent remain.
-No backend duplicate-text, S-ID or word-count rejection was added. Saved outputs
-are not rewritten; the RAG/Prompt changes govern newly generated turns.
-
-Deployment result and manual acceptance remain separate: the code is prepared
-for the owner's browser audit, not certified as universally successful.
-
-## Remake stalled Preview correction — September 8
-
-A sanitized live inspection of `a675c540-611f-46fd-bd0b-f4da552f5c99`
-found six ready speeches, followed by a pending seventh turn and a pending job
-without progress after Remake. Both paid LLM attempts for that turn had failed
-with `question_route_invalid`; their retained stage rows were incorrectly treated
-as recoverable success. The old transcript fence then prevented a fresh claim.
-The route also called scheduler release, permanently excluding this draft from
-Preview scheduling, and only attempted to enqueue one turn.
-
-Remake now checks the Provider operation state before reusing a staged response.
-Settled failed responses use the existing explicit fresh-turn allowance; their
-operation/charge records survive. The replacement keeps its input prefix and
-cutoff, and subsequent ungenerated dependencies reference the replacement ID.
-Local accepted-result recovery clears an unpublished claim fence while keeping
-cached valid speech unchanged. Draft Remake explicitly reopens the Preview
-scheduler and resumes the remaining sequence, rather than marking it ended.
-Repeated identical requests do not schedule a second recovery.
-
-Report now exposes only Regenerate (Conclude creates the first report); Refresh
-and Generate labels are removed, and View revision is renamed Review.
-
-The inspected failure debate was deleted during diagnosis and was not recreated.
-Current validation results are recorded below; they are not a guarantee of model
-quality or universal recovery from external failures.
+Settled failed Provider responses are not cached successes. Explicit Remake uses
+its fresh-turn allowance, preserves charge records and valid cached results,
+rebinds pending dependencies and rejoins Preview scheduling. Unknown acceptance
+is not resent. Report offers Regenerate and Review; Conclude creates its first
+revision. Deleted diagnostic records are not recreated.
 
 ## Latest owner refinements
 
@@ -257,13 +195,23 @@ Structural nonempty text/JSON parsing, consent, costs and database ownership/sta
 fences remain. Prompt instructions still describe the expected output.
 
 Rebirth now accepts completed replay and binds new final-turn dependencies to the
-new IDs, keeping exact Preview/audio. Report has only Regenerate and Review.
+new IDs, keeping exact Preview/audio. A later live-schema reproduction found migration
+0020's final_input_immutable trigger still blocked Rebirth. Explicit reset writes
+now temporarily suspend and restore that one trigger inside BEGIN IMMEDIATE;
+ordinary updates stay protected and rollback restores data plus trigger. The
+current real case reproduced successfully in an in-memory clone, with Preview
+text/audio IDs unchanged and the trigger restored. No live records were reset.
+Lifecycle fixtures now include this actual trigger and the multi-draft recovery
+queue; 14 checks cover these paths, including
+rollback protection. Report has only Regenerate and Review.
 Generate Audio is removed from debate details. The list uses
 Unvoice → Revoice → Revoice... (disabled) → Unvoice; failures retain the respective
 retry action without an error message. List audio state is loaded from actual
 saved-turn audio, not an optimistic label on a failed deletion. Agent version
-pills are left of the divider, with Group on the right and aligned columns.
-Remake supports draft/failed/stopped/completed and replay checkpoints, repairs
+pills are left of the divider. Group is right-aligned with the same 18px text
+inset and typography as Destroy, sharing its action CSS without a hover effect; both
+align vertically with the version pill.
+The recovery service supports draft/failed/stopped/completed and replay checkpoints, repairs
 orphan job claims and rebinds retained completion receipts. Completed healthy
 history stays completed; failed Reports can be regenerated through the same
 explicit click. In-flight/unknown paid requests are not duplicated, and another
@@ -284,6 +232,49 @@ Two retained-replay Next clicks switched Elena → Mira → Rowan with matching 
 this is a spot check, not full classroom or teaching-quality acceptance. No paid
 Provider-generation test or destructive browser action was performed.
 
+## Prompt-only repetition correction
+
+The owner supplied three final speeches that only changed the named agreement
+partner and repeated the same argument. Actual System/stage Prompts now anchor
+each Agent in its own opening, received question and RAG rationale. Same-round
+history identifies already-covered points; it is not a continuation template.
+Round two asks about unresolved conditions/evidence; round three directly answers
+what was asked. Round four briefly responds to another speaker, then develops its
+own retained/changed judgment and one useful condition, limitation, action detail
+or unresolved issue. Agreement is allowed; superficial paraphrase and invented
+disagreement are discouraged. No similarity detector, rejection, retry or text
+rewriting was added. New calls use this guidance; saved text is unchanged.
+Actual generated Prompt documentation is refreshed. Model diversity/teaching
+quality still requires a new real classroom observation.
+
+## Latest delivery additions
+
+Destroy rejected four real records because committed debate_turn_tts journals
+use staging/debate-turn-tts/course/debate/turn/operation.wav, absent from its
+ownership allowlist. Exact same-course/debate UUID WAV paths are now recognized;
+other scopes, traversal and symlinks remain protected. All four deletes succeeded
+in independent in-memory clones with foreign keys intact. Actual user records
+were not deleted during diagnosis. Owned empty staging directories are removed.
+
+Global Remake refreshes the list, resumes abnormal drafts and failed Reports,
+and continues past a blocked record. Preview resumptions queue serially rather
+than overwriting scheduler ownership. Stage and Debate lists share DebateStatus,
+so Ready/Completed label and badge treatment come from the same state mapping.
+
+Both Conclude paths now request report/generate?initial=true after finalization.
+The writer transaction reuses any started/ready/failed report instead of making
+a second initial revision; Regenerate still explicitly creates a new revision.
+Report history omits Ready and its separator, keeping the word count and Review.
+The separate How to date with girls? connection failure is deferred at the owner's
+request: the recorded failure was an Embedding ConnectError, not rejected speech;
+a no-auth HEAD probe subsequently connected. No new paid generation test was run.
+
+Latest batch verification: 47 focused backend checks and 61 frontend checks
+passed, including scoped TTS-file deletion, trigger-aware Rebirth, queued global
+recovery, initial-report reuse and Conclude's first-generation request. Type,
+targeted lint/format and OpenAPI semantic checks passed. The full suites and a
+new paid teaching-quality run were not performed.
+
 ## Runtime and established UI
 
 Next.js, FastAPI, SQLite/local files and Caddy share port 8080. Inspect active
@@ -293,7 +284,7 @@ real DashScope adapters with independent authorization. Current Embedding is
 text-embedding-v4, 1024 dimensions.
 
 Teacher lists/creation use yellow rows on white paper. Unvoice/Destroy sit beside
-Remake/Rebirth; Open Stage uses their action styling. Failed actions preserve the row.
+Rebirth; global Remake sits beside New Debate; Open Stage uses their action styling. Failed actions preserve the row.
 Stage titles are removed; speech scrolls above compact gold controls and bubbles
 persist until Next. Open Message/Hide preserves its QR session. Conclude contains
 Report and scores; Audio Ready indicates retained audio. This change adds only
@@ -309,3 +300,14 @@ Classroom-scale load, public deployment, monitoring, backup/restore, real speech
 and data/licensing governance remain outside this local Demo scope.
 [ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/) and [ADRs](adr/)
 retain stable design references.
+
+Latest Prompt guidance treats speeches as substantive essay answers: relevant
+explanation, evidence and direct answers earn credit; repetition, digression and
+padding do not. Persona shapes priorities, criteria and recommendations, never
+invented facts. RAG material is selected for complementary relevance and explained,
+not merely named. Expanded language-specific upper guidance appears above; no
+minimum or runtime length rejection was restored. Provider request/token ceilings
+remain unchanged. An additional 21 four-round backend checks and 11 Preview/Stage
+frontend checks passed after this change; frontend types passed. These checks
+do not validate model answer depth or teaching quality. Preview and Stage Check RAG now count unique evidence source IDs,
+not paragraphs, using the same badge treatment. Saved speeches remain unchanged.

@@ -3104,6 +3104,7 @@ def regenerate_report(
     actor_user_id: str,
     debate_id: str,
     idempotency_key: str,
+    initial_only: bool = False,
 ) -> Report:
     """Create one new immutable report revision or an insight retry revision."""
 
@@ -3127,6 +3128,15 @@ def regenerate_report(
     )
     if replay is not None:
         return replay
+    if initial_only:
+        current = _report_dto(db, debate_id)
+        if (
+            current.generation_status != "not_started"
+            or current.current_success_revision is not None
+        ):
+            _finish_idempotency(db, record, current)
+            db.flush()
+            return current
     window = _window_row(db, debate_id)
     if window is None or window.get("status") != "finalized":
         raise invalid_state("Classroom interaction must be finalized before a report.")

@@ -48,7 +48,7 @@ from app.modules.reports.service import (
     validate_report_markdown,
 )
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 TEACHER_ID = "08b9de2d-bb75-5c71-a64b-231b48f9eb25"
 
@@ -509,11 +509,13 @@ def test_m14_enqueuer_runs_empty_interaction_to_ready_report(app_factory) -> Non
             session.commit()
         # Closing interaction creates only the insight job.  Report generation
         # is a separate explicit Bench action after that insight is ready.
+        # Conclude requests the initial revision without duplicating one already made.
         with database.session() as session:
             regenerate_report(
                 session,
                 actor_user_id=TEACHER_ID,
                 debate_id=debate_id,
+                initial_only=True,
                 idempotency_key="m14-report-generate-namespace-0001",
             )
             assert (
@@ -538,6 +540,26 @@ def test_m14_enqueuer_runs_empty_interaction_to_ready_report(app_factory) -> Non
             assert ready is not None
             assert ready.status == "ready"
             assert ready.word_count is not None and ready.word_count >= 0
+            revision_count = session.scalar(
+                select(func.count())
+                .select_from(CivilizationReportRevision)
+                .where(CivilizationReportRevision.debate_id == debate_id)
+            )
+            regenerate_report(
+                session,
+                actor_user_id=TEACHER_ID,
+                debate_id=debate_id,
+                idempotency_key="conclude-initial-repeat-key",
+                initial_only=True,
+            )
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(CivilizationReportRevision)
+                    .where(CivilizationReportRevision.debate_id == debate_id)
+                )
+                == revision_count
+            )
             assert (
                 session.scalar(
                     select(Job.state).where(Job.idempotency_key == f"report.generate:{revision_id}")

@@ -36,7 +36,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
@@ -436,6 +436,18 @@ def _path_is_allowed(
     ):
         return True
     parts = PurePosixPath(relative_path).parts
+    if (
+        not directory
+        and len(parts) == 6
+        and parts[:4] == ("staging", "debate-turn-tts", course_id, debate_id)
+        and PurePosixPath(parts[5]).suffix == ".wav"
+    ):
+        try:
+            UUID(parts[4])
+            UUID(PurePosixPath(parts[5]).stem)
+        except ValueError:
+            return False
+        return True
     # Reports are currently returned as bytes, but older runtime journals may
     # have materialised one exact Debate-named file.  Permit that file shape
     # without opening the whole reports tree.
@@ -473,6 +485,11 @@ def _collect_file_path(
             graph.file_paths.setdefault(child_relative, child_path)
         return
     graph.file_paths.setdefault(relative_path, path)
+    if relative_path.startswith(f"staging/debate-turn-tts/{graph.course_id}/{graph.debate_id}/"):
+        parts = PurePosixPath(relative_path).parts
+        for depth in (5, 4):
+            parent = str(PurePosixPath(*parts[:depth]))
+            graph.directory_paths.setdefault(parent, _safe_path(root, parent, directory=True))
 
 
 def _collect_audio_directory(graph: _DebateGraph, root: Path) -> None:

@@ -45,9 +45,7 @@ export function SegmentRagInspector({
     <details className={styles.inspector}>
       <summary>
         {label(locale, "Check RAG", "查看 RAG")}
-        {segments.length > 0 ? (
-          <span className={styles.count}>{segments.length}</span>
-        ) : null}
+        <span className={styles.count}>{sourceById.size}</span>
       </summary>
       <div className={styles.segmentList}>
         {segments.map((segment, index) => (

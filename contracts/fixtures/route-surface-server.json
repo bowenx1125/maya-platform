@@ -3058,6 +3058,15 @@
           },
           {
             "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "name": "initial",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {

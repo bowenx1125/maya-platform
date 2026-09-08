@@ -87,6 +87,7 @@ describe("teacher debate preview", () => {
       screen.getByRole("link", { name: "Open Stage" }).getAttribute("href"),
     ).toBe("/teacher/debates-beta/debate-a/control");
 
+    expect(screen.getByText("Check RAG").closest("summary")?.textContent).toBe("Check RAG1");
     fireEvent.click(screen.getByText("Check RAG"));
     expect(screen.getByText("water-sharing.md")).toBeTruthy();
     expect(

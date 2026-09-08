@@ -234,6 +234,7 @@ export default function TeacherDebateControlPage() {
   const finishInFlight = useRef(false);
   const finishKey = useRef<IdempotencyHandle | null>(null);
   const interactionInFlight = useRef(false);
+  const initialReportKey = useRef<IdempotencyHandle | null>(null);
   const interactionOpenKey = useRef<IdempotencyHandle | null>(null);
   const interactionCloseKey = useRef<IdempotencyHandle | null>(null);
 
@@ -350,6 +351,13 @@ export default function TeacherDebateControlPage() {
     interactionInFlight.current = true;
     setInteractionBusy(true);
     setInteractionError(null);
+    const openReport = async () => {
+      const key = initialReportKey.current ?? createIdempotencyHandle();
+      initialReportKey.current = key;
+      await api.regenerateReport(debateId, { idempotency: key, initial: true });
+      initialReportKey.current = null;
+      setReportOpen(true);
+    };
     try {
       // Conclude must use the durable end-of-lesson state, not the interaction
       // cached when this page was first opened or before the final round.
@@ -359,7 +367,7 @@ export default function TeacherDebateControlPage() {
       setInteraction(current);
       if (current?.status === "finalized") {
         setInteraction(current);
-        setReportOpen(true);
+        await openReport();
         return;
       }
       if (!current || current.status === "closed") {
@@ -389,7 +397,7 @@ export default function TeacherDebateControlPage() {
       if (current.status === "finalized") {
         setInteraction(current);
         setJoinUrl(null);
-        setReportOpen(true);
+        await openReport();
         return;
       }
       if (current.status !== "open") {
@@ -402,7 +410,7 @@ export default function TeacherDebateControlPage() {
       interactionCloseKey.current = null;
       setInteraction(finalized);
       setJoinUrl(null);
-      setReportOpen(true);
+      await openReport();
       // Closing a segments interaction also promotes the Debate to its
       // completed report state. Refresh the page-owned snapshot so a reload
       // and the current screen expose the same lifecycle state.
@@ -579,9 +587,11 @@ export default function TeacherDebateControlPage() {
                 {showSegmentsReport ? (
                   <button
                     className="secondary-action"
-                    disabled={detail.playback.mode === "replay"}
+                    disabled={
+                      interactionBusy || detail.playback.mode === "replay"
+                    }
                     type="button"
-                    onClick={() => setReportOpen(true)}
+                    onClick={() => void conclude()}
                   >
                     Conclude
                   </button>

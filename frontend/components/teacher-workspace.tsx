@@ -16,6 +16,7 @@ import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
+import debateStyles from "./debate/setup/debate-setup.module.css";
 import {
   EmptyCard,
   ErrorNotice,
@@ -138,7 +139,11 @@ function PublishedAgentCard({
       >
         {version.version_label}
       </span>
-      <div className="published-card-meta">{groupName}</div>
+      <div className="published-card-meta">
+        <span className={`secondary-action ${debateStyles.listAction}`}>
+          {groupName}
+        </span>
+      </div>
     </Link>
   );
 }

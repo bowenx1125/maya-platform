@@ -179,7 +179,7 @@ describe("PW3-E teacher shell and responsive contract", () => {
     expect(
       screen.queryByText("That action is not available in the current state."),
     ).toBeNull();
-    expect(api.debates).toHaveBeenCalledTimes(1);
+    expect(api.debates).toHaveBeenCalledTimes(3);
   });
 
   it.each([{ locale: "en" as const }, { locale: "zh" as const }])(

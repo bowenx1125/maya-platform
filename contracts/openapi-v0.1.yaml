@@ -1370,6 +1370,10 @@ paths:
         - $ref: "#/components/parameters/DebateId"
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CsrfToken"
+        - name: initial
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
       responses:
         "202":
           description: Insight retried if required, then a new report revision is created.

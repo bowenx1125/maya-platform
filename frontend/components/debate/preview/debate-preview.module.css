@@ -261,3 +261,15 @@
     width: 100%;
   }
 }
+
+.evidenceCount {
+  display: inline-grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  margin-left: 6px;
+  border-radius: 999px;
+  color: var(--indigo-dark);
+  background: rgba(84, 73, 166, 0.12);
+  font-size: 0.72rem;
+}

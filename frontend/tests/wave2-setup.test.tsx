@@ -327,3 +327,55 @@ it("updates debate progress in place without opening the debate", async () => {
     vi.useRealTimers();
   }
 });
+
+it("places one global Remake beside New debate and recovers only stalled records", async () => {
+  const failed = {
+    id: "failed",
+    course_id: courseId,
+    topic: "Needs recovery",
+    status: "draft",
+    created_at: "2026-09-08",
+    prepared_turns: 0,
+    expected_turns: 12,
+    preview: null,
+    audio_restore_needed: false,
+    stall: {
+      turn_id: "turn",
+      round_no: 1,
+      safe_error_code: "provider_not_sent",
+    },
+  } as DebateSummary;
+  const ready = {
+    ...failed,
+    id: "ready",
+    topic: "Ready lesson",
+    stall: null,
+    prepared_turns: 12,
+    expected_turns: 12,
+  } as DebateSummary;
+  const api = {
+    debates: vi.fn().mockResolvedValue([failed, ready]),
+    debate: vi
+      .fn()
+      .mockResolvedValue({
+        id: "failed",
+        revision: 1,
+        playback: { control_version: 2 },
+      }),
+    remakeDebate: vi.fn().mockResolvedValue({}),
+  };
+  useSessionMock.mockReturnValue({ ...teacherSession(), api });
+  render(<TeacherDebateList />);
+  await screen.findByText("Needs recovery");
+  expect(screen.getAllByRole("button", { name: "Remake" })).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Remake" }));
+  await waitFor(() => expect(api.remakeDebate).toHaveBeenCalledTimes(1));
+  expect(api.remakeDebate.mock.calls[0][0]).toBe("failed");
+  expect(api.debate).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Remake" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+});

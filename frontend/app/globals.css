@@ -1115,7 +1115,7 @@ details > summary {
   align-items: center;
   gap: 18px;
   min-width: 0;
-  padding: 16px 18px;
+  padding: 16px 8px 16px 18px;
   border: 1px solid #e5d8bf;
   border-radius: 16px;
   color: inherit;
@@ -1126,7 +1126,7 @@ details > summary {
     border-color 160ms ease;
 }
 
-.published-card:hover {
+.published-card:hover:not(:has(.published-card-meta:hover)) {
   background: #f7ecd6;
   border-color: #deceb0;
 }
@@ -1167,13 +1167,18 @@ details > summary {
 .published-card-meta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   min-width: 0;
-  min-height: 32px;
+  min-height: 36px;
   padding-left: 16px;
   border-left: 1px solid #deceb0;
   color: #655332;
   font-size: 0.78rem;
   overflow-wrap: anywhere;
+}
+
+.published-card-meta .secondary-action:hover {
+  transform: none;
 }
 
 @media (max-width: 620px) {

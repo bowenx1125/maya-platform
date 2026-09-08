@@ -458,6 +458,27 @@ def test_delete_all_removes_only_target_graph_and_restores_recovery_guards(migra
     database, ids, data_root = migrated_database
     task_manager = _TaskRecorder()
     ticket_store = _TicketRecorder()
+    from app.modules.debates.playback.audio import audio_staging_relative_path
+
+    stage_relative = audio_staging_relative_path(
+        ids["course"], ids["debate"], ids["turn"], _uid(9001)
+    )
+    stage_path = data_root / stage_relative
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    stage_path.write_bytes(b"owned staging audio")
+    with database.session() as session:
+        _add(
+            session,
+            "file_operations",
+            id=_uid(9001),
+            operation_type="debate_turn_tts",
+            entity_id=ids["debate"],
+            request_id=_uid(9002),
+            source_relative_path=stage_relative,
+            state="committed",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
     with database.session() as session:
         result = asyncio.run(
             cleanup.delete_all(
@@ -475,6 +496,7 @@ def test_delete_all_removes_only_target_graph_and_restores_recovery_guards(migra
     assert result.interrupted_job_count == 0
     assert task_manager.cancelled == [ids["debate"]]
     assert ticket_store.revoked == [ids["debate"]]
+    assert not stage_path.exists()
     assert result.deleted_rows["debates"] == 1
     assert result.deleted_rows["llm_recovery_inputs"] == 1
     assert result.deleted_rows["provider_operations"] == 1

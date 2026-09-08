@@ -12,7 +12,7 @@ from app.modules.debates.setup.rules import canonical_rule_snapshot_json
 from app.modules.interactions.models import ClassroomInteractionWindow
 from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from tests.conftest import login
 from tests.test_wave2_playback import _headers
@@ -72,6 +72,18 @@ def _saved_classroom(database, settings):
             db.flush()
             turn.audio_file_id = file_id
             turn.audio_duration_ms = metadata.duration_ms
+    with database.session() as db:
+        db.execute(
+            text(
+                "CREATE TRIGGER IF NOT EXISTS debate_final_input_immutable "
+                "BEFORE UPDATE ON debates "
+                "WHEN OLD.final_input_json IS NOT NULL AND "
+                "(NEW.final_input_json IS NOT OLD.final_input_json OR "
+                "NEW.final_input_hash IS NOT OLD.final_input_hash OR "
+                "NEW.final_frozen_at IS NOT OLD.final_frozen_at) "
+                "BEGIN SELECT RAISE(ABORT, 'final_input_immutable'); END"
+            )
+        )
     return debate_id
 
 
@@ -162,6 +174,14 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
                         ]
                         assert turn.cutoff_turn_index == turn.turn_index - 1
                 assert db.get(Debate, debate_id).final_input_json is None
+                assert (
+                    db.scalar(
+                        text(
+                            "SELECT 1 FROM sqlite_master WHERE name='debate_final_input_immutable'"
+                        )
+                    )
+                    == 1
+                )
                 assert not set(
                     db.scalars(select(DebateTurn.id).where(DebateTurn.id.in_(final_ids)))
                 )
@@ -570,3 +590,79 @@ def test_remake_recovers_saved_checkpoint_across_states_and_stale_versions(
                 )
     finally:
         database.dispose()
+
+
+def test_explicit_final_input_reset_rolls_back_with_its_original_trigger(app_factory):
+    from app.modules.debates import cleanup
+    from app.modules.debates.rebirth import _write_reset_final_input
+    from sqlalchemy.exc import IntegrityError
+
+    app, database, settings = app_factory()
+    try:
+        with TestClient(app):
+            debate_id = _saved_classroom(database, settings)
+            with database.session() as db:
+                before = db.get(Debate, debate_id).final_input_json
+                trigger = db.scalar(
+                    text("SELECT sql FROM sqlite_master WHERE name='debate_final_input_immutable'")
+                )
+                cleanup._begin_immediate(db)
+                debate = db.get(Debate, debate_id)
+                _write_reset_final_input(db, debate, None, clear_timestamp=True)
+                db.rollback()
+                assert db.get(Debate, debate_id).final_input_json == before
+                assert (
+                    db.scalar(
+                        text(
+                            "SELECT sql FROM sqlite_master "
+                            "WHERE name='debate_final_input_immutable'"
+                        )
+                    )
+                    == trigger
+                )
+                with pytest.raises(IntegrityError, match="final_input_immutable"):
+                    db.execute(
+                        text("UPDATE debates SET final_input_json=NULL WHERE id=:id"),
+                        {"id": debate_id},
+                    )
+                db.rollback()
+    finally:
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_global_remake_queues_each_draft_without_stealing_inflight_work():
+    import asyncio
+
+    from app.modules.debates.playback.prewarm import PrewarmScheduler
+
+    started, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    ready, calls = set(), []
+
+    def plan(debate_id):
+        return [(debate_id + "-turn", debate_id in ready)]
+
+    async def prepare(debate_id, _turn_id):
+        calls.append(debate_id)
+        if debate_id == "a":
+            started.set()
+            await release.wait()
+        ready.add(debate_id)
+        if debate_id == "b":
+            finished.set()
+
+    scheduler = PrewarmScheduler(plan=plan, prepare=prepare)
+    scheduler.bind_running_loop()
+    try:
+        scheduler.resume("a")
+        await asyncio.wait_for(started.wait(), 2)
+        scheduler.resume("b")
+        scheduler.resume("b")
+        await asyncio.sleep(0)
+        assert scheduler.owner == "a"
+        release.set()
+        await asyncio.wait_for(finished.wait(), 2)
+        assert calls == ["a", "b"]
+    finally:
+        release.set()
+        await scheduler.close()

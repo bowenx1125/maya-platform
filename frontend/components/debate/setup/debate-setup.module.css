@@ -348,7 +348,8 @@
   display: contents;
 }
 
-.debateActions :is(button, a) {
+.debateActions :is(button, a),
+.listAction.listAction {
   min-height: 36px;
   padding: 8px 10px;
   border: 0;

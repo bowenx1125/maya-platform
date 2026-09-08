@@ -63,7 +63,7 @@ vi.mock("../components/report", () => ({
     return (
       <section data-testid="inline-report">
         <h2>Report</h2>
-        <button type="button">Generate Report</button>
+        <button type="button">Regenerate</button>
       </section>
     );
   },
@@ -273,6 +273,9 @@ function pageApi(
       current = afterClose;
       return current;
     }),
+    regenerateReport: vi
+      .fn()
+      .mockResolvedValue({ generation_status: "generating" }),
     finishDebate: vi.fn(),
   };
 }
@@ -299,6 +302,10 @@ describe("segments_v2 Bench Conclude and Report", () => {
     expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
     expect(api.openInteraction).not.toHaveBeenCalled();
     expect(api.closeInteraction).toHaveBeenCalledTimes(1);
+    expect(api.regenerateReport).toHaveBeenCalledWith(
+      debateId,
+      expect.objectContaining({ initial: true }),
+    );
   });
 
   it("opens an already-finalized report discovered on Conclude", async () => {
@@ -310,6 +317,10 @@ describe("segments_v2 Bench Conclude and Report", () => {
     expect(await screen.findByRole("dialog", { name: "Report" })).toBeTruthy();
     expect(api.openInteraction).not.toHaveBeenCalled();
     expect(api.closeInteraction).not.toHaveBeenCalled();
+    expect(api.regenerateReport).toHaveBeenCalledWith(
+      debateId,
+      expect.objectContaining({ initial: true }),
+    );
   });
 
   it("uses public paragraph grades for Conclude totals and never counts a replay twice", async () => {

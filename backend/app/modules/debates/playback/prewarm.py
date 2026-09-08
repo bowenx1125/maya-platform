@@ -47,6 +47,7 @@ class PrewarmScheduler:
         self._task: asyncio.Task[None] | None = None
         self._ended: set[str] = set()
         self._closed = False
+        self._resume_queue: list[str] = []
 
     @property
     def owner(self) -> str | None:
@@ -75,12 +76,23 @@ class PrewarmScheduler:
     def resume(self, debate_id: str) -> None:
         """An explicit Remake reopens a draft and resumes its whole Preview."""
         self._ended.discard(debate_id)
-        self.focus(debate_id)
+        loop = self._loop
+        if self._closed or loop is None or loop.is_closed():
+            return
+        loop.call_soon_threadsafe(self._resume, debate_id)
+
+    def _resume(self, debate_id: str) -> None:
+        if self._task is not None and not self._task.done() and self._owner != debate_id:
+            if debate_id not in self._resume_queue:
+                self._resume_queue.append(debate_id)
+            return
+        self._focus(debate_id)
 
     def release(self, debate_id: str) -> None:
         """This Debate is over: never warm it again."""
 
         self._ended.add(debate_id)
+        self._resume_queue = [item for item in self._resume_queue if item != debate_id]
         loop = self._loop
         if self._closed or loop is None or loop.is_closed():
             return
@@ -88,6 +100,7 @@ class PrewarmScheduler:
             loop.call_soon_threadsafe(self._focus, None)
 
     def _focus(self, debate_id: str | None) -> None:
+        self._resume_queue = [item for item in self._resume_queue if item != debate_id]
         if self._owner == debate_id and self._task is not None and not self._task.done():
             return
         self._owner = debate_id
@@ -149,9 +162,12 @@ class PrewarmScheduler:
             self._task = None
             if not self._closed and self._owner is not None and self._owner != debate_id:
                 self._focus(self._owner)
+            elif not self._closed and self._resume_queue:
+                self._focus(self._resume_queue.pop(0))
 
     async def close(self) -> None:
         self._closed = True
+        self._resume_queue.clear()
         task = self._task
         self._task = None
         self._owner = None

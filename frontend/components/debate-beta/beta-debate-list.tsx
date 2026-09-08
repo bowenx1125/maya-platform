@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "../locale";
 import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard, PageIntro, SectionCard } from "../ui";
-import { statusLabel } from "../../lib/i18n";
+import { DebateStatus } from "../debate/debate-status";
 import type { DebateSummary } from "../../lib/api";
 import styles from "./beta-debate-list.module.css";
 import listStyles from "../debate/setup/debate-setup.module.css";
@@ -124,14 +124,7 @@ export function BetaDebateList() {
                   <div className={styles.rowMain}>
                     <h2>{debate.topic}</h2>
                     <span className={styles.meta}>
-                      <span
-                        className={styles.status}
-                        data-status={debate.status}
-                      >
-                        {debate.preview?.ready && debate.status === "draft"
-                          ? "Ready"
-                          : statusLabel(debate.status, locale)}
-                      </span>
+                      <DebateStatus debate={debate} />
                       {debate.expected_turns > 0 ? (
                         <span className={styles.progress}>
                           {debate.preview?.prepared_turns ??

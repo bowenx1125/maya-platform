@@ -4266,7 +4266,9 @@ export interface operations {
     };
     regenerateReport: {
         parameters: {
-            query?: never;
+            query?: {
+                initial?: boolean;
+            };
             header: {
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */

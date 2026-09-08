@@ -230,7 +230,10 @@ function RagCheck({
   );
   return (
     <details className={styles.ragCheck}>
-      <summary>Check RAG</summary>
+      <summary>
+        Check RAG
+        <span className={styles.evidenceCount}>{sourceById.size}</span>
+      </summary>
       <div className={styles.segmentList}>
         {segments.map((segment, index) => (
           <div className={styles.segment} key={`${index}-${segment.text}`}>

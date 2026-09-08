@@ -19,6 +19,37 @@ from app.modules.debates.round_count import debate_round_count
 from app.modules.interactions.service import create_closed_window
 
 
+def _write_reset_final_input(
+    db: Session, debate: Any, value: str | None, *, clear_timestamp: bool = False
+) -> None:
+    """Change the frozen envelope only inside the explicit reset writer transaction."""
+    from app.modules.debates.models import Debate
+
+    # BEGIN IMMEDIATE is held by both callers. Other writers cannot observe
+    # the scoped exception; rollback also restores the original SQLite DDL.
+    trigger = db.scalar(
+        text(
+            "SELECT sql FROM sqlite_master WHERE type='trigger' "
+            "AND name='debate_final_input_immutable'"
+        )
+    )
+    if trigger:
+        db.execute(text("DROP TRIGGER debate_final_input_immutable"))
+    try:
+        values: dict[str, Any] = {
+            "final_input_json": value,
+            "final_input_hash": hashlib.sha256(value.encode()).hexdigest()
+            if value is not None
+            else None,
+        }
+        if clear_timestamp:
+            values["final_frozen_at"] = None
+        db.execute(update(Debate).where(Debate.id == debate.id).values(**values))
+    finally:
+        if trigger:
+            db.execute(text(str(trigger)))
+
+
 async def rebirth_debate(
     db: Session,
     *,
@@ -244,9 +275,7 @@ async def rebirth_debate(
             )
         )
         debate.status = "draft"
-        debate.final_input_json = None
-        debate.final_input_hash = None
-        debate.final_frozen_at = None
+        _write_reset_final_input(db, debate, None, clear_timestamp=True)
         debate.started_at = debate.finished_at = None
         debate.last_sequence = 0
         create_closed_window(db, debate)
@@ -433,12 +462,11 @@ async def remake_debate(
             frozen = json.loads(debate.final_input_json)
             if frozen.get("generation") != generation:
                 frozen["generation"] = generation
-                debate.final_input_json = json.dumps(
-                    frozen, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                _write_reset_final_input(
+                    db,
+                    debate,
+                    json.dumps(frozen, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
                 )
-                debate.final_input_hash = hashlib.sha256(
-                    debate.final_input_json.encode()
-                ).hexdigest()
         fresh = False
         if target.generation_status != "final_ready":
             if any(
