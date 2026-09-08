@@ -123,7 +123,7 @@ export default function TeacherDebateControlPage() {
       statusPaused: t("statusPaused"),
       waitingNext: t("debateWaitingNext"),
       phaseReady: locale === "zh" ? "就绪" : "Ready",
-      phaseInProgress: locale === "zh" ? "进行中" : "Running",
+      phaseInProgress: locale === "zh" ? "生成中" : "Generating",
       phaseWaiting: locale === "zh" ? "等待继续" : "Waiting",
       phaseFinished: locale === "zh" ? "已完成" : "Completed",
       phaseOpening: t("debatePhaseOpening"),

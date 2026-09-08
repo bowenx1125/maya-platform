@@ -91,6 +91,11 @@
 .turns {
   display: grid;
   gap: var(--workspace-gap);
+  min-width: 0;
+  padding: var(--workspace-inset);
+  border: 1px solid #e5d8bf;
+  border-radius: 20px;
+  background: #fbf4e5;
 }
 
 .turnCard {
@@ -134,6 +139,10 @@
 }
 
 .speech {
+  padding: 16px;
+  border: 1px solid #e5d8bf;
+  border-radius: 14px;
+  background: #fbf4e5;
   color: var(--ink);
   line-height: 1.65;
   margin: 0;

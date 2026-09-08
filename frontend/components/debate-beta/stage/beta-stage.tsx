@@ -477,32 +477,20 @@ function deriveClassroomPhase(
   detailStatus: DebateDetail["status"],
   playbackStatus: DebatePlaybackState["status"],
   playbackMode: DebatePlaybackState["mode"],
-  actionInFlight: boolean,
+  canAdvance: boolean,
 ): ClassroomPhase {
   if (detailStatus === "draft") return "ready";
   if (detailStatus === "failed") return "failed";
-  if (detailStatus === "stopped") return "stopped";
-  // Replay is an active playback surface over a finished source Debate. Its
-  // source status must not mask the current replay phase while a turn is
-  // being prepared/played or waiting for the teacher to advance it.
-  if (playbackMode === "replay") {
-    if (!actionInFlight && playbackStatus === "waiting_next") {
-      return "waiting";
-    }
-    if (playbackStatus === "stopped") return "stopped";
-    return "in_progress";
-  }
-  if (detailStatus === "debate_finished" || detailStatus === "completed") {
+  if (detailStatus === "stopped" || playbackStatus === "stopped")
+    return "stopped";
+  if (
+    playbackMode !== "replay" &&
+    (detailStatus === "debate_finished" || detailStatus === "completed")
+  ) {
     return "finished";
   }
-  if (
-    !actionInFlight &&
-    playbackStatus === "waiting_next" &&
-    (playbackMode === "live" || playbackMode === "replay")
-  ) {
-    return "waiting";
-  }
-  return "in_progress";
+  // Waiting means the teacher can advance, using the button's exact gate.
+  return canAdvance ? "waiting" : "in_progress";
 }
 
 export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
@@ -561,7 +549,6 @@ export function BetaDebateStage({
   currentAudioDebateId,
   expectedCurrentAudioDebateId,
   onCurrentAudioDebateIdChange,
-  actionInFlight = false,
   className,
   headerActions,
   outputLanguage = "en",
@@ -571,7 +558,11 @@ export function BetaDebateStage({
   betaLabels,
 }: BetaStageProps) {
   const labels = useMemo(
-    () => resolvePlaybackStageLabels(suppliedLabels),
+    () =>
+      resolvePlaybackStageLabels({
+        phaseInProgress: "Generating",
+        ...suppliedLabels,
+      }),
     [suppliedLabels],
   );
   const [detailState, setDetailState] = useState<DebateDetail>(detail);
@@ -3294,7 +3285,7 @@ export function BetaDebateStage({
     detailState.status,
     playback.status,
     playback.mode,
-    busyAction !== null || actionInFlight,
+    canAdvance,
   );
   const visibleStatus =
     phase === "ready"

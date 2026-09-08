@@ -777,7 +777,22 @@ describe("waiting generation reconciliation", () => {
     };
     const socket = new ReplaySocket();
     const api = apiFor(initial);
-    const refreshSnapshot = vi.fn().mockResolvedValue(ready);
+    const successor = "40000000-0000-4000-8000-000000000002";
+    const advanced = {
+      ...ready,
+      playback: {
+        ...ready.playback,
+        status: "ready" as const,
+        current_turn_id: successor,
+        control_version: 8,
+        next_turn_ready: false,
+      },
+    };
+    vi.mocked(api.advanceDebatePlayback).mockResolvedValue(advanced.playback);
+    const refreshSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValue(advanced);
     render(
       <BetaDebateStage
         api={api}
@@ -794,6 +809,7 @@ describe("waiting generation reconciliation", () => {
       (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    expect(screen.getByText("Generating")).toBeTruthy();
     await waitFor(
       () =>
         expect(
@@ -802,8 +818,95 @@ describe("waiting generation reconciliation", () => {
         ).toBe(false),
       { timeout: 3000 },
     );
+    expect(screen.getByText("Waiting")).toBeTruthy();
     expect(refreshSnapshot).toHaveBeenCalledTimes(1);
     expect(api.advanceDebatePlayback).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() =>
+      expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(
+        socket
+          .commands()
+          .some(
+            (command) =>
+              command.command_type === "playback.media.prepare" &&
+              command.turn_id === successor,
+          ),
+      ).toBe(true),
+    );
+    expect(screen.getByText("Generating")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     expect(api.retryDebatePreparation).not.toHaveBeenCalled();
   });
+});
+
+it("keeps immediate Next while playing and blocks a duplicate click until the successor is prepared", async () => {
+  const initial = detail();
+  initial.status = "running";
+  initial.round_count = 4;
+  initial.playback = {
+    ...initial.playback,
+    status: "playing",
+    mode: "live",
+    current_turn_id: turnId,
+  };
+  const successor = "40000000-0000-4000-8000-000000000002";
+  const advanced = {
+    ...initial,
+    playback: {
+      ...initial.playback,
+      status: "ready" as const,
+      current_turn_id: successor,
+      control_version: 8,
+    },
+  };
+  const socket = new ReplaySocket();
+  const api = apiFor(initial);
+  let resolveNext!: (value: DebatePlaybackState) => void;
+  vi.mocked(api.advanceDebatePlayback).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveNext = resolve;
+      }),
+  );
+  render(
+    <BetaDebateStage
+      api={api}
+      debateId={debateId}
+      detail={initial}
+      socketFactory={() => socket}
+      refreshSnapshot={async () => advanced}
+    />,
+  );
+  await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+  act(() => socket.emitOpen());
+  act(() => socket.emitMessage(acquired()));
+  expect(screen.getByText("Waiting")).toBeTruthy();
+  const next = screen.getByRole("button", {
+    name: "Next",
+  }) as HTMLButtonElement;
+  expect(next.disabled).toBe(false);
+  fireEvent.click(next);
+  fireEvent.click(next);
+  expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1);
+  expect(next.disabled).toBe(true);
+  expect(screen.getByText("Generating")).toBeTruthy();
+  await act(async () => resolveNext(advanced.playback));
+  await waitFor(() =>
+    expect(
+      socket
+        .commands()
+        .some(
+          (command) =>
+            command.command_type === "playback.media.prepare" &&
+            command.turn_id === successor,
+        ),
+    ).toBe(true),
+  );
+  expect(api.retryDebatePreparation).not.toHaveBeenCalled();
 });

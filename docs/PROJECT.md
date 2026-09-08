@@ -286,10 +286,9 @@ Navigation uses 9px corners, 6px gaps, 1px hover lift and darker gold; language/
 Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.
-Home Agent tiles show name/group above version/description, giving descriptions
-more width. Provider component tiles use the same pale-yellow background.
+Home tiles show name/group above version/description; service tiles are pale yellow.
 New uses white Topic/Background, pale-yellow Ruleset text and white cards; stance shares the
-language switch styles. Preview speech cards are white with symmetric edge spacing.
+language switch styles. Preview uses pale-yellow outer/body panels and white speech cards.
 
 
 3D Replay is hidden before completion; Interact/Hide toggles the existing QR session.
@@ -307,7 +306,8 @@ without downloading a file. Selection/cache reset on version change. No file-cou
 or Download RAG header remains. No source text is edited or republished.
 17 detail/file/avatar checks passed; live UI confirmed equal full-body panels,
 one-file Check expansion and no horizontal overflow at 390px.
-68 targeted setup/Home/playback checks and types passed; frontend deployed healthy.
+Stage label follows the Next gate: Waiting when enabled, otherwise Generating.
+36 UI checks cover waiting recovery, Next, duplicate-click locking and replay.
 Topic/Background heights link; Beta Reconnect is removed.
 Report failure reproduced from a retained revision: RAG bibliographic numbers
 triggered report_input_private before any provider call. Removed Report prose
