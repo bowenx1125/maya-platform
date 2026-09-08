@@ -292,12 +292,9 @@ Creation has a combined two-column Topic/Background card: white ground and
 textareas, Background optional status only in its placeholder. Published Agents
 and Selected Order merge into Agents Order. The existing published-agent endpoint
 sorts by Agent.created_at descending (stable ID tie-break) and joins Group.name in
-the same query. Only active published Agents remain eligible. Each fixed-position
-row shows + or its numeric selection order, then name, green version pill and group.
-Selected rows reveal stance/open controls and a wider Agent note input. Controls do
-not toggle row selection. Deselect/reselect preserves notes/stance and appends to
-the selection order; unselected drafts are not submitted. Snapshot-fixed prose is
-removed. Existing IDs, round scheduling and per-language frozen rules are unchanged.
+the same query. Only active published Agents remain eligible. Rows show +/selection number, name, version/group; selected rows reveal stance
+and note controls without toggling selection. Reselect preserves edits and appends
+to order. Unselected drafts are not submitted; internal IDs/rules are unchanged.
 
 Teacher navigation now has Home and Classroom; its list title is Debates with New.
 The separate Beta list is removed (old URL redirects); nested 3D controls remain.
@@ -311,8 +308,9 @@ off-white panel contains title, service grid,
 then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
 Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
-Top navigation and language/Edit controls lift 1px on hover; navigation has no
-border/shadow. Home, Classroom, New and Preview use a shared 20px section gap, with
+Top navigation lifts 1px with the Immerse shadow on hover; language/Edit also lift.
+Create titles have no artificial minimum header height or title margin; inputs
+are block elements to avoid baseline gaps. Shared title line-height is 1.4. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
 New uses white Topic/Background/Ruleset text areas and cards; stance shares the

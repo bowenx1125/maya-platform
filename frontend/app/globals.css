@@ -615,13 +615,14 @@ details > summary {
   box-shadow: none;
   transition:
     transform 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 .nav-link:hover,
 .nav-logout:hover:not(:disabled) {
   transform: translateY(-1px);
   border: 0;
-  box-shadow: none;
+  box-shadow: 0 12px 22px rgba(84, 73, 166, 0.23);
   background: transparent;
 }
 
@@ -684,6 +685,7 @@ details > summary {
 }
 
 .demo-composition-heading h2 {
+  line-height: 1.4;
   margin: 0;
   font-size: 1.24rem;
 }
@@ -1144,6 +1146,7 @@ details > summary {
   border-bottom: 1px solid #e4d5b7;
 }
 .published-section > .section-card-header h2 {
+  line-height: 1.4;
   margin: 0;
 }
 

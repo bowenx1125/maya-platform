@@ -1,11 +1,16 @@
 .section :global(.section-card-header) {
   margin-bottom: 0;
-  min-height: 56px;
-  align-items: center;
+  min-height: 0;
+  align-items: flex-start;
   padding-bottom: 16px;
   border-bottom: 1px solid #e4d5b7;
 }
 
 .section > :global(.section-card-header) + * {
   margin-top: 16px;
+}
+
+.section :global(.section-card-header) h2 {
+  margin: 0;
+  line-height: 1.4;
 }
