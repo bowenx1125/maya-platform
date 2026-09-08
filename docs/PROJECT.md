@@ -305,13 +305,14 @@ The separate Beta list is removed (old URL redirects); nested 3D controls remain
 Immerse opens the same control route from ready Preview or each eligible list row.
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
-84 checks passed; four existing Stage lint warnings.
+
 
 Home uses Course, Composition and Providers. The compact Provider strip uses the Agent-list off-white panel, placing baseline
 status below its title beside the component grid. Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
-Navigation has a 1px hover lift without border/shadow. New page title is Debates.
+Top navigation and language/Edit controls lift 1px on hover; navigation has no
+border/shadow. Home, Classroom, New and Preview use a shared 20px section gap, with
+stacked heading/card margins removed. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
 New uses white Topic/Background/Ruleset text areas and cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
-Palette refinement: 55 frontend checks and types passed.

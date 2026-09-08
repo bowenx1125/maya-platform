@@ -30,6 +30,7 @@
   font-weight: 700;
   cursor: pointer;
   transition:
+    transform 160ms ease,
     background 160ms ease,
     color 160ms ease,
     box-shadow 160ms ease;
@@ -50,6 +51,7 @@
   font-weight: 700;
   cursor: pointer;
   transition:
+    transform 160ms ease,
     background 160ms ease,
     color 160ms ease;
 }
@@ -94,4 +96,9 @@
 .raw:focus {
   border-color: var(--indigo);
   outline-color: var(--indigo);
+}
+
+.languageSwitch button:hover:not(:disabled),
+.action:hover:not(:disabled) {
+  transform: translateY(-1px);
 }

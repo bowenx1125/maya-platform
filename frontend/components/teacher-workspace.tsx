@@ -72,7 +72,7 @@ export function TeacherDashboard() {
   if (loading) return <LoadingCard />;
   if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
   return (
-    <>
+    <div className="teacher-home-layout">
       <PageIntro
         eyebrow={t("teacherCourse")}
         title={course?.name ?? t("publishedAgents")}
@@ -101,7 +101,7 @@ export function TeacherDashboard() {
           </div>
         </SectionCard>
       )}
-    </>
+    </div>
   );
 }
 

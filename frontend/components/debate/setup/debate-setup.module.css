@@ -1,6 +1,12 @@
 .pageStack {
   display: grid;
-  gap: 20px;
+  gap: var(--workspace-gap);
+}
+.pageStack > * {
+  margin-bottom: 0;
+}
+.pageStack > :global(.page-intro) h1 {
+  margin-bottom: 0;
 }
 
 .candidateGrid {

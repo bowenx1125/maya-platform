@@ -1,4 +1,5 @@
 :root {
+  --workspace-gap: 20px;
   --ink: #27233d;
   --muted: #706b82;
   --paper: #fcfaf6;
@@ -800,6 +801,17 @@ details > summary {
 
 .page-intro-action {
   flex: 0 0 auto;
+}
+
+.teacher-home-layout {
+  display: grid;
+  gap: var(--workspace-gap);
+}
+.teacher-home-layout > * {
+  margin-bottom: 0;
+}
+.teacher-home-layout > .page-intro h1 {
+  margin-bottom: 0;
 }
 
 .course-context {
