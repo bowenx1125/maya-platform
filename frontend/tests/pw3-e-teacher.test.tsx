@@ -133,7 +133,7 @@ describe("PW3-E teacher shell and responsive contract", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the stalled row unchanged when Remake fails", async () => {
+  it("keeps the stalled row unchanged when Refresh fails", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = {
       debates: vi.fn().mockResolvedValue([
@@ -169,11 +169,11 @@ describe("PW3-E teacher shell and responsive contract", () => {
         <TeacherDebateList />
       </LocaleProvider>,
     );
-    const resume = await screen.findByRole("button", { name: "Remake" });
+    const resume = await screen.findByRole("button", { name: "Refresh" });
     fireEvent.click(resume);
     await waitFor(() => expect(api.remakeDebate).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(resume).toHaveProperty("disabled", false));
-    expect(resume.textContent).toBe("Remake");
+    expect(resume.textContent).toBe("Refresh");
     expect(screen.getByText("A stalled classroom")).toBeTruthy();
     expect(screen.getByText("Stalled")).toBeTruthy();
     expect(

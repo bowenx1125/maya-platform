@@ -95,8 +95,9 @@ export function DemoCompositionBadge() {
       data-testid="demo-composition"
     >
       <div className="demo-composition-heading">
-        <div className="eyebrow">{t("demoComposition")}</div>
-        <h2 id="demo-composition-title">{t("demoBaseline")}</h2>
+        <h2 id="demo-composition-title">
+          {t("demoBaseline")} {t("demoComposition")}
+        </h2>
         <div className="demo-composition-footer">
           <span
             className={`status-badge ${status.baseline.usable ? "status-good" : "status-bad"}`}

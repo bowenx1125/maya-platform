@@ -192,7 +192,7 @@ export function TeacherDebateList({
               disabled={remaking}
               onClick={() => void remakeAll()}
             >
-              {remaking ? "Remake..." : "Remake"}
+              {remaking ? "Refresh..." : "Refresh"}
             </button>
           </div>
         }
@@ -318,7 +318,7 @@ function ClassroomResetButton({
   const { api } = useSession();
   const [busy, setBusy] = useState(false);
   const active = useRef(false);
-  const label = action === "rebirth" ? "Rebirth" : "Remake";
+  const label = action === "rebirth" ? "Rebirth" : "Refresh";
   return (
     <button
       className="secondary-action"

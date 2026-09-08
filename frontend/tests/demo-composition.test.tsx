@@ -50,7 +50,7 @@ describe("Real-Core Demo composition badge", () => {
     );
 
     await screen.findByTestId("demo-composition");
-    expect(screen.getByText("Providers")).toBeTruthy();
+    expect(screen.getByText("Providers Composition")).toBeTruthy();
     expect(screen.getByText("Bowen baseline ready")).toBeTruthy();
     expect(screen.getByTestId("demo-composition").textContent).toContain(
       "Embedding",

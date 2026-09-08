@@ -520,7 +520,7 @@ it("updates debate progress in place without opening the debate", async () => {
   }
 });
 
-it("places one global Remake beside New and recovers only stalled records", async () => {
+it("places one global Refresh beside New and recovers only stalled records", async () => {
   const failed = {
     id: "failed",
     course_id: courseId,
@@ -557,13 +557,13 @@ it("places one global Remake beside New and recovers only stalled records", asyn
   useSessionMock.mockReturnValue({ ...teacherSession(), api });
   render(<TeacherDebateList />);
   await screen.findByText("Needs recovery");
-  expect(screen.getAllByRole("button", { name: "Remake" })).toHaveLength(1);
-  fireEvent.click(screen.getByRole("button", { name: "Remake" }));
+  expect(screen.getAllByRole("button", { name: "Refresh" })).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() => expect(api.remakeDebate).toHaveBeenCalledTimes(1));
   expect(api.remakeDebate.mock.calls[0][0]).toBe("failed");
   expect(api.debate).toHaveBeenCalledTimes(1);
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Remake" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: "Refresh" })).toHaveProperty(
       "disabled",
       false,
     ),

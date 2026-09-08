@@ -124,7 +124,7 @@ no new barrages; a lone second-row action fills the row.
   A settled failed paid turn can get a new identity and a bounded new attempt on
   the teacher's explicit click, while old charge records remain. Accepted results
   are recovered locally. Sending/acceptance-unknown requests are not duplicated.
-  One global Remake sits beside New; no per-row Remake remains. It
+  One global Refresh (Remake recovery) sits beside New; no per-row Remake remains. It
   refreshes every record and recovers failed/stalled work, following the first
   incomplete eligible turn or the
   retained playback checkpoint and uses current server versions. No generic
@@ -189,7 +189,7 @@ real DashScope adapters with independent authorization. Current Embedding is
 text-embedding-v4, 1024 dimensions.
 
 Teacher lists/creation use yellow rows on white paper. Devocalize/Destroy sit beside
-Rebirth; global Remake sits beside New; Immerse uses their action styling. Failed actions preserve the row.
+Rebirth; global Refresh sits beside New; Immerse uses their action styling. Failed actions preserve the row.
 Stage titles are removed; speech scrolls above compact gold controls and bubbles
 persist until Next. Open Message/Hide preserves its QR session. Conclude contains
 Report and scores; Audio Ready indicates retained audio. This change adds only
@@ -307,7 +307,7 @@ Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
 
 
-Home uses Course, Composition and Providers. The compact Provider strip uses the Agent-list off-white panel, placing baseline
+Home uses Course and a single-line Providers Composition heading. The compact Provider strip uses the Agent-list off-white panel, placing baseline
 status below its title beside the component grid. Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
 Top navigation and language/Edit controls lift 1px on hover; navigation has no
