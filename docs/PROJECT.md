@@ -299,8 +299,8 @@ Check loads one immutable document into Markdown inside that same yellow row,
 without downloading a file. Selection/cache reset on version change. No file-count
 or Download RAG header remains. No source text is edited or republished.
 Stage label follows the Next gate: Waiting when enabled, otherwise Generating.
-Evaluation/Report share white-yellow-white panels, 1.24rem titles, 24/18px insets
-and 16px dividers. Version actions sit top-right with compact hover/press feedback.
+Evaluation/Report use white shells with solid-yellow content, 1.24rem titles, 24/18px insets
+and 16px dividers/content padding. No nested white cards. Version actions sit top-right.
 Report generation has one inline placeholder, no duplicate banner.
 Topic/Background heights link; Beta Reconnect is removed.
 Report failure reproduced from a retained revision: RAG bibliographic numbers

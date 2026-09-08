@@ -123,10 +123,9 @@
 .reportCard,
 .history {
   min-width: 0;
-  padding: 1rem;
-  border: 1px solid #e6d3aa;
-  border-radius: 0.95rem;
-  background: #fff;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .revisionStatus,
