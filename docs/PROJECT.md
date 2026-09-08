@@ -270,7 +270,7 @@ mobile stacks the cards. Agents Order lists published Agents newest-first with
 version/group, numeric selection order and per-selected-Agent stance/notes.
 Reselect preserves edits and appends order; internal IDs/rules are unchanged.
 
-Teacher navigation now has Home and Classroom; its list title is Debates with New.
+Navigation: Home/Classroom; list: Debates/New.
 The separate Beta list is removed (old URL redirects); nested 3D controls remain.
 Immerse opens the same control route from ready Preview or each eligible list row.
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
@@ -307,7 +307,7 @@ or Download RAG header remains. No source text is edited or republished.
 17 detail/file/avatar checks passed; live UI confirmed equal full-body panels,
 one-file Check expansion and no horizontal overflow at 390px.
 Stage label follows the Next gate: Waiting when enabled, otherwise Generating.
-36 UI checks cover waiting recovery, Next, duplicate-click locking and replay.
+36 UI checks cover Next/recovery/replay. Removed the transient playback busy notice.
 Topic/Background heights link; Beta Reconnect is removed.
 Report failure reproduced from a retained revision: RAG bibliographic numbers
 triggered report_input_private before any provider call. Removed Report prose

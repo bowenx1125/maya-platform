@@ -3432,11 +3432,6 @@ export function BetaDebateStage({
                     {canStart ? labels.start : finalActionLabel}
                   </button>
                 </div>
-                {busyAction ? (
-                  <p className={styles.busyMessage} role="status">
-                    {labels.controlBusy}
-                  </p>
-                ) : null}
               </div>
             ) : null}
 

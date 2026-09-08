@@ -896,6 +896,7 @@ it("keeps immediate Next while playing and blocks a duplicate click until the su
   expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1);
   expect(next.disabled).toBe(true);
   expect(screen.getByText("Generating")).toBeTruthy();
+  expect(screen.queryByText("Updating classroom playback…")).toBeNull();
   await act(async () => resolveNext(advanced.playback));
   await waitFor(() =>
     expect(
