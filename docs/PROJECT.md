@@ -267,12 +267,11 @@ longer exist, so no original full Report was replayed or regenerated here.
 
 ## Real ruleset effect check
 
-A controlled Chinese opening comparison used identical synthetic Topic, Persona
-and RAG, changing only frozen Markdown: default produced five paragraphs; custom
-produced the requested Decision/Evidence/Review structure with numerical allocation
-and one-week monitoring. Two valid calls used 3287 tokens. One preceding accepted
-call was lost to an experiment recording bug; actual total is three calls, not
-two. No classroom records or Provider settings changed. Full outputs and limits:
+A Chinese opening comparison held synthetic Topic/Persona/RAG fixed and changed
+frozen Markdown. Default yielded five paragraphs; custom yielded the requested
+Decision/Evidence/Review structure. Two valid calls used 3287 tokens; one earlier
+accepted call was lost to an experiment recording bug, so actual total is three.
+No classroom records or Provider settings changed. Outputs and limitations:
 [Ruleset effect evidence](validation/RULESET_EFFECT_2026-09-08.md).
 
 The custom answer exposed S1 after its teacher rules omitted citation wording.
@@ -307,7 +306,8 @@ Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
 
 Home uses Mayaform for the default course heading and shared login/navigation brand.
-Providers Composition uses the Agent-list off-white panel: title, service grid,
+Providers Composition shares the Published heading size and gold divider. Its
+off-white panel contains title, service grid,
 then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
 Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.

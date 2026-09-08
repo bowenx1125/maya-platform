@@ -685,7 +685,7 @@ details > summary {
 
 .demo-composition-heading h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.24rem;
 }
 
 .demo-composition-heading p {
@@ -1138,7 +1138,8 @@ details > summary {
   opacity: 0;
 }
 
-.published-section > .section-card-header {
+.published-section > .section-card-header,
+.demo-composition-heading {
   padding-bottom: 16px;
   border-bottom: 1px solid #e4d5b7;
 }
