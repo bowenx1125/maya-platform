@@ -130,11 +130,9 @@ no new barrages; a lone second-row action fills the row.
   retained playback checkpoint and uses current server versions. No generic
   failure prose is inserted into the list.
 
-The new POST `/rebirth` and `/remake` endpoints use teacher authentication,
-CSRF, idempotency and current-revision/control checks. Only Destroy intentionally
-ignores old version values. Frozen OpenAPI, generated client and route fixtures
-were updated together. Audit records distinguish fresh generation authorization
-from media-only recovery; scope budgets preserve earlier allocated costs.
+Recovery endpoints retain authentication, CSRF, idempotency and control checks.
+Only Destroy ignores old versions. Audit records distinguish fresh generation
+authorization from media-only recovery; prior cost allocations remain.
 
 ## Playback and retrieval
 
@@ -307,12 +305,13 @@ The separate Beta list is removed (old URL redirects); nested 3D controls remain
 Immerse opens the same control route from ready Preview or each eligible list row.
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
-84 frontend checks and types passed; four existing Stage lint warnings.
+84 checks passed; four existing Stage lint warnings.
 
-Home uses Course, Composition and Providers. Published/count/Agents is one heading
+Home uses Course, Composition and Providers. The compact Provider strip places
+baseline status below its title, beside the component grid. Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
 Navigation has a 1px hover lift without border/shadow. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
 New uses Agent-row pale yellow (#fbf4e5) inside white cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
-55 focused frontend checks and types passed for the palette refinement; no paid calls.
+Palette refinement: 55 frontend checks and types passed.

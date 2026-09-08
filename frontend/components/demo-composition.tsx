@@ -97,6 +97,16 @@ export function DemoCompositionBadge() {
       <div className="demo-composition-heading">
         <div className="eyebrow">{t("demoComposition")}</div>
         <h2 id="demo-composition-title">{t("demoBaseline")}</h2>
+        <div className="demo-composition-footer">
+          <span
+            className={`status-badge ${status.baseline.usable ? "status-good" : "status-bad"}`}
+          >
+            <span aria-hidden="true" />
+            {status.baseline.usable
+              ? t("demoBaselineReady")
+              : t("demoBaselineUnavailable")}
+          </span>
+        </div>
       </div>
       <div aria-label={t("demoComposition")} className="demo-composition-grid">
         {status.composition.components.map((component) => (
@@ -125,16 +135,6 @@ export function DemoCompositionBadge() {
             ) : null}
           </div>
         ))}
-      </div>
-      <div className="demo-composition-footer">
-        <span
-          className={`status-badge ${status.baseline.usable ? "status-good" : "status-bad"}`}
-        >
-          <span aria-hidden="true" />
-          {status.baseline.usable
-            ? t("demoBaselineReady")
-            : t("demoBaselineUnavailable")}
-        </span>
       </div>
     </section>
   );
