@@ -2547,8 +2547,9 @@ components:
         expires_at: { $ref: "#/components/schemas/IsoTime" }
     PublishedAgentSummary:
       type: object
-      required: [agent, current_version]
+      required: [agent, current_version, group_name]
       properties:
+        group_name: { type: string }
         agent: { $ref: "#/components/schemas/AgentSummary" }
         current_version: { $ref: "#/components/schemas/AgentVersion" }
     DebateParticipantInput:

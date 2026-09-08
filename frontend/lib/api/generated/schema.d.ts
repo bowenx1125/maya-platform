@@ -1650,6 +1650,7 @@ export interface components {
             expires_at: components["schemas"]["IsoTime"];
         };
         PublishedAgentSummary: {
+            group_name: string;
             agent: components["schemas"]["AgentSummary"];
             current_version: components["schemas"]["AgentVersion"];
         };

@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -49,6 +50,7 @@ function teacherSession() {
 
 function candidate(id: string, name: string): PublishedAgentSummary {
   return {
+    group_name: `${name} Group`,
     agent: {
       id,
       group_id: `${id}-group`,
@@ -203,6 +205,72 @@ describe("Wave 2 teacher debate setup", () => {
     expect(router.replace).toHaveBeenCalledWith("/teacher/debates");
   });
 
+  it("keeps row positions, numbers selection order, and preserves notes across deselection", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    render(
+      <TeacherDebateCreate
+        controller={{
+          loadRuleset: vi
+            .fn()
+            .mockResolvedValue({ zh: "# 中文", en: "# English" }),
+          loadCandidates: vi
+            .fn()
+            .mockResolvedValue([
+              candidate("new", "Newest"),
+              candidate("old", "Older"),
+            ]),
+          create,
+        }}
+      />,
+    );
+    const newest = await screen.findByRole("button", { name: "Newest" });
+    const older = screen.getByRole("button", { name: "Older" });
+    expect(screen.getByRole("heading", { name: "Agents Order" })).toBeTruthy();
+    expect(screen.queryByText(/snapshot fixed when saved/)).toBeNull();
+    expect(within(newest).getByText("Newest Group")).toBeTruthy();
+    expect(within(newest).getByText("+")).toBeTruthy();
+    fireEvent.click(older);
+    fireEvent.click(newest);
+    expect(within(older).getByText("1")).toBeTruthy();
+    expect(within(newest).getByText("2")).toBeTruthy();
+    expect(
+      newest.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const note = screen.getByRole("textbox", { name: /Older.*note/i });
+    fireEvent.change(note, {
+      target: { value: "Discuss practical consequences" },
+    });
+    fireEvent.click(note);
+    expect(older.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(older);
+    expect(within(newest).getByText("1")).toBeTruthy();
+    fireEvent.click(older);
+    expect(within(older).getByText("2")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: /Older.*note/i,
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("Discuss practical consequences");
+    fireEvent.change(screen.getByLabelText("Topic"), {
+      target: { value: "A shared decision?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create debate draft" }),
+    );
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(
+      create.mock.calls[0][1].participants.map(
+        (row: { agent_id: string }) => row.agent_id,
+      ),
+    ).toEqual(["new", "old"]);
+    expect(create.mock.calls[0][1].participants[1].teacher_note).toBe(
+      "Discuss practical consequences",
+    );
+  });
+
   it("loads candidates once with the stable default platform controller", async () => {
     const publishedAgents = vi
       .fn()
@@ -289,7 +357,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
 
-    fireEvent.change(screen.getByLabelText("Background (optional)"), {
+    fireEvent.change(screen.getByLabelText("Background"), {
       target: { value: "A classroom scenario." },
     });
     fireEvent.click(screen.getByRole("button", { name: "中文" }));
@@ -334,7 +402,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
 
-    fireEvent.change(screen.getByLabelText("Background (optional)"), {
+    fireEvent.change(screen.getByLabelText("Background"), {
       target: { value: "A classroom scenario." },
     });
     fireEvent.click(screen.getByRole("button", { name: "中文" }));

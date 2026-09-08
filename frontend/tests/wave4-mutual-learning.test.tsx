@@ -37,6 +37,7 @@ afterEach(() => {
 
 function candidate(id: string, name: string): PublishedAgentSummary {
   return {
+    group_name: `${name} Group`,
     agent: {
       id,
       group_id: `${id}-group`,

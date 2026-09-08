@@ -164,6 +164,7 @@ class TestChatResponse(BaseModel):
 
 
 class PublishedAgentSummary(BaseModel):
+    group_name: str
     agent: AgentSummary
     current_version: AgentVersion
 

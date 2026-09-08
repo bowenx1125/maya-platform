@@ -439,3 +439,129 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.topicCard.topicCard {
+  background: var(--gold-soft);
+  border-color: #ddc995;
+}
+.topicColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.topicColumn {
+  min-width: 0;
+}
+.topicColumn > :global(.section-card-header) + * {
+  margin-top: 16px;
+}
+.contextInput.contextInput {
+  width: 100%;
+  min-height: 120px;
+  background: #fff;
+  border-color: #dccb9e;
+}
+.agentOrderList {
+  display: grid;
+  gap: 10px;
+}
+.agentOrderRow {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(0, 2fr);
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbf4e5;
+  cursor: pointer;
+}
+.agentOrderRow:hover {
+  border-color: #d6bd86;
+}
+.agentOrderSelected {
+  border-color: #cdb786;
+}
+.agentIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.agentIdentity:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 5px;
+}
+.orderNumber {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f0dfb7;
+  color: #71562e;
+  font-weight: 750;
+}
+.agentText {
+  min-width: 0;
+}
+.agentText strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.agentMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.agentMeta :global(.status-pill) {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+}
+.orderControls {
+  display: grid;
+  grid-template-columns: auto minmax(85px, 100px) minmax(160px, 1fr);
+  gap: 8px;
+  align-items: center;
+  cursor: default;
+}
+.orderControlsOpen {
+  grid-template-columns: auto minmax(180px, 1fr);
+}
+.orderControls .choice {
+  padding: 0 8px;
+  font-size: 0.74rem;
+}
+.orderControls input {
+  width: 100%;
+  min-width: 0;
+}
+.orderControls select {
+  width: 100%;
+  min-width: 0;
+}
+@media (max-width: 1050px) {
+  .agentOrderRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .topicColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .orderControls,
+  .orderControlsOpen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

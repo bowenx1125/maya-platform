@@ -1422,7 +1422,7 @@ def list_published_agents_for_teacher(
     db: Session = Depends(get_db),
 ) -> list[PublishedAgentSummary]:
     rows = db.execute(
-        select(Agent, AgentVersion)
+        select(Agent, AgentVersion, Group.name)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .join(AgentVersion, AgentVersion.id == Agent.current_published_version_id)
@@ -1433,7 +1433,7 @@ def list_published_agents_for_teacher(
             Agent.status == "active",
             AgentVersion.state == "published",
         )
-        .order_by(Agent.name)
+        .order_by(Agent.created_at.desc(), Agent.id.desc())
     ).all()
     if not rows:
         course_exists = db.scalar(
@@ -1447,8 +1447,9 @@ def list_published_agents_for_teacher(
             raise not_found()
     return [
         PublishedAgentSummary(
+            group_name=group_name,
             agent=_summary_with_metadata(db, agent, include_draft=False),
             current_version=version_dto(db, version, agent),
         )
-        for agent, version in rows
+        for agent, version, group_name in rows
     ]

@@ -176,17 +176,11 @@ was added. New model output still requires manual teaching-quality review.
 
 ## Other delivered repairs
 
-Destroy recognizes only scoped UUID WAV paths under debate-turn-tts staging,
-cleans owned empty directories, and retains traversal/symlink protections. Four
-live-schema in-memory copies passed deletion/foreign-key checks; user records
-were not deleted for testing. Global Remake queues recoveries without stealing
-active Preview ownership. Stage and Debate lists share Ready/Completed badges.
-
-Conclude requests initial=true; a writer transaction reuses an already-started
-first report. Regenerate explicitly creates another revision. Report history
-retains word count/Review and omits Ready. A separate Embedding ConnectError was
-deferred at the owner's request after recreation worked. Earlier targeted
-checks do not establish full classroom quality acceptance.
+Destroy handles scoped staging audio safely. Global Remake queues recovery without
+stealing active Preview ownership. Conclude creates the first Report once;
+Regenerate explicitly creates another revision. Stage/Debate lists share status
+badges; Report shows word count and Review, without Ready. A separate Embedding
+connection issue remains deferred at the owner's request.
 
 ## Runtime and established UI
 
@@ -219,32 +213,22 @@ prose, generic 3D error text and audio replacement dialogs are removed; control
 and cost guards remain. Older broad Wave2 playback tests retain two unresolved
 native-ended/hidden-index assertions; targeted Beta checks are not a full-suite pass.
 
-## Topic and Background — September 8
+## Topic and Background
 
-Creation accepts any script, numbers, punctuation and emoji independently of the
-selected output language. Topic still needs visible content. Original Topic and
-optional Background are saved separately; migration 0026_debate_background adds
-an empty-default column, leaving existing records unchanged. Before model input,
-NFC normalization removes invisible control/format/surrogate characters and
-collapses whitespace while retaining meaningful symbols and word separators.
-Generation, each round's RAG query and Report receive a labeled Topic/Background
-context through the frozen topic field. Background is teacher scenario data, not
-verified evidence or system instructions. Reports no longer reject this context
-at the former 1200-character title limit; Provider token/call budgets remain.
-Lists/public classroom titles show only the authored Topic. Draft edits discard
-old Preview plans as before; their next frozen inputs include the new background.
-
-Creation uses a yellow Topic textarea, an optional Background below it, English/
-Chinese compact switch in Ruleset, and Create Debate Draft beside Back. No extra
-Provider call or automatic regeneration of existing records was introduced.
-
-Topic/Background persistence, retrieval, Report and setup checks passed offline.
+Topics accept arbitrary scripts/symbols but require visible content. Topic and
+optional Background are stored separately (migration0026); display titles use
+only Topic. Before LLM/RAG/Report input, NFC/control cleanup and whitespace
+folding preserve meaningful punctuation and word separators. Background is
+scenario data, not verified evidence or system instructions. The former Report
+1200-character title limit is removed; total Provider budgets remain. Draft edits
+invalidate old Preview plans. Creation uses the combined gold/white card described
+below, with Create beside Back and language selection inside Ruleset.
 
 ## Frozen Markdown Ruleset and current Report repair
 
 Default teaching content now lives only in backend/app/modules/debates/default_rules/
 zh.md and en.md. The creation form loads both through a teacher-scoped read-only
-endpoint. Selected Order is followed by one Debate Ruleset row: compact language
+endpoint. Agents Order is followed by one Debate Ruleset row: compact language
 switch, Details, Edit. Details renders only the selected language in a full-width scrollable document;
 Edit shows raw text; Save updates that language in this form and returns to Details. Create is disabled while
 editing. The old Multi-round Civilization/phase block is removed; Topic and
@@ -310,7 +294,18 @@ Creation now defaults to Chinese in both form and API. Ruleset language can chan
 only while Details is closed; CN/EN text remains independently saved in the form,
 with no extra Prompt CN/EN headings. Editing Chinese then selecting English uses
 the untouched English prompt. Existing draft language is preserved on updates
-that omit output_language. Topic, Background, Published Agents, Selected Order and
-Ruleset share one title-divider style and alignment. The duplicate Open explanation
+that omit output_language. Topic, Background, Agents Order and Ruleset share one title-divider style and alignment. The duplicate Open explanation
 caption is removed; its button remains. 43 frontend and 25 backend targeted checks
 passed, including language switching and frozen-language selection; no paid retest.
+
+Creation now has a combined two-column Topic/Background card: gold ground, white
+textareas, Background optional status only in its placeholder. Published Agents
+and Selected Order merge into Agents Order. The existing published-agent endpoint
+sorts by Agent.created_at descending (stable ID tie-break) and joins Group.name in
+the same query. Only active published Agents remain eligible. Each fixed-position
+row shows + or its numeric selection order, then name, green version pill and group.
+Selected rows reveal stance/open controls and a wider Agent note input. Controls do
+not toggle row selection. Deselect/reselect preserves notes/stance and appends to
+the selection order; unselected drafts are not submitted. Snapshot-fixed prose is
+removed. Existing IDs, round scheduling and per-language frozen rules are unchanged.
+44 frontend checks and backend ordering/authorization checks passed; no paid calls.

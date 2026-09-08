@@ -59,15 +59,6 @@ function copy(t: (key: MessageKey) => string, key: MessageKey): string {
   return t(key);
 }
 
-function interpolate(
-  value: string,
-  values: Record<string, string | number>,
-): string {
-  return value.replace(/\{(\w+)\}/g, (_, key: string) =>
-    String(values[key] ?? `{${key}}`),
-  );
-}
-
 function teacherCourseId(
   user: ReturnType<typeof useSession>["user"],
 ): string | null {
@@ -459,24 +450,11 @@ export function TeacherDebateCreate({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const selectedCandidates = useMemo(
-    () =>
-      selectedIds
-        .map((id) => candidates.find((item) => item.agent.id === id))
-        .filter(Boolean) as PublishedAgentSummary[],
-    [candidates, selectedIds],
-  );
-
   function toggleCandidate(candidate: PublishedAgentSummary) {
     setFormError(null);
     const id = candidate.agent.id;
     if (selectedIds.includes(id)) {
       setSelectedIds((current) => current.filter((item) => item !== id));
-      setParticipantDrafts((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
       return;
     }
     if (selectedIds.length >= 5) {
@@ -486,7 +464,7 @@ export function TeacherDebateCreate({
     setSelectedIds((current) => [...current, id]);
     setParticipantDrafts((current) => ({
       ...current,
-      [id]: defaultParticipant(),
+      [id]: current[id] ?? defaultParticipant(),
     }));
   }
 
@@ -601,195 +579,181 @@ export function TeacherDebateCreate({
         className={styles.pageStack}
         onSubmit={submit}
       >
-        <SectionCard
-          className={sectionStyles.section}
-          title={copy(t, "debateTopic")}
-        >
-          <label className="stack-form">
-            <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
-            <textarea
-              aria-label={copy(t, "debateTopic")}
-              aria-describedby={topicError ? "debate-topic-error" : undefined}
-              aria-invalid={topicError !== null}
-              disabled={busy}
-              id="debate-topic"
-              className={styles.topicInput}
-              onChange={(event) => {
-                setTopic(event.target.value);
-                if (topicError) setTopicError(null);
-              }}
-              placeholder={copy(t, "debateTopicPlaceholder")}
-              required
-              rows={3}
-              value={topic}
-            />
-            {topicError ? (
-              <span
-                className={styles.fieldError}
-                id="debate-topic-error"
-                role="alert"
-              >
-                {topicError}
-              </span>
-            ) : null}
-          </label>
+        <SectionCard className={`${styles.topicCard} ${sectionStyles.section}`}>
+          <div className={styles.topicColumns}>
+            <div className={styles.topicColumn}>
+              <div className="section-card-header">
+                <h2>{copy(t, "debateTopic")}</h2>
+              </div>
+              <label className="stack-form">
+                <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
+                <textarea
+                  aria-label={copy(t, "debateTopic")}
+                  aria-describedby={
+                    topicError ? "debate-topic-error" : undefined
+                  }
+                  aria-invalid={topicError !== null}
+                  disabled={busy}
+                  id="debate-topic"
+                  className={styles.contextInput}
+                  onChange={(event) => {
+                    setTopic(event.target.value);
+                    if (topicError) setTopicError(null);
+                  }}
+                  placeholder={copy(t, "debateTopicPlaceholder")}
+                  required
+                  rows={3}
+                  value={topic}
+                />
+                {topicError ? (
+                  <span
+                    className={styles.fieldError}
+                    id="debate-topic-error"
+                    role="alert"
+                  >
+                    {topicError}
+                  </span>
+                ) : null}
+              </label>
+            </div>
+            <div className={styles.topicColumn}>
+              <div className="section-card-header">
+                <h2>Background</h2>
+              </div>
+              <textarea
+                aria-label="Background"
+                className={styles.contextInput}
+                disabled={busy}
+                placeholder="Optional context"
+                rows={3}
+                value={background}
+                onChange={(event) => setBackground(event.target.value)}
+              />
+            </div>
+          </div>
         </SectionCard>
 
-        <SectionCard
-          className={sectionStyles.section}
-          title="Background (optional)"
-        >
-          <textarea
-            aria-label="Background (optional)"
-            className={styles.topicInput}
-            disabled={busy}
-            rows={4}
-            value={background}
-            onChange={(event) => setBackground(event.target.value)}
-          />
-        </SectionCard>
-
-        <SectionCard
-          className={sectionStyles.section}
-          title={copy(t, "debateCandidates")}
-        >
+        <SectionCard className={sectionStyles.section} title="Agents Order">
           {candidates.length === 0 ? (
             <EmptyCard title={copy(t, "debateNoCandidates")} />
           ) : (
-            <div className={styles.candidateGrid}>
+            <div className={styles.agentOrderList}>
               {candidates.map((candidate) => {
-                const selected = selectedIds.includes(candidate.agent.id);
-                const order = selectedIds.indexOf(candidate.agent.id);
-                return (
-                  <button
-                    aria-pressed={selected}
-                    className={`${styles.candidate} ${selected ? styles.candidateSelected : ""}`}
-                    disabled={busy}
-                    key={candidate.agent.id}
-                    onClick={() => toggleCandidate(candidate)}
-                    type="button"
-                  >
-                    <span className={styles.candidateTop}>
-                      <span className={styles.orderMark}>
-                        {selected ? String.fromCharCode(65 + order) : "＋"}
-                      </span>
-                    </span>
-                    <span className={styles.candidateName}>
-                      {candidate.agent.name}
-                    </span>
-                    <span className={styles.candidateDescription}>
-                      {candidate.agent.description || copy(t, "debateCurrent")}
-                    </span>
-                    <span className={styles.candidateHint}>
-                      {candidate.current_version.version_label} ·{" "}
-                      {copy(t, "debateCurrent")}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          className={sectionStyles.section}
-          title={copy(t, "debateSelected")}
-        >
-          {selectedCandidates.length ? (
-            <div className={styles.selectedList}>
-              {selectedCandidates.map((candidate, index) => {
                 const id = candidate.agent.id;
+                const order = selectedIds.indexOf(id);
+                const selected = order !== -1;
                 const draft = participantDrafts[id] ?? defaultParticipant();
                 return (
-                  <div className={styles.selectedRow} key={id}>
-                    <div className={styles.selectedIdentity}>
-                      <span className={styles.slotMark}>
-                        {String.fromCharCode(65 + index)}
-                      </span>
-                      <div>
-                        <strong>{candidate.agent.name}</strong>
-                        <small>
-                          {interpolate(copy(t, "debateVersionSnapshot"), {
-                            version: candidate.current_version.version_label,
-                          })}
-                        </small>
-                      </div>
-                    </div>
-                    <div
-                      className={`${styles.selectedControls} ${draft.mode === "open" ? styles.selectedControlsOpen : ""}`}
+                  <div
+                    key={id}
+                    className={`${styles.agentOrderRow} ${selected ? styles.agentOrderSelected : ""}`}
+                    onClick={(event) => {
+                      if (
+                        !busy &&
+                        !(event.target as HTMLElement).closest(
+                          "button,input,select,textarea,label,[data-agent-controls]",
+                        )
+                      )
+                        toggleCandidate(candidate);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={styles.agentIdentity}
+                      disabled={busy}
+                      aria-label={candidate.agent.name}
+                      aria-pressed={selected}
+                      onClick={() => toggleCandidate(candidate)}
                     >
+                      <span className={styles.orderNumber} aria-hidden="true">
+                        {selected ? order + 1 : "+"}
+                      </span>
+                      <span className={styles.agentText}>
+                        <strong>{candidate.agent.name}</strong>
+                        <span className={styles.agentMeta}>
+                          <span className="status-pill status-good">
+                            {candidate.current_version.version_label}
+                          </span>
+                          <span>{candidate.group_name}</span>
+                        </span>
+                      </span>
+                    </button>
+                    {selected ? (
                       <div
-                        className={styles.choiceGroup}
-                        aria-label={copy(t, "debateStance") as string}
+                        data-agent-controls
+                        className={`${styles.orderControls} ${draft.mode === "open" ? styles.orderControlsOpen : ""}`}
                       >
-                        <button
-                          aria-pressed={draft.mode === "assigned"}
-                          className={`${styles.choice} ${draft.mode === "assigned" ? styles.choiceActive : ""}`}
-                          disabled={busy}
-                          onClick={() =>
-                            updateParticipant(id, {
-                              mode: "assigned",
-                              stance: draft.stance ?? "neutral",
-                            })
-                          }
-                          type="button"
+                        <div
+                          className={styles.choiceGroup}
+                          aria-label={copy(t, "debateStance") as string}
                         >
-                          {copy(t, "debateAssigned")}
-                        </button>
-                        <button
-                          aria-pressed={draft.mode === "open"}
-                          className={`${styles.choice} ${draft.mode === "open" ? styles.choiceActive : ""}`}
-                          disabled={busy}
-                          onClick={() =>
-                            updateParticipant(id, {
-                              mode: "open",
-                              stance: null,
-                            })
-                          }
-                          type="button"
-                        >
-                          {copy(t, "debateOpen")}
-                        </button>
-                      </div>
-                      {draft.mode === "assigned" ? (
-                        <select
-                          aria-label={`${candidate.agent.name} ${copy(t, "debateAssigned")}`}
+                          <button
+                            aria-pressed={draft.mode === "assigned"}
+                            className={`${styles.choice} ${draft.mode === "assigned" ? styles.choiceActive : ""}`}
+                            disabled={busy}
+                            onClick={() =>
+                              updateParticipant(id, {
+                                mode: "assigned",
+                                stance: draft.stance ?? "neutral",
+                              })
+                            }
+                            type="button"
+                          >
+                            {copy(t, "debateAssigned")}
+                          </button>
+                          <button
+                            aria-pressed={draft.mode === "open"}
+                            className={`${styles.choice} ${draft.mode === "open" ? styles.choiceActive : ""}`}
+                            disabled={busy}
+                            onClick={() =>
+                              updateParticipant(id, {
+                                mode: "open",
+                                stance: null,
+                              })
+                            }
+                            type="button"
+                          >
+                            {copy(t, "debateOpen")}
+                          </button>
+                        </div>
+                        {draft.mode === "assigned" ? (
+                          <select
+                            aria-label={`${candidate.agent.name} ${copy(t, "debateAssigned")}`}
+                            disabled={busy}
+                            onChange={(event) =>
+                              updateParticipant(id, {
+                                stance: event.target.value as StanceValue,
+                              })
+                            }
+                            value={draft.stance ?? "neutral"}
+                          >
+                            <option value="support">
+                              {copy(t, "debateSupport")}
+                            </option>
+                            <option value="oppose">
+                              {copy(t, "debateOppose")}
+                            </option>
+                            <option value="neutral">
+                              {copy(t, "debateNeutral")}
+                            </option>
+                          </select>
+                        ) : null}
+                        <input
+                          aria-label={`${candidate.agent.name} ${copy(t, "debateNote")}`}
+                          className={styles.noteInput}
                           disabled={busy}
                           onChange={(event) =>
-                            updateParticipant(id, {
-                              stance: event.target.value as StanceValue,
-                            })
+                            updateParticipant(id, { note: event.target.value })
                           }
-                          value={draft.stance ?? "neutral"}
-                        >
-                          <option value="support">
-                            {copy(t, "debateSupport")}
-                          </option>
-                          <option value="oppose">
-                            {copy(t, "debateOppose")}
-                          </option>
-                          <option value="neutral">
-                            {copy(t, "debateNeutral")}
-                          </option>
-                        </select>
-                      ) : null}
-                      <input
-                        aria-label={`${candidate.agent.name} ${copy(t, "debateNote")}`}
-                        className={styles.noteInput}
-                        disabled={busy}
-                        onChange={(event) =>
-                          updateParticipant(id, { note: event.target.value })
-                        }
-                        placeholder={copy(t, "debateNotePlaceholder")}
-                        value={draft.note}
-                      />
-                    </div>
+                          placeholder="Agent note"
+                          value={draft.note}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-          ) : (
-            <p className={styles.emptyCopy}>{copy(t, "debateSelectAtLeast")}</p>
           )}
         </SectionCard>
 

@@ -5689,9 +5689,13 @@
         "type": "object",
         "required": [
           "agent",
-          "current_version"
+          "current_version",
+          "group_name"
         ],
         "properties": {
+          "group_name": {
+            "type": "string"
+          },
           "agent": {
             "$ref": "#/components/schemas/AgentSummary"
           },

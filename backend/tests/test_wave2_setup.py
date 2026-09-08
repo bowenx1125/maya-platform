@@ -1087,3 +1087,21 @@ def test_topic_background_saved_separately_and_normalized_only_for_model(debate_
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["background"] == "Updated scenario"
+
+
+def test_published_agents_sort_by_creation_and_include_group_name(debate_app):
+    from app.core.models import Group
+
+    _app, database, client = debate_app
+    old_id = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Alpha Old")[0]
+    new_id = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Zulu New")[0]
+    with database.session() as db:
+        db.get(Agent, old_id).created_at = datetime(2024, 1, 1, tzinfo=UTC)
+        db.get(Agent, new_id).created_at = datetime(2025, 1, 1, tzinfo=UTC)
+        group_name = db.get(Group, GROUP_DEMO_ID).name
+    login(client)
+    response = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert response.status_code == 200, response.text
+    rows = [row for row in response.json() if row["agent"]["id"] in {old_id, new_id}]
+    assert [row["agent"]["id"] for row in rows] == [new_id, old_id]
+    assert all(row["group_name"] == group_name for row in rows)
