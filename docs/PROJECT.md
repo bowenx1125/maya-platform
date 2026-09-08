@@ -97,7 +97,7 @@ rules. Schema 0025 removed old report word-count publication limits. Larger Stag
 names omit A/B/C. Replay uses saved text/audio, hides Open Message and collects
 no new barrages; a lone second-row action fills the row.
 
-## Classroom actions — final owner decisions
+## Classroom actions
 
 - **Devocalize** removes saved audio; speech and sources survive.
 - **Destroy** deletes the target debate regardless of draft/running/stalled/terminal
@@ -307,7 +307,7 @@ The separate Beta list is removed (old URL redirects); nested 3D controls remain
 Immerse opens the same control route from ready Preview or each eligible list row.
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
-84 focused frontend checks and types passed; four existing Stage lint warnings.
+84 frontend checks and types passed; four existing Stage lint warnings.
 
 Home uses Course, Composition and Providers. Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
