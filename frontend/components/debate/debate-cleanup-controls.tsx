@@ -126,7 +126,7 @@ export function DebateCleanupControls({
       }
       setRevoice(false);
     } catch {
-      /* Leave Revoice available when restoration fails. */
+      /* Leave Revocalize available when restoration fails. */
     } finally {
       await refresh();
       active.current = false;
@@ -210,7 +210,11 @@ export function DebateCleanupControls({
         disabled={busy}
         onClick={() => void (revoice ? generateAudio() : remove("voice"))}
       >
-        {generatingAudio ? "Revoice..." : revoice ? "Revoice" : "Unvoice"}
+        {generatingAudio
+          ? "Revocalize..."
+          : revoice
+            ? "Revocalize"
+            : "Devocalize"}
       </button>
       <button
         className="secondary-action"

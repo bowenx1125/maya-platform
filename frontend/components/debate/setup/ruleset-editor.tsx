@@ -23,7 +23,7 @@ export function RulesetEditor({
   onSave: (prompts: TeachingPrompts) => void;
   onEditingChange: (editing: boolean) => void;
 }) {
-  const [mode, setMode] = useState<"closed" | "details" | "edit">("closed");
+  const [mode, setMode] = useState<"details" | "edit">("details");
   const [draft, setDraft] = useState(prompts);
   const editing = mode === "edit";
 
@@ -42,7 +42,7 @@ export function RulesetEditor({
               <button
                 key={value}
                 type="button"
-                disabled={disabled || mode !== "closed"}
+                disabled={disabled || editing}
                 aria-pressed={language === value}
                 onClick={() => onLanguageChange(value)}
               >
@@ -53,17 +53,7 @@ export function RulesetEditor({
           <button
             type="button"
             className={styles.action}
-            disabled={disabled || editing}
-            aria-expanded={mode !== "closed"}
-            aria-controls="ruleset-content"
-            onClick={() => setMode(mode === "closed" ? "details" : "closed")}
-          >
-            Details
-          </button>
-          <button
-            type="button"
-            className={styles.action}
-            disabled={disabled || mode === "closed"}
+            disabled={disabled}
             onClick={() => {
               if (editing) {
                 onSave({ ...prompts, [language]: draft[language] });
@@ -81,30 +71,28 @@ export function RulesetEditor({
         </div>
       }
     >
-      {mode !== "closed" ? (
-        <div id="ruleset-content" className={styles.content}>
-          {editing ? (
-            <textarea
-              aria-label={language === "zh" ? "中文规则" : "English rules"}
-              className={styles.raw}
-              value={draft[language]}
-              disabled={disabled}
-              spellCheck={false}
-              onChange={(event) =>
-                setDraft({ ...draft, [language]: event.target.value })
-              }
-            />
-          ) : (
-            <div className={styles.document}>
-              <ReportMarkdown
-                label={language === "zh" ? "中文规则" : "English rules"}
-              >
-                {prompts[language]}
-              </ReportMarkdown>
-            </div>
-          )}
-        </div>
-      ) : null}
+      <div id="ruleset-content" className={styles.content}>
+        {editing ? (
+          <textarea
+            aria-label={language === "zh" ? "中文规则" : "English rules"}
+            className={styles.raw}
+            value={draft[language]}
+            disabled={disabled}
+            spellCheck={false}
+            onChange={(event) =>
+              setDraft({ ...draft, [language]: event.target.value })
+            }
+          />
+        ) : (
+          <div className={styles.document}>
+            <ReportMarkdown
+              label={language === "zh" ? "中文规则" : "English rules"}
+            >
+              {prompts[language]}
+            </ReportMarkdown>
+          </div>
+        )}
+      </div>
     </SectionCard>
   );
 }

@@ -99,7 +99,7 @@ no new barrages; a lone second-row action fills the row.
 
 ## Classroom actions — final owner decisions
 
-- **Unvoice** removes saved audio; speech and sources survive.
+- **Devocalize** removes saved audio; speech and sources survive.
 - **Destroy** deletes the target debate regardless of draft/running/stalled/terminal
   state. Its writer transaction uses current revisions, so a stale list cannot
   block the destructive intent. The list sends the ID without depending on a
@@ -124,7 +124,7 @@ no new barrages; a lone second-row action fills the row.
   A settled failed paid turn can get a new identity and a bounded new attempt on
   the teacher's explicit click, while old charge records remain. Accepted results
   are recovered locally. Sending/acceptance-unknown requests are not duplicated.
-  One global Remake sits beside New Debate; no per-row Remake remains. It
+  One global Remake sits beside New; no per-row Remake remains. It
   refreshes every record and recovers failed/stalled work, following the first
   incomplete eligible turn or the
   retained playback checkpoint and uses current server versions. No generic
@@ -163,7 +163,7 @@ Rebirth preserves Preview/audio, resets final dependencies, and changes frozen
 final input inside a writer transaction that restores its immutability trigger.
 Rollback restores both data and trigger. Remake respects unknown/in-flight paid
 requests and other active classrooms. Healthy completed speech is reused.
-Unvoice/Revoice retain their respective action after failures. Agent version
+Devocalize/Revocalize retain their respective action after failures. Agent version
 pills sit left of the divider, Group right without hover. Recovery has targeted
 checks and in-memory live-schema reproductions, not universal service guarantees.
 
@@ -190,8 +190,8 @@ runtime data. TTS/Voice remain Mock; Debate LLM, Embedding and Report are config
 real DashScope adapters with independent authorization. Current Embedding is
 text-embedding-v4, 1024 dimensions.
 
-Teacher lists/creation use yellow rows on white paper. Unvoice/Destroy sit beside
-Rebirth; global Remake sits beside New Debate; Open Stage uses their action styling. Failed actions preserve the row.
+Teacher lists/creation use yellow rows on white paper. Devocalize/Destroy sit beside
+Rebirth; global Remake sits beside New; Immerse uses their action styling. Failed actions preserve the row.
 Stage titles are removed; speech scrolls above compact gold controls and bubbles
 persist until Next. Open Message/Hide preserves its QR session. Conclude contains
 Report and scores; Audio Ready indicates retained audio. This change adds only
@@ -222,17 +222,17 @@ folding preserve meaningful punctuation and word separators. Background is
 scenario data, not verified evidence or system instructions. The former Report
 1200-character title limit is removed; total Provider budgets remain. Draft edits
 invalidate old Preview plans. Creation uses the combined gold/white card described
-below, with Create beside Back and language selection inside Ruleset.
+below, with Done beside Back and language selection inside Ruleset.
 
 ## Frozen Markdown Ruleset and current Report repair
 
 Default teaching content now lives only in backend/app/modules/debates/default_rules/
 zh.md and en.md. The creation form loads both through a teacher-scoped read-only
 endpoint. Agents Order is followed by one Debate Ruleset row: compact language
-switch, Details, Edit. Details renders only the selected language in a full-width scrollable document;
-Edit shows raw text; Save updates that language in this form and returns to Details. Create is disabled while
+switch and Edit. Selected-language Markdown is always rendered full-width;
+Edit shows raw text; Save updates that language in this form and returns to rendered mode. Done is disabled while
 editing. The old Multi-round Civilization/phase block is removed; Topic and
-Background inputs are yellow.
+Background inputs use white textareas on gold.
 
 Create freezes both authored Markdown files and eight complete System messages
 (four for each language) in rule_snapshot_json. Markdown is sent intact, with no
@@ -267,12 +267,6 @@ validation now logs only field paths/types, never values. The user had already
 reset this debate to Preview Ready; original final speeches/report revisions no
 longer exist, so no original full Report was replayed or regenerated here.
 
-Validation: 81 focused rules/protocol/recovery/database checks, 63 editor/setup/
-Stage frontend checks and 37 Report checks passed. Report fixtures verify six
-long evidence chunks reach actual request construction unchanged; live retained
-chunks reproduced the original limit. Types, targeted lint/mypy and contract
-checks pass. No new paid or full browser classroom acceptance was performed.
-
 ## Real ruleset effect check
 
 A controlled Chinese opening comparison used identical synthetic Topic, Persona
@@ -287,11 +281,10 @@ The custom answer exposed S1 after its teacher rules omitted citation wording.
 New execution Prompts now reserve S IDs for metadata; no backend text filter was
 added. Existing frozen lessons are unchanged; this addition has offline coverage,
 not another paid rerun. One opening comparison is not four-round quality acceptance.
-Ruleset styling now uses gold card, white documents/switch, gold selection and
-purple actions. Thirteen frozen-rule checks and two editor checks passed.
+Ruleset uses gold cards, white documents/switch, gold selection and purple actions.
 
 Creation now defaults to Chinese in both form and API. Ruleset language can change
-only while Details is closed; CN/EN text remains independently saved in the form,
+whenever Edit is inactive; CN/EN text remains independently saved in the form,
 with no extra Prompt CN/EN headings. Editing Chinese then selecting English uses
 the untouched English prompt. Existing draft language is preserved on updates
 that omit output_language. Topic, Background, Agents Order and Ruleset share one title-divider style and alignment. The duplicate Open explanation
@@ -309,3 +302,12 @@ not toggle row selection. Deselect/reselect preserves notes/stance and appends t
 the selection order; unselected drafts are not submitted. Snapshot-fixed prose is
 removed. Existing IDs, round scheduling and per-language frozen rules are unchanged.
 44 frontend checks and backend ordering/authorization checks passed; no paid calls.
+
+Teacher navigation now has Home and Classroom; its list title is Debates with New.
+The separate Beta list is removed (old URL redirects); nested 3D controls remain.
+Immerse opens the same control route from ready Preview or each eligible list row.
+Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
+Audio restoration displays disabled Revocalize...; stage ready label is Ready.
+Ruleset has no Details toggle; Save restores rendered Markdown and language switching.
+84 focused frontend checks and TypeScript pass; lint has no errors and four existing
+Stage warnings. No paid calls or full browser classroom acceptance in this UI batch.

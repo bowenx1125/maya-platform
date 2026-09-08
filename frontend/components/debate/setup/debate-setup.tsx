@@ -244,6 +244,22 @@ export function TeacherDebateList({
                         onDone={() => void load(true)}
                       />
                     ) : null}
+                    {!["failed", "stopped"].includes(debate.status) &&
+                    (debate.preview?.ready ||
+                      ["running", "completed", "debate_finished"].includes(
+                        debate.status,
+                      )) ? (
+                      <Link
+                        className="secondary-action"
+                        href={`/teacher/debates-beta/${debate.id}/control`}
+                      >
+                        Immerse
+                      </Link>
+                    ) : (
+                      <button type="button" disabled>
+                        Immerse
+                      </button>
+                    )}
                     <DebateCleanupControls
                       api={api}
                       debateId={debate.id}

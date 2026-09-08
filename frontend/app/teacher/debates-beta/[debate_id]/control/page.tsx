@@ -122,7 +122,7 @@ export default function TeacherDebateControlPage() {
       statusPlaying: t("statusPlaying"),
       statusPaused: t("statusPaused"),
       waitingNext: t("debateWaitingNext"),
-      phaseReady: locale === "zh" ? "等待开始" : "Ready to start",
+      phaseReady: locale === "zh" ? "就绪" : "Ready",
       phaseInProgress: locale === "zh" ? "进行中" : "Running",
       phaseWaiting: locale === "zh" ? "等待继续" : "Waiting",
       phaseFinished: locale === "zh" ? "已完成" : "Completed",
@@ -458,7 +458,7 @@ export default function TeacherDebateControlPage() {
     <RouteGuard role="teacher">
       {!detail || !debateId ? (
         <div className={styles.boot}>
-          <Link className={styles.bootBack} href="/teacher/debates-beta">
+          <Link className={styles.bootBack} href="/teacher/debates">
             {t("debateBack")}
           </Link>
           {loading ? <LoadingCard /> : null}
@@ -479,7 +479,7 @@ export default function TeacherDebateControlPage() {
           <BetaDebateStage
             headerActions={
               <>
-                <Link className="secondary-action" href="/teacher/debates-beta">
+                <Link className="secondary-action" href="/teacher/debates">
                   {t("debateBack")}
                 </Link>
                 {detail.status === "running" &&

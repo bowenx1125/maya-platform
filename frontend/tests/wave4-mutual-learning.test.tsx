@@ -105,9 +105,7 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: topic },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[1]).toMatchObject({
       rule_set_id: mutualRuleSet,

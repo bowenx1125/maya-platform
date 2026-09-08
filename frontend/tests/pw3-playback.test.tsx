@@ -267,7 +267,7 @@ describe("PW3-D three-control playback", () => {
     expect(
       document.querySelector('[data-classroom-phase="ready"]'),
     ).toBeTruthy();
-    expect(screen.getByText("Ready to start")).toBeTruthy();
+    expect(screen.getByText("Ready")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start debate" })).toHaveProperty(
       "disabled",
       false,

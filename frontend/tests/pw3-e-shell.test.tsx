@@ -39,32 +39,29 @@ function renderTeacherShell(pathname: string) {
 describe("PW3-E teacher information architecture", () => {
   afterEach(() => cleanup());
 
-  it("exposes Dashboard, Debates and the beta stage as primary navigation links", () => {
+  it("exposes Home, Classroom as primary navigation links", () => {
     renderTeacherShell("/teacher");
 
     const primaryNavigation = within(screen.getByRole("navigation"));
     const links = primaryNavigation.getAllByRole("link");
-    // Debates (beta) is a sibling entry, not a replacement: the classic
-    // Debates link stays exactly where it was.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/teacher",
       "/teacher/debates",
-      "/teacher/debates-beta",
     ]);
     expect(
-      primaryNavigation.getByRole("link", { name: "Dashboard" }).className,
+      primaryNavigation.getByRole("link", { name: "Home" }).className,
     ).toContain("active");
     expect(
       primaryNavigation
-        .getByRole("link", { name: "Dashboard" })
+        .getByRole("link", { name: "Home" })
         .getAttribute("aria-current"),
     ).toBe("page");
     expect(
-      primaryNavigation.getByRole("link", { name: "Debates" }).className,
+      primaryNavigation.getByRole("link", { name: "Classroom" }).className,
     ).not.toContain("active");
     expect(
       primaryNavigation
-        .getByRole("link", { name: "Debates" })
+        .getByRole("link", { name: "Classroom" })
         .getAttribute("aria-current"),
     ).toBeNull();
 
@@ -72,37 +69,40 @@ describe("PW3-E teacher information architecture", () => {
     expect(screen.getByRole("link", { name: "Maya" })).toBeTruthy();
   });
 
-  it("keeps the debate item active for nested create and control routes", () => {
-    renderTeacherShell("/teacher/debates/example-debate/control");
+  it.each([
+    "/teacher/debates/example-debate/control",
+    "/teacher/debates-beta/example-debate/control",
+  ])("keeps Classroom active for %s", (path) => {
+    renderTeacherShell(path);
 
     const primaryNavigation = within(screen.getByRole("navigation"));
     expect(
-      primaryNavigation.getByRole("link", { name: "Debates" }).className,
+      primaryNavigation.getByRole("link", { name: "Classroom" }).className,
     ).toContain("active");
     expect(
       primaryNavigation
-        .getByRole("link", { name: "Debates" })
+        .getByRole("link", { name: "Classroom" })
         .getAttribute("aria-current"),
     ).toBe("page");
     expect(
-      primaryNavigation.getByRole("link", { name: "Dashboard" }).className,
+      primaryNavigation.getByRole("link", { name: "Home" }).className,
     ).not.toContain("active");
   });
 
-  it("keeps Dashboard active for nested published Agent inspection routes", () => {
+  it("keeps Home active for nested published Agent inspection routes", () => {
     renderTeacherShell("/teacher/agents/agent-id");
 
     const primaryNavigation = within(screen.getByRole("navigation"));
     expect(
-      primaryNavigation.getByRole("link", { name: "Dashboard" }).className,
+      primaryNavigation.getByRole("link", { name: "Home" }).className,
     ).toContain("active");
     expect(
       primaryNavigation
-        .getByRole("link", { name: "Dashboard" })
+        .getByRole("link", { name: "Home" })
         .getAttribute("aria-current"),
     ).toBe("page");
     expect(
-      primaryNavigation.getByRole("link", { name: "Debates" }).className,
+      primaryNavigation.getByRole("link", { name: "Classroom" }).className,
     ).not.toContain("active");
   });
 });

@@ -29,28 +29,28 @@ function Harness({ saved = vi.fn(), editing = vi.fn() } = {}) {
 }
 
 describe("per-debate Markdown rules editor", () => {
-  it("shows only the selected language and preserves edits across collapsed language switches", () => {
+  it("shows only the selected language and preserves edits across language switches", () => {
     const saved = vi.fn();
     const editing = vi.fn();
     render(<Harness saved={saved} editing={editing} />);
     expect(
       (screen.getByRole("button", { name: "Edit" }) as HTMLButtonElement)
         .disabled,
-    ).toBe(true);
+    ).toBe(false);
+    expect(screen.queryByRole("button", { name: "Details" })).toBeNull();
     expect(screen.queryByText("Prompt CN")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("heading", { name: "中文规则" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "English rules" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "English" }) as HTMLButtonElement)
         .disabled,
-    ).toBe(true);
+    ).toBe(false);
     expect(screen.queryByText("Prompt CN")).toBeNull();
     expect(screen.queryByText("Prompt EN")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(editing).toHaveBeenLastCalledWith(true);
     expect(
-      (screen.getByRole("button", { name: "Details" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "English" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
@@ -65,19 +65,15 @@ describe("per-debate Markdown rules editor", () => {
     });
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getByRole("heading", { name: "本场新规则" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.queryByText("Prompt CN")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "English" }));
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("heading", { name: "English rules" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "本场新规则" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "中文" }) as HTMLButtonElement)
         .disabled,
-    ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    ).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "中文" }));
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("heading", { name: "本场新规则" })).toBeTruthy();
     expect(saved).toHaveBeenCalledTimes(1);
   });
@@ -95,7 +91,6 @@ describe("per-debate Markdown rules editor", () => {
         onEditingChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(container.querySelector("script")).toBeNull();
     expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "中文" })).toBeTruthy();

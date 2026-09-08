@@ -54,16 +54,16 @@ export function AppShell({
     : [
         { href: "/teacher", label: t("dashboard") },
         { href: "/teacher/debates", label: t("debates") },
-        // A sibling surface, not a replacement: the classic Debates entry and
-        // everything under it are untouched.
-        { href: "/teacher/debates-beta", label: `${t("debates")} (beta)` },
       ];
 
+  const activePath = pathname.startsWith("/teacher/debates-beta/")
+    ? pathname.replace("/teacher/debates-beta/", "/teacher/debates/")
+    : pathname;
   const activeHref = links
     .filter(
       (link) =>
-        pathname === link.href ||
-        (!isStudent && pathname.startsWith(`${link.href}/`)),
+        activePath === link.href ||
+        (!isStudent && activePath.startsWith(`${link.href}/`)),
     )
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 

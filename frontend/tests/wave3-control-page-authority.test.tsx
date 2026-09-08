@@ -293,7 +293,7 @@ describe("Wave 3 control-page Finish authority gate", () => {
     expect(await screen.findByTestId("debate-preview")).toBeTruthy();
     expect(screen.getByText("Saved teacher preview speech.")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Open Stage" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Immerse" }).getAttribute("href"),
     ).toBe(`/teacher/debates-beta/${debateId}/control`);
     expect(screen.queryByRole("button", { name: "End" })).toBeNull();
   });

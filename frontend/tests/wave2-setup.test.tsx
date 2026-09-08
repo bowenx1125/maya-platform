@@ -164,6 +164,62 @@ describe("Wave 2 teacher debate setup", () => {
     expect(screen.getByText("2 rounds")).toBeTruthy();
   });
 
+  it.each([
+    ["draft", false, false],
+    ["draft", true, true],
+    ["running", false, true],
+    ["completed", false, true],
+    ["failed", true, false],
+    ["stopped", true, false],
+  ] as const)(
+    "gates Immerse for %s / preview %s",
+    async (status, ready, enabled) => {
+      useSessionMock.mockReturnValue(teacherSession());
+      render(
+        <TeacherDebateList
+          controller={{
+            load: vi.fn().mockResolvedValue([
+              {
+                id: "stage-entry",
+                course_id: courseId,
+                topic: "Stage entry",
+                status,
+                created_at: "2026-09-08T00:00:00Z",
+                preview: { ready },
+                audio_restore_needed: false,
+              },
+            ]),
+          }}
+        />,
+      );
+      await screen.findByRole("link", { name: /Stage entry/ });
+      if (enabled) {
+        const entry = screen.getByRole("link", { name: "Immerse" });
+        expect(entry.getAttribute("href")).toBe(
+          "/teacher/debates-beta/stage-entry/control",
+        );
+        expect(
+          entry.compareDocumentPosition(
+            screen.getByRole("button", { name: "Devocalize" }),
+          ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        if (status === "completed") {
+          expect(
+            screen
+              .getByRole("button", { name: "Rebirth" })
+              .compareDocumentPosition(entry) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+          ).toBeTruthy();
+        }
+      } else {
+        expect(
+          (screen.getByRole("button", { name: "Immerse" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(true);
+      }
+    },
+  );
+
   it("preserves click order and sends the fixed four-round request", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
@@ -190,9 +246,7 @@ describe("Wave 2 teacher debate setup", () => {
           "Should the United States ban TikTok's recommendation algorithm?",
       },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     const payload = create.mock.calls[0][1];
@@ -257,9 +311,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "A shared decision?" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(
       create.mock.calls[0][1].participants.map(
@@ -325,13 +377,9 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: "A stable classroom question" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -367,9 +415,7 @@ describe("Wave 2 teacher debate setup", () => {
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: mixedTopic } });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0][1]).toMatchObject({
@@ -409,7 +455,6 @@ describe("Wave 2 teacher debate setup", () => {
     expect(
       screen.getByRole("button", { name: "中文" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 仅本场中文修改" },
@@ -417,19 +462,16 @@ describe("Wave 2 teacher debate setup", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Create debate draft",
+          name: "Done",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     fireEvent.click(screen.getByRole("button", { name: "English" }));
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: mixedTopic } });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create debate draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0][1]).toMatchObject({
@@ -478,7 +520,7 @@ it("updates debate progress in place without opening the debate", async () => {
   }
 });
 
-it("places one global Remake beside New debate and recovers only stalled records", async () => {
+it("places one global Remake beside New and recovers only stalled records", async () => {
   const failed = {
     id: "failed",
     course_id: courseId,
