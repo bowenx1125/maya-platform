@@ -546,8 +546,8 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
             json={
                 "topic": "A valid English topic",
                 "participants": participants,
-                "round_count": 2,
-                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+                "round_count": 4,
+                "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
             },
         )
         assert created.status_code == 201, created.text
@@ -558,7 +558,7 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
         with database.session() as db:
             db.execute(
                 text("UPDATE debates SET topic=:topic WHERE id=:debate_id"),
-                {"topic": "中文议题", "debate_id": debate_id},
+                {"topic": "\u200b", "debate_id": debate_id},
             )
 
         rejected = client.post(
@@ -573,14 +573,14 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
         assert rejected.status_code == 422, rejected.text
         assert rejected.json()["code"] == "topic_language_invalid"
         assert rejected.json()["details"] == TOPIC_LANGUAGE_ERROR_DETAILS
-        assert "中文议题" not in rejected.text
+        assert "\u200b" not in rejected.text
 
         with database.session() as db:
             debate = db.get(Debate, debate_id)
             playback = db.scalar(
                 select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
             )
-            assert debate is not None and debate.status == "draft" and debate.topic == "中文议题"
+            assert debate is not None and debate.status == "draft" and debate.topic == "\u200b"
             assert playback is not None
             assert playback.status == "preparing"
             assert playback.control_version == 0
@@ -608,10 +608,10 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
             f"/api/v1/debates/{debate_id}",
             headers=_headers(csrf),
             json={
-                "topic": TOPIC,
+                "topic": "中文 + English?",
                 "participants": participants,
-                "round_count": 2,
-                "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+                "round_count": 4,
+                "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
                 "expected_revision": 0,
             },
         )
@@ -625,8 +625,8 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
                 "confirm_previous_audio_cleanup": False,
             },
         )
-        assert started.status_code == 200, started.text
-        assert started.json()["status"] == "running"
+        assert started.status_code == 409, started.text
+        assert started.json()["code"] == "preview_not_ready"
 
 
 def test_sql_next_cross_session_claim_has_one_winner_and_stable_stale_loser(

@@ -61,6 +61,7 @@ function detail(
     id: debateId,
     course_id: "10000000-0000-4000-8000-000000000001",
     topic: "Should the United States ban TikTok's recommendation algorithm?",
+    background: "",
     status: overrides.status ?? "running",
     created_at: "2026-08-27T00:00:00Z",
     audio_restore_needed: false,
@@ -405,9 +406,7 @@ describe("Wave 2 M12 playback stage", () => {
         .some((command) => command.command_type === "playback.media.prepare"),
     ).toBe(false);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Refresh" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Retry this turn" }),

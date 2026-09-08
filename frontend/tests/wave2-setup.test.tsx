@@ -89,10 +89,10 @@ describe("Wave 2 teacher debate setup", () => {
     ["\u0301English", "isolated combining mark"],
     ["123\u0301", "combining mark after a number"],
     ["你\u0301", "combining mark after a non-Latin letter"],
-  ])("rejects %s (%s)", (value) => {
+  ])("accepts unrestricted topic %s (%s)", (value) => {
     expect(validateDebateTopic(value)).toEqual({
-      valid: false,
-      reason: "english",
+      valid: true,
+      normalized: value,
     });
   });
 
@@ -129,10 +129,10 @@ describe("Wave 2 teacher debate setup", () => {
 
   it("localizes a server topic-language error without exposing provider data", () => {
     expect(localizeError({ code: "topic_language_invalid" }, "zh")).toContain(
-      "拉丁字母",
+      "议题",
     );
     expect(localizeError({ code: "topic_language_invalid" }, "en")).toContain(
-      "Latin-script",
+      "topic",
     );
   });
 
@@ -259,7 +259,7 @@ describe("Wave 2 teacher debate setup", () => {
     expect(keys[1]).toBe(keys[0]);
   });
 
-  it("blocks invalid topics before create and keeps the input accessible", async () => {
+  it("accepts mixed topics and submits optional background with selected language", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
     const controller: DebateCreateController = {
@@ -277,19 +277,25 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
 
+    fireEvent.change(screen.getByLabelText("Background (optional)"), {
+      target: { value: "A classroom scenario." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Chinese 中文" }));
     const input = screen.getByLabelText("Topic");
-    const invalidTopic = "Should TikTok be banned? 推荐算法";
-    fireEvent.change(input, { target: { value: invalidTopic } });
+    const mixedTopic = "Should TikTok be banned? 推荐算法";
+    fireEvent.change(input, { target: { value: mixedTopic } });
     fireEvent.click(
       screen.getByRole("button", { name: "Create debate draft" }),
     );
 
-    const error = await screen.findByRole("alert");
-    expect(error.textContent).toContain("Latin-script");
-    expect(input.getAttribute("aria-invalid")).toBe("true");
-    expect(input.getAttribute("aria-describedby")).toBe("debate-topic-error");
-    expect((input as HTMLTextAreaElement).value).toBe(invalidTopic);
-    expect(create).not.toHaveBeenCalled();
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][1]).toMatchObject({
+      topic: mixedTopic,
+      background: "A classroom scenario.",
+      output_language: "zh",
+    });
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByRole("combobox", { name: "Language" })).toBeNull();
   });
 });
 
@@ -355,13 +361,11 @@ it("places one global Remake beside New debate and recovers only stalled records
   } as DebateSummary;
   const api = {
     debates: vi.fn().mockResolvedValue([failed, ready]),
-    debate: vi
-      .fn()
-      .mockResolvedValue({
-        id: "failed",
-        revision: 1,
-        playback: { control_version: 2 },
-      }),
+    debate: vi.fn().mockResolvedValue({
+      id: "failed",
+      revision: 1,
+      playback: { control_version: 2 },
+    }),
     remakeDebate: vi.fn().mockResolvedValue({}),
   };
   useSessionMock.mockReturnValue({ ...teacherSession(), api });

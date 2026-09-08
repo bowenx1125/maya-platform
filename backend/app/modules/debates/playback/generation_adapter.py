@@ -81,6 +81,7 @@ from app.modules.debates.round_count import (
     uses_segment_protocol,
     visible_turn_predecessors,
 )
+from app.modules.debates.topic_language import model_topic
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
@@ -1421,7 +1422,7 @@ class SqlTurnPreparer:
             )
         context = GenerationContext(
             debate_id=debate_id,
-            topic=str(debate.topic),
+            topic=model_topic(debate.topic, debate.background or ""),
             turn=plan,
             participant=participant,
             participants=participants,

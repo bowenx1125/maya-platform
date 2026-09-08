@@ -101,6 +101,7 @@ function detail(): DebateDetail {
     id: debateId,
     course_id: "10000000-0000-4000-8000-000000000002",
     topic: "How should a classroom balance memory and change?",
+    background: "",
     status: "completed",
     created_at: "2026-09-07T00:00:00Z",
     audio_restore_needed: false,

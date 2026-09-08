@@ -23,6 +23,7 @@ const detail = {
   id: debateId,
   course_id: "10000000-0000-4000-8000-000000000001",
   topic: "Should classrooms compare cultural perspectives?",
+  background: "",
   status: "stopped",
   created_at: "2026-08-30T00:00:00Z",
   audio_restore_needed: false,

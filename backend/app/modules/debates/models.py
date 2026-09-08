@@ -102,6 +102,7 @@ class Debate(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
     topic: Mapped[str] = mapped_column(Text, nullable=False)
+    background: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     rule_set_id: Mapped[str] = mapped_column(String(100), nullable=False)
     rule_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
     # Chosen before Preview generation; playback cannot change saved speech.

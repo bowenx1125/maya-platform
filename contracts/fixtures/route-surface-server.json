@@ -5714,7 +5714,11 @@
           "topic": {
             "type": "string",
             "minLength": 1,
-            "description": "Non-empty topic in the selected lesson language. English accepts Latin letters; Chinese also accepts Han characters. Controls are rejected."
+            "description": "Non-empty topic; any script or symbols are accepted."
+          },
+          "background": {
+            "type": "string",
+            "default": ""
           },
           "output_language": {
             "type": "string",
@@ -6397,6 +6401,10 @@
               "report_status"
             ],
             "properties": {
+              "background": {
+                "type": "string",
+                "default": ""
+              },
               "revision": {
                 "type": "integer",
                 "minimum": 0

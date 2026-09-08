@@ -24,7 +24,6 @@ from app.core.models import (
     StoredFile,
 )
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
-from app.modules.debates.generated.latin_script_ranges import LATIN_SCRIPT_LETTER_RANGES
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.schemas import DebateDraftRequest, DebateParticipantInput
 from app.modules.debates.setup import service as setup_service
@@ -46,9 +45,6 @@ from app.modules.debates.setup.service import (
 from app.modules.debates.topic_language import (
     TOPIC_LANGUAGE_ERROR_CODE,
     TOPIC_LANGUAGE_ERROR_DETAILS,
-    TOPIC_LANGUAGE_ERROR_MESSAGE,
-    TopicLanguageError,
-    _is_latin_letter,
     validate_english_topic,
 )
 from fastapi import FastAPI
@@ -151,13 +147,8 @@ def test_request_validates_assigned_open_and_fixed_round_shapes() -> None:
         "English\u2028line",
     ],
 )
-def test_validate_english_topic_rejects_non_latin_or_unsafe_values(value: str) -> None:
-    with pytest.raises(TopicLanguageError) as error:
-        validate_english_topic(value)
-    assert error.value.code == TOPIC_LANGUAGE_ERROR_CODE
-    assert error.value.message == TOPIC_LANGUAGE_ERROR_MESSAGE
-    assert error.value.details == TOPIC_LANGUAGE_ERROR_DETAILS
-    assert value not in error.value.message
+def test_topic_accepts_scripts_and_symbols_independently_of_output_language(value: str) -> None:
+    assert validate_english_topic(value) == value.strip()
 
 
 @pytest.mark.parametrize(
@@ -184,14 +175,6 @@ def test_validate_english_topic_accepts_latin_diacritics_numbers_punctuation_and
     value: str, expected: str
 ) -> None:
     assert validate_english_topic(value) == expected
-
-
-def test_every_generated_latin_letter_is_reachable_even_if_python_unicode_lags() -> None:
-    for start, end in LATIN_SCRIPT_LETTER_RANGES:
-        for codepoint in range(start, end + 1):
-            character = chr(codepoint)
-            assert _is_latin_letter(character)
-            assert validate_english_topic(character) == character
 
 
 def _insert_published_agent(
@@ -448,11 +431,11 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
         {"agent_id": bowen_id, "stance_mode": "open"},
         {"agent_id": kaikai_id, "stance_mode": "open"},
     ]
-    invalid_topic = "TikTok 推荐算法"
+    invalid_topic = "\u200b"
     rejected = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
         headers=headers(csrf, **{"Idempotency-Key": "invalid-topic-create-001"}),
-        json={"topic": invalid_topic, "participants": participants, "round_count": 2},
+        json={"topic": invalid_topic, "participants": participants, "round_count": 4},
     )
     assert rejected.status_code == 422, rejected.text
     assert rejected.json()["code"] == TOPIC_LANGUAGE_ERROR_CODE
@@ -473,8 +456,8 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
         json={
             "topic": "A valid English topic",
             "participants": participants,
-            "round_count": 2,
-            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+            "round_count": 4,
+            "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
         },
     )
     assert created.status_code == 201, created.text
@@ -484,10 +467,10 @@ def test_invalid_topic_is_a_stable_422_before_create_claim_or_update_cas(
         f"/api/v1/debates/{debate_id}",
         headers=headers(csrf),
         json={
-            "topic": "Запрет TikTok",
+            "topic": "\u200b",
             "participants": participants,
-            "round_count": 2,
-            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+            "round_count": 4,
+            "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
             "expected_revision": before["revision"],
         },
     )
@@ -1063,3 +1046,44 @@ def test_audio_swap_rejects_absolute_and_parent_paths(
                     expected_old_debate_id=None,
                 ),
             )
+
+
+def test_topic_background_saved_separately_and_normalized_only_for_model(debate_app):
+    from app.modules.debates.topic_language import model_topic
+
+    _app, database, client = debate_app
+    agent_ids = [
+        _insert_published_agent(database, group_id=GROUP_DEMO_ID, name=name)[0]
+        for name in ("Context One", "Context Two")
+    ]
+    _session, csrf = login(client)
+    body = {
+        "topic": "中文 + English?\n  🙂",
+        "background": "Two students.\n\tOne asks:\u202e ‘为什么？’",
+        "output_language": "en",
+        "participants": [{"agent_id": agent_id, "stance_mode": "open"} for agent_id in agent_ids],
+    }
+    response = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "background-create-001"}),
+        json=body,
+    )
+    assert response.status_code == 201, response.text
+    saved = response.json()
+    assert saved["background"] == body["background"]
+    assert saved["topic"] == body["topic"]
+    assert client.get(f"/api/v1/debates/{saved['id']}").json()["background"] == body["background"]
+    with database.session() as db:
+        debate = db.get(Debate, saved["id"])
+        assert debate.background == body["background"]
+        assert model_topic(debate.topic, debate.background) == (
+            "Topic: 中文 + English? 🙂\n"
+            "Background (teacher-provided context): Two students. One asks: ‘为什么？’"
+        )
+    updated = client.patch(
+        f"/api/v1/debates/{saved['id']}",
+        headers=headers(csrf),
+        json={**body, "background": "Updated scenario", "expected_revision": saved["revision"]},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["background"] == "Updated scenario"

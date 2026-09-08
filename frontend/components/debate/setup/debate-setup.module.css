@@ -417,3 +417,51 @@
   display: grid;
   gap: 14px;
 }
+
+.topicInput.topicInput {
+  background: var(--gold-soft);
+  border-color: #d6bd86;
+}
+
+.createActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.languageChoices {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid #dfceaa;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.languageChoice {
+  min-height: 44px;
+  padding: 10px 24px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: #746040;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.languageChoice:hover:not(:disabled) {
+  background: #fbf4e5;
+  color: #49391f;
+}
+
+.languageActive.languageActive {
+  background: var(--gold-soft);
+  border-color: #d6bd86;
+  color: #49391f;
+}

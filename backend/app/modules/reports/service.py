@@ -59,6 +59,7 @@ from app.modules.debates.round_count import (
     expected_turn_count as planned_turn_count,
 )
 from app.modules.debates.source_lineage import receipt_scope_is_valid
+from app.modules.debates.topic_language import model_topic
 from app.modules.interactions.models import BarrageMessage
 from app.providers.control import (
     LLM_MAYA_REPORT_BUCKET,
@@ -1505,7 +1506,7 @@ def _report_context(
     if segment_mode:
         manifest: ReportInputManifestV1 | ReportInputManifestV2 = ReportInputManifestV2(
             debate_id=_uuid(debate_id),
-            topic=debate.topic,
+            topic=model_topic(debate.topic, debate.background or ""),
             participants=manifest_participants,
             turns=cast(list[ManifestTurnV2], manifest_turns),
             turn_sources=cast(list[ManifestTurnSourceV2], manifest_sources),
@@ -1534,7 +1535,7 @@ def _report_context(
     else:
         manifest = ReportInputManifestV1(
             debate_id=_uuid(debate_id),
-            topic=debate.topic,
+            topic=model_topic(debate.topic, debate.background or ""),
             participants=manifest_participants,
             turns=manifest_turns,
             turn_sources=manifest_sources,

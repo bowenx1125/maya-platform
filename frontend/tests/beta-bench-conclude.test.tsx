@@ -213,6 +213,7 @@ function finishedSegmentsDetail(): DebateDetail {
     id: debateId,
     course_id: courseId,
     topic: "Should classrooms compare cultural perspectives?",
+    background: "",
     status: "debate_finished",
     created_at: "2026-08-30T00:00:00Z",
     audio_restore_needed: false,

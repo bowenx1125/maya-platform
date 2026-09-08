@@ -59,6 +59,7 @@ function detail(
   return {
     id: debateId,
     course_id: "10000000-0000-4000-8000-000000000001",
+    background: "",
     topic: "Should the United States ban TikTok's recommendation algorithm?",
     status,
     created_at: "2026-08-28T00:00:00Z",

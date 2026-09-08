@@ -183,7 +183,7 @@ class ReportInsight(_ClosedModel):
 class ReportRequest(_ClosedModel):
     """The complete allowlisted input for one report-section generation."""
 
-    topic: str = Field(min_length=1, max_length=1200)
+    topic: str = Field(min_length=1)
     participants: tuple[ReportParticipant, ...] = Field(min_length=2, max_length=5)
     speeches: tuple[ReportSpeech, ...] = Field(min_length=1, max_length=10)
     sources: tuple[ReportSource, ...] = Field(default=(), max_length=64)

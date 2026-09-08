@@ -1645,8 +1645,10 @@ export interface components {
             teacher_note: string;
         };
         DebateDraftRequest: {
-            /** @description Non-empty topic in the selected lesson language. English accepts Latin letters; Chinese also accepts Han characters. Controls are rejected. */
+            /** @description Non-empty topic; any script or symbols are accepted. */
             topic: string;
+            /** @default  */
+            background: string;
             /**
              * @default en
              * @enum {string}
@@ -1842,6 +1844,8 @@ export interface components {
             regenerable_turn_ids?: components["schemas"]["Uuid"][];
         };
         DebateDetail: components["schemas"]["DebateSummary"] & {
+            /** @default  */
+            background: string;
             revision: number;
             last_sequence: number;
             /** @enum {string} */

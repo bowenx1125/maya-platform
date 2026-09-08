@@ -67,12 +67,9 @@ class DebateParticipantInput(_ClosedModel):
 
 class DebateDraftRequest(_ClosedModel):
     topic: str = Field(
-        min_length=1,
-        description=(
-            "Non-empty topic in the selected lesson language. English accepts Latin "
-            "letters; Chinese also accepts Han characters. Controls are rejected."
-        ),
+        min_length=1, description="Non-empty topic; any script or symbols are accepted."
     )
+    background: str = ""
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: Literal[4] = 4
     output_language: Literal["en", "zh"] = "en"
@@ -298,6 +295,7 @@ class Transcript(_ClosedModel):
 
 
 class DebateDetail(DebateSummary):
+    background: str = ""
     teaching_protocol: Literal["four_round_v1"] | None = None
     output_language: Literal["en", "zh"] = "en"
     turn_protocol: Literal["segments_v2"] | None = None

@@ -2553,8 +2553,8 @@ components:
           type: string
           minLength: 1
           description: >-
-            Non-empty topic in the selected lesson language. English accepts
-            Latin letters; Chinese also accepts Han characters. Controls are rejected.
+            Non-empty topic; any script or symbols are accepted.
+        background: { type: string, default: "" }
         output_language: { type: string, enum: [en, zh], default: en }
         turn_protocol:
           type: [string, "null"]
@@ -2910,6 +2910,7 @@ components:
               report_status,
             ]
           properties:
+            background: { type: string, default: "" }
             revision: { type: integer, minimum: 0 }
             last_sequence: { type: integer, minimum: 0 }
             rule_set_id:

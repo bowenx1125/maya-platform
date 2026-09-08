@@ -140,7 +140,7 @@ class PlaybackControlMixin(PlaybackCore):
         idempotency_key: str | None = None,
         request_id: str | None = None,
     ) -> PlaybackStateDTO:
-        # A historical draft can predate the English-topic rule.  Check it
+        # An empty historical draft cannot be generated. Check it
         # before an idempotency claim, audio swap, plan/job creation, or any
         # playback state mutation.  Replays of an already-started debate keep
         # their existing idempotency semantics because only draft topics are

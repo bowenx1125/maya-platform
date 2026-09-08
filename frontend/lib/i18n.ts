@@ -568,7 +568,7 @@ const enMessages = {
   errorInteractionClosed: "Classroom interaction has ended.",
   errorParticipantNotInDebate: "That participant is not part of this debate.",
   errorTopicLanguageInvalid:
-    "This topic must use Latin-script letters and cannot contain other scripts or control characters.",
+    "Enter a non-empty topic.",
   errorAudioNotRetained: "This audio is no longer retained.",
   errorBarrageInsightFailed: "Classroom insight could not be prepared.",
   errorReportFailed: "The Maya report could not be generated.",
@@ -1209,7 +1209,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorInteractionClosed: "课堂互动已经结束。",
   errorParticipantNotInDebate: "该参辩者不属于本场辩论。",
   errorTopicLanguageInvalid:
-    "该议题必须使用拉丁字母，不能包含其他文字或控制字符。",
+    "请填写非空议题。",
   errorAudioNotRetained: "这段语音已不再保留。",
   errorBarrageInsightFailed: "无法整理课堂意见。",
   errorReportFailed: "无法生成 Maya 报告。",

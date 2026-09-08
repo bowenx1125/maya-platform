@@ -404,6 +404,7 @@ export function TeacherDebateCreate({
     Record<string, ParticipantDraft>
   >({});
   const [topic, setTopic] = useState("");
+  const [background, setBackground] = useState("");
   const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("en");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
   const [loading, setLoading] = useState(true);
@@ -480,16 +481,9 @@ export function TeacherDebateCreate({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    const topicValidation = validateDebateTopic(topic, outputLanguage);
+    const topicValidation = validateDebateTopic(topic);
     if (!topicValidation.valid) {
-      setTopicError(
-        copy(
-          t,
-          topicValidation.reason === "required"
-            ? "debateTopicRequired"
-            : "debateTopicLanguageInvalid",
-        ),
-      );
+      setTopicError(copy(t, "debateTopicRequired"));
       return;
     }
     setTopicError(null);
@@ -503,6 +497,7 @@ export function TeacherDebateCreate({
     }
     const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
+      background,
       output_language: outputLanguage,
       turn_protocol: "segments_v2",
       participants: selectedIds.map((agentId) => {
@@ -564,13 +559,27 @@ export function TeacherDebateCreate({
         eyebrow={copy(t, "newDebate")}
         title={copy(t, "newDebateTitle")}
         action={
-          <Link className="secondary-action" href="/teacher/debates">
-            {copy(t, "debateBack")}
-          </Link>
+          <div className={styles.createActions}>
+            <Link className="secondary-action" href="/teacher/debates">
+              {copy(t, "debateBack")}
+            </Link>
+            <button
+              className="primary-action"
+              form="create-debate-form"
+              disabled={busy || candidates.length === 0}
+              type="submit"
+            >
+              {busy ? copy(t, "debateCreating") : copy(t, "debateCreateAction")}
+            </button>
+          </div>
         }
       />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
-      <form className={styles.pageStack} onSubmit={submit}>
+      <form
+        id="create-debate-form"
+        className={styles.pageStack}
+        onSubmit={submit}
+      >
         <SectionCard title={copy(t, "debateTopic")}>
           <label className="stack-form">
             <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
@@ -580,6 +589,7 @@ export function TeacherDebateCreate({
               aria-invalid={topicError !== null}
               disabled={busy}
               id="debate-topic"
+              className={styles.topicInput}
               onChange={(event) => {
                 setTopic(event.target.value);
                 if (topicError) setTopicError(null);
@@ -599,6 +609,37 @@ export function TeacherDebateCreate({
               </span>
             ) : null}
           </label>
+        </SectionCard>
+
+        <SectionCard title="Background (optional)">
+          <textarea
+            aria-label="Background (optional)"
+            disabled={busy}
+            rows={4}
+            value={background}
+            onChange={(event) => setBackground(event.target.value)}
+          />
+        </SectionCard>
+
+        <SectionCard title="Language">
+          <div
+            className={styles.languageChoices}
+            role="group"
+            aria-label="Language"
+          >
+            {(["en", "zh"] as const).map((language) => (
+              <button
+                key={language}
+                type="button"
+                disabled={busy}
+                aria-pressed={outputLanguage === language}
+                className={`${styles.languageChoice} ${outputLanguage === language ? styles.languageActive : ""}`}
+                onClick={() => setOutputLanguage(language)}
+              >
+                {language === "en" ? "English" : "Chinese 中文"}
+              </button>
+            ))}
+          </div>
         </SectionCard>
 
         <SectionCard title={copy(t, "debateCandidates")}>
@@ -742,20 +783,6 @@ export function TeacherDebateCreate({
         </SectionCard>
 
         <SectionCard title={copy(t, "debateMutualLearningRuleSet")}>
-          <label className={styles.roundField}>
-            <span className={styles.roundLabel}>Language</span>
-            <select
-              aria-label="Language"
-              disabled={busy}
-              value={outputLanguage}
-              onChange={(event) =>
-                setOutputLanguage(event.target.value as "en" | "zh")
-              }
-            >
-              <option value="en">English</option>
-              <option value="zh">Chinese</option>
-            </select>
-          </label>
           <div className={styles.fixedRule}>
             <p
               aria-label={copy(t, "debateRuleSet")}
@@ -770,15 +797,6 @@ export function TeacherDebateCreate({
               {formError}
             </div>
           ) : null}
-          <div className={styles.submitRow}>
-            <button
-              className="primary-action"
-              disabled={busy || candidates.length === 0}
-              type="submit"
-            >
-              {busy ? copy(t, "debateCreating") : copy(t, "debateCreateAction")}
-            </button>
-          </div>
         </SectionCard>
       </form>
     </div>

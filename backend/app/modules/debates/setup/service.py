@@ -994,6 +994,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "id": _as_uuid(debate.id),
             "course_id": _as_uuid(debate.course_id),
             "topic": debate.topic,
+            "background": debate.background,
             "status": debate.status,
             "created_at": debate.created_at,
             "revision": debate.revision,
@@ -1118,6 +1119,7 @@ def create_debate_draft(
         id=str(uuid4()),
         course_id=course_id,
         topic=topic,
+        background=payload.background,
         output_language=payload.output_language,
         rule_set_id=payload.rule_set_id,
         rule_snapshot_json=canonical_rule_snapshot_json(
@@ -1375,6 +1377,7 @@ def update_debate_draft(
         )
         .values(
             topic=topic,
+            background=payload.background,
             output_language=payload.output_language,
             rule_set_id=payload.rule_set_id,
             rule_snapshot_json=canonical_rule_snapshot_json(

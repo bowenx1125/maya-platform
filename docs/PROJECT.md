@@ -87,30 +87,15 @@ The owner authorizes main delivery and Docker updates; final classroom audit is
 manual. No usage reset is authorized. The external owner-requested HANDOFF.md
 contains continuation instructions.
 
-## Current requested fixes — September 8 classroom audit
+## Established classroom behavior
 
-Implemented: Next media failures recover in place using saved audio, with no
-Regenerate or generic playback-failure card. Duplicate prepared-media messages
-do not restart the same audio element. A committed recovery event is now published
-even when audio fails before started_ack. Lists refresh progress every two seconds
-while visible and on focus.
-
-Content requirements (language, length, wording, source aliases) are prompt-only.
-Speech prompts reserve S IDs for metadata and ask for natural references to RAG.
-No backend S-token detection/replacement is added; saved speeches stay unchanged.
-Report language follows the frozen debate language: Chinese for zh, English for en.
-Report prose is no longer rejected for language, length, Markdown or rhetorical
-rules; schema 0025 also removes the old database word-count publication limits.
-Only readable output, authorization, verified source bindings, cost and state integrity remain.
-
-The report is rendered as Markdown, including headings/lists/tables, with raw HTML
-execution disabled. Stage uses larger Agent names without A/B/C. Retained replay
-uses saved text/audio and hides Open Message; no new barrages are collected.
-A lone second-row action spans the controls. Conclude becomes available after
-replay completes. One newly authorized real Report for Chinese debate
-`c0e48278-c094-4c1f-8b6f-080b48b13767` completed in about 14 seconds;
-revision 3 is ready with a Chinese title and 1,007 Chinese characters. No Debate
-LLM or TTS regeneration was requested for this playback audit.
+Next can interrupt audio and recover using saved media. Lists refresh while
+visible and on focus. Language, length and source alias wording are Prompt-only;
+S IDs remain metadata. Report language follows the debate, renders Markdown
+without executing raw HTML, and does not reject prose for rhetorical/length
+rules. Schema 0025 removed old report word-count publication limits. Larger Stage
+names omit A/B/C. Replay uses saved text/audio, hides Open Message and collects
+no new barrages; a lone second-row action fills the row.
 
 ## Classroom actions — final owner decisions
 
@@ -151,22 +136,13 @@ ignores old version values. Frozen OpenAPI, generated client and route fixtures
 were updated together. Audit records distinguish fresh generation authorization
 from media-only recovery; scope budgets preserve earlier allocated costs.
 
-## Earlier browser-state corrections
+## Playback and retrieval
 
-The owner reproduced stale Preview, silent Next and duplicate-looking Agent text.
-Corrections include visible-page Preview polling; preserving completed WS event
-and receive tasks until consumed; sequential public-event indices under rotated
-speaker order; atomic speech/speaker snapshot application; and rejecting stale
-media callbacks. Next can interrupt playing/paused audio and advance the adjacent
-ready turn under version/identity checks. A natural-ended race retries only after
-confirming the original source turn is still current. Final freezes the barrage
-cutoff transactionally. Rebirth preserves completed Preview job receipts.
-
-Every new turn retrieves from its own KB with Prompt priorities high/low/medium/
-high. Up to three queries share one Embedding batch per turn: 3N Preview plus N
-final, within the initial 4N ceiling. Explicit Rebirth/Remake add only their new
-query allowance under existing token/money/consent limits. Saved outputs are not
-rewritten. These changes were not universal browser or teaching-quality acceptance.
+Preview polls while visible. Stage consumes ordered WebSocket events, applies
+speech/speaker atomically, ignores stale media callbacks and lets Next interrupt
+audio. Final freezes barrages transactionally. Each round retrieves from its own
+KB with high/low/medium/high Prompt priority; up to three queries share one
+Embedding batch, within the existing 4N initial allowance.
 
 ## Remake recovery
 
@@ -305,3 +281,27 @@ control, Provider authorization and mutation guards remain enforced.
 Targeted UI/connection checks: 26 passed; types passed and lint had no errors
 (four existing warnings). Broader playback checks also exposed unresolved native
 ended-ack and hidden-turn-index assertions; no claim of full playback acceptance.
+
+## Topic and Background — September 8
+
+Creation accepts any script, numbers, punctuation and emoji independently of the
+selected output language. Topic still needs visible content. Original Topic and
+optional Background are saved separately; migration 0026_debate_background adds
+an empty-default column, leaving existing records unchanged. Before model input,
+NFC normalization removes invisible control/format/surrogate characters and
+collapses whitespace while retaining meaningful symbols and word separators.
+Generation, each round's RAG query and Report receive a labeled Topic/Background
+context through the frozen topic field. Background is teacher scenario data, not
+verified evidence or system instructions. Reports no longer reject this context
+at the former 1200-character title limit; Provider token/call budgets remain.
+Lists/public classroom titles show only the authored Topic. Draft edits discard
+old Preview plans as before; their next frozen inputs include the new background.
+
+Creation uses a yellow Topic textarea, an optional Background below it, English/
+Chinese click choices above Agents, and Create Debate Draft beside Back. No extra
+Provider call or automatic regeneration of existing records was introduced.
+
+Verification: 37 topic/setup checks, 7 database/seed/initial-report checks, 19
+background/report checks (overlap with the topic set), and 36 frontend setup checks
+passed. Frontend types, targeted backend mypy and OpenAPI semantic/generated
+contracts passed. No paid generation or real browser classroom test was run.
