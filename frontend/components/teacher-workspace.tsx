@@ -159,20 +159,12 @@ export function TeacherAgentDetail({
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
-  const [snapshotText, setSnapshotText] = useState<string | null>(null);
-  const [downloadedSnapshotId, setDownloadedSnapshotId] = useState<
-    string | null
-  >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setSnapshot(null);
-    setSnapshotText(null);
-    setDownloadedSnapshotId(null);
     try {
       const nextAgent = await api.agent(agentId);
       const [nextVersions, nextGroup] = await Promise.all([
@@ -229,45 +221,15 @@ export function TeacherAgentDetail({
     ? versions.find((version) => version.id === selectedVersionId)
     : currentVersion;
 
-  async function downloadSnapshot() {
-    if (!snapshot) return;
-    setBusy(true);
-    try {
-      const downloaded = await api.downloadSnapshot(snapshot.id);
-      setSnapshotText(downloaded.content);
-      setDownloadedSnapshotId(snapshot.id);
-      downloadText(downloaded.content, downloaded.filename);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function downloadDocument(snapshotDocumentId: string) {
-    if (!snapshot) return;
-    setBusy(true);
-    try {
-      const downloaded = await api.downloadSnapshotDocument(
-        snapshot.id,
-        snapshotDocumentId,
-      );
-      downloadText(downloaded.content, downloaded.filename);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (snapshotId && snapshot?.id !== snapshotId) return <LoadingCard />;
 
   return (
     <div className={detailStyles.page}>
       <PageIntro
+        eyebrow="Agent"
         title={agent.name}
-        description={agent.description}
         action={
-          <Link className={detailStyles.action} href="/teacher">
+          <Link className="secondary-action" href="/teacher">
             {t("debateBack")}
           </Link>
         }
@@ -277,12 +239,17 @@ export function TeacherAgentDetail({
       ) : null}
       <div className={detailStyles.overview}>
         <TeacherPersona key={selectedVersion?.id} version={selectedVersion} />
-        <SectionCard title="Profile" className={detailStyles.card}>
+        <SectionCard
+          title="Profile"
+          className={`${detailStyles.card} ${detailStyles.profile}`}
+        >
           {selectedVersion ? (
             <div className={detailStyles.avatar}>
               <AvatarPreview
                 config={selectedVersion.avatar_config}
                 fallbackLabel={currentAgent.name}
+                framing="full-body"
+                className={detailStyles.fullBody}
               />
             </div>
           ) : null}
@@ -324,64 +291,17 @@ export function TeacherAgentDetail({
           </div>
         </SectionCard>
       </div>
-      <SectionCard
-        title="RAG"
-        className={detailStyles.card}
-        action={
-          snapshot ? (
-            <div className={detailStyles.actions}>
-              <span className={detailStyles.count}>
-                {snapshot.documents.length} {t("files")}
-              </span>
-              <button
-                className={detailStyles.action}
-                type="button"
-                disabled={busy}
-                onClick={() => void downloadSnapshot()}
-              >
-                Download RAG
-              </button>
-            </div>
-          ) : null
-        }
-      >
-        {snapshot ? (
-          <>
-            <div className={detailStyles.files}>
-              {snapshot.documents.map((document) => (
-                <div className={detailStyles.file} key={document.id}>
-                  <div>
-                    <strong title={document.source_filename}>
-                      {document.source_filename}
-                    </strong>
-                    <small>
-                      {document.char_count.toLocaleString()} {t("characters")}
-                    </small>
-                  </div>
-                  <button
-                    className={detailStyles.action}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void downloadDocument(document.id)}
-                  >
-                    {t("download")}
-                  </button>
-                </div>
-              ))}
-            </div>
-            {snapshot.documents.length === 0 ? (
-              <p className={detailStyles.empty}>No files</p>
-            ) : null}
-            {canShowSnapshotText(snapshot.id, downloadedSnapshotId) &&
-            snapshotText ? (
-              <details className={detailStyles.ragPreview} open>
-                <summary>RAG</summary>
-                <ReportMarkdown label="RAG content">
-                  {snapshotText}
-                </ReportMarkdown>
-              </details>
-            ) : null}
-          </>
+      <SectionCard title="RAG" className={detailStyles.card}>
+        {snapshot?.documents.length ? (
+          <div className={detailStyles.files}>
+            {snapshot.documents.map((document) => (
+              <RagFile
+                key={`${snapshot.id}:${document.id}`}
+                snapshotId={snapshot.id}
+                document={document}
+              />
+            ))}
+          </div>
         ) : (
           <p className={detailStyles.empty}>No files</p>
         )}
@@ -412,47 +332,14 @@ export function TeacherAgentDetail({
   );
 }
 
-export function canShowSnapshotText(
-  snapshotId: string | null | undefined,
-  downloadedSnapshotId: string | null,
-): boolean {
-  return Boolean(snapshotId && downloadedSnapshotId === snapshotId);
-}
-
 function TeacherPersona({ version }: { version?: AgentVersion }) {
-  const { api } = useSession();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  async function downloadAgentMd() {
-    if (!version) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const downloaded = await api.downloadAgentMd(version.id, "AGENT.md");
-      downloadText(downloaded.content, downloaded.filename);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
     <SectionCard
       title="Persona"
-      className={detailStyles.card}
+      className={`${detailStyles.card} ${detailStyles.personaCard}`}
       action={
         version ? (
-          <div className={detailStyles.actions}>
-            <span className="agent-pill">{version.version_label}</span>
-            <button
-              className={detailStyles.action}
-              type="button"
-              disabled={busy}
-              onClick={() => void downloadAgentMd()}
-            >
-              Download
-            </button>
-          </div>
+          <span className="agent-pill">{version.version_label}</span>
         ) : null
       }
     >
@@ -463,8 +350,85 @@ function TeacherPersona({ version }: { version?: AgentVersion }) {
       ) : (
         <p className={detailStyles.empty}>No Persona</p>
       )}
-      {error ? <ErrorNotice error={error} /> : null}
     </SectionCard>
+  );
+}
+
+function RagFile({
+  snapshotId,
+  document,
+}: {
+  snapshotId: string;
+  document: KnowledgeSnapshot["documents"][number];
+}) {
+  const { api } = useSession();
+  const [open, setOpen] = useState(false);
+  const [content, setContent] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  async function read(download = false) {
+    if (busy) return;
+    if (!download && content !== null) {
+      setOpen(!open);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.downloadSnapshotDocument(
+        snapshotId,
+        document.id,
+      );
+      if (download) downloadText(result.content, result.filename);
+      else {
+        setContent(result.content);
+        setOpen(true);
+      }
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className={detailStyles.file}>
+      <div className={detailStyles.fileHeader}>
+        <div className={detailStyles.fileIdentity}>
+          <strong title={document.source_filename}>
+            {document.source_filename}
+          </strong>
+          <small>{document.char_count.toLocaleString()} characters</small>
+        </div>
+        <div className={detailStyles.fileActions}>
+          <button
+            className={detailStyles.action}
+            type="button"
+            aria-expanded={open}
+            aria-controls={`rag-file-${document.id}`}
+            disabled={busy}
+            onClick={() => void read()}
+          >
+            Check
+          </button>
+          <button
+            className={detailStyles.action}
+            type="button"
+            disabled={busy}
+            onClick={() => void read(true)}
+          >
+            Download
+          </button>
+        </div>
+      </div>
+      {open && content !== null ? (
+        <div id={`rag-file-${document.id}`} className={detailStyles.fileBody}>
+          <ReportMarkdown label={document.source_filename}>
+            {content}
+          </ReportMarkdown>
+        </div>
+      ) : null}
+      {error ? <ErrorNotice error={error} onRetry={() => void read()} /> : null}
+    </div>
   );
 }
 

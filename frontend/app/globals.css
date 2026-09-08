@@ -625,7 +625,7 @@ details > summary {
   transform: translateY(-1px);
   border: 0;
   box-shadow: none;
-  color: #382d19;
+  color: var(--indigo);
   background: rgba(196, 164, 104, 0.16);
 }
 

@@ -7,7 +7,7 @@
   margin: 0;
 }
 .page > :global(.page-intro) h1 {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 .page > :global(.page-intro) p {
   font-size: 0.9rem;
@@ -17,7 +17,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr);
   gap: var(--workspace-gap);
-  align-items: start;
+  align-items: stretch;
 }
 .card.card {
   margin: 0;
@@ -49,7 +49,7 @@
   min-height: 36px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 6px;
   background: transparent;
   color: #655332;
   font: inherit;
@@ -80,15 +80,31 @@
   overflow: auto;
   overscroll-behavior: contain;
 }
+.personaCard.personaCard,
+.profile.profile {
+  display: flex;
+  flex-direction: column;
+  min-height: 650px;
+}
+.persona {
+  flex: 1 1 auto;
+}
 .avatar {
-  display: grid;
-  place-items: center;
+  flex: 1 1 0;
+  display: flex;
+  min-height: 360px;
   min-width: 0;
   padding: 12px;
   border: 1px solid #e5d8bf;
   border-radius: 14px;
   background: #fbf4e5;
   overflow: hidden;
+}
+.fullBody.fullBody {
+  aspect-ratio: auto;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
 }
 .profileFacts {
   display: grid;
@@ -108,46 +124,57 @@
   color: var(--muted);
   overflow-wrap: anywhere;
 }
-.count {
-  font-size: 0.78rem;
-  color: #796f5e;
-}
 .files {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .file {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
+  overflow: hidden;
   border: 1px solid #e5d8bf;
   border-radius: 14px;
   background: #fbf4e5;
 }
-.file > div {
+.fileHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
+}
+.fileIdentity {
   flex: 1 1 0;
   min-width: 0;
+  padding: 14px 16px;
 }
-.file strong {
+.fileIdentity strong {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9rem;
 }
-.file small {
+.fileIdentity small {
   display: block;
   margin-top: 4px;
   font-size: 0.75rem;
   color: var(--muted);
 }
-.file .action {
+.fileActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
   border-left: 1px solid #deceb0;
-  border-radius: 0 9px 9px 0;
+  padding: 0 8px;
+  margin: 12px 0;
+}
+.fileBody {
+  margin: 0 16px 16px;
+  padding-top: 16px;
+  border-top: 1px solid #deceb0;
+  overflow-wrap: anywhere;
 }
 .versions {
   display: flex;
@@ -176,16 +203,6 @@
   margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
-}
-.ragPreview {
-  margin-top: 16px;
-  padding: 12px 14px;
-  background: #fbf4e5;
-  border-radius: 14px;
-}
-.ragPreview summary {
-  cursor: pointer;
-  color: #655332;
 }
 @media (max-width: 780px) {
   .overview {

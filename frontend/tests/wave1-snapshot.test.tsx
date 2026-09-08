@@ -14,10 +14,7 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { useSession } from "../components/session-provider";
-import {
-  canShowSnapshotText,
-  TeacherAgentDetail,
-} from "../components/teacher-workspace";
+import { TeacherAgentDetail } from "../components/teacher-workspace";
 import { StudentPublishedVersion } from "../components/agent-workspace";
 
 const mockedUseSession = vi.mocked(useSession);
@@ -91,70 +88,68 @@ describe("student and teacher snapshot selection", () => {
     });
   });
 
-  it("clears downloaded text when a teacher switches historical snapshots", async () => {
+  it("checks files independently without downloading all RAG and resets on version change", async () => {
+    const first = "11111111-1111-4111-8111-111111111111";
+    const second = "22222222-2222-4222-8222-222222222222";
     const api = {
       agent: vi.fn().mockResolvedValue(agent()),
       versions: vi
         .fn()
         .mockResolvedValue([
-          version(
-            "version-one",
-            "11111111-1111-4111-8111-111111111111",
-            "published",
-          ),
-          version(
-            "version-two",
-            "22222222-2222-4222-8222-222222222222",
-            "superseded",
-          ),
+          version("version-one", first, "published"),
+          version("version-two", second, "superseded"),
         ]),
       snapshot: vi.fn((id: string) =>
         Promise.resolve({
-          ...snapshot(
-            id === "11111111-1111-4111-8111-111111111111"
-              ? "snapshot-one"
-              : "snapshot-two",
-          ),
+          ...snapshot(id),
           id,
+          documents: [
+            {
+              id: "one",
+              source_filename: "One.md",
+              char_count: 20,
+              order_index: 0,
+            },
+            {
+              id: "two",
+              source_filename: "Two.md",
+              char_count: 20,
+              order_index: 1,
+            },
+          ],
         }),
       ),
-      downloadSnapshot: vi.fn((id: string) =>
-        Promise.resolve({
-          content: `# ${id}`,
-          filename: `RAG--Agent--V1.0.md`,
-        }),
+      downloadSnapshot: vi.fn(),
+      downloadSnapshotDocument: vi.fn((id: string, doc: string) =>
+        Promise.resolve({ content: `# ${id} ${doc}`, filename: `${doc}.md` }),
       ),
-      downloadSnapshotDocument: vi.fn(),
     };
     mockedUseSession.mockReturnValue({ api } as never);
-
     const view = render(<TeacherAgentDetail agentId="agent-id" />);
     await screen.findByRole("heading", { name: "version-one" });
-    fireEvent.click(screen.getByRole("button", { name: "Download RAG" }));
-    await waitFor(() =>
-      expect(
-        screen.getByText("11111111-1111-4111-8111-111111111111"),
-      ).toBeTruthy(),
-    );
-
+    expect(screen.queryByRole("button", { name: "Download RAG" })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
+    await screen.findByRole("heading", { name: `${first} one` });
+    expect(screen.queryByRole("heading", { name: `${first} two` })).toBeNull();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(api.downloadSnapshot).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
+    expect(screen.queryByRole("heading", { name: `${first} one` })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
+    expect(api.downloadSnapshotDocument).toHaveBeenCalledTimes(1);
     view.rerender(
-      <TeacherAgentDetail
-        agentId="agent-id"
-        snapshotId="22222222-2222-4222-8222-222222222222"
-      />,
+      <TeacherAgentDetail agentId="agent-id" snapshotId={second} />,
     );
     await screen.findByRole("heading", { name: "version-two" });
-    expect(
-      screen.queryByText("11111111-1111-4111-8111-111111111111"),
-    ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Download RAG" }));
-    await waitFor(() =>
-      expect(api.downloadSnapshot).toHaveBeenLastCalledWith(
-        "22222222-2222-4222-8222-222222222222",
-      ),
+    expect(screen.queryByRole("heading", { name: `${first} one` })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[1]);
+    await screen.findByRole("heading", { name: `${second} two` });
+    fireEvent.click(screen.getAllByRole("button", { name: "Download" })[1]);
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
+    expect(api.downloadSnapshotDocument).toHaveBeenLastCalledWith(
+      second,
+      "two",
     );
-    expect(canShowSnapshotText("snapshot-one", "snapshot-two")).toBe(false);
-    expect(canShowSnapshotText("snapshot-two", "snapshot-two")).toBe(true);
   });
 
   it("marks the displayed teacher snapshot and keeps other versions navigable", async () => {

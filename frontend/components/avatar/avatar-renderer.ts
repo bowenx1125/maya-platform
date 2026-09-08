@@ -14,6 +14,7 @@ import { avatarMotionFrame, expressionForAvatarState } from "./avatar-motion";
 export type AvatarRendererOptions = {
   canvas: HTMLCanvasElement;
   assetUrl?: string;
+  framing?: "head" | "full-body";
   decoderPath?: string;
   onReady?: () => void;
   onError?: (error: Error) => void;
@@ -181,6 +182,8 @@ export function applyAvatarConfigMaterials(
  * class owns only Three.js resources and the animation loop.
  */
 export class AvatarRenderer {
+  private readonly framing: "head" | "full-body";
+  private bodySize: THREE.Vector3 | null = null;
   private readonly canvas: HTMLCanvasElement;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
@@ -202,6 +205,7 @@ export class AvatarRenderer {
 
   constructor(options: AvatarRendererOptions) {
     this.canvas = options.canvas;
+    this.framing = options.framing ?? "head";
     this.onReady = options.onReady;
     this.onError = options.onError;
     this.scene = new THREE.Scene();
@@ -278,7 +282,10 @@ export class AvatarRenderer {
           disposeObject(gltf.scene);
           return;
         }
-        this.root = this.prepareHeadCrop(gltf.scene);
+        this.root =
+          this.framing === "full-body"
+            ? this.prepareFullBody(gltf.scene)
+            : this.prepareHeadCrop(gltf.scene);
         this.scene.add(this.root);
         if (this.config) this.applyConfig(this.root, this.config);
         this.applyExpression(this.root, this.expressionForState());
@@ -295,6 +302,28 @@ export class AvatarRenderer {
         this.onError?.(error);
       },
     );
+  }
+
+  private prepareFullBody(scene: THREE.Object3D): THREE.Object3D {
+    const bounds = new THREE.Box3().setFromObject(scene);
+    if (bounds.isEmpty()) return scene;
+    scene.position.sub(bounds.getCenter(new THREE.Vector3()));
+    this.bodySize = bounds.getSize(new THREE.Vector3());
+    this.fitFullBody();
+    return scene;
+  }
+
+  private fitFullBody(): void {
+    if (!this.bodySize) return;
+    const size = this.bodySize;
+    const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const distance =
+      Math.max(size.y, size.x / this.camera.aspect) / (2 * Math.tan(halfFov));
+    const depth = distance * 1.14 + size.z / 2;
+    this.camera.position.set(0, 0, depth);
+    this.camera.far = Math.max(20, depth + size.length() * 2);
+    this.camera.lookAt(0, 0, 0);
+    this.camera.updateProjectionMatrix();
   }
 
   private prepareHeadCrop(scene: THREE.Object3D): THREE.Object3D {
@@ -421,6 +450,7 @@ export class AvatarRenderer {
     this.width = width;
     this.height = height;
     this.camera.aspect = width / height;
+    this.fitFullBody();
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
   }

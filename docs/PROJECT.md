@@ -241,15 +241,11 @@ following the displayed turn (e.g. 4/12): green when
 connected, red otherwise, with accessible nonvisual connection text. Existing
 reconnect actions remain available without explanatory notices.
 
-Live Report diagnosis: retained evidence in debate 8d8c9171-723b-4189-84aa-a7ef4ad7548c
-contains six chunks of 4127–4408 characters. Each reproduced string_too_long in
-ReportSource.excerpt's obsolete 2400-character constraint, before a paid Report
-operation. That per-source limit is removed, preserving exact evidence and total
-request budgets. Generating/failed revision DTOs also sent removed translated_markdown,
-causing a second ValidationError; those stale fields are removed. Unexpected input
-validation now logs only field paths/types, never values. The user had already
-reset this debate to Preview Ready; original final speeches/report revisions no
-longer exist, so no original full Report was replayed or regenerated here.
+Report inputs previously rejected six retained evidence chunks (4127–4408 chars)
+under an obsolete 2400-char limit. Removing it preserves complete evidence within
+total request budgets. Stale translated_markdown fields were also removed from
+failure/generating DTOs. The owner had reset the affected lesson, so its original
+full failed Report could not be replayed. Logs retain only safe validation paths.
 
 ## Real ruleset effect check
 
@@ -264,7 +260,7 @@ The custom answer exposed S1 after its teacher rules omitted citation wording.
 New execution Prompts now reserve S IDs for metadata; no backend text filter was
 added. Existing frozen lessons are unchanged; this addition has offline coverage,
 not another paid rerun. One opening comparison is not four-round quality acceptance.
-Ruleset uses white cards/documents and purple actions.
+Ruleset uses white cards, pale-yellow documents and purple actions.
 
 Creation defaults to Chinese; language changes outside Edit preserve independent
 CN/EN drafts and only the selected language drives generation. Draft updates that
@@ -296,7 +292,7 @@ Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
-New uses white Topic/Background/Ruleset text areas and cards; stance shares the
+New uses white Topic/Background, pale-yellow Ruleset text and white cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
 
 Live DOM: Home/Create/list insets 25px including border; divider gaps 16px.
@@ -307,11 +303,15 @@ height/padding, and transcript bottom padding no longer adds 26px. Replay recove
 uses existing controller acquisition and saved media; no generation protocol changed.
 34 targeted Stage/replay checks and types passed; no paid or full classroom test.
 
-Agent details now use scoped white cards, pale-yellow Persona/file rows, shared
-24px insets and 16px title dividers. Persona renders Markdown by default with one
-version badge/download action. Profile combines avatar/group/voice; RAG omits IDs
-and technical snapshot prose. Versions appear only when multiple releases exist;
-selection updates Persona/avatar/voice with RAG and clears stale downloaded content.
-Downloads retain existing endpoints; no source text is edited or republished.
-Eight focused detail/download/version tests, typecheck and targeted lint passed.
-Live detail view: title dividers align; 1280px/390px layouts have no horizontal overflow.
+Agent details use white cards, pale-yellow Persona/files, shared 24px insets and
+16px title dividers. Agent eyebrow replaces description; Back matches Debates.
+Persona keeps only its version badge. Profile matches Persona height and uses an
+opt-in full-body camera fit; other avatar previews retain head framing. Custom
+voice is green. Each RAG row has Check/Download with symmetric action padding;
+Check loads one immutable document into Markdown inside that same yellow row,
+without downloading a file. Selection/cache reset on version change. No file-count
+or Download RAG header remains. No source text is edited or republished.
+17 targeted detail/file/avatar checks, types and lint passed. Playback debugging
+was canceled by the owner after Destroy; no pending playback changes were retained.
+Live UI confirmed equal Persona/Profile height, whole-body framing and one-file
+Check expansion inside its row; 390px view has no horizontal overflow.

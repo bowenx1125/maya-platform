@@ -11,6 +11,7 @@ export type AvatarCanvasProps = {
   config: AvatarConfig;
   state?: AvatarState;
   assetUrl?: string;
+  framing?: "head" | "full-body";
   fallbackLabel?: string;
   className?: string;
   onLoad?: () => void;
@@ -33,6 +34,7 @@ export function AvatarCanvas({
   state = "idle",
   assetUrl = AVATAR_ASSET_URL,
   fallbackLabel,
+  framing = "head",
   className,
   onLoad,
   onError,
@@ -81,6 +83,7 @@ export function AvatarCanvas({
           const renderer = new AvatarRenderer({
             canvas,
             assetUrl,
+            framing,
             onReady: () => {
               if (!active) return;
               setStatus("ready");
@@ -122,7 +125,7 @@ export function AvatarCanvas({
       rendererRef.current?.dispose();
       rendererRef.current = null;
     };
-  }, [assetUrl]);
+  }, [assetUrl, framing]);
 
   useEffect(() => {
     rendererRef.current?.setConfig(config);
