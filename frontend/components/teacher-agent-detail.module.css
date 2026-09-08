@@ -114,10 +114,12 @@
 }
 .files {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .file {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -127,6 +129,7 @@
   background: #fbf4e5;
 }
 .file > div {
+  flex: 1 1 0;
   min-width: 0;
 }
 .file strong {
@@ -188,4 +191,9 @@
   .overview {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+.actions .action {
+  min-height: 0;
+  padding: 4px 9px;
+  line-height: 1.25;
 }

@@ -314,3 +314,4 @@ and technical snapshot prose. Versions appear only when multiple releases exist;
 selection updates Persona/avatar/voice with RAG and clears stale downloaded content.
 Downloads retain existing endpoints; no source text is edited or republished.
 Eight focused detail/download/version tests, typecheck and targeted lint passed.
+Live detail view: title dividers align; 1280px/390px layouts have no horizontal overflow.
