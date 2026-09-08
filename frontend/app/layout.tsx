@@ -8,7 +8,7 @@ import { localeToHtmlLang } from "../lib/i18n";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Maya Teaching Platform",
+  title: "Mayaform",
   description:
     "A local-first classroom platform for evidence-aware cultural debate.",
 };

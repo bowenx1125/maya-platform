@@ -306,9 +306,10 @@ Immerse opens the same control route from ready Preview or each eligible list ro
 Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
 
-
-Home uses Course and a single-line Providers Composition heading. The compact Provider strip uses the Agent-list off-white panel, placing baseline
-status below its title beside the component grid. Published/count/Agents is one heading
+Home uses Mayaform for the default course heading and shared login/navigation brand.
+Providers Composition uses the Agent-list off-white panel: title, service grid,
+then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
+Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
 Top navigation and language/Edit controls lift 1px on hover; navigation has no
 border/shadow. Home, Classroom, New and Preview use a shared 20px section gap, with

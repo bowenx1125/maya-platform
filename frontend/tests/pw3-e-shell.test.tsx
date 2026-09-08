@@ -66,7 +66,7 @@ describe("PW3-E teacher information architecture", () => {
     ).toBeNull();
 
     expect(screen.getByRole("button", { name: "Log out" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Maya" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Mayaform" })).toBeTruthy();
   });
 
   it.each([

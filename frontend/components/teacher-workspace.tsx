@@ -75,7 +75,11 @@ export function TeacherDashboard() {
     <div className="teacher-home-layout">
       <PageIntro
         eyebrow={t("teacherCourse")}
-        title={course?.name ?? t("publishedAgents")}
+        title={
+          course?.name === "Maya Cultural Exchange Demo"
+            ? t("appName")
+            : (course?.name ?? t("appName"))
+        }
       />
       {/* What is real and what is Mock, under the course it describes rather
           than above the title, so the page opens on its own heading. */}

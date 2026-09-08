@@ -15,7 +15,7 @@ export const AGENT_OUTLINE = PERSONA_OUTLINE_V2;
  * prompts and model output) never goes through it.
  */
 const enMessages = {
-  appName: "Maya",
+  appName: "Mayaform",
   workspace: "Teaching workspace",
   loading: "Loading…",
   retry: "Try again",
@@ -34,7 +34,7 @@ const enMessages = {
   teacher: "Teacher view",
   student: "Student view",
   logout: "Log out",
-  signIn: "Sign in to Maya",
+  signIn: "Sign in to Mayaform",
   username: "Username",
   password: "Password",
   createAgent: "Create Agent",
@@ -60,9 +60,9 @@ const enMessages = {
   retryConflict: "The draft changed elsewhere. Your local text is still here.",
   signInContinue: "Sign in to continue.",
   sessionRequired:
-    "Your session is required before Maya can reveal course or group content.",
+    "Your session is required before Mayaform can reveal course or group content.",
   viewUnavailable: "That view is not available for this account.",
-  roleBoundary: "Maya keeps student drafts and teacher snapshots separate.",
+  roleBoundary: "Mayaform keeps student drafts and teacher snapshots separate.",
   returnWorkspace: "Return to workspace",
   demoIdentity: "Demo identity",
   or: "or",
@@ -705,7 +705,7 @@ const enMessages = {
 } as const;
 
 const zhMessages: Record<keyof typeof enMessages, string> = {
-  appName: "Maya",
+  appName: "Mayaform",
   workspace: "教学工作区",
   loading: "正在加载…",
   retry: "重试",
@@ -724,7 +724,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teacher: "教师视图",
   student: "学生视图",
   logout: "退出登录",
-  signIn: "登录 Maya",
+  signIn: "登录 Mayaform",
   username: "用户名",
   password: "密码",
   createAgent: "创建智能体",
@@ -750,7 +750,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   signInContinue: "登录后继续。",
   sessionRequired: "需要登录后才能查看课程或小组内容。",
   viewUnavailable: "此账号无法访问该页面。",
-  roleBoundary: "Maya 将学生草稿与教师快照分开保护。",
+  roleBoundary: "Mayaform 将学生草稿与教师快照分开保护。",
   returnWorkspace: "返回工作区",
   demoIdentity: "演示身份",
   or: "或",
@@ -1342,7 +1342,7 @@ export const messages = {
  * technical names rather than translatable prose. */
 export const ALLOWED_IDENTICAL_TERMS = [
   "Refresh",
-  "Maya",
+  "Mayaform",
   "AGENT.md",
   "evidence.md",
   "RAG",
