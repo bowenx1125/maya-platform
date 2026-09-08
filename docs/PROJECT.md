@@ -307,8 +307,8 @@ Action order is Rebirth when completed, Immerse, Devocalize/Revocalize, Destroy.
 Audio restoration displays disabled Revocalize...; stage ready label is Ready.
 84 checks passed; four existing Stage lint warnings.
 
-Home uses Course, Composition and Providers. The compact Provider strip places
-baseline status below its title, beside the component grid. Published/count/Agents is one heading
+Home uses Course, Composition and Providers. The compact Provider strip uses the Agent-list off-white panel, placing baseline
+status below its title beside the component grid. Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
 Navigation has a 1px hover lift without border/shadow. New page title is Debates.
 Linked Agent tiles have name/ellipsized small description above version/group.
