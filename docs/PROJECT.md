@@ -294,7 +294,6 @@ more width. Provider component tiles use the same pale-yellow background.
 New uses white Topic/Background, pale-yellow Ruleset text and white cards; stance shares the
 language switch styles. Preview speech cards are white with symmetric edge spacing.
 
-Live DOM: Home/Create/list insets 25px including border; divider gaps 16px.
 
 3D Replay is hidden before completion; Interact/Hide toggles the existing QR session.
 Conclude waits for playback completion. Check RAG summary has no inherited minimum
