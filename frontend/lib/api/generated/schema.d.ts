@@ -1674,7 +1674,7 @@ export interface components {
             /** @default null */
             teaching_prompts: components["schemas"]["TeachingPrompts"] | null;
             /**
-             * @default en
+             * @default zh
              * @enum {string}
              */
             output_language: "en" | "zh";

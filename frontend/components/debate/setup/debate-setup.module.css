@@ -429,3 +429,13 @@
   align-items: center;
   gap: 10px;
 }
+
+.selectedControlsOpen {
+  grid-template-columns: auto minmax(160px, 1fr);
+}
+
+@media (max-width: 720px) {
+  .selectedControlsOpen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

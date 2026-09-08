@@ -2582,7 +2582,7 @@ components:
             - $ref: "#/components/schemas/TeachingPrompts"
             - { type: "null" }
           default: null
-        output_language: { type: string, enum: [en, zh], default: en }
+        output_language: { type: string, enum: [en, zh], default: zh }
         turn_protocol:
           type: [string, "null"]
           enum: [segments_v2, null]

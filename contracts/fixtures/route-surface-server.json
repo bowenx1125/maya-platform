@@ -5784,7 +5784,7 @@
               "en",
               "zh"
             ],
-            "default": "en"
+            "default": "zh"
           },
           "turn_protocol": {
             "type": [

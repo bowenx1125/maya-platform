@@ -235,7 +235,7 @@ Lists/public classroom titles show only the authored Topic. Draft edits discard
 old Preview plans as before; their next frozen inputs include the new background.
 
 Creation uses a yellow Topic textarea, an optional Background below it, English/
-Chinese click choices above Agents, and Create Debate Draft beside Back. No extra
+Chinese compact switch in Ruleset, and Create Debate Draft beside Back. No extra
 Provider call or automatic regeneration of existing records was introduced.
 
 Topic/Background persistence, retrieval, Report and setup checks passed offline.
@@ -245,8 +245,8 @@ Topic/Background persistence, retrieval, Report and setup checks passed offline.
 Default teaching content now lives only in backend/app/modules/debates/default_rules/
 zh.md and en.md. The creation form loads both through a teacher-scoped read-only
 endpoint. Selected Order is followed by one Debate Ruleset row: compact language
-switch, Details, Edit. Details renders two scrollable Markdown columns; Edit shows
-raw text; Save updates this form and returns to Details. Create is disabled while
+switch, Details, Edit. Details renders only the selected language in a full-width scrollable document;
+Edit shows raw text; Save updates that language in this form and returns to Details. Create is disabled while
 editing. The old Multi-round Civilization/phase block is removed; Topic and
 Background inputs are yellow.
 
@@ -305,3 +305,12 @@ added. Existing frozen lessons are unchanged; this addition has offline coverage
 not another paid rerun. One opening comparison is not four-round quality acceptance.
 Ruleset styling now uses gold card, white documents/switch, gold selection and
 purple actions. Thirteen frozen-rule checks and two editor checks passed.
+
+Creation now defaults to Chinese in both form and API. Ruleset language can change
+only while Details is closed; CN/EN text remains independently saved in the form,
+with no extra Prompt CN/EN headings. Editing Chinese then selecting English uses
+the untouched English prompt. Existing draft language is preserved on updates
+that omit output_language. Topic, Background, Published Agents, Selected Order and
+Ruleset share one title-divider style and alignment. The duplicate Open explanation
+caption is removed; its button remains. 43 frontend and 25 backend targeted checks
+passed, including language switching and frozen-language selection; no paid retest.

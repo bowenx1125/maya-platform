@@ -1364,6 +1364,8 @@ def update_debate_draft(
     require_teacher_course(db, actor_user_id, debate.course_id)
     if debate.status != "draft":
         raise invalid_state("Only a draft Debate can be updated.")
+    if "output_language" not in payload.model_fields_set:
+        payload = payload.model_copy(update={"output_language": debate.output_language})
     topic = _validated_topic(payload.topic, payload.output_language)
     teaching_protocol = debate_teaching_protocol(debate)
     _ensure_payload(payload, teaching_protocol=teaching_protocol)

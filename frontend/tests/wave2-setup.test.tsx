@@ -293,6 +293,9 @@ describe("Wave 2 teacher debate setup", () => {
       target: { value: "A classroom scenario." },
     });
     fireEvent.click(screen.getByRole("button", { name: "中文" }));
+    expect(
+      screen.getByRole("button", { name: "中文" }).getAttribute("aria-pressed"),
+    ).toBe("true");
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: mixedTopic } });
@@ -305,6 +308,67 @@ describe("Wave 2 teacher debate setup", () => {
       topic: mixedTopic,
       background: "A classroom scenario.",
       output_language: "zh",
+    });
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByRole("combobox", { name: "Language" })).toBeNull();
+  });
+
+  it("uses default English when Chinese rules alone were edited", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    const controller: DebateCreateController = {
+      loadRuleset: vi
+        .fn()
+        .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
+      loadCandidates: vi
+        .fn()
+        .mockResolvedValue([
+          candidate("bowen", "Bowen"),
+          candidate("kaikai", "Kaikai"),
+        ]),
+      create,
+    };
+
+    render(<TeacherDebateCreate controller={controller} />);
+    await screen.findByRole("button", { name: /Bowen/ });
+    fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
+
+    fireEvent.change(screen.getByLabelText("Background (optional)"), {
+      target: { value: "A classroom scenario." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "中文" }));
+    expect(
+      screen.getByRole("button", { name: "中文" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
+      target: { value: "# 仅本场中文修改" },
+    });
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Create debate draft",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    const input = screen.getByLabelText("Topic");
+    const mixedTopic = "Should TikTok be banned? 推荐算法";
+    fireEvent.change(input, { target: { value: mixedTopic } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create debate draft" }),
+    );
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][1]).toMatchObject({
+      topic: mixedTopic,
+      background: "A classroom scenario.",
+      output_language: "en",
+      teaching_prompts: { zh: "# 仅本场中文修改", en: "# Default rules" },
     });
     expect(input.getAttribute("aria-invalid")).toBe("false");
     expect(screen.queryByRole("combobox", { name: "Language" })).toBeNull();

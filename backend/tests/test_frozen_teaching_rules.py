@@ -118,6 +118,7 @@ def test_creation_freezes_two_languages_and_other_debates_remain_independent(
     assert defaults.status_code == 200
     assert defaults.json() == default_teaching_prompts()
     body = {
+        "output_language": "en",
         "topic": "Water?",
         "participants": [{"agent_id": agent, "stance_mode": "open"} for agent in ids],
         "teaching_prompts": {"zh": "# 中文课堂", "en": "# Original English lesson"},
@@ -170,12 +171,13 @@ def test_creation_freezes_two_languages_and_other_debates_remain_independent(
         f"/api/v1/debates/{debate_id}",
         headers=headers(csrf),
         json={
-            **{k: v for k, v in body.items() if k != "teaching_prompts"},
+            **{k: v for k, v in body.items() if k not in {"teaching_prompts", "output_language"}},
             "background": "New context",
             "expected_revision": 0,
         },
     )
     assert updated.status_code == 200, updated.text
+    assert updated.json()["output_language"] == "en"
     with database.session() as db:
         assert db.get(Debate, debate_id).rule_snapshot_json == frozen
 
@@ -207,3 +209,15 @@ def test_migration_freezes_existing_rules_without_overwriting_custom_records(mon
         assert {
             row[0]: json.loads(row[1]) for row in db.execute(text("SELECT * FROM debates"))
         } == rows
+
+
+def test_selected_language_only_uses_its_own_frozen_prompt():
+    from app.modules.debates.schemas import DebateDraftRequest
+
+    defaults = default_teaching_prompts()
+    rules = freeze_teaching_rules({**defaults, "zh": "# Chinese-only revision"})
+    english = frozen_system_prompt(json.dumps(rules), 1, "en")
+    assert defaults["en"] in english
+    assert "Chinese-only revision" not in english
+    assert "Chinese-only revision" in frozen_system_prompt(json.dumps(rules), 1, "zh")
+    assert DebateDraftRequest.model_fields["output_language"].default == "zh"

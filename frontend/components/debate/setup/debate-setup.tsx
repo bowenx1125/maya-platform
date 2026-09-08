@@ -23,6 +23,7 @@ import {
 } from "../../../lib/api";
 import { localizeError, type MessageKey } from "../../../lib/i18n";
 import { RulesetEditor, type TeachingPrompts } from "./ruleset-editor";
+import sectionStyles from "./create-section.module.css";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
@@ -414,7 +415,7 @@ export function TeacherDebateCreate({
   });
   const [rulesEditing, setRulesEditing] = useState(false);
   const rulesLoaded = useRef(false);
-  const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("en");
+  const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("zh");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -600,7 +601,10 @@ export function TeacherDebateCreate({
         className={styles.pageStack}
         onSubmit={submit}
       >
-        <SectionCard title={copy(t, "debateTopic")}>
+        <SectionCard
+          className={sectionStyles.section}
+          title={copy(t, "debateTopic")}
+        >
           <label className="stack-form">
             <span className={styles.srOnly}>{copy(t, "debateTopic")}</span>
             <textarea
@@ -631,7 +635,10 @@ export function TeacherDebateCreate({
           </label>
         </SectionCard>
 
-        <SectionCard title="Background (optional)">
+        <SectionCard
+          className={sectionStyles.section}
+          title="Background (optional)"
+        >
           <textarea
             aria-label="Background (optional)"
             className={styles.topicInput}
@@ -642,7 +649,10 @@ export function TeacherDebateCreate({
           />
         </SectionCard>
 
-        <SectionCard title={copy(t, "debateCandidates")}>
+        <SectionCard
+          className={sectionStyles.section}
+          title={copy(t, "debateCandidates")}
+        >
           {candidates.length === 0 ? (
             <EmptyCard title={copy(t, "debateNoCandidates")} />
           ) : (
@@ -681,7 +691,10 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        <SectionCard title={copy(t, "debateSelected")}>
+        <SectionCard
+          className={sectionStyles.section}
+          title={copy(t, "debateSelected")}
+        >
           {selectedCandidates.length ? (
             <div className={styles.selectedList}>
               {selectedCandidates.map((candidate, index) => {
@@ -702,7 +715,9 @@ export function TeacherDebateCreate({
                         </small>
                       </div>
                     </div>
-                    <div className={styles.selectedControls}>
+                    <div
+                      className={`${styles.selectedControls} ${draft.mode === "open" ? styles.selectedControlsOpen : ""}`}
+                    >
                       <div
                         className={styles.choiceGroup}
                         aria-label={copy(t, "debateStance") as string}
@@ -757,11 +772,7 @@ export function TeacherDebateCreate({
                             {copy(t, "debateNeutral")}
                           </option>
                         </select>
-                      ) : (
-                        <span className={styles.fieldHint}>
-                          {copy(t, "debateOpen")}
-                        </span>
-                      )}
+                      ) : null}
                       <input
                         aria-label={`${candidate.agent.name} ${copy(t, "debateNote")}`}
                         className={styles.noteInput}

@@ -78,7 +78,7 @@ class DebateDraftRequest(_ClosedModel):
     teaching_prompts: TeachingPrompts | None = None
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: Literal[4] = 4
-    output_language: Literal["en", "zh"] = "en"
+    output_language: Literal["en", "zh"] = "zh"
     turn_protocol: Literal["segments_v2"] | None = None
     rule_set_id: RuleSetId = NEW_DEBATE_RULE_SET_ID
     total_duration_seconds: None = None
