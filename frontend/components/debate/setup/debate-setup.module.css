@@ -433,7 +433,7 @@
   min-width: 0;
 }
 .topicColumn > :global(.section-card-header) + * {
-  margin-top: 16px;
+  margin-top: var(--section-content-gap);
 }
 .contextInput.contextInput {
   display: block;

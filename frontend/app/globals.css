@@ -1,6 +1,7 @@
 :root {
   --workspace-gap: 20px;
   --workspace-inset: 24px;
+  --section-content-gap: 16px;
   --ink: #27233d;
   --muted: #706b82;
   --paper: #fcfaf6;
@@ -669,7 +670,7 @@ details > summary {
 .demo-composition-strip {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: var(--section-content-gap);
   align-items: center;
   min-width: 0;
   margin-bottom: 20px;
@@ -1142,8 +1143,11 @@ details > summary {
 
 .published-section > .section-card-header,
 .demo-composition-heading {
-  padding-bottom: 16px;
+  padding-bottom: var(--section-content-gap);
   border-bottom: 1px solid #e4d5b7;
+}
+.published-section > .section-card-header {
+  margin-bottom: var(--section-content-gap);
 }
 .published-section > .section-card-header h2 {
   line-height: 1.4;

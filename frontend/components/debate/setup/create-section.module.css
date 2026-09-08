@@ -2,12 +2,12 @@
   margin-bottom: 0;
   min-height: 0;
   align-items: flex-start;
-  padding-bottom: 16px;
+  padding-bottom: var(--section-content-gap);
   border-bottom: 1px solid #e4d5b7;
 }
 
 .section > :global(.section-card-header) + * {
-  margin-top: 16px;
+  margin-top: var(--section-content-gap);
 }
 
 .section :global(.section-card-header) h2 {
