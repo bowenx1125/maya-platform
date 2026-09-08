@@ -39,6 +39,7 @@ type SpeechStreamProps = {
   emptyMessage: string;
   /** The lesson's state, shown with the heading rather than in a pill of its own. */
   status?: string;
+  showTurnCount?: boolean;
   /** Replay the whole session, when the viewer may control playback. */
   onReplayAll?: () => void;
   replayAllDisabled?: boolean;
@@ -219,6 +220,7 @@ export function SpeechStream({
   phaseOf,
   emptyMessage,
   status,
+  showTurnCount = true,
   onReplayAll,
   replayAllDisabled,
 }: SpeechStreamProps) {
@@ -256,7 +258,7 @@ export function SpeechStream({
           {labels.transcript}
           {status ? <span className={styles.streamState}>{status}</span> : null}
         </h2>
-        {turns.length ? (
+        {showTurnCount && turns.length ? (
           <span className={styles.streamCount}>{turns.length}</span>
         ) : null}
         {onReplayAll ? (

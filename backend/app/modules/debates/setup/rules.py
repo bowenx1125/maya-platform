@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
@@ -174,6 +174,7 @@ def canonical_rule_snapshot_json(
     round_count: int = 2,
     turn_protocol: Literal["segments_v2"] | None = None,
     teaching_protocol: Literal["four_round_v1"] | None = None,
+    frozen_teaching: Mapping[str, object] | None = None,
 ) -> str:
     """Serialize the rule snapshot deterministically for a Debate row."""
 
@@ -192,6 +193,10 @@ def canonical_rule_snapshot_json(
                 "teaching_protocol_invalid", "Teaching requires four segment rounds."
             )
         payload["teaching_protocol"] = teaching_protocol
+    if teaching_protocol is not None:
+        from app.modules.debates.teaching_rules import freeze_teaching_rules
+
+        payload.update(frozen_teaching if frozen_teaching is not None else freeze_teaching_rules())
     if rule_set_id == RULE_SET_ID_V1:
         # Preserve the byte-shape of the historical v1 canonical snapshot;
         # the retrieval policy field did not exist when those rows were made.

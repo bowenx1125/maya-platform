@@ -1791,6 +1791,37 @@
         }
       }
     },
+    "/api/v1/courses/{course_id}/debate-ruleset": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "getDebateRulesetDefaults",
+        "responses": {
+          "200": {
+            "description": "Default teaching Markdown for a new debate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeachingPrompts"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/courses/{course_id}/debates": {
       "parameters": [
         {
@@ -5704,6 +5735,22 @@
           }
         }
       },
+      "TeachingPrompts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "zh",
+          "en"
+        ],
+        "properties": {
+          "zh": {
+            "type": "string"
+          },
+          "en": {
+            "type": "string"
+          }
+        }
+      },
       "DebateDraftRequest": {
         "type": "object",
         "required": [
@@ -5719,6 +5766,17 @@
           "background": {
             "type": "string",
             "default": ""
+          },
+          "teaching_prompts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeachingPrompts"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "output_language": {
             "type": "string",

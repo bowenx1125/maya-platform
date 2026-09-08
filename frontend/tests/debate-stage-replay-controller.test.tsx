@@ -563,6 +563,14 @@ describe("saved media failure recovery", () => {
       );
       await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
       act(() => socket.emitOpen());
+      if (kind === "beta") {
+        expect(
+          screen
+            .getByLabelText(/Turn \d+ of \d+, connected/)
+            .getAttribute("data-connected"),
+        ).toBe("true");
+        expect(screen.queryByText("Connected")).toBeNull();
+      }
       act(() => socket.emitMessage(acquired()));
       const prepared = {
         ...acquired(),

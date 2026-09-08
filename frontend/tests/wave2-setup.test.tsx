@@ -166,6 +166,9 @@ describe("Wave 2 teacher debate setup", () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
     const controller: DebateCreateController = {
+      loadRuleset: vi
+        .fn()
+        .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
       loadCandidates: vi
         .fn()
         .mockResolvedValue([
@@ -210,6 +213,9 @@ describe("Wave 2 teacher debate setup", () => {
     useSessionMock.mockReturnValue({
       api: {
         publishedAgents,
+        debateRulesetDefaults: vi
+          .fn()
+          .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
         createDebate: vi.fn().mockResolvedValue(createdDebate()),
       },
       user: teacherSession().user,
@@ -232,6 +238,9 @@ describe("Wave 2 teacher debate setup", () => {
       },
     );
     const controller: DebateCreateController = {
+      loadRuleset: vi
+        .fn()
+        .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
       loadCandidates: vi
         .fn()
         .mockResolvedValue([
@@ -263,6 +272,9 @@ describe("Wave 2 teacher debate setup", () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());
     const controller: DebateCreateController = {
+      loadRuleset: vi
+        .fn()
+        .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
       loadCandidates: vi
         .fn()
         .mockResolvedValue([
@@ -280,7 +292,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByLabelText("Background (optional)"), {
       target: { value: "A classroom scenario." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Chinese 中文" }));
+    fireEvent.click(screen.getByRole("button", { name: "中文" }));
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
     fireEvent.change(input, { target: { value: mixedTopic } });

@@ -1106,3 +1106,20 @@
     max-width: none;
   }
 }
+
+.turnProgress {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: #23664d;
+  background: #e4f2e9;
+}
+.turnProgress[data-connected="false"] {
+  color: #963c34;
+  background: #f8e1dd;
+}

@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -147,6 +148,15 @@ class ReportTaskManager:
                     debate_id,
                     type(exc).__name__,
                 )
+                if isinstance(exc, ValidationError):
+                    LOGGER.error(
+                        "Report input validation failed for debate %s fields=%s",
+                        debate_id,
+                        [
+                            {"field": ".".join(map(str, error["loc"])), "type": error["type"]}
+                            for error in exc.errors(include_input=False, include_url=False)
+                        ],
+                    )
                 self._fail_stuck_job(debate_id, operation, owner_id)
                 return
 

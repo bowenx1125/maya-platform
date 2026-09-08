@@ -2894,7 +2894,6 @@ def _revision_dto(
                 **common,
                 "english_markdown": None,
                 "word_count": None,
-                "translated_markdown": None,
                 "safe_error_code": None,
             }
         )
@@ -2912,7 +2911,6 @@ def _revision_dto(
             **common,
             "english_markdown": None,
             "word_count": None,
-            "translated_markdown": None,
             "safe_error_code": revision.safe_error_code or "report_generation_failed",
         }
     )

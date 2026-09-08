@@ -815,6 +815,21 @@ paths:
               schema: { type: string }
         "404": { $ref: "#/components/responses/Error" }
 
+  /courses/{course_id}/debate-ruleset:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Debates]
+      operationId: getDebateRulesetDefaults
+      responses:
+        "200":
+          description: Default teaching Markdown for a new debate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeachingPrompts" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /courses/{course_id}/debates:
     parameters:
       - $ref: "#/components/parameters/CourseId"
@@ -2545,6 +2560,13 @@ components:
         assigned_stance:
           { type: [string, "null"], enum: [support, oppose, neutral, null] }
         teacher_note: { type: string, default: "" }
+    TeachingPrompts:
+      type: object
+      additionalProperties: false
+      required: [zh, en]
+      properties:
+        zh: { type: string }
+        en: { type: string }
     DebateDraftRequest:
       type: object
       required: [topic, participants]
@@ -2555,6 +2577,11 @@ components:
           description: >-
             Non-empty topic; any script or symbols are accepted.
         background: { type: string, default: "" }
+        teaching_prompts:
+          anyOf:
+            - $ref: "#/components/schemas/TeachingPrompts"
+            - { type: "null" }
+          default: null
         output_language: { type: string, enum: [en, zh], default: en }
         turn_protocol:
           type: [string, "null"]

@@ -683,6 +683,7 @@ class GenerationContext:
     round_count: int | None = None
     barrages: tuple[Mapping[str, object], ...] = ()
     teaching_protocol: str | None = None
+    frozen_system_prompt: str | None = None
 
     def __post_init__(self) -> None:
         if self.turn_protocol not in {"legacy_v1", "segments_v2"}:

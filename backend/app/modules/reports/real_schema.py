@@ -146,7 +146,7 @@ class ReportSource(_ClosedModel):
     # fixtures.  The provider never authors or resolves this key; the service
     # maps it back to the immutable TurnSource row when rendering citations.
     evidence_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
-    excerpt: str = Field(min_length=1, max_length=2400)
+    excerpt: str = Field(min_length=1)
 
 
 class ReportBarrage(_ClosedModel):

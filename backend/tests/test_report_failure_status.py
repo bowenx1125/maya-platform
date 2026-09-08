@@ -100,3 +100,23 @@ def test_reconciliation_preserves_active_work_and_existing_success(app_factory):
             assert report.latest_attempt_status == "ready"
             assert report.current_success_revision is not None
             assert reconcile_orphaned_report_statuses(db) == 0
+
+
+def test_generating_and_failed_report_revisions_do_not_emit_removed_translation_field():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.modules.reports.service import _revision_dto
+
+    for status in ("generating", "failed"):
+        revision = SimpleNamespace(
+            id=str(uuid4()),
+            revision_no=1,
+            status=status,
+            created_at=datetime.now(UTC),
+            safe_error_code="report_generation_failed" if status == "failed" else None,
+        )
+        result = _revision_dto(None, revision)
+        assert result.status == status
+        assert "translated_markdown" not in result.model_dump()

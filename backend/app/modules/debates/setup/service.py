@@ -72,6 +72,7 @@ from app.modules.debates.setup.rules import (
     build_turn_plan,
     canonical_rule_snapshot_json,
 )
+from app.modules.debates.teaching_rules import freeze_teaching_rules
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
 from app.modules.interactions.service import create_closed_window
 
@@ -1127,6 +1128,11 @@ def create_debate_draft(
             round_count=payload.round_count,
             turn_protocol="segments_v2",
             teaching_protocol="four_round_v1",
+            frozen_teaching=freeze_teaching_rules(
+                payload.teaching_prompts.model_dump()
+                if payload.teaching_prompts is not None
+                else None
+            ),
         ),
         status="draft",
         revision=0,
@@ -1361,6 +1367,17 @@ def update_debate_draft(
     topic = _validated_topic(payload.topic, payload.output_language)
     teaching_protocol = debate_teaching_protocol(debate)
     _ensure_payload(payload, teaching_protocol=teaching_protocol)
+    stored_rules = json.loads(debate.rule_snapshot_json)
+    if (
+        payload.teaching_prompts is not None
+        and payload.teaching_prompts.model_dump() != stored_rules.get("teaching_prompts")
+    ):
+        raise invalid_state("Teaching rules are frozen when the debate is created.")
+    frozen_teaching = {
+        key: stored_rules[key]
+        for key in ("teaching_prompts", "system_prompts")
+        if key in stored_rules
+    }
     timestamp = utc_now()
     # A draft warms its turns in the background, so an edit has to discard
     # them: the plan freezes the speaking order and every turn's predecessor
@@ -1385,6 +1402,7 @@ def update_debate_draft(
                 round_count=payload.round_count,
                 turn_protocol="segments_v2" if teaching_protocol else payload.turn_protocol,
                 teaching_protocol=teaching_protocol,
+                frozen_teaching=frozen_teaching or None,
             ),
             revision=Debate.revision + 1,
             updated_at=timestamp,

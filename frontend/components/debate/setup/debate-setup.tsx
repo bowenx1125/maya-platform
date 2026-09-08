@@ -22,6 +22,7 @@ import {
   type PublishedAgentSummary,
 } from "../../../lib/api";
 import { localizeError, type MessageKey } from "../../../lib/i18n";
+import { RulesetEditor, type TeachingPrompts } from "./ruleset-editor";
 import { validateDebateTopic } from "../../../lib/debate-topic";
 import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
@@ -44,6 +45,7 @@ export type DebateListController = {
 };
 
 export type DebateCreateController = {
+  loadRuleset: (courseId: string) => Promise<TeachingPrompts>;
   loadCandidates: (courseId: string) => Promise<PublishedAgentSummary[]>;
   create: (
     courseId: string,
@@ -380,6 +382,7 @@ const defaultParticipant = (): ParticipantDraft => ({
 function defaultCreateController(api: PlatformApi): DebateCreateController {
   return {
     loadCandidates: (courseId) => api.publishedAgents(courseId),
+    loadRuleset: (courseId) => api.debateRulesetDefaults(courseId),
     create: (courseId, payload, idempotency) =>
       api.createDebate(courseId, payload, { idempotency }),
   };
@@ -405,6 +408,12 @@ export function TeacherDebateCreate({
   >({});
   const [topic, setTopic] = useState("");
   const [background, setBackground] = useState("");
+  const [teachingPrompts, setTeachingPrompts] = useState<TeachingPrompts>({
+    zh: "",
+    en: "",
+  });
+  const [rulesEditing, setRulesEditing] = useState(false);
+  const rulesLoaded = useRef(false);
   const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("en");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
   const [loading, setLoading] = useState(true);
@@ -426,7 +435,16 @@ export function TeacherDebateCreate({
     setLoading(true);
     setError(null);
     try {
-      const next = await effectiveController.loadCandidates(courseId);
+      const [next, defaults] = await Promise.all([
+        effectiveController.loadCandidates(courseId),
+        rulesLoaded.current
+          ? Promise.resolve(null)
+          : effectiveController.loadRuleset(courseId),
+      ]);
+      if (defaults !== null) {
+        setTeachingPrompts(defaults);
+        rulesLoaded.current = true;
+      }
       setCandidates(next.filter((item) => item.agent.status === "active"));
     } catch (cause) {
       setError(cause);
@@ -480,6 +498,7 @@ export function TeacherDebateCreate({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (rulesEditing || busy || !rulesLoaded.current) return;
     setFormError(null);
     const topicValidation = validateDebateTopic(topic);
     if (!topicValidation.valid) {
@@ -498,6 +517,7 @@ export function TeacherDebateCreate({
     const payload: SetupDraftPayload = {
       topic: topicValidation.normalized,
       background,
+      teaching_prompts: teachingPrompts,
       output_language: outputLanguage,
       turn_protocol: "segments_v2",
       participants: selectedIds.map((agentId) => {
@@ -566,7 +586,7 @@ export function TeacherDebateCreate({
             <button
               className="primary-action"
               form="create-debate-form"
-              disabled={busy || candidates.length === 0}
+              disabled={busy || rulesEditing || candidates.length === 0}
               type="submit"
             >
               {busy ? copy(t, "debateCreating") : copy(t, "debateCreateAction")}
@@ -614,32 +634,12 @@ export function TeacherDebateCreate({
         <SectionCard title="Background (optional)">
           <textarea
             aria-label="Background (optional)"
+            className={styles.topicInput}
             disabled={busy}
             rows={4}
             value={background}
             onChange={(event) => setBackground(event.target.value)}
           />
-        </SectionCard>
-
-        <SectionCard title="Language">
-          <div
-            className={styles.languageChoices}
-            role="group"
-            aria-label="Language"
-          >
-            {(["en", "zh"] as const).map((language) => (
-              <button
-                key={language}
-                type="button"
-                disabled={busy}
-                aria-pressed={outputLanguage === language}
-                className={`${styles.languageChoice} ${outputLanguage === language ? styles.languageActive : ""}`}
-                onClick={() => setOutputLanguage(language)}
-              >
-                {language === "en" ? "English" : "Chinese 中文"}
-              </button>
-            ))}
-          </div>
         </SectionCard>
 
         <SectionCard title={copy(t, "debateCandidates")}>
@@ -782,22 +782,19 @@ export function TeacherDebateCreate({
           )}
         </SectionCard>
 
-        <SectionCard title={copy(t, "debateMutualLearningRuleSet")}>
-          <div className={styles.fixedRule}>
-            <p
-              aria-label={copy(t, "debateRuleSet")}
-              className={styles.rulePhases}
-              data-testid="debate-rule-set"
-            >
-              {copy(t, "debateMutualLearningRules")}
-            </p>
+        <RulesetEditor
+          prompts={teachingPrompts}
+          language={outputLanguage}
+          disabled={busy}
+          onLanguageChange={setOutputLanguage}
+          onSave={setTeachingPrompts}
+          onEditingChange={setRulesEditing}
+        />
+        {formError ? (
+          <div className="form-error" role="alert">
+            {formError}
           </div>
-          {formError ? (
-            <div className="form-error" role="alert">
-              {formError}
-            </div>
-          ) : null}
-        </SectionCard>
+        ) : null}
       </form>
     </div>
   );

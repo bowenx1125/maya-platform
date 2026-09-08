@@ -120,7 +120,7 @@ def test_four_round_wire_requires_explicit_field_consent_and_versions_recovery()
     assert request.prompt_contract_version == FOUR_ROUND_SEGMENT_PROMPT_VERSION
     assert segment_prompt_version(_snapshot()) == SEGMENT_PROMPT_VERSION
     assert json.loads(request.user_message.content)["discussion"]["self_id"] == PUBLIC_ID
-    assert "最多100" in request.system_message.content
+    assert "320 words" in request.system_message.content
     assert set(request.body["response_format"]["json_schema"]["schema"]["properties"]) == {
         "segments",
         "question",
@@ -181,10 +181,16 @@ class OfflineAdapter(SegmentLLMAdapter):
 
 
 @pytest.mark.parametrize("repair_success", [True, False])
-def test_length_and_structure_share_one_frozen_repair_and_completed_output_is_reused(
+def test_structure_repair_uses_frozen_rules_and_completed_output_is_reused(
     repair_success,
 ):
-    frozen = snapshot()
+    from dataclasses import replace
+
+    from app.modules.debates.teaching_rules import compile_system_prompt
+
+    frozen = replace(
+        snapshot(), frozen_system_prompt=compile_system_prompt("# Per-lesson repair rule", 1, "en")
+    )
     second = output(65) if repair_success else {"segments": []}
     provider = OfflineAdapter([{"segments": []}, second])
     ledger = InMemoryProviderOperationRepository(
@@ -209,8 +215,12 @@ def test_length_and_structure_share_one_frozen_repair_and_completed_output_is_re
     assert len(provider.requests) == 2
     assert [request.attempt_no for request in provider.requests] == [1, 2]
     assert provider.requests[1].retrieval_reused
+    assert provider.requests[1].system_message.content.startswith(
+        provider.requests[0].system_message.content
+    )
+    assert "# Per-lesson repair rule" in provider.requests[0].system_message.content
     assert provider.requests[0].user_message.content == provider.requests[1].user_message.content
-    assert '"code":"segment_shape_invalid"' in provider.requests[1].system_message.content
+    assert '"code":"segment_count_invalid"' in provider.requests[1].system_message.content
     assert result.status == ("succeeded" if repair_success else "failed")
     if repair_success:
         resumed = runtime.resume_accepted_stage(result.stage, snapshot=frozen, context=context)

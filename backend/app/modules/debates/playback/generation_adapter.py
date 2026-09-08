@@ -81,6 +81,7 @@ from app.modules.debates.round_count import (
     uses_segment_protocol,
     visible_turn_predecessors,
 )
+from app.modules.debates.teaching_rules import frozen_system_prompt
 from app.modules.debates.topic_language import model_topic
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers.adapters import (
@@ -1431,6 +1432,11 @@ class SqlTurnPreparer:
             turn_protocol="segments_v2" if uses_segment_protocol(debate) else "legacy_v1",
             round_count=round_count,
             teaching_protocol=debate_teaching_protocol(debate),
+            frozen_system_prompt=frozen_system_prompt(
+                debate.rule_snapshot_json, plan.round_no, debate_output_language(debate)
+            )
+            if debate_teaching_protocol(debate)
+            else None,
             barrages=barrages,
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(

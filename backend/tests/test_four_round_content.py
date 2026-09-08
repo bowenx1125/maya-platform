@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 from app.modules.debates.generation import GenerationContext, MutualLearningPolicy
-from app.modules.debates.generation.four_round import BODY_LIMITS, body_count, visible_predecessors
+from app.modules.debates.generation.four_round import body_count, visible_predecessors
 from app.modules.debates.generation.mutual_learning_prompts import compute_mutual_transcript_hash
 from app.modules.debates.generation.retrieval import build_turn_subqueries
 from app.modules.debates.generation.segments import (
@@ -88,7 +88,7 @@ def output(snapshot, count):
 def test_exact_body_boundaries_count_only_displayed_paragraphs(language, round_no):
     ctx = context(round_no, language)
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
-    _, high = BODY_LIMITS[language][round_no - 1]
+    high = {"zh": [500, 450, 550, 650], "en": [320, 280, 350, 420]}[language][round_no - 1]
     for count in (1, high, high + 1):
         value = output(snapshot, count)
         result = validate_segment_output(value, snapshot)
@@ -96,7 +96,7 @@ def test_exact_body_boundaries_count_only_displayed_paragraphs(language, round_n
         assert result.speech == value["segments"][0]["text"]
         loaded = load_segment_turn_result(result.as_stored_payload(), snapshot)
         assert loaded.output == result.output
-    assert f"最多{high}" in build_segment_system_prompt(snapshot)
+    assert str(high) in build_segment_system_prompt(snapshot)
 
 
 def test_counter_punctuation_whitespace_and_english_compounds():
@@ -108,8 +108,10 @@ def test_source_alias_guidance_is_prompt_only_and_does_not_rewrite_speech():
     ctx = context(1, "zh")
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
     prompt = build_segment_system_prompt(snapshot)
-    assert "RAG资料显示" in prompt
-    assert "不能写进text" in prompt
+    assert "RAG证实" in prompt
+    assert "RAG提示" in prompt
+    assert "我感觉" in prompt
+    assert "不写进课堂正文" in prompt
     value = output(snapshot, 1)
     value["segments"][0]["text"] = "S2和S5的正文保持原样。"
     assert validate_segment_output(value, snapshot).speech == "S2和S5的正文保持原样。"

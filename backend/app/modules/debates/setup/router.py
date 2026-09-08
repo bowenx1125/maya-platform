@@ -19,15 +19,34 @@ from app.modules.debates.schemas import (
     DebateDraftRequest,
     DebateDraftUpdateRequest,
     DebateSummary,
+    TeachingPrompts,
 )
 from app.modules.debates.setup.service import (
     create_debate_draft,
     get_debate,
     list_debates,
+    require_teacher_course,
     update_debate_draft,
 )
 
 router = APIRouter(tags=["Debates"])
+
+
+@router.get(
+    "/courses/{course_id}/debate-ruleset",
+    response_model=TeachingPrompts,
+    operation_id="getDebateRulesetDefaults",
+    responses={200: {"model": TeachingPrompts}, 403: {"model": Error}, 404: {"model": Error}},
+)
+def get_ruleset_defaults(
+    course_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> TeachingPrompts:
+    from app.modules.debates.teaching_rules import default_teaching_prompts
+
+    require_teacher_course(db, context.user.id, str(course_id))
+    return TeachingPrompts(**default_teaching_prompts())
 
 
 @router.get(

@@ -60,6 +60,9 @@ function setupController(
   create: ReturnType<typeof vi.fn>,
 ): DebateCreateController {
   return {
+    loadRuleset: vi
+      .fn()
+      .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
     loadCandidates: vi
       .fn()
       .mockResolvedValue([
@@ -93,9 +96,11 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     await screen.findByRole("button", { name: /Bowen/ });
     fireEvent.click(screen.getByRole("button", { name: /Bowen/ }));
     fireEvent.click(screen.getByRole("button", { name: /Kaikai/ }));
-    fireEvent.change(screen.getByLabelText("Language"), {
-      target: { value: language },
-    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: language === "zh" ? "中文" : "English",
+      }),
+    );
     fireEvent.change(screen.getByLabelText("Topic"), {
       target: { value: topic },
     });
@@ -116,7 +121,8 @@ describe("Wave 4 mutual-learning setup and phase view helpers", () => {
     renderCreate();
     await screen.findByRole("button", { name: /Bowen/ });
     expect(screen.queryByRole("option", { name: /legacy/i })).toBeNull();
-    expect(screen.getByTestId("debate-rule-set")).toBeTruthy();
+    expect(screen.getByText("Debate Ruleset")).toBeTruthy();
+    expect(screen.queryByTestId("debate-rule-set")).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: "Rounds" })).toBeNull();
     expect(screen.queryByText("Rounds")).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();

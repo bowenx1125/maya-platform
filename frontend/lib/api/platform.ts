@@ -1148,6 +1148,16 @@ export class PlatformApi {
     );
   }
 
+  async debateRulesetDefaults(
+    courseId: string,
+  ): Promise<{ zh: string; en: string }> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/debate-ruleset", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
   async publishedAgents(courseId: string): Promise<PublishedAgentSummary[]> {
     return unwrap(
       await this.client.GET("/courses/{course_id}/published-agents", {

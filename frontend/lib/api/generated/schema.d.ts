@@ -665,6 +665,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/debate-ruleset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getDebateRulesetDefaults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/debates": {
         parameters: {
             query?: never;
@@ -1644,11 +1662,17 @@ export interface components {
             /** @default  */
             teacher_note: string;
         };
+        TeachingPrompts: {
+            zh: string;
+            en: string;
+        };
         DebateDraftRequest: {
             /** @description Non-empty topic; any script or symbols are accepted. */
             topic: string;
             /** @default  */
             background: string;
+            /** @default null */
+            teaching_prompts: components["schemas"]["TeachingPrompts"] | null;
             /**
              * @default en
              * @enum {string}
@@ -3486,6 +3510,30 @@ export interface operations {
                     "text/markdown": string;
                 };
             };
+            404: components["responses"]["Error"];
+        };
+    };
+    getDebateRulesetDefaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default teaching Markdown for a new debate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeachingPrompts"];
+                };
+            };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };

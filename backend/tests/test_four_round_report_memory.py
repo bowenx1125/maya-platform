@@ -96,3 +96,25 @@ def test_report_keeps_frozen_final_input_after_replay_release_but_live_fence_sta
     debate.status = "running"
     with pytest.raises(PlatformError):
         read_final_input(cast(Debate, debate))
+
+
+def test_report_keeps_long_rag_evidence_intact_in_actual_provider_input():
+    context = _context()
+    long_evidence = "Evidence about the shared classroom record. " * 110
+    assert len(long_evidence) > 4400
+    enriched = replace(
+        context,
+        sources=tuple(
+            replace(source, chunk_text=long_evidence) if index < 6 else source
+            for index, source in enumerate(context.sources)
+        ),
+    )
+    request = build_real_report_request(enriched)
+    assert all(source.excerpt == long_evidence for source in request.sources[:6])
+    wire = build_report_request(
+        request,
+        config=DashScopeLLMConfig(api_key="offline-test", workspace_id="offline-workspace"),
+        tokenizer=_Tokenizer(),
+        price_card=_price_card(),
+    )
+    assert long_evidence in wire.user_message.content

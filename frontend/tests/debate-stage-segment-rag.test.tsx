@@ -204,3 +204,30 @@ describe("segments_v2 retained audio replay", () => {
     },
   );
 });
+
+it("shows current/total progress and connection color without separate connection or transcript counts", () => {
+  const value = detail(true);
+  value.round_count = 4;
+  value.participants = Array.from({ length: 3 }, (_, index) => ({
+    ...value.participants[0],
+    id: index === 0 ? participantId : `participant-${index}`,
+    order_index: index,
+  }));
+  value.public_turns = [{ ...value.public_turns[0], turn_index: 3 }];
+  render(
+    <LocaleProvider initialLocale="en">
+      <BetaDebateStage
+        api={api}
+        debateId={debateId}
+        detail={value}
+        readOnly
+        socketFactory={() => new IdleSocket()}
+      />
+    </LocaleProvider>,
+  );
+  const progress = screen.getByLabelText("Turn 4 of 12, disconnected");
+  expect(progress.textContent).toBe("4/12");
+  expect(progress.getAttribute("data-connected")).toBe("false");
+  expect(screen.queryByText("Connected")).toBeNull();
+  expect(screen.queryByText("unconnected")).toBeNull();
+});

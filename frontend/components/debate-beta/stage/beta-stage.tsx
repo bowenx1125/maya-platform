@@ -3312,25 +3312,6 @@ export function BetaDebateStage({
       (connectionIssue === null ||
         connectionIssue === "network" ||
         connectionIssue === "sequence_gap"));
-  const connectionIssueCopy =
-    connectionIssue === "superseded"
-      ? labels.connectionSuperseded
-      : connectionIssue === "session_expired"
-        ? labels.connectionSessionExpired
-        : connectionIssue === "origin_mismatch"
-          ? labels.connectionOriginMismatch
-          : connectionIssue === "sequence_gap"
-            ? labels.connectionSequenceGap
-            : connectionIssue === "network"
-              ? labels.connectionDisconnected
-              : null;
-  const connectionCopy =
-    connectionIssueCopy ??
-    (connection === "connected"
-      ? labels.connectionReady
-      : connection === "disconnected"
-        ? labels.connectionDisconnected
-        : labels.connectionReconnecting);
   const canReconnectConnection =
     !readOnly &&
     connection === "disconnected" &&
@@ -3349,9 +3330,11 @@ export function BetaDebateStage({
           connectionIssue === "origin_mismatch"
         ? { label: labels.connectionReload ?? "", kind: "reload" }
         : null;
-  const showConnectionPill =
-    !suppressConnectionUi &&
-    (connectionIssue === null || connectionIssue === "network");
+  const totalTurns = expectedTurnCount(detailState);
+  const progressTurn = bubbleTurn ?? publicTurns[publicTurns.length - 1];
+  const currentTurnNumber = progressTurn
+    ? Math.min(totalTurns, Math.max(0, progressTurn.turn_index + 1))
+    : 0;
 
   return (
     <section
@@ -3369,15 +3352,9 @@ export function BetaDebateStage({
           controls under the face. A second copy of the title told a reader
           nothing and pushed the debate itself further down. */}
 
-      {!suppressConnectionUi && connection !== "connected" ? (
+      {!suppressConnectionUi &&
+      (canReconnectConnection || connectionRecovery) ? (
         <div className={styles.connectionOverlay} role="status">
-          <span className={styles.overlayDot} aria-hidden="true" />
-          {connectionCopy}
-          {connectionIssue === null ||
-          connectionIssue === "network" ||
-          connectionIssue === "sequence_gap" ? (
-            <small>{labels.connectionWaiting}</small>
-          ) : null}
           {canReconnectConnection ? (
             <button
               className={styles.reconnectButton}
@@ -3456,15 +3433,14 @@ export function BetaDebateStage({
               stage reads as two rectangles ending on the same line. */}
           <div className={styles.stagePanel}>
             <div className={styles.statusCluster}>
-              {showConnectionPill ? (
-                <span
-                  className={styles.connectionPill}
-                  data-state={connection}
-                  role="status"
-                >
-                  {connectionCopy}
-                </span>
-              ) : null}
+              <span
+                className={styles.turnProgress}
+                data-connected={connection === "connected"}
+                aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
+                role="status"
+              >
+                {currentTurnNumber}/{totalTurns}
+              </span>
             </div>
             {!readOnly ? (
               <div className={styles.controlsArea}>
@@ -3491,7 +3467,6 @@ export function BetaDebateStage({
                     {labels.controlBusy}
                   </p>
                 ) : null}
-
               </div>
             ) : null}
 
@@ -3515,7 +3490,6 @@ export function BetaDebateStage({
         </div>
 
         <div className={styles.speechColumn}>
-
           {providerGate ? (
             <section
               className={styles.providerGateCard}
@@ -3531,9 +3505,8 @@ export function BetaDebateStage({
               </a>
               {providerGate.loading ? (
                 <span>{labels.providerGateLoading}</span>
-              ) : providerGate.error ? (
-                null
-              ) : providerGate.value?.items.length ? (
+              ) : providerGate.error ? null : providerGate.value?.items
+                  .length ? (
                 <ul>
                   {providerGate.value.items
                     .filter(
@@ -3543,9 +3516,7 @@ export function BetaDebateStage({
                     )
                     .map((item) => (
                       <li key={item.manifest_hash}>
-                        {item.confirmed ? (
-                          null
-                        ) : (
+                        {item.confirmed ? null : (
                           <a
                             href={`/teacher/provider-disclosures/${item.manifest_hash}`}
                             target="_blank"
@@ -3606,6 +3577,7 @@ export function BetaDebateStage({
               thing twice and pushed the first speech down. */}
 
           <SpeechStream
+            showTurnCount={false}
             styles={styles}
             describe={(participantId) => {
               const owner = participantById.get(participantId);

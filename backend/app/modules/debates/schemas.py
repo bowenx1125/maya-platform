@@ -65,11 +65,17 @@ class DebateParticipantInput(_ClosedModel):
         return self
 
 
+class TeachingPrompts(_ClosedModel):
+    zh: str
+    en: str
+
+
 class DebateDraftRequest(_ClosedModel):
     topic: str = Field(
         min_length=1, description="Non-empty topic; any script or symbols are accepted."
     )
     background: str = ""
+    teaching_prompts: TeachingPrompts | None = None
     participants: list[DebateParticipantInput] = Field(min_length=2, max_length=5)
     round_count: Literal[4] = 4
     output_language: Literal["en", "zh"] = "en"

@@ -61,6 +61,7 @@ const implementedOperationIds = new Set([
   "deleteVoiceProfile",
   "createVoicePreview",
   "confirmVoiceProfile",
+  "getDebateRulesetDefaults",
   "listDebates",
   "createDebate",
   "getDebate",

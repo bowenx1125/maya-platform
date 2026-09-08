@@ -152,55 +152,20 @@ rebinds pending dependencies and rejoins Preview scheduling. Unknown acceptance
 is not resent. Report offers Regenerate and Review; Conclude creates its first
 revision. Deleted diagnostic records are not recreated.
 
-## Latest owner refinements
+## Recovery and output boundaries
 
-All model auxiliary-output requirements are prompt guidance, not speech rejection
-or repair triggers. Wrong/missing question routing, optional discussion memory,
-source aliases, support modes and barrage replies preserve exact paragraph text.
-Only usable metadata is projected. Unknown source IDs never become evidence;
-inconsistent support is ungraded (zero points), while valid direct/contextual/
-no_match retain +5/+2/+0. No text is truncated, rewritten or padded. Missing
-optional response memory cannot block Conclude/Report; history remains available.
-Structural nonempty text/JSON parsing, consent, costs and database ownership/state
-fences remain. Prompt instructions still describe the expected output.
+Auxiliary model metadata cannot reject a readable speech. Invalid question,
+memory, source, support or barrage bindings are omitted/ungraded, never invented.
+Consent, cost, identity, state and readable JSON/text boundaries remain. No body
+truncation, padding or automatic wording replacement is performed.
 
-Rebirth now accepts completed replay and binds new final-turn dependencies to the
-new IDs, keeping exact Preview/audio. A later live-schema reproduction found migration
-0020's final_input_immutable trigger still blocked Rebirth. Explicit reset writes
-now temporarily suspend and restore that one trigger inside BEGIN IMMEDIATE;
-ordinary updates stay protected and rollback restores data plus trigger. The
-current real case reproduced successfully in an in-memory clone, with Preview
-text/audio IDs unchanged and the trigger restored. No live records were reset.
-Lifecycle fixtures now include this actual trigger and the multi-draft recovery
-queue; 14 checks cover these paths, including
-rollback protection. Report has only Regenerate and Review.
-Generate Audio is removed from debate details. The list uses
-Unvoice → Revoice → Revoice... (disabled) → Unvoice; failures retain the respective
-retry action without an error message. List audio state is loaded from actual
-saved-turn audio, not an optimistic label on a failed deletion. Agent version
-pills are left of the divider. Group is right-aligned with the same 18px text
-inset and typography as Destroy, sharing its action CSS without a hover effect; both
-align vertically with the version pill.
-The recovery service supports draft/failed/stopped/completed and replay checkpoints, repairs
-orphan job claims and rebinds retained completion receipts. Completed healthy
-history stays completed; failed Reports can be regenerated through the same
-explicit click. In-flight/unknown paid requests are not duplicated, and another
-active classroom's ownership is not silently taken away. These remain recovery
-boundaries, so universal one-click recovery from every external outage is not claimed.
-
-The list's additive audio_restore_needed field avoids fetching every detail
-(which would change the Preview scheduler owner). Frozen OpenAPI, generated
-client and fixtures are updated together; no database migration is needed.
-Revoice also restores saved audio in Stopped/Failed debates without restarting
-the lesson or calling the Debate LLM.
-
-Latest verification: 81 focused backend checks plus 9 cached-audio checks passed;
-17 frontend checks, typing, targeted lint/format and semantic contract comparison
-passed. Both production images built and were restarted. Browser navigation
-confirmed Agent pill/divider alignment, list actions and no detail Generate Audio.
-Two retained-replay Next clicks switched Elena → Mira → Rowan with matching text;
-this is a spot check, not full classroom or teaching-quality acceptance. No paid
-Provider-generation test or destructive browser action was performed.
+Rebirth preserves Preview/audio, resets final dependencies, and changes frozen
+final input inside a writer transaction that restores its immutability trigger.
+Rollback restores both data and trigger. Remake respects unknown/in-flight paid
+requests and other active classrooms. Healthy completed speech is reused.
+Unvoice/Revoice retain their respective action after failures. Agent version
+pills sit left of the divider, Group right without hover. Recovery has targeted
+checks and in-memory live-schema reproductions, not universal service guarantees.
 
 ## Prompt-only repetition correction
 
@@ -209,33 +174,19 @@ Later turns contribute evidence, answers or judgment rather than paraphrasing th
 previous speaker. Agreement is allowed; no similarity rejection or text rewriting
 was added. New model output still requires manual teaching-quality review.
 
-## Latest delivery additions
+## Other delivered repairs
 
-Destroy rejected four real records because committed debate_turn_tts journals
-use staging/debate-turn-tts/course/debate/turn/operation.wav, absent from its
-ownership allowlist. Exact same-course/debate UUID WAV paths are now recognized;
-other scopes, traversal and symlinks remain protected. All four deletes succeeded
-in independent in-memory clones with foreign keys intact. Actual user records
-were not deleted during diagnosis. Owned empty staging directories are removed.
+Destroy recognizes only scoped UUID WAV paths under debate-turn-tts staging,
+cleans owned empty directories, and retains traversal/symlink protections. Four
+live-schema in-memory copies passed deletion/foreign-key checks; user records
+were not deleted for testing. Global Remake queues recoveries without stealing
+active Preview ownership. Stage and Debate lists share Ready/Completed badges.
 
-Global Remake refreshes the list, resumes abnormal drafts and failed Reports,
-and continues past a blocked record. Preview resumptions queue serially rather
-than overwriting scheduler ownership. Stage and Debate lists share DebateStatus,
-so Ready/Completed label and badge treatment come from the same state mapping.
-
-Both Conclude paths now request report/generate?initial=true after finalization.
-The writer transaction reuses any started/ready/failed report instead of making
-a second initial revision; Regenerate still explicitly creates a new revision.
-Report history omits Ready and its separator, keeping the word count and Review.
-The separate How to date with girls? connection failure is deferred at the owner's
-request: the recorded failure was an Embedding ConnectError, not rejected speech;
-a no-auth HEAD probe subsequently connected. No new paid generation test was run.
-
-Latest batch verification: 47 focused backend checks and 61 frontend checks
-passed, including scoped TTS-file deletion, trigger-aware Rebirth, queued global
-recovery, initial-report reuse and Conclude's first-generation request. Type,
-targeted lint/format and OpenAPI semantic checks passed. The full suites and a
-new paid teaching-quality run were not performed.
+Conclude requests initial=true; a writer transaction reuses an already-started
+first report. Regenerate explicitly creates another revision. Report history
+retains word count/Review and omits Ready. A separate Embedding ConnectError was
+deferred at the owner's request after recreation worked. Earlier targeted
+checks do not establish full classroom quality acceptance.
 
 ## Runtime and established UI
 
@@ -274,7 +225,7 @@ frontend checks passed after this change; frontend types passed. These checks
 do not validate model answer depth or teaching quality. Preview and Stage Check RAG now count unique evidence source IDs,
 not paragraphs, using the same badge treatment. Saved speeches remain unchanged.
 
-Stage presentation now uses “unconnected” for network disconnection. Controller
+Stage connection wording has been replaced by the turn-progress bubble. Controller
 waiting and Finish-blocked prose, generic 3D error text, redundant confirmation
 labels and the Stage audio replacement browser dialog are removed. Connection,
 control, Provider authorization and mutation guards remain enforced.
@@ -305,3 +256,52 @@ Verification: 37 topic/setup checks, 7 database/seed/initial-report checks, 19
 background/report checks (overlap with the topic set), and 36 frontend setup checks
 passed. Frontend types, targeted backend mypy and OpenAPI semantic/generated
 contracts passed. No paid generation or real browser classroom test was run.
+
+## Frozen Markdown Ruleset and current Report repair
+
+Default teaching content now lives only in backend/app/modules/debates/default_rules/
+zh.md and en.md. The creation form loads both through a teacher-scoped read-only
+endpoint. Selected Order is followed by one Debate Ruleset row: compact language
+switch, Details, Edit. Details renders two scrollable Markdown columns; Edit shows
+raw text; Save updates this form and returns to Details. Create is disabled while
+editing. The old Multi-round Civilization/phase block is removed; Topic and
+Background inputs are yellow.
+
+Create freezes both authored Markdown files and eight complete System messages
+(four for each language) in rule_snapshot_json. Markdown is sent intact, with no
+heading parser or old pedagogical Prompt appended. Only the language/current-round,
+JSON/source/routing execution contract is added. Changes to default files or other
+debates cannot alter this snapshot. Draft updates preserve frozen rules and reject
+attempts to replace them; default-file reads make no Provider calls. Migration
+0027_frozen_teaching_markdown freezes defaults for existing four-round rows while
+preserving their saved speeches, custom snapshots and non-four-round records.
+
+GenerationContext passes the frozen System text into each turn's server-only
+snapshot. Input hashes include it; persisted recovery envelopes retain it, and
+repair appends feedback to the same message. UI rendering suppresses executable
+HTML and unsafe script links. Provider budgets and authorization remain unchanged;
+these engineering checks cannot guarantee model compliance or teaching quality.
+Chinese default wording is direct “RAG证实”, contextual “RAG提示”, no_match “我感觉”.
+The last includes independent LLM reasoning with assumptions/grounds, not invented
+facts. These are editable Prompt instructions only, not output rejection rules.
+
+3D Stage removes the transcript header count and visible connection wording.
+A single current/total bubble follows the displayed turn (e.g. 4/12): green when
+connected, red otherwise, with accessible nonvisual connection text. Existing
+reconnect actions remain available without explanatory notices.
+
+Live Report diagnosis: retained evidence in debate 8d8c9171-723b-4189-84aa-a7ef4ad7548c
+contains six chunks of 4127–4408 characters. Each reproduced string_too_long in
+ReportSource.excerpt's obsolete 2400-character constraint, before a paid Report
+operation. That per-source limit is removed, preserving exact evidence and total
+request budgets. Generating/failed revision DTOs also sent removed translated_markdown,
+causing a second ValidationError; those stale fields are removed. Unexpected input
+validation now logs only field paths/types, never values. The user had already
+reset this debate to Preview Ready; original final speeches/report revisions no
+longer exist, so no original full Report was replayed or regenerated here.
+
+Validation: 81 focused rules/protocol/recovery/database checks, 63 editor/setup/
+Stage frontend checks and 37 Report checks passed. Report fixtures verify six
+long evidence chunks reach actual request construction unchanged; live retained
+chunks reproduced the original limit. Types, targeted lint/mypy and contract
+checks pass. No new paid or full browser classroom acceptance was performed.

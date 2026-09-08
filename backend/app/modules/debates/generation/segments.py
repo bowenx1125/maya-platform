@@ -482,6 +482,7 @@ class SegmentInputSnapshot:
     snapshot_id: str | None = None
     receipt_hash: str = ""
     discussion_json: str | None = None
+    frozen_system_prompt: str | None = None
 
     @classmethod
     def from_user_payload(
@@ -490,6 +491,7 @@ class SegmentInputSnapshot:
         *,
         receipts: Sequence[SnapshotRetrievalReceipt] = (),
         snapshot_id: str | None = None,
+        frozen_system_prompt: str | None = None,
     ) -> SegmentInputSnapshot:
         """Load one serialized seven-group payload with server receipts.
 
@@ -569,6 +571,7 @@ class SegmentInputSnapshot:
             for source, receipt in zip(source_values, receipt_values, strict=True)
         )
         return cls(
+            frozen_system_prompt=frozen_system_prompt,
             topic=topic,
             language=language,
             round=round_value,
@@ -601,6 +604,7 @@ class SegmentInputSnapshot:
         receipts: Sequence[SnapshotRetrievalReceipt] = (),
         barrages: Sequence[object] = (),
         snapshot_id: str | None = None,
+        frozen_system_prompt: str | None = None,
         discussion: Mapping[str, object] | None = None,
     ) -> SegmentInputSnapshot:
         """Create a snapshot from compact fields without provider access."""
@@ -623,10 +627,17 @@ class SegmentInputSnapshot:
         }
         if discussion is not None:
             raw["discussion"] = dict(discussion)
-        return cls.from_user_payload(raw, receipts=receipts, snapshot_id=snapshot_id)
+        return cls.from_user_payload(
+            raw,
+            receipts=receipts,
+            snapshot_id=snapshot_id,
+            frozen_system_prompt=frozen_system_prompt,
+        )
 
     def __post_init__(self) -> None:
         _text(self.topic, "topic")
+        if self.frozen_system_prompt is not None:
+            _text(self.frozen_system_prompt, "frozen_system_prompt")
         if self.language not in {"en", "zh"}:
             raise _error("language must be en or zh.", code="language_invalid")
         if not isinstance(self.round, SegmentRound) or not isinstance(self.persona, SegmentPersona):
@@ -751,6 +762,11 @@ class SegmentInputSnapshot:
         """Serialize the full frozen snapshot for server-only recovery."""
 
         return {
+            **(
+                {"frozen_system_prompt": self.frozen_system_prompt}
+                if self.frozen_system_prompt is not None
+                else {}
+            ),
             "snapshot_id": self.snapshot_id,
             "receipt_hash": self.receipt_hash,
             "input": self.to_user_payload(),
@@ -764,13 +780,16 @@ class SegmentInputSnapshot:
     def from_server_payload(cls, value: Mapping[str, object]) -> SegmentInputSnapshot:
         """Load a full server snapshot and verify its receipt digest."""
 
-        if not isinstance(value, Mapping) or set(value) != {
+        if not isinstance(value, Mapping) or set(value) - {"frozen_system_prompt"} != {
             "snapshot_id",
             "receipt_hash",
             "input",
             "receipts",
         }:
             raise _error("server snapshot fields are invalid.", code="snapshot_invalid")
+        frozen_prompt = value.get("frozen_system_prompt")
+        if frozen_prompt is not None and not isinstance(frozen_prompt, str):
+            raise _error("frozen system prompt must be text.", code="snapshot_invalid")
         snapshot_id = value.get("snapshot_id")
         receipt_hash = value.get("receipt_hash")
         input_value = value.get("input")
@@ -791,6 +810,7 @@ class SegmentInputSnapshot:
                 input_value,
                 receipts=receipts,
                 snapshot_id=snapshot_id,
+                frozen_system_prompt=frozen_prompt,
             )
         except (TypeError, ValueError) as exc:
             raise _error("server snapshot is invalid.", code="snapshot_invalid") from exc
@@ -808,7 +828,12 @@ class SegmentInputSnapshot:
 
     @property
     def input_hash(self) -> str:
-        return hashlib.sha256(self.to_user_json().encode("utf-8")).hexdigest()
+        value = self.to_user_json()
+        if self.frozen_system_prompt is not None:
+            value = _canonical(
+                {"input": self.to_user_payload(), "system": self.frozen_system_prompt}
+            )
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _context_round_total(context: GenerationContext, explicit: int | None) -> int:
@@ -881,6 +906,7 @@ def build_segment_input(
             code="history_speaker_invalid",
         )
     return SegmentInputSnapshot.from_groups(
+        frozen_system_prompt=context.frozen_system_prompt,
         topic=context.topic,
         language=context.output_language,
         round_number=context.turn.round_no,
@@ -959,6 +985,8 @@ def build_segment_system_prompt(
     """Return the short human-readable system brief for the segment contract."""
 
     if isinstance(snapshot_or_language, SegmentInputSnapshot):
+        if snapshot_or_language.frozen_system_prompt is not None:
+            return snapshot_or_language.frozen_system_prompt
         if snapshot_or_language.discussion_json is not None:
             return system_prompt(snapshot_or_language.round.number, snapshot_or_language.language)
         language = snapshot_or_language.language
