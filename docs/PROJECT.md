@@ -306,7 +306,7 @@ off-white panel contains title, service grid,
 then left-aligned baseline status. Home/Debates panels share 24px insets (18px mobile).
 Published/count/Agents is one heading
 above the Agent tiles, separated by a gold rule; no separate header badge remains.
-Top navigation lifts 1px with the Immerse shadow on hover; language/Edit also lift.
+Top navigation uses 9px rounded rectangles and lifts 1px with the Immerse hover shadow; language/Edit also lift.
 Create titles have no artificial minimum header height or title margin; inputs
 are block elements to avoid baseline gaps. Shared title line-height is 1.4. All these section dividers use 16px above/below. Home, Classroom, New and Preview use a shared 20px section gap, with
 stacked heading/card margins removed. New page title is Debates.

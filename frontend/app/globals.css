@@ -595,7 +595,8 @@ details > summary {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 6px 2px;
+  padding: 6px 11px;
+  border-radius: 9px;
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 750;
