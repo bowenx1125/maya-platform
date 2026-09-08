@@ -16,13 +16,14 @@ import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
+import { ReportMarkdown } from "./report/report-markdown";
+import detailStyles from "./teacher-agent-detail.module.css";
 import {
   EmptyCard,
   ErrorNotice,
   LoadingCard,
   PageIntro,
   SectionCard,
-  StatusBadge,
 } from "./ui";
 
 export function TeacherDashboard() {
@@ -224,6 +225,10 @@ export function TeacherAgentDetail({
       )?.id ?? null)
     : (currentAgent.current_published_version_id ?? null);
 
+  const selectedVersion = selectedSnapshotId
+    ? versions.find((version) => version.id === selectedVersionId)
+    : currentVersion;
+
   async function downloadSnapshot() {
     if (!snapshot) return;
     setBusy(true);
@@ -254,168 +259,156 @@ export function TeacherAgentDetail({
     }
   }
 
+  if (snapshotId && snapshot?.id !== snapshotId) return <LoadingCard />;
+
   return (
-    <>
+    <div className={detailStyles.page}>
       <PageIntro
-        eyebrow={t("publishedAgent")}
         title={agent.name}
         description={agent.description}
         action={
-          <Link className="secondary-action" href="/teacher">
+          <Link className={detailStyles.action} href="/teacher">
             {t("debateBack")}
           </Link>
         }
       />
-      <div className="teacher-agent-context-grid">
-        <SectionCard title={group?.name ?? t("producingGroup")}>
-          {/* Who made this Agent, by name, in an order a reader can scan. */}
-          {group?.members?.length ? (
-            <ul className="teacher-group-members">
-              {[...group.members]
-                .sort((left, right) =>
-                  left.display_name.localeCompare(right.display_name),
-                )
-                .map((member) => (
-                  <li key={member.user_id}>{member.display_name}</li>
-                ))}
-            </ul>
-          ) : group ? null : (
-            // The group itself did not load; its id is all we can honestly say.
-            <p className="teacher-context-value">{currentAgent.group_id}</p>
-          )}
-        </SectionCard>
-        <SectionCard title={t("avatarPreview")}>
-          {currentVersion ? (
-            <AvatarPreview
-              config={currentVersion.avatar_config}
-              fallbackLabel={currentAgent.name}
-            />
-          ) : (
-            <p className="muted-copy">{t("noCurrentPublished")}</p>
-          )}
-        </SectionCard>
-        <SectionCard title={t("voiceBinding")}>
-          {currentVersion ? (
-            <div
-              className="teacher-voice-state"
-              data-effective-voice={
-                currentVersion.voice_fallback_active
-                  ? "platform-fallback"
-                  : "custom-profile"
-              }
-            >
-              <span
-                className={`status-badge status-${currentVersion.voice_fallback_active ? "warn" : "good"}`}
-              >
-                <span aria-hidden="true" />
-                {currentVersion.voice_fallback_active
-                  ? t("platformVoiceFallback")
-                  : t("customVoiceReady")}
-              </span>
-            </div>
-          ) : (
-            <p className="muted-copy">{t("noCurrentPublished")}</p>
-          )}
-        </SectionCard>
-      </div>
       {agent.status === "archived" ? (
-        <div className="notice notice-warning">
-          <strong>{t("archivedAgent")}</strong>
-          <span>{t("archivedLede")}</span>
-        </div>
+        <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}
-      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
-      <div className="teacher-detail-grid">
-        <div>
-          <SectionCard title={t("currentRelease")}>
-            {currentVersion ? (
-              <TeacherVersion
-                version={currentVersion}
-                selected={currentVersion.id === selectedVersionId}
+      <div className={detailStyles.overview}>
+        <TeacherPersona key={selectedVersion?.id} version={selectedVersion} />
+        <SectionCard title="Profile" className={detailStyles.card}>
+          {selectedVersion ? (
+            <div className={detailStyles.avatar}>
+              <AvatarPreview
+                config={selectedVersion.avatar_config}
+                fallbackLabel={currentAgent.name}
               />
-            ) : (
-              <EmptyCard title={t("noCurrentPublished")} />
-            )}
-          </SectionCard>
-          <SectionCard title={t("publishedHistory")}>
-            {versions.length === 0 ? (
-              <p className="muted-copy">{t("noPublishedHistory")}</p>
-            ) : (
-              <div className="version-list">
-                {versions.map((version) => (
-                  <TeacherVersion
-                    version={version}
-                    selected={version.id === selectedVersionId}
-                    key={version.id}
-                  />
-                ))}
-              </div>
-            )}
-          </SectionCard>
-        </div>
-        <aside>
-          <SectionCard title={t("knowledgeSnapshot")}>
-            {snapshot ? (
-              <>
-                <div className="snapshot-summary">
-                  <div>
-                    <span className="section-label">{t("snapshot")}</span>
-                    <strong>{snapshot.id.slice(0, 8)}…</strong>
-                  </div>
-                  <div>
-                    <span className="section-label">{t("content")}</span>
-                    <strong>
-                      {snapshot.total_char_count.toLocaleString()}{" "}
-                      {t("characters")}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="section-label">{t("files")}</span>
-                    <strong>{snapshot.documents.length}</strong>
-                  </div>
-                </div>
-                <button
-                  className="secondary-action"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void downloadSnapshot()}
-                >
-                  {t("downloadRag")}
-                </button>
-                <div className="snapshot-files">
-                  {snapshot.documents.map((document) => (
-                    <div className="snapshot-file" key={document.id}>
-                      <span>
-                        <strong>{document.source_filename}</strong>
-                        <small>
-                          {t("order")} {document.order_index + 1} ·{" "}
-                          {document.char_count.toLocaleString()}{" "}
-                          {t("characters")}
-                        </small>
-                      </span>
-                      <button
-                        className="inline-button"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void downloadDocument(document.id)}
-                      >
-                        {t("download")}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {canShowSnapshotText(snapshot.id, downloadedSnapshotId) &&
-                snapshotText ? (
-                  <pre className="snapshot-preview">{snapshotText}</pre>
+            </div>
+          ) : null}
+          <div className={detailStyles.profileFacts}>
+            {group ? (
+              <div className={detailStyles.fact}>
+                <strong>{group.name}</strong>
+                {group.members?.length ? (
+                  <p>
+                    {[...group.members]
+                      .sort((a, b) =>
+                        a.display_name.localeCompare(b.display_name),
+                      )
+                      .map((member) => member.display_name)
+                      .join(" · ")}
+                  </p>
                 ) : null}
-              </>
-            ) : (
-              <p className="muted-copy">{t("selectSnapshot")}</p>
-            )}
-          </SectionCard>
-        </aside>
+              </div>
+            ) : null}
+            {selectedVersion ? (
+              <div
+                className={detailStyles.fact}
+                data-effective-voice={
+                  selectedVersion.voice_fallback_active
+                    ? "platform-fallback"
+                    : "custom-profile"
+                }
+              >
+                <span
+                  className={`status-badge status-${selectedVersion.voice_fallback_active ? "warn" : "good"}`}
+                >
+                  <span aria-hidden="true" />
+                  {selectedVersion.voice_fallback_active
+                    ? "Default voice"
+                    : "Custom voice"}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
       </div>
-    </>
+      <SectionCard
+        title="RAG"
+        className={detailStyles.card}
+        action={
+          snapshot ? (
+            <div className={detailStyles.actions}>
+              <span className={detailStyles.count}>
+                {snapshot.documents.length} {t("files")}
+              </span>
+              <button
+                className={detailStyles.action}
+                type="button"
+                disabled={busy}
+                onClick={() => void downloadSnapshot()}
+              >
+                Download RAG
+              </button>
+            </div>
+          ) : null
+        }
+      >
+        {snapshot ? (
+          <>
+            <div className={detailStyles.files}>
+              {snapshot.documents.map((document) => (
+                <div className={detailStyles.file} key={document.id}>
+                  <div>
+                    <strong title={document.source_filename}>
+                      {document.source_filename}
+                    </strong>
+                    <small>
+                      {document.char_count.toLocaleString()} {t("characters")}
+                    </small>
+                  </div>
+                  <button
+                    className={detailStyles.action}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void downloadDocument(document.id)}
+                  >
+                    {t("download")}
+                  </button>
+                </div>
+              ))}
+            </div>
+            {snapshot.documents.length === 0 ? (
+              <p className={detailStyles.empty}>No files</p>
+            ) : null}
+            {canShowSnapshotText(snapshot.id, downloadedSnapshotId) &&
+            snapshotText ? (
+              <details className={detailStyles.ragPreview} open>
+                <summary>RAG</summary>
+                <ReportMarkdown label="RAG content">
+                  {snapshotText}
+                </ReportMarkdown>
+              </details>
+            ) : null}
+          </>
+        ) : (
+          <p className={detailStyles.empty}>No files</p>
+        )}
+      </SectionCard>
+      {versions.length > 1 ? (
+        <SectionCard title="Versions" className={detailStyles.card}>
+          <div className={detailStyles.versions}>
+            {versions.map((version) => (
+              <Link
+                key={version.id}
+                className={detailStyles.version}
+                aria-label={`${version.version_label} ${version.state === "published" ? "Published" : "Previous"}`}
+                aria-current={
+                  version.id === selectedVersionId ? "page" : undefined
+                }
+                href={`/teacher/agents/${version.agent_id}?snapshot=${version.knowledge_snapshot_id ?? ""}`}
+              >
+                <span className="agent-pill">{version.version_label}</span>
+                <span>
+                  {version.state === "published" ? "Published" : "Previous"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+    </div>
   );
 }
 
@@ -426,73 +419,52 @@ export function canShowSnapshotText(
   return Boolean(snapshotId && downloadedSnapshotId === snapshotId);
 }
 
-function TeacherVersion({
-  version,
-  selected,
-}: {
-  version: AgentVersion;
-  selected: boolean;
-}) {
-  const t = useT();
+function TeacherPersona({ version }: { version?: AgentVersion }) {
   const { api } = useSession();
-  const [agentMdBusy, setAgentMdBusy] = useState(false);
-  const [agentMdError, setAgentMdError] = useState<unknown>(null);
-
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   async function downloadAgentMd() {
-    setAgentMdBusy(true);
-    setAgentMdError(null);
+    if (!version) return;
+    setBusy(true);
+    setError(null);
     try {
       const downloaded = await api.downloadAgentMd(version.id, "AGENT.md");
       downloadText(downloaded.content, downloaded.filename);
     } catch (cause) {
-      setAgentMdError(cause);
+      setError(cause);
     } finally {
-      setAgentMdBusy(false);
+      setBusy(false);
     }
   }
-
   return (
-    <div className="teacher-version">
-      <div className="version-summary">
-        <div>
-          <div className="chip-row">
-            <strong>{version.version_label}</strong>
-            <StatusBadge status={version.state} />
+    <SectionCard
+      title="Persona"
+      className={detailStyles.card}
+      action={
+        version ? (
+          <div className={detailStyles.actions}>
+            <span className="agent-pill">{version.version_label}</span>
+            <button
+              className={detailStyles.action}
+              type="button"
+              disabled={busy}
+              onClick={() => void downloadAgentMd()}
+            >
+              Download
+            </button>
           </div>
-          <p>
-            {t("immutable")} {t("revision")} {version.revision} ·{" "}
-            {version.enabled_documents?.length ?? 0} {t("evidenceFiles")}
-          </p>
-        </div>
-        {selected ? (
-          <span className="current-version-indicator" aria-current="page">
-            {t("viewingSnapshot")}
-          </span>
-        ) : (
-          <Link
-            className="text-link"
-            href={`/teacher/agents/${version.agent_id}?snapshot=${version.knowledge_snapshot_id ?? ""}`}
-          >
-            {t("inspect")}
-          </Link>
-        )}
-      </div>
-      <details>
-        <summary>{t("readAgentMd")}</summary>
-        <pre className="read-only-markdown compact-readonly">
-          {version.agent_md || t("noPrompt")}
-        </pre>
-        <button
-          className="inline-button"
-          type="button"
-          disabled={agentMdBusy}
-          onClick={() => void downloadAgentMd()}
-        >
-          {t("download")} AGENT.md
-        </button>
-        {agentMdError ? <ErrorNotice error={agentMdError} /> : null}
-      </details>
-    </div>
+        ) : null
+      }
+    >
+      {version?.agent_md ? (
+        <ReportMarkdown className={detailStyles.persona} label="Persona">
+          {version.agent_md}
+        </ReportMarkdown>
+      ) : (
+        <p className={detailStyles.empty}>No Persona</p>
+      )}
+      {error ? <ErrorNotice error={error} /> : null}
+    </SectionCard>
   );
 }
 

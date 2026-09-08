@@ -224,11 +224,15 @@ describe("PW3-E teacher shell and responsive contract", () => {
 
     await waitFor(() => expect(screen.getByText("Bowen group")).toBeTruthy());
     expect(api.group).toHaveBeenCalledWith(groupId);
+    expect(screen.getByRole("heading", { name: "Persona" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
+    expect(screen.queryByText("Current release")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
     expect(
       screen.getByRole("img", { name: "Published Agent avatar preview" }),
     ).toBeTruthy();
     // The state is a badge, not a paragraph explaining what the badge means.
-    expect(screen.getByText("Platform voice fallback")).toBeTruthy();
+    expect(screen.getByText("Default voice")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /edit description/i }),
     ).toBeNull();

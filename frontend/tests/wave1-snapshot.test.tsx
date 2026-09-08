@@ -8,7 +8,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentDetail, AgentVersion, KnowledgeSnapshot } from "../lib/api";
-import { t } from "../lib/i18n";
 
 vi.mock("../components/session-provider", () => ({
   useSession: vi.fn(),
@@ -130,13 +129,11 @@ describe("student and teacher snapshot selection", () => {
     mockedUseSession.mockReturnValue({ api } as never);
 
     const view = render(<TeacherAgentDetail agentId="agent-id" />);
-    await waitFor(() => expect(screen.getByText("11111111…")).toBeTruthy());
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download frozen RAG.md" }),
-    );
+    await screen.findByRole("heading", { name: "version-one" });
+    fireEvent.click(screen.getByRole("button", { name: "Download RAG" }));
     await waitFor(() =>
       expect(
-        screen.getByText("# 11111111-1111-4111-8111-111111111111"),
+        screen.getByText("11111111-1111-4111-8111-111111111111"),
       ).toBeTruthy(),
     );
 
@@ -146,13 +143,11 @@ describe("student and teacher snapshot selection", () => {
         snapshotId="22222222-2222-4222-8222-222222222222"
       />,
     );
-    await waitFor(() => expect(screen.getByText("22222222…")).toBeTruthy());
+    await screen.findByRole("heading", { name: "version-two" });
     expect(
-      screen.queryByText("# 11111111-1111-4111-8111-111111111111"),
+      screen.queryByText("11111111-1111-4111-8111-111111111111"),
     ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download frozen RAG.md" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Download RAG" }));
     await waitFor(() =>
       expect(api.downloadSnapshot).toHaveBeenLastCalledWith(
         "22222222-2222-4222-8222-222222222222",
@@ -188,45 +183,33 @@ describe("student and teacher snapshot selection", () => {
     mockedUseSession.mockReturnValue({ api } as never);
 
     const view = render(<TeacherAgentDetail agentId="agent-id" />);
-    await waitFor(() => expect(screen.getAllByText("Viewing")).toHaveLength(2));
-    expect(t("viewingSnapshot", "en")).toBe("Viewing");
-    expect(t("viewingSnapshot", "zh")).toBe("正在查看");
-    const viewingIndicators = screen.getAllByText("Viewing");
+    const current = await screen.findByRole("link", { name: "V1.0 Published" });
+    expect(current.getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "version-one" })).toBeTruthy();
     expect(
-      viewingIndicators.every(
-        (item) =>
-          item.getAttribute("aria-current") === "page" &&
-          item.classList.contains("current-version-indicator") &&
-          item.closest("a") === null &&
-          item.getAttribute("href") === null,
-      ),
-    ).toBe(true);
-    expect(screen.queryAllByRole("link", { name: "Viewing" })).toHaveLength(0);
-    const initialInspectLinks = screen.getAllByRole("link", {
-      name: "Inspect →",
-    });
-    expect(initialInspectLinks).toHaveLength(1);
-    expect(initialInspectLinks[0]?.getAttribute("href")).toBe(
+      screen.getByRole("link", { name: "V1.1 Previous" }).getAttribute("href"),
+    ).toBe(
       "/teacher/agents/agent-id?snapshot=22222222-2222-4222-8222-222222222222",
     );
-
+    expect(screen.queryByText("Viewing")).toBeNull();
     view.rerender(
       <TeacherAgentDetail
         agentId="agent-id"
         snapshotId="22222222-2222-4222-8222-222222222222"
       />,
     );
-    await waitFor(() => expect(screen.getAllByText("Viewing")).toHaveLength(1));
-    const historicalInspectLinks = screen.getAllByRole("link", {
-      name: "Inspect →",
-    });
-    expect(historicalInspectLinks).toHaveLength(2);
+    await screen.findByRole("heading", { name: "version-two" });
     expect(
-      historicalInspectLinks.map((link) => link.getAttribute("href")),
-    ).toEqual([
-      "/teacher/agents/agent-id?snapshot=11111111-1111-4111-8111-111111111111",
-      "/teacher/agents/agent-id?snapshot=11111111-1111-4111-8111-111111111111",
-    ]);
+      screen
+        .getByRole("link", { name: "V1.1 Previous" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      screen
+        .getByRole("link", { name: "V1.0 Published" })
+        .getAttribute("aria-current"),
+    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "version-one" })).toBeNull();
   });
 
   it("lets a same-group student inspect and download a published snapshot", async () => {

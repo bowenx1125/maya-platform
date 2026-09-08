@@ -73,12 +73,10 @@ disagreement; string similarity and keyword counts are not hard failure gates.
 
 ## Report loading correction
 
-Report inputs preserve bibliographic URLs after the owner removed the blanket
-`https://` rejection; a real call succeeded. Unexpected failures now fail both
-revision and aggregate. Startup reconciles orphan generating aggregates without
-calling the Provider, preserving active jobs. Frontend status reads ignore stale
-responses and failed revision-history reads cannot hide a ready report. Logs
-contain safe codes and exception types, never response bodies.
+Bibliographic URLs remain allowed. Failed jobs settle aggregate and revision;
+startup reconciles orphan generating jobs without paid calls. UI ignores stale
+status responses; failed history reads cannot hide a ready report. Diagnostic
+logs contain safe codes/types, never response bodies.
 
 ## Verification boundary
 
@@ -268,13 +266,9 @@ added. Existing frozen lessons are unchanged; this addition has offline coverage
 not another paid rerun. One opening comparison is not four-round quality acceptance.
 Ruleset uses white cards/documents and purple actions.
 
-Creation now defaults to Chinese in both form and API. Ruleset language can change
-whenever Edit is inactive; CN/EN text remains independently saved in the form,
-with no extra Prompt CN/EN headings. Editing Chinese then selecting English uses
-the untouched English prompt. Existing draft language is preserved on updates
-that omit output_language. Topic, Background, Agents Order and Ruleset share one title-divider style and alignment. The duplicate Open explanation
-caption is removed; its button remains. Language switching and frozen selection
-have targeted offline coverage.
+Creation defaults to Chinese; language changes outside Edit preserve independent
+CN/EN drafts and only the selected language drives generation. Draft updates that
+omit language preserve it. Create section title dividers share one style.
 
 Creation has a combined two-column Topic/Background card: white ground and
 textareas, Background optional status only in its placeholder. Published Agents
@@ -312,3 +306,11 @@ Conclude waits for playback completion. Check RAG summary has no inherited minim
 height/padding, and transcript bottom padding no longer adds 26px. Replay recovery
 uses existing controller acquisition and saved media; no generation protocol changed.
 34 targeted Stage/replay checks and types passed; no paid or full classroom test.
+
+Agent details now use scoped white cards, pale-yellow Persona/file rows, shared
+24px insets and 16px title dividers. Persona renders Markdown by default with one
+version badge/download action. Profile combines avatar/group/voice; RAG omits IDs
+and technical snapshot prose. Versions appear only when multiple releases exist;
+selection updates Persona/avatar/voice with RAG and clears stale downloaded content.
+Downloads retain existing endpoints; no source text is edited or republished.
+Eight focused detail/download/version tests, typecheck and targeted lint passed.
