@@ -67,7 +67,7 @@ def test_registered_account_rejects_a_wrong_password(client: TestClient) -> None
         json={"username": "new-student", "password": "correct-horse-2"},
     )
     assert response.status_code == 401
-    assert response.json()["code"] == "unauthenticated"
+    assert response.json()["code"] == "password_incorrect"
 
 
 def test_fixed_demo_catalog_still_authenticates(client: TestClient) -> None:
@@ -200,3 +200,46 @@ def test_display_name_is_used_when_supplied(client: TestClient, app_factory: Any
         membership = session.scalar(select(CourseMember).where(CourseMember.user_id == user.id))
         assert membership is not None
         assert membership.role == "student"
+
+
+def test_sign_in_says_which_half_was_wrong(client: TestClient) -> None:
+    """A student who mistyped their name should not hunt for their password."""
+
+    missing = client.post(
+        "/api/v1/auth/login",
+        json={"username": "nobody-here", "password": "correct-horse-1"},
+    )
+    assert missing.status_code == 401
+    assert missing.json()["code"] == "account_not_found"
+
+    wrong = client.post(
+        "/api/v1/auth/login",
+        json={"username": "maya", "password": "not-the-password"},
+    )
+    assert wrong.status_code == 401
+    assert wrong.json()["code"] == "password_incorrect"
+
+
+def test_a_deactivated_account_says_so(app_factory: Any) -> None:
+    app, _database, _settings = app_factory()
+    with TestClient(app) as student:
+        assert register(student).status_code == 201
+    with TestClient(app) as teacher:
+        _payload, csrf = login(teacher)
+        roster = teacher.get(f"/api/v1/courses/{COURSE_ID}/roster").json()
+        target = next(item for item in roster["entries"] if item["username"] == "new-student")
+        assert (
+            teacher.patch(
+                f"/api/v1/courses/{COURSE_ID}/members/{target['user_id']}",
+                json={"status": "inactive"},
+                headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+            ).status_code
+            == 200
+        )
+    with TestClient(app) as blocked:
+        response = blocked.post(
+            "/api/v1/auth/login",
+            json={"username": "new-student", "password": "correct-horse-1"},
+        )
+        assert response.status_code == 401
+        assert response.json()["code"] == "account_inactive"

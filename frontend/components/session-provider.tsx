@@ -437,6 +437,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const [error, setError] = useState<unknown>(null);
   const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
+  const [emptyField, setEmptyField] = useState<MessageKey | null>(null);
   const setMood = useSetAcademyMood();
 
   useEffect(() => {
@@ -470,11 +471,26 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const name = username.trim();
+    // An empty field is a typo, not a rejected credential. Naming which one is
+    // missing avoids a round trip that could only answer "that failed".
+    if (!name || !password) {
+      setError(null);
+      setEmptyField(
+        !name && !password
+          ? "loginNeedBoth"
+          : !name
+            ? "loginNeedUsername"
+            : "loginNeedPassword",
+      );
+      return;
+    }
+    setEmptyField(null);
     setBusy(true);
     setError(null);
     setErrorFallback("loginFailed");
     try {
-      const session = await login(username.trim(), password);
+      const session = await login(name, password);
       router.replace(
         nextPath ||
           (session.user.courses.some((item) => item.role === "teacher")
@@ -537,7 +553,11 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
           </div>
         </div>
       ) : null}
-      {error ? (
+      {emptyField ? (
+        <p className="form-error" role="alert">
+          {t(emptyField)}
+        </p>
+      ) : error ? (
         <p className="form-error" role="alert">
           {localizeError(error, locale, errorFallback)}
         </p>
@@ -547,7 +567,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
           <span>{t("or")}</span>
         </div>
       ) : null}
-      <form className="stack-form login-form" onSubmit={submit}>
+      <form className="stack-form login-form" noValidate onSubmit={submit}>
         <label>
           <span>{t("username")}</span>
           <input
@@ -575,14 +595,17 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
           {busy ? t("signingIn") : t("signIn")}
         </button>
         {onRegister ? (
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={busy}
-            onClick={onRegister}
-          >
-            {t("needAccount")} {t("registerTitle")}
-          </button>
+          <p className="academy-switch">
+            {t("needAccount")}{" "}
+            <button
+              className="academy-textlink"
+              type="button"
+              disabled={busy}
+              onClick={onRegister}
+            >
+              {t("needAccountLink")}
+            </button>
+          </p>
         ) : null}
       </form>
     </section>

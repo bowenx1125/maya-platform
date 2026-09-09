@@ -23,7 +23,10 @@ export default function HomePage() {
       <main className="academy-shell">
         <div className="academy-card">
           <AcademyFrame />
-          <section className="academy-stage" aria-label={t("academyStageLabel")}>
+          <section
+            className="academy-stage"
+            aria-label={t("academyStageLabel")}
+          >
             <AcademyBackdrop />
             <AcademyMascots label={t("academyMascotsLabel")} />
             <div className="academy-tagline">

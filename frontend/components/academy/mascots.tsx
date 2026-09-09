@@ -30,8 +30,11 @@ type Scholar = {
   lag: number;
   /** Idle breathing period; different for each so they never sync up. */
   bob: string;
-  /** Which way this one turns away from the form. */
+  /** How this one hides while a password is on screen. */
   turn: number;
+  duck: number;
+  /** Offset so the four do not react in unison. */
+  stagger: string;
 };
 
 // Muted fresco pigments rather than saturated UI colours, and four different
@@ -39,7 +42,7 @@ type Scholar = {
 const SCHOLARS: Scholar[] = [
   {
     id: "scroll",
-    cx: 62,
+    cx: 80,
     w: 64,
     h: 92,
     shape: "arch",
@@ -48,7 +51,9 @@ const SCHOLARS: Scholar[] = [
     accessory: "scroll",
     lag: 1,
     bob: "3.4s",
-    turn: -15,
+    turn: -17,
+    duck: 3,
+    stagger: "0ms",
   },
   {
     id: "wreath",
@@ -61,7 +66,9 @@ const SCHOLARS: Scholar[] = [
     accessory: "wreath",
     lag: 0.88,
     bob: "4.1s",
-    turn: -11,
+    turn: 9,
+    duck: 6,
+    stagger: "70ms",
   },
   {
     id: "tablet",
@@ -74,11 +81,13 @@ const SCHOLARS: Scholar[] = [
     accessory: "tablet",
     lag: 0.95,
     bob: "3.7s",
-    turn: -18,
+    turn: -6,
+    duck: -4,
+    stagger: "140ms",
   },
   {
     id: "wave",
-    cx: 350,
+    cx: 358,
     w: 56,
     h: 104,
     shape: "pillar",
@@ -87,7 +96,9 @@ const SCHOLARS: Scholar[] = [
     accessory: "wave",
     lag: 0.82,
     bob: "4.6s",
-    turn: -13,
+    turn: 14,
+    duck: 2,
+    stagger: "40ms",
   },
 ];
 
@@ -266,9 +277,11 @@ function useEyeTracking(
 function Accessory({
   scholar,
   geometry,
+  mood,
 }: {
   scholar: Scholar;
   geometry: Geometry;
+  mood: AcademyMood;
 }) {
   const { cx, body, shade, h } = scholar;
   const { top, left, right } = geometry;
@@ -347,17 +360,29 @@ function Accessory({
           />
         </g>
       );
-    case "wave":
+    case "wave": {
+      // While a password is on screen the raised arm comes across the face
+      // instead of waving: one of the four hides differently from the rest.
+      const hiding = mood === "discreet";
+      const elbow = hiding
+        ? `M${right - 7} ${handY - 8} q18 -22 -6 -34`
+        : `M${right - 7} ${handY - 8} q21 -6 25 -31`;
       return (
         <g
           className="academy-wave-arm"
           // Pivot at the shoulder, or the arm swings around the SVG origin.
           style={{ transformOrigin: `${right - 7}px ${handY - 8}px` }}
         >
-          <path d={`M${right - 7} ${handY - 8} q21 -6 25 -31`} {...arm} />
-          <circle cx={right + 17} cy={top + 12} r="7" fill={body} />
+          <path d={elbow} {...arm} />
+          <circle
+            cx={hiding ? cx + 6 : right + 17}
+            cy={hiding ? top + 18 : top + 12}
+            r="7"
+            fill={body}
+          />
         </g>
       );
+    }
   }
 }
 
@@ -434,7 +459,10 @@ function Scholar({
       style={
         {
           "--bob": scholar.bob,
-          transform: closed ? `rotate(${scholar.turn}deg)` : undefined,
+          "--stagger": scholar.stagger,
+          transform: closed
+            ? `rotate(${scholar.turn}deg) translate(0px, ${scholar.duck}px)`
+            : undefined,
           transformOrigin: `${cx}px ${FLOOR}px`,
         } as React.CSSProperties
       }
@@ -454,7 +482,7 @@ function Scholar({
         className="academy-jelly"
         style={{ transformOrigin: `${cx}px ${FLOOR}px` }}
       >
-        <Accessory scholar={scholar} geometry={geometry} />
+        <Accessory scholar={scholar} geometry={geometry} mood={mood} />
         <clipPath id={clipId}>
           <path d={outline} />
         </clipPath>

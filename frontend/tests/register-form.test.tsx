@@ -65,6 +65,9 @@ async function toGroupStep(
   fireEvent.change(screen.getByLabelText("Password"), {
     target: { value: password },
   });
+  fireEvent.change(screen.getByLabelText("Confirm password"), {
+    target: { value: password },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   return screen.findByLabelText("Group name");
 }
@@ -217,5 +220,48 @@ describe("student self-registration form", () => {
     mount("zh");
     expect(await screen.findByLabelText("用户名")).toBeTruthy();
     expect(screen.getByRole("button", { name: "下一步" })).toBeTruthy();
+  });
+});
+
+describe("registration guards the password before the group step", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    replace.mockReset();
+  });
+
+  it("refuses a password shorter than the server would accept", async () => {
+    mount();
+    fireEvent.change(await screen.findByLabelText("Username"), {
+      target: { value: "tiny" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "abc" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "abc" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    // Told here rather than after choosing a group and being bounced back.
+    expect(await screen.findByText(/password is too short/i)).toBeTruthy();
+    expect(screen.queryByLabelText("Group name")).toBeNull();
+  });
+
+  it("refuses two passwords that do not match", async () => {
+    mount();
+    fireEvent.change(await screen.findByLabelText("Username"), {
+      target: { value: "mismatch" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-horse-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "correct-horse-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText(/do not match/i)).toBeTruthy();
+    expect(screen.queryByLabelText("Group name")).toBeNull();
   });
 });

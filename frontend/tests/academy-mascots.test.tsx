@@ -172,16 +172,21 @@ describe("academy mascots", () => {
     );
   });
 
-  it("turns each scholar away from the form while a password is on screen", () => {
+  it("hides each scholar differently while a password is on screen", () => {
     stubLayout();
     mount();
     fireEvent.click(screen.getByRole("button", { name: "discreet" }));
     const turns = Array.from(document.querySelectorAll(".academy-scholar")).map(
       (node) => (node as SVGGElement).style.transform,
     );
-    expect(turns.every((value) => /rotate\(-\d+deg\)/.test(value))).toBe(true);
-    // Not all by the same amount, or the four pivot as one object.
-    expect(new Set(turns).size).toBeGreaterThan(1);
+    expect(turns).toHaveLength(4);
+    expect(turns.every((value) => /rotate\(-?\d+deg\)/.test(value))).toBe(true);
+    // Four distinct reactions: same idea, four ways of doing it, so the group
+    // does not read as one object pivoting.
+    expect(new Set(turns).size).toBe(4);
+    // Some turn each way rather than all leaning together.
+    expect(turns.some((value) => /rotate\(-\d/.test(value))).toBe(true);
+    expect(turns.some((value) => /rotate\(\d/.test(value))).toBe(true);
   });
 
   it("marks the refusal so the shake and the frown can react", () => {

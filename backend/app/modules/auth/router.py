@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.errors import Error, PlatformError, forbidden, not_found, unauthenticated
+from app.core.errors import Error, PlatformError, forbidden, not_found
 from app.core.models import CourseMember, Group, GroupMember, User
 from app.modules.auth.credentials import (
     CredentialFileError,
@@ -30,6 +30,7 @@ from app.modules.auth.registration import (
     register_student,
     reset_student_password,
     resolve_course,
+    username_exists,
     verify_database_password,
 )
 from app.modules.auth.schemas import (
@@ -176,10 +177,24 @@ def login(
     if user_id is None:
         user_id = verify_database_password(db, payload.username, payload.password)
     if user_id is None:
-        raise unauthenticated("The username or password is incorrect.")
+        # Which half was wrong is reported on purpose. A student who has
+        # mistyped their name should not spend the lesson guessing at their
+        # password instead. The cost is that a name can be probed for
+        # existence, which is accepted here: these are classroom accounts,
+        # created by the students themselves, and the roster is visible to
+        # everyone in the course anyway.
+        if username_exists(db, settings, payload.username):
+            raise PlatformError(
+                "password_incorrect", "That password does not match this account.", 401
+            )
+        raise PlatformError("account_not_found", "No account uses that username yet.", 401)
     user = db.get(User, user_id)
     if user is None or user.status != "active":
-        raise unauthenticated("The username or password is incorrect.")
+        # A deactivated account is a teacher decision, not a typo, and saying
+        # so is what stops the student from trying the password again.
+        raise PlatformError(
+            "account_inactive", "This account has been deactivated by a teacher.", 401
+        )
     raw_token, session_row, raw_csrf = create_rotated_session(
         db,
         user,

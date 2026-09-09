@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { type RegistrationOptions } from "../lib/api";
-import { localizeError } from "../lib/i18n";
+import { localizeError, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
 import { useSetAcademyMood } from "./academy/mood";
 import { useLocale, useT } from "./locale";
@@ -16,6 +16,8 @@ function foldGroupName(value: string) {
 }
 
 const TOTAL_STEPS = 2;
+/** Mirrors PASSWORD_MIN in the backend registration service. */
+const PASSWORD_MIN = 5;
 
 export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
   const t = useT();
@@ -25,6 +27,8 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [localError, setLocalError] = useState<MessageKey | null>(null);
   const [groupName, setGroupName] = useState("");
   const [options, setOptions] = useState<RegistrationOptions | null>(null);
   const [busy, setBusy] = useState(false);
@@ -81,6 +85,17 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
     event.preventDefault();
     // The group step is the last one; the first only advances the form.
     if (step === 1) {
+      // Checked here rather than through the server so the student is told
+      // about a short or mistyped password before they pick a group.
+      if (password.length < PASSWORD_MIN) {
+        setLocalError("passwordTooShort");
+        return;
+      }
+      if (password !== confirmation) {
+        setLocalError("registerPasswordMismatch");
+        return;
+      }
+      setLocalError(null);
       setStep(2);
       return;
     }
@@ -113,7 +128,11 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
         {t("registerStepOf", { current: step, total: TOTAL_STEPS })} ·{" "}
         {step === 1 ? t("registerStepAccount") : t("registerStepGroup")}
       </p>
-      {error ? (
+      {localError ? (
+        <p className="form-error" role="alert">
+          {t(localError)}
+        </p>
+      ) : error ? (
         <p className="form-error" role="alert">
           {localizeError(error, locale, "registerFailed")}
         </p>
@@ -136,11 +155,29 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
             <label>
               <span>{t("password")}</span>
               <input
+                aria-describedby="register-password-rule"
                 autoComplete="new-password"
                 type="password"
                 value={password}
+                minLength={PASSWORD_MIN}
                 maxLength={128}
                 onChange={(event) => setPassword(event.target.value)}
+                onFocus={() => setMood("discreet")}
+                onBlur={() => setMood("idle")}
+                required
+              />
+            </label>
+            <small className="muted" id="register-password-rule">
+              {t("passwordRule")}
+            </small>
+            <label>
+              <span>{t("registerConfirmPassword")}</span>
+              <input
+                autoComplete="new-password"
+                type="password"
+                value={confirmation}
+                maxLength={128}
+                onChange={(event) => setConfirmation(event.target.value)}
                 onFocus={() => setMood("discreet")}
                 onBlur={() => setMood("idle")}
                 required
@@ -150,14 +187,17 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
               {t("registerNext")}
             </button>
             {onCancel ? (
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={busy}
-                onClick={onCancel}
-              >
-                {t("haveAccount")} {t("signIn")}
-              </button>
+              <p className="academy-switch">
+                {t("haveAccount")}{" "}
+                <button
+                  className="academy-textlink"
+                  type="button"
+                  disabled={busy}
+                  onClick={onCancel}
+                >
+                  {t("signIn")}
+                </button>
+              </p>
             ) : null}
           </>
         ) : (

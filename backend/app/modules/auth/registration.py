@@ -219,6 +219,28 @@ def register_student(
     return user, group
 
 
+def username_exists(db: Session, settings: Settings, username: str) -> bool:
+    """Whether either credential source knows this username.
+
+    Used only to tell "no such account" apart from "wrong password" in the
+    sign-in response.  That distinction is a deliberate product choice for a
+    classroom: it also confirms to anyone asking that a given name is taken,
+    so account names here are not a secret.
+    """
+
+    folded = username.strip().casefold()
+    if not folded:
+        return False
+    if folded in _catalog_usernames(settings):
+        return True
+    return (
+        db.scalar(
+            select(UserCredential.user_id).where(func.lower(UserCredential.username) == folded)
+        )
+        is not None
+    )
+
+
 def verify_database_password(db: Session, username: str, password: str) -> str | None:
     """Return the User id for a valid database-catalog credential."""
 
