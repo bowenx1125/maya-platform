@@ -60,3 +60,53 @@ class PublicMember(BaseModel):
     user_id: UUID
     display_name: str
     role: str
+
+
+class RegisterRequest(BaseModel):
+    """Public self-registration input for a student account."""
+
+    # Only the upper bounds are enforced here. Length/shape rejection lives in
+    # the registration service so the client sees one stable 422 code
+    # (``registration_invalid``) instead of a mix of 400 and 422 envelopes.
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=128, json_schema_extra={"format": "password"})
+    group_name: str = Field(max_length=200)
+    display_name: str | None = Field(default=None, max_length=200)
+    course_id: UUID | None = None
+
+
+class RegistrationGroup(BaseModel):
+    """A group a registering student may join, with no member identities."""
+
+    name: str
+    member_count: int = Field(ge=0)
+
+
+class RegistrationOptions(BaseModel):
+    """Server-decided options a registration form may present."""
+
+    course_id: UUID
+    course_name: str
+    groups: list[RegistrationGroup]
+
+
+class PasswordResetRequest(BaseModel):
+    """Teacher-initiated password reset for one student in their course."""
+
+    course_id: UUID
+    user_id: UUID
+    # Omit to let the server generate a short, read-aloud-safe password.
+    new_password: str | None = Field(
+        default=None,
+        max_length=128,
+        json_schema_extra={"format": "password"},
+    )
+
+
+class PasswordResetResult(BaseModel):
+    """The value to hand to the student. Returned once and never stored."""
+
+    user_id: UUID
+    username: str
+    display_name: str
+    password: str = Field(json_schema_extra={"format": "password"})

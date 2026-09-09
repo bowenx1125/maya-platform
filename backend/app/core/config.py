@@ -150,6 +150,11 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="ALLOW_LEGACY_DEMO_USERS",
     )
+    # Password for the shared MAYA teaching account. It is a normal account
+    # with the teacher role; only the password source is special, because a
+    # shared classroom credential must not live in Git. Leaving this empty
+    # means the account is never provisioned and MAYA cannot sign in.
+    maya_password: str | None = Field(default=None, validation_alias="MAYA_PASSWORD")
     maya_env: str = Field(default="", validation_alias="MAYA_ENV")
 
     @field_validator("session_secret", mode="before")

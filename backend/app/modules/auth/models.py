@@ -36,3 +36,29 @@ class DemoAccountBinding(Base):
         Index("ix_demo_account_bindings_user_id", "user_id", unique=True),
         Index("ix_demo_account_bindings_active", "active"),
     )
+
+
+class UserCredential(Base):
+    """Database-stored credential for a self-registered account.
+
+    The seven fixed Demo identities keep using the read-only
+    ``accounts.private.md`` catalog. This table is the second, writable
+    credential source introduced for student self-registration; a username
+    may exist in exactly one of the two sources. ``username`` is duplicated
+    from :class:`~app.core.models.User` so a login attempt can be resolved
+    without loading the public user row first.
+    """
+
+    __tablename__ = "user_credentials"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", name="fk_user_credentials_user", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    username: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (Index("ix_user_credentials_username", "username", unique=True),)

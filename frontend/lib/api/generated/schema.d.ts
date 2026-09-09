@@ -71,6 +71,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/registration-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Course and existing group names a new student may join. No member identity is exposed. */
+        get: operations["getRegistrationOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create a student account, attach it to a course group by name and start its Session. */
+        post: operations["registerStudent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -81,6 +115,23 @@ export interface paths {
         get: operations["getCurrentUser"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-resets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Teacher-initiated password reset for one self-registered student in their course. */
+        post: operations["resetStudentPassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -155,6 +206,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /** @description Members of a course the caller teaches, with account source and groups. */
+        get: operations["getCourseRoster"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rename a member, move them between groups or deactivate the account. */
+        patch: operations["updateCourseMember"];
+        trace?: never;
+    };
     "/groups/{group_id}": {
         parameters: {
             query?: never;
@@ -168,6 +258,26 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{group_id}/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Join a group in a course the caller teaches. Idempotent. */
+        post: operations["joinGroupAsTeacher"];
+        /** @description Leave a group the caller teaches. Idempotent. */
+        delete: operations["leaveGroupAsTeacher"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1397,6 +1507,36 @@ export interface components {
         DemoQuickLoginRequest: {
             user_id: components["schemas"]["Uuid"];
         };
+        RegisterRequest: {
+            username: string;
+            /** Format: password */
+            password: string;
+            group_name: string;
+            display_name?: string | null;
+            course_id?: components["schemas"]["Uuid"];
+        };
+        PasswordResetRequest: {
+            course_id: components["schemas"]["Uuid"];
+            user_id: components["schemas"]["Uuid"];
+            /** Format: password */
+            new_password?: string | null;
+        };
+        PasswordResetResult: {
+            user_id: components["schemas"]["Uuid"];
+            username: string;
+            display_name: string;
+            /** Format: password */
+            password: string;
+        };
+        RegistrationGroup: {
+            name: string;
+            member_count: number;
+        };
+        RegistrationOptions: {
+            course_id: components["schemas"]["Uuid"];
+            course_name: string;
+            groups: components["schemas"]["RegistrationGroup"][];
+        };
         AuthSession: {
             user: components["schemas"]["CurrentUser"];
             csrf_token: string;
@@ -1440,6 +1580,29 @@ export interface components {
             user_id: components["schemas"]["Uuid"];
             display_name: string;
             role: string;
+        };
+        GroupRef: {
+            id: components["schemas"]["Uuid"];
+            name: string;
+        };
+        RosterEntry: {
+            user_id: components["schemas"]["Uuid"];
+            username: string;
+            display_name: string;
+            role: string;
+            status: string;
+            source: string;
+            editable: boolean;
+            groups?: components["schemas"]["GroupRef"][];
+        };
+        CourseRoster: {
+            course_id: components["schemas"]["Uuid"];
+            entries?: components["schemas"]["RosterEntry"][];
+        };
+        UpdateCourseMemberRequest: {
+            display_name?: string | null;
+            group_name?: string | null;
+            status?: string | null;
         };
         KnowledgeDocument: {
             id: components["schemas"]["Uuid"];
@@ -2252,6 +2415,7 @@ export interface components {
     };
     parameters: {
         CourseId: components["schemas"]["Uuid"];
+        UserId: components["schemas"]["Uuid"];
         GroupId: components["schemas"]["Uuid"];
         AgentId: components["schemas"]["Uuid"];
         VersionId: components["schemas"]["Uuid"];
@@ -2406,6 +2570,53 @@ export interface operations {
             503: components["responses"]["Error"];
         };
     };
+    getRegistrationOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Course and existing group names a new student may join. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationOptions"];
+                };
+            };
+            422: components["responses"]["Error"];
+        };
+    };
+    registerStudent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created and session started. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
     getCurrentUser: {
         parameters: {
             query?: never;
@@ -2425,6 +2636,36 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+        };
+    };
+    resetStudentPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description The new password, returned exactly once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetResult"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     logout: {
@@ -2514,6 +2755,64 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    getCourseRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Members with account source and groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseRoster"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateCourseMember: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                course_id: components["parameters"]["CourseId"];
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCourseMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description The member after the edit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RosterEntry"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
     getGroup: {
         parameters: {
             query?: never;
@@ -2534,6 +2833,58 @@ export interface operations {
                     "application/json": components["schemas"]["GroupDetail"];
                 };
             };
+            404: components["responses"]["Error"];
+        };
+    };
+    joinGroupAsTeacher: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The group after the caller joined it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupDetail"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    leaveGroupAsTeacher: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller is no longer a member of this group. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };

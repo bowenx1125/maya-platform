@@ -108,7 +108,7 @@ def test_seed_cli_uses_alembic_and_is_repeatable(tmp_path: Path) -> None:
     with db.session() as session:
         assert session.scalar(select(User)) is not None
     with db.engine.connect() as connection:
-        assert ALEMBIC_HEAD == "0027_frozen_teaching_markdown"
+        assert ALEMBIC_HEAD == "0028_student_self_registration"
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             == ALEMBIC_HEAD
