@@ -9,6 +9,7 @@ from app.modules.auth.observer import OBSERVER_USER_ID, OBSERVER_USERNAME
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from tests.conftest import login
 from tests.test_auth_self_registration import register
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
@@ -201,3 +202,34 @@ def test_maya_holds_the_teacher_role_for_reset(app_factory: Any) -> None:
             )
         )
         assert role == "teacher"
+
+
+def test_only_mayamaya_crosses_the_student_draft_boundary(app_factory: Any) -> None:
+    """The exception is the shared account's, not every teacher's."""
+
+    app, _database, _settings = _maya_app(app_factory)
+    documents = f"/api/v1/groups/{GROUP_A_ID}/knowledge-documents"
+
+    with TestClient(app) as teacher:
+        # An ordinary course teacher stays outside student drafts even after
+        # joining the group, which is the boundary this account is the one
+        # exception to.
+        _payload, csrf = login(teacher)
+        headers = {"Origin": "http://testserver", "X-CSRF-Token": csrf}
+        assert (
+            teacher.post(f"/api/v1/groups/{GROUP_A_ID}/membership", headers=headers).status_code
+            == 200
+        )
+        assert teacher.get(documents).status_code == 404
+
+    with TestClient(app) as observer:
+        _payload, csrf = _login_maya(observer)
+        headers = {"Origin": "http://testserver", "X-CSRF-Token": csrf}
+        # Without a membership it is refused too: the exception is earned by
+        # joining, not held standing over every group in the course.
+        assert observer.get(documents).status_code == 404
+        assert (
+            observer.post(f"/api/v1/groups/{GROUP_A_ID}/membership", headers=headers).status_code
+            == 200
+        )
+        assert observer.get(documents).status_code == 200

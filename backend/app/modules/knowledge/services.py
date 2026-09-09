@@ -77,6 +77,7 @@ from app.modules.agents.schemas import (
 from app.modules.agents.schemas import (
     SnapshotDocument as SnapshotDocumentDTO,
 )
+from app.modules.auth.observer import is_observer
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import (
     promote_atomic,
@@ -158,10 +159,34 @@ def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str |
 
 
 def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) -> str:
+    """Require the student side of a group's workspace.
+
+    Teachers are kept out of student drafts on purpose, and that boundary is
+    unchanged for every ordinary teacher account.  The single exception is the
+    shared MAYAMAYA account, which exists to walk into a group and see exactly
+    what its students see; it still has to have joined the group, so the
+    exception is a deliberate act recorded as a membership row rather than a
+    standing power over every group in the course.
+    """
+
     role = scoped_group_role(db, context, group_id)
-    if role != "student":
-        raise not_found()
-    return role
+    if role == "student":
+        return role
+    if role == "teacher" and is_observer(context.user) and _is_group_member(db, context, group_id):
+        return "student"
+    raise not_found()
+
+
+def _is_group_member(db: Session, context: AuthContext, group_id: str) -> bool:
+    return (
+        db.scalar(
+            select(GroupMember.user_id).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == context.user.id,
+            )
+        )
+        is not None
+    )
 
 
 def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:

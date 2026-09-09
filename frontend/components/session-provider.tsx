@@ -387,9 +387,20 @@ export function RouteGuard({
     );
   }
 
-  const hasRole = role
-    ? user?.courses.some((membership) => membership.role === role)
-    : true;
+  // A teacher who has joined a group may open the student workspace for it.
+  // That is the whole point of joining: the shared teaching account walks into
+  // a group to see what its students see. Course role alone would keep every
+  // teacher out of the surface they just gave themselves access to.
+  const teachesCourse = user?.courses?.some(
+    (membership) => membership.role === "teacher",
+  );
+  const sitsInGroup = (user?.groups?.length ?? 0) > 0;
+  const hasRole = !role
+    ? true
+    : role === "student"
+      ? user?.courses?.some((membership) => membership.role === "student") ||
+        (teachesCourse && sitsInGroup)
+      : teachesCourse;
   if (!hasRole) {
     return (
       <main className="shell">
