@@ -19,9 +19,11 @@ import {
   type AuthSession,
   type CurrentUser,
   type DemoIdentity,
+  type RegisterRequest,
 } from "../lib/api";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
+import { useSetAcademyMood } from "./academy/mood";
 import { useLocale, useT } from "./locale";
 
 type SessionStatus = "loading" | "authenticated" | "anonymous";
@@ -34,6 +36,7 @@ type SessionContextValue = {
   error: unknown;
   refresh: () => Promise<AuthSession | null>;
   login: (username: string, password: string) => Promise<AuthSession>;
+  register: (body: RegisterRequest) => Promise<AuthSession>;
   quickLogin: (userId: string) => Promise<AuthSession>;
   logout: () => Promise<void>;
   switchIdentity: (userId: string) => Promise<AuthSession>;
@@ -218,6 +221,30 @@ export function SessionProvider({
     ],
   );
 
+  const register = useCallback(
+    (body: RegisterRequest) =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          // Registration returns a started session, so it commits through the
+          // same path as a login rather than leaving the caller signed out.
+          const next = await api.register(body);
+          commitAuthenticatedSession(epoch, next);
+          return next;
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
+  );
+
   const quickLogin = useCallback(
     (userId: string) =>
       enqueueSessionMutation(async () => {
@@ -292,6 +319,7 @@ export function SessionProvider({
       error,
       refresh,
       login,
+      register,
       quickLogin,
       logout,
       switchIdentity,
@@ -300,6 +328,7 @@ export function SessionProvider({
       api,
       error,
       login,
+      register,
       logout,
       quickLogin,
       refresh,
@@ -386,7 +415,7 @@ export function RouteGuard({
   return <>{children}</>;
 }
 
-export function LoginForm() {
+export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
@@ -397,6 +426,15 @@ export function LoginForm() {
   const [error, setError] = useState<unknown>(null);
   const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
+  const setMood = useSetAcademyMood();
+
+  useEffect(() => {
+    // The shake is a one-shot reaction, not a state the panel stays in.
+    if (!error) return;
+    setMood("refused");
+    const timer = window.setTimeout(() => setMood("idle"), 900);
+    return () => window.clearTimeout(timer);
+  }, [error, setMood]);
 
   useEffect(() => {
     let active = true;
@@ -505,6 +543,8 @@ export function LoginForm() {
             autoComplete="username"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
+            onFocus={() => setMood("attentive")}
+            onBlur={() => setMood("idle")}
             required
           />
         </label>
@@ -515,12 +555,24 @@ export function LoginForm() {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            onFocus={() => setMood("discreet")}
+            onBlur={() => setMood("idle")}
             required
           />
         </label>
         <button className="primary-action" type="submit" disabled={busy}>
           {busy ? t("signingIn") : t("signIn")}
         </button>
+        {onRegister ? (
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={busy}
+            onClick={onRegister}
+          >
+            {t("needAccount")} {t("registerTitle")}
+          </button>
+        ) : null}
       </form>
     </section>
   );

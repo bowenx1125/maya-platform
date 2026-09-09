@@ -1,0 +1,221 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { RegistrationOptions } from "../lib/api";
+import { LocaleProvider } from "../components/locale";
+
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace }),
+}));
+
+vi.mock("../components/session-provider", () => ({
+  useSession: vi.fn(),
+}));
+
+import { useSession } from "../components/session-provider";
+import { RegisterForm } from "../components/register-form";
+
+const mockedUseSession = vi.mocked(useSession);
+const courseId = "course-id";
+
+function options(): RegistrationOptions {
+  return {
+    course_id: courseId,
+    course_name: "Cultural exchange",
+    groups: [
+      { name: "Team Aurora", member_count: 2 },
+      { name: "Team Borealis", member_count: 1 },
+      { name: "星辰队", member_count: 3 },
+    ],
+  } as RegistrationOptions;
+}
+
+function mount(locale: "en" | "zh" = "en") {
+  const api = {
+    registrationOptions: vi.fn().mockResolvedValue(options()),
+  };
+  const register = vi.fn().mockResolvedValue({
+    user: { courses: [] },
+    csrf_token: "csrf",
+  });
+  mockedUseSession.mockReturnValue({ api, register } as never);
+  const view = render(
+    <LocaleProvider initialLocale={locale}>
+      <RegisterForm />
+    </LocaleProvider>,
+  );
+  return { api, register, view };
+}
+
+/** Fill the sign-in step and advance to the group step. */
+async function toGroupStep(
+  username = "new-student",
+  password = "correct-horse-1",
+) {
+  fireEvent.change(await screen.findByLabelText("Username"), {
+    target: { value: username },
+  });
+  fireEvent.change(screen.getByLabelText("Password"), {
+    target: { value: password },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  return screen.findByLabelText("Group name");
+}
+
+describe("student self-registration form", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    replace.mockReset();
+  });
+
+  it("asks for the group on a step of its own", async () => {
+    mount();
+    // The group field, its suggestions and its verdict are all absent while
+    // the sign-in details are being filled in, so nothing can grow under the
+    // student's cursor.
+    expect(await screen.findByLabelText("Username")).toBeTruthy();
+    expect(screen.queryByLabelText("Group name")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Team Aurora/ })).toBeNull();
+    expect(screen.getByText(/Step 1 of 2/)).toBeTruthy();
+
+    await toGroupStep();
+    expect(screen.getByText(/Step 2 of 2/)).toBeTruthy();
+    expect(screen.queryByLabelText("Username")).toBeNull();
+  });
+
+  it("goes back to the sign-in step without losing what was typed", async () => {
+    mount();
+    await toGroupStep();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    const username = (await screen.findByLabelText(
+      "Username",
+    )) as HTMLInputElement;
+    expect(username.value).toBe("new-student");
+  });
+
+  it("offers every joinable group before anything is typed", async () => {
+    const { api } = mount();
+    await waitFor(() => expect(api.registrationOptions).toHaveBeenCalled());
+    await toGroupStep();
+
+    expect(
+      await screen.findByRole("button", { name: /Team Aurora/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Team Borealis/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /星辰队/ })).toBeTruthy();
+  });
+
+  it("narrows suggestions to names that contain what was typed", async () => {
+    mount();
+    const group = await toGroupStep();
+    // A substring, not a prefix: "aurora" still finds "Team Aurora".
+    fireEvent.change(group, { target: { value: "aurora" } });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Team Borealis/ }),
+      ).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: /Team Aurora/ })).toBeTruthy();
+  });
+
+  it("says whether a typed name joins an existing group or creates one", async () => {
+    mount();
+    const group = await toGroupStep();
+
+    fireEvent.change(group, { target: { value: "  team   AURORA " } });
+    expect(
+      await screen.findByText(/You will join Team Aurora, which has 2/),
+    ).toBeTruthy();
+
+    fireEvent.change(group, { target: { value: "Team Unknown" } });
+    expect(await screen.findByText(/you will create it/i)).toBeTruthy();
+  });
+
+  it("fills the field from a suggestion", async () => {
+    mount();
+    await toGroupStep();
+    fireEvent.click(await screen.findByRole("button", { name: /星辰队/ }));
+    const group = screen.getByLabelText("Group name") as HTMLInputElement;
+    expect(group.value).toBe("星辰队");
+  });
+
+  it("registers with the chosen course and no display name", async () => {
+    const { register } = mount();
+    const group = await toGroupStep(" new-student ");
+    fireEvent.change(group, { target: { value: "Team Aurora" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    await waitFor(() =>
+      expect(register).toHaveBeenCalledWith({
+        username: "new-student",
+        password: "correct-horse-1",
+        group_name: "Team Aurora",
+        course_id: courseId,
+      }),
+    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/student"));
+  });
+
+  it("returns to the first step when the account is rejected", async () => {
+    const api = {
+      registrationOptions: vi.fn().mockResolvedValue(options()),
+    };
+    const register = vi.fn().mockRejectedValue(new Error("username taken"));
+    mockedUseSession.mockReturnValue({ api, register } as never);
+    render(
+      <LocaleProvider initialLocale="en">
+        <RegisterForm />
+      </LocaleProvider>,
+    );
+
+    const group = await toGroupStep();
+    fireEvent.change(group, { target: { value: "Team Aurora" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    // The username is the field the student can correct, so the form goes
+    // back to it rather than leaving them on the group step.
+    expect(await screen.findByLabelText("Username")).toBeTruthy();
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
+
+  it("still submits when the options request fails", async () => {
+    const api = {
+      registrationOptions: vi.fn().mockRejectedValue(new Error("offline")),
+    };
+    const register = vi.fn().mockResolvedValue({ csrf_token: "csrf" });
+    mockedUseSession.mockReturnValue({ api, register } as never);
+    render(
+      <LocaleProvider initialLocale="en">
+        <RegisterForm />
+      </LocaleProvider>,
+    );
+
+    const group = await toGroupStep("solo");
+    fireEvent.change(group, { target: { value: "Brand New Group" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    await waitFor(() =>
+      expect(register).toHaveBeenCalledWith({
+        username: "solo",
+        password: "correct-horse-1",
+        group_name: "Brand New Group",
+      }),
+    );
+  });
+
+  it("renders the Chinese copy", async () => {
+    mount("zh");
+    expect(await screen.findByLabelText("用户名")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "下一步" })).toBeTruthy();
+  });
+});

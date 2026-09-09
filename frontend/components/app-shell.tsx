@@ -54,6 +54,7 @@ export function AppShell({
     : [
         { href: "/teacher", label: t("dashboard") },
         { href: "/teacher/debates", label: t("debates") },
+        { href: "/teacher/roster", label: t("accounts") },
       ];
 
   const activePath = pathname.startsWith("/teacher/debates-beta/")
