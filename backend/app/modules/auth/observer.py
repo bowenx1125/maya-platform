@@ -5,7 +5,7 @@ environment-provisioned account and its name has to stay distinct from that
 one.  MAYAMAYA is an ordinary account: a username, a password and the teacher role.
 Two things about it are deliberate.
 
-First, the password comes from ``MAYA_PASSWORD`` rather than from Git or a
+First, the password comes from ``MAYAMAYAMAYA_PASSWORD`` rather than from Git or a
 literal in this file. It is a shared classroom credential, so a fixed value
 is the point; keeping it out of the repository is what stops "fixed" from
 also meaning "public". With the variable unset the account is not created at
@@ -39,7 +39,7 @@ OBSERVER_USER_ID = str(uuid5(ACCOUNT_NAMESPACE, "maya-observer"))
 
 
 def observer_enabled(settings: Settings) -> bool:
-    return bool(settings.maya_password and settings.maya_password.strip())
+    return bool(settings.mayamaya_password and settings.mayamaya_password.strip())
 
 
 def is_observer(user: User) -> bool:
@@ -52,7 +52,7 @@ def provision_observer_account(session: Session, settings: Settings) -> bool:
     Returns whether the account is present after the call.
     """
 
-    password = (settings.maya_password or "").strip()
+    password = (settings.mayamaya_password or "").strip()
     now = datetime.now(UTC)
     if not password:
         # No configured password: revoke any account left over from a start

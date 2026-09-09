@@ -13,15 +13,15 @@ from tests.test_auth_self_registration import register
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_A_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
-MAYA_PASSWORD = "classroom-observer-2026"
+MAYAMAYA_PASSWORD = "classroom-observer-2026"
 
 
-def _maya_app(app_factory: Any, password: str | None = MAYA_PASSWORD) -> Any:
-    app, database, settings = app_factory(maya_password=password)
+def _maya_app(app_factory: Any, password: str | None = MAYAMAYA_PASSWORD) -> Any:
+    app, database, settings = app_factory(mayamaya_password=password)
     return app, database, settings
 
 
-def _login_maya(client: TestClient, password: str = MAYA_PASSWORD) -> tuple[Any, str]:
+def _login_maya(client: TestClient, password: str = MAYAMAYA_PASSWORD) -> tuple[Any, str]:
     response = client.post(
         "/api/v1/auth/login",
         json={"username": OBSERVER_USERNAME, "password": password},
@@ -48,7 +48,7 @@ def test_maya_is_absent_without_a_configured_password(app_factory: Any) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/auth/login",
-            json={"username": OBSERVER_USERNAME, "password": MAYA_PASSWORD},
+            json={"username": OBSERVER_USERNAME, "password": MAYAMAYA_PASSWORD},
         )
         assert response.status_code == 401
     with database.session() as session:
@@ -60,12 +60,12 @@ def test_removing_the_password_disables_the_account(app_factory: Any) -> None:
     with TestClient(app) as client:
         _login_maya(client)
     # A second app over the same database with no configured password.
-    disabled_app, _database, _settings = app_factory(maya_password=None)
+    disabled_app, _database, _settings = app_factory(mayamaya_password=None)
     with TestClient(disabled_app) as client:
         assert (
             client.post(
                 "/api/v1/auth/login",
-                json={"username": OBSERVER_USERNAME, "password": MAYA_PASSWORD},
+                json={"username": OBSERVER_USERNAME, "password": MAYAMAYA_PASSWORD},
             ).status_code
             == 401
         )
@@ -164,12 +164,14 @@ def test_password_change_takes_effect_on_restart(app_factory: Any) -> None:
     app, database, _settings = _maya_app(app_factory)
     with TestClient(app) as client:
         _login_maya(client)
-    rotated_app, _database, _settings = app_factory(maya_password="a-different-observer-password")
+    rotated_app, _database, _settings = app_factory(
+        mayamaya_password="a-different-observer-password"
+    )
     with TestClient(rotated_app) as client:
         assert (
             client.post(
                 "/api/v1/auth/login",
-                json={"username": OBSERVER_USERNAME, "password": MAYA_PASSWORD},
+                json={"username": OBSERVER_USERNAME, "password": MAYAMAYA_PASSWORD},
             ).status_code
             == 401
         )

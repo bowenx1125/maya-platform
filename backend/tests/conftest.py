@@ -53,11 +53,11 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
     def factory(
         *,
         demo_mode: bool = True,
-        maya_password: str | None = None,
+        mayamaya_password: str | None = None,
     ) -> tuple[FastAPI, Database, Settings]:
         settings = Settings(
             maya_env="test",
-            maya_password=maya_password,
+            mayamaya_password=mayamaya_password,
             session_secret="x" * 32,
             demo_mode=demo_mode,
             demo_quick_login=False,
