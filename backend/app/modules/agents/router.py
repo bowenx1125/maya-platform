@@ -561,7 +561,7 @@ def list_group_agents(
         )
     )
     rows = db.execute(
-        select(Agent, CourseMember.role)
+        select(Agent)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .outerjoin(
@@ -573,7 +573,7 @@ def list_group_agents(
             CourseMember.user_id == context.user.id,
             or_(
                 and_(CourseMember.role == "teacher", published_version),
-                and_(CourseMember.role == "student", GroupMember.user_id.is_not(None)),
+                GroupMember.user_id.is_not(None),
             ),
         )
     ).all()
@@ -864,7 +864,6 @@ def create_next_agent_version(
             AgentVersion.id == scoped.agent.current_published_version_id,
             AgentVersion.agent_id == scoped.agent.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
     if current is None or current.state != "published":

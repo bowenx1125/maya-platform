@@ -299,7 +299,6 @@ def media_path_for_preview(
                     Group.id == VoicePreview.group_id,
                     scoped_group_member.user_id == context.user.id,
                     scoped_course_member.user_id == context.user.id,
-                    scoped_course_member.role == "student",
                 ),
             ),
         )

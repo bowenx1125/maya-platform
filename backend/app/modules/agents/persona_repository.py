@@ -66,7 +66,6 @@ class SqlAlchemyPersonaStore(PersonaStore):
                     GroupMember.group_id == group_id,
                     GroupMember.user_id == user_id,
                     CourseMember.user_id == user_id,
-                    CourseMember.role == "student",
                 )
             )
             is not None

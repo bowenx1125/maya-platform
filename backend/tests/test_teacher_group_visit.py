@@ -72,3 +72,55 @@ def test_student_drafts_open_only_after_the_teacher_joins(app_factory: Any) -> N
         # Leaving closes it again, so the visit is a deliberate, reversible act.
         assert teacher.delete(_membership(), headers=headers).status_code == 204
         assert teacher.get(documents).status_code == 404
+
+
+def test_the_whole_workspace_opens_and_closes_with_the_visit(app_factory: Any) -> None:
+    """One rule, checked across the surfaces a group workspace is made of.
+
+    A draft agent is the sharpest case: it is invisible from the teacher view
+    by design, so seeing it is only explicable by the membership row.
+    """
+
+    app, _database, _settings = app_factory()
+    with TestClient(app) as student:
+        payload = register(student, group_name="Team Aurora").json()
+        group_id = payload["user"]["groups"][0]["group_id"]
+        agent = student.post(
+            f"/api/v1/groups/{group_id}/agents",
+            json={"name": "Aurora"},
+            headers={
+                **ORIGIN,
+                "X-CSRF-Token": payload["csrf_token"],
+                "Idempotency-Key": "teacher-visit-workspace-key",
+            },
+        ).json()
+    version_id = agent["current_draft_version_id"]
+
+    surfaces = [
+        f"/api/v1/agents/{agent['id']}",
+        f"/api/v1/agent-versions/{version_id}",
+        f"/api/v1/groups/{group_id}/voice-profiles",
+        f"/api/v1/groups/{group_id}/knowledge-documents",
+    ]
+    listing = f"/api/v1/groups/{group_id}/agents"
+
+    with TestClient(app) as teacher:
+        _payload, csrf = login(teacher)
+        headers = {**ORIGIN, "X-CSRF-Token": csrf}
+        membership = _membership(group_id)
+
+        # The teacher view lists published work, so a group holding nothing but
+        # a draft looks empty from outside and its parts are simply not there.
+        assert teacher.get(listing).json() == []
+        for url in surfaces:
+            assert teacher.get(url).status_code == 404, url
+
+        assert teacher.post(membership, headers=headers).status_code == 200
+        assert [row["id"] for row in teacher.get(listing).json()] == [agent["id"]]
+        for url in surfaces:
+            assert teacher.get(url).status_code == 200, url
+
+        assert teacher.delete(membership, headers=headers).status_code == 204
+        assert teacher.get(listing).json() == []
+        for url in surfaces:
+            assert teacher.get(url).status_code == 404, url

@@ -110,8 +110,14 @@ def voice_profile_dto(profile: VoiceProfile) -> VoiceProfileResponse:
 
 
 def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
+    """A group's voices belong to the group, so membership is the whole test.
+
+    A teacher who joined the group is a member like any other; one who has not
+    joined is outside it.  See ``scoped_group_role`` for the shared rule.
+    """
+
     return (
-        select(VoiceProfile, CourseMember.role)
+        select(VoiceProfile)
         .join(Group, Group.id == VoiceProfile.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .join(
@@ -122,7 +128,6 @@ def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
             VoiceProfile.id == profile_id,
             VoiceProfile.scope == "group",
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
 
@@ -145,7 +150,6 @@ def list_group_voices(
             Group.id == group_id,
             GroupMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
     if authorized is None:
@@ -193,7 +197,6 @@ def validate_voice_binding(
             AgentVersion.id == version.id,
             GroupMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
     if target_group is None:
@@ -768,7 +771,6 @@ def _assert_student_group_access(db: Session, context: AuthContext, group_id: st
             Group.id == group_id,
             GroupMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
         .order_by(Group.id)
     ).first()

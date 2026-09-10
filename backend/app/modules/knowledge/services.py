@@ -136,7 +136,13 @@ def _utc_datetime(value: datetime) -> datetime:
 
 
 def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str | None:
-    """Resolve a group's course/group membership without loading the group first."""
+    """Resolve how a group answers this caller, without loading the group first.
+
+    Membership outranks the course role.  A teacher who joined the group is
+    inside it and is answered the way its students are; a teacher who has not
+    joined still gets the teacher view, which is a summary of published work
+    rather than a window into drafts.
+    """
 
     row = db.execute(
         select(CourseMember.role, GroupMember.user_id)
@@ -154,7 +160,7 @@ def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str |
     ).first()
     if row is None:
         return None
-    return "teacher" if row[0] == "teacher" else "student"
+    return "teacher" if row[1] is None else "student"
 
 
 def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) -> str:
@@ -167,24 +173,9 @@ def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) 
     unfinished work.
     """
 
-    role = scoped_group_role(db, context, group_id)
-    if role == "student":
-        return role
-    if role == "teacher" and _is_group_member(db, context, group_id):
-        return "student"
-    raise not_found()
-
-
-def _is_group_member(db: Session, context: AuthContext, group_id: str) -> bool:
-    return (
-        db.scalar(
-            select(GroupMember.user_id).where(
-                GroupMember.group_id == group_id,
-                GroupMember.user_id == context.user.id,
-            )
-        )
-        is not None
-    )
+    if scoped_group_role(db, context, group_id) != "student":
+        raise not_found()
+    return "student"
 
 
 def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
@@ -195,7 +186,7 @@ def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAge
         )
     )
     row = db.execute(
-        select(Agent, CourseMember.role)
+        select(Agent, GroupMember.user_id)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .outerjoin(
@@ -207,18 +198,18 @@ def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAge
             CourseMember.user_id == context.user.id,
             or_(
                 and_(CourseMember.role == "teacher", published_version),
-                and_(CourseMember.role == "student", GroupMember.user_id.is_not(None)),
+                GroupMember.user_id.is_not(None),
             ),
         )
     ).first()
     if row is None:
         raise not_found()
-    return ScopedAgent(row[0], "teacher" if row[1] == "teacher" else "student")
+    return ScopedAgent(row[0], "teacher" if row[1] is None else "student")
 
 
 def visible_version(db: Session, context: AuthContext, version_id: str) -> ScopedVersion:
     row = db.execute(
-        select(AgentVersion, Agent, CourseMember.role)
+        select(AgentVersion, Agent, GroupMember.user_id)
         .join(Agent, Agent.id == AgentVersion.agent_id)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
@@ -234,18 +225,18 @@ def visible_version(db: Session, context: AuthContext, version_id: str) -> Scope
                     CourseMember.role == "teacher",
                     AgentVersion.state.in_(("published", "superseded")),
                 ),
-                and_(CourseMember.role == "student", GroupMember.user_id.is_not(None)),
+                GroupMember.user_id.is_not(None),
             ),
         )
     ).first()
     if row is None:
         raise not_found()
-    return ScopedVersion(row[0], row[1], "teacher" if row[2] == "teacher" else "student")
+    return ScopedVersion(row[0], row[1], "teacher" if row[2] is None else "student")
 
 
 def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> ScopedSnapshot:
     row = db.execute(
-        select(KnowledgeSnapshot, AgentVersion, Agent, CourseMember.role)
+        select(KnowledgeSnapshot, AgentVersion, Agent, GroupMember.user_id)
         .join(AgentVersion, AgentVersion.id == KnowledgeSnapshot.agent_version_id)
         .join(Agent, Agent.id == AgentVersion.agent_id)
         .join(Group, Group.id == Agent.group_id)
@@ -263,7 +254,7 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     ).first()
     if row is None:
         raise not_found()
-    return ScopedSnapshot(row[0], row[1], row[2], "teacher" if row[3] == "teacher" else "student")
+    return ScopedSnapshot(row[0], row[1], row[2], "teacher" if row[3] is None else "student")
 
 
 def visible_student_version(db: Session, context: AuthContext, version_id: str) -> ScopedVersion:
@@ -279,7 +270,6 @@ def visible_student_version(db: Session, context: AuthContext, version_id: str) 
         .where(
             AgentVersion.id == version_id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     ).first()
     if row is None:
@@ -299,7 +289,6 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
         .where(
             Agent.id == agent_id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     ).first()
     if row is None:
@@ -319,7 +308,6 @@ def visible_student_document(db: Session, context: AuthContext, document_id: str
         .where(
             KnowledgeDocument.id == document_id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     ).first()
     if row is None:
