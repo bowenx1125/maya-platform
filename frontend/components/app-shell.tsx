@@ -59,10 +59,6 @@ export function AppShell({
         { href: "/teacher", label: t("dashboard") },
         { href: "/teacher/debates", label: t("debates") },
         { href: "/teacher/roster", label: t("accounts") },
-        // Only once the account is actually sitting in a group: the student
-        // workspace is a group's workspace, so without one there is nothing
-        // for this link to open.
-        ...(groupId ? [{ href: "/student", label: t("student") }] : []),
       ];
 
   const activePath = pathname.startsWith("/teacher/debates-beta/")

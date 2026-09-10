@@ -29,7 +29,6 @@ from app.core.errors import PlatformError, conflict, unprocessable
 from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.modules.auth.credentials import CredentialFileError, active_catalog_snapshot
 from app.modules.auth.models import UserCredential
-from app.modules.auth.observer import OBSERVER_USERNAME
 from app.modules.auth.service import revoke_user_sessions
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
@@ -42,7 +41,8 @@ GROUP_NAME_MAX = 200
 
 # The shared MAYA teaching account is provisioned by the server from
 # ``MAYA_PASSWORD`` and must never be claimable through public registration.
-RESERVED_USERNAMES = frozenset({OBSERVER_USERNAME.casefold()})
+# Only the read-only catalog reserves names now; see _catalog_usernames.
+RESERVED_USERNAMES: frozenset[str] = frozenset()
 
 
 def _hasher() -> PasswordHash:

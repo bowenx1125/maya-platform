@@ -55,7 +55,7 @@ class RosterEntry(BaseModel):
     display_name: str
     role: str
     status: str
-    # "catalog", "observer" or "database"; only the last one is editable.
+    # "catalog" or "database"; only the latter is editable.
     source: str
     editable: bool
     groups: list[GroupRef] = Field(default_factory=list)

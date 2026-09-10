@@ -10,6 +10,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CourseRoster, Group, RosterEntry } from "../lib/api";
 import { LocaleProvider } from "../components/locale";
 
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
 vi.mock("../components/session-provider", () => ({
   useSession: vi.fn(),
 }));
@@ -43,6 +48,15 @@ function roster(): CourseRoster {
     course_id: courseId,
     entries: [
       entry({}),
+      entry({
+        user_id: teacherId,
+        username: "maya",
+        display_name: "Maya",
+        role: "teacher",
+        source: "catalog",
+        editable: false,
+        groups: [{ id: groupId, name: "Team Aurora" }],
+      }),
       entry({
         user_id: catalogId,
         username: "student-bowen-1",
@@ -82,8 +96,10 @@ function apiForTeacher() {
 }
 
 function mount(api: ReturnType<typeof apiForTeacher>, locale: "en" | "zh") {
+  const refresh = vi.fn().mockResolvedValue(null);
   mockedUseSession.mockReturnValue({
     api,
+    refresh,
     user: {
       id: teacherId,
       courses: [{ course_id: courseId, role: "teacher" }],
@@ -101,6 +117,7 @@ describe("teacher account management", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    push.mockReset();
   });
 
   it("offers edits only for accounts an edit can outlive a restart", async () => {
@@ -111,11 +128,9 @@ describe("teacher account management", () => {
     expect(await screen.findByText("New Student")).toBeTruthy();
     expect(screen.getByText("Bowen Student 1")).toBeTruthy();
     // One editable account yields one Edit control; the catalog identity is
-    // listed with the reason instead.
+    // named by its source instead of carrying controls it cannot honour.
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
-    expect(
-      screen.getByText(/re-applied from its source every time/i),
-    ).toBeTruthy();
+    expect(screen.getAllByText(/Demo catalog/)).toHaveLength(2);
   });
 
   it("saves a renamed student", async () => {
@@ -174,21 +189,50 @@ describe("teacher account management", () => {
     const api = apiForTeacher();
     mount(api, "en");
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Reset password" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Reset" }));
     expect(await screen.findByText("swift-otter-42")).toBeTruthy();
     expect(screen.getByText(/shown once/i)).toBeTruthy();
   });
 
-  it("walks the caller into a group and back out", async () => {
+  it("opens a group's workspace from its own row", async () => {
     const api = apiForTeacher();
     mount(api, "en");
 
-    const join = await screen.findAllByRole("button", { name: "Join" });
-    fireEvent.click(join[0]);
+    // Entering a group the caller is not in joins first, then opens it: one
+    // action from the row rather than a state to set and then act on.
+    const enter = await screen.findAllByRole("button", { name: "Enter" });
+    fireEvent.click(enter[1]);
     await waitFor(() =>
-      expect(api.joinGroupAsTeacher).toHaveBeenCalledWith(groupId),
+      expect(api.joinGroupAsTeacher).toHaveBeenCalledWith("other-group"),
+    );
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/student/groups/other-group"),
+    );
+  });
+
+  it("opens a group it is already inside without rejoining", async () => {
+    const api = apiForTeacher();
+    mount(api, "en");
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Enter" }))[0],
+    );
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(`/student/groups/${groupId}`),
+    );
+    expect(api.joinGroupAsTeacher).not.toHaveBeenCalled();
+  });
+
+  it("leaves a group from its own row", async () => {
+    const api = apiForTeacher();
+    mount(api, "en");
+
+    // Leave only appears for a group the caller is inside.
+    const leave = await screen.findAllByRole("button", { name: "Leave" });
+    expect(leave).toHaveLength(1);
+    fireEvent.click(leave[0]);
+    await waitFor(() =>
+      expect(api.leaveGroupAsTeacher).toHaveBeenCalledWith(groupId),
     );
   });
 

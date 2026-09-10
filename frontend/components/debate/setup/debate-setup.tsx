@@ -206,9 +206,6 @@ export function TeacherDebateList({
           {debates.length === 0 ? (
             <div className={styles.emptyState}>
               <strong>{t("debateNoDebates")}</strong>
-              <Link className="secondary-action" href="/teacher/debates/new">
-                {t("newDebate")}
-              </Link>
             </div>
           ) : (
             <div className={styles.list}>

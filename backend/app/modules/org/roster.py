@@ -9,10 +9,6 @@ editable, and the difference is not cosmetic:
     every start, so an edit here would silently disappear at the next
     restart.
 
-``observer``
-    The shared MAYA account, re-provisioned from ``MAYA_PASSWORD`` on every
-    start for the same reason.
-
 ``database``
     Self-registered students.  Their credential lives in ``user_credentials``
     and nothing rewrites it behind the teacher's back, so this is the only
@@ -37,7 +33,6 @@ from sqlalchemy.orm import Session
 from app.core.errors import PlatformError, conflict, not_found, unprocessable
 from app.core.models import CourseMember, Group, GroupMember, User
 from app.modules.auth.models import DemoAccountBinding
-from app.modules.auth.observer import is_observer
 from app.modules.auth.service import revoke_user_sessions
 
 ACTIVE = "active"
@@ -45,7 +40,6 @@ INACTIVE = "inactive"
 ASSIGNABLE_STATUSES = frozenset({ACTIVE, INACTIVE})
 
 SOURCE_CATALOG = "catalog"
-SOURCE_OBSERVER = "observer"
 SOURCE_DATABASE = "database"
 
 DISPLAY_NAME_MAX = 200
@@ -104,8 +98,6 @@ def normalize_status(raw: str) -> str:
 
 
 def _account_source(user: User, catalog_user_ids: frozenset[str]) -> str:
-    if is_observer(user):
-        return SOURCE_OBSERVER
     if user.id in catalog_user_ids:
         return SOURCE_CATALOG
     return SOURCE_DATABASE

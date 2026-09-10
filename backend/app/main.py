@@ -29,7 +29,6 @@ from app.core.logging import configure_application_logging
 from app.core.models import Course
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.dependencies import get_db
-from app.modules.auth.observer import provision_observer_account
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
@@ -289,11 +288,6 @@ def create_app(
                     if restored:
                         session.commit()
                         logger.info("Reinstalled %s reviewed provider policies", restored)
-            with runtime_database.session() as session:
-                # MAYA is provisioned from the environment on every start, so
-                # changing MAYA_PASSWORD and restarting is the whole rotation
-                # procedure and an unset variable turns the account off.
-                provision_observer_account(session, runtime_settings)
             recover_embedding_provider_startup(runtime_database)
             recover_llm_startup(ProviderRepository(runtime_database))
             with runtime_database.session() as session:

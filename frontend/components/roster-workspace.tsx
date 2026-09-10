@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   type Course,
@@ -26,15 +27,16 @@ type Draft = { display_name: string; group_name: string };
 type IssuedPassword = { user_id: string; username: string; password: string };
 
 function sourceKey(source: string) {
-  if (source === "catalog") return "sourceCatalog" as const;
-  if (source === "observer") return "sourceObserver" as const;
-  return "sourceDatabase" as const;
+  return source === "catalog"
+    ? ("sourceCatalog" as const)
+    : ("sourceDatabase" as const);
 }
 
 export function RosterWorkspace() {
   const t = useT();
   const { locale } = useLocale();
-  const { api, user } = useSession();
+  const { api, user, refresh } = useSession();
+  const router = useRouter();
   const [course, setCourse] = useState<Course | null>(null);
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -122,16 +124,35 @@ export function RosterWorkspace() {
     [api, courseId],
   );
 
-  const toggleGroup = useCallback(
+  const enterGroup = useCallback(
     async (group: Group, joined: boolean) => {
       setBusy(group.id);
       setError(null);
       try {
-        if (joined) {
-          await api.leaveGroupAsTeacher(group.id);
-        } else {
+        // Joining is what opens the group's workspace, so the two are one
+        // action rather than a state to set and then act on.
+        if (!joined) {
           await api.joinGroupAsTeacher(group.id);
+          // The route guard reads membership from the session; without this
+          // the new membership is not visible yet and the workspace answers
+          // 403 to the caller who just joined it.
+          await refresh();
         }
+        router.push(`/student/groups/${group.id}`);
+      } catch (cause) {
+        setError(cause);
+        setBusy(null);
+      }
+    },
+    [api, refresh, router],
+  );
+
+  const leaveGroup = useCallback(
+    async (group: Group) => {
+      setBusy(group.id);
+      setError(null);
+      try {
+        await api.leaveGroupAsTeacher(group.id);
         await load();
       } catch (cause) {
         setError(cause);
@@ -160,7 +181,6 @@ export function RosterWorkspace() {
       <PageIntro
         eyebrow={t("accountsEyebrow")}
         title={course?.name ?? t("accounts")}
-        description={t("accountsLede")}
       />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
@@ -203,7 +223,6 @@ export function RosterWorkspace() {
                       <label>
                         <span>{t("groupNameLabel")}</span>
                         <input
-                          aria-describedby="roster-group-hint"
                           list="roster-group-names"
                           value={draft.group_name}
                           maxLength={200}
@@ -215,9 +234,6 @@ export function RosterWorkspace() {
                           }
                         />
                       </label>
-                      <small className="muted" id="roster-group-hint">
-                        {t("groupNameHint")}
-                      </small>
                       <div className="button-row">
                         <button
                           className="inline-button"
@@ -248,9 +264,6 @@ export function RosterWorkspace() {
                       {t(sourceKey(entry.source))}
                     </small>
                     <small>{groupSummary(entry)}</small>
-                    {entry.editable ? null : (
-                      <small className="muted">{t("sourceLockedHint")}</small>
-                    )}
                     {issued && issued.user_id === entry.user_id ? (
                       <small role="status">
                         {t("resetPasswordIssued", {
@@ -324,7 +337,7 @@ export function RosterWorkspace() {
         )}
       </SectionCard>
 
-      <SectionCard title={t("walkInTitle")} description={t("walkInLede")}>
+      <SectionCard title={t("groups")}>
         {groups.length === 0 ? (
           <EmptyCard title={t("rosterNoGroup")} />
         ) : (
@@ -335,16 +348,27 @@ export function RosterWorkspace() {
                 <div className="list-row" key={group.id}>
                   <span>
                     <strong>{group.name}</strong>
-                    {joined ? <small>{t("inThisGroup")}</small> : null}
                   </span>
-                  <button
-                    className="inline-button"
-                    type="button"
-                    disabled={busy === group.id}
-                    onClick={() => void toggleGroup(group, joined)}
-                  >
-                    {joined ? t("leaveGroup") : t("joinGroup")}
-                  </button>
+                  <div className="button-row">
+                    {joined ? (
+                      <button
+                        className="inline-button"
+                        type="button"
+                        disabled={busy === group.id}
+                        onClick={() => void leaveGroup(group)}
+                      >
+                        {t("leave")}
+                      </button>
+                    ) : null}
+                    <button
+                      className="inline-button"
+                      type="button"
+                      disabled={busy === group.id}
+                      onClick={() => void enterGroup(group, joined)}
+                    >
+                      {t("enter")}
+                    </button>
+                  </div>
                 </div>
               );
             })}
