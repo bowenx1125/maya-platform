@@ -86,7 +86,7 @@ describe("student self-registration form", () => {
     // student's cursor.
     expect(await screen.findByLabelText("Username")).toBeTruthy();
     expect(screen.queryByLabelText("Group name")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Team Aurora/ })).toBeNull();
+    expect(screen.queryByRole("option")).toBeNull();
     expect(screen.getByText(/Step 1 of 2/)).toBeTruthy();
 
     await toGroupStep();
@@ -108,27 +108,65 @@ describe("student self-registration form", () => {
   it("offers every joinable group before anything is typed", async () => {
     const { api } = mount();
     await waitFor(() => expect(api.registrationOptions).toHaveBeenCalled());
-    await toGroupStep();
+    const group = await toGroupStep();
+    fireEvent.focus(group);
 
+    // The whole list, not a filtered one: a student who has not typed yet is
+    // reading the names to find theirs.
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(3));
     expect(
-      await screen.findByRole("button", { name: /Team Aurora/ }),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Team Borealis/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /星辰队/ })).toBeTruthy();
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual([
+      "Team Aurora2 member(s)",
+      "Team Borealis1 member(s)",
+      "星辰队3 member(s)",
+    ]);
   });
 
   it("narrows suggestions to names that contain what was typed", async () => {
     mount();
     const group = await toGroupStep();
+    fireEvent.focus(group);
     // A substring, not a prefix: "aurora" still finds "Team Aurora".
     fireEvent.change(group, { target: { value: "aurora" } });
 
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
+    expect(screen.getByRole("option").textContent).toContain("Team Aurora");
+  });
+
+  it("closes the list on Escape and reopens it on the next keystroke", async () => {
+    mount();
+    const group = await toGroupStep();
+    fireEvent.focus(group);
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(3));
+
+    fireEvent.keyDown(group, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("option")).toBeNull());
+    expect(group.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.change(group, { target: { value: "team" } });
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+  });
+
+  it("walks the list with the arrow keys and takes the highlighted name", async () => {
+    mount();
+    const group = (await toGroupStep()) as HTMLInputElement;
+    fireEvent.focus(group);
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(3));
+
+    fireEvent.keyDown(group, { key: "ArrowDown" });
+    fireEvent.keyDown(group, { key: "ArrowDown" });
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /Team Borealis/ }),
-      ).toBeNull(),
+      expect(group.getAttribute("aria-activedescendant")).toBe(
+        screen.getAllByRole("option")[1].id,
+      ),
     );
-    expect(screen.getByRole("button", { name: /Team Aurora/ })).toBeTruthy();
+
+    // Enter takes the highlighted row rather than submitting the empty field
+    // underneath it, which would have created a group by accident.
+    fireEvent.keyDown(group, { key: "Enter" });
+    await waitFor(() => expect(group.value).toBe("Team Borealis"));
+    expect(screen.queryByRole("option")).toBeNull();
   });
 
   it("says whether a typed name joins an existing group or creates one", async () => {
@@ -146,10 +184,11 @@ describe("student self-registration form", () => {
 
   it("fills the field from a suggestion", async () => {
     mount();
-    await toGroupStep();
-    fireEvent.click(await screen.findByRole("button", { name: /星辰队/ }));
-    const group = screen.getByLabelText("Group name") as HTMLInputElement;
+    const group = (await toGroupStep()) as HTMLInputElement;
+    fireEvent.focus(group);
+    fireEvent.click(await screen.findByRole("option", { name: /星辰队/ }));
     expect(group.value).toBe("星辰队");
+    expect(screen.queryByRole("option")).toBeNull();
   });
 
   it("registers with the chosen course and no display name", async () => {

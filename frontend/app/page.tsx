@@ -10,7 +10,7 @@ import {
   AcademyEmblem,
   AcademyFrame,
 } from "../components/academy/scene";
-import { LanguageSwitcher, useT } from "../components/locale";
+import { useT } from "../components/locale";
 import { RegisterForm } from "../components/register-form";
 import { LoginForm } from "../components/session-provider";
 
@@ -36,9 +36,6 @@ export default function HomePage() {
           </section>
 
           <section className="academy-panel">
-            <div className="academy-panel-head">
-              <LanguageSwitcher />
-            </div>
             <AcademyEmblem />
             <h2 className="academy-welcome">
               {registering ? t("registerTitle") : t("academyWelcome")}

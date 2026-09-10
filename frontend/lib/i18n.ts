@@ -731,8 +731,6 @@ const enMessages = {
   registerLede:
     "Choose a username and password, then say which group you belong to.",
   registerGroupLabel: "Group name",
-  registerGroupHint:
-    "Type your group name. If someone in your group registered first, pick their group from the suggestions so you land together.",
   registerSuggestions: "Groups you can join",
   registerWillJoin: "You will join {name}, which has {count} member(s).",
   registerWillCreate: "No group is called that yet, so you will create it.",
@@ -1420,8 +1418,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   registerTitle: "注册账号",
   registerLede: "设置用户名和密码，并填写你所在的小组。",
   registerGroupLabel: "小组名称",
-  registerGroupHint:
-    "填写你的小组名称。如果组里已经有人先注册过，请从推荐中选择同一个小组，这样你们才会分到一起。",
   registerSuggestions: "可加入的小组",
   registerWillJoin: "你将加入「{name}」，该组现有 {count} 人。",
   registerWillCreate: "还没有同名的小组，你将创建这个小组。",

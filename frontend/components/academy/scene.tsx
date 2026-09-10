@@ -173,38 +173,33 @@ export function AcademyFrame() {
   );
 }
 
-/** Wreathed column emblem shown above the form. */
+/**
+ * The Mayaform mark: a gold ring with an indigo disc set above and right of it.
+ *
+ * This is the same shape `.brand-dot` draws in the signed-in header, at the
+ * proportions that rule sets — a 3-in-18 ring, a 16-wide disc offset by 5 and
+ * -4 — so the logo the opening animation collapses is the one the app then
+ * wears in its nav.  The viewBox is cropped to the mark itself rather than
+ * padded to a square, which lets it scale without a margin of empty space.
+ */
 export function AcademyEmblem() {
   return (
     <svg
       className="academy-emblem"
-      viewBox="0 0 96 96"
+      viewBox="0 0 66 63"
       aria-hidden="true"
       focusable="false"
     >
+      {/* Drawn first, so the ring crosses in front of it as the shadow does. */}
+      <circle cx="42" cy="24" r="24" fill="var(--indigo)" />
       <circle
-        cx="48"
-        cy="48"
-        r="45"
+        cx="27"
+        cy="36"
+        r="22.5"
         fill="none"
-        stroke="#c9a227"
-        strokeWidth="1.6"
+        stroke="var(--gold)"
+        strokeWidth="9"
       />
-      <g fill="none" stroke="#c9a227" strokeWidth="2" strokeLinecap="round">
-        <path d="M22 54 q-2 -22 16 -32" />
-        <path d="M74 54 q2 -22 -16 -32" />
-        <path d="M26 44 l-7 -3 M28 36 l-7 -3 M33 28 l-6 -4" />
-        <path d="M70 44 l7 -3 M68 36 l7 -3 M63 28 l6 -4" />
-      </g>
-      <g fill="#b08a33">
-        <rect x="36" y="34" width="24" height="6" rx="2" />
-        <rect x="40" y="40" width="16" height="26" />
-        <rect x="34" y="66" width="28" height="6" rx="2" />
-      </g>
-      <g stroke="#e0cb95" strokeWidth="1.4">
-        <path d="M45 42 V64 M51 42 V64" />
-      </g>
-      <path d="M48 76 l3 4 -3 4 -3 -4 Z" fill="#c9a227" />
     </svg>
   );
 }
