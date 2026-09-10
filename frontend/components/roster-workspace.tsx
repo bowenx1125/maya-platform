@@ -55,28 +55,35 @@ export function RosterWorkspace() {
     [user],
   );
 
-  const load = useCallback(async () => {
-    if (!courseId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const [courses, roster, courseGroups] = await Promise.all([
-        api.courses(),
-        api.courseRoster(courseId),
-        api.groups(courseId),
-      ]);
-      setCourse(courses.find((item) => item.id === courseId) ?? null);
-      setEntries(roster.entries ?? []);
-      setGroups(courseGroups);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, courseId]);
+  const load = useCallback(
+    async (gate = true) => {
+      if (!courseId) {
+        setLoading(false);
+        return;
+      }
+      // Only the first read hides the page. A reload after a row action keeps
+      // the list on screen, because swapping it for a loading card unmounts
+      // everything below the fold and throws the reader back to the top of a
+      // list they were working halfway down.
+      if (gate) setLoading(true);
+      setError(null);
+      try {
+        const [courses, roster, courseGroups] = await Promise.all([
+          api.courses(),
+          api.courseRoster(courseId),
+          api.groups(courseId),
+        ]);
+        setCourse(courses.find((item) => item.id === courseId) ?? null);
+        setEntries(roster.entries ?? []);
+        setGroups(courseGroups);
+      } catch (cause) {
+        setError(cause);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, courseId],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -93,7 +100,7 @@ export function RosterWorkspace() {
       try {
         await api.updateCourseMember(courseId, entry.user_id, body);
         setEditing(null);
-        await load();
+        await load(false);
       } catch (cause) {
         setError(cause);
       } finally {
@@ -153,14 +160,16 @@ export function RosterWorkspace() {
       setError(null);
       try {
         await api.leaveGroupAsTeacher(group.id);
-        await load();
+        // The nav is built from the session's groups, so without this it keeps
+        // offering the workspace of a group the teacher has just walked out of.
+        await Promise.all([load(false), refresh()]);
       } catch (cause) {
         setError(cause);
       } finally {
         setBusy(null);
       }
     },
-    [api, load],
+    [api, load, refresh],
   );
 
   if (loading) return <LoadingCard />;
@@ -258,7 +267,13 @@ export function RosterWorkspace() {
               return (
                 <div className="list-row" key={entry.user_id}>
                   <span>
-                    <strong>{entry.display_name}</strong>
+                    <span className="roster-headline">
+                      <strong>{entry.display_name}</strong>
+                      <StatusBadge
+                        status={entry.status}
+                        tone={entry.status === "active" ? "good" : "neutral"}
+                      />
+                    </span>
                     <small>
                       {entry.username} · {roleLabel(entry.role, locale)} ·{" "}
                       {t(sourceKey(entry.source))}
@@ -274,10 +289,6 @@ export function RosterWorkspace() {
                       </small>
                     ) : null}
                   </span>
-                  <StatusBadge
-                    status={entry.status}
-                    tone={entry.status === "active" ? "good" : "neutral"}
-                  />
                   {entry.editable ? (
                     <div className="button-row">
                       <button

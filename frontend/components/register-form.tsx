@@ -77,11 +77,14 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
 
   const groups = useMemo(() => options?.groups ?? [], [options]);
 
-  // A substring match rather than a prefix match: a student who remembers only
-  // part of the name their group used still finds it.
+  // Nothing is offered until something is typed: an untouched field that drops
+  // the whole course on the reader is answering a question they have not asked
+  // yet, and it buries the one name they came here to write.  A substring
+  // match rather than a prefix match, so a student who remembers only part of
+  // the name their group used still finds it.
   const suggestions = useMemo(() => {
     const query = foldGroupName(groupName);
-    if (!query) return groups;
+    if (!query) return [];
     return groups.filter((group) => foldGroupName(group.name).includes(query));
   }, [groups, groupName]);
 

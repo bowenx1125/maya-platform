@@ -105,22 +105,23 @@ describe("student self-registration form", () => {
     expect(username.value).toBe("new-student");
   });
 
-  it("offers every joinable group before anything is typed", async () => {
+  it("suggests nothing until the student starts typing", async () => {
     const { api } = mount();
     await waitFor(() => expect(api.registrationOptions).toHaveBeenCalled());
     const group = await toGroupStep();
     fireEvent.focus(group);
 
-    // The whole list, not a filtered one: a student who has not typed yet is
-    // reading the names to find theirs.
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(3));
-    expect(
-      screen.getAllByRole("option").map((option) => option.textContent),
-    ).toEqual([
-      "Team Aurora2 member(s)",
-      "Team Borealis1 member(s)",
-      "星辰队3 member(s)",
-    ]);
+    // An untouched field answers a question nobody asked: the student came
+    // here to write one name, and the whole course dropped over it buries it.
+    expect(screen.queryByRole("option")).toBeNull();
+    expect(group.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.change(group, { target: { value: "team" } });
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual(["Team Aurora2 member(s)", "Team Borealis1 member(s)"]),
+    );
   });
 
   it("narrows suggestions to names that contain what was typed", async () => {
@@ -137,22 +138,22 @@ describe("student self-registration form", () => {
   it("closes the list on Escape and reopens it on the next keystroke", async () => {
     mount();
     const group = await toGroupStep();
-    fireEvent.focus(group);
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(3));
+    fireEvent.change(group, { target: { value: "team" } });
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
 
     fireEvent.keyDown(group, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("option")).toBeNull());
     expect(group.getAttribute("aria-expanded")).toBe("false");
 
-    fireEvent.change(group, { target: { value: "team" } });
+    fireEvent.change(group, { target: { value: "team " } });
     await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
   });
 
   it("walks the list with the arrow keys and takes the highlighted name", async () => {
     mount();
     const group = (await toGroupStep()) as HTMLInputElement;
-    fireEvent.focus(group);
-    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(3));
+    fireEvent.change(group, { target: { value: "team" } });
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
 
     fireEvent.keyDown(group, { key: "ArrowDown" });
     fireEvent.keyDown(group, { key: "ArrowDown" });
@@ -185,7 +186,7 @@ describe("student self-registration form", () => {
   it("fills the field from a suggestion", async () => {
     mount();
     const group = (await toGroupStep()) as HTMLInputElement;
-    fireEvent.focus(group);
+    fireEvent.change(group, { target: { value: "星" } });
     fireEvent.click(await screen.findByRole("option", { name: /星辰队/ }));
     expect(group.value).toBe("星辰队");
     expect(screen.queryByRole("option")).toBeNull();

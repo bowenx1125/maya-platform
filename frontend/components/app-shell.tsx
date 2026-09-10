@@ -38,7 +38,12 @@ export function AppShell({
   const links = isStudent
     ? [
         { href: "/student", label: t("home") },
-        ...(isCourseTeacher ? [{ href: "/teacher", label: t("teacher") }] : []),
+        // Back to the roster, not the dashboard: the roster is the only door
+        // into a group for a teacher, so it is the page they left to get here
+        // and the one that still has the row they are working through.
+        ...(isCourseTeacher
+          ? [{ href: "/teacher/roster", label: t("teacher") }]
+          : []),
         ...(groupId
           ? [{ href: `/student/groups/${groupId}`, label: t("groupWorkspace") }]
           : []),

@@ -980,6 +980,32 @@ details > summary {
   gap: 5px;
 }
 
+/* Account management: the status reads on the name's own line.  As a column
+   of its own it sat wherever the row's other children left it, so it landed in
+   the middle of rows that carry buttons and at the far edge of rows that do
+   not, and a list of both had its states scattered across the width.  Beside
+   the name it is always in the same place, and the right edge is left to the
+   controls. */
+.roster-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  min-width: 0;
+}
+
+.roster-headline strong {
+  min-width: 0;
+}
+
+/* Quieter than the badge's default: at a name's scale, 800 weight on a word
+   this small reads as a shout rather than a label. */
+.roster-headline .status-badge {
+  padding: 4px 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .list-row strong,
 .document-main strong,
 .snapshot-file strong {
