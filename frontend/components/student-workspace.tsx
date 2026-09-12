@@ -123,17 +123,8 @@ export function StudentDashboard() {
     <>
       <PageIntro
         eyebrow={t("studentHome")}
-        title={`${t("welcomeBack")}${user?.display_name ? `, ${user.display_name}` : ""}.`}
-        description={t("studentHomeLede")}
-        action={
-          course ? (
-            <div className="course-context">
-              <span className="section-label">{t("currentCourse")}</span>
-              <strong>{course.name}</strong>
-              <span>{course.code}</span>
-            </div>
-          ) : null
-        }
+        title={t("appName")}
+        description={course?.name}
       />
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
@@ -154,7 +145,7 @@ function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
   return (
     <SectionCard
       title={group.name}
-      description={`${group.members?.length ?? 0} ${t("groupMembers")} · ${t("privateGroup")}`}
+      description={`${group.members?.length ?? 0} ${t("groupMembers")}`}
       action={
         <Link className="text-link" href={`/student/groups/${group.id}`}>
           {t("openWorkspace")}
@@ -203,9 +194,6 @@ function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
             <StatusBadge status={agent.status} />
           </Link>
         ))}
-        {agents.length === 0 ? (
-          <p className="muted-copy">{t("createFirstAgent")}</p>
-        ) : null}
       </div>
     </SectionCard>
   );
@@ -262,7 +250,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
       <PageIntro
         eyebrow={t("groupWorkspace")}
         title={group.name}
-        description={t("groupLede")}
+
         action={
           <div className="button-row">
             <Link
@@ -281,7 +269,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
         }
       />
       <div className="workspace-grid">
-        <SectionCard title={t("agents")} description={t("agentsLede")}>
+        <SectionCard title={t("agents")}>
           {agents.length === 0 ? (
             <EmptyCard
               title={t("noAgents")}
@@ -314,7 +302,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
         </SectionCard>
         <SectionCard
           title={t("knowledgeLibrary")}
-          description={t("knowledgeLede")}
+
           action={
             <Link
               className="text-link"
@@ -343,7 +331,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           )}
         </SectionCard>
       </div>
-      <SectionCard title={t("members")} description={t("membersLede")}>
+      <SectionCard title={t("members")}>
         <div className="member-grid">
           {(group.members ?? []).map((member) => (
             <div className="member-chip" key={member.user_id}>
@@ -494,21 +482,12 @@ function GroupAgentRow({
 
   return (
     <div
-      className="agent-row"
+      className="agent-row student-agent-entry"
       data-agent-row={currentAgent.id}
-      style={{ flexWrap: "wrap" }}
     >
       <Link
         href={`/student/agents/${currentAgent.id}`}
         className="agent-row-link"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "14px",
-          minWidth: 0,
-          flex: "1 1 12rem",
-          textDecoration: "none",
-        }}
       >
         <div className="avatar-orb" aria-hidden="true">
           {currentAgent.name.slice(0, 1).toUpperCase()}
@@ -533,14 +512,6 @@ function GroupAgentRow({
         className="secondary-action description-edit-trigger"
         type="button"
         aria-label={t("editDescription")}
-        style={{
-          flex: "1 1 14rem",
-          minWidth: "9rem",
-          justifyContent: "space-between",
-          overflowWrap: "anywhere",
-          textAlign: "left",
-          whiteSpace: "normal",
-        }}
         onClick={() => {
           setDescriptionDraft(currentAgent.description ?? "");
           setEditing(true);
@@ -612,7 +583,7 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <PageIntro eyebrow={t("newAgent")} title={t("newAgentTitle")} />
+      <PageIntro eyebrow={t("agents")} title={t("newAgent")} />
       <SectionCard title={t("agentIdentity")}>
         <form className="stack-form wide-form" onSubmit={submit}>
           <label>
@@ -624,7 +595,6 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
                 abandonCreateIntent();
                 setName(event.target.value);
               }}
-              placeholder={t("agentNamePlaceholder")}
               required
             />
           </label>
@@ -639,7 +609,6 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
                 abandonCreateIntent();
                 setDescription(event.target.value);
               }}
-              placeholder={t("descriptionPlaceholder")}
               rows={4}
             />
           </label>

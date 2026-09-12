@@ -173,9 +173,8 @@ persist until Next. Interact/Hide preserves its QR session. Conclude shows Evalu
 
 ## Remaining scope
 
-Earlier two-round and partial RAG experiments do not validate this four-round
-protocol. Full RAG quality acceptance remains incomplete. Module DDL is 9.10; acceptance owner is 徐伯闻.
-古月 owns 3D/voice/TTS, Kaikai accounts/student UI, 徐伯闻 remaining modules.
+Full RAG quality acceptance remains incomplete. 徐伯闻 owns acceptance; 古月 owns
+3D/voice/TTS and Kaikai accounts/student UI.
 
 Classroom-scale load, public deployment, monitoring, backup/restore, real speech
 and data/licensing governance remain outside this local Demo scope.
@@ -215,14 +214,11 @@ attempts to replace them; default-file reads make no Provider calls. Migration
 0027_frozen_teaching_markdown freezes defaults for existing four-round rows while
 preserving their saved speeches, custom snapshots and non-four-round records.
 
-GenerationContext passes the frozen System text into each turn's server-only
-snapshot. Input hashes include it; persisted recovery envelopes retain it, and
-repair appends feedback to the same message. UI rendering suppresses executable
-HTML and unsafe script links. Provider budgets and authorization remain unchanged;
-these engineering checks cannot guarantee model compliance or teaching quality.
-Chinese default wording is direct “RAG证实”, contextual “RAG提示”, no_match “我感觉”.
-The last includes independent LLM reasoning with assumptions/grounds, not invented
-facts. These are editable Prompt instructions only, not output rejection rules.
+Turn input hashes and recovery envelopes retain frozen System messages; repair
+appends feedback to the same message. UI rejects executable HTML/unsafe links.
+Provider budgets and authorization are unchanged; model compliance remains manual.
+Chinese direct/contextual/no_match wording is “RAG证实”/“RAG提示”/“我感觉”, editable
+Prompt guidance only. No-match reasoning states assumptions without inventing facts.
 
 3D Stage removes the transcript header count and visible connection wording.
 A single current/total bubble sits at the transcript top right, outside controls,
@@ -230,11 +226,9 @@ following the displayed turn (e.g. 4/12): green when
 connected, red otherwise, with accessible nonvisual connection text. Existing
 3D network recovery uses Back/re-entry; authentication sign-in/reload actions remain.
 
-Report inputs previously rejected six retained evidence chunks (4127–4408 chars)
-under an obsolete 2400-char limit. Removing it preserves complete evidence within
-total request budgets. Stale translated_markdown fields were also removed from
-failure/generating DTOs. The owner had reset the affected lesson, so its original
-full failed Report could not be replayed. Logs retain only safe validation paths.
+Report preserves complete evidence within total request budgets and omits obsolete
+translated_markdown failure fields. Diagnostics retain safe validation paths. The
+owner reset the affected lesson, preventing replay of its original failed Report.
 
 Creation defaults to Chinese; language changes outside Edit preserve independent
 CN/EN drafts and only the selected language drives generation. Draft updates that
@@ -262,8 +256,7 @@ already-ready notifications skip refresh. Live starts and controller handoff cle
 legacy replay cursors. Report bibliographic prose no longer triggers private-input
 keyword rejection; relationship/schema checks remain. Retained report input validates.
 
-Agent.md now has only a 12,000-character total authorship budget. Field and list
-caps are removed from compiler, stored/provider models and paragraph conversion.
+Agent.md has a 12,000-character total budget; no field/list caps.
 
 ## Obsolete protocol removal — September 10, 2026
 
@@ -276,8 +269,7 @@ baselines no longer block the current every-round RAG and same-round context.
 
 ## Preview Background module
 
-Preview shows a Background card as the first card inside the turns panel, in the
-same yellow speech-card design, only when the Debate has a non-blank Background.
+Preview starts with a yellow Background card when Background is non-blank.
 
 ## Stalled-debate correction
 
@@ -310,14 +302,25 @@ This supersedes the previous teacher deletion prohibition.
 Existing real LLM four-round generation, Embedding and Report configuration is
 preserved; TTS/Voice remain as configured. Real Provider acceptance remains manual.
 
-The single automated pass reported frontend 334 passed/1 skipped and backend
-1339 passed/24 skipped, with 33 fixture-setup errors and 3 historical-migration
-fixture failures. All five new account integration tests passed. The shared raw
-fixture now supplies canonical keys; old-schema migration fixtures use historical
-columns instead of current ORM models. Fixture corrections were not rerun locally per owner request; no full-suite pass is claimed. OpenAPI/WS/route,
-repository-boundary and formatting checks passed; backend lint/mypy and frontend
-types passed. Frontend lint has four existing warnings and no errors.
+Account integration verification: frontend 334 passed/1 skipped; backend 1339
+passed/24 skipped, including five new integration tests. Thirty-three shared-fixture
+setup errors and three old-schema fixture failures were adapted without a local
+rerun per owner request. No full backend-suite pass is claimed. Contract, boundary,
+format, backend lint/mypy and frontend type checks passed.
 
 Docker backend/frontend builds succeeded and both services are healthy after the
 0027-to-0029 upgrade; foreign-key check is clean. Home and Accounts return HTTP 200.
 Private configuration is unchanged. Classroom behavior awaits the owner's audit.
+
+## Accounts and student workspace design
+
+Accounts, eight student routes and QR interaction share the teacher's Inter typography, white
+cards, pale-yellow content, gold dividers, 24/18px insets and 20px section spacing.
+Forms, lists, version panels, Persona, avatar and voice controls use that hierarchy;
+actions use single words; explanatory UI prose is removed. Authored content,
+validation states and consent remain. Editing/action rows adapt to narrow screens.
+
+Before the final compact-copy revision, 334 frontend tests passed/1 skipped in one
+run. Final copy uses updated action-name assertions; no repeat full test run. Desktop Accounts/Home/Group/Agent and narrow-screen editor/
+knowledge views were inspected. Backend and Provider configuration were unchanged.
+README covers accounts, four rounds and current classroom controls.

@@ -32,6 +32,7 @@ import {
   type PersonaPreviewDiagnostic,
   type PersonaPreviewSpec,
 } from "./persona";
+import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -604,14 +605,16 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       voiceProfileId !== (version.voice_profile_id ?? null)),
   );
   const blockers = version?.publish_blockers ?? [];
-  const blockerCopy: Record<string, Parameters<typeof t>[0]> = {
-    agent_md_missing: "blockAgentMdMissing",
-    agent_md_too_large: "blockAgentMdLarge",
-    rag_missing: "blockRagMissing",
-    rag_over_limit: "blockRagOverLimit",
-    rag_index_pending: "blockRagPending",
-    rag_index_failed: "blockRagFailed",
-    avatar_missing: "blockAvatarMissing",
+  const blockerTitles: Record<string, string> = {
+    agent_md_missing: "AGENT.md",
+    agent_md_too_large: "AGENT.md",
+    rag_missing: t("knowledge"),
+    rag_over_limit: t("knowledge"),
+    rag_index_pending: t("knowledge"),
+    rag_index_failed: t("knowledge"),
+    avatar_missing: t("avatarDesign"),
+    persona_compile_required: "Persona",
+    persona_confirmation_required: "Persona",
   };
 
   // The recovery action can be rendered while the previous request is still
@@ -982,7 +985,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       {localDirty ? (
         <div className="notice notice-warning" role="status" aria-live="polite">
           <strong>{t("unsavedChanges")}</strong>
-          <span>{t("saveBeforePublish")}</span>
         </div>
       ) : null}
       {conflict ? (
@@ -1007,7 +1009,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       {providerConfirmationRequired ? (
         <div className="notice notice-warning" role="status">
           <strong>{t("providerConfirmationNeeded")}</strong>
-          <span>{t("shareDisclosureWithTeacher")}</span>
+
           <Link
             className="text-link"
             href={`/teacher/provider-approvals/agent-versions/${currentVersion.id}`}
@@ -1026,7 +1028,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         <div className="workbench-main">
           <SectionCard
             title={t("agentMd")}
-            description={t("agentMdLede")}
             action={
               <div className="button-row">
                 <button
@@ -1066,7 +1067,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 abandonPublishIntent();
                 setAgentMd(event.target.value);
               }}
-              placeholder={t("writePrompt")}
             />
             <div className="editor-footer">
               <span>
@@ -1099,10 +1099,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             onConfirm={() => void confirmPersonaDraft()}
           />
           {avatarConfig ? (
-            <SectionCard
-              title={t("avatarDesign")}
-              description={t("avatarDesignLede")}
-            >
+            <SectionCard title={t("avatarDesign")}>
               <AvatarEditor
                 templates={avatarTemplates}
                 value={avatarConfig}
@@ -1114,7 +1111,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           ) : null}
           <SectionCard
             title={t("voiceBinding")}
-            description={t("voiceBindingLede")}
             action={
               <Link
                 className="text-link"
@@ -1153,7 +1149,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           </SectionCard>
           <SectionCard
             title={t("evidenceSet")}
-            description={t("evidenceSetLede")}
             action={
               <label className="secondary-action file-button">
                 {t("uploadMarkdown")}
@@ -1212,17 +1207,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               </div>
             )}
           </SectionCard>
-          <SectionCard
-            title={t("testChat")}
-            description={t("testChatLede")}
-            className="chat-card"
-          >
+          <SectionCard title={t("testChat")} className="chat-card">
             <form className="chat-form" onSubmit={askAgent}>
               <textarea
                 aria-label={t("testChatMessage")}
                 value={chatMessage}
                 onChange={(event) => setChatMessage(event.target.value)}
-                placeholder={t("askEvidence")}
                 rows={3}
               />
               <button
@@ -1233,11 +1223,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 {chatBusy ? t("retrieving") : t("testDraft")}
               </button>
             </form>
-            {chatResult ? (
-              <ChatResult result={chatResult} />
-            ) : (
-              <p className="muted-copy">{t("tryChat")}</p>
-            )}
+            {chatResult ? <ChatResult result={chatResult} /> : null}
           </SectionCard>
         </div>
         <aside className="workbench-side">
@@ -1248,7 +1234,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   <span aria-hidden="true">✓</span>
                   <div>
                     <strong>{t("readyPublish")}</strong>
-                    <small>{t("allBlockersClear")}</small>
                   </div>
                 </div>
               ) : (
@@ -1256,22 +1241,17 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   <div className="check-item check-bad" key={blocker}>
                     <span aria-hidden="true">!</span>
                     <div>
-                      <strong>{blockerLabel(blocker, locale)}</strong>
-                      <small>
-                        {blockerCopy[blocker]
-                          ? t(blockerCopy[blocker])
-                          : t("resolveBlocker")}
-                      </small>
+                      <strong>
+                        {blockerTitles[blocker] ??
+                          blockerLabel(blocker, locale)}
+                      </strong>
                     </div>
                   </div>
                 ))
               )}
             </div>
           </SectionCard>
-          <SectionCard
-            title={t("ragPreview")}
-            description={t("ragPreviewLede")}
-          >
+          <SectionCard title={t("ragPreview")}>
             {preview ? (
               <>
                 <div className="rag-metrics">
@@ -1389,7 +1369,6 @@ function ReadOnlyVersion({
       <PageIntro
         eyebrow={t("publishedSnapshot")}
         title={`${agent.name} · ${version.version_label}`}
-        description={t("publishedSnapshotLede")}
         action={
           <Link
             className="secondary-action"
@@ -1401,17 +1380,18 @@ function ReadOnlyVersion({
       />
       <div className="workbench-grid">
         <div className="workbench-main">
-          <SectionCard title={t("agentMd")} description={t("readOnlyRelease")}>
-            <pre className="read-only-markdown">
+          <SectionCard title={t("agentMd")}>
+            <ReportMarkdown className="read-only-markdown rendered-persona">
               {version.agent_md || t("noPrompt")}
-            </pre>
+            </ReportMarkdown>
             <button
               className="secondary-action"
               type="button"
               disabled={agentMdBusy}
+              aria-label={`${t("download")} AGENT.md`}
               onClick={() => void downloadAgentMd()}
             >
-              {t("download")} AGENT.md
+              {t("download")}
             </button>
             {agentMdError ? <ErrorNotice error={agentMdError} /> : null}
           </SectionCard>
@@ -1441,7 +1421,7 @@ function ReadOnlyVersion({
               <div>
                 <strong>{statusLabel(version.state, locale)}</strong>
                 <small>
-                  {t("revision")} {version.revision} {t("revisionImmutable")}
+                  {t("revision")} {version.revision}
                 </small>
               </div>
             </div>
@@ -1565,7 +1545,7 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
       </SectionCard>
     );
   return (
-    <SectionCard title={t("knowledgeSnapshot")} description={t("snapshotLede")}>
+    <SectionCard title={t("knowledgeSnapshot")}>
       {snapshot ? (
         <>
           <div className="snapshot-summary">
@@ -1588,6 +1568,7 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
             className="secondary-action"
             type="button"
             disabled={busy}
+            aria-label={`${t("download")} RAG`}
             onClick={() => void downloadSnapshot()}
           >
             {t("downloadRag")}

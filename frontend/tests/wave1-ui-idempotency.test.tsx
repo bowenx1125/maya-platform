@@ -104,7 +104,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     render(<CreateAgentForm groupId="group-id" />);
     const name = screen.getByLabelText("Agent name");
     fireEvent.change(name, { target: { value: "First Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create V1.0 draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("alert").textContent).toContain("Request failed");
@@ -114,7 +114,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     expect(keys[1]).toBe(keys[0]);
 
     fireEvent.change(name, { target: { value: "Second Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create V1.0 draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(3));
     expect(keys[2]).not.toBe(keys[1]);
     expect(router.push).toHaveBeenCalledWith(
@@ -174,11 +174,9 @@ describe("Wave 1A UI idempotency wiring", () => {
 
     render(<AgentWorkbench versionId="version-id" />);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Publish version" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     await waitFor(() => {
       expect(api.publish).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("alert").textContent).toContain(
@@ -213,11 +211,11 @@ describe("Wave 1A UI idempotency wiring", () => {
     useSessionMock.mockReturnValue({ api });
 
     render(<AgentWorkbench versionId="version-id" />);
-    await screen.findByRole("button", { name: "Publish version" });
-    fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
+    await screen.findByRole("button", { name: "Publish" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
 
     const link = await screen.findByRole("link", {
-      name: "Open teacher approval page",
+      name: "Review",
     });
     expect(link.getAttribute("href")).toBe(
       "/teacher/provider-approvals/agent-versions/version-id",
@@ -246,9 +244,9 @@ describe("Wave 1A UI idempotency wiring", () => {
 
     render(<AgentOverview agentId="agent-id" />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Delete Agent" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Delete Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "connection reset",
@@ -271,7 +269,7 @@ describe("Wave 1A UI idempotency wiring", () => {
 
     render(<AgentOverview agentId="agent-id" />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Delete Agent" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy(),
     );
     expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Unarchive" })).toBeNull();
@@ -300,13 +298,9 @@ describe("Wave 1A UI idempotency wiring", () => {
 
     render(<AgentOverview agentId="agent-id" />);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Create next version" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "New" })).toBeTruthy(),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create next version" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "connection reset",
@@ -348,10 +342,8 @@ describe("Wave 1A UI idempotency wiring", () => {
     useSessionMock.mockReturnValue({ api });
 
     render(<AgentWorkbench versionId="version-id" />);
-    await waitFor(() =>
-      expect(screen.getByLabelText("Upload Markdown")).toBeTruthy(),
-    );
-    const fileInput = screen.getByLabelText("Upload Markdown");
+    await waitFor(() => expect(screen.getByLabelText("Upload")).toBeTruthy());
+    const fileInput = screen.getByLabelText("Upload");
     fireEvent.change(fileInput, {
       target: { files: [new File(["# one"], "one.md")] },
     });

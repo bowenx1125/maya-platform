@@ -121,9 +121,7 @@ describe("G2 session and draft recovery paths", () => {
 
     const refresh = vi.fn();
     render(<DraftConflictNotice onRefresh={refresh} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Refresh server revision" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("alert").textContent).toContain("local AGENT.md");
   });

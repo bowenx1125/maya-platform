@@ -272,7 +272,6 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
       </SectionCard>
       {editing ? (
         <SectionCard title={t("knowledgeEditTitle")}>
-          <p className="muted-copy">{t("knowledgeEditDownload")}</p>
           <MarkdownEditor
             document={editing}
             initialContent={editingContent}
@@ -285,10 +284,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
           />
         </SectionCard>
       ) : null}
-      <SectionCard
-        title={`${documents.length} ${t("fileCount")}`}
-        description={t("draftEnableLede")}
-      >
+      <SectionCard title={`${documents.length} ${t("fileCount")}`}>
         {documents.length === 0 ? (
           <EmptyCard title={t("knowledgeNoFiles")} />
         ) : (

@@ -1,0 +1,419 @@
+/* Student and account workspaces share the teacher's paper/card hierarchy. */
+.surface {
+  --workspace-content: #fbf4e5;
+  --workspace-selected: #b59859;
+  --workspace-label: #655332;
+  --workspace-border: #e5d8bf;
+  --workspace-divider: #e4d5b7;
+  --surface-subtle: var(--workspace-content);
+  --surface: #fff;
+  --accent: #b59859;
+  display: grid;
+  align-content: start;
+  gap: var(--workspace-gap);
+  min-width: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.surface > *,
+.surface :global(.workspace-grid),
+.surface :global(.overview-grid),
+.surface :global(.workbench-grid),
+.surface :global(.section-card) {
+  margin-bottom: 0;
+}
+
+.surface :global(.page-intro) {
+  margin: 0;
+  align-items: center;
+  gap: var(--section-content-gap);
+}
+
+.surface :global(.page-intro) h1 {
+  margin: 8px 0 0;
+  font-weight: 760;
+  letter-spacing: -0.045em;
+}
+
+.surface :global(.page-intro) p {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.surface :global(.section-card) {
+  background: #fff;
+  padding: var(--workspace-inset);
+}
+
+.surface :global(.section-card-header) {
+  align-items: center;
+  margin: 0 0 var(--section-content-gap);
+  padding-bottom: var(--section-content-gap);
+  border-bottom: 1px solid var(--workspace-divider);
+}
+
+.surface :global(.section-card-header) h2 {
+  margin: 0;
+  font-size: 1.24rem;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+
+.surface :global(.section-card-header) p {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+}
+
+.surface :global(.workspace-grid),
+.surface :global(.overview-grid),
+.surface :global(.workbench-grid) {
+  gap: var(--workspace-gap);
+  align-items: start;
+}
+
+.surface :global(.workbench-main),
+.surface :global(.workbench-side),
+.surface :global(.account-layout) {
+  display: grid;
+  gap: var(--workspace-gap);
+  min-width: 0;
+}
+
+.surface :global(.workbench-grid) {
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+}
+
+.surface :global(.compact-list),
+.surface :global(.agent-list),
+.surface :global(.document-list),
+.surface :global(.version-list),
+.surface :global(.snapshot-files) {
+  gap: 12px;
+}
+
+.surface :global(.list-row),
+.surface :global(.agent-row),
+.surface :global(.document-row),
+.surface :global(.version-summary),
+.surface :global(.snapshot-file),
+.surface :global(.member-chip) {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  background: var(--workspace-content);
+  box-shadow: none;
+}
+
+.surface :global(a.list-row):hover,
+.surface :global(a.agent-row):hover {
+  background: #f7ecd6;
+  border-color: #cbb588;
+}
+
+.surface :global(.list-row) strong,
+.surface :global(.agent-row) strong,
+.surface :global(.document-main) strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.surface :global(.list-row) small,
+.surface :global(.document-main) small {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.surface :global(.status-badge),
+.surface :global(.current-label),
+.surface :global(.dirty-label) {
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.surface :global(.button-row),
+.surface :global(.row-actions) {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.surface :global(.primary-action),
+.surface :global(.secondary-action),
+.surface :global(.inline-button),
+.surface :global(.text-link) {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #655332;
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.surface :global(.primary-action) {
+  background: var(--gold-soft);
+  color: #58431d;
+}
+
+.surface :global(.danger-button) {
+  color: var(--red);
+}
+
+.surface :global(.primary-action):hover:not(:disabled),
+.surface :global(.secondary-action):hover:not(:disabled),
+.surface :global(.inline-button):hover:not(:disabled),
+.surface :global(.text-link):hover {
+  background: rgba(196, 164, 104, 0.16);
+  color: #382d19;
+  transform: translateY(-1px);
+}
+
+.surface :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid #b59859;
+  outline-offset: 3px;
+}
+
+.surface :is(button, input, select, textarea):disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.surface :global(.stack-form) {
+  gap: var(--section-content-gap);
+}
+
+.surface :global(.stack-form) label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.surface :global(.wide-form) {
+  max-width: none;
+}
+
+.surface
+  :global(.stack-form)
+  :is(input:not([type="checkbox"]):not([type="file"]), select, textarea),
+.surface :global(.chat-form) input {
+  min-width: 0;
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.surface :global(.markdown-editor),
+.surface :global(.read-only-markdown),
+.surface :global(.rag-preview),
+.surface :global(.snapshot-preview) {
+  padding: 16px;
+  border-color: var(--workspace-border);
+  background: var(--workspace-content);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.surface :global(.stat-row),
+.surface :global(.rag-metrics) {
+  gap: 10px;
+  margin: 0 0 var(--section-content-gap);
+}
+
+.surface :global(.stat-row) > div,
+.surface :global(.rag-metrics) > div {
+  padding: 12px 16px;
+  border: 1px solid var(--workspace-border);
+  background: var(--workspace-content);
+}
+
+.surface :global(.stat-row) strong {
+  font-size: 1.24rem;
+  line-height: 1.4;
+  font-weight: 650;
+}
+
+.surface :global(.avatar-orb) {
+  border-color: var(--workspace-border);
+  background: #f6ecd3;
+  color: #79623d;
+  border-radius: 12px;
+}
+
+.surface :global(.workbench-meta) {
+  margin: 0;
+  font-weight: 500;
+}
+
+.surface :global(.empty-card) {
+  padding: 24px;
+  background: var(--workspace-content);
+  border: 1px solid var(--workspace-border);
+  box-shadow: none;
+}
+
+.surface :global(.empty-mark) {
+  background: var(--gold-soft);
+  color: #8a6a1f;
+}
+
+.surface :global(.account-row) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.surface :global(.account-row) > :global(.button-row) {
+  justify-content: flex-end;
+  padding-left: 12px;
+  border-left: 1px solid var(--workspace-divider);
+}
+
+.surface :global(.account-edit) {
+  grid-column: 1 / -1;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.surface :global(.account-edit) > :global(.button-row) {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.surface :global(.account-meta) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--muted);
+}
+
+.surface :global(.group-label) {
+  color: #796f5e;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.surface :global(.student-agent-entry) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.surface :global(.description-edit-trigger) {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--workspace-border);
+  background: var(--workspace-content);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .surface :global(.workbench-grid),
+  .surface :global(.workspace-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .surface {
+    --workspace-inset: 18px;
+  }
+  .surface :global(.page-intro) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .surface :global(.page-intro-action) {
+    width: 100%;
+  }
+  .surface :global(.account-row),
+  .surface :global(.account-edit),
+  .surface :global(.student-agent-entry) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .surface :global(.account-row) > :global(.button-row) {
+    justify-content: flex-start;
+    padding: 10px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--workspace-divider);
+  }
+  .surface :global(.stat-row) > div {
+    padding: 10px 8px;
+  }
+  .surface :global(.document-row),
+  .surface :global(.version-summary) {
+    flex-wrap: wrap;
+  }
+  .surface :global(.document-main) {
+    flex-basis: 60%;
+  }
+  .surface :global(.row-actions) {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface :is(a, button) {
+    transition: none;
+    transform: none;
+  }
+}
+
+.surface :global(.agent-row-link) {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  text-decoration: none;
+}
+.surface :global(.student-agent-entry) > :global(.description-edit-trigger) {
+  padding: 0 0 0 16px;
+  border: 0;
+  border-left: 1px solid var(--workspace-divider);
+  border-radius: 0;
+  background: transparent;
+}
+@media (max-width: 600px) {
+  .surface :global(.student-agent-entry) > :global(.description-edit-trigger) {
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--workspace-divider);
+  }
+}
+
+.surface :global(.rendered-persona) {
+  white-space: normal;
+}
+
+.surface :global(.check-item) strong {
+  text-transform: none;
+}

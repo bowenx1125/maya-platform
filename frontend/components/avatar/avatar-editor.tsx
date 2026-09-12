@@ -109,11 +109,6 @@ export function AvatarEditor({
                 <span className={styles.templateName}>
                   {avatarTemplateLabel(template.id, template.name, locale)}
                 </span>
-                <span className={styles.templateMeta}>
-                  {t("avatarTemplateControls", {
-                    count: template.supported_parameters.length,
-                  })}
-                </span>
               </button>
             ))}
           </div>
@@ -236,12 +231,11 @@ export function AvatarEditor({
           </div>
         </div>
       </div>
-      <p
-        className={`${styles.message}${errorMessage ? ` ${styles.error}` : ""}`}
-        role={errorMessage ? "alert" : undefined}
-      >
-        {errorMessage ?? t("avatarGuidance")}
-      </p>
+      {errorMessage ? (
+        <p className={`${styles.message} ${styles.error}`} role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -17,9 +17,7 @@ describe("MarkdownEditor", () => {
     render(<MarkdownEditor onCreate={onCreate} />);
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /Add to library/ }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: /^Add$/ })).toBeTruthy(),
     );
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "lesson.md" },
@@ -30,7 +28,7 @@ describe("MarkdownEditor", () => {
         target: { value: "# Lesson\n\nShared evidence." },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Add to library/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
 
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
     const file = onCreate.mock.calls[0][0] as File;
@@ -61,9 +59,7 @@ describe("MarkdownEditor", () => {
     );
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /Save replacement/ }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: /^Save$/ })).toBeTruthy(),
     );
     fireEvent.change(
       screen.getByRole("textbox", { name: /Markdown content/ }),
@@ -71,7 +67,7 @@ describe("MarkdownEditor", () => {
         target: { value: "# New\n\nReplacement" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Save replacement/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
 
     await waitFor(() => expect(onReplace).toHaveBeenCalledTimes(1));
     const request = onReplace.mock.calls[0][0];

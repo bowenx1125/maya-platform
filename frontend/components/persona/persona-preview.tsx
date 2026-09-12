@@ -277,18 +277,13 @@ export function PersonaPreview({
     <section className="section-card" data-testid="persona-preview">
       <div className="section-card-header">
         <div>
-          <h2>Structured Persona</h2>
-          <p>
-            A deterministic preview of what the confirmed AGENT.md teaches. It
-            cannot alter evidence identity, platform rules, order, permissions,
-            or the output schema.
-          </p>
+          <h2>Persona</h2>
         </div>
         <div className={styles.statusRow}>
           <span
             className={`${styles.status} ${confirmed ? styles.statusConfirmed : spec ? styles.statusReady : styles.statusPending}`}
           >
-            {confirmed ? "Confirmed" : spec ? "Preview ready" : "Needs compile"}
+            {confirmed ? "Confirmed" : spec ? "Ready" : "Pending"}
           </span>
           {onConfirm && spec && !confirmed ? (
             <button
@@ -296,7 +291,7 @@ export function PersonaPreview({
               type="button"
               onClick={onConfirm}
             >
-              Confirm Persona
+              Confirm
             </button>
           ) : onCompile && !spec ? (
             <button
@@ -304,7 +299,7 @@ export function PersonaPreview({
               type="button"
               onClick={onCompile}
             >
-              Compile Persona
+              Compile
             </button>
           ) : null}
         </div>
@@ -381,27 +376,11 @@ export function PersonaPreview({
             </div>
           ) : null}
           {mockPair ? <MockResponsePair pair={mockPair} /> : null}
-          <div className={styles.immutable}>
-            <strong>Does not change</strong>
-            <span>KnowledgeSnapshot and evidence IDs</span>
-            <span>Debate rules, participant order, and permissions</span>
-            <span>Structured output and safety validation</span>
-          </div>
         </>
-      ) : (
-        <div className={styles.pending}>
-          <strong>
-            Compile the exact authored template to preview its meaning.
-          </strong>
-          <span>
-            The raw AGENT.md remains the source of authorship; no default
-            Persona or legacy fallback is inferred.
-          </span>
-        </div>
-      )}
+      ) : null}
       {rawAgentMd.trim() ? (
         <details className={styles.sourceDetails}>
-          <summary>Authored AGENT.md</summary>
+          <summary>Source</summary>
           <pre>{rawAgentMd}</pre>
         </details>
       ) : null}
@@ -414,10 +393,6 @@ function MockResponsePair({ pair }: { pair: MockPersonaResponsePair }) {
     <div className={styles.mockPair} data-testid="persona-mock-response-pair">
       <div className={styles.mockPairHeader}>
         <h3>Same-input Mock response pair</h3>
-        <span>
-          Topic, stance, seed, evidence IDs, RuleSet and output schema are
-          fixed; only Persona teaching dimensions vary.
-        </span>
       </div>
       <div className={styles.mockPairInput}>
         <span>Input</span>

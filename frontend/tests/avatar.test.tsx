@@ -105,15 +105,11 @@ describe("M07 avatar editor boundary", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("radio", { name: /Wave 1 Default Head/i }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("radio", { name: /Maya Warm Scholar/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Default/i })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Scholar/i })).toBeTruthy();
     expect(screen.queryByRole("radio", { name: /Unavailable/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("radio", { name: /Maya Warm Scholar/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Scholar/i }));
     expect(onChange).toHaveBeenLastCalledWith({
       template_id: "maya-warm-scholar",
       material_theme: "warm_sand",
@@ -123,9 +119,7 @@ describe("M07 avatar editor boundary", () => {
       motion_style: "calm",
     });
 
-    fireEvent.click(
-      screen.getByRole("radio", { name: /Maya Civic Observer/i }),
-    );
+    fireEvent.click(screen.getByRole("radio", { name: /Observer/i }));
     expect(onChange).toHaveBeenLastCalledWith({
       template_id: "maya-civic-observer",
       material_theme: "civic_olive",
@@ -244,7 +238,7 @@ describe("M07 avatar editor boundary", () => {
     expect(
       screen.getByRole("img", { name: /Avatar avatar preview/i }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "nod yes" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Nod" })).toBeTruthy();
   });
 });
 

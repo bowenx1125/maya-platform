@@ -140,7 +140,7 @@ describe("teacher account management", () => {
 
     const nameField = screen.getByLabelText("Display name");
     fireEvent.change(nameField, { target: { value: "Ada Lovelace" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(api.updateCourseMember).toHaveBeenCalledWith(courseId, studentId, {

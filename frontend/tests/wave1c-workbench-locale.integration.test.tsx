@@ -223,15 +223,13 @@ describe("Wave 1C real workbench locale boundary", () => {
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Publish version" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
     );
     const editor = screen.getByLabelText("AGENT.md editor");
     fireEvent.change(editor, { target: { value: "# Local Agent" } });
 
     const publishButton = screen.getByRole("button", {
-      name: "Publish version",
+      name: "Publish",
     });
     expect((publishButton as HTMLButtonElement).disabled).toBe(true);
     expect(
@@ -253,7 +251,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       ).toBeTruthy(),
     );
     fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
-    fireEvent.click(screen.getByRole("button", { name: "插入参考大纲" }));
+    fireEvent.click(screen.getByRole("button", { name: "模板" }));
 
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
@@ -281,9 +279,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     });
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Publish version" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
     );
     const countsBefore = {
       me: api.me.mock.calls.length,
@@ -306,7 +302,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Local while uploading" },
     });
-    const uploadInput = screen.getByLabelText("Upload Markdown");
+    const uploadInput = screen.getByLabelText("Upload");
     fireEvent.change(uploadInput, { target: { files: [firstUploadFile] } });
     await waitFor(() =>
       expect(screen.getByText("connection reset")).toBeTruthy(),
@@ -363,14 +359,12 @@ describe("Wave 1C real workbench locale boundary", () => {
     });
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Publish version" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
     );
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Conflict stays local" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "Your local AGENT.md",

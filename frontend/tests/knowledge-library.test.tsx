@@ -71,9 +71,7 @@ describe("KnowledgeLibrary integration", () => {
     });
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /Add to library/ }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: /^Add$/ })).toBeTruthy(),
     );
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "shared.md" },
@@ -84,7 +82,7 @@ describe("KnowledgeLibrary integration", () => {
         target: { value: "# Shared evidence" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Add to library/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
 
     await waitFor(() =>
       expect(createLibraryKnowledge).toHaveBeenCalledTimes(1),
@@ -96,10 +94,10 @@ describe("KnowledgeLibrary integration", () => {
     await waitFor(() => expect(screen.getByText("shared.md")).toBeTruthy());
     expect(
       screen.getByRole("heading", {
-        name: "Add Markdown to the group library",
+        name: "New",
       }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Add to library/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Add$/ })).toBeTruthy();
   });
 
   it("downloads the original before editing and submits document CAS values", async () => {
@@ -139,7 +137,7 @@ describe("KnowledgeLibrary integration", () => {
       target: { value: "updated.md" },
     });
     fireEvent.change(editContent, { target: { value: "# Updated" } });
-    fireEvent.click(screen.getByRole("button", { name: /Save replacement/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
 
     await waitFor(() =>
       expect(replaceKnowledgeDocument).toHaveBeenCalledTimes(1),
@@ -192,7 +190,7 @@ describe("KnowledgeLibrary integration", () => {
         target: { value: "# Changed" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Save replacement/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
 
     await waitFor(() => expect(knowledge).toHaveBeenCalledTimes(2));
     expect(screen.getByText(/source changed elsewhere/i)).toBeTruthy();
@@ -217,7 +215,7 @@ describe("KnowledgeLibrary integration", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /添加到资料库/ })).toBeTruthy(),
     );
-    expect(screen.queryByRole("button", { name: /Add to library/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add$/ })).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "error.md" },
     });

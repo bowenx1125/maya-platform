@@ -59,7 +59,7 @@ describe("Wave 4 structured Persona student preview", () => {
     );
   });
 
-  it("shows structured fields, canonical impact boundaries and previous-version diff", () => {
+  it("shows structured fields and version diff without explanatory boilerplate", () => {
     render(
       <PersonaPreview
         rawAgentMd="# River Keeper"
@@ -71,10 +71,10 @@ describe("Wave 4 structured Persona student preview", () => {
     expect(screen.getByTestId("persona-preview")).toBeTruthy();
     expect(screen.getByText("Confirmed")).toBeTruthy();
     expect(screen.getByText("Direct")).toBeTruthy();
-    expect(screen.getByText(/KnowledgeSnapshot and evidence IDs/)).toBeTruthy();
+    expect(screen.queryByText(/KnowledgeSnapshot and evidence IDs/)).toBeNull();
     expect(screen.getAllByText(/Tone/)).not.toHaveLength(0);
     expect(screen.getByText(/Calm → Direct/)).toBeTruthy();
-    expect(screen.getByText("Authored AGENT.md")).toBeTruthy();
+    expect(screen.getByText("Source")).toBeTruthy();
     expect(screen.getByTestId("persona-mock-response-pair")).toBeTruthy();
     expect(screen.getByText("Same-input Mock response pair")).toBeTruthy();
     expect(screen.getAllByText(/evidence: none/)).not.toHaveLength(0);
@@ -97,10 +97,10 @@ describe("Wave 4 structured Persona student preview", () => {
 
   it("keeps an uncompiled draft explicit and never invents a default Persona", () => {
     render(<PersonaPreview rawAgentMd="# River Keeper" />);
-    expect(screen.getByText("Needs compile")).toBeTruthy();
+    expect(screen.getByText("Pending")).toBeTruthy();
     expect(
       screen.getByText(/no default Persona or legacy fallback/),
     ).toBeTruthy();
-    expect(screen.getByText("Authored AGENT.md")).toBeTruthy();
+    expect(screen.getByText("Source")).toBeTruthy();
   });
 });

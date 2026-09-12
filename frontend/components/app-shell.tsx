@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
+import workspaceStyles from "./workspace-theme.module.css";
+
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
 
@@ -112,7 +114,11 @@ export function AppShell({
           </button>
         </div>
       </header>
-      <main className="app-main">{children}</main>
+      <main
+        className={`app-main ${isStudent || pathname === "/teacher/roster" ? workspaceStyles.surface : ""}`}
+      >
+        {children}
+      </main>
     </div>
   );
 }

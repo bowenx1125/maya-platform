@@ -186,14 +186,15 @@ export function RosterWorkspace() {
   }
 
   return (
-    <>
+    <div className="account-layout">
       <PageIntro
         eyebrow={t("accountsEyebrow")}
-        title={course?.name ?? t("accounts")}
+        title={t("accounts")}
+        description={course?.name}
       />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
-      <SectionCard title={t("accounts")}>
+      <SectionCard title={`${t("members")} · ${entries.length}`}>
         {entries.length === 0 ? (
           <EmptyCard title={t("rosterEmpty")} />
         ) : (
@@ -202,9 +203,9 @@ export function RosterWorkspace() {
               const pending = busy === entry.user_id;
               if (editing === entry.user_id) {
                 return (
-                  <div className="list-row" key={entry.user_id}>
+                  <div className="list-row account-row" key={entry.user_id}>
                     <form
-                      className="stack-form"
+                      className="stack-form account-edit"
                       onSubmit={(event) => {
                         event.preventDefault();
                         void mutate(entry, {
@@ -265,7 +266,7 @@ export function RosterWorkspace() {
                 );
               }
               return (
-                <div className="list-row" key={entry.user_id}>
+                <div className="list-row account-row" key={entry.user_id}>
                   <span>
                     <span className="roster-headline">
                       <strong>{entry.display_name}</strong>
@@ -274,18 +275,18 @@ export function RosterWorkspace() {
                         tone={entry.status === "active" ? "good" : "neutral"}
                       />
                     </span>
-                    <small>
-                      {entry.username} · {roleLabel(entry.role, locale)} ·{" "}
-                      {t(sourceKey(entry.source))}
-                    </small>
-                    <small>{groupSummary(entry)}</small>
+                    <span className="account-meta">
+                      <small>{entry.username}</small>
+                      <small>{roleLabel(entry.role, locale)}</small>
+                      <small>{t(sourceKey(entry.source))}</small>
+                    </span>
+                    <span className="group-label">{groupSummary(entry)}</span>
                     {issued && issued.user_id === entry.user_id ? (
                       <small role="status">
                         {t("resetPasswordIssued", {
                           username: issued.username,
                         })}
                         : <code>{issued.password}</code>{" "}
-                        {t("resetPasswordHint")}
                       </small>
                     ) : null}
                   </span>
@@ -348,7 +349,7 @@ export function RosterWorkspace() {
         )}
       </SectionCard>
 
-      <SectionCard title={t("groups")}>
+      <SectionCard title={`${t("groups")} · ${groups.length}`}>
         {groups.length === 0 ? (
           <EmptyCard title={t("rosterNoGroup")} />
         ) : (
@@ -356,7 +357,7 @@ export function RosterWorkspace() {
             {groups.map((group) => {
               const joined = ownGroupIds.has(group.id);
               return (
-                <div className="list-row" key={group.id}>
+                <div className="list-row account-row" key={group.id}>
                   <span>
                     <strong>{group.name}</strong>
                   </span>
@@ -386,6 +387,6 @@ export function RosterWorkspace() {
           </div>
         )}
       </SectionCard>
-    </>
+    </div>
   );
 }

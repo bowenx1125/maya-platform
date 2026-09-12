@@ -166,14 +166,10 @@ export function MarkdownEditor({
           value={content}
           disabled={disabled || submitting}
           onChange={(event) => setContent(event.target.value)}
-          placeholder={t("knowledgeContentPlaceholder")}
           aria-label={t("knowledgeContent")}
           rows={10}
         />
       </label>
-      <p className="muted-copy">
-        {replacing ? t("knowledgeEditNote") : t("knowledgeCreateNote")}
-      </p>
       {error ? (
         <div className="notice notice-error" role="alert">
           {error}

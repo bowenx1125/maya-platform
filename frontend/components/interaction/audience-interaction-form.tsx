@@ -197,9 +197,6 @@ export function AudienceInteractionForm({
         <section className={styles.audienceCard}>
           <span className={styles.eyebrow}>{t("appName")}</span>
           <h1>{t("audienceSubmitted")}</h1>
-          <p className={styles.success} role="status">
-            {t("audienceSubmittedHint")}
-          </p>
         </section>
       </main>
     );
@@ -283,7 +280,6 @@ export function AudienceInteractionForm({
           <input
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
-            placeholder={t("audienceNicknamePlaceholder")}
             autoComplete="nickname"
             disabled={barragePayload !== null}
           />
@@ -298,7 +294,7 @@ export function AudienceInteractionForm({
                   <strong>{t("audienceVoteSubmitted")}</strong>
                 ) : null}
               </div>
-              <p>{t("audienceVoteQuestion")}</p>
+
               <div className={styles.participantChoices}>
                 {form.participants.map((participant) => (
                   <label
@@ -367,7 +363,6 @@ export function AudienceInteractionForm({
                   }
                 }}
                 maxLength={turnBound ? 300 : undefined}
-                placeholder={t("audienceBarragePlaceholder")}
                 rows={5}
                 disabled={
                   !canInteract ||
@@ -402,9 +397,7 @@ export function AudienceInteractionForm({
           </div>
         ) : null}
 
-        {!canInteract ? (
-          <p className={styles.helper}>{t("audienceEnterNickname")}</p>
-        ) : null}
+        {!canInteract ? null : null}
       </section>
     </main>
   );

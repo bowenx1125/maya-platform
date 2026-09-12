@@ -1,15 +1,15 @@
 .voicePanel {
   display: grid;
-  gap: 1rem;
+  gap: var(--workspace-gap);
 }
 
 .uploadCard {
   display: grid;
   gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid var(--line, #ded7c8);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--surface, #fffdf8) 90%, #efe6d5);
+  padding: 16px;
+  border: 1px solid var(--workspace-border, #e5d8bf);
+  border-radius: 14px;
+  background: var(--workspace-content, #fbf4e5);
 }
 
 .fileInput {
@@ -18,14 +18,14 @@
   padding: 0.5rem;
   border: 1px dashed var(--line, #ded7c8);
   border-radius: 0.65rem;
-  background: var(--surface, #fffdf8);
+  background: #fff;
 }
 
 .consent {
   display: flex;
   gap: 0.55rem;
   align-items: flex-start;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   line-height: 1.45;
 }
 
@@ -38,16 +38,16 @@
 
 .profileList {
   display: grid;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .profile {
   display: grid;
   gap: 0.7rem;
-  padding: 1rem;
-  border: 1px solid var(--line, #ded7c8);
-  border-radius: 0.85rem;
-  background: var(--surface, #fffdf8);
+  padding: 16px;
+  border: 1px solid var(--workspace-border, #e5d8bf);
+  border-radius: 14px;
+  background: var(--workspace-content, #fbf4e5);
 }
 
 .profileHeader {
@@ -79,7 +79,7 @@
 .hint {
   margin: 0;
   color: var(--muted, #6e6a64);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   line-height: 1.5;
 }
 
@@ -88,4 +88,26 @@
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.fileInput::file-selector-button {
+  margin-right: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--gold-soft);
+  color: #655332;
+  font: inherit;
+  cursor: pointer;
+}
+.profileName {
+  font-size: 0.9rem;
+}
+.actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--workspace-divider, #e4d5b7);
+}
+
+.uploadCard > :global(.primary-action) {
+  justify-self: start;
 }

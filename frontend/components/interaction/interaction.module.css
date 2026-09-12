@@ -415,3 +415,59 @@
     transform: none;
   }
 }
+
+/* The QR audience surface uses the same paper hierarchy as the workspaces. */
+.audienceCard {
+  padding: 24px;
+  border-radius: 22px;
+  background: #fff;
+  gap: var(--workspace-gap);
+}
+.audienceCard h1 {
+  margin: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4d5b7;
+  font-weight: 760;
+  line-height: 1.4;
+}
+.audienceCard .audienceSection {
+  padding: 16px;
+  border-color: #e5d8bf;
+  border-radius: 14px;
+  background: #fbf4e5;
+}
+.audienceCard .sectionHeading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e4d5b7;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.audienceCard .primaryButton,
+.audienceCard .secondaryButton {
+  border: 0;
+  border-radius: 6px;
+  background: var(--gold-soft);
+  color: #655332;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+.audienceCard .field {
+  font-weight: 600;
+}
+.audienceCard :is(input, textarea):focus-visible {
+  border-color: #b59859;
+  outline: 2px solid #b59859;
+  outline-offset: 2px;
+}
+.audienceCard .choice {
+  border-color: #e5d8bf;
+}
+.audienceCard .choice input {
+  accent-color: #b59859;
+}
+@media (max-width: 600px) {
+  .audienceCard {
+    padding: 18px;
+  }
+}

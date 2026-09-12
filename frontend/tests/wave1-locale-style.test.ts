@@ -6,8 +6,8 @@ import { statusLabel, t } from "../lib/i18n";
 
 describe("Wave 1A locale and V2 style boundary", () => {
   it("keeps English-first copy translatable without changing business state", () => {
-    expect(t("publish", "en")).toBe("Publish version");
-    expect(t("publish", "zh")).toBe("发布版本");
+    expect(t("publish", "en")).toBe("Publish");
+    expect(t("publish", "zh")).toBe("发布");
     expect(statusLabel("stale_revision", "en")).toBe("stale revision");
     expect(statusLabel("stale_revision", "zh")).toBe("stale revision");
     expect(statusLabel("published", "zh")).toBe("已发布");

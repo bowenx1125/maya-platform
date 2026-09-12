@@ -130,16 +130,14 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
       screen.queryByText("Define an identity and evidence set."),
     ).toBeNull();
     expect(
-      screen
-        .getByRole("link", { name: "Return to workspace" })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: "Back" }).getAttribute("href"),
     ).toBe(`/student/groups/${groupId}`);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "A current perspective" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(api.updateAgentMetadata).toHaveBeenCalledWith(agentId, {
@@ -161,12 +159,12 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     });
 
     vi.mocked(window.confirm).mockReturnValueOnce(false);
-    fireEvent.click(screen.getByRole("link", { name: "Return to workspace" }));
+    fireEvent.click(screen.getByRole("link", { name: "Back" }));
     expect(window.confirm).toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(api.deleteAgent).toHaveBeenCalledWith(agentId, expect.anything()),
     );
@@ -198,7 +196,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "Local draft" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.agent).toHaveBeenCalled());
     expect(
@@ -210,7 +208,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     ).toBe("Local draft");
     expect(screen.getByText(/description changed elsewhere/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(api.updateAgentMetadata).toHaveBeenLastCalledWith(agentId, {
         expected_metadata_revision: 1,
@@ -257,7 +255,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "Row description" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(groupApi.updateAgentMetadata).toHaveBeenCalledWith(agentId, {
         expected_metadata_revision: 0,
@@ -315,7 +313,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "Local row draft" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(groupApi.agent).toHaveBeenCalledWith(agentId));
     expect(
       (
@@ -328,7 +326,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
       screen.getByLabelText("Current Agent metadata").textContent,
     ).toContain("Authoritative server value");
 
-    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(groupApi.updateAgentMetadata).toHaveBeenLastCalledWith(agentId, {
         expected_metadata_revision: 1,
@@ -347,7 +345,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     expect(screen.queryByText("暂无简介")).toBeNull();
     expect(screen.getByRole("button", { name: "编辑简介" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "编辑简介" }));
-    expect(screen.getByRole("button", { name: "保存简介" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "保存" })).toBeTruthy();
   });
 
   it("does not restore the removed description on the teacher detail page", async () => {

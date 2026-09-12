@@ -225,14 +225,14 @@ describe("M13 anonymous audience form", () => {
     );
     render(<AudienceInteractionForm accessToken="token" api={api} />);
     await screen.findByRole("heading", { name: form.topic });
-    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+    fireEvent.change(screen.getByLabelText("Nickname"), {
       target: { value: "Learner" },
     });
     fireEvent.change(
       screen.getByPlaceholderText("Share a thought or question"),
       { target: { value: "How does the source support this?" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Send barrage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("Round 2");
     expect(
       (
@@ -241,7 +241,7 @@ describe("M13 anonymous audience form", () => {
         ) as HTMLTextAreaElement
       ).value,
     ).toBe("How does the source support this?");
-    fireEvent.click(screen.getByRole("button", { name: "Send barrage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(2));
     const calls = vi.mocked(api.submitBarrage).mock.calls;
     expect(calls[0][1].turn_id).toBe("turn-old");
@@ -261,7 +261,7 @@ describe("M13 anonymous audience form", () => {
     vi.mocked(api.getForm).mockResolvedValue(form);
     render(<AudienceInteractionForm accessToken="token" api={api} />);
     await screen.findByRole("heading", { name: form.topic });
-    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+    fireEvent.change(screen.getByLabelText("Nickname"), {
       target: { value: "Learner" },
     });
     for (const message of ["First question", "Another question"]) {
@@ -269,7 +269,7 @@ describe("M13 anonymous audience form", () => {
         screen.getByPlaceholderText("Share a thought or question"),
         { target: { value: message } },
       );
-      fireEvent.click(screen.getByRole("button", { name: "Send barrage" }));
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
       await waitFor(() =>
         expect(
           (
@@ -291,7 +291,7 @@ describe("M13 anonymous audience form", () => {
     cleanup();
     render(<AudienceInteractionForm accessToken="token" api={api} />);
     await act(async () => {});
-    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+    fireEvent.change(screen.getByLabelText("Nickname"), {
       target: { value: "Learner" },
     });
     vi.mocked(api.getForm).mockRejectedValueOnce(new Error("offline"));
@@ -340,14 +340,14 @@ describe("M13 anonymous audience form", () => {
       name: "Should classrooms use anonymous questions?",
     });
 
-    fireEvent.change(screen.getByLabelText("弹幕昵称"), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "同学" },
     });
-    expect(screen.getByLabelText("弹幕昵称")).toBeTruthy();
+    expect(screen.getByLabelText("昵称")).toBeTruthy();
     expect(screen.getByText("投票")).toBeTruthy();
     expect(screen.getByText("弹幕")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "提交匿名投票" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "发送弹幕" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "投票" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
     expect(screen.queryByText("Vote / 投票")).toBeNull();
     expect(screen.queryByText("Barrage / 弹幕")).toBeNull();
   });
@@ -359,12 +359,12 @@ describe("M13 anonymous audience form", () => {
       name: "Should classrooms use anonymous questions?",
     });
 
-    const nickname = screen.getByLabelText("Nickname for barrages");
+    const nickname = screen.getByLabelText("Nickname");
     fireEvent.change(nickname, { target: { value: "Class 1" } });
     const voteButton = screen.getByRole("button", {
-      name: /Submit anonymous vote/,
+      name: /^Vote$/,
     });
-    const barrageButton = screen.getByRole("button", { name: /Send barrage/ });
+    const barrageButton = screen.getByRole("button", { name: /^Send$/ });
     expect((voteButton as HTMLButtonElement).disabled).toBe(false);
     expect((barrageButton as HTMLButtonElement).disabled).toBe(true);
 
@@ -379,7 +379,7 @@ describe("M13 anonymous audience form", () => {
         target: { value: "A useful question" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Send barrage/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/ }));
     await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(1));
     expect(api.submitBarrage).toHaveBeenCalledWith(
       "token",
@@ -390,7 +390,7 @@ describe("M13 anonymous audience form", () => {
     );
     expect(
       screen.getByRole("heading", {
-        name: "Submitted successfully",
+        name: "Submitted",
       }),
     ).toBeTruthy();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
@@ -405,12 +405,12 @@ describe("M13 anonymous audience form", () => {
     await screen.findByRole("heading", {
       name: "Should classrooms use anonymous questions?",
     });
-    fireEvent.change(screen.getByLabelText("Nickname for barrages"), {
+    fireEvent.change(screen.getByLabelText("Nickname"), {
       target: { value: "Retry learner" },
     });
 
     const voteButton = screen.getByRole("button", {
-      name: /Submit anonymous vote/,
+      name: /^Vote$/,
     });
     fireEvent.click(voteButton);
     await screen.findByText("connection reset");

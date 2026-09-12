@@ -144,10 +144,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
 
   return (
     <div className={styles.voicePanel}>
-      <PageIntro
-        eyebrow={t("voiceProfilesEyebrow")}
-        title={t("voiceProfilesTitle")}
-      />
+      <PageIntro eyebrow={t("voiceProfilesEyebrow")} title={t("voices")} />
       {error ? (
         <ErrorNotice error={error} onRetry={() => setError(null)} />
       ) : null}
@@ -166,13 +163,14 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
             aria-label={t("voiceSampleFile")}
           />
           {file ? <p className={styles.hint}>{file.name}</p> : null}
-          <label className={styles.consent}>
+          <label className={styles.consent} title={t("voiceConsent")}>
             <input
               type="checkbox"
+              aria-label={t("voiceConsent")}
               checked={consent}
               onChange={(event) => setConsent(event.target.checked)}
             />
-            <span>{t("voiceConsent")}</span>
+            <span>{t("voiceConsentLabel")}</span>
           </label>
           <button
             className="primary-action"
@@ -197,11 +195,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
                   </span>
                   <StatusBadge status={profile.status} />
                 </div>
-                <p className={styles.hint}>
-                  {profile.status === "ready"
-                    ? t("voiceReadyDescription")
-                    : t("voicePreviewDescription")}
-                </p>
                 {preview[profile.id] ? (
                   <audio
                     className={styles.audio}
@@ -248,9 +241,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
           </div>
         )}
       </SectionCard>
-      <p className={styles.hint}>
-        {t("platformVoiceFallback")} · {t("voiceFallbackHint")}
-      </p>
     </div>
   );
 }
