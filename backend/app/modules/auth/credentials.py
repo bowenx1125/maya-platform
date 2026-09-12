@@ -28,6 +28,7 @@ import yaml
 from pwdlib import PasswordHash
 
 from app.core.config import Settings
+from app.core.identity import username_key
 
 # This is the frozen Wave 0 seed namespace. Keeping the canonical account
 # keys equal to the existing seed keys means the first private catalog sync
@@ -337,7 +338,7 @@ def parse_accounts_markdown(source: str) -> DesiredAccountGraph:
         group_value = values.get("group", "").strip()
         if not _ACCOUNT_KEY_RE.fullmatch(key):
             raise CredentialFileError("demo account catalog is malformed")
-        if key in seen_keys or username.casefold() in seen_usernames:
+        if key in seen_keys or username_key(username) in seen_usernames:
             raise CredentialFileError("demo account catalog is malformed")
         if role_value not in {"teacher", "student"}:
             raise CredentialFileError("demo account catalog is malformed")
@@ -348,7 +349,7 @@ def parse_accounts_markdown(source: str) -> DesiredAccountGraph:
         if role_value == "student" and not group_value:
             raise CredentialFileError("demo account catalog is malformed")
         seen_keys.add(key)
-        seen_usernames.add(username.casefold())
+        seen_usernames.add(username_key(username))
         rows.append(
             DemoAccount(
                 account_key=key,
@@ -477,10 +478,10 @@ def _load_legacy_credentials(path: Path) -> tuple[DemoCredential, ...]:
             parsed = str(UUID(user_id))
         except ValueError:
             raise CredentialFileError("legacy demo credentials are malformed") from None
-        if parsed in seen_ids or username.casefold() in seen_names:
+        if parsed in seen_ids or username_key(username) in seen_names:
             raise CredentialFileError("legacy demo credentials are malformed")
         seen_ids.add(parsed)
-        seen_names.add(username.casefold())
+        seen_names.add(username_key(username))
         if password_hash.startswith("REPLACE_"):
             # An example copied into runtime must not accidentally authenticate.
             continue
@@ -543,7 +544,7 @@ def verify_password(settings: Settings, username: str, password: str) -> str | N
     try:
         snapshot = active_catalog_snapshot(settings)
         for account in snapshot.accounts:
-            if account.username != username:
+            if username_key(account.username) != username_key(username):
                 continue
             if account.password_hash is not None:
                 try:

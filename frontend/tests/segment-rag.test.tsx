@@ -62,7 +62,9 @@ describe("segments_v2 public debate presentation", () => {
   it("renders paragraphs and keeps source receipts collapsed until Check RAG opens", () => {
     renderStream([segmentTurn]);
 
-    expect(screen.getByText("Check RAG").closest("summary")?.textContent).toBe("Check RAG1");
+    expect(screen.getByText("Check RAG").closest("summary")?.textContent).toBe(
+      "Check RAG1",
+    );
     expect(screen.getAllByText("First paragraph.")).toHaveLength(2);
     expect(screen.getAllByText("Second paragraph.")).toHaveLength(2);
     expect(screen.getByText("Check RAG").closest("details")).toHaveProperty(

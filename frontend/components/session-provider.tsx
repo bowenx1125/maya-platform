@@ -19,9 +19,11 @@ import {
   type AuthSession,
   type CurrentUser,
   type DemoIdentity,
+  type RegisterRequest,
 } from "../lib/api";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
+import { useSetAcademyMood } from "./academy/mood";
 import { useLocale, useT } from "./locale";
 
 type SessionStatus = "loading" | "authenticated" | "anonymous";
@@ -34,6 +36,7 @@ type SessionContextValue = {
   error: unknown;
   refresh: () => Promise<AuthSession | null>;
   login: (username: string, password: string) => Promise<AuthSession>;
+  register: (body: RegisterRequest) => Promise<AuthSession>;
   quickLogin: (userId: string) => Promise<AuthSession>;
   logout: () => Promise<void>;
   switchIdentity: (userId: string) => Promise<AuthSession>;
@@ -218,6 +221,30 @@ export function SessionProvider({
     ],
   );
 
+  const register = useCallback(
+    (body: RegisterRequest) =>
+      enqueueSessionMutation(async () => {
+        const epoch = beginSessionOperation();
+        try {
+          // Registration returns a started session, so it commits through the
+          // same path as a login rather than leaving the caller signed out.
+          const next = await api.register(body);
+          commitAuthenticatedSession(epoch, next);
+          return next;
+        } catch (cause) {
+          preserveSessionAfterFailure(epoch);
+          throw cause;
+        }
+      }),
+    [
+      api,
+      beginSessionOperation,
+      commitAuthenticatedSession,
+      enqueueSessionMutation,
+      preserveSessionAfterFailure,
+    ],
+  );
+
   const quickLogin = useCallback(
     (userId: string) =>
       enqueueSessionMutation(async () => {
@@ -292,6 +319,7 @@ export function SessionProvider({
       error,
       refresh,
       login,
+      register,
       quickLogin,
       logout,
       switchIdentity,
@@ -300,6 +328,7 @@ export function SessionProvider({
       api,
       error,
       login,
+      register,
       logout,
       quickLogin,
       refresh,
@@ -358,9 +387,20 @@ export function RouteGuard({
     );
   }
 
-  const hasRole = role
-    ? user?.courses.some((membership) => membership.role === role)
-    : true;
+  // A teacher who has joined a group may open the student workspace for it.
+  // Explicit teacher access opens the same editing workspace as student membership.
+  // Course role alone would keep every
+  // teacher out of the surface they just gave themselves access to.
+  const teachesCourse = user?.courses?.some(
+    (membership) => membership.role === "teacher",
+  );
+  const sitsInGroup = (user?.groups?.length ?? 0) > 0;
+  const hasRole = !role
+    ? true
+    : role === "student"
+      ? user?.courses?.some((membership) => membership.role === "student") ||
+        (teachesCourse && sitsInGroup)
+      : teachesCourse;
   if (!hasRole) {
     return (
       <main className="shell">
@@ -386,7 +426,7 @@ export function RouteGuard({
   return <>{children}</>;
 }
 
-export function LoginForm() {
+export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
@@ -397,6 +437,16 @@ export function LoginForm() {
   const [error, setError] = useState<unknown>(null);
   const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
+  const [emptyField, setEmptyField] = useState<MessageKey | null>(null);
+  const setMood = useSetAcademyMood();
+
+  useEffect(() => {
+    // The shake is a one-shot reaction, not a state the panel stays in.
+    if (!error) return;
+    setMood("refused");
+    const timer = window.setTimeout(() => setMood("idle"), 900);
+    return () => window.clearTimeout(timer);
+  }, [error, setMood]);
 
   useEffect(() => {
     let active = true;
@@ -421,11 +471,26 @@ export function LoginForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const name = username.trim();
+    // An empty field is a typo, not a rejected credential. Naming which one is
+    // missing avoids a round trip that could only answer "that failed".
+    if (!name || !password) {
+      setError(null);
+      setEmptyField(
+        !name && !password
+          ? "loginNeedBoth"
+          : !name
+            ? "loginNeedUsername"
+            : "loginNeedPassword",
+      );
+      return;
+    }
+    setEmptyField(null);
     setBusy(true);
     setError(null);
     setErrorFallback("loginFailed");
     try {
-      const session = await login(username.trim(), password);
+      const session = await login(name, password);
       router.replace(
         nextPath ||
           (session.user.courses.some((item) => item.role === "teacher")
@@ -488,7 +553,11 @@ export function LoginForm() {
           </div>
         </div>
       ) : null}
-      {error ? (
+      {emptyField ? (
+        <p className="form-error" role="alert">
+          {t(emptyField)}
+        </p>
+      ) : error ? (
         <p className="form-error" role="alert">
           {localizeError(error, locale, errorFallback)}
         </p>
@@ -498,13 +567,15 @@ export function LoginForm() {
           <span>{t("or")}</span>
         </div>
       ) : null}
-      <form className="stack-form login-form" onSubmit={submit}>
+      <form className="stack-form login-form" noValidate onSubmit={submit}>
         <label>
           <span>{t("username")}</span>
           <input
             autoComplete="username"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
+            onFocus={() => setMood("attentive")}
+            onBlur={() => setMood("idle")}
             required
           />
         </label>
@@ -515,12 +586,27 @@ export function LoginForm() {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            onFocus={() => setMood("discreet")}
+            onBlur={() => setMood("idle")}
             required
           />
         </label>
         <button className="primary-action" type="submit" disabled={busy}>
           {busy ? t("signingIn") : t("signIn")}
         </button>
+        {onRegister ? (
+          <p className="academy-switch">
+            {t("needAccount")}{" "}
+            <button
+              className="academy-textlink"
+              type="button"
+              disabled={busy}
+              onClick={onRegister}
+            >
+              {t("needAccountLink")}
+            </button>
+          </p>
+        ) : null}
       </form>
     </section>
   );

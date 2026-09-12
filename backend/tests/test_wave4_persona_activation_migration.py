@@ -8,8 +8,10 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from app.core.db import ALEMBIC_HEAD, Database
-from app.seed import GROUP_DEMO_ID, seed_demo_data
+from app.seed import GROUP_DEMO_ID
 from sqlalchemy import inspect, text
+
+from tests.legacy_organization import seed_legacy_organization
 
 
 def _config(database_url: str) -> Config:
@@ -38,7 +40,7 @@ def test_0012_marks_only_mutable_drafts_and_round_trips(tmp_path: Path) -> None:
     database = Database(database_url, tmp_path)
     now = datetime.now(UTC)
     with database.session() as session:
-        seed_demo_data(session)
+        seed_legacy_organization(session)
     with database.engine.begin() as connection:
         connection.execute(
             text(

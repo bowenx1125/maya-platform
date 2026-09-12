@@ -25,6 +25,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
+from app.core.identity import group_name_key, username_key
+
 
 class Base(DeclarativeBase):
     """Declarative metadata for the checked-in Wave 1A migration head."""
@@ -35,6 +37,13 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     username: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    username_key: Mapped[str] = mapped_column(String(240), nullable=False, server_default="")
+
+    @validates("username")
+    def _set_username(self, _key: str, value: str) -> str:
+        self.username_key = username_key(value)
+        return value
+
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -52,7 +61,10 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (Index("ix_users_status", "status"),)
+    __table_args__ = (
+        Index("ix_users_status", "status"),
+        Index("uq_users_username_key", "username_key", unique=True),
+    )
 
 
 class SessionRecord(Base):
@@ -135,6 +147,13 @@ class Group(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    name_key: Mapped[str] = mapped_column(String(400), nullable=False, server_default="")
+
+    @validates("name")
+    def _set_name(self, _key: str, value: str) -> str:
+        self.name_key = group_name_key(value)
+        return value
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     course: Mapped[Course] = relationship(back_populates="groups")
@@ -145,6 +164,7 @@ class Group(Base):
 
     __table_args__ = (
         UniqueConstraint("course_id", "name", name="uq_groups_course_name"),
+        Index("uq_groups_course_name_key", "course_id", "name_key", unique=True),
         Index("ix_groups_course_id", "course_id"),
     )
 
@@ -172,6 +192,18 @@ class GroupMember(Base):
         CheckConstraint("role IN ('leader', 'admin', 'member')", name="ck_group_members_role"),
         Index("ix_group_members_user_id", "user_id"),
     )
+
+
+class TeacherGroupAccess(Base):
+    __tablename__ = "teacher_group_access"
+
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Agent(Base):

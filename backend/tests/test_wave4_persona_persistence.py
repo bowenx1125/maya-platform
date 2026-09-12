@@ -18,6 +18,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login, make_foreign_group
+from tests.legacy_organization import seed_legacy_organization
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 
@@ -538,7 +539,7 @@ def test_0009_does_not_backfill_existing_legacy_agent_versions(tmp_path: Path) -
     cfg.attributes["database_url"] = database_url
     command.upgrade(cfg, "0008_wave4_mutual_learning_rounds")
     with database.session() as session:
-        seed_demo_data(session)
+        seed_legacy_organization(session)
         now = datetime.now(UTC)
         agent = Agent(
             id="legacy-persona-agent",

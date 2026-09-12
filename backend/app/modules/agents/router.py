@@ -32,7 +32,6 @@ from app.core.models import (
     DemoAcceptanceRun,
     FileOperation,
     Group,
-    GroupMember,
     IdempotencyRecord,
     KnowledgeSnapshot,
 )
@@ -107,6 +106,7 @@ from app.modules.knowledge.services import (
     visible_student_version,
     visible_version,
 )
+from app.modules.org.access import WorkspaceMember
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider as select_embedding_provider
 from app.providers.standing_consent import apply_standing_provider_consent
@@ -170,35 +170,28 @@ def _detail_with_metadata(db: Session, agent: Agent, role: str) -> AgentDetail:
 
 
 def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
-    """Resolve delete visibility and preserve the teacher/other-group split.
-
-    A student must be a member of the owning group.  A teacher in the owning
-    course is deliberately recognized before the student-only check so the
-    operation returns ``403 forbidden`` rather than accidentally making a
-    same-course teacher look like a missing resource.  Other courses/groups
-    remain indistinguishable from a missing Agent and return 404.
-    """
+    """Students and teachers with explicit group access may delete its Agents."""
 
     row = db.execute(
-        select(Agent, CourseMember.role)
+        select(Agent, WorkspaceMember.user_id)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .outerjoin(
-            GroupMember,
-            and_(GroupMember.group_id == Group.id, GroupMember.user_id == context.user.id),
+            WorkspaceMember,
+            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
         )
         .where(
             Agent.id == agent_id,
             CourseMember.user_id == context.user.id,
             or_(
                 CourseMember.role == "teacher",
-                and_(CourseMember.role == "student", GroupMember.user_id.is_not(None)),
+                and_(CourseMember.role == "student", WorkspaceMember.user_id.is_not(None)),
             ),
         )
     ).first()
     if row is None:
         raise not_found()
-    if row[1] != "student":
+    if row[1] is None:
         raise forbidden()
     return cast(Agent, row[0])
 
@@ -561,19 +554,19 @@ def list_group_agents(
         )
     )
     rows = db.execute(
-        select(Agent, CourseMember.role)
+        select(Agent)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .outerjoin(
-            GroupMember,
-            and_(GroupMember.group_id == Group.id, GroupMember.user_id == context.user.id),
+            WorkspaceMember,
+            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
         )
         .where(
             Agent.group_id == str(group_id),
             CourseMember.user_id == context.user.id,
             or_(
                 and_(CourseMember.role == "teacher", published_version),
-                and_(CourseMember.role == "student", GroupMember.user_id.is_not(None)),
+                WorkspaceMember.user_id.is_not(None),
             ),
         )
     ).all()
@@ -729,7 +722,7 @@ def update_agent_metadata(
     operation_id="deleteAgent",
     responses={
         204: {"description": "Eligible Agent and its draft state deleted."},
-        403: {"model": Error, "description": "Teachers cannot delete Agents."},
+        403: {"model": Error, "description": "CSRF failure or group workspace access required."},
         404: {"model": Error, "description": "Agent not found."},
         409: {"model": Error, "description": "Agent history is retained."},
     },
@@ -857,14 +850,13 @@ def create_next_agent_version(
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .join(
-            GroupMember,
-            and_(GroupMember.group_id == Group.id, GroupMember.user_id == context.user.id),
+            WorkspaceMember,
+            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
         )
         .where(
             AgentVersion.id == scoped.agent.current_published_version_id,
             AgentVersion.agent_id == scoped.agent.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
     if current is None or current.state != "published":

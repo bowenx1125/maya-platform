@@ -21,4 +21,30 @@ describe("Wave 1A locale and V2 style boundary", () => {
     );
     expect(css).toMatch(/font-family:\s*\n\s*Inter,/);
   });
+
+  it("confines the display serif to the sign-in plate", () => {
+    const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+    // The academy sign-in is the one surface allowed a serif. It is declared
+    // once, as --display-serif, so a second product surface cannot pick one up
+    // by copying a font stack; the rest of the interface stays on Inter.
+    const declarations = css.match(/font-family:[^;]+;/g) ?? [];
+    const display = declarations.filter((rule) =>
+      rule.includes("var(--display-serif)"),
+    );
+    expect(display).toHaveLength(2);
+    // "ui-sans-serif" in the body stack is not a serif; a bare serif family
+    // anywhere else would be.
+    const stray = declarations.filter(
+      (rule) =>
+        !rule.includes("var(--display-serif)") &&
+        /(?<![\w-])serif\b/.test(rule),
+    );
+    expect(stray).toEqual([]);
+    expect(css).toMatch(
+      /\.academy-tagline h1\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
+    );
+    expect(css).toMatch(
+      /\.academy-welcome\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
+    );
+  });
 });

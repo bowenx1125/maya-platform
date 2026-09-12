@@ -21,7 +21,6 @@ from app.core.models import (
     AgentVersion,
     CourseMember,
     Group,
-    GroupMember,
     VoiceProfile,
     VoiceProviderOperation,
 )
@@ -32,6 +31,7 @@ from app.modules.knowledge.services import (
     finish_idempotency,
     request_hash,
 )
+from app.modules.org.access import WorkspaceMember
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
     decrypt_external_voice_id,
@@ -110,19 +110,24 @@ def voice_profile_dto(profile: VoiceProfile) -> VoiceProfileResponse:
 
 
 def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
+    """A group's voices belong to the group, so membership is the whole test.
+
+    A teacher who joined the group is a member like any other; one who has not
+    joined is outside it.  See ``scoped_group_role`` for the shared rule.
+    """
+
     return (
-        select(VoiceProfile, CourseMember.role)
+        select(VoiceProfile)
         .join(Group, Group.id == VoiceProfile.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .join(
-            GroupMember,
-            and_(GroupMember.group_id == Group.id, GroupMember.user_id == context.user.id),
+            WorkspaceMember,
+            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
         )
         .where(
             VoiceProfile.id == profile_id,
             VoiceProfile.scope == "group",
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
 
@@ -138,14 +143,13 @@ def list_group_voices(
     db: Session, context: AuthContext, group_id: str
 ) -> list[VoiceProfileResponse]:
     authorized = db.scalar(
-        select(GroupMember.user_id)
-        .join(Group, Group.id == GroupMember.group_id)
+        select(WorkspaceMember.user_id)
+        .join(Group, Group.id == WorkspaceMember.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .where(
             Group.id == group_id,
-            GroupMember.user_id == context.user.id,
+            WorkspaceMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
     if authorized is None:
@@ -186,14 +190,13 @@ def validate_voice_binding(
     target_group = db.scalar(
         select(Agent.group_id)
         .join(AgentVersion, AgentVersion.agent_id == Agent.id)
-        .join(GroupMember, GroupMember.group_id == Agent.group_id)
+        .join(WorkspaceMember, WorkspaceMember.group_id == Agent.group_id)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .where(
             AgentVersion.id == version.id,
-            GroupMember.user_id == context.user.id,
+            WorkspaceMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
     )
     if target_group is None:
@@ -762,13 +765,12 @@ def enroll_voice(
 def _assert_student_group_access(db: Session, context: AuthContext, group_id: str) -> None:
     row = db.execute(
         select(Group.id)
-        .join(GroupMember, GroupMember.group_id == Group.id)
+        .join(WorkspaceMember, WorkspaceMember.group_id == Group.id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .where(
             Group.id == group_id,
-            GroupMember.user_id == context.user.id,
+            WorkspaceMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
-            CourseMember.role == "student",
         )
         .order_by(Group.id)
     ).first()

@@ -71,9 +71,7 @@ describe("PW3-A anonymous Demo login", () => {
     const card = await screen.findByRole("button", { name: /Student/ });
     expect(screen.getByLabelText("Username")).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Sign in to Mayaform" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.queryByText("Use username and password instead")).toBeNull();
     fireEvent.click(card);
 
@@ -118,9 +116,7 @@ describe("PW3-A anonymous Demo login", () => {
     expect(screen.queryByText("Build with intention")).toBeNull();
     expect(screen.queryByText("Release with context")).toBeNull();
     expect(screen.queryByText("Keep the boundary clear")).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: "Sign in to Mayaform" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(screen.queryByText(/WAVE 1A/)).toBeNull();
   });
 
@@ -148,9 +144,7 @@ describe("PW3-A anonymous Demo login", () => {
     await waitFor(() => expect(api.demoIdentities).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("Demo identity")).toBeNull();
     expect(screen.queryByText("or")).toBeNull();
-    expect(
-      screen.getByRole("heading", { name: "Sign in to Mayaform" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Sign in" })).toBeTruthy();
     const username = screen.getByLabelText("Username");
     const password = screen.getByLabelText("Password");
     fireEvent.change(username, { target: { value: "student" } });

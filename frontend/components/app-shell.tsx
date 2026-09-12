@@ -32,9 +32,18 @@ export function AppShell({
   }
 
   const isStudent = role === "student";
+  const isCourseTeacher = user?.courses?.some(
+    (membership) => membership.role === "teacher",
+  );
   const links = isStudent
     ? [
         { href: "/student", label: t("home") },
+        // Back to the roster, not the dashboard: the roster is the only door
+        // into a group for a teacher, so it is the page they left to get here
+        // and the one that still has the row they are working through.
+        ...(isCourseTeacher
+          ? [{ href: "/teacher/roster", label: t("teacher") }]
+          : []),
         ...(groupId
           ? [{ href: `/student/groups/${groupId}`, label: t("groupWorkspace") }]
           : []),
@@ -54,6 +63,7 @@ export function AppShell({
     : [
         { href: "/teacher", label: t("dashboard") },
         { href: "/teacher/debates", label: t("debates") },
+        { href: "/teacher/roster", label: t("accounts") },
       ];
 
   const activePath = pathname.startsWith("/teacher/debates-beta/")

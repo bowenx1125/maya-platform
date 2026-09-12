@@ -11,6 +11,13 @@ export type Course = components["schemas"]["Course"];
 export type CourseDetail = components["schemas"]["CourseDetail"];
 export type Group = components["schemas"]["Group"];
 export type GroupDetail = components["schemas"]["GroupDetail"];
+export type CourseRoster = components["schemas"]["CourseRoster"];
+export type RosterEntry = components["schemas"]["RosterEntry"];
+export type UpdateCourseMemberRequest =
+  components["schemas"]["UpdateCourseMemberRequest"];
+export type PasswordResetResult = components["schemas"]["PasswordResetResult"];
+export type RegistrationOptions = components["schemas"]["RegistrationOptions"];
+export type RegisterRequest = components["schemas"]["RegisterRequest"];
 export type AgentSummary = components["schemas"]["AgentSummary"];
 export type AgentDetail = components["schemas"]["AgentDetail"];
 export type AgentVersion = components["schemas"]["AgentVersion"];
@@ -508,6 +515,18 @@ export class PlatformApi {
     return session;
   }
 
+  async registrationOptions(): Promise<RegistrationOptions> {
+    return unwrap(await this.client.GET("/auth/registration-options"));
+  }
+
+  async register(body: RegisterRequest): Promise<AuthSession> {
+    const session = await unwrap<AuthSession>(
+      await this.client.POST("/auth/register", { body }),
+    );
+    this.setCsrfToken(session.csrf_token);
+    return session;
+  }
+
   async logout(): Promise<void> {
     const result = await this.client.POST("/auth/logout", {
       params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
@@ -572,6 +591,69 @@ export class PlatformApi {
     return unwrap(
       await this.client.GET("/groups/{group_id}", {
         params: { path: { group_id: groupId } },
+      }),
+    );
+  }
+
+  async courseRoster(courseId: string): Promise<CourseRoster> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/roster", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async updateCourseMember(
+    courseId: string,
+    userId: string,
+    body: UpdateCourseMemberRequest,
+  ): Promise<RosterEntry> {
+    return unwrap(
+      await this.client.PATCH("/courses/{course_id}/members/{user_id}", {
+        params: {
+          path: { course_id: courseId, user_id: userId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body,
+      }),
+    );
+  }
+
+  async resetStudentPassword(
+    courseId: string,
+    userId: string,
+    newPassword?: string,
+  ): Promise<PasswordResetResult> {
+    return unwrap(
+      await this.client.POST("/auth/password-resets", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: {
+          course_id: courseId,
+          user_id: userId,
+          ...(newPassword ? { new_password: newPassword } : {}),
+        },
+      }),
+    );
+  }
+
+  async joinGroupAsTeacher(groupId: string): Promise<GroupDetail> {
+    return unwrap(
+      await this.client.POST("/groups/{group_id}/membership", {
+        params: {
+          path: { group_id: groupId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+      }),
+    );
+  }
+
+  async leaveGroupAsTeacher(groupId: string): Promise<void> {
+    await unwrap<void>(
+      await this.client.DELETE("/groups/{group_id}/membership", {
+        params: {
+          path: { group_id: groupId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
       }),
     );
   }

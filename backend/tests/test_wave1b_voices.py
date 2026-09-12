@@ -60,7 +60,6 @@ from app.providers.voice import (
     VoiceProviderError,
     VoiceProviderTimeout,
 )
-from app.seed import seed_demo_data
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select, text
@@ -68,6 +67,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.requests import Request
 
 from tests.conftest import login, make_foreign_group
+from tests.legacy_organization import seed_legacy_organization
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_A = "7813f937-902c-5534-bfb2-ad773a43aeda"
@@ -1481,7 +1481,7 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
     command.upgrade(migration_config, "0002_wave1_agents_rag")
     now = datetime.now(UTC)
     with database.session() as session:
-        seed_demo_data(session)
+        seed_legacy_organization(session)
     with database.session() as session:
         session.execute(
             text(

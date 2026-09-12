@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.db import Database
+from app.core.identity import username_key
 from app.core.models import Course, CourseMember, Group, GroupMember, SessionRecord, User
 from app.modules.auth.credentials import (
     CredentialFileError,
@@ -162,7 +163,14 @@ def _resolve_group(
     return candidate.id
 
 
-def _revoke_user_sessions(session: Session, user_id: str, timestamp: datetime) -> None:
+def revoke_user_sessions(session: Session, user_id: str, timestamp: datetime) -> None:
+    """Revoke every live session for a user.
+
+    Deactivating an account has to take effect on sessions that already
+    exist, not only on the next login, so the roster edit path calls this
+    alongside the catalog sync that first needed it.
+    """
+
     rows = session.scalars(select(SessionRecord).where(SessionRecord.user_id == user_id)).all()
     for row in rows:
         if row.revoked_at is None:
@@ -179,7 +187,7 @@ def _resolve_catalog_users(
     users_by_id = {row.id: row for row in users}
     users_by_username: dict[str, list[User]] = {}
     for row in users:
-        users_by_username.setdefault(row.username.casefold(), []).append(row)
+        users_by_username.setdefault(username_key(row.username), []).append(row)
 
     bindings_by_key: dict[str, DemoAccountBinding] = {}
     bindings_by_user: dict[str, DemoAccountBinding] = {}
@@ -197,7 +205,7 @@ def _resolve_catalog_users(
     seen_users: set[str] = set()
     resolved: dict[str, User | None] = {}
     for account in graph.accounts:
-        name_key = account.username.casefold()
+        name_key = username_key(account.username)
         if account.account_key in seen_keys or name_key in seen_names:
             raise AccountSyncError("demo account catalog contains duplicate identities")
         seen_keys.add(account.account_key)
@@ -230,7 +238,7 @@ def _resolve_catalog_users(
                     raise AccountSyncError("demo account catalog conflicts with an existing user")
                 # A deterministic row that has drifted away from its username
                 # is not safe to claim. It may be a non-Demo application user.
-                if deterministic.username.casefold() != name_key:
+                if username_key(deterministic.username) != name_key:
                     raise AccountSyncError("demo account catalog conflicts with an existing user")
                 resolved_user = deterministic
             else:
@@ -418,7 +426,7 @@ def _sync_graph_in_session(
                 binding.updated_at = timestamp
 
             if material_changed and not is_new:
-                _revoke_user_sessions(session, user.id, timestamp)
+                revoke_user_sessions(session, user.id, timestamp)
                 changed_count += 1
 
         # Only users owned by a durable catalog binding can be disabled. A
@@ -436,7 +444,7 @@ def _sync_graph_in_session(
             binding.active = False
             binding.updated_at = timestamp
             user.status = "inactive"
-            _revoke_user_sessions(session, user.id, timestamp)
+            revoke_user_sessions(session, user.id, timestamp)
             for course_row in course_members_by_user.get(user.id, []):
                 session.delete(course_row)
             for group_row in group_members_by_user.get(user.id, []):

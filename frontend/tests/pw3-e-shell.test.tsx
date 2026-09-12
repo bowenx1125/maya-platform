@@ -39,7 +39,7 @@ function renderTeacherShell(pathname: string) {
 describe("PW3-E teacher information architecture", () => {
   afterEach(() => cleanup());
 
-  it("exposes Home, Classroom as primary navigation links", () => {
+  it("exposes Home, Classroom and Accounts as primary navigation links", () => {
     renderTeacherShell("/teacher");
 
     const primaryNavigation = within(screen.getByRole("navigation"));
@@ -47,6 +47,7 @@ describe("PW3-E teacher information architecture", () => {
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/teacher",
       "/teacher/debates",
+      "/teacher/roster",
     ]);
     expect(
       primaryNavigation.getByRole("link", { name: "Home" }).className,

@@ -3375,7 +3375,6 @@ export function DebateStage({
                     {labels.controlBusy}
                   </p>
                 ) : null}
-
               </div>
             ) : null}
 

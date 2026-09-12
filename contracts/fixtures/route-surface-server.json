@@ -201,6 +201,69 @@
         }
       }
     },
+    "/api/v1/auth/registration-options": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "operationId": "getRegistrationOptions",
+        "description": "Course and existing group names a new student may join. No member identity is exposed.",
+        "responses": {
+          "200": {
+            "description": "Course and existing group names a new student may join.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationOptions"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "operationId": "registerStudent",
+        "description": "Create a student account, attach it to a course group by name and start its Session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created and session started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "tags": [
@@ -219,6 +282,51 @@
             }
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password-resets": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "resetStudentPassword",
+        "description": "Teacher-initiated password reset for one self-registered student in their course.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new password, returned exactly once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -354,6 +462,94 @@
         }
       }
     },
+    "/api/v1/courses/{course_id}/roster": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "getCourseRoster",
+        "description": "Members of a course the caller teaches, with account source and groups.",
+        "responses": {
+          "200": {
+            "description": "Members with account source and groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseRoster"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/courses/{course_id}/members/{user_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        },
+        {
+          "$ref": "#/components/parameters/UserId"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "updateCourseMember",
+        "description": "Rename a member, move them between groups or deactivate the account.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCourseMemberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The member after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterEntry"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}": {
       "parameters": [
         {
@@ -388,6 +584,66 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/membership": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/GroupId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "joinGroupAsTeacher",
+        "description": "Join a group in a course the caller teaches. Idempotent.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group after the caller joined it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "leaveGroupAsTeacher",
+        "description": "Leave a group the caller teaches. Idempotent.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The caller is no longer a member of this group."
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -3816,6 +4072,14 @@
           "$ref": "#/components/schemas/Uuid"
         }
       },
+      "UserId": {
+        "name": "user_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
       "GroupId": {
         "name": "group_id",
         "in": "path",
@@ -4548,6 +4812,124 @@
           }
         }
       },
+      "RegisterRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password",
+          "group_name"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 128
+          },
+          "group_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "PasswordResetRequest": {
+        "type": "object",
+        "required": [
+          "course_id",
+          "user_id"
+        ],
+        "properties": {
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "new_password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "password",
+            "maxLength": 128
+          }
+        }
+      },
+      "PasswordResetResult": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "password"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "RegistrationGroup": {
+        "type": "object",
+        "required": [
+          "name",
+          "member_count"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "member_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "RegistrationOptions": {
+        "type": "object",
+        "required": [
+          "course_id",
+          "course_name",
+          "groups"
+        ],
+        "properties": {
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "course_name": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistrationGroup"
+            }
+          }
+        }
+      },
       "AuthSession": {
         "type": "object",
         "required": [
@@ -4740,6 +5122,102 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "GroupRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RosterEntry": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role",
+          "status",
+          "source",
+          "editable"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupRef"
+            }
+          }
+        }
+      },
+      "CourseRoster": {
+        "type": "object",
+        "required": [
+          "course_id"
+        ],
+        "properties": {
+          "course_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterEntry"
+            }
+          }
+        }
+      },
+      "UpdateCourseMemberRequest": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "group_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from app.core.db import Database
+from app.core.identity import group_name_key, username_key
 from app.core.models import Base
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.debates import cleanup as online_cleanup
@@ -37,6 +38,10 @@ def _hash(letter: str = "a") -> str:
 
 
 def _add(session, table_name: str, **values: object) -> None:
+    if table_name == "users":
+        values["username_key"] = username_key(str(values["username"]))
+    elif table_name == "groups":
+        values["name_key"] = group_name_key(str(values["name"]))
     session.execute(Base.metadata.tables[table_name].insert().values(**values))
 
 

@@ -50,7 +50,10 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
     credential_file.write_text(yaml.safe_dump(credentials), encoding="utf-8")
     credential_file.chmod(0o600)
 
-    def factory(*, demo_mode: bool = True) -> tuple[FastAPI, Database, Settings]:
+    def factory(
+        *,
+        demo_mode: bool = True,
+    ) -> tuple[FastAPI, Database, Settings]:
         settings = Settings(
             maya_env="test",
             session_secret="x" * 32,

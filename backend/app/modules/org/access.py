@@ -1,0 +1,25 @@
+"""Read-only workspace scope combining student membership and teacher access."""
+
+from sqlalchemy import literal, select, union
+from sqlalchemy.orm import aliased
+
+from app.core.models import CourseMember, Group, GroupMember, TeacherGroupAccess
+
+_workspace_members = union(
+    select(GroupMember.group_id, GroupMember.user_id, GroupMember.role, GroupMember.created_at),
+    select(
+        TeacherGroupAccess.group_id,
+        TeacherGroupAccess.user_id,
+        literal("member").label("role"),
+        TeacherGroupAccess.created_at,
+    )
+    .join(Group, Group.id == TeacherGroupAccess.group_id)
+    .join(CourseMember, CourseMember.course_id == Group.course_id)
+    .where(
+        CourseMember.user_id == TeacherGroupAccess.user_id,
+        CourseMember.role == "teacher",
+    ),
+).subquery("workspace_members")
+
+# Used only in reads. Teacher access is never written into catalog-owned membership.
+WorkspaceMember = aliased(GroupMember, _workspace_members, adapt_on_names=True)

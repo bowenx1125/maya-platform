@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-SCHEMA_HEAD = "0027_frozen_teaching_markdown"
+SCHEMA_HEAD = "0029_account_keys_teacher_access"
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 
@@ -71,6 +71,8 @@ TARGET_TABLES = (
 )
 
 PRESERVED_TABLES = (
+    "user_credentials",
+    "teacher_group_access",
     "users",
     "sessions",
     "demo_account_bindings",

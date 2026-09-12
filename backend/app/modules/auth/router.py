@@ -6,12 +6,12 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.errors import Error, PlatformError, not_found, unauthenticated
-from app.core.models import CourseMember, GroupMember, User
+from app.core.errors import Error, PlatformError, forbidden, not_found
+from app.core.models import CourseMember, Group, GroupMember, User
 from app.modules.auth.credentials import (
     CredentialFileError,
     DemoAccountSnapshot,
@@ -26,6 +26,13 @@ from app.modules.auth.dependencies import (
     require_demo_mode,
     require_demo_quick_login,
 )
+from app.modules.auth.registration import (
+    register_student,
+    reset_student_password,
+    resolve_course,
+    username_exists,
+    verify_database_password,
+)
 from app.modules.auth.schemas import (
     AuthSession,
     CourseMembership,
@@ -35,6 +42,11 @@ from app.modules.auth.schemas import (
     DemoSwitchRequest,
     GroupMembership,
     LoginRequest,
+    PasswordResetRequest,
+    PasswordResetResult,
+    RegisterRequest,
+    RegistrationGroup,
+    RegistrationOptions,
 )
 from app.modules.auth.service import (
     SESSION_COOKIE_NAME,
@@ -42,6 +54,7 @@ from app.modules.auth.service import (
     create_rotated_session,
     revoke_cookie_session,
 )
+from app.modules.org.access import WorkspaceMember
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -76,9 +89,9 @@ def _current_user(db: Session, user: User) -> CurrentUser:
         .order_by(CourseMember.course_id)
     ).all()
     group_rows = db.execute(
-        select(GroupMember.group_id, GroupMember.role)
-        .where(GroupMember.user_id == user.id)
-        .order_by(GroupMember.group_id)
+        select(WorkspaceMember.group_id, WorkspaceMember.role)
+        .where(WorkspaceMember.user_id == user.id)
+        .order_by(WorkspaceMember.group_id)
     ).all()
     return CurrentUser(
         id=UUID(user.id),
@@ -158,12 +171,31 @@ def login(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthSession:
+    # The read-only Demo catalog stays authoritative for the fixed
+    # identities; self-registered accounts resolve from the database source
+    # only after that lookup misses.
     user_id = verify_password(settings, payload.username, payload.password)
     if user_id is None:
-        raise unauthenticated("The username or password is incorrect.")
+        user_id = verify_database_password(db, payload.username, payload.password)
+    if user_id is None:
+        # Which half was wrong is reported on purpose. A student who has
+        # mistyped their name should not spend the lesson guessing at their
+        # password instead. The cost is that a name can be probed for
+        # existence, which is accepted here: these are classroom accounts,
+        # created by the students themselves, and the roster is visible to
+        # everyone in the course anyway.
+        if username_exists(db, settings, payload.username):
+            raise PlatformError(
+                "password_incorrect", "That password does not match this account.", 401
+            )
+        raise PlatformError("account_not_found", "No account uses that username yet.", 401)
     user = db.get(User, user_id)
     if user is None or user.status != "active":
-        raise unauthenticated("The username or password is incorrect.")
+        # A deactivated account is a teacher decision, not a typo, and saying
+        # so is what stops the student from trying the password again.
+        raise PlatformError(
+            "account_inactive", "This account has been deactivated by a teacher.", 401
+        )
     raw_token, session_row, raw_csrf = create_rotated_session(
         db,
         user,
@@ -307,3 +339,143 @@ def logout(
 ) -> None:
     revoke_cookie_session(db, context.raw_session_token)
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+
+
+@router.get(
+    "/registration-options",
+    response_model=RegistrationOptions,
+    operation_id="getRegistrationOptions",
+    openapi_extra={"security": []},
+    responses={
+        200: {
+            "model": RegistrationOptions,
+            "description": "Course and existing group names a new student may join.",
+        },
+        422: {"model": Error, "description": "Registration is not available yet."},
+    },
+)
+def registration_options(db: Session = Depends(get_db)) -> RegistrationOptions:
+    """Publish the joinable group names for the registration form.
+
+    Only the group name and a member count are exposed. Member identities
+    stay behind authentication: a student picking a group must be able to
+    recognise it, not enumerate who is already in it.
+    """
+
+    course = resolve_course(db, None)
+    rows = db.execute(
+        select(Group.name, func.count(GroupMember.user_id))
+        .outerjoin(GroupMember, GroupMember.group_id == Group.id)
+        .where(Group.course_id == course.id)
+        .group_by(Group.id, Group.name)
+        .order_by(Group.name)
+    ).all()
+    return RegistrationOptions(
+        course_id=UUID(course.id),
+        course_name=course.name,
+        groups=[RegistrationGroup(name=row[0], member_count=row[1]) for row in rows],
+    )
+
+
+@router.post(
+    "/register",
+    response_model=AuthSession,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="registerStudent",
+    openapi_extra={"security": []},
+    responses={
+        201: {"model": AuthSession, "description": "Account created and session started."},
+        409: {"model": Error, "description": "The username is already taken."},
+        422: {"model": Error, "description": "A submitted field is not acceptable."},
+    },
+)
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> AuthSession:
+    """Create a student account, attach it to a group and start its session.
+
+    The new account signs in immediately: requiring a second manual login
+    right after a successful registration adds a failure step without adding
+    any security, because the caller just proved knowledge of the password.
+    """
+
+    user, _group = register_student(
+        db,
+        settings,
+        username=payload.username,
+        password=payload.password,
+        display_name=payload.display_name,
+        group_name=payload.group_name,
+        course_id=str(payload.course_id) if payload.course_id else None,
+    )
+    raw_token, session_row, raw_csrf = create_rotated_session(
+        db,
+        user,
+        settings,
+        old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+    )
+    _set_session_cookie(response, raw_token, settings, request)
+    return _auth_response(db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf)
+
+
+@router.post(
+    "/password-resets",
+    response_model=PasswordResetResult,
+    operation_id="resetStudentPassword",
+    responses={
+        200: {
+            "model": PasswordResetResult,
+            "description": "The new password, returned exactly once.",
+        },
+        403: {"model": Error, "description": "CSRF failure or the caller is not the teacher."},
+        404: {"model": Error, "description": "The course or member is not visible."},
+        422: {"model": Error, "description": "This account has no resettable password."},
+    },
+)
+def reset_password(
+    payload: PasswordResetRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> PasswordResetResult:
+    """Reset one student's password and return the value to read out in class.
+
+    Self-registered accounts have no email, so there is no self-service
+    recovery path; the teacher of the course is the recovery mechanism. The
+    scope is checked twice: the caller must teach this course, and the target
+    must be a member of that same course.
+    """
+
+    caller_role = db.scalar(
+        select(CourseMember.role).where(
+            CourseMember.course_id == str(payload.course_id),
+            CourseMember.user_id == context.user.id,
+        )
+    )
+    if caller_role is None:
+        # An unauthorized course id stays indistinguishable from a missing one.
+        raise not_found()
+    if caller_role != "teacher":
+        raise forbidden()
+    target_role = db.scalar(
+        select(CourseMember.role).where(
+            CourseMember.course_id == str(payload.course_id),
+            CourseMember.user_id == str(payload.user_id),
+        )
+    )
+    if target_role is None:
+        raise not_found()
+    target = db.get(User, str(payload.user_id))
+    if target is None or target.status != "active":
+        raise not_found()
+    password = reset_student_password(db, target=target, new_password=payload.new_password)
+    return PasswordResetResult(
+        user_id=UUID(target.id),
+        username=target.username,
+        display_name=target.display_name,
+        password=password,
+    )

@@ -19,9 +19,10 @@ from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, invalid_state, not_found
-from app.core.models import CourseMember, Group, GroupMember, StoredFile, VoicePreview, VoiceProfile
+from app.core.models import CourseMember, Group, StoredFile, VoicePreview, VoiceProfile
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import contained_path, write_atomic
+from app.modules.org.access import WorkspaceMember
 from app.modules.voices.crypto import VoiceEncryptionError
 from app.modules.voices.schemas import PlaybackResource, VoiceProfileResponse
 from app.modules.voices.service import (
@@ -269,7 +270,7 @@ def media_path_for_preview(
     Group previews retain the existing same-group student query.
     """
 
-    scoped_group_member = aliased(GroupMember)
+    scoped_group_member = aliased(WorkspaceMember)
     scoped_course_member = aliased(CourseMember)
     teacher_course_member = aliased(CourseMember)
     teacher_exists = exists(
@@ -299,7 +300,6 @@ def media_path_for_preview(
                     Group.id == VoicePreview.group_id,
                     scoped_group_member.user_id == context.user.id,
                     scoped_course_member.user_id == context.user.id,
-                    scoped_course_member.role == "student",
                 ),
             ),
         )

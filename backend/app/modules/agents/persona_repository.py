@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core.models import Agent, AgentVersion, CourseMember, Group, GroupMember
+from app.core.models import Agent, AgentVersion, CourseMember, Group
 from app.modules.agents.persona import diagnostics_json
 from app.modules.agents.persona_service import (
     PersonaCompilationWrite,
@@ -21,6 +21,7 @@ from app.modules.agents.persona_service import (
     PersonaStore,
     PersonaVersionState,
 )
+from app.modules.org.access import WorkspaceMember
 
 
 class SqlAlchemyPersonaStore(PersonaStore):
@@ -59,14 +60,13 @@ class SqlAlchemyPersonaStore(PersonaStore):
     def is_current_group_member(self, user_id: str, group_id: str) -> bool:
         return (
             self.db.scalar(
-                select(GroupMember.user_id)
-                .join(Group, Group.id == GroupMember.group_id)
+                select(WorkspaceMember.user_id)
+                .join(Group, Group.id == WorkspaceMember.group_id)
                 .join(CourseMember, CourseMember.course_id == Group.course_id)
                 .where(
-                    GroupMember.group_id == group_id,
-                    GroupMember.user_id == user_id,
+                    WorkspaceMember.group_id == group_id,
+                    WorkspaceMember.user_id == user_id,
                     CourseMember.user_id == user_id,
-                    CourseMember.role == "student",
                 )
             )
             is not None
