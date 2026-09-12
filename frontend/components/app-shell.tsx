@@ -44,7 +44,7 @@ export function AppShell({
         // into a group for a teacher, so it is the page they left to get here
         // and the one that still has the row they are working through.
         ...(isCourseTeacher
-          ? [{ href: "/teacher/roster", label: t("teacher") }]
+          ? [{ href: "/teacher/roster", label: t("homeward") }]
           : []),
         ...(groupId
           ? [{ href: `/student/groups/${groupId}`, label: t("groupWorkspace") }]

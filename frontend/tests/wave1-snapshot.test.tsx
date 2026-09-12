@@ -144,7 +144,7 @@ describe("student and teacher snapshot selection", () => {
     expect(screen.queryByRole("heading", { name: `${first} one` })).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Check" })[1]);
     await screen.findByRole("heading", { name: `${second} two` });
-    fireEvent.click(screen.getAllByRole("button", { name: "Download RAG" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Download" })[1]);
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
     expect(api.downloadSnapshotDocument).toHaveBeenLastCalledWith(
       second,
@@ -238,6 +238,6 @@ describe("student and teacher snapshot selection", () => {
         "11111111-1111-4111-8111-111111111111",
       ),
     );
-    expect(screen.getByText("Published snapshot")).toBeTruthy();
+    expect(screen.getByText("Version")).toBeTruthy();
   });
 });

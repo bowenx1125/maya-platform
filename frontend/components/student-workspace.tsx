@@ -7,9 +7,7 @@ import type { FormEvent } from "react";
 
 import {
   isAmbiguousMutationFailure,
-  type AgentDetail,
   type AgentSummary,
-  type Course,
   type GroupDetail,
   type KnowledgeDocument,
   type PlatformApi,
@@ -30,30 +28,7 @@ import {
 type GroupOverview = {
   group: GroupDetail;
   agents: AgentSummary[];
-  documents: KnowledgeDocument[];
 };
-
-type AgentWithMetadata = AgentSummary & {
-  metadata_revision?: number;
-};
-
-type AgentMetadataApi = PlatformApi & {
-  updateAgentMetadata: (
-    agentId: string,
-    body: {
-      expected_metadata_revision: number;
-      description: string | null;
-    },
-  ) => Promise<AgentDetail>;
-};
-
-function isMetadataRevisionConflict(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { status?: unknown; code?: unknown };
-  return (
-    candidate.status === 409 && candidate.code === "stale_metadata_revision"
-  );
-}
 
 async function loadGroups(
   api: PlatformApi,
@@ -61,16 +36,15 @@ async function loadGroups(
 ): Promise<GroupOverview[]> {
   return Promise.all(
     groupIds.map(async (groupId) => {
-      const [group, agents, documents] = await Promise.all([
+      const [group, agents] = await Promise.all([
         api.group(groupId),
         // Keep legacy archived rows discoverable so an old, never-published
         // Agent still has an explicit hard-delete path after archive UI is
         // removed.  Historical rows remain visibly inactive and are rejected
         // by the server's history check.
         api.agents(groupId, true),
-        api.knowledge(groupId),
       ]);
-      return { group, agents, documents };
+      return { group, agents };
     }),
   );
 }
@@ -78,7 +52,6 @@ async function loadGroups(
 export function StudentDashboard() {
   const t = useT();
   const { api, user } = useSession();
-  const [course, setCourse] = useState<Course | null>(null);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -88,19 +61,8 @@ export function StudentDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const studentCourse = user.courses.find(
-        (membership) => membership.role === "student",
-      );
       const groupIds = user.groups.map((membership) => membership.group_id);
-      const [courses, overviews] = await Promise.all([
-        api.courses(),
-        loadGroups(api, groupIds),
-      ]);
-      setCourse(
-        courses.find((item) => item.id === studentCourse?.course_id) ??
-          courses[0] ??
-          null,
-      );
+      const overviews = await loadGroups(api, groupIds);
       setGroups(overviews);
     } catch (cause) {
       setError(cause);
@@ -121,11 +83,7 @@ export function StudentDashboard() {
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("studentHome")}
-        title={t("appName")}
-        description={course?.name}
-      />
+      <PageIntro eyebrow={t("studentHome")} title={t("appName")} />
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
@@ -141,45 +99,16 @@ export function StudentDashboard() {
 
 function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
   const t = useT();
-  const { group, agents, documents } = overview;
+  const { group, agents } = overview;
   return (
     <SectionCard
       title={group.name}
-      description={`${group.members?.length ?? 0} ${t("groupMembers")}`}
       action={
         <Link className="text-link" href={`/student/groups/${group.id}`}>
           {t("openWorkspace")}
         </Link>
       }
     >
-      <div className="stat-row">
-        <div>
-          <strong>
-            {agents.filter((agent) => agent.status === "active").length}
-          </strong>
-          <span>{t("activeAgents")}</span>
-        </div>
-        <div>
-          <strong>
-            {
-              documents.filter(
-                (document) => document.workspace_state === "active",
-              ).length
-            }
-          </strong>
-          <span>{t("markdownFiles")}</span>
-        </div>
-        <div>
-          <strong>
-            {
-              agents.filter((agent) =>
-                Boolean(agent.current_published_version_id),
-              ).length
-            }
-          </strong>
-          <span>{t("publishedCount")}</span>
-        </div>
-      </div>
       <div className="compact-list">
         {agents.slice(0, 4).map((agent) => (
           <Link
@@ -189,9 +118,16 @@ function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
           >
             <span>
               <strong>{agent.name}</strong>
-              <small>{agent.description}</small>
             </span>
-            <StatusBadge status={agent.status} />
+            <StatusBadge
+              status={
+                agent.status === "archived"
+                  ? "archived"
+                  : agent.current_draft_version_id
+                    ? "draft"
+                    : "published"
+              }
+            />
           </Link>
         ))}
       </div>
@@ -259,49 +195,23 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
             >
               {t("createAgent")}
             </Link>
-            <Link
-              className="secondary-action"
-              href={`/student/groups/${groupId}/knowledge`}
-            >
-              {t("openKnowledge")}
-            </Link>
           </div>
         }
       />
       <div className="workspace-grid">
         <SectionCard title={t("agents")}>
           {agents.length === 0 ? (
-            <EmptyCard
-              title={t("noAgents")}
-              action={
-                <Link
-                  className="secondary-action"
-                  href={`/student/groups/${groupId}/agents/new`}
-                >
-                  {t("createAgent")}
-                </Link>
-              }
-            />
+            <EmptyCard title={t("noAgents")} />
           ) : (
             <div className="agent-list">
               {agents.map((agent) => (
-                <GroupAgentRow
-                  agent={agent}
-                  key={`${agent.id}:${(agent as AgentWithMetadata).metadata_revision ?? 0}:${agent.description ?? ""}`}
-                  onUpdated={(updated) =>
-                    setAgents((current) =>
-                      current.map((item) =>
-                        item.id === updated.id ? updated : item,
-                      ),
-                    )
-                  }
-                />
+                <GroupAgentRow agent={agent} key={agent.id} />
               ))}
             </div>
           )}
         </SectionCard>
         <SectionCard
-          title={t("knowledgeLibrary")}
+          title={t("knowledgePage")}
 
           action={
             <Link
@@ -348,180 +258,22 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   );
 }
 
-function GroupAgentRow({
-  agent,
-  onUpdated,
-}: {
-  agent: AgentSummary;
-  onUpdated: (agent: AgentSummary) => void;
-}) {
-  const t = useT();
-  const { api } = useSession();
-  const metadataApi = api as AgentMetadataApi;
-  const [currentAgent, setCurrentAgent] = useState<AgentWithMetadata>(
-    agent as AgentWithMetadata,
-  );
-  const [descriptionDraft, setDescriptionDraft] = useState(
-    agent.description ?? "",
-  );
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [conflict, setConflict] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-
-  const dirty = descriptionDraft !== (currentAgent.description ?? "");
-
-  async function refreshAfterConflict(localDraft: string) {
-    try {
-      const authoritative = await metadataApi.agent(currentAgent.id);
-      setCurrentAgent(authoritative as AgentWithMetadata);
-      setDescriptionDraft(localDraft);
-      setEditing(true);
-      setConflict(true);
-      setError(null);
-    } catch (refreshError) {
-      setError(refreshError);
-    }
-  }
-
-  async function saveDescription() {
-    if (!dirty) {
-      setEditing(false);
-      return;
-    }
-    const localDraft = descriptionDraft;
-    setSaving(true);
-    setError(null);
-    try {
-      const next = await metadataApi.updateAgentMetadata(currentAgent.id, {
-        expected_metadata_revision: currentAgent.metadata_revision ?? 0,
-        description: localDraft,
-      });
-      const nextAgent = next as AgentWithMetadata;
-      setCurrentAgent(nextAgent);
-      setDescriptionDraft(nextAgent.description ?? "");
-      setEditing(false);
-      setConflict(false);
-      onUpdated(nextAgent);
-    } catch (cause) {
-      if (isMetadataRevisionConflict(cause)) {
-        await refreshAfterConflict(localDraft);
-      } else {
-        setError(cause);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function cancelDescription() {
-    setDescriptionDraft(currentAgent.description ?? "");
-    setEditing(false);
-    setConflict(false);
-    setError(null);
-  }
-
-  if (editing) {
-    return (
-      <div
-        className="agent-row"
-        data-agent-row={currentAgent.id}
-        style={{ flexWrap: "wrap" }}
-      >
-        <div className="avatar-orb" aria-hidden="true">
-          {currentAgent.name.slice(0, 1).toUpperCase()}
-        </div>
-        <div className="agent-row-copy">
-          <Link
-            href={`/student/agents/${currentAgent.id}`}
-            className="text-link"
-          >
-            {currentAgent.name}
-          </Link>
-          <label>
-            <span className="section-label">{t("description")}</span>
-            <textarea
-              aria-label={t("description")}
-              rows={2}
-              value={descriptionDraft}
-              disabled={saving}
-              onChange={(event) => setDescriptionDraft(event.target.value)}
-            />
-          </label>
-          {conflict ? (
-            <div className="notice notice-warning" role="alert">
-              <strong>{t("metadataConflict")}</strong>
-              <span aria-label={t("currentMetadata")}>
-                {t("currentMetadata")}: {currentAgent.description}
-              </span>
-            </div>
-          ) : null}
-          {error ? <ErrorNotice error={error} /> : null}
-          <div className="button-row">
-            <button
-              className="primary-action"
-              type="button"
-              disabled={saving || !dirty}
-              onClick={() => void saveDescription()}
-            >
-              {saving ? t("saving") : t("saveDescription")}
-            </button>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={saving}
-              onClick={cancelDescription}
-            >
-              {t("cancel")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+function GroupAgentRow({ agent }: { agent: AgentSummary }) {
+  const state =
+    agent.status === "archived"
+      ? "archived"
+      : agent.current_draft_version_id
+        ? "draft"
+        : "published";
   return (
-    <div
-      className="agent-row student-agent-entry"
-      data-agent-row={currentAgent.id}
+    <Link
+      className="agent-row"
+      href={`/student/agents/${agent.id}`}
+      data-agent-row={agent.id}
     >
-      <Link
-        href={`/student/agents/${currentAgent.id}`}
-        className="agent-row-link"
-      >
-        <div className="avatar-orb" aria-hidden="true">
-          {currentAgent.name.slice(0, 1).toUpperCase()}
-        </div>
-        <div className="agent-row-copy">
-          <strong>{currentAgent.name}</strong>
-          <div className="chip-row">
-            <StatusBadge status={currentAgent.status} />
-            {currentAgent.current_draft_version_id ? (
-              <StatusBadge status="draft" />
-            ) : null}
-            {currentAgent.current_published_version_id ? (
-              <StatusBadge status="published" />
-            ) : null}
-          </div>
-        </div>
-        <span className="row-arrow" aria-hidden="true">
-          →
-        </span>
-      </Link>
-      <button
-        className="secondary-action description-edit-trigger"
-        type="button"
-        aria-label={t("editDescription")}
-        onClick={() => {
-          setDescriptionDraft(currentAgent.description ?? "");
-          setEditing(true);
-          setError(null);
-        }}
-      >
-        <span>{currentAgent.description}</span>
-        <span aria-hidden="true">✎</span>
-      </button>
-    </div>
+      <strong className="agent-row-name">{agent.name}</strong>
+      <StatusBadge status={state} />
+    </Link>
   );
 }
 

@@ -233,7 +233,9 @@ const enMessages = {
   statusPreviewReady: "preview ready",
   statusPartial: "partial",
   statusInterrupted: "interrupted",
-  studentHome: "Student home",
+  studentHome: "Home",
+  homeward: "Homeward",
+  agentInfo: "Info",
   welcomeBack: "Welcome back",
   studentHomeLede:
     "Build an Agent with a clear identity, a selected evidence set, and a release that a teacher can inspect.",
@@ -262,7 +264,7 @@ const enMessages = {
   members: "Members",
   membersLede:
     "Demo membership is read-only. All members share this group workspace.",
-  newAgent: "New agent",
+  newAgent: "New",
   newAgentTitle: "Give your Agent a point of view.",
   newAgentLede:
     "Start with a stable identity. You can shape the prompt and evidence in the draft workbench.",
@@ -296,13 +298,13 @@ const enMessages = {
   shareDisclosureWithTeacher:
     "Ask the course teacher to review this Agent version, then publish again after confirmation.",
   openProviderDisclosure: "Review",
-  agentWorkbench: "Agent workbench",
+  agentWorkbench: "Edit",
   groundingRag: "RAG grounded",
   groundingGeneral: "General reasoning",
   groundingMixed: "Mixed grounding",
   defineIdentity: "Define an identity and evidence set.",
   noDescriptionProvided: "No description provided.",
-  agentWorkspace: "Agent workspace",
+  agentWorkspace: "Agent",
   studentAgentLede:
     "A student-owned cultural perspective with a versioned evidence boundary.",
   archiveConfirm:
@@ -319,7 +321,7 @@ const enMessages = {
     "A draft is the safe place to revise prompt, evidence, and release checks.",
   noEditableDraft: "None",
   openWorkbench: "Edit",
-  versionHistory: "Version history",
+  versionHistory: "Versions",
   versionHistoryLede:
     "The full release trail stays available for your group, including snapshots used in prior classroom work.",
   noVersions: "None",
@@ -360,7 +362,7 @@ const enMessages = {
     "Try one factual question for a matched result, then a broader question to see the no-match boundary.",
   noSources:
     "No source files returned. General reasoning is not presented as evidence.",
-  publishChecklist: "Publish checklist",
+  publishChecklist: "Checklist",
   checklistLede:
     "The backend remains authoritative; this checklist is only a teaching preview.",
   readyPublish: "Ready",
@@ -373,7 +375,7 @@ const enMessages = {
   blockRagPending: "Wait for enabled files to finish indexing.",
   blockRagFailed: "Retry or remove failed enabled files.",
   blockAvatarMissing: "Choose an available 3D template before publishing.",
-  ragPreview: "RAG preview",
+  ragPreview: "RAG",
   ragPreviewLede:
     "Preview of the ordered draft knowledge set. It is not a published snapshot.",
   files: "files",
@@ -390,7 +392,7 @@ const enMessages = {
   whatTeachesPublish:
     "freezes both so another person can inspect the same release later.",
   testChatMessage: "Test chat message",
-  publishedSnapshot: "Published snapshot",
+  publishedSnapshot: "Version",
   publishedSnapshotLede:
     "This release is immutable. Teacher views expose the same frozen Agent prompt and source set without draft controls.",
   readOnlyRelease: "Read-only release content.",
@@ -443,8 +445,8 @@ const enMessages = {
   edit: "Edit",
   reindex: "Reindex",
   hide: "Hide",
-  knowledgePage: "Knowledge library",
-  knowledgePageTitle: "Group Markdown",
+  knowledgePage: "Knowledge",
+  knowledgePageTitle: "Knowledge",
   knowledgePageLede:
     "Files are immutable source records. Hide removes a file from the workspace only; published snapshots are never rewritten.",
   knowledgeCreateTitle: "New",
@@ -977,7 +979,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   statusPreviewReady: "试听就绪",
   statusPartial: "部分完成",
   statusInterrupted: "已中断",
-  studentHome: "学生首页",
+  studentHome: "首页",
+  homeward: "Homeward",
+  agentInfo: "信息",
   welcomeBack: "欢迎回来",
   studentHomeLede: "构建清晰的人设、明确的证据集，以及教师可以检查的发布版本。",
   currentCourse: "当前课程",
@@ -1002,7 +1006,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   noMarkdown: "暂无",
   members: "成员",
   membersLede: "演示成员关系只读；所有成员共享这个小组工作台。",
-  newAgent: "新建智能体",
+  newAgent: "新建",
   newAgentTitle: "给你的智能体一个观点。",
   newAgentLede: "先建立稳定身份，再在草稿工作台塑造提示词和证据。",
   agentIdentity: "智能体身份",
@@ -1034,12 +1038,12 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   shareDisclosureWithTeacher:
     "请课程教师查看这个智能体版本；确认后再重新发布。",
   openProviderDisclosure: "审批",
-  agentWorkbench: "智能体工作台",
+  agentWorkbench: "编辑",
   groundingRag: "RAG 证据回答",
   groundingGeneral: "一般推理",
   groundingMixed: "混合依据",
   noDescriptionProvided: "还没有简介。",
-  agentWorkspace: "智能体工作台",
+  agentWorkspace: "智能体",
   studentAgentLede: "学生拥有的文化视角，具有清晰的版本化证据边界。",
   archiveConfirm: "归档这个智能体？历史和已发布快照仍会保留。",
   unarchiveConfirm: "取消归档这个智能体？",
@@ -1052,7 +1056,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   draftStatusLede: "草稿是修改提示词、证据和发布检查项的安全空间。",
   noEditableDraft: "无",
   openWorkbench: "编辑",
-  versionHistory: "版本历史",
+  versionHistory: "版本",
   versionHistoryLede: "完整版本轨迹会保留在小组内，包括过往课堂使用的快照。",
   noVersions: "无",
   inspectRelease: "查看",
@@ -1114,7 +1118,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   whatTeachesRag: "提供明确证据。",
   whatTeachesPublish: "冻结两者，方便他人复核同一发布版本。",
   testChatMessage: "测试聊天消息",
-  publishedSnapshot: "已发布快照",
+  publishedSnapshot: "版本",
   publishedSnapshotLede:
     "这个版本不可变。教师视图会展示相同的 Agent 提示词和来源集，不显示草稿控件。",
   readOnlyRelease: "只读发布内容。",
@@ -1162,7 +1166,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   reindex: "重新索引",
   hide: "隐藏",
   knowledgePage: "知识库",
-  knowledgePageTitle: "小组 Markdown",
+  knowledgePageTitle: "知识库",
   knowledgePageLede:
     "文件是不可变来源记录。隐藏只会移出工作区，不会改写已发布快照。",
   knowledgeCreateTitle: "新建",

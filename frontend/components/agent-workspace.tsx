@@ -294,7 +294,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
       <PageIntro
         eyebrow={t("agentWorkspace")}
         title={agent.name}
-        description={agent.description}
         action={
           <div className="button-row">
             <Link
@@ -353,7 +352,20 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           {t("metadataConflict")}
         </div>
       ) : null}
-      <SectionCard title={t("description")}>
+      <SectionCard
+        title={t("agentInfo")}
+        action={
+          !editingDescription ? (
+            <button
+              className="inline-button"
+              type="button"
+              onClick={() => setEditingDescription(true)}
+            >
+              {t("edit")}
+            </button>
+          ) : undefined
+        }
+      >
         {editingDescription ? (
           <div className="stack-form">
             <label>
@@ -386,55 +398,12 @@ export function AgentOverview({ agentId }: { agentId: string }) {
             </div>
           </div>
         ) : (
-          <button
-            className="secondary-action description-edit-trigger"
-            type="button"
-            aria-label={t("editDescription")}
-            onClick={() => setEditingDescription(true)}
-          >
-            <span>{agent.description}</span>
-            <span aria-hidden="true">✎</span>
-          </button>
+          <div className="agent-info-description">
+            <span className="section-label">{t("description")}</span>
+            <p>{agent.description || "—"}</p>
+          </div>
         )}
       </SectionCard>
-      <div className="workspace-grid">
-        <SectionCard title={t("currentRelease")}>
-          {current ? (
-            <VersionSummary version={current} current />
-          ) : (
-            <EmptyCard
-              title={t("noPublishedYet")}
-              action={
-                draft ? (
-                  <Link
-                    className="secondary-action"
-                    href={`/student/agent-versions/${draft.id}/edit`}
-                  >
-                    {t("openV10")}
-                  </Link>
-                ) : null
-              }
-            />
-          )}
-        </SectionCard>
-        <SectionCard title={t("draftStatus")}>
-          {draft ? (
-            <VersionSummary
-              version={draft}
-              action={
-                <Link
-                  className="text-link"
-                  href={`/student/agent-versions/${draft.id}/edit`}
-                >
-                  {t("openWorkbench")}
-                </Link>
-              }
-            />
-          ) : (
-            <p className="muted-copy">{t("noEditableDraft")}</p>
-          )}
-        </SectionCard>
-      </div>
       <SectionCard title={t("versionHistory")}>
         {versions.length === 0 ? (
           <p className="muted-copy">{t("noVersions")}</p>
@@ -481,10 +450,6 @@ function VersionSummary({
             <span className="current-label">{t("current")}</span>
           ) : null}
         </div>
-        <p>
-          {version.enabled_documents?.length ?? 0} {t("enabledFiles")} ·{" "}
-          {t("revision")} {version.revision}
-        </p>
       </div>
       {action ??
         (version.state !== "draft" ? (
@@ -970,12 +935,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       />
       <div className="workbench-meta">
         <StatusBadge status="draft" />
-        <span>
-          {t("revision")} {version.revision}
-        </span>
-        <span>
-          {enabledCount} {t("enabledFileCount")}
-        </span>
         {localDirty ? (
           <span className="dirty-label" role="status">
             {t("unsavedChanges")}

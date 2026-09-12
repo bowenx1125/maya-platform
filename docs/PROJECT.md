@@ -314,13 +314,15 @@ Private configuration is unchanged. Classroom behavior awaits the owner's audit.
 
 ## Accounts and student workspace design
 
-Accounts, eight student routes and QR interaction share the teacher's Inter typography, white
-cards, pale-yellow content, gold dividers, 24/18px insets and 20px section spacing.
-Forms, lists, version panels, Persona, avatar and voice controls use that hierarchy;
-actions use single words; explanatory UI prose is removed. Authored content,
-validation states and consent remain. Editing/action rows adapt to narrow screens.
+Accounts, student routes and QR interaction share teacher Inter typography, white
+cards, pale-yellow content, gold dividers and responsive spacing. Actions use
+single words. Home/group lists show Agent names and draft/published status;
+Description is edited inside Agent Info. Homeward returns teachers to Accounts.
+Duplicate version panels, technical counters and explanatory title prose are removed.
+Authored content, validation, consent and Provider configuration remain unchanged.
 
-Before the final compact-copy revision, 334 frontend tests passed/1 skipped in one
-run. Final copy uses updated action-name assertions; no repeat full test run. Desktop Accounts/Home/Group/Agent and narrow-screen editor/
-knowledge views were inspected. Backend and Provider configuration were unchanged.
-README covers accounts, four rounds and current classroom controls.
+The earlier frontend suite passed 334 tests/1 skipped before final copy revisions.
+Latest refinement: one focused run passed 9/10; the remaining assertion used an old
+Download RAG button name and was updated without rerunning, per owner request.
+Type/lint and frontend build pass. Desktop and 390px UI were visually inspected
+and refined; final classroom behavior remains for owner audit. README is current.

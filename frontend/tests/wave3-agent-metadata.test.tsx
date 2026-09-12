@@ -133,7 +133,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
       screen.getByRole("link", { name: "Back" }).getAttribute("href"),
     ).toBe(`/student/groups/${groupId}`);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "A current perspective" },
     });
@@ -153,7 +153,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
   it("requires confirmation before discarding a dirty description or deleting", async () => {
     render(<AgentOverview agentId={agentId} />);
     await waitFor(() => expect(screen.getByText("Draft Agent")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "Unsaved" },
     });
@@ -192,7 +192,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
 
     render(<AgentOverview agentId={agentId} />);
     await waitFor(() => expect(screen.getByText("Draft Agent")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "Local draft" },
     });
@@ -217,20 +217,15 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     );
   });
 
-  it("keeps the row edit control keyboard-focusable and updates GroupWorkspace state", async () => {
+  it("opens Agent info from a keyboard-focusable row without inline metadata controls", async () => {
     const agent: AgentSummary = {
       id: agentId,
       group_id: groupId,
       name: "Row Agent",
-      description: "",
+      description: "List-hidden description",
       status: "active",
       current_published_version_id: null,
       current_draft_version_id: versionId,
-    } as AgentSummary;
-    const updated = {
-      ...agent,
-      description: "Row description",
-      metadata_revision: 1,
     } as AgentSummary;
     const groupApi = {
       ...api,
@@ -242,97 +237,33 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
       }),
       agents: vi.fn().mockResolvedValue([agent]),
       knowledge: vi.fn().mockResolvedValue([]),
-      updateAgentMetadata: vi.fn().mockResolvedValue(updated),
+      updateAgentMetadata: vi.fn(),
     } as unknown as MetadataApi;
     mockedUseSession.mockReturnValue({ api: groupApi } as never);
 
     render(<GroupWorkspace groupId={groupId} />);
     await waitFor(() => expect(screen.getByText("Row Agent")).toBeTruthy());
-    const edit = screen.getByRole("button", { name: "Edit description" });
-    edit.focus();
-    expect(document.activeElement).toBe(edit);
-    fireEvent.click(edit);
-    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
-      target: { value: "Row description" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(groupApi.updateAgentMetadata).toHaveBeenCalledWith(agentId, {
-        expected_metadata_revision: 0,
-        description: "Row description",
-      }),
-    );
-    expect(await screen.findByText("Row description")).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Row Agent/ });
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    expect(link.getAttribute("href")).toBe(`/student/agents/${agentId}`);
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByText("List-hidden description")).toBeNull();
+    expect(groupApi.updateAgentMetadata).not.toHaveBeenCalled();
   });
 
-  it("shows the authoritative row value after a stale CAS and preserves the local draft", async () => {
-    const agent: AgentSummary = {
-      id: agentId,
-      group_id: groupId,
-      name: "Conflict Agent",
-      description: "Original server value",
-      status: "active",
-      current_published_version_id: null,
-      current_draft_version_id: versionId,
-    } as AgentSummary;
-    const authoritative = {
-      ...agent,
-      description: "Authoritative server value",
-      metadata_revision: 1,
-    } as AgentSummary;
-    const groupApi = {
-      ...api,
-      group: vi.fn().mockResolvedValue({
-        id: groupId,
-        course_id: "course-id",
-        name: "Bowen group",
-        members: [],
-      }),
-      agents: vi.fn().mockResolvedValue([agent]),
-      knowledge: vi.fn().mockResolvedValue([]),
-      agent: vi.fn().mockResolvedValue(authoritative),
-      updateAgentMetadata: vi
-        .fn()
-        .mockRejectedValueOnce({
-          status: 409,
-          code: "stale_metadata_revision",
-        })
-        .mockResolvedValueOnce({
-          ...authoritative,
-          description: "Local row draft",
-          metadata_revision: 2,
-        }),
-    } as unknown as MetadataApi;
-    mockedUseSession.mockReturnValue({ api: groupApi } as never);
-
-    render(<GroupWorkspace groupId={groupId} />);
-    await waitFor(() =>
-      expect(screen.getByText("Conflict Agent")).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+  it("cancels Info edits without changing the stored description", async () => {
+    vi.mocked(api.agent).mockResolvedValue(draftAgent("Stored description"));
+    render(<AgentOverview agentId={agentId} />);
+    await screen.findByText("Stored description");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
-      target: { value: "Local row draft" },
+      target: { value: "Unsaved description" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(groupApi.agent).toHaveBeenCalledWith(agentId));
-    expect(
-      (
-        screen.getByRole("textbox", {
-          name: "Description",
-        }) as HTMLTextAreaElement
-      ).value,
-    ).toBe("Local row draft");
-    expect(
-      screen.getByLabelText("Current Agent metadata").textContent,
-    ).toContain("Authoritative server value");
-
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(groupApi.updateAgentMetadata).toHaveBeenLastCalledWith(agentId, {
-        expected_metadata_revision: 1,
-        description: "Local row draft",
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("Stored description")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    expect(api.updateAgentMetadata).not.toHaveBeenCalled();
   });
 
   it("renders empty descriptions and metadata labels in Chinese without a fallback", async () => {
@@ -343,8 +274,8 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     );
     await waitFor(() => expect(screen.getByText("Draft Agent")).toBeTruthy());
     expect(screen.queryByText("暂无简介")).toBeNull();
-    expect(screen.getByRole("button", { name: "编辑简介" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "编辑简介" }));
+    expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
     expect(screen.getByRole("button", { name: "保存" })).toBeTruthy();
   });
 

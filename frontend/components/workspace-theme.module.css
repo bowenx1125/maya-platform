@@ -48,6 +48,8 @@
 }
 
 .surface :global(.section-card-header) {
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   margin: 0 0 var(--section-content-gap);
   padding-bottom: var(--section-content-gap);
@@ -416,4 +418,23 @@
 
 .surface :global(.check-item) strong {
   text-transform: none;
+}
+
+.surface :global(.agent-row-name) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.surface :global(.agent-info-description) {
+  padding: 16px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  background: var(--workspace-content);
+}
+.surface :global(.agent-info-description) p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
