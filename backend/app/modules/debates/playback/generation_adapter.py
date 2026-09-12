@@ -1,4 +1,4 @@
-"""SQL adapter from frozen Wave 2 rows to the pure M11 generator.
+"""SQL adapter from frozen debate rows to the generation service.
 
 The adapter is deliberately provider-neutral.  It loads only the selected
 participant's immutable AgentVersion and KnowledgeSnapshot, reconstructs the
@@ -48,12 +48,14 @@ from app.modules.debates.generation import (
     TurnPolicy,
     build_turn_subqueries,
     compute_prompt_receipt_hash,
-    compute_transcript_hash,
     public_evidence_trace,
 )
 from app.modules.debates.generation.four_round import body_count
 from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
+)
+from app.modules.debates.generation.mutual_learning_prompts import (
+    compute_mutual_transcript_hash,
 )
 from app.modules.debates.generation.prompt_request import (
     PromptRequestV1,
@@ -83,7 +85,6 @@ from app.modules.debates.round_count import (
 )
 from app.modules.debates.teaching_rules import frozen_system_prompt
 from app.modules.debates.topic_language import model_topic
-from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
     EmbeddingAcceptanceUnknown,
@@ -1400,8 +1401,9 @@ class SqlTurnPreparer:
             raise ValueError("turn participant row is unavailable")
         expected_fence = generation_fence(db, debate, current)
         persisted_rule_set_id = str(debate.rule_set_id)
-        is_mutual = persisted_rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
-        round_count = self._round_count(debate) if is_mutual else 2
+        if persisted_rule_set_id != MUTUAL_LEARNING_RULE_SET_ID:
+            raise ValueError("only the mutual-learning rule set can be generated")
+        round_count = self._round_count(debate)
         policy = TurnPolicy(rule_set_id=persisted_rule_set_id)
         plans = policy.plan_with_ids(
             participants,
@@ -1497,12 +1499,6 @@ class SqlTurnPreparer:
             SqlSnapshotRetriever(db, query_embeddings=query_embeddings),
             self.llm,
             rule_set_id=persisted_rule_set_id,
-            mock_retrieval_policy_id=(
-                MOCK_LEXICAL_ANCHOR_POLICY_ID
-                if getattr(self.settings, "embedding_provider", "mock") == "mock"
-                and persisted_rule_set_id == "ordered_multi_agent_rounds_demo_v2"
-                else None
-            ),
             llm_runtime=llm_runtime,
             llm_runtime_options=llm_runtime_options,
             llm_manifest_preparer=llm_manifest_preparer,
@@ -2154,11 +2150,11 @@ def generation_fence(db: Session, debate: Any, turn: Any) -> PreparedGenerationF
         raise ValueError("planned turn is unavailable")
     if any(row.turn_index != index for index, row in enumerate(rows)):
         raise ValueError("persisted turn plan indexes are not contiguous")
-    is_mutual = str(getattr(debate, "rule_set_id", "")) == MUTUAL_LEARNING_RULE_SET_ID
-    if is_mutual:
-        round_count = SqlTurnPreparer._round_count(debate)
-        if int(current.round_no) > round_count:
-            raise ValueError("turn round exceeds the frozen mutual-learning plan")
+    if str(getattr(debate, "rule_set_id", "")) != MUTUAL_LEARNING_RULE_SET_ID:
+        raise ValueError("only the mutual-learning rule set has a generation fence")
+    round_count = SqlTurnPreparer._round_count(debate)
+    if int(current.round_no) > round_count:
+        raise ValueError("turn round exceeds the frozen mutual-learning plan")
     expected_rows = visible_turn_predecessors(debate, current, rows)
     expected_ids = tuple(str(row.id) for row in expected_rows)
     if _decode_predecessor_ids(current) != expected_ids:
@@ -2172,33 +2168,14 @@ def generation_fence(db: Session, debate: Any, turn: Any) -> PreparedGenerationF
         expected_cutoff = max((item.turn_index for item in visible), default=-1)
         if predecessor.cutoff_turn_index != expected_cutoff:
             raise ValueError("a predecessor has a stale cutoff index")
-        if is_mutual:
-            from app.modules.debates.generation.mutual_learning_prompts import (
-                compute_mutual_transcript_hash,
-            )
-
-            expected_predecessor_hash = compute_mutual_transcript_hash(visible)
-        else:
-            expected_predecessor_hash = compute_transcript_hash(visible)
-        if predecessor.transcript_hash != expected_predecessor_hash:
+        if predecessor.transcript_hash != compute_mutual_transcript_hash(visible):
             raise ValueError("a predecessor has a stale transcript hash")
-    if is_mutual:
-        from app.modules.debates.generation.mutual_learning_prompts import (
-            compute_mutual_transcript_hash,
-        )
-
-        transcript_hash = compute_mutual_transcript_hash(predecessors)
-    else:
-        transcript_hash = compute_transcript_hash(predecessors)
+    transcript_hash = compute_mutual_transcript_hash(predecessors)
     stored_hash = getattr(current, "transcript_hash", None)
     if stored_hash is not None and str(stored_hash) != transcript_hash:
         raise ValueError("persisted turn transcript hash does not match its prefix")
     stored_cutoff = getattr(current, "cutoff_turn_index", None)
-    expected_cutoff = (
-        max((int(row.turn_index) for row in expected_rows), default=-1)
-        if is_mutual
-        else current.turn_index - 1
-    )
+    expected_cutoff = max((int(row.turn_index) for row in expected_rows), default=-1)
     if stored_cutoff is not None and int(stored_cutoff) != expected_cutoff:
         raise ValueError("persisted turn cutoff does not match its prefix")
     return PreparedGenerationFence(

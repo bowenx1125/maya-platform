@@ -15,7 +15,6 @@ from app.modules.knowledge.providers import (
     EmbeddingBatchV1,
     EmbeddingHTTPRejected,
     EmbeddingModelError,
-    EmbeddingPlanError,
     EmbeddingResponseError,
     EmbeddingShapeError,
     InMemoryEmbeddingLedger,
@@ -159,12 +158,13 @@ def test_snapshot_chunk_ids_are_stable_per_snapshot_but_not_cross_snapshot() -> 
     assert first.chunks[0].chunk_id != other_snapshot.chunks[0].chunk_id
 
 
-def test_utf8_fallback_rejects_long_unbroken_input_before_provider_call() -> None:
+def test_long_unbroken_input_is_planned_without_a_per_item_cap() -> None:
+    # The owner removed the 8,000-token per-item ceiling, so a long unbroken
+    # chunk is planned instead of rejected. Planning still calls no provider.
     provider = MockEmbeddingProvider()
     build = _build("x" * 8_001)
-    with pytest.raises(EmbeddingPlanError, match="8,000") as error:
-        plan_embedding_batches(build)
-    assert error.value.code == "embedding_item_too_large"
+    plan = plan_embedding_batches(build)
+    assert [item.token_count for batch in plan.batches for item in batch.items] == [8_001]
     assert provider.call_count == 0
 
 

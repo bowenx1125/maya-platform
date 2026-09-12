@@ -128,7 +128,7 @@ class MemoryDebate:
     id: str = field(default_factory=lambda: str(uuid4()))
     course_id: str = field(default_factory=lambda: str(uuid4()))
     topic: str = ""
-    rule_set_id: str = "ordered_multi_agent_rounds_demo_v1"
+    rule_set_id: str = "ordered_multi_expert_mutual_learning_v1"
     round_count: int = 2
     status: str = "draft"
     revision: int = 0

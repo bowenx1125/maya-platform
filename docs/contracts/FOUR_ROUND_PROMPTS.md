@@ -101,7 +101,7 @@ Execute round 1 of 4. Output speech in Chinese. Apply the teaching rules relevan
 - Same-round history shows what has already been covered; it is not a continuation template. A short sentence may locate an earlier point, but do not repeat its entire argument or merely substitute names, synonyms or sentence order.
 - Evidence may answer a new question without being read aloud again. Shared conclusions are allowed; add a useful evidence interpretation, condition, practical detail or unresolved issue without manufacturing disagreement.
 
-## Round 1: RAG Opening
+## Round 1: Opening
 
 Work independently with your own knowledge base, without reading other opening speeches. Give RAG evidence high priority. Develop one central position, explain the key evidence and why it supports the position, show the decision criterion your Persona prioritizes, and identify an important limit or condition.
 
@@ -245,7 +245,7 @@ Execute round 2 of 4. Output speech in Chinese. Apply the teaching rules relevan
 - Same-round history shows what has already been covered; it is not a continuation template. A short sentence may locate an earlier point, but do not repeat its entire argument or merely substitute names, synonyms or sentence order.
 - Evidence may answer a new question without being read aloud again. Shared conclusions are allowed; add a useful evidence interpretation, condition, practical detail or unresolved issue without manufacturing disagreement.
 
-## Round 1: RAG Opening
+## Round 1: Opening
 
 Work independently with your own knowledge base, without reading other opening speeches. Give RAG evidence high priority. Develop one central position, explain the key evidence and why it supports the position, show the decision criterion your Persona prioritizes, and identify an important limit or condition.
 
@@ -389,7 +389,7 @@ Execute round 3 of 4. Output speech in Chinese. Apply the teaching rules relevan
 - Same-round history shows what has already been covered; it is not a continuation template. A short sentence may locate an earlier point, but do not repeat its entire argument or merely substitute names, synonyms or sentence order.
 - Evidence may answer a new question without being read aloud again. Shared conclusions are allowed; add a useful evidence interpretation, condition, practical detail or unresolved issue without manufacturing disagreement.
 
-## Round 1: RAG Opening
+## Round 1: Opening
 
 Work independently with your own knowledge base, without reading other opening speeches. Give RAG evidence high priority. Develop one central position, explain the key evidence and why it supports the position, show the decision criterion your Persona prioritizes, and identify an important limit or condition.
 
@@ -533,7 +533,7 @@ Execute round 4 of 4. Output speech in Chinese. Apply the teaching rules relevan
 - Same-round history shows what has already been covered; it is not a continuation template. A short sentence may locate an earlier point, but do not repeat its entire argument or merely substitute names, synonyms or sentence order.
 - Evidence may answer a new question without being read aloud again. Shared conclusions are allowed; add a useful evidence interpretation, condition, practical detail or unresolved issue without manufacturing disagreement.
 
-## Round 1: RAG Opening
+## Round 1: Opening
 
 Work independently with your own knowledge base, without reading other opening speeches. Give RAG evidence high priority. Develop one central position, explain the key evidence and why it supports the position, show the decision criterion your Persona prioritizes, and identify an important limit or condition.
 

@@ -52,6 +52,7 @@ export type DebatePreviewParticipant = {
 export type DebatePreviewSnapshot = {
   teaching_protocol?: "four_round_v1" | null;
   topic: string;
+  background?: string;
   participants: readonly DebatePreviewParticipant[];
   preview: DebatePreviewProgress | null;
   preview_turns?: readonly DebatePreviewTurn[];
@@ -87,6 +88,7 @@ export function DebatePreview({
   const turns = [...previewTurns].sort(
     (left, right) => left.turn_index - right.turn_index,
   );
+  const background = (detail.background ?? "").trim();
 
   return (
     <div className={styles.page} data-testid="debate-preview">
@@ -114,12 +116,16 @@ export function DebatePreview({
 
       {error ? <ErrorNotice error={error} /> : null}
 
-      {turns.length === 0 ? (
+      {turns.length === 0 && !background ? (
         <SectionCard>
           <p className={styles.empty}>No saved turns yet.</p>
         </SectionCard>
       ) : (
         <div className={styles.turns}>
+          {background ? <BackgroundCard text={background} /> : null}
+          {turns.length === 0 ? (
+            <p className={styles.empty}>No saved turns yet.</p>
+          ) : null}
           {turns.map((turn) => (
             <PreviewTurnCard
               key={turn.id}
@@ -136,6 +142,19 @@ export function DebatePreview({
         </div>
       )}
     </div>
+  );
+}
+
+function BackgroundCard({ text }: { text: string }) {
+  return (
+    <article className={styles.turnCard} data-testid="preview-background">
+      <div className={styles.turnHeader}>
+        <div>
+          <h2>Background</h2>
+        </div>
+      </div>
+      <p className={styles.speech}>{text}</p>
+    </article>
   );
 }
 

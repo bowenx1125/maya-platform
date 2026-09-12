@@ -102,6 +102,24 @@ describe("teacher debate preview", () => {
     ).toBeTruthy();
   });
 
+  it("shows Background before the turns only when the debate has one", () => {
+    const { container } = renderPreview({
+      ...detail,
+      background: "  The village lost a well last winter.  ",
+    });
+
+    expect(screen.getByText("Background")).toBeTruthy();
+    expect(
+      screen.getByText("The village lost a well last winter."),
+    ).toBeTruthy();
+    const cards = container.querySelectorAll("article");
+    expect(cards[0].getAttribute("data-testid")).toBe("preview-background");
+
+    cleanup();
+    renderPreview({ ...detail, background: "   " });
+    expect(screen.queryByText("Background")).toBeNull();
+  });
+
   it("holds classroom access until the server preview is ready", () => {
     renderPreview({
       ...detail,

@@ -1688,9 +1688,9 @@ export interface components {
             participants: components["schemas"]["DebateParticipantInput"][];
             /**
              * @default ordered_multi_expert_mutual_learning_v1
-             * @enum {string}
+             * @constant
              */
-            rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
+            rule_set_id: "ordered_multi_expert_mutual_learning_v1";
             /**
              * @default 4
              * @constant
@@ -1873,8 +1873,8 @@ export interface components {
             background: string;
             revision: number;
             last_sequence: number;
-            /** @enum {string} */
-            rule_set_id: "ordered_multi_agent_rounds_demo_v1" | "ordered_multi_agent_rounds_demo_v2" | "ordered_multi_expert_mutual_learning_v1";
+            /** @constant */
+            rule_set_id: "ordered_multi_expert_mutual_learning_v1";
             round_count: number;
             /**
              * @default en

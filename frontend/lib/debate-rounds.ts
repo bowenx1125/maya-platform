@@ -17,7 +17,7 @@ export function teachingRoundLabel(round: number, locale: "en" | "zh"): string {
   const labels =
     locale === "zh"
       ? ["RAG 立论", "讨论", "回应", "总结"]
-      : ["RAG Opening", "Discussion", "Response", "Conclusion"];
+      : ["Opening", "Discussion", "Response", "Conclusion"];
   return labels[round - 1] ?? "";
 }
 

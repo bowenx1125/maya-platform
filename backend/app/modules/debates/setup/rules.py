@@ -9,11 +9,10 @@ from typing import Literal
 from uuid import UUID
 
 from app.modules.debates.generation.mutual_learning_policy import MutualLearningPolicy
+from app.modules.debates.generation.policy import TurnPolicyError
 from app.modules.debates.schemas import (
     RULE_SET_ID,
     RULE_SET_ID_MUTUAL_LEARNING,
-    RULE_SET_ID_V1,
-    RULE_SET_ID_V2,
     DebateRuleSnapshot,
     Slot,
     TurnPlanEntry,
@@ -64,23 +63,26 @@ def build_turn_plan(
     rule_set_id: str = RULE_SET_ID,
     teaching_protocol: str | None = None,
 ) -> tuple[TurnPlanEntry, ...]:
-    """Build round-major turns with no model/provider decision points.
+    """Adapt the mutual-learning plan to the persisted UUID turn DTOs.
 
-    Round one follows A..E.  Round two repeats the same order and assigns the
-    next participant question, except the final overall turn, which asks the
-    class a reflection question.  Every entry carries the complete planned
-    predecessor index prefix for later generation CAS checks.
+    No model or provider decides anything here.  Every entry carries the
+    complete planned predecessor index prefix for later generation CAS checks.
     """
 
     if rule_set_id == RULE_SET_ID_MUTUAL_LEARNING:
         participants = normalize_participant_ids(participant_ids)
         # The generation policy is the single owner of phase and barrier
         # semantics.  Setup only adapts its ordered entries to UUID DTOs.
-        plan = MutualLearningPolicy().plan(
-            [str(item) for item in participants],
-            round_count=round_count,
-            teaching_protocol=teaching_protocol,
-        )
+        try:
+            plan = MutualLearningPolicy().plan(
+                [str(item) for item in participants],
+                round_count=round_count,
+                teaching_protocol=teaching_protocol,
+            )
+        except TurnPolicyError as exc:
+            # Setup speaks RuleViolation so the router keeps returning a stable
+            # business code instead of leaking a planner exception as a 500.
+            raise RuleViolation(exc.code, str(exc)) from exc
         return tuple(
             TurnPlanEntry(
                 participant_id=UUID(entry.participant_id),
@@ -100,37 +102,7 @@ def build_turn_plan(
             )
             for entry in plan
         )
-    if rule_set_id not in {RULE_SET_ID_V1, RULE_SET_ID_V2}:
-        raise RuleViolation("rule_set_unavailable", "The Debate rule set is unavailable.")
-    if round_count != 2:
-        raise RuleViolation("demo_round_count_fixed", "The demo uses exactly two rounds.")
-    participants = normalize_participant_ids(participant_ids)
-    entries: list[TurnPlanEntry] = []
-    participant_count = len(participants)
-    for round_no in (1, 2):
-        for order_index, participant_id in enumerate(participants):
-            turn_index = (round_no - 1) * participant_count + order_index
-            question_type = "none"
-            question_target: UUID | None = None
-            if round_no == 2:
-                if turn_index == (participant_count * 2) - 1:
-                    question_type = "audience_reflection"
-                else:
-                    question_type = "agent"
-                    question_target = participants[(order_index + 1) % participant_count]
-            entries.append(
-                TurnPlanEntry(
-                    participant_id=participant_id,
-                    slot=SLOTS[order_index],
-                    order_index=order_index,
-                    round_no=round_no,
-                    turn_index=turn_index,
-                    predecessor_turn_indexes=tuple(range(turn_index)),
-                    question_type=question_type,  # type: ignore[arg-type]
-                    question_target_participant_id=question_target,
-                )
-            )
-    return tuple(entries)
+    raise RuleViolation("rule_set_unavailable", "The Debate rule set is unavailable.")
 
 
 # The concise alias is convenient for repositories and hidden migration tests.
@@ -139,19 +111,11 @@ plan_turns = build_turn_plan
 
 def rule_snapshot(
     *,
-    rule_set_id: Literal[
-        "ordered_multi_agent_rounds_demo_v1",
-        "ordered_multi_agent_rounds_demo_v2",
-        "ordered_multi_expert_mutual_learning_v1",
-    ] = RULE_SET_ID,
+    rule_set_id: Literal["ordered_multi_expert_mutual_learning_v1"] = RULE_SET_ID,
     round_count: int = 2,
 ) -> DebateRuleSnapshot:
     """Return a fresh immutable copy of the frozen Demo rule values."""
 
-    if rule_set_id == RULE_SET_ID_V1:
-        return DebateRuleSnapshot(rule_set_id=RULE_SET_ID_V1, retrieval_policy_id=None)
-    if rule_set_id == RULE_SET_ID_V2:
-        return DebateRuleSnapshot()
     if rule_set_id == RULE_SET_ID_MUTUAL_LEARNING:
         try:
             return DebateRuleSnapshot(
@@ -166,11 +130,7 @@ def rule_snapshot(
 
 def canonical_rule_snapshot_json(
     *,
-    rule_set_id: Literal[
-        "ordered_multi_agent_rounds_demo_v1",
-        "ordered_multi_agent_rounds_demo_v2",
-        "ordered_multi_expert_mutual_learning_v1",
-    ] = RULE_SET_ID,
+    rule_set_id: Literal["ordered_multi_expert_mutual_learning_v1"] = RULE_SET_ID,
     round_count: int = 2,
     turn_protocol: Literal["segments_v2"] | None = None,
     teaching_protocol: Literal["four_round_v1"] | None = None,
@@ -197,10 +157,6 @@ def canonical_rule_snapshot_json(
         from app.modules.debates.teaching_rules import freeze_teaching_rules
 
         payload.update(frozen_teaching if frozen_teaching is not None else freeze_teaching_rules())
-    if rule_set_id == RULE_SET_ID_V1:
-        # Preserve the byte-shape of the historical v1 canonical snapshot;
-        # the retrieval policy field did not exist when those rows were made.
-        payload.pop("retrieval_policy_id", None)
     return json.dumps(
         payload,
         sort_keys=True,

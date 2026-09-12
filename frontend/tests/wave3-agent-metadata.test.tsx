@@ -350,7 +350,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     expect(screen.getByRole("button", { name: "保存简介" })).toBeTruthy();
   });
 
-  it("labels teacher description as current metadata while history remains separate", async () => {
+  it("does not restore the removed description on the teacher detail page", async () => {
     const teacherApi = {
       agent: vi.fn().mockResolvedValue({
         ...draftAgent("Current mutable description"),
@@ -379,12 +379,7 @@ describe("Wave 3 Agent metadata and safe-delete UI", () => {
     mockedUseSession.mockReturnValue({ api: teacherApi } as never);
 
     render(<TeacherAgentDetail agentId={agentId} />);
-    // The description leads the page now, in place of a note about which
-    // fields a teacher cannot see. It no longer needs a labelled card of its
-    // own repeating the same sentence further down.
-    await waitFor(() =>
-      expect(screen.getByText("Current mutable description")).toBeTruthy(),
-    );
-    expect(screen.getAllByText("Current mutable description")).toHaveLength(1);
+    await waitFor(() => expect(screen.getByText("Frozen prompt")).toBeTruthy());
+    expect(screen.queryByText("Current mutable description")).toBeNull();
   });
 });

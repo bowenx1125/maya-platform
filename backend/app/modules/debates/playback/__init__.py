@@ -1,4 +1,4 @@
-"""Teacher-controlled playback for the Wave 2 classroom stage.
+"""Teacher-controlled playback for the classroom stage.
 
 The playback package deliberately owns only the presentation boundary.  Debate
 setup and turn generation are injected through small protocols so the module

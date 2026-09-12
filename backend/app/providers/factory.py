@@ -1,4 +1,4 @@
-"""Server-side provider selection for Wave 1 and Wave 2 capabilities."""
+"""Server-side provider selection for Maya capabilities."""
 
 from __future__ import annotations
 

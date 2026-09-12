@@ -6,7 +6,7 @@ from dataclasses import replace
 from uuid import uuid4
 
 import pytest
-from app.modules.debates.generation.four_round import BODY_LIMITS, body_count
+from app.modules.debates.generation.four_round import body_count
 from app.modules.debates.generation.mutual_learning_policy import MutualLearningPolicy
 from app.modules.debates.generation.mutual_learning_prompts import compute_mutual_transcript_hash
 from app.modules.debates.generation.retrieval import RetrievalResult
@@ -100,12 +100,16 @@ def test_complete_four_round_lesson_freezes_inputs_and_preserves_metadata(
         calls_before = len(retrieval.calls)
         final = generator.generate(context).final_ready
         snapshot = llm.snapshots[-1]
-        low, high = BODY_LIMITS[language][entry.round_no - 1]
-        assert low <= body_count(final.speech, language) <= high
+        # The backend no longer bounds a speech; the round guidance exists only
+        # in the Prompt, so this asserts readable output inside that guidance.
+        guidance = {"zh": [500, 450, 550, 650], "en": [320, 280, 350, 420]}
+        high = guidance[language][entry.round_no - 1]
+        assert 0 < body_count(final.speech, language) <= high
         assert final.attempt == 1
-        assert len(retrieval.calls) - calls_before == int(entry.round_no in {1, 3})
-        if entry.round_no in {1, 3}:
-            assert retrieval.calls[-1][0] == owner.snapshot_id
+        # Every round now retrieves from the current Agent's own RAG. The
+        # round-specific query changes emphasis; it does not disable RAG.
+        assert len(retrieval.calls) - calls_before == 1
+        assert retrieval.calls[-1][0] == owner.snapshot_id
         assert len(snapshot.history) == (0 if entry.round_no == 1 else entry.turn_index)
         if entry.round_no == 1:
             assert {receipt.snapshot_id for receipt in snapshot.receipts} == {owner.snapshot_id}
@@ -143,7 +147,7 @@ def test_complete_four_round_lesson_freezes_inputs_and_preserves_metadata(
         turns.append(reloaded)
     assert len(turns) == agent_count * 4
     assert llm.calls == agent_count * 4
-    assert len(retrieval.calls) == agent_count * 2
+    assert len(retrieval.calls) == agent_count * 4
     assert tts.synthesize_calls == agent_count * 3
     reloaded_audio = AudioStore(tmp_path, tts_provider=tts)
     for metadata in saved_audio:

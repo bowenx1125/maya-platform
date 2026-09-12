@@ -36,7 +36,6 @@ from .prompt_request import (
     ProviderPromptV1,
     build_provider_prompt_from_mutual_input,
 )
-from .prompts import make_turn_prompt_input
 from .retrieval import (
     RAGRetrievalError,
     RetrievalResult,
@@ -66,7 +65,6 @@ from .types import (
     PublicSource,
     SnapshotRetrievalReceipt,
     StructuredTurnResult,
-    TurnPromptInput,
     TurnValidationError,
     ValidatedTurn,
 )
@@ -85,9 +83,7 @@ class Retriever(Protocol):
 class TurnLLM(Protocol):
     def generate_turn(
         self,
-        prompt: (
-            TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot
-        ),
+        prompt: MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot,
     ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
         """Generate a provider-neutral structured turn."""
 
@@ -166,97 +162,13 @@ class TurnGenerationService:
     ) -> GenerationResult:
         if getattr(context, "turn_protocol", "legacy_v1") == "segments_v2":
             return self._generate_segments(context, claim=claim)
-        if self.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID:
-            if context.participant.persona is not None:
-                return self._generate_mutual_learning_strict(context, claim=claim)
-            return self._generate_mutual_learning(context, claim=claim)
-        attempts: list[GenerationAttempt] = []
-        active_claim = claim
-        for attempt in (1, 2):
-            attempt_record = GenerationAttempt(attempt=attempt)
-            try:
-                subqueries = build_turn_subqueries(context)
-                if self.mock_retrieval_policy_id is None:
-                    retrieval = self.retriever.retrieve(context.participant.snapshot_id, subqueries)
-                elif isinstance(self.retriever, SnapshotRetriever):
-                    retrieval = self.retriever.retrieve(
-                        context.participant.snapshot_id,
-                        subqueries,
-                        policy_id=self.mock_retrieval_policy_id,
-                        topic_anchor=context.topic,
-                    )
-                else:
-                    raise RAGRetrievalError(
-                        "The Mock lexical policy requires the snapshot retriever.",
-                        technical=False,
-                    )
-                receipts = self._receipts(retrieval)
-                attempt_record = replace(attempt_record, retrieval_count=len(receipts))
-                prompt = make_turn_prompt_input(context, receipts, rule_set_id=self.rule_set_id)
-                if self.fence is not None:
-                    active_claim = self._claim_for_attempt(
-                        context,
-                        attempt,
-                        active_claim,
-                        transcript_hash=prompt.transcript_hash,
-                    )
-                attempt_record = replace(attempt_record, provider_called=True)
-                raw = self.llm.generate_turn(prompt)
-                validated = self._validate_with_optional_trim(
-                    raw,
-                    attempt=attempt,
-                    context=context,
-                    receipts=receipts,
-                )
-                result = final_ready_turn(
-                    validated,
-                    turn_id=context.turn.turn_id,
-                    participant_id=context.participant.participant_id,
-                    snapshot_id=context.participant.snapshot_id,
-                    round_no=context.turn.round_no,
-                    turn_index=context.turn.turn_index,
-                    predecessor_turn_ids=prompt.predecessor_turn_ids,
-                    cutoff_turn_index=prompt.cutoff_turn_index,
-                    transcript_hash=prompt.transcript_hash,
-                    attempt=attempt,
-                )
-                if self.fence is not None:
-                    if active_claim is None or not self.fence.complete(
-                        active_claim,
-                        stage="generation",
-                        attempt=attempt,
-                        predecessor_turn_ids=prompt.predecessor_turn_ids,
-                        transcript_hash=prompt.transcript_hash,
-                    ):
-                        raise GenerationDiscarded(
-                            "The turn generation result arrived after its fence changed."
-                        )
-                attempts.append(attempt_record)
-                return GenerationResult(result, tuple(attempts))
-            except GenerationDiscarded:
-                raise
-            except (
-                RAGRetrievalError,
-                GenerationProviderError,
-                TurnValidationError,
-                ValueError,
-            ) as exc:
-                attempts.append(
-                    replace(
-                        attempt_record,
-                        failure_code=getattr(exc, "code", "turn_generation_failed"),
-                    )
-                )
-                if self.fence is not None and active_claim is not None:
-                    self.fence.release(active_claim)
-                    active_claim = None
-                if attempt == 2:
-                    raise GenerationFailed(
-                        "Turn generation failed after the shared two-attempt repair budget.",
-                        attempt=attempt,
-                    ) from exc
-        # The loop always returns or raises; keep type checkers honest.
-        raise GenerationFailed("Turn generation did not produce a result.")
+        if self.rule_set_id != MUTUAL_LEARNING_RULE_SET_ID:
+            raise GenerationFailed(
+                "Only the mutual-learning rule set can generate a turn.", attempt=1
+            )
+        if context.participant.persona is not None:
+            return self._generate_mutual_learning_strict(context, claim=claim)
+        return self._generate_mutual_learning(context, claim=claim)
 
     def _generate_segments(
         self,
@@ -1316,43 +1228,6 @@ class TurnGenerationService:
         if not all(isinstance(item, SnapshotRetrievalReceipt) for item in receipts):
             raise RAGRetrievalError("The retriever returned an untyped receipt.", technical=False)
         return cast(tuple[SnapshotRetrievalReceipt, ...], receipts)
-
-    def _validate_with_optional_trim(
-        self,
-        raw: object,
-        *,
-        attempt: int,
-        context: GenerationContext,
-        receipts: Sequence[SnapshotRetrievalReceipt],
-    ) -> ValidatedTurn:
-        validator = self.validator
-        if not isinstance(validator, TurnValidator):
-            raise TurnValidationError("The legacy validator is not configured.")
-        try:
-            return validator.validate(
-                raw,  # type: ignore[arg-type]
-                plan=context.turn,
-                participant=context.participant,
-                receipts=receipts,
-                predecessors=context.predecessors,
-                pending_question=context.effective_pending_question,
-            )
-        except TurnValidationError:
-            if attempt != 2:
-                raise
-            # Long output may be shortened only on complete sentences; every
-            # structural/rule/evidence check is rerun by this method.
-            from .types import StructuredTurnResult
-
-            parsed = StructuredTurnResult.from_provider(raw)  # type: ignore[arg-type]
-            return validator.validate_after_sentence_trim(
-                parsed,
-                plan=context.turn,
-                participant=context.participant,
-                receipts=receipts,
-                predecessors=context.predecessors,
-                pending_question=context.effective_pending_question,
-            )
 
 
 @dataclass(slots=True)

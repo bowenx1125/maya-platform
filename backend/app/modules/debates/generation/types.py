@@ -1,6 +1,6 @@
 """Provider-neutral data contracts for M11 turn generation.
 
-The generation package intentionally has no dependency on the Wave 2 ORM.  A
+The generation package intentionally has no dependency on the debate ORM. A
 setup repository can adapt its rows to these small immutable objects and a
 playback worker can persist the resulting :class:`FinalReadyTurn` without
 giving a provider access to database models.  The same boundary is useful in
@@ -473,47 +473,10 @@ class PendingQuestion:
 
 
 @dataclass(frozen=True, slots=True)
-class TurnPromptInput:
-    """Immutable prompt input and final-ready predecessor fence."""
-
-    debate_id: str
-    topic: str
-    rule_set_id: str
-    phase: str
-    turn_plan: TurnPlan
-    participant: ParticipantContext
-    participants: tuple[ParticipantContext, ...]
-    agent_md: str
-    stance_mode: StanceMode
-    assigned_stance: Stance | None
-    teacher_note: str
-    current_position_summary: str
-    predecessors: tuple[FinalReadyTurn, ...]
-    predecessor_turn_ids: tuple[str, ...]
-    cutoff_turn_index: int
-    transcript_hash: str
-    receipts: tuple[SnapshotRetrievalReceipt, ...] = ()
-    pending_question: PendingQuestion | None = None
-
-    def __post_init__(self) -> None:
-        if self.participant.snapshot_id == "":
-            raise ValueError("participant snapshot is required")
-        if self.assigned_stance is not None and self.stance_mode != "assigned":
-            raise ValueError("open prompt cannot carry an assigned stance")
-        if self.stance_mode == "assigned" and self.assigned_stance is None:
-            raise ValueError("assigned prompt requires a stance")
-        if self.predecessor_turn_ids != tuple(item.turn_id for item in self.predecessors):
-            raise ValueError("predecessor_turn_ids must match the final-ready prefix")
-        if self.cutoff_turn_index != self.turn_plan.turn_index - 1:
-            raise ValueError("cutoff_turn_index must be the immediate predecessor index")
-
-
-@dataclass(frozen=True, slots=True)
 class MutualLearningPromptInput:
     """Prompt boundary with a completed-round visibility fence.
 
-    This is intentionally a separate DTO from :class:`TurnPromptInput`: the
-    latter's lower-index prefix is part of the frozen legacy contract, while
+    The completed-round fence is deliberate: only turns from finished rounds
     mutual learning hashes and carries only prior-round public turns.
     """
 
@@ -789,7 +752,6 @@ __all__ = [
     "Stance",
     "StanceMode",
     "StructuredTurnResult",
-    "TurnPromptInput",
     "TurnQuestion",
     "TurnValidationError",
     "ValidatedTurn",

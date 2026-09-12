@@ -10,7 +10,7 @@ New debates have exactly four rounds and two to five Agents. The complete round
 selector is removed. Snapshots use `four_round_v1` and `segments_v2`. The owner waived historical playback
 and recovery compatibility. Existing records are not silently regenerated/deleted.
 
-1. RAG Opening: high-priority own-KB evidence; independent claim and its relevance. Culture is
+1. Opening: high-priority own-KB evidence; independent claim and its relevance. Culture is
    a perspective, not proof; acknowledge missing evidence.
 2. Discussion: low-priority new own-KB retrieval. Start from the speaker's own
    first-round position/evidence, then respond to specific other claims with
@@ -32,12 +32,12 @@ order rotates but identities/question targets stay stable. Scheduling, SQL Next,
 input hashes and recovery use the same prefix. Completed results/accepted stages
 are reused rather than charged again.
 
-| Round       | Chinese upper guidance | English upper guidance |
-| ----------- | ---------------------- | ---------------------- |
-| RAG Opening | 500 characters         | 320 words              |
-| Discussion  | 450 characters         | 280 words               |
-| Response    | 550 characters         | 350 words              |
-| Conclusion  | 650 characters         | 420 words              |
+| Round      | Chinese upper guidance | English upper guidance |
+| ---------- | ---------------------- | ---------------------- |
+| Opening    | 500 characters         | 320 words              |
+| Discussion | 450 characters         | 280 words              |
+| Response   | 550 characters         | 350 words              |
+| Conclusion | 650 characters         | 420 words              |
 
 The owner's latest decision removes all backend speech-length validation and
 all minimum lengths. These upper bounds appear in the actual System Prompt only.
@@ -138,23 +138,18 @@ audio. Final freezes barrages transactionally. Each round retrieves from its own
 KB with high/low/medium/high Prompt priority; up to three queries share one
 Embedding batch, within the existing 4N initial allowance.
 
-## Remake recovery
+## Recovery and output boundaries
 
 Settled failed Provider responses are not cached successes. Explicit Remake uses
 its fresh-turn allowance, preserves charge records and valid cached results,
-rebinds pending dependencies and rejoins Preview scheduling. Unknown acceptance
-is not resent. Report offers Regenerate and Review; Conclude creates its first
-revision. Deleted diagnostic records are not recreated.
-
-## Recovery and output boundaries
-
-Readable speech survives unusable auxiliary metadata; invalid bindings remain
-ungraded. Consent/cost/identity/state/readable-output guards remain. No text
-truncation, padding or automatic rewriting. Rebirth resets final dependencies in
-one writer transaction, restoring immutability triggers on success or rollback.
-Remake respects in-flight/unknown paid requests and reuses healthy saved results.
-Devocalize/Revocalize preserve their action after failures. Recovery checks do not
-establish universal real-service acceptance.
+rebinds pending dependencies and rejoins Preview scheduling; unknown acceptance is
+never resent and deleted diagnostic records are not recreated. Report offers
+Regenerate and Review; Conclude creates its first revision. Readable speech
+survives unusable auxiliary metadata; invalid bindings remain ungraded. No text
+truncation, padding or rewriting. Rebirth resets final dependencies in one writer
+transaction, restoring immutability triggers on success or rollback.
+Devocalize/Revocalize preserve their action after failures. Consent/cost/identity/
+state guards remain, and these checks do not establish real-service acceptance.
 
 ## Prompt-only repetition correction
 
@@ -242,21 +237,6 @@ total request budgets. Stale translated_markdown fields were also removed from
 failure/generating DTOs. The owner had reset the affected lesson, so its original
 full failed Report could not be replayed. Logs retain only safe validation paths.
 
-## Real ruleset effect check
-
-A Chinese opening comparison held synthetic Topic/Persona/RAG fixed and changed
-frozen Markdown. Default yielded five paragraphs; custom yielded the requested
-Decision/Evidence/Review structure. Two valid calls used 3287 tokens; one earlier
-accepted call was lost to an experiment recording bug, so actual total is three.
-No classroom records or Provider settings changed. Outputs and limitations:
-[Ruleset effect evidence](validation/RULESET_EFFECT_2026-09-08.md).
-
-The custom answer exposed S1 after its teacher rules omitted citation wording.
-New execution Prompts now reserve S IDs for metadata; no backend text filter was
-added. Existing frozen lessons are unchanged; this addition has offline coverage,
-not another paid rerun. One opening comparison is not four-round quality acceptance.
-Ruleset uses white cards, pale-yellow documents and purple actions.
-
 Creation defaults to Chinese; language changes outside Edit preserve independent
 CN/EN drafts and only the selected language drives generation. Draft updates that
 omit language preserve it. Create section title dividers share one style.
@@ -280,20 +260,13 @@ Home tiles show name/group above version/description; service tiles are pale yel
 New uses white Topic/Background, pale-yellow Ruleset text and white cards; stance shares the
 language switch styles. Preview: yellow page, white outer panel, yellow speech cards; unboxed text.
 
-
 3D Replay is hidden before completion; Interact/Hide toggles the existing QR session.
 Conclude waits for playback completion. Check RAG summary has no inherited minimum
 height/padding, and transcript bottom padding no longer adds 26px. Replay recovery
 uses existing controller acquisition and saved media; no generation protocol changed.
 
-Agent details use white cards, pale-yellow Persona/files, shared 24px insets and
-16px title dividers. Agent eyebrow replaces description; Back matches Debates.
-Persona keeps only its version badge. Profile matches Persona height and uses an
-opt-in full-body camera fit; other avatar previews retain head framing. Custom
-voice is green. Each RAG row has Check/Download with symmetric action padding;
-Check loads one immutable document into Markdown inside that same yellow row,
-without downloading a file. Selection/cache reset on version change. No file-count
-or Download RAG header remains. No source text is edited or republished.
+Agent details use white cards and pale-yellow Persona/RAG rows. Profile shows the
+full body; each immutable RAG document has Check and Download actions.
 Stage label follows the Next gate: Waiting when enabled, otherwise Generating.
 Evaluation/Report use white shells with solid-yellow content, 1.24rem titles, 24/18px insets
 and 16px dividers/content padding. No nested white cards. Version actions sit top-right.
@@ -305,14 +278,32 @@ scanners and keyword substitution; relationship/schema checks remain. Waiting
 Stage reads while waiting for readiness; ordinary reads do not enable media retry.
 Already-ready notifications skip refresh. Neither path generates or auto-advances.
 Live starts store no replay cursor; controller handoff clears legacy live cursors.
-Retained report input validates; full backend collection still has an obsolete BODY_LIMITS import.
-
-36 targeted Evaluation/Report/Stage checks passed, including no early media-retry
-enablement during ordinary polling. Types passed; browser acceptance remains manual.
-
-Evaluation uses green/gold/gray-purple grade cues and muted Agent bar colors, with
-purple scores. History uses a gold rule; idle actions are quiet. 16 UI checks passed.
+Retained report input validates.
 
 Agent.md now has only a 12,000-character total authorship budget. Field and list
-caps are removed from compiler, stored/provider models, and paragraph conversion.
-77 checks cover long fields, publication and 12,000/12,001. TCM passes unchanged.
+caps are removed from compiler, stored/provider models and paragraph conversion.
+
+## Obsolete protocol removal — September 10, 2026
+
+The two old demo RuleSets, their Prompt module and their generation/retrieval/Mock
+branches are removed. The API and WebSocket contracts accept only
+`ordered_multi_expert_mutual_learning_v1`; new Debates use four-round
+`segments_v2`. Migration files and stored-result readers remain because the
+database still depends on them. Obsolete length and prior-round-only test
+baselines no longer block the current every-round RAG and same-round context.
+
+## Preview Background module
+
+Preview shows a Background card as the first card inside the turns panel, in the
+same yellow speech-card design, only when the Debate has a non-blank Background.
+
+## Stalled-debate correction
+
+Long Background text previously hit the local 8,000-token per-item Embedding cap
+before any Provider call. That item/query cap is removed; request-level Provider
+capacity controls remain. A subsequent Retry exposed a second false rejection in
+the LLM prose scanner. LLM boundaries now validate JSON shape and approved field
+classes without rejecting teacher/RAG/classroom text by keyword, phone, email,
+UUID, path or identity pattern. Credentials and endpoints remain absent from the
+outbound DTO. Existing failed turns still require one explicit Retry/Refresh after
+the corrected backend is deployed.

@@ -408,7 +408,7 @@ G3 evidence.
 
 ## Evidence trace
 
-Status: `FROZEN / P1 REPAIRED / SOL G2 PASS / REAL CALLS 0`
+Status: `CURRENT FOUR-ROUND PROTOCOL`
 
 ### Meaning
 
@@ -506,44 +506,33 @@ Status: `FROZEN / P1 REPAIRED / SOL G2 PASS / REAL CALLS 0`
 
 RuleSet ID: `ordered_multi_expert_mutual_learning_v1`
 
-This is a new Mock-first protocol. It does not alter
-`ordered_multi_agent_rounds_demo_v1` or `ordered_multi_agent_rounds_demo_v2`, and it
-does not authorize a real Provider.
+This is the only active Debate RuleSet. The old two-round demo RuleSets and
+their generation path have been removed. New Debates use the reviewed real LLM
+adapter and the `segments_v2` paragraph protocol.
 
 ### Round phase
 
-The pure resolver accepts `(round_no, is_final_round)` and returns the closed
-`RoundPhase = opening | exchange | final_integration`:
+The pure resolver maps the fixed four rounds to the internal phase vocabulary:
 
 - `round_no == 1` -> `opening`;
 - `round_no > 1` and `is_final_round == false` -> `exchange`;
 - `is_final_round == true` -> `final_integration`.
 
-Inputs with `round_no < 1`, or `round_no == 1 && is_final_round` in a session whose
-round count is at least two, are invalid. A configured plan computes
-`is_final_round = round_no == round_count`, but the resolver itself does not own a
-maximum. Mutual-learning sessions require at least two rounds. The current Demo product
-may offer 2–5 rounds to bound runtime/cost; protocol semantics never branch on 2 or 5.
-
-Two rounds map to `opening -> final_integration`; three map to
-`opening -> exchange -> final_integration`; N maps to opening, N-2 exchanges and final
-integration.
+New Debate input fixes `round_count` at four. Round 1 is Opening, round 2
+Discussion, round 3 Response, and round 4 Conclusion. The internal `exchange`
+phase covers rounds 2 and 3; their actual tasks remain distinct in the frozen
+teacher Ruleset prompt and segment discussion context.
 
 ### Round barrier
 
-For a turn in round `r`, Provider/generation context includes the original question,
-shared public Case, current confirmed Persona, current KnowledgeSnapshot, assigned
-pending question and public/final-ready turns whose `round_no < r`. It excludes every
-same-round turn even if already final-ready, all future turns, every other Persona,
-private snapshot/chunk and teacher note.
+Round 1 turns are independent. From round 2 onward, Provider/generation context
+includes every successfully generated lower-index turn, including earlier
+speakers in the current round. It excludes future turns, every other private
+Persona and teacher-only fields.
 
-A–E order remains the deterministic generation/playback order, but does not change the
-barrier. For this RuleSet, the persisted context IDs and transcript hash cover exactly
-the prior-round visible set, not the full lower turn-index prefix used by legacy
-RuleSets. Legacy fence semantics remain byte/behavior compatible behind their IDs.
-The earlier general decision to retain complete previous speech means every speech in
-this RuleSet-visible prior-round set, not a same-round leak; this versioned barrier is
-the controlling contract.
+Speaking order rotates by round while stable participant IDs preserve question
+routing. Persisted predecessor IDs and transcript hashes cover the exact visible
+lower-index prefix. Resume reuses completed results rather than generating them again.
 
 ### Phase requirements
 
@@ -1132,17 +1121,13 @@ never reaches `final_ready`.
 
 ### Outbound privacy boundary
 
-Before manifest persistence and again immediately before `sending`, the server scans the
-exact two messages and field paths. The allowlist is limited to the data classes in
-ProviderDataCallV1. It rejects credentials, authorization material, workspace values,
-student/user/member identity tokens, names, nicknames, email/phone/UUID-shaped private
-values, teacher notes, raw `AGENT.md`, source filenames/paths and fields outside the
-allowlist.
-
-Identity tokens come from the authoritative course/group/member graph, not a caller
-default. They are passed into the Persona provider-view builder and the final exact
-message scanner. A rejection occurs before manifest, operation, reservation or network
-I/O and returns a safe code without the matched text.
+Before manifest persistence and again immediately before `sending`, the server parses
+the exact two messages and validates their closed field tree. Unknown fields, duplicate
+JSON keys, malformed JSON and unapproved outbound field classes fail before network
+I/O. Teacher-authored Topic/Background, Persona, RAG excerpts, public speech and
+classroom messages are treated as data and are not rejected by keyword, language,
+phone/email/UUID, path or identity-pattern scanners. Provider credentials and endpoint
+configuration are not fields in these DTOs and therefore cannot enter either message.
 
 The export manifest contains hashes and the approved field classes, not raw messages.
 Teacher disclosure remains the only browser surface that names the supplier. Ordinary
@@ -1359,8 +1344,7 @@ Before implementation can receive G2 review, fake transports must prove:
 10. Turn, EvidenceTrace, usage and operation success commit or roll back together;
 11. selector composition permits only real LLM with Embedding/TTS/Voice/Translation
     Mock or disabled;
-12. legacy RuleSets, Mock LLM, Replay and historical turns remain unchanged.
+12. the active four-round RuleSet, Mock fixtures and Replay remain independently testable.
 
-Only a subsequent Sol High `PASS / P0=0 / P1=0` on this contract authorizes Luna to
-implement W4-LLM-A. No real LLM request is part of G1/G2 because the prior account
-preflight cannot be repeated.
+This historical gate has been superseded by the reviewed real LLM configuration
+recorded in `docs/PROJECT.md`.

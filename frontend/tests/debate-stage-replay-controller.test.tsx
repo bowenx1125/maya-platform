@@ -115,7 +115,7 @@ function detail(): DebateDetail {
     stall: null,
     revision: 1,
     last_sequence: 4,
-    rule_set_id: "ordered_multi_agent_rounds_demo_v2",
+    rule_set_id: "ordered_multi_expert_mutual_learning_v1",
     round_count: 2,
     participants: [
       {

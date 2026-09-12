@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from .snapshot_build import SnapshotBuildChunkV1, SnapshotBuildV1
 
 
-MAX_ITEM_TOKENS = 8_000
 MAX_BATCH_ITEMS = 10
 MAX_BATCH_TOKENS = 30_000
 MAX_REQUESTS = 20
@@ -225,11 +224,6 @@ def _chunk_item(
         raise EmbeddingPlanError(
             "tokenizer is unavailable", code="embedding_tokenizer_unavailable"
         ) from exc
-    if count > MAX_ITEM_TOKENS:
-        raise EmbeddingPlanError(
-            "one embedding item exceeds 8,000 counted tokens",
-            code="embedding_item_too_large",
-        )
     return EmbeddingItemV1(
         chunk_id=chunk.chunk_id,
         text=chunk.text,
@@ -372,7 +366,6 @@ __all__ = [
     "EmbeddingPlanV1",
     "MAX_BATCH_ITEMS",
     "MAX_BATCH_TOKENS",
-    "MAX_ITEM_TOKENS",
     "MAX_REQUESTS",
     "MAX_TOTAL_TOKENS",
     "build_embedding_plan",

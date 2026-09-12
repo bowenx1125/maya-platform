@@ -38,12 +38,14 @@ vi.mock("../components/debate-beta/stage", () => ({
     joinUrl,
     joinCodeVisible,
   }: {
-    headerActions?: ReactNode;
+    headerActions?: ReactNode | ((replayButton: ReactNode) => ReactNode);
     joinUrl?: string | null;
     joinCodeVisible?: boolean;
   }) => (
     <section data-testid="beta-stage" data-join-url={joinUrl}>
-      {headerActions}
+      {typeof headerActions === "function"
+        ? headerActions(<button type="button">Replay</button>)
+        : headerActions}
       {joinUrl && joinCodeVisible ? (
         <div id="classroom-join-code" role="img" aria-label="Scan to join">
           {joinUrl}
@@ -52,7 +54,7 @@ vi.mock("../components/debate-beta/stage", () => ({
     </section>
   ),
   resolveBetaStageLabels: () => ({
-    openInteraction: "Open Message",
+    openInteraction: "Interact",
     hideInteraction: "Hide",
     interactionOpening: "Opening…",
   }),
@@ -227,7 +229,7 @@ function finishedSegmentsDetail(): DebateDetail {
     stall: null,
     revision: 1,
     last_sequence: 4,
-    rule_set_id: "ordered_multi_agent_rounds_demo_v2",
+    rule_set_id: "ordered_multi_expert_mutual_learning_v1",
     round_count: 2,
     participants,
     public_turns: completeTurns(),
@@ -369,9 +371,14 @@ describe("segments_v2 Bench Conclude and Report", () => {
 
   it("toggles the same join code without closing or reopening classroom messages", async () => {
     const detail = { ...finishedSegmentsDetail(), status: "running" as const };
+    detail.playback = {
+      ...detail.playback,
+      status: "playing",
+      current_turn_id: detail.public_turns[0]?.id ?? null,
+    };
     const api = pageApi(interaction("closed"), interaction("closed"), detail);
     renderPage(api);
-    const toggle = await screen.findByRole("button", { name: "Open Message" });
+    const toggle = await screen.findByRole("button", { name: "Interact" });
     fireEvent.click(toggle);
     expect(await screen.findByRole("button", { name: "Hide" })).toBe(toggle);
     const url = screen.getByRole("img", { name: "Scan to join" }).textContent;
@@ -381,7 +388,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
     expect(screen.getByTestId("beta-stage").getAttribute("data-join-url")).toBe(
       url,
     );
-    expect(screen.getByRole("button", { name: "Open Message" })).toBe(toggle);
+    expect(screen.getByRole("button", { name: "Interact" })).toBe(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
     expect(screen.getByRole("img", { name: "Scan to join" }).textContent).toBe(
@@ -393,9 +400,14 @@ describe("segments_v2 Bench Conclude and Report", () => {
 
   it("restores the existing classroom URL after a reload without a new open request", async () => {
     const detail = { ...finishedSegmentsDetail(), status: "running" as const };
+    detail.playback = {
+      ...detail.playback,
+      status: "playing",
+      current_turn_id: detail.public_turns[0]?.id ?? null,
+    };
     const api = pageApi(interaction("open"), interaction("open"), detail);
     renderPage(api);
-    const toggle = await screen.findByRole("button", { name: "Open Message" });
+    const toggle = await screen.findByRole("button", { name: "Interact" });
     expect(screen.queryByRole("img", { name: "Scan to join" })).toBeNull();
     fireEvent.click(toggle);
     expect(screen.getByRole("img", { name: "Scan to join" }).textContent).toBe(
@@ -463,18 +475,6 @@ describe("segments_v2 Bench Conclude and Report", () => {
     expect(screen.queryByRole("button", { name: "Evaluation" })).toBeNull();
     expect(api.closeInteraction).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Interaction" })).toBeNull();
-  });
-
-  it("preserves the legacy Interaction link for v1 debates", async () => {
-    const legacy = { ...finishedSegmentsDetail(), turn_protocol: null };
-    const api = pageApi(interaction("closed"), interaction("closed"), legacy);
-    renderPage(api);
-
-    const link = await screen.findByRole("link", { name: "Interaction" });
-    expect(link.getAttribute("href")).toBe(
-      `/teacher/debates/${debateId}/interaction`,
-    );
-    expect(screen.queryByRole("button", { name: "Conclude" })).toBeNull();
   });
 });
 

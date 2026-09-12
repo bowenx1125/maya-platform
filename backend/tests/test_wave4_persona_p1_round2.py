@@ -306,14 +306,7 @@ def test_long_dimension_projection_preserves_complete_sentence_boundary() -> Non
     assert SPEECH_DIMENSION_WORD_LIMIT == 8
 
 
-@pytest.mark.parametrize(
-    "rule_set_id",
-    (
-        "ordered_multi_agent_rounds_demo_v1",
-        "ordered_multi_agent_rounds_demo_v2",
-        _RULE_SET,
-    ),
-)
+@pytest.mark.parametrize("rule_set_id", (_RULE_SET,))
 def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provider(
     app_factory: object,
     rule_set_id: str,

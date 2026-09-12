@@ -1,9 +1,9 @@
-"""SQLAlchemy repository adapter for the frozen Wave 2 tables.
+"""SQLAlchemy repository adapter for the debate playback tables.
 
 M10 owns the declarative debate models and migration.  To keep ownership
 isolated, this adapter uses a deliberately small SQL/text boundary and maps
 rows to provider-neutral objects consumed by ``PlaybackService``.  It never
-creates or alters tables; an absent Wave 2 migration is reported as an empty
+creates or alters tables; an absent playback migration is reported as an empty
 repository, which keeps Wave 1 tests independent.
 """
 
@@ -841,7 +841,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             # A test can provide a fake row even before migration.  Production
             # composition must fail closed rather than creating an untracked
             # in-memory authority.
-            raise RuntimeError("Wave 2 playback tables are not installed")
+            raise RuntimeError("Debate playback tables are not installed")
         result = db.execute(
             text("SELECT * FROM playback_states WHERE debate_id=:debate_id"),
             {"debate_id": str(debate.id)},
@@ -3410,7 +3410,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         """CAS the debate watermark and insert one event in the same DB tx."""
 
         if not self._has_table(db, "debate_events") or not self._has_table(db, "debates"):
-            raise RuntimeError("Wave 2 event tables are not installed")
+            raise RuntimeError("Debate event tables are not installed")
         result = db.execute(
             text(
                 "UPDATE debates SET last_sequence=last_sequence+1, updated_at=:updated_at "

@@ -23,21 +23,11 @@ from app.modules.debates.generation.types import (
 Stance = Literal["support", "oppose", "neutral"]
 StanceMode = Literal["assigned", "open"]
 Slot = Literal["A", "B", "C", "D", "E"]
-RULE_SET_ID_V1: Literal["ordered_multi_agent_rounds_demo_v1"] = "ordered_multi_agent_rounds_demo_v1"
-RULE_SET_ID_V2: Literal["ordered_multi_agent_rounds_demo_v2"] = "ordered_multi_agent_rounds_demo_v2"
 RULE_SET_ID_MUTUAL_LEARNING: Literal["ordered_multi_expert_mutual_learning_v1"] = (
     "ordered_multi_expert_mutual_learning_v1"
 )
-# Read models keep every RuleSet an immutable Debate may already carry.
-RuleSetId = Literal[
-    "ordered_multi_agent_rounds_demo_v1",
-    "ordered_multi_agent_rounds_demo_v2",
-    "ordered_multi_expert_mutual_learning_v1",
-]
-RULE_SET_ID: Literal["ordered_multi_agent_rounds_demo_v2"] = RULE_SET_ID_V2
-# A new Debate created through the API is always ordered multi-expert mutual
-# learning.  The legacy RuleSets keep their frozen planner behaviour above and
-# stay readable, but no product surface offers them any more.
+RuleSetId = Literal["ordered_multi_expert_mutual_learning_v1"]
+RULE_SET_ID: Literal["ordered_multi_expert_mutual_learning_v1"] = RULE_SET_ID_MUTUAL_LEARNING
 NEW_DEBATE_RULE_SET_ID: Literal["ordered_multi_expert_mutual_learning_v1"] = (
     RULE_SET_ID_MUTUAL_LEARNING
 )
@@ -91,8 +81,6 @@ class DebateDraftRequest(_ClosedModel):
         ids = [item.agent_id for item in self.participants]
         if len(set(ids)) != len(ids):
             raise ValueError("participants must be unique")
-        if self.rule_set_id in {RULE_SET_ID_V1, RULE_SET_ID_V2}:
-            raise ValueError("new debates require the four-round teaching rules")
         return self
 
 
@@ -353,7 +341,7 @@ class TurnPlanEntry(_ClosedModel):
 class DebateRuleSnapshot(_ClosedModel):
     """Versioned immutable rule data stored on each Debate."""
 
-    rule_set_id: RuleSetId = "ordered_multi_agent_rounds_demo_v2"
+    rule_set_id: RuleSetId = "ordered_multi_expert_mutual_learning_v1"
     retrieval_policy_id: Literal["mock_lexical_anchor_v2"] | None = MOCK_RETRIEVAL_POLICY_ID
     round_count: int = Field(default=2, ge=2, le=5)
     turn_protocol: Literal["segments_v2"] | None = None
@@ -365,29 +353,9 @@ class DebateRuleSnapshot(_ClosedModel):
     target_min_words: Literal[160] = 160
     target_max_words: Literal[185] = 185
 
-    @model_validator(mode="before")
-    @classmethod
-    def restore_legacy_retrieval_default(cls, value: object) -> object:
-        """Read exact v1 snapshots that predate the retrieval-policy field."""
-
-        if isinstance(value, dict) and value.get("rule_set_id") == RULE_SET_ID_V1:
-            updated = dict(value)
-            updated.setdefault("retrieval_policy_id", None)
-            return updated
-        return value
-
     @model_validator(mode="after")
     def validate_versioned_retrieval_policy(self) -> DebateRuleSnapshot:
-        if self.rule_set_id == RULE_SET_ID_V1 and self.retrieval_policy_id is not None:
-            raise ValueError("the v1 rule snapshot cannot carry a v2 retrieval policy")
-        if (
-            self.rule_set_id == RULE_SET_ID_V2
-            and self.retrieval_policy_id != MOCK_RETRIEVAL_POLICY_ID
-        ):
-            raise ValueError("the v2 rule snapshot requires mock_lexical_anchor_v2")
-        if self.rule_set_id in {RULE_SET_ID_V1, RULE_SET_ID_V2} and self.round_count != 2:
-            raise ValueError("legacy rule snapshots require exactly two rounds")
-        if self.rule_set_id == RULE_SET_ID_MUTUAL_LEARNING and self.round_count < 2:
+        if self.round_count < 2:
             raise ValueError("mutual-learning snapshots require at least two rounds")
         return self
 
@@ -412,8 +380,6 @@ __all__ = [
     "ReleaseDebateRequest",
     "RetrievalSource",
     "RULE_SET_ID",
-    "RULE_SET_ID_V1",
-    "RULE_SET_ID_V2",
     "RULE_SET_ID_MUTUAL_LEARNING",
     "RuleSetId",
     "MOCK_RETRIEVAL_POLICY_ID",

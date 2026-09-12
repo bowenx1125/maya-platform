@@ -1,11 +1,8 @@
 """Provider-neutral LLM port and deterministic Mock implementation.
 
-Wave 2 intentionally does not ship a real text-model adapter.  The Mock
-provider emits a stable structured object from the canonical prompt bytes and
-offers explicit, test-only failure injection for the shared attempt-1/2
-repair path.  The fixed Wave 4 adapter is re-exported at the end of this
-module; its transport/output/privacy/accounting implementation lives in small
-sibling modules so this historical Mock port remains stable.
+The Mock emits a stable structured object from canonical prompt bytes and
+offers explicit, test-only failure injection. The reviewed real adapter is
+re-exported below; transport, output and accounting live in sibling modules.
 """
 
 from __future__ import annotations
@@ -29,7 +26,6 @@ from app.modules.debates.generation.mutual_learning_prompts import (
     build_mutual_learning_prompt,
 )
 from app.modules.debates.generation.prompt_request import ProviderPromptV1
-from app.modules.debates.generation.prompts import build_turn_prompt, prompt_hash
 from app.modules.debates.generation.segments import (
     SegmentInputSnapshot,
     SegmentTurnResult,
@@ -45,7 +41,6 @@ from app.modules.debates.generation.types import (
     MutualLearningPromptInput,
     MutualLearningTurnResultV1,
     StructuredTurnResult,
-    TurnPromptInput,
     TurnQuestion,
 )
 
@@ -150,10 +145,7 @@ class LLMProvider(Protocol):
 
     def generate_turn(
         self,
-        prompt: TurnPromptInput
-        | MutualLearningPromptInput
-        | ProviderPromptV1
-        | SegmentInputSnapshot,
+        prompt: MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot,
     ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
         """Generate one closed structured turn from a frozen prompt."""
 
@@ -176,16 +168,8 @@ class MockLLMCall:
     messages: tuple[tuple[str, str], ...] = ()
 
 
-def _legacy_turn_prompt(
-    prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
-) -> TurnPromptInput:
-    if not isinstance(prompt, TurnPromptInput):
-        raise TypeError("the legacy Mock renderer requires a TurnPromptInput")
-    return prompt
-
-
 def _prompt_phase(
-    prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+    prompt: MutualLearningPromptInput | ProviderPromptV1,
 ) -> str:
     if isinstance(prompt, ProviderPromptV1):
         return prompt.request.phase
@@ -193,7 +177,7 @@ def _prompt_phase(
 
 
 def _prompt_next_participant_id(
-    prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+    prompt: MutualLearningPromptInput | ProviderPromptV1,
 ) -> str | None:
     if isinstance(prompt, ProviderPromptV1):
         return prompt.request.next_participant_id
@@ -273,10 +257,7 @@ class MockLLMProvider:
 
     def generate_turn(
         self,
-        prompt: TurnPromptInput
-        | MutualLearningPromptInput
-        | ProviderPromptV1
-        | SegmentInputSnapshot,
+        prompt: MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot,
     ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
         if isinstance(prompt, SegmentInputSnapshot):
             return validate_segment_output(self.generate_segments(prompt), prompt)
@@ -284,22 +265,20 @@ class MockLLMProvider:
         messages: tuple[tuple[str, str], ...] = ()
         if isinstance(prompt, ProviderPromptV1):
             request = prompt.request
-            is_mutual = request.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
+            rule_set_id = request.rule_set_id
             messages = tuple((message.role, message.content) for message in prompt.messages)
             rendered = "\x1e".join(content for _role, content in messages)
             receipt_hash = request.receipt_hash
             turn_id = request.turn_id
         else:
-            is_mutual = prompt.rule_set_id == MUTUAL_LEARNING_RULE_SET_ID
-            rendered = (
-                build_mutual_learning_prompt(prompt)  # type: ignore[arg-type]
-                if is_mutual
-                else build_turn_prompt(_legacy_turn_prompt(prompt))
-            )
+            rule_set_id = prompt.rule_set_id
+            rendered = build_mutual_learning_prompt(prompt)
             receipt_hash = hashlib.sha256(
                 "\x1f".join(receipt.resolved_evidence_id() for receipt in prompt.receipts).encode()
             ).hexdigest()
             turn_id = prompt.turn_plan.turn_id
+        if rule_set_id != MUTUAL_LEARNING_RULE_SET_ID:
+            raise LLMProviderError("the Mock provider supports only the mutual-learning rule set")
         digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
         self.call_log.append(
             MockLLMCall(
@@ -315,69 +294,40 @@ class MockLLMProvider:
         if failure in {"json", "shape"}:
             raise LLMStructuredOutputError("mock malformed structured output")
         if failure in {"word", "long"}:
-            long_result: StructuredTurnResult | MutualLearningTurnResultV1 = (
-                self._mutual_result(prompt)
-                if is_mutual
-                else self._valid_result(_legacy_turn_prompt(prompt))
+            return self._mutual_result(prompt).model_copy(
+                update={"speech": " ".join(["word"] * 201) + "."}
             )
-            return long_result.model_copy(update={"speech": " ".join(["word"] * 201) + "."})
         if failure == "short":
-            short_result: StructuredTurnResult | MutualLearningTurnResultV1 = (
-                self._mutual_result(prompt)
-                if is_mutual
-                else self._valid_result(_legacy_turn_prompt(prompt))
+            return self._mutual_result(prompt).model_copy(
+                update={"speech": " ".join(["word"] * 79) + "."}
             )
-            return short_result.model_copy(update={"speech": " ".join(["word"] * 79) + "."})
         if failure == "rule":
-            if is_mutual:
-                result = self._mutual_result(prompt)
-                phase = _prompt_phase(prompt)
-                next_participant_id = _prompt_next_participant_id(prompt)
-                if phase == "opening":
-                    return result.model_copy(
-                        update={
-                            "question": TurnQuestion(
-                                type="agent",
-                                target_participant_id=next_participant_id,
-                                text="What do you think?",
-                            )
-                        }
-                    )
-                return result.model_copy(update={"engagements": []})
-            legacy_prompt = _legacy_turn_prompt(prompt)
-            legacy_result = self._valid_result(legacy_prompt)
-            if legacy_prompt.turn_plan.round_no == 1:
-                return legacy_result.model_copy(
+            result = self._mutual_result(prompt)
+            if _prompt_phase(prompt) == "opening":
+                return result.model_copy(
                     update={
                         "question": TurnQuestion(
                             type="agent",
-                            target_participant_id=legacy_prompt.turn_plan.next_participant_id,
+                            target_participant_id=_prompt_next_participant_id(prompt),
                             text="What do you think?",
                         )
                     }
                 )
-            return legacy_result.model_copy(update={"rebuttal_target_turn_id": None})
+            return result.model_copy(update={"engagements": []})
         if failure == "matched_but_unused":
-            if is_mutual:
-                mutual_result = self._mutual_result(prompt)
-                return mutual_result.model_copy(
-                    update={
-                        "used_evidence_id": [],
-                        "key_claims": [
-                            claim.model_copy(update={"used_evidence_ids": []})
-                            for claim in mutual_result.key_claims
-                        ],
-                    }
-                )
-            legacy_result = self._valid_result(_legacy_turn_prompt(prompt))
-            return legacy_result.model_copy(update={"used_evidence_id": []})
+            mutual_result = self._mutual_result(prompt)
+            return mutual_result.model_copy(
+                update={
+                    "used_evidence_id": [],
+                    "key_claims": [
+                        claim.model_copy(update={"used_evidence_ids": []})
+                        for claim in mutual_result.key_claims
+                    ],
+                }
+            )
         if failure is not None:
             raise LLMProviderError("unknown mock failure injection")
-        return (
-            self._mutual_result(prompt)
-            if is_mutual
-            else self._valid_result(_legacy_turn_prompt(prompt))
-        )
+        return self._mutual_result(prompt)
 
     def generate_segments(
         self,
@@ -567,7 +517,7 @@ class MockLLMProvider:
 
     def _mutual_result(
         self,
-        prompt: TurnPromptInput | MutualLearningPromptInput | ProviderPromptV1,
+        prompt: MutualLearningPromptInput | ProviderPromptV1,
     ) -> MutualLearningTurnResultV1:
         if isinstance(prompt, ProviderPromptV1):
             request = prompt.request
@@ -607,8 +557,6 @@ class MockLLMProvider:
                 ),
             )
             return self._valid_mutual_result(cast(MutualLearningPromptInput, compatibility))
-        if isinstance(prompt, TurnPromptInput):
-            raise TypeError("the mutual Mock renderer requires a mutual-learning prompt")
         return self._valid_mutual_result(prompt)
 
     def _valid_mutual_result(self, prompt: MutualLearningPromptInput) -> MutualLearningTurnResultV1:
@@ -888,162 +836,12 @@ class MockLLMProvider:
             question=question,
         )
 
-    def _valid_result(self, prompt: TurnPromptInput) -> StructuredTurnResult:
-        # The hash influences deterministic phrase selection, but it is an
-        # internal implementation detail and must never leak into classroom
-        # speech or ordinary logs.
-        style = "careful" if int(prompt_hash(prompt)[0], 16) % 2 == 0 else "practical"
-        receipt_ids = [receipt.resolved_evidence_id() for receipt in prompt.receipts]
-        used = receipt_ids[:1]
-        participant = prompt.participant
-        stance_text = prompt.assigned_stance or "an open, evolving perspective"
-        if prompt.turn_plan.round_no == 1:
-            evidence_excerpt = ""
-            if used:
-                source_text = prompt.receipts[0].text.strip()
-                evidence_excerpt = " ".join(source_text.split())[:180]
-            evidence_line = (
-                "The assigned knowledge passage states, "
-                f'"{evidence_excerpt}". I use that passage as a bounded reason, '
-                "while keeping the source scope limited to this participant's snapshot."
-                if used
-                else (
-                    "No relevant passage was retrieved, so I make a clearly general "
-                    "argument without a citation."
-                )
-            )
-            speech = (
-                f"As {participant.agent_name}, I approach this question from {stance_text}. "
-                "The first responsibility is to state a position that can be examined rather than "
-                "treating disagreement as a personal conflict. My central claim is that decisions "
-                "about recommendation systems should balance individual agency, public safety, "
-                "innovation, and the practical effects on communities. "
-                f"{evidence_line} "
-                "That distinction matters because a rule can address a real harm while creating "
-                "a different burden for creators, small businesses, or minority voices. "
-                "I therefore "
-                "support a transparent standard, measurable safeguards, and meaningful oversight, "
-                "while recognizing that reasonable people may weigh those safeguards differently. "
-                f"This {style} opening summary keeps "
-                "the claim open to respectful challenge."
-            )
-            return StructuredTurnResult(
-                speech=speech,
-                rebuttal_summary="",
-                new_argument_summary=(
-                    "Recommendation decisions should balance agency, safety, innovation, "
-                    "and community effects."
-                ),
-                turn_summary=(
-                    "The opening position favors transparent, measurable safeguards and "
-                    "accountable oversight."
-                ),
-                position_summary=(
-                    "Balance user agency, public safety, innovation, and community effects "
-                    "through accountable safeguards."
-                ),
-                position_update="unchanged",
-                used_evidence_id=used,
-                question=TurnQuestion(type="none"),
-            )
-
-        predecessor = next(
-            (
-                item
-                for item in prompt.predecessors
-                if item.participant_id != participant.participant_id
-            ),
-            None,
-        )
-        target_turn_id = predecessor.turn_id if predecessor is not None else None
-        target_claim = (
-            getattr(predecessor.structured, "position_summary", "")
-            if predecessor is not None
-            else "the earlier participant's specific claim"
-        )
-        pending = prompt.pending_question
-        answer = (
-            f"I answer the question '{pending.text}' directly: it deserves a concrete "
-            "safeguard and evidence-based review. "
-            if pending is not None
-            else "I also address the concern left open by the earlier exchange. "
-        )
-        if prompt.turn_plan.is_final:
-            question = (
-                "What principle should our class carry forward when a policy protects people "
-                "but may also limit choice?"
-            )
-            question_shape = TurnQuestion(type="audience_reflection", text=question)
-        else:
-            question = (
-                "How would the next participant test this balance against their strongest "
-                f"concern about {prompt.topic.strip()}?"
-            )
-            question_shape = TurnQuestion(
-                type="agent",
-                target_participant_id=prompt.turn_plan.next_participant_id,
-                text=question,
-            )
-        evidence_excerpt = ""
-        if used:
-            source_text = prompt.receipts[0].text.strip()
-            evidence_excerpt = " ".join(source_text.split())[:180]
-        evidence_line = (
-            f'A relevant assigned passage says, "{evidence_excerpt}". '
-            "I use that concrete passage to qualify the claim, but it does not decide "
-            "the value judgment for us. "
-            if used
-            else (
-                "Because no relevant passage was found, I mark this as general reasoning "
-                "and do not invent a source. "
-            )
-        )
-        speech = (
-            f"I appreciate the specificity of the earlier claim: {target_claim}. "
-            f"{answer}My response is a refinement, not a dismissal. {evidence_line} "
-            "A responsible policy should identify a concrete risk, explain who bears its cost, "
-            "and include review points that can correct unintended effects. That approach leaves "
-            "room to acknowledge useful innovation while refusing to treat popularity as proof of "
-            "safety. I would revise my emphasis toward transparent safeguards, independent review, "
-            "and a genuine path for affected communities to be heard. "
-            f"{question} The discussion is stronger when each side answers the actual concern, "
-            f"and this {style} position update follows the evidence and the discussion."
-        )
-        return StructuredTurnResult(
-            speech=speech,
-            answered_question_id=pending.question_id if pending is not None else None,
-            rebuttal_target_turn_id=target_turn_id,
-            rebuttal_summary=(
-                "The earlier claim deserves a direct answer; safeguards should address harm "
-                "without treating popularity as proof."
-            ),
-            new_argument_summary=(
-                "Transparent safeguards, independent review, and a correction path balance "
-                "policy benefits and costs."
-            ),
-            turn_summary=(
-                "The response refines the position through a specific rebuttal, evidence "
-                "boundary, and focused question."
-            ),
-            position_summary=(
-                "Refine the balance toward transparent safeguards, independent review, "
-                "and affected-community voice."
-            ),
-            position_update="refined",
-            position_update_reason=(
-                "The earlier claim and the current evidence boundary justify emphasizing "
-                "review and correction mechanisms."
-            ),
-            used_evidence_id=used,
-            question=question_shape,
-        )
-
 
 def validate_llm_provider_selector(selector: str) -> None:
-    """Fail closed: Wave 2 has no unreviewed real LLM implementation."""
+    """Keep direct Mock construction separate from the reviewed real adapter."""
 
     if selector != "mock":
-        raise RuntimeError("Wave 2 LLM provider must be mock until separately audited")
+        raise RuntimeError("Use the reviewed provider factory for a real LLM adapter")
 
 
 def llm_provider(settings: object | None = None, *, selector: str | None = None) -> LLMProvider:

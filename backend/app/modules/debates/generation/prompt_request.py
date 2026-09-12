@@ -955,7 +955,7 @@ def build_prompt_request(
     if query_items is None and context is not None:
         from .retrieval import build_turn_subqueries
 
-        query_items = build_turn_subqueries(context, pending_question=pending_question)  # type: ignore[arg-type]
+        query_items = build_turn_subqueries(context)
     if query_items is None:
         query_items = ()
     query_models: list[PromptQueryV1] = []

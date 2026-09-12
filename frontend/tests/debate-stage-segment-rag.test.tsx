@@ -96,7 +96,7 @@ function detail(audioReady: boolean | null): DebateDetail {
     stall: null,
     revision: 1,
     last_sequence: 1,
-    rule_set_id: "ordered_multi_agent_rounds_demo_v2",
+    rule_set_id: "ordered_multi_expert_mutual_learning_v1",
     round_count: 2,
     participants: [
       {

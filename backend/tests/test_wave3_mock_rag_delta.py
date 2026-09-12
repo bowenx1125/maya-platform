@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 from app.core.db import Database
@@ -21,26 +19,11 @@ from app.core.models import (
 )
 from app.modules.agents.persona import compile_persona
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
-from app.modules.debates.generation import (
-    MUTUAL_LEARNING_RULE_SET_ID,
-    GenerationContext,
-    ParticipantContext,
-    TurnGenerationService,
-    TurnPolicy,
-)
 from app.modules.debates.generation.retrieval import (
     RetrievalResult,
     SnapshotRetriever,
     TurnSubquery,
 )
-from app.modules.debates.schemas import (
-    MOCK_RETRIEVAL_POLICY_ID,
-    RULE_SET_ID_V1,
-    RULE_SET_ID_V2,
-    DebateRuleSnapshot,
-)
-from app.modules.debates.setup.rules import canonical_rule_snapshot_json
-from app.modules.debates.setup.service import commit_start_plan
 from app.modules.knowledge.markdown import EMBEDDING_DIMENSION, EMBEDDING_KEY, mock_embedding
 from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
@@ -48,11 +31,6 @@ from app.modules.knowledge.mock_lexical import (
     frozen_latin_tokens_v2,
 )
 from app.modules.knowledge.vector import MockVectorStore, StoredVectorRow
-from app.providers.llm import MockLLMProvider
-from fastapi.testclient import TestClient
-from sqlalchemy import select
-
-from tests.conftest import login
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
@@ -372,58 +350,6 @@ def test_round_two_generic_predecessor_query_cannot_bypass_topic_anchor() -> Non
     assert result.topic_anchor_hash is not None
 
 
-def test_turn_generation_passes_authoritative_topic_separately_from_subquery_text() -> None:
-    first = ParticipantContext(
-        participant_id="participant-a",
-        agent_id="agent-a",
-        agent_name="A",
-        slot="A",
-        order_index=0,
-        snapshot_id="snapshot-a",
-        agent_md="# A\nA careful viewpoint.",
-    )
-    second = ParticipantContext(
-        participant_id="participant-b",
-        agent_id="agent-b",
-        agent_name="B",
-        slot="B",
-        order_index=1,
-        snapshot_id="snapshot-b",
-        agent_md="# B\nA careful viewpoint.",
-    )
-    plan = TurnPolicy(rule_set_id=RULE_SET_ID_V2).plan((first, second))[0]
-    service = TurnGenerationService(
-        SnapshotRetriever(
-            _FixedSearch(
-                (
-                    {
-                        "chunk_id": "mineral",
-                        "source_filename": "mineral.md",
-                        "score": 0.99,
-                        "chunk_text": (
-                            "Bowenite is a hard green mineral used in carving and geology."
-                        ),
-                    },
-                )
-            )
-        ),
-        MockLLMProvider(),
-        rule_set_id=RULE_SET_ID_V2,
-        mock_retrieval_policy_id=MOCK_LEXICAL_ANCHOR_POLICY_ID,
-    )
-    result = service.generate(
-        GenerationContext(
-            "debate-a",
-            "Should the United States ban TikTok's recommendation algorithm?",
-            plan,
-            first,
-            (first, second),
-        )
-    )
-    assert result.final_ready.retrieval_status == "no_match"
-    assert result.final_ready.used_receipts == ()
-
-
 def test_v2_keeps_receipt_rank_identity_cap_and_v1_behavior_is_unchanged() -> None:
     topic = "TikTok recommendation algorithm"
     chunks = tuple(
@@ -456,139 +382,3 @@ def test_v2_keeps_receipt_rank_identity_cap_and_v1_behavior_is_unchanged() -> No
     )
     assert legacy.matched
     assert legacy.policy_id is None
-
-
-def test_rule_snapshot_versions_are_explicit_and_legacy_json_remains_readable() -> None:
-    current = json.loads(canonical_rule_snapshot_json())
-    assert current["rule_set_id"] == RULE_SET_ID_V2
-    assert current["retrieval_policy_id"] == MOCK_RETRIEVAL_POLICY_ID
-
-    legacy_raw = (
-        '{"rule_set_id":"ordered_multi_agent_rounds_demo_v1","round_count":2,'
-        '"min_participants":2,"max_participants":5,"min_words":80,"max_words":200,'
-        '"target_min_words":160,"target_max_words":185}'
-    )
-    parsed = DebateRuleSnapshot.model_validate_json(legacy_raw)
-    assert parsed.rule_set_id == RULE_SET_ID_V1
-    assert parsed.retrieval_policy_id is None
-    assert "retrieval_policy_id" not in json.loads(
-        canonical_rule_snapshot_json(rule_set_id=RULE_SET_ID_V1)
-    )
-
-
-def test_sql_turn_preparer_applies_v2_anchor_and_leaves_persisted_v1_unfiltered(
-    app_factory: Any,
-) -> None:
-    """Exercise the real snapshot SQL adapter with a forced high vector score."""
-
-    from app.modules.debates.models import Debate
-    from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
-    from app.modules.debates.playback.protocols import PreparedTurn
-
-    topic = "Should the United States ban TikTok's recommendation algorithm?"
-    exact_query = (
-        f"{topic}\nState this participant's viewpoint and core reasons.\n"
-        "Current position: the current position"
-    )
-    app, database, settings = app_factory()
-    with TestClient(app) as client:
-        relevant_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name="Relevant SQL",
-            evidence=(
-                "TikTok recommendation algorithm governance affects creator visibility "
-                "and user choice."
-            ),
-        )
-        mineral_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name="Mineral SQL",
-            evidence="Bowenite is a hard green mineral used in carving and geological study.",
-        )
-        partner_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name="Partner SQL",
-            evidence="Classroom dialogue can compare evidence and general reasoning.",
-        )
-
-        # Force both first chunks to a perfect score for the exact generated
-        # subquery.  The v2 negative must still fail on chunk text, proving the
-        # result is not merely below the vector threshold.
-        with database.session() as db:
-            for agent_id in (relevant_agent, mineral_agent):
-                agent = db.get(Agent, agent_id)
-                assert agent is not None and agent.current_published_version_id
-                version = db.get(AgentVersion, agent.current_published_version_id)
-                assert version is not None and version.knowledge_snapshot_id
-                chunk = db.scalar(
-                    select(KnowledgeChunk).where(
-                        KnowledgeChunk.snapshot_id == version.knowledge_snapshot_id
-                    )
-                )
-                assert chunk is not None
-                chunk.embedding_blob = mock_embedding(exact_query)
-
-        _session, csrf = login(client)
-
-        def prepare(
-            first_agent_id: str,
-            *,
-            idempotency_key: str,
-            legacy_v1: bool = False,
-        ) -> PreparedTurn:
-            response = client.post(
-                f"/api/v1/courses/{COURSE_ID}/debates",
-                headers=_headers(csrf, **{"Idempotency-Key": idempotency_key}),
-                json={
-                    "topic": topic,
-                    "participants": [
-                        {"agent_id": first_agent_id, "stance_mode": "open"},
-                        {"agent_id": partner_agent, "stance_mode": "open"},
-                    ],
-                    "round_count": 4,
-                    "rule_set_id": MUTUAL_LEARNING_RULE_SET_ID,
-                },
-            )
-            assert response.status_code == 201, response.text
-            debate_id = response.json()["id"]
-            with database.session() as db:
-                debate = db.get(Debate, debate_id)
-                assert debate is not None
-                persisted_rule_set_id = RULE_SET_ID_V1 if legacy_v1 else RULE_SET_ID_V2
-                debate.rule_set_id = persisted_rule_set_id
-                debate.rule_snapshot_json = canonical_rule_snapshot_json(
-                    rule_set_id=persisted_rule_set_id
-                )
-                turns = commit_start_plan(db, debate_id=debate_id)
-                assert turns
-                return SqlTurnPreparer(settings=settings)(
-                    db,
-                    debate,
-                    turns[0],
-                    attempt=1,
-                    cancellation_generation=0,
-                )
-
-        relevant_v2 = prepare(
-            relevant_agent,
-            idempotency_key="wave3-rag-sql-relevant-v2",
-        )
-        unrelated_v2 = prepare(
-            mineral_agent,
-            idempotency_key="wave3-rag-sql-mineral-v2",
-        )
-        same_row_v1 = prepare(
-            mineral_agent,
-            idempotency_key="wave3-rag-sql-mineral-v1",
-            legacy_v1=True,
-        )
-
-        assert relevant_v2.retrieval_status == "matched"
-        assert len(relevant_v2.sources) >= 1
-        assert unrelated_v2.retrieval_status == "no_match"
-        assert unrelated_v2.sources == ()
-        assert same_row_v1.retrieval_status == "matched"
-        assert len(same_row_v1.sources) >= 1

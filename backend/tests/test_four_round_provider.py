@@ -91,17 +91,27 @@ def scan(payload: dict[str, object], *, classes: tuple[str, ...] | None = None) 
     )
 
 
-def test_discussion_ids_are_opaque_but_text_and_unlisted_fields_stay_private():
+def test_discussion_text_is_authored_data_but_unlisted_fields_stay_closed():
     payload = snapshot().to_user_payload()
     scan(payload)
-    for change in (
-        {"received_questions": [{"from_id": OTHER_ID, "text": PUBLIC_ID}]},
-        {"student_id": PUBLIC_ID},
-        {"agents": [{"id": PUBLIC_ID, "name": PUBLIC_ID}, {"id": OTHER_ID, "name": "Forest"}]},
-    ):
-        modified = {**payload, "discussion": {**payload["discussion"], **change}}
-        with pytest.raises(LLMOutboundPrivacyError):
-            scan(modified)
+    authored = {
+        **payload,
+        "discussion": {
+            **payload["discussion"],
+            "received_questions": [{"from_id": OTHER_ID, "text": PUBLIC_ID}],
+            "agents": [
+                {"id": PUBLIC_ID, "name": PUBLIC_ID},
+                {"id": OTHER_ID, "name": "Forest"},
+            ],
+        },
+    }
+    scan(authored)
+    unknown = {
+        **payload,
+        "discussion": {**payload["discussion"], "student_id": PUBLIC_ID},
+    }
+    with pytest.raises(LLMOutboundPrivacyError):
+        scan(unknown)
     with pytest.raises(LLMOutboundPrivacyError) as error:
         scan(payload, classes=LLMOutboundManifestV1().field_classes)
     assert error.value.code == "llm_discussion_manifest_missing"

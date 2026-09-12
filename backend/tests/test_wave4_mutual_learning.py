@@ -18,12 +18,12 @@ from app.modules.debates.generation import (
     SnapshotRetriever,
     TurnGenerationService,
     TurnPolicy,
+    TurnPolicyError,
     TurnQuestion,
     TurnValidationError,
     ValidatedTurn,
     build_mutual_learning_prompt,
     build_mutual_learning_synthesis,
-    compute_mutual_transcript_hash,
     make_mutual_learning_prompt_input,
     phase_for_round,
     resolve_round_phase,
@@ -165,7 +165,9 @@ def test_only_marked_teaching_plan_limits_questions_to_its_discussion_round() ->
     assert all(entry.next_participant_id is None for entry in teaching if entry.round_no == 3)
 
 
-def test_turn_policy_dispatches_new_rule_without_changing_legacy_fixed_plan() -> None:
+def test_turn_policy_dispatches_the_only_rule_set_to_the_mutual_planner() -> None:
+    # The two-round demo RuleSets are removed, so TurnPolicy has one planner and
+    # its default rule set must produce the same phases as the explicit one.
     plans = TurnPolicy(rule_set_id=RULE_SET).plan(["a", "b"], round_count=3)
     assert [item.phase for item in plans] == [
         "opening",
@@ -175,8 +177,9 @@ def test_turn_policy_dispatches_new_rule_without_changing_legacy_fixed_plan() ->
         "final_integration",
         "final_integration",
     ]
-    legacy = TurnPolicy().plan(["a", "b"])
-    assert [item.phase for item in legacy] == ["opening", "opening", "rebuttal", "rebuttal"]
+    assert TurnPolicy().plan(["a", "b"], round_count=3) == plans
+    with pytest.raises(TurnPolicyError):
+        TurnPolicy(rule_set_id="ordered_multi_agent_rounds_demo_v2")
 
 
 def test_round_barrier_hides_same_round_and_shares_all_prior_rounds() -> None:
@@ -210,195 +213,6 @@ def test_round_barrier_hides_same_round_and_shares_all_prior_rounds() -> None:
     assert turns[6].turn_id not in build_mutual_learning_prompt(final_prompt)
     assert "Private persona 1" not in build_mutual_learning_prompt(final_prompt)
     assert "private teacher note 1" not in build_mutual_learning_prompt(final_prompt)
-
-
-def test_sql_turn_preparer_keeps_final_ready_opening_out_of_same_round_context(
-    app_factory: object,
-) -> None:
-    """The SQL adapter must enforce the barrier before the Mock sees a prompt."""
-
-    import json
-    from typing import Any
-
-    from app.modules.debates.models import Debate
-    from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
-    from app.modules.debates.setup.service import commit_start_plan
-    from fastapi.testclient import TestClient
-
-    from tests.conftest import login
-    from tests.test_wave3_mock_rag_delta import (
-        COURSE_ID,
-        GROUP_DEMO_ID,
-        _headers,
-        _insert_sql_published_agent,
-    )
-
-    class CaptureMock(MockLLMProvider):
-        inputs: list[Any]
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.inputs = []
-
-        def generate_turn(self, prompt: Any) -> Any:
-            self.inputs.append(prompt)
-            return super().generate_turn(prompt)
-
-    app, database, settings = app_factory()  # type: ignore[operator]
-    with TestClient(app) as client:
-        first_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name="Barrier A",
-            evidence="Unrelated mineral carving notes do not answer this classroom topic.",
-            confirmed_persona=True,
-        )
-        second_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name="Barrier B",
-            evidence="Another unrelated geological passage for a separate snapshot.",
-            confirmed_persona=True,
-        )
-        _session, csrf = login(client)
-        response = client.post(
-            f"/api/v1/courses/{COURSE_ID}/debates",
-            headers=_headers(csrf, **{"Idempotency-Key": "wave4-sql-opening-barrier"}),
-            json={
-                "topic": "How should communities discuss fairness in technology?",
-                "participants": [
-                    {"agent_id": first_agent, "stance_mode": "open"},
-                    {"agent_id": second_agent, "stance_mode": "open"},
-                ],
-                "rule_set_id": RULE_SET,
-                "round_count": 4,
-            },
-        )
-        assert response.status_code == 201, response.text
-        debate_id = response.json()["id"]
-        with database.session() as db:
-            debate = db.get(Debate, debate_id)
-            assert debate is not None
-            from app.modules.debates.setup.rules import canonical_rule_snapshot_json
-
-            debate.rule_snapshot_json = canonical_rule_snapshot_json(
-                rule_set_id=RULE_SET, round_count=2
-            )
-            turns = commit_start_plan(db, debate_id=debate_id)
-            assert len(turns) == 4
-            assert turns[0].round_no == turns[1].round_no == 1
-
-            llm = CaptureMock()
-            preparer = SqlTurnPreparer(settings=settings, llm=llm)
-            first_prepared = preparer(
-                db,
-                debate,
-                turns[0],
-                attempt=1,
-                cancellation_generation=0,
-            )
-            prepared_result = MutualLearningTurnResultV1.model_validate(first_prepared.structured)
-            assert first_prepared.evidence_trace
-            claim_ids = {claim.claim_id for claim in prepared_result.key_claims}
-            trace_ids = {row["claim_id"] for row in first_prepared.evidence_trace}
-            assert claim_ids == trace_ids
-            assert all(
-                claim.claim_text == row["claim_text"]
-                for claim in prepared_result.key_claims
-                for row in first_prepared.evidence_trace
-                if row["claim_id"] == claim.claim_id
-            )
-            # Make A genuinely final-ready in the same SQL transaction.  B's
-            # prompt must still omit it because both rows belong to opening.
-            turns[0].generation_status = "final_ready"
-            turns[0].preparation_stage = "ready"
-            turns[0].speech = first_prepared.speech
-            turns[0].structured_json = json.dumps(
-                dict(first_prepared.structured), sort_keys=True, separators=(",", ":")
-            )
-            turns[0].retrieval_status = first_prepared.retrieval_status
-            turns[0].grounding_mode = first_prepared.grounding_mode
-            turns[0].retrieval_receipts_json = "[]"
-            turns[0].word_count = first_prepared.word_count
-            turns[0].transcript_hash = first_prepared.transcript_hash
-            turns[0].cutoff_turn_index = first_prepared.cutoff_turn_index
-            db.flush()
-            assert turns[0].generation_status == "final_ready"
-
-            second_prepared = preparer(
-                db,
-                debate,
-                turns[1],
-                attempt=1,
-                cancellation_generation=0,
-            )
-            assert second_prepared.predecessor_turn_ids == ()
-            assert len(llm.inputs) == 2
-            assert llm.inputs[1].request.predecessors == ()
-            assert llm.inputs[1].request.transcript_hash == compute_mutual_transcript_hash(())
-
-
-@pytest.mark.parametrize("round_count", (3, 5))
-def test_sql_draft_projection_preserves_frozen_three_and_five_round_counts(
-    app_factory: object,
-    round_count: int,
-) -> None:
-    """Setup/detail reads the persisted snapshot rather than defaulting to two."""
-
-    from app.modules.debates.models import Debate
-    from app.modules.debates.setup.rules import canonical_rule_snapshot_json
-    from fastapi.testclient import TestClient
-
-    from tests.conftest import login
-    from tests.test_wave3_mock_rag_delta import (
-        COURSE_ID,
-        GROUP_DEMO_ID,
-        _headers,
-        _insert_sql_published_agent,
-    )
-
-    app, database, _settings = app_factory()  # type: ignore[operator]
-    with TestClient(app) as client:
-        first_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name=f"Projection A {round_count}",
-            evidence="A snapshot passage for the projection test.",
-            confirmed_persona=True,
-        )
-        second_agent = _insert_sql_published_agent(
-            database,
-            group_id=GROUP_DEMO_ID,
-            name=f"Projection B {round_count}",
-            evidence="A second snapshot passage for the projection test.",
-            confirmed_persona=True,
-        )
-        _session, csrf = login(client)
-        response = client.post(
-            f"/api/v1/courses/{COURSE_ID}/debates",
-            headers=_headers(csrf, **{"Idempotency-Key": f"wave4-sql-round-count-{round_count}"}),
-            json={
-                "topic": "How should communities discuss fairness in technology?",
-                "participants": [
-                    {"agent_id": first_agent, "stance_mode": "open"},
-                    {"agent_id": second_agent, "stance_mode": "open"},
-                ],
-                "rule_set_id": RULE_SET,
-                "round_count": 4,
-            },
-        )
-        assert response.status_code == 201, response.text
-        payload = response.json()
-        assert payload["rule_set_id"] == RULE_SET
-        assert payload["round_count"] == 4
-        with database.session() as db:
-            debate = db.get(Debate, payload["id"])
-            debate.rule_snapshot_json = canonical_rule_snapshot_json(
-                rule_set_id=RULE_SET, round_count=round_count
-            )
-        detail = client.get(f"/api/v1/debates/{payload['id']}")
-        assert detail.status_code == 200, detail.text
-        assert detail.json()["round_count"] == round_count
 
 
 def test_new_debate_requires_confirmed_persona_and_legacy_creation_is_unavailable(

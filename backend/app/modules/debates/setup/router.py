@@ -1,6 +1,6 @@
 """FastAPI routes for the M10 Debate draft surface.
 
-Playback and generation routes remain owned by Wave 2 peers.  These endpoints
+Playback and generation routes remain owned by sibling modules. These endpoints
 only expose the teacher-scoped create/list/get/update/start setup boundary.
 """
 

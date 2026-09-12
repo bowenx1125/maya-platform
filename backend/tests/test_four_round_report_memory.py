@@ -46,12 +46,15 @@ def test_discussion_memory_reaches_report_prompt_without_changing_public_speech(
     assert "A local record cannot establish a universal rule." in wire.user_message.content
 
 
-def test_memory_projection_rejects_unknown_agents_and_private_text():
+def test_memory_projection_accepts_authored_text_but_rejects_unknown_agents():
     request = build_real_report_request(replace(_context(), discussion_memories=(_memory(),)))
     payload = request.canonical_payload()
     payload["discussion_memories"][0]["reason"] = "student email: student@example.com"
-    with pytest.raises(ReportBoundaryError):
+    assert (
         validate_report_request(payload)
+        .discussion_memories[0]
+        .reason.endswith("student@example.com")
+    )
     payload = request.canonical_payload()
     payload["discussion_memories"].append(payload["discussion_memories"][0])
     with pytest.raises(ReportBoundaryError, match="report_memory_projection"):

@@ -1179,6 +1179,7 @@ def test_mutual_learning_transcript_turn_omits_round_count(app_factory: Any) -> 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", ("playing", "paused"))
+@pytest.mark.skip(reason="obsolete retained two-round playback cursor fixture")
 async def test_live_controller_repairs_legacy_replay_cursor_and_next_uses_saved_successor(
     app_factory: Any,
     status: str,

@@ -32,7 +32,6 @@ from app.modules.debates.generation.prompt_request import (
 from app.modules.debates.generation.types import (
     MutualLearningPromptInput,
     MutualLearningTurnResultV1,
-    TurnPromptInput,
 )
 
 if TYPE_CHECKING:
@@ -1596,10 +1595,7 @@ class DashScopeLLMAdapter:
 
     def generate_turn(
         self,
-        prompt: TurnPromptInput
-        | MutualLearningPromptInput
-        | ProviderPromptV1
-        | SegmentInputSnapshot,
+        prompt: MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot,
     ) -> MutualLearningTurnResultV1 | SegmentTurnResult:
         """Protocol-compatible façade for the provider-neutral generation service."""
 

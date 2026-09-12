@@ -372,7 +372,7 @@ class PlaybackControlMixin(PlaybackCore):
                                 self._get(
                                     debate,
                                     "rule_set_id",
-                                    default="ordered_multi_agent_rounds_demo_v1",
+                                    default="ordered_multi_expert_mutual_learning_v1",
                                 )
                             ),
                             **(

@@ -393,40 +393,9 @@ def build_turn_subqueries(
             )
         )
         return tuple(mutual_queries[:MAX_SUBQUERIES])
-    if context.turn.round_no == 1:
-        return (
-            TurnSubquery(
-                "viewpoint",
-                (
-                    f"{topic}\nState this participant's viewpoint and core reasons.\n"
-                    f"Current position: {position}"
-                ),
-            ),
-        )
-
-    question = pending_question or context.effective_pending_question
-    queries: list[TurnSubquery] = []
-    if question is not None:
-        queries.append(
-            TurnSubquery(
-                "pending_question",
-                f"{topic}\nAnswer this specific question from another participant: {question.text}",
-            )
-        )
-    claim = _first_other_claim(context)
-    queries.append(
-        TurnSubquery(
-            "rebuttal",
-            f"{topic}\nRebut or accurately refine this earlier participant claim: {claim}",
-        )
+    raise RAGRetrievalError(
+        "Retrieval supports only the mutual-learning and segments protocols.", technical=False
     )
-    queries.append(
-        TurnSubquery(
-            "updated_position",
-            f"{topic}\nFind evidence that supports or qualifies the updated position: {position}",
-        )
-    )
-    return tuple(queries[:MAX_SUBQUERIES])
 
 
 def _segment_persona_focus(persona: SegmentPersona) -> str:
@@ -547,15 +516,14 @@ def build_segment_subqueries(
                     f"Answer these actual questions or challenged points:\n{actual}",
                 ),
             )
-        memory: Mapping[str, object] | None = next(
-            (
-                cast(Mapping[str, object], getattr(item.structured, "discussion_memory"))
-                for item in reversed(own_turns)
-                if item.round_no == 3
-                and isinstance(getattr(item.structured, "discussion_memory", None), Mapping)
-            ),
-            None,
-        )
+        memory: Mapping[str, object] | None = None
+        for item in reversed(own_turns):
+            if item.round_no != 3:
+                continue
+            saved = getattr(item.structured, "discussion_memory", None)
+            if isinstance(saved, Mapping):
+                memory = cast(Mapping[str, object], saved)
+                break
         last_position = own_turns[-1].speech if own_turns else own_position
         final_position = str(memory["position"]) if memory is not None else last_position
         unresolved = str(memory["unresolved_question"]) if memory is not None else ""

@@ -133,7 +133,7 @@
     "sequence": 2,
     "occurred_at": "2026-08-26T12:00:00.000Z",
     "payload": {
-      "rule_set_id": "ordered_multi_agent_rounds_demo_v1",
+      "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
       "participants": [
         {
           "participant_id": "22222222-2222-4222-8222-222222222222",

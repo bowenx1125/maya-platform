@@ -1,6 +1,6 @@
 """Closed provider-neutral playback and WebSocket schemas.
 
-These models intentionally mirror the frozen Wave 2 wire contracts.  Internal
+These models intentionally mirror the frozen playback wire contracts. Internal
 generation/voice details never cross this file's public DTO boundary.
 """
 
@@ -136,11 +136,7 @@ class ReplayPayload(ClosedModel):
 
 
 class DebateStartedPayload(ClosedModel):
-    rule_set_id: Literal[
-        "ordered_multi_agent_rounds_demo_v1",
-        "ordered_multi_agent_rounds_demo_v2",
-        "ordered_multi_expert_mutual_learning_v1",
-    ]
+    rule_set_id: Literal["ordered_multi_expert_mutual_learning_v1"]
     round_count: int | None = Field(default=None, ge=2, le=5)
     participants: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)
     participant_slots: list[ParticipantSlotDTO] | None = Field(default=None, min_length=2)

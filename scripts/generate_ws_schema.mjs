@@ -350,11 +350,7 @@ const payloads = {
       {
         rule_set_id: {
           type: "string",
-          enum: [
-            "ordered_multi_agent_rounds_demo_v1",
-            "ordered_multi_agent_rounds_demo_v2",
-            "ordered_multi_expert_mutual_learning_v1",
-          ],
+          const: "ordered_multi_expert_mutual_learning_v1",
         },
         round_count: nullable(roundCount),
         participants: arrayOf(participantSlot, 2),

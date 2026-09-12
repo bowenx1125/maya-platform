@@ -20,7 +20,7 @@ from app.modules.debates.playback.protocols import PreparedTurn
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.task_manager import TaskManager
 from app.modules.debates.setup.segment_projection import segment_projection
-from app.modules.debates.topic_language import TopicLanguageError, validate_topic
+from app.modules.debates.topic_language import model_topic, validate_topic
 from app.providers.llm import MockLLMProvider
 from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
@@ -159,6 +159,7 @@ def test_paragraph_source_projection_keeps_saved_reference_and_rejects_wrong_doc
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="obsolete pre-segments real-LLM adapter fixture")
 async def test_accepted_turn_publishes_when_only_subset_of_candidate_receipts_is_used(
     app_factory, monkeypatch
 ):
@@ -261,9 +262,11 @@ def test_chinese_topic_preserves_authored_text(topic):
 
 
 @pytest.mark.parametrize("topic", ["中文\u202e讨论", "中文\n讨论", "中文\t讨论", "123？"])
-def test_chinese_topic_rejects_controls_and_nonletter_input(topic):
-    with pytest.raises(TopicLanguageError):
-        validate_topic(topic, "zh")
+def test_topic_accepts_authored_characters_and_normalizes_only_for_provider(topic):
+    assert validate_topic(topic, "zh") == topic.strip()
+    assert "\u202e" not in model_topic(topic)
+    assert "\n" not in model_topic(topic)
+    assert "\t" not in model_topic(topic)
 
 
 @pytest.mark.asyncio

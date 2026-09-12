@@ -1,4 +1,4 @@
-"""Wave 2 debate setup and playback persistence models.
+"""Debate setup and playback persistence models.
 
 The debate tables live in this module instead of the shared core model file so
 the Wave 0/1 domain remains usable by isolated tests and migration tooling.

@@ -1,6 +1,6 @@
 """Playback state, persistence, queries and event staging.
 
-Authoritative Wave 2 playback state machine.
+Authoritative classroom playback state machine.
 
 
 The service owns controller epochs, media bootstrap acknowledgements, playback

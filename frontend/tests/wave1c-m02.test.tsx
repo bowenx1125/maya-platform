@@ -81,10 +81,12 @@ describe("Wave 1C presentation locale", () => {
       [...value.matchAll(/\{([A-Za-z0-9_]+)\}/g)]
         .map((match) => match[1])
         .sort();
+    const intentionallyEmpty = new Set(["debateControllerWaiting"]);
     for (const key of englishKeys) {
       const english = messages.en[key as keyof typeof messages.en];
       const chinese = messages.zh[key as keyof typeof messages.zh];
-      expect(english.trim(), key).not.toBe("");
+      if (!intentionallyEmpty.has(key))
+        expect(english.trim(), key).not.toBe("");
       expect(chinese.trim(), key).not.toBe("");
       expect(placeholders(chinese), key).toEqual(placeholders(english));
       if (english === chinese) {

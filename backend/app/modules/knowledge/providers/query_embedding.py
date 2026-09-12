@@ -30,7 +30,6 @@ from .embedding import ValidatedEmbeddingBatchV1
 from .packing import (
     MAX_BATCH_ITEMS,
     MAX_BATCH_TOKENS,
-    MAX_ITEM_TOKENS,
     EmbeddingBatchV1,
     EmbeddingItemV1,
 )
@@ -347,10 +346,6 @@ def _query_batch(
             raise QueryEmbeddingError(
                 "query tokenizer is unavailable", code="query_embedding_tokenizer_unavailable"
             ) from exc
-        if count > MAX_ITEM_TOKENS:
-            raise QueryEmbeddingError(
-                "query exceeds the fixed token limit", code="query_embedding_query_too_large"
-            )
         token_counts.append(count)
     total_tokens = sum(token_counts)
     if total_tokens > MAX_BATCH_TOKENS:

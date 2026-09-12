@@ -64,7 +64,6 @@ from .operations import (
 from .packing import (
     MAX_BATCH_ITEMS,
     MAX_BATCH_TOKENS,
-    MAX_ITEM_TOKENS,
     MAX_REQUESTS,
     MAX_TOTAL_TOKENS,
     EmbeddingBatchV1,
@@ -266,7 +265,6 @@ __all__ = [
     "InMemorySnapshotPublisher",
     "MAX_BATCH_ITEMS",
     "MAX_BATCH_TOKENS",
-    "MAX_ITEM_TOKENS",
     "MAX_REQUESTS",
     "MAX_TOTAL_TOKENS",
     "ConservativeUtf8Tokenizer",

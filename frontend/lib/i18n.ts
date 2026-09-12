@@ -89,7 +89,7 @@ const enMessages = {
   debateRoundCount: "Rounds",
   debateRoundOption: "{count} rounds",
   debateRoundCountHint: "{turns} turns",
-  debateMutualLearningRules: "RAG Opening · Discussion · Response · Conclusion",
+  debateMutualLearningRules: "Opening · Discussion · Response · Conclusion",
   debatePhaseOpening: "Opening",
   debatePhaseExchange: "Exchange",
   debatePhaseFinalIntegration: "Final integration",

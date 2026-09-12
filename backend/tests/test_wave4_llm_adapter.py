@@ -435,7 +435,7 @@ def test_repair_feedback_with_wrong_request_policy_hash_is_zero_transport() -> N
     assert transport.calls == []
 
 
-def test_actual_message_privacy_scan_blocks_identity_and_unknown_fields() -> None:
+def test_outbound_boundary_rejects_unknown_fields_without_scanning_prose() -> None:
     prompt = _prompt()
     value = json.loads(prompt.user_message.content)
     value["unexpected_field"] = "Alice"
@@ -443,67 +443,17 @@ def test_actual_message_privacy_scan_blocks_identity_and_unknown_fields() -> Non
     with pytest.raises(LLMOutboundPrivacyError) as error:
         scan_llm_outbound_messages(messages)
     assert error.value.code == "llm_outbound_field_forbidden"
-    with pytest.raises(LLMOutboundPrivacyError) as identity_error:
-        scan_llm_outbound_messages(prompt.messages, identity_tokens=("River Keeper",))
-    assert identity_error.value.code == "llm_outbound_data_forbidden"
-    assert "River Keeper" not in str(identity_error.value)
-
-
-def test_identity_scan_matches_whole_words_not_substrings() -> None:
-    """A course member's name is blocked; a word that merely contains it is not.
-
-    Demo usernames are ordinary given names, so substring matching would fail
-    a whole turn closed on unrelated vocabulary and leave a safe code that
-    names no cause.
-    """
-
-    blocked = _prompt(topic="How should Jade weigh competing duties?")
-    with pytest.raises(LLMOutboundPrivacyError) as error:
-        scan_llm_outbound_messages(blocked.messages, identity_tokens=("jade",))
-    assert error.value.code == "llm_outbound_data_forbidden"
-
-    for topic in (
-        "How should a jaded reviewer weigh competing duties?",
-        "How should a Himalayan village weigh competing duties?",
-    ):
-        scan_llm_outbound_messages(_prompt(topic=topic).messages, identity_tokens=("jade", "maya"))
-
-
-def test_path_aware_privacy_allows_opaque_uuid_id_paths_but_not_text() -> None:
-    prompt = _prompt()
-    value = json.loads(prompt.user_message.content)
-    uuid = "12345678-1234-4234-8234-123456789abc"
-    value["debate_id"] = uuid
-    value["turn_id"] = uuid
-    value["participant_id"] = uuid
-    messages = (
-        prompt.system_message,
-        PromptMessageV1(role="user", content=json.dumps(value, separators=(",", ":"))),
-    )
-    scan_llm_outbound_messages(messages)
-
-    value["topic"] = f"Topic mentioning {uuid}"
-    messages = (
-        prompt.system_message,
-        PromptMessageV1(role="user", content=json.dumps(value, separators=(",", ":"))),
-    )
-    with pytest.raises(LLMOutboundPrivacyError):
-        scan_llm_outbound_messages(messages)
-
-    value = json.loads(prompt.user_message.content)
-    value["topic"] = "A normal topic"
-    value["persona_provider_view"]["identity"]["role"] = uuid
-    messages = (
-        prompt.system_message,
-        PromptMessageV1(role="user", content=json.dumps(value, separators=(",", ":"))),
-    )
-    with pytest.raises(LLMOutboundPrivacyError):
-        scan_llm_outbound_messages(messages)
-
-    with pytest.raises(LLMOutboundPrivacyError):
-        scan_llm_outbound_messages(
-            (PromptMessageV1(role="system", content=uuid), prompt.user_message)
+    authored = _prompt(
+        topic=(
+            "Contact private@example.com about 13800138000, "
+            "student_id=42 and /Users/example/source.md."
         )
+    )
+    scan_llm_outbound_messages(
+        authored.messages,
+        identity_tokens=("private",),
+        workspace_id="workspace123",
+    )
 
 
 def test_unreviewed_tokenizer_manifest_or_price_card_is_zero_call() -> None:

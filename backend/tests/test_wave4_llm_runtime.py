@@ -19,11 +19,7 @@ from app.modules.debates.generation import (
     TurnGenerationService,
     build_provider_prompt,
 )
-from app.modules.debates.generation.prompt_request import (
-    PromptEvidenceV1,
-    PromptMessageV1,
-    ProviderPromptV1,
-)
+from app.modules.debates.generation.prompt_request import PromptMessageV1, ProviderPromptV1
 from app.modules.provider_disclosure import (
     InMemoryProviderDisclosureStore,
     ProviderDataCallDebateManifestListResponseV1,
@@ -426,43 +422,6 @@ def test_proven_not_sent_uses_one_frozen_second_attempt(monkeypatch) -> None:
     assert [item.state for item in operations] == ["not_sent", "succeeded"]
 
 
-def test_manifest_scan_rejects_identity_before_persistence() -> None:
-    people = _participants()
-    plan = MutualLearningPolicy().plan(people, round_count=2)[0]
-    prompt = build_provider_prompt(
-        GenerationContext(
-            debate_id="debate-runtime",
-            topic="student-alice's forbidden topic",
-            turn=plan,
-            participant=people[0],
-            participants=people,
-        ),
-        persona=people[0].persona,
-    )
-
-    class _ManifestStore:
-        calls = 0
-
-        def ensure_export_manifest(self, manifest: object, **kwargs: object) -> None:
-            del manifest, kwargs
-            self.calls += 1
-
-    store = _ManifestStore()
-    runtime = LLMTurnRuntime(ledger=object(), adapter=_FakeAdapter(), manifest_store=store)
-    with pytest.raises(Exception) as error:
-        runtime.prepare_manifest(
-            prompt,
-            debate_id="debate-runtime",
-            turn_id="turn-0",
-            policy_hash=_hash("policy"),
-            build_manifest_hash=_hash("build"),
-            policy_snapshot_id="policy-row",
-            identity_tokens=("student-alice",),
-        )
-    assert getattr(error.value, "code", None) == "llm_outbound_data_forbidden"
-    assert store.calls == 0
-
-
 def _prompt_with_request(prompt: ProviderPromptV1, request: object) -> ProviderPromptV1:
     request_value = request
     return ProviderPromptV1(
@@ -687,89 +646,6 @@ def test_scope_cap_stops_the_ninth_call_before_adapter(monkeypatch) -> None:
     assert outcomes[8].safe_error_code == "llm_reservation_failed"
     assert adapter.calls == 8
     assert ledger.operations()[-1].state == "failed"
-
-
-@pytest.mark.parametrize("hostile_field", ("topic", "persona", "prior", "evidence"))
-def test_authoritative_identity_is_rejected_before_manifest_for_every_prompt_field(
-    hostile_field: str,
-) -> None:
-    people = _participants()
-    plans = MutualLearningPolicy().plan(people, round_count=2)
-    context = GenerationContext(
-        debate_id="debate-runtime",
-        topic="A safe topic",
-        turn=plans[0],
-        participant=people[0],
-        participants=people,
-    )
-    prompt = build_provider_prompt(context, persona=people[0].persona)
-    identity = "student-alice"
-    request = prompt.request
-    if hostile_field == "topic":
-        request = request.model_copy(update={"topic": f"{identity} topic"})
-    elif hostile_field == "persona":
-        view = request.persona_provider_view.model_copy(
-            update={"initial_position": f"Support {identity} only"}
-        )
-        request = request.model_copy(update={"persona_provider_view": view})
-    elif hostile_field == "prior":
-        predecessors = tuple(
-            SimpleNamespace(
-                turn_id=f"turn-{index}",
-                participant_id=f"participant-{index}",
-                round_no=1,
-                turn_index=index,
-                speech=(f"{identity} prior speech" if index == 0 else "A public prior speech."),
-                structured={"speech": "A public prior speech."},
-                publication_status="final_ready",
-            )
-            for index in range(2)
-        )
-        later_context = GenerationContext(
-            debate_id="debate-runtime",
-            topic="A safe topic",
-            turn=plans[2],
-            participant=people[0],
-            participants=people,
-            predecessors=predecessors,
-        )
-        prompt = build_provider_prompt(later_context, persona=people[0].persona)
-        request = prompt.request
-    else:
-        request = request.model_copy(
-            update={
-                "evidence_catalog": (
-                    PromptEvidenceV1(
-                        evidence_id="evidence-1",
-                        excerpt=f"{identity} evidence",
-                        query_ids=(),
-                    ),
-                )
-            }
-        )
-    hostile_prompt = _prompt_with_request(prompt, request)
-
-    class _ManifestStore:
-        calls = 0
-
-        def ensure_export_manifest(self, manifest: object, **kwargs: object) -> None:
-            del manifest, kwargs
-            self.calls += 1
-
-    store = _ManifestStore()
-    runtime = LLMTurnRuntime(ledger=object(), adapter=_FakeAdapter(), manifest_store=store)
-    with pytest.raises(Exception) as error:
-        runtime.prepare_manifest(
-            hostile_prompt,
-            debate_id="debate-runtime",
-            turn_id=str(request.turn_id),
-            policy_hash=_hash("policy"),
-            build_manifest_hash=_hash("build"),
-            policy_snapshot_id="policy-row",
-            identity_tokens=(identity,),
-        )
-    assert getattr(error.value, "code", None) == "llm_outbound_data_forbidden"
-    assert store.calls == 0
 
 
 def test_teacher_debate_manifest_listing_has_stable_auth_and_exact_dto() -> None:

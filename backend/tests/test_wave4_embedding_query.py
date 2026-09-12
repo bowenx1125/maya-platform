@@ -172,13 +172,13 @@ def test_invalid_query_sequence_fails_closed() -> None:
     assert provider.calls == []
 
 
-def test_query_item_token_limit_fails_before_preflight_or_provider() -> None:
+def test_long_query_has_no_per_item_backend_limit() -> None:
     service, preflight, provider = _real_service()
 
-    with pytest.raises(QueryEmbeddingError, match="token limit"):
-        service.embed_query(_snapshot(), "x" * 8_001)
-    assert preflight.calls == []
-    assert provider.calls == []
+    result = service.embed_query(_snapshot(), "x" * 8_001)
+    assert result.values
+    assert preflight.calls
+    assert len(provider.calls) == 1
 
 
 def test_real_request_batch_contains_no_source_or_private_metadata() -> None:

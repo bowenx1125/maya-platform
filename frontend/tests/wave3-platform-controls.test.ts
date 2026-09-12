@@ -37,7 +37,7 @@ const detail = {
   stall: null,
   revision: 1,
   last_sequence: 3,
-  rule_set_id: "ordered_multi_agent_rounds_demo_v1",
+  rule_set_id: "ordered_multi_expert_mutual_learning_v1",
   round_count: 2,
   participants: [],
   public_turns: [],

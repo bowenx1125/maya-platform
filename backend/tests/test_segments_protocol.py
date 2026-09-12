@@ -37,7 +37,7 @@ from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.providers.control import InMemoryProviderOperationRepository, ProviderScopeBudgetV1
 from app.providers.llm import MockLLMProvider
 from app.providers.llm_adapter import LLMUsageV1
-from app.providers.llm_privacy import LLMOutboundPrivacyError, validate_anonymous_barrage_text
+from app.providers.llm_privacy import validate_anonymous_barrage_text
 from app.providers.llm_segments import (
     SegmentAcceptedCandidateV2,
     SegmentLLMRequestV2,
@@ -454,14 +454,14 @@ def test_segment_retrieval_dispatch_is_focused_and_final_query_covers_every_barr
     assert len(queries) <= 3
 
 
-def test_anonymous_barrage_privacy_helper_fails_closed_without_echoing_values() -> None:
+def test_anonymous_barrage_boundary_keeps_authored_text() -> None:
     assert validate_anonymous_barrage_text("A general classroom question.") == (
         "A general classroom question."
     )
-    with pytest.raises(LLMOutboundPrivacyError) as error:
+    assert (
         validate_anonymous_barrage_text("Contact private@example.com", identity_tokens=("Private",))
-    assert "private@example.com" not in str(error.value)
-    assert "Private" not in str(error.value)
+        == "Contact private@example.com"
+    )
 
 
 def test_explicit_segments_service_uses_mock_segment_output_without_legacy_fields() -> None:

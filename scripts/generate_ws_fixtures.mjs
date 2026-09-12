@@ -142,7 +142,7 @@ const valid = [
     latest_sequence: 0,
   }),
   envelope("debate.started", 2, {
-    rule_set_id: "ordered_multi_agent_rounds_demo_v1",
+    rule_set_id: "ordered_multi_expert_mutual_learning_v1",
     participants,
   }),
   envelope("debate.started", 2, {

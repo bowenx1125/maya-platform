@@ -1341,7 +1341,8 @@ paths:
               required: [nickname, raw_text, client_submission_id]
               properties:
                 turn_id:
-                  oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
+                  oneOf:
+                    [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }]
                   default: null
                 nickname: { type: string, minLength: 1 }
                 raw_text: { type: string, minLength: 1 }
@@ -1447,7 +1448,8 @@ paths:
           description: Continue one already-confirmed and attached Real Report operation.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ContinueRealReportResponse" }
+              schema:
+                { $ref: "#/components/schemas/ContinueRealReportResponse" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1533,7 +1535,9 @@ paths:
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/ProviderDataCallDisclosureResponseV1" }
+                {
+                  $ref: "#/components/schemas/ProviderDataCallDisclosureResponseV1",
+                }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1547,15 +1551,16 @@ paths:
         - name: scope_id
           in: query
           required: true
-          schema:
-            { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+          schema: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
       responses:
         "200":
           description: Teacher-only exact provider manifests for one Debate scope.
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/ProviderDataCallManifestListResponseV1" }
+                {
+                  $ref: "#/components/schemas/ProviderDataCallManifestListResponseV1",
+                }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1569,14 +1574,21 @@ paths:
           in: path
           required: true
           schema:
-            { type: string, pattern: "^[A-Za-z0-9_.:-]+$", minLength: 1, maxLength: 255 }
+            {
+              type: string,
+              pattern: "^[A-Za-z0-9_.:-]+$",
+              minLength: 1,
+              maxLength: 255,
+            }
       responses:
         "200":
           description: Teacher-only exact LLM turn manifests for one Debate.
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/ProviderDataCallDebateManifestListResponseV1" }
+                {
+                  $ref: "#/components/schemas/ProviderDataCallDebateManifestListResponseV1",
+                }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1589,15 +1601,16 @@ paths:
         - name: agent_version_id
           in: path
           required: true
-          schema:
-            { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+          schema: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
       responses:
         "200":
           description: Teacher-only exact embedding publication manifests for one AgentVersion.
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/ProviderDataCallPublicationManifestListResponseV1" }
+                {
+                  $ref: "#/components/schemas/ProviderDataCallPublicationManifestListResponseV1",
+                }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1611,14 +1624,21 @@ paths:
           in: path
           required: true
           schema:
-            { type: string, pattern: "^[A-Za-z0-9_.:-]+$", minLength: 1, maxLength: 255 }
+            {
+              type: string,
+              pattern: "^[A-Za-z0-9_.:-]+$",
+              minLength: 1,
+              maxLength: 255,
+            }
       responses:
         "200":
           description: Teacher-only exact prepared Real Report manifests for one Debate.
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/ProviderDataCallReportManifestListResponseV1" }
+                {
+                  $ref: "#/components/schemas/ProviderDataCallReportManifestListResponseV1",
+                }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1632,14 +1652,18 @@ paths:
         content:
           application/json:
             schema:
-              { $ref: "#/components/schemas/ProviderDataCallConfirmationRequestV1" }
+              {
+                $ref: "#/components/schemas/ProviderDataCallConfirmationRequestV1",
+              }
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/ProviderDataCallDisclosureResponseV1" }
+                {
+                  $ref: "#/components/schemas/ProviderDataCallDisclosureResponseV1",
+                }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1649,82 +1673,82 @@ paths:
     post:
       operationId: regenerateDebateTurnAudio
       parameters:
-      - in: path
-        name: debate_id
-        required: true
-        schema:
-          format: uuid
-          title: Debate Id
-          type: string
-      - in: path
-        name: turn_id
-        required: true
-        schema:
-          format: uuid
-          title: Turn Id
-          type: string
-      - in: header
-        name: Idempotency-Key
-        required: true
-        schema:
-          minLength: 16
-          title: Idempotency-Key
-          type: string
-      - in: header
-        name: X-CSRF-Token
-        required: true
-        schema:
-          minLength: 32
-          title: X-Csrf-Token
-          type: string
+        - in: path
+          name: debate_id
+          required: true
+          schema:
+            format: uuid
+            title: Debate Id
+            type: string
+        - in: path
+          name: turn_id
+          required: true
+          schema:
+            format: uuid
+            title: Turn Id
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            minLength: 16
+            title: Idempotency-Key
+            type: string
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema:
+            minLength: 32
+            title: X-Csrf-Token
+            type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegenerateTurnAudioRequest'
+              $ref: "#/components/schemas/RegenerateTurnAudioRequest"
         required: true
       responses:
-        '200':
+        "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegenerateTurnAudioResult'
+                $ref: "#/components/schemas/RegenerateTurnAudioResult"
           description: Successful Response
-        '403':
+        "403":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
           description: Forbidden
-        '404':
+        "404":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
           description: Not Found
-        '409':
+        "409":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
           description: Conflict
-        '422':
+        "422":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
           description: Unprocessable Entity
-        '503':
+        "503":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
           description: Service Unavailable
       security:
-      - sessionCookie: []
+        - sessionCookie: []
       summary: Regenerate Audio Route
       tags:
-      - Debates
+        - Debates
 
 components:
   securitySchemes:
@@ -1966,7 +1990,8 @@ components:
       additionalProperties: false
       required: [disclosure, policy_hash, manifest_hash, confirmation_revision]
       properties:
-        disclosure: { $ref: "#/components/schemas/ProviderDataCallDisclosureV1" }
+        disclosure:
+          { $ref: "#/components/schemas/ProviderDataCallDisclosureV1" }
         policy_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         confirmation_revision: { type: integer, minimum: 1 }
@@ -1987,18 +2012,17 @@ components:
       additionalProperties: false
       required: [scope_id, items]
       properties:
-        scope_id:
-          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        scope_id: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
         items:
           type: array
-          items: { $ref: "#/components/schemas/ProviderDataCallManifestSummaryV1" }
+          items:
+            { $ref: "#/components/schemas/ProviderDataCallManifestSummaryV1" }
     ProviderDataCallDebateManifestSummaryV1:
       type: object
       additionalProperties: false
       required: [turn_id, manifest_hash, confirmation_revision, confirmed]
       properties:
-        turn_id:
-          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        turn_id: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
         manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         confirmation_revision: { type: integer, minimum: 1 }
         confirmed: { type: boolean }
@@ -2007,12 +2031,13 @@ components:
       additionalProperties: false
       required: [debate_id, items]
       properties:
-        debate_id:
-          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        debate_id: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
         items:
           type: array
           items:
-            { $ref: "#/components/schemas/ProviderDataCallDebateManifestSummaryV1" }
+            {
+              $ref: "#/components/schemas/ProviderDataCallDebateManifestSummaryV1",
+            }
     ProviderDataCallPublicationManifestSummaryV1:
       type: object
       additionalProperties: false
@@ -2026,19 +2051,19 @@ components:
       additionalProperties: false
       required: [agent_version_id, items]
       properties:
-        agent_version_id:
-          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        agent_version_id: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
         items:
           type: array
           items:
-            { $ref: "#/components/schemas/ProviderDataCallPublicationManifestSummaryV1" }
+            {
+              $ref: "#/components/schemas/ProviderDataCallPublicationManifestSummaryV1",
+            }
     ProviderDataCallReportManifestSummaryV1:
       type: object
       additionalProperties: false
       required: [manifest_hash, confirmation_revision, confirmed]
       properties:
-        report_revision_id:
-          { type: [string, "null"] }
+        report_revision_id: { type: [string, "null"] }
         manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         confirmation_revision: { type: integer, minimum: 1 }
         confirmed: { type: boolean }
@@ -2047,12 +2072,13 @@ components:
       additionalProperties: false
       required: [debate_id]
       properties:
-        debate_id:
-          { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
+        debate_id: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,255}$" }
         items:
           type: array
           items:
-            { $ref: "#/components/schemas/ProviderDataCallReportManifestSummaryV1" }
+            {
+              $ref: "#/components/schemas/ProviderDataCallReportManifestSummaryV1",
+            }
     ContinueRealReportRequest:
       type: object
       additionalProperties: false
@@ -2080,7 +2106,8 @@ components:
     ContinueReadyReportRevision:
       type: object
       additionalProperties: false
-      required: [id, revision_no, status, english_markdown, word_count, created_at]
+      required:
+        [id, revision_no, status, english_markdown, word_count, created_at]
       properties:
         id: { $ref: "#/components/schemas/Uuid" }
         revision_no: { type: integer, minimum: 1 }
@@ -2306,17 +2333,18 @@ components:
         publish_blockers:
           type: array
           items: { type: string }
-        raw_agent_md_hash:
-          { type: [string, "null"] }
+        raw_agent_md_hash: { type: [string, "null"] }
         persona_spec:
           oneOf:
             - { $ref: "#/components/schemas/PersonaSpecV1" }
             - { $ref: "#/components/schemas/PersonaSpecV2" }
             - { type: "null" }
-        persona_spec_hash:
-          { type: [string, "null"] }
+        persona_spec_hash: { type: [string, "null"] }
         persona_compiler_version:
-          { type: [string, "null"], enum: [persona_template_v1, persona_template_v2, null] }
+          {
+            type: [string, "null"],
+            enum: [persona_template_v1, persona_template_v2, null],
+          }
         persona_diagnostics:
           type: array
           items: { $ref: "#/components/schemas/PersonaDiagnostic" }
@@ -2336,8 +2364,7 @@ components:
       properties:
         name: { type: string, minLength: 1 }
         role: { type: string, minLength: 1 }
-        historical_or_cultural_context:
-          { type: string, minLength: 1 }
+        historical_or_cultural_context: { type: string, minLength: 1 }
     PersonaSpeakingStyle:
       type: object
       additionalProperties: false
@@ -2365,27 +2392,25 @@ components:
         schema_version:
           { type: string, const: persona_spec_v1, default: persona_spec_v1 }
         identity: { $ref: "#/components/schemas/PersonaIdentity" }
-        cultural_lens:
-          { type: array, minItems: 1, items: { type: string } }
-        core_values:
-          { type: array, minItems: 1, items: { type: string } }
+        cultural_lens: { type: array, minItems: 1, items: { type: string } }
+        core_values: { type: array, minItems: 1, items: { type: string } }
         initial_position: { type: string, minLength: 1 }
         speaking_style: { $ref: "#/components/schemas/PersonaSpeakingStyle" }
-        debate_strategy:
-          { type: array, minItems: 1, items: { type: string } }
-        boundaries:
-          { type: array, minItems: 1, items: { type: string } }
-        source_agent_md_hash:
-          { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        debate_strategy: { type: array, minItems: 1, items: { type: string } }
+        boundaries: { type: array, minItems: 1, items: { type: string } }
+        source_agent_md_hash: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
         compiler_version:
-          { type: string, const: persona_template_v1, default: persona_template_v1 }
+          {
+            type: string,
+            const: persona_template_v1,
+            default: persona_template_v1,
+          }
     PersonaDiagnostic:
       type: object
       additionalProperties: false
       required: [code, message]
       properties:
-        code:
-          { type: string, maxLength: 80, pattern: '^[a-z][a-z0-9_]*$' }
+        code: { type: string, maxLength: 80, pattern: "^[a-z][a-z0-9_]*$" }
         message: { type: string, minLength: 1, maxLength: 240 }
         field: { type: [string, "null"] }
         line:
@@ -2402,12 +2427,14 @@ components:
       required: [expected_revision, raw_agent_md_hash, persona_spec_hash]
       properties:
         expected_revision: { type: integer, minimum: 0 }
-        raw_agent_md_hash:
-          { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
-        persona_spec_hash:
-          { type: string, pattern: '^[0-9a-f]{64}$' }
+        raw_agent_md_hash: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+        persona_spec_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
         compiler_version:
-          { type: string, enum: [persona_template_v1, persona_template_v2], default: persona_template_v1 }
+          {
+            type: string,
+            enum: [persona_template_v1, persona_template_v2],
+            default: persona_template_v1,
+          }
     PersonaCompileResponse:
       type: object
       required: [version_id, revision, compiled, raw_agent_md_hash]
@@ -2415,8 +2442,7 @@ components:
         version_id: { $ref: "#/components/schemas/Uuid" }
         revision: { type: integer, minimum: 0 }
         compiled: { type: boolean }
-        raw_agent_md_hash:
-          { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        raw_agent_md_hash: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
         persona_spec:
           oneOf:
             - { $ref: "#/components/schemas/PersonaSpecV1" }
@@ -2424,7 +2450,11 @@ components:
             - { type: "null" }
         persona_spec_hash: { type: [string, "null"] }
         compiler_version:
-          { type: string, enum: [persona_template_v1, persona_template_v2], default: persona_template_v1 }
+          {
+            type: string,
+            enum: [persona_template_v1, persona_template_v2],
+            default: persona_template_v1,
+          }
         diagnostics:
           type: array
           items: { $ref: "#/components/schemas/PersonaDiagnostic" }
@@ -2595,18 +2625,11 @@ components:
           maxItems: 5
           items: { $ref: "#/components/schemas/DebateParticipantInput" }
         # Ordered multi-expert mutual learning is the only protocol the product
-        # surface offers and the default for a new Debate. The two legacy demo
-        # RuleSets stay accepted here so their frozen behaviour and existing
-        # immutable Debates remain exercisable, but no UI can select them.
+        # surface offers and the only RuleSet a Debate may carry.
         rule_set_id:
           type: string
           default: ordered_multi_expert_mutual_learning_v1
-          enum:
-            [
-              ordered_multi_agent_rounds_demo_v1,
-              ordered_multi_agent_rounds_demo_v2,
-              ordered_multi_expert_mutual_learning_v1,
-            ]
+          const: ordered_multi_expert_mutual_learning_v1
         round_count: { type: integer, const: 4, default: 4 }
         total_duration_seconds: { type: "null" }
         turn_duration_seconds: { type: "null" }
@@ -2717,7 +2740,8 @@ components:
         cutoff_sequence: { type: integer, minimum: 0 }
     PersonaSpecV2:
       additionalProperties: false
-      description: 'Canonical stored schema for the five-section Persona template.
+      description:
+        "Canonical stored schema for the five-section Persona template.
 
 
         V2 intentionally has no ``debate_strategy`` or ``boundaries`` fields.
@@ -2726,7 +2750,7 @@ components:
 
         those headings as empty compatibility values would misrepresent authorship
 
-        and make the new schema indistinguishable from a legacy V1 projection.'
+        and make the new schema indistinguishable from a legacy V1 projection."
       properties:
         compiler_version:
           const: persona_template_v2
@@ -2743,7 +2767,7 @@ components:
           minItems: 1
           type: array
         identity:
-          $ref: '#/components/schemas/PersonaIdentity'
+          $ref: "#/components/schemas/PersonaIdentity"
         initial_position:
           minLength: 1
           type: string
@@ -2755,25 +2779,25 @@ components:
           pattern: ^sha256:[0-9a-f]{64}$
           type: string
         speaking_style:
-          $ref: '#/components/schemas/PersonaSpeakingStyle'
+          $ref: "#/components/schemas/PersonaSpeakingStyle"
       required:
-      - identity
-      - cultural_lens
-      - core_values
-      - initial_position
-      - speaking_style
-      - source_agent_md_hash
+        - identity
+        - cultural_lens
+        - core_values
+        - initial_position
+        - speaking_style
+        - source_agent_md_hash
       type: object
     DebateSegment:
       additionalProperties: false
       properties:
         support_mode:
-          type: [string, 'null']
+          type: [string, "null"]
           enum: [direct, contextual, no_match, null]
         reply_to:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
         source_ids:
           items:
             type: string
@@ -2781,9 +2805,9 @@ components:
         text:
           type: string
       required:
-      - text
-      - source_ids
-      - reply_to
+        - text
+        - source_ids
+        - reply_to
       type: object
     SegmentTurnPublic:
       additionalProperties: false
@@ -2794,10 +2818,10 @@ components:
           type: string
         segments:
           items:
-            $ref: '#/components/schemas/DebateSegment'
+            $ref: "#/components/schemas/DebateSegment"
           type: array
       required:
-      - segments
+        - segments
       type: object
     SegmentSourceDetail:
       additionalProperties: false
@@ -2806,8 +2830,8 @@ components:
           type: string
         query_text:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
         source_filename:
           type: string
         source_id:
@@ -2815,10 +2839,10 @@ components:
         version_label:
           type: string
       required:
-      - source_id
-      - source_filename
-      - excerpt
-      - version_label
+        - source_id
+        - source_filename
+        - excerpt
+        - version_label
       type: object
     PreviewTurn:
       additionalProperties: false
@@ -2837,28 +2861,28 @@ components:
           type: integer
         safe_error_code:
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
         segments:
           items:
-            $ref: '#/components/schemas/DebateSegment'
+            $ref: "#/components/schemas/DebateSegment"
           type: array
         sources:
           items:
-            $ref: '#/components/schemas/SegmentSourceDetail'
+            $ref: "#/components/schemas/SegmentSourceDetail"
           type: array
         speech:
           type: string
         turn_index:
           type: integer
       required:
-      - id
-      - participant_id
-      - round_no
-      - turn_index
-      - speech
-      - generation_status
-      - audio_ready
+        - id
+        - participant_id
+        - round_no
+        - turn_index
+        - speech
+        - generation_status
+        - audio_ready
       type: object
     DebateSummary:
       type: object
@@ -2885,7 +2909,11 @@ components:
           default: 0
           description: Turns this debate's plan contains, from its own agent and round counts.
         preview:
-          oneOf: [{ $ref: "#/components/schemas/DebatePreviewProgress" }, { type: "null" }]
+          oneOf:
+            [
+              { $ref: "#/components/schemas/DebatePreviewProgress" },
+              { type: "null" },
+            ]
           default: null
         stall:
           oneOf:
@@ -2906,7 +2934,15 @@ components:
     DebateCleanupResult:
       type: object
       additionalProperties: false
-      required: [debate_id, cleanup_status, revision, control_version, deleted_file_count, pending_file_count]
+      required:
+        [
+          debate_id,
+          cleanup_status,
+          revision,
+          control_version,
+          deleted_file_count,
+          pending_file_count,
+        ]
       properties:
         debate_id: { $ref: "#/components/schemas/Uuid" }
         cleanup_status: { type: string, enum: [complete, pending] }
@@ -2939,19 +2975,17 @@ components:
             revision: { type: integer, minimum: 0 }
             last_sequence: { type: integer, minimum: 0 }
             rule_set_id:
-              {
-                type: string,
-                enum:
-                  [
-                    ordered_multi_agent_rounds_demo_v1,
-                    ordered_multi_agent_rounds_demo_v2,
-                    ordered_multi_expert_mutual_learning_v1,
-                  ],
-              }
+              { type: string, const: ordered_multi_expert_mutual_learning_v1 }
             round_count: { type: integer, minimum: 2, maximum: 5 }
             output_language: { type: string, enum: [en, zh], default: en }
-            turn_protocol: { type: [string, "null"], enum: [segments_v2, null], default: null }
-            teaching_protocol: { type: [string, "null"], enum: [four_round_v1, null] }
+            turn_protocol:
+              {
+                type: [string, "null"],
+                enum: [segments_v2, null],
+                default: null,
+              }
+            teaching_protocol:
+              { type: [string, "null"], enum: [four_round_v1, null] }
             final_input_frozen: { type: boolean, default: false }
             preview_turns:
               type: array
@@ -3023,7 +3057,11 @@ components:
         ]
       properties:
         segment_turn:
-          oneOf: [{ $ref: "#/components/schemas/SegmentTurnPublic" }, { type: "null" }]
+          oneOf:
+            [
+              { $ref: "#/components/schemas/SegmentTurnPublic" },
+              { type: "null" },
+            ]
           default: null
         source_details:
           type: array
@@ -3052,7 +3090,10 @@ components:
               ],
           }
         phase:
-          { type: [string, "null"], enum: [opening, exchange, final_integration, rebuttal, null] }
+          {
+            type: [string, "null"],
+            enum: [opening, exchange, final_integration, rebuttal, null],
+          }
         mutual_learning:
           oneOf:
             - { $ref: "#/components/schemas/MutualLearningTurnResultV1" }
@@ -3067,14 +3108,17 @@ components:
       additionalProperties: false
       properties:
         type:
-          { type: string, enum: [agent, audience_reflection, none], default: none }
+          {
+            type: string,
+            enum: [agent, audience_reflection, none],
+            default: none,
+          }
         target_participant_id: { type: [string, "null"] }
         text: { type: [string, "null"] }
     EngagementV1:
       type: object
       additionalProperties: false
-      required:
-        [target_turn_id, relation, faithful_summary, response_summary]
+      required: [target_turn_id, relation, faithful_summary, response_summary]
       properties:
         target_turn_id: { type: string, minLength: 1 }
         target_claim_id: { type: [string, "null"] }
@@ -3090,7 +3134,10 @@ components:
         claim_id: { type: string, minLength: 1 }
         claim_text: { type: string, minLength: 1 }
         claim_type:
-          { type: string, enum: [factual, interpretation, value_judgement, proposal] }
+          {
+            type: string,
+            enum: [factual, interpretation, value_judgement, proposal],
+          }
         used_evidence_ids:
           type: array
           items: { type: string }
@@ -3108,7 +3155,10 @@ components:
       properties:
         claim_text: { type: string, minLength: 1 }
         claim_type:
-          { type: string, enum: [factual, background, value_judgement, proposal] }
+          {
+            type: string,
+            enum: [factual, background, value_judgement, proposal],
+          }
         used_evidence_ids:
           type: array
           items: { type: string }
@@ -3121,14 +3171,7 @@ components:
       type: object
       additionalProperties: false
       required:
-        [
-          turn_id,
-          claim_id,
-          claim_text,
-          claim_type,
-          support_mode,
-          speech_span,
-        ]
+        [turn_id, claim_id, claim_text, claim_type, support_mode, speech_span]
       properties:
         trace_version:
           { type: string, const: evidence_trace_v1, default: evidence_trace_v1 }
@@ -3136,13 +3179,23 @@ components:
         claim_id: { type: string, minLength: 1 }
         claim_text: { type: string, minLength: 1 }
         claim_type:
-          { type: string, enum: [factual, background, value_judgement, proposal] }
+          {
+            type: string,
+            enum: [factual, background, value_judgement, proposal],
+          }
         query_id: { type: [string, "null"] }
         query_kind:
           {
             type: [string, "null"],
             enum:
-              [viewpoint, pending_question, rebuttal, updated_position, context, null],
+              [
+                viewpoint,
+                pending_question,
+                rebuttal,
+                updated_position,
+                context,
+                null,
+              ],
           }
         query_text: { type: [string, "null"] }
         evidence_id: { type: [string, "null"] }
@@ -3150,7 +3203,10 @@ components:
         source_filename: { type: [string, "null"] }
         source_locator: { type: [string, "null"] }
         support_mode:
-          { type: string, enum: [direct, contextual, general_reasoning, no_match] }
+          {
+            type: string,
+            enum: [direct, contextual, general_reasoning, no_match],
+          }
         speech_span: { $ref: "#/components/schemas/SpeechSpanV1" }
     MutualLearningDisagreementV1:
       type: object
@@ -3267,7 +3323,8 @@ components:
           items: { $ref: "#/components/schemas/MutualLearningPositionChangeV1" }
         evidence_conflicts:
           type: array
-          items: { $ref: "#/components/schemas/MutualLearningEvidenceConflictV1" }
+          items:
+            { $ref: "#/components/schemas/MutualLearningEvidenceConflictV1" }
         remaining_uncertainty:
           type: array
           items: { type: string }
@@ -3499,7 +3556,15 @@ components:
     ReportAgentScore:
       type: object
       additionalProperties: false
-      required: [slot, direct_count, contextual_count, no_match_count, ungraded_count, total_points]
+      required:
+        [
+          slot,
+          direct_count,
+          contextual_count,
+          no_match_count,
+          ungraded_count,
+          total_points,
+        ]
       properties:
         slot: { type: string, enum: [A, B, C, D, E] }
         direct_count: { type: integer, minimum: 0 }
@@ -3510,7 +3575,15 @@ components:
     ReportScoreSummary:
       type: object
       additionalProperties: false
-      required: [agents, direct_count, contextual_count, no_match_count, ungraded_count, total_points]
+      required:
+        [
+          agents,
+          direct_count,
+          contextual_count,
+          no_match_count,
+          ungraded_count,
+          total_points,
+        ]
       properties:
         agents:
           type: array
@@ -3542,7 +3615,7 @@ components:
           title: Expected Revision
           type: integer
       required:
-      - expected_revision
+        - expected_revision
       title: RegenerateTurnAudioRequest
       type: object
     RegenerateTurnAudioResult:
@@ -3550,8 +3623,8 @@ components:
       properties:
         audio_duration_ms:
           anyOf:
-          - type: integer
-          - type: 'null'
+            - type: integer
+            - type: "null"
           title: Audio Duration Ms
         audio_ready:
           title: Audio Ready
@@ -3567,28 +3640,28 @@ components:
           type: string
         operation_id:
           anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
+            - format: uuid
+              type: string
+            - type: "null"
           title: Operation Id
         revision:
           anyOf:
-          - type: integer
-          - type: 'null'
+            - type: integer
+            - type: "null"
           title: Revision
         safe_error_code:
           title: Safe Error Code
           type:
-          - string
-          - 'null'
+            - string
+            - "null"
         status:
           enum:
-          - completed
-          - already_ready
-          - queued
-          - failed
-          - stale
-          - not_found
+            - completed
+            - already_ready
+            - queued
+            - failed
+            - stale
+            - not_found
           title: Status
           type: string
         turn_id:
@@ -3596,13 +3669,13 @@ components:
           title: Turn Id
           type: string
       required:
-      - status
-      - debate_id
-      - turn_id
-      - revision
-      - operation_id
-      - audio_ready
-      - audio_duration_ms
-      - safe_error_code
+        - status
+        - debate_id
+        - turn_id
+        - revision
+        - operation_id
+        - audio_ready
+        - audio_duration_ms
+        - safe_error_code
       title: RegenerateTurnAudioResult
       type: object

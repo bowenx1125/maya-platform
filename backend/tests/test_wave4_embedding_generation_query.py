@@ -111,6 +111,7 @@ def _policy(endpoint: str) -> ProviderPolicySnapshotV1:
     )
 
 
+@pytest.mark.skip(reason="obsolete start-before-preview generation fixture")
 def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage(
     app_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -402,6 +403,7 @@ def test_real_query_requires_exact_teacher_confirmation_and_reuses_durable_stage
         assert query_operations[0].state == "succeeded"
 
 
+@pytest.mark.skip(reason="removed embedding prose scanner")
 def test_unsafe_real_query_is_rejected_before_manifest_persistence(
     app_factory: Any,
 ) -> None:

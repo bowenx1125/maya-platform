@@ -68,22 +68,34 @@ def headers(csrf: str, **extra: str) -> dict[str, str]:
 def test_turn_plan_is_exact_for_two_three_and_five_participants() -> None:
     for count in (2, 3, 5):
         ids = [uuid4() for _ in range(count)]
-        plan = build_turn_plan(ids)
-        assert len(plan) == count * 2
-        assert [(entry.round_no, entry.slot, entry.turn_index) for entry in plan] == [
-            (round_no, chr(65 + order_index), (round_no - 1) * count + order_index)
-            for round_no in (1, 2)
-            for order_index in range(count)
+        plan = build_turn_plan(ids, round_count=4, teaching_protocol="four_round_v1")
+        assert len(plan) == count * 4
+        assert [(entry.round_no, entry.turn_index) for entry in plan] == [
+            (round_no, (round_no - 1) * count + speaking_index)
+            for round_no in (1, 2, 3, 4)
+            for speaking_index in range(count)
         ]
+        # Speaking order rotates one seat per round while slot identity follows
+        # the teacher's click order, so routing stays stable across rounds.
+        for round_no in range(1, 5):
+            offset = (round_no - 1) % count
+            expected = [(offset + step) % count for step in range(count)]
+            entries = plan[(round_no - 1) * count : round_no * count]
+            assert [entry.order_index for entry in entries] == expected
+            assert [entry.slot for entry in entries] == [chr(65 + item) for item in expected]
+        # Openings are independent; later rounds see the exact lower-index prefix.
+        assert all(entry.predecessor_turn_indexes == () for entry in plan[:count])
         assert all(
-            entry.predecessor_turn_indexes == tuple(range(entry.turn_index)) for entry in plan
+            entry.predecessor_turn_indexes == tuple(range(entry.turn_index))
+            for entry in plan[count:]
         )
-        assert [entry.question_type for entry in plan[:count]] == ["none"] * count
-        assert all(entry.question_type == "agent" for entry in plan[count:-1])
-        assert plan[-1].question_type == "audience_reflection"
-        assert plan[-1].question_target_participant_id is None
-        for order_index, entry in enumerate(plan[count:-1]):
-            assert entry.question_target_participant_id == ids[(order_index + 1) % count]
+        # Only the discussion round routes a question, and it targets the next
+        # click-order Agent rather than the next speaker.
+        assert [entry.question_type for entry in plan] == (
+            ["none"] * count + ["agent"] * count + ["none"] * (count * 2)
+        )
+        for entry in plan[count : count * 2]:
+            assert entry.question_target_participant_id == ids[(entry.order_index + 1) % count]
 
 
 def test_rule_planner_rejects_invalid_count_rounds_and_duplicates() -> None:
@@ -93,8 +105,8 @@ def test_rule_planner_rejects_invalid_count_rounds_and_duplicates() -> None:
 
     ids = [uuid4(), uuid4()]
     with pytest.raises(RuleViolation) as round_error:
-        build_turn_plan(ids, round_count=3)
-    assert round_error.value.code == "demo_round_count_fixed"
+        build_turn_plan(ids, round_count=6)
+    assert round_error.value.code == "mutual_learning_round_count_invalid"
 
     with pytest.raises(RuleViolation) as duplicate_error:
         build_turn_plan([ids[0], ids[0]])
@@ -113,7 +125,7 @@ def test_request_validates_assigned_open_and_fixed_round_shapes() -> None:
         )
     request = DebateDraftRequest(
         topic="A topic",
-        round_count=2,
+        round_count=4,
         participants=[
             DebateParticipantInput(
                 agent_id=agent_id,
@@ -123,7 +135,7 @@ def test_request_validates_assigned_open_and_fixed_round_shapes() -> None:
             DebateParticipantInput(agent_id=uuid4(), stance_mode="open"),
         ],
     )
-    assert request.round_count == 2
+    assert request.round_count == 4
 
 
 @pytest.mark.parametrize(
@@ -254,7 +266,7 @@ def _insert_debate_row(database: Database, *, debate_id: str | None = None) -> s
                 id=debate_id,
                 course_id=COURSE_ID,
                 topic="Audio swap boundary",
-                rule_set_id="ordered_multi_agent_rounds_demo_v1",
+                rule_set_id="ordered_multi_expert_mutual_learning_v1",
                 rule_snapshot_json="{}",
                 status="draft",
                 revision=0,
@@ -271,7 +283,7 @@ def _insert_debate_row(database: Database, *, debate_id: str | None = None) -> s
 def _create_payload(first_agent_id: str, second_agent_id: str, *, topic: str) -> DebateDraftRequest:
     return DebateDraftRequest(
         topic=topic,
-        round_count=2,
+        round_count=4,
         participants=[
             DebateParticipantInput(agent_id=UUID(first_agent_id), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(second_agent_id), stance_mode="open"),
@@ -307,8 +319,8 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
             {"agent_id": bowen_id, "stance_mode": "assigned", "assigned_stance": "support"},
             {"agent_id": kaikai_id, "stance_mode": "assigned", "assigned_stance": "oppose"},
         ],
-        "round_count": 2,
-        "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+        "round_count": 4,
+        "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
     }
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
@@ -319,12 +331,12 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     created = response.json()
     debate_id = created["id"]
     assert created["revision"] == 0
-    assert created["rule_set_id"] == "ordered_multi_agent_rounds_demo_v2"
+    assert created["rule_set_id"] == "ordered_multi_expert_mutual_learning_v1"
     with database.session() as db:
         persisted = db.get(Debate, debate_id)
         assert persisted is not None
         persisted_rule = json.loads(persisted.rule_snapshot_json)
-        assert persisted_rule["rule_set_id"] == "ordered_multi_agent_rounds_demo_v2"
+        assert persisted_rule["rule_set_id"] == "ordered_multi_expert_mutual_learning_v1"
         assert persisted_rule["retrieval_policy_id"] == "mock_lexical_anchor_v2"
     assert [item["slot"] for item in created["participants"]] == ["A", "B"]
     assert [item["agent_id"] for item in created["participants"]] == [bowen_id, kaikai_id]
@@ -367,8 +379,8 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
             {"agent_id": kaikai_id, "stance_mode": "open", "assigned_stance": None},
             {"agent_id": bowen_id, "stance_mode": "assigned", "assigned_stance": "neutral"},
         ],
-        "round_count": 2,
-        "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+        "round_count": 4,
+        "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
         "expected_revision": 0,
     }
     updated = client.patch(f"/api/v1/debates/{debate_id}", headers=headers(csrf), json=update_body)
@@ -405,8 +417,8 @@ def test_embedding_only_slice_keeps_mock_voice_fallback(
                 {"agent_id": bowen_id, "stance_mode": "open"},
                 {"agent_id": kaikai_id, "stance_mode": "open"},
             ],
-            "round_count": 2,
-            "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+            "round_count": 4,
+            "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
         },
     )
     assert response.status_code == 201, response.text
@@ -779,8 +791,8 @@ def test_teacher_student_and_outside_course_boundaries(
             {"agent_id": bowen_id, "stance_mode": "open"},
             {"agent_id": kaikai_id, "stance_mode": "open"},
         ],
-        "round_count": 2,
-        "rule_set_id": "ordered_multi_agent_rounds_demo_v2",
+        "round_count": 4,
+        "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
     }
     student_session, student_csrf = login(client, "bowen")
     del student_session
@@ -819,10 +831,7 @@ def test_commit_start_plan_writes_full_predecessor_prefix_without_public_start_s
     ]
     payload = DebateDraftRequest(
         topic="Ordering",
-        round_count=2,
-        # This asserts the frozen legacy full-prefix predecessor plan, so it
-        # names that RuleSet rather than taking the mutual-learning default.
-        rule_set_id="ordered_multi_agent_rounds_demo_v2",
+        round_count=4,
         participants=[
             DebateParticipantInput(agent_id=UUID(ids[0]), stance_mode="open"),
             DebateParticipantInput(agent_id=UUID(ids[1]), stance_mode="open"),
@@ -839,9 +848,11 @@ def test_commit_start_plan_writes_full_predecessor_prefix_without_public_start_s
         assert debate is not None and debate.status == "draft"
         turns = commit_start_plan(session, debate_id=str(detail.id))
         assert debate.status == "draft"
-        assert len(turns) == 4
-        assert json.loads(turns[0].predecessor_turn_ids_json) == []
-        for index, turn in enumerate(turns[1:], start=1):
+        assert len(turns) == 8
+        # Round one is independent; every later turn keeps the exact prefix.
+        for turn in turns[:2]:
+            assert json.loads(turn.predecessor_turn_ids_json) == []
+        for index, turn in enumerate(turns[2:], start=2):
             assert json.loads(turn.predecessor_turn_ids_json) == [item.id for item in turns[:index]]
         assert session.scalar(select(DebateTurn).where(DebateTurn.debate_id == str(detail.id)))
 
@@ -858,7 +869,7 @@ def test_typed_audio_swap_journal_transitions_and_recovery(
                 id=new_debate_id,
                 course_id=COURSE_ID,
                 topic="Audio swap",
-                rule_set_id="ordered_multi_agent_rounds_demo_v1",
+                rule_set_id="ordered_multi_expert_mutual_learning_v1",
                 rule_snapshot_json="{}",
                 status="draft",
                 revision=0,

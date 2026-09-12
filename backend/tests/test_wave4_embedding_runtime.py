@@ -13,7 +13,6 @@ from app.modules.knowledge.providers import (
     REAL_EMBEDDING_POLICY_VERSION,
     REAL_EMBEDDING_PROVIDER,
     REAL_EMBEDDING_REGION,
-    EmbeddingPlanError,
     InMemoryEmbeddingLedger,
     MockEmbeddingProvider,
     PinnedTokenizerV1,
@@ -393,14 +392,16 @@ def test_final_current_input_check_blocks_publication_after_runtime_drift() -> N
     assert ledger.operation(result.operations[0].id).state == "failed"
 
 
-def test_long_unbroken_input_fails_plan_with_zero_control_or_provider_calls() -> None:
+def test_long_unbroken_input_no_longer_fails_the_plan_on_a_per_item_ceiling() -> None:
+    # Removing the 8,000-token per-item cap means this build now reaches the
+    # runtime instead of being rejected while planning.
     build = _build("x" * 8_001)
     runtime, transport, ledger, _ = _runtime(build)
 
-    with pytest.raises(EmbeddingPlanError, match="8,000"):
-        runtime.run(build, scope_id="long-scope")
-    assert transport.calls == []
-    assert ledger.operations() == ()
+    result = runtime.run(build, scope_id="long-scope")
+    assert result.operations
+    assert transport.calls
+    assert ledger.operations()
 
 
 def test_not_sent_releases_and_allows_explicit_next_attempt_but_no_auto_retry() -> None:

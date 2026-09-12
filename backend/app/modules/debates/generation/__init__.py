@@ -1,4 +1,4 @@
-"""Deterministic, provider-neutral Wave 2 turn generation primitives."""
+"""Deterministic, provider-neutral debate generation primitives."""
 
 from typing import TYPE_CHECKING
 
@@ -72,8 +72,6 @@ from .mutual_learning_validator import (
 from .policy import (
     RULE_SET_ID,
     RULE_SET_ID_MUTUAL_LEARNING,
-    RULE_SET_ID_V1,
-    RULE_SET_ID_V2,
     TurnPlan,
     TurnPolicy,
     TurnPolicyError,
@@ -154,13 +152,6 @@ from .prompt_request import (
     predecessor_projection,
     render_prompt,
     render_prompt_system_message,
-)
-from .prompts import (
-    PLATFORM_PRIORITY_RULES,
-    build_turn_prompt,
-    compute_receipt_hash,
-    compute_transcript_hash,
-    make_turn_prompt_input,
 )
 from .recovery import (
     LLMRecoveryLedgerPort,
@@ -270,7 +261,6 @@ from .types import (
     SelectedEvidence,
     SnapshotRetrievalReceipt,
     StructuredTurnResult,
-    TurnPromptInput,
     TurnQuestion,
     TurnValidationError,
     ValidatedTurn,
@@ -297,8 +287,6 @@ __all__ = [
     "PreparationCap",
     "PublicSource",
     "RULE_SET_ID",
-    "RULE_SET_ID_V1",
-    "RULE_SET_ID_V2",
     "RULE_SET_ID_MUTUAL_LEARNING",
     "MUTUAL_LEARNING_RULE_SET_ID",
     "MUTUAL_RULE_SET_ID",
@@ -399,7 +387,6 @@ __all__ = [
     "predecessor_projection",
     "render_prompt",
     "render_prompt_system_message",
-    "TurnPromptInput",
     "TurnSubquery",
     "TurnQuestion",
     "TurnValidationError",
@@ -408,8 +395,6 @@ __all__ = [
     "MutualTurnValidator",
     "MutualLearningValidationResult",
     "ValidatedTurn",
-    "build_turn_prompt",
-    "PLATFORM_PRIORITY_RULES",
     "build_segment_subqueries",
     "build_turn_subqueries",
     "build_segment_input",
@@ -421,8 +406,6 @@ __all__ = [
     "parse_segment_output_json",
     "validate_segment_output",
     "can_claim_turn",
-    "compute_receipt_hash",
-    "compute_transcript_hash",
     "count_turn_words",
     "has_explicit_source_claim",
     "PositionHistoryRecord",
@@ -462,7 +445,6 @@ __all__ = [
     "LLMTurnRuntime",
     "OpenAICompatibleLLMAdapter",
     "mark_public",
-    "make_turn_prompt_input",
     "make_mutual_learning_prompt_input",
     "build_mutual_learning_prompt",
     "compute_mutual_receipt_hash",
