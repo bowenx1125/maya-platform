@@ -221,19 +221,7 @@ describe("teacher account management", () => {
       expect(push).toHaveBeenCalledWith(`/student/groups/${groupId}`),
     );
     expect(api.joinGroupAsTeacher).not.toHaveBeenCalled();
-  });
-
-  it("leaves a group from its own row", async () => {
-    const api = apiForTeacher();
-    mount(api, "en");
-
-    // Leave only appears for a group the caller is inside.
-    const leave = await screen.findAllByRole("button", { name: "Leave" });
-    expect(leave).toHaveLength(1);
-    fireEvent.click(leave[0]);
-    await waitFor(() =>
-      expect(api.leaveGroupAsTeacher).toHaveBeenCalledWith(groupId),
-    );
+    expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
   });
 
   it("renders the Chinese copy for the same surface", async () => {

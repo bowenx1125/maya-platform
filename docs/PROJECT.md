@@ -295,8 +295,8 @@ login. Registration and teacher moves use the same group normalization/upsert.
 Canonical collisions stop migration.
 
 Teacher access persists in teacher_group_access across catalog sync. Enter grants
-full workspace creation/editing/deletion under the teacher identity; Leave closes
-access. Publication/history, CSRF, course and provider consent/cost rules remain.
+full workspace creation/editing/deletion under the teacher identity. Groups shows
+Enter only; Homeward returns to Accounts. The course subtitle is removed. Publication/history, CSRF, course and provider consent/cost rules remain.
 This supersedes the previous teacher deletion prohibition.
 
 Existing real LLM four-round generation, Embedding and Report configuration is

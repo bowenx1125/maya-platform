@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
-  type Course,
   type Group,
   type RosterEntry,
   type UpdateCourseMemberRequest,
@@ -37,7 +36,6 @@ export function RosterWorkspace() {
   const { locale } = useLocale();
   const { api, user, refresh } = useSession();
   const router = useRouter();
-  const [course, setCourse] = useState<Course | null>(null);
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,12 +66,10 @@ export function RosterWorkspace() {
       if (gate) setLoading(true);
       setError(null);
       try {
-        const [courses, roster, courseGroups] = await Promise.all([
-          api.courses(),
+        const [roster, courseGroups] = await Promise.all([
           api.courseRoster(courseId),
           api.groups(courseId),
         ]);
-        setCourse(courses.find((item) => item.id === courseId) ?? null);
         setEntries(roster.entries ?? []);
         setGroups(courseGroups);
       } catch (cause) {
@@ -154,24 +150,6 @@ export function RosterWorkspace() {
     [api, refresh, router],
   );
 
-  const leaveGroup = useCallback(
-    async (group: Group) => {
-      setBusy(group.id);
-      setError(null);
-      try {
-        await api.leaveGroupAsTeacher(group.id);
-        // The nav is built from the session's groups, so without this it keeps
-        // offering the workspace of a group the teacher has just walked out of.
-        await Promise.all([load(false), refresh()]);
-      } catch (cause) {
-        setError(cause);
-      } finally {
-        setBusy(null);
-      }
-    },
-    [api, load, refresh],
-  );
-
   if (loading) return <LoadingCard />;
 
   const self = entries.find((entry) => entry.user_id === user?.id);
@@ -187,11 +165,7 @@ export function RosterWorkspace() {
 
   return (
     <div className="account-layout">
-      <PageIntro
-        eyebrow={t("accountsEyebrow")}
-        title={t("accounts")}
-        description={course?.name}
-      />
+      <PageIntro eyebrow={t("accountsEyebrow")} title={t("accounts")} />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
       <SectionCard title={`${t("members")} · ${entries.length}`}>
@@ -362,16 +336,6 @@ export function RosterWorkspace() {
                     <strong>{group.name}</strong>
                   </span>
                   <div className="button-row">
-                    {joined ? (
-                      <button
-                        className="inline-button"
-                        type="button"
-                        disabled={busy === group.id}
-                        onClick={() => void leaveGroup(group)}
-                      >
-                        {t("leave")}
-                      </button>
-                    ) : null}
                     <button
                       className="inline-button"
                       type="button"
