@@ -21,11 +21,9 @@ dependency version is pinned in the workspace lockfile.
 
 ## `laozi/sumie_bg.jpg`
 
-The ink-wash backdrop behind the Debates (beta) bench comes from the project
-owner's own Laozi digital-human prototype, supplied for this repository by the
-owner. **This inclusion is not a public asset licence clearance:** confirm its
-terms for classroom and any public use before Maya is deployed or shared
-outside the private demo.
+This retained, currently unused backdrop comes from the project owner's own
+Laozi digital-human prototype. **This inclusion is not a public asset licence
+clearance:** confirm its terms before any public use or redistribution.
 
 The Debates (beta) bench now uses the owner's purchased `elder-scholar.glb`
 and `noble-scholar.glb`, converted from the supplied FBX model pack. These
@@ -33,9 +31,8 @@ figures have rigged jaws for the initial speech animation and no lip-sync
 blendshapes. The owner's authorization covers this private classroom demo;
 do not redistribute the model files independently.
 
-## `temple-courtyard.jpg`
+## `scholar-chair-*.png`
 
-Background photograph: Mrs cardboardbird, [Temple-courtyard.jpg](https://commons.wikimedia.org/wiki/File:Temple-courtyard.jpg),
-[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/). The local
-file is a 1280-pixel Wikimedia thumbnail; the app changes its on-screen
-crop, brightness and saturation. The image remains under CC BY-SA 3.0.
+The two transparent chair layers are local artwork for the private stage.
+Their editable SVG sources are beside the PNG files. The SVGs were rasterized
+to PNG for WebGL texture compatibility; no external image source is used.

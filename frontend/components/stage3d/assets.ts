@@ -17,7 +17,10 @@ export const STAGE_CHARACTER_ASSETS = [
 /** Draco decoder, served locally so the scene never reaches a CDN. */
 export const STAGE_DECODER_PATH = `${STAGE_ASSET_ROOT}draco/`;
 
-export const STAGE_BACKDROP_ASSET = `${STAGE_ASSET_ROOT}temple-courtyard.jpg`;
+export const STAGE_CHAIR_ASSETS = [
+  `${STAGE_ASSET_ROOT}scholar-chair-back.png`,
+  `${STAGE_ASSET_ROOT}scholar-chair-front.png`,
+] as const;
 
 /** Only paths under the stage asset root may reach the loader. */
 export function isStageAssetUrl(value: string): boolean {

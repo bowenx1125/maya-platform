@@ -9,7 +9,6 @@ import {
 } from "react";
 
 import type { AvatarState } from "../avatar";
-import { STAGE_BACKDROP_ASSET } from "./assets";
 import type { StageAnchor, StageCharacter } from "./scholar-stage";
 import styles from "./stage3d.module.css";
 
@@ -172,29 +171,7 @@ export function ScholarScene({
 
   return (
     <div className={styles.scene} data-scene-status={status}>
-      <div
-        aria-hidden="true"
-        className={styles.backdrop}
-        style={{ backgroundImage: `url(${STAGE_BACKDROP_ASSET})` }}
-      />
-      <span className={styles.backdropCredit}>
-        背景摄影：
-        <a
-          href="https://commons.wikimedia.org/wiki/File:Temple-courtyard.jpg"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          Mrs cardboardbird
-        </a>
-        {" · "}
-        <a
-          href="https://creativecommons.org/licenses/by-sa/3.0/"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          CC BY-SA 3.0
-        </a>
-      </span>
+      <div aria-hidden="true" className={styles.backdrop} />
       <div className={styles.canvasViewport}>
         <canvas
           className={styles.canvas}

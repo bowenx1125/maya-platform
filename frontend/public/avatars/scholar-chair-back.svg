@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 340">
+  <defs>
+    <linearGradient id="wood" x2="1" y2="0">
+      <stop stop-color="#38281f"/>
+      <stop offset=".48" stop-color="#76523a"/>
+      <stop offset="1" stop-color="#3d2b22"/>
+    </linearGradient>
+    <linearGradient id="seat" y2="1" x2="0">
+      <stop stop-color="#9a7450"/>
+      <stop offset="1" stop-color="#503727"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="120" cy="328" rx="91" ry="9" fill="#302920" opacity=".18"/>
+  <path d="M27 61Q120 15 213 61L207 79Q120 39 33 79Z" fill="url(#wood)" stroke="#241a15" stroke-width="4"/>
+  <path d="M35 67L47 67L54 250L37 250Z M205 67L193 67L186 250L203 250Z" fill="url(#wood)" stroke="#241a15" stroke-width="3"/>
+  <path d="M51 102Q120 74 189 102L188 116Q120 91 52 116Z" fill="#60412e" stroke="#291e17" stroke-width="3"/>
+  <path d="M61 116L76 111L80 207L66 210Z M103 103L116 100L116 206L103 206Z M137 100L150 103L137 206L124 206Z M164 111L179 116L174 210L160 207Z" fill="url(#wood)" opacity=".96"/>
+  <path d="M40 204Q120 191 200 204L204 230Q120 222 36 230Z" fill="url(#seat)" stroke="#2c211a" stroke-width="4"/>
+  <path d="M39 227L56 228L54 317L38 317Z M184 228L201 227L202 317L186 317Z" fill="#493326" stroke="#241b16" stroke-width="3"/>
+</svg>

@@ -7,7 +7,7 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #ece8e0;
+  background: #fff;
   isolation: isolate;
 }
 
@@ -15,37 +15,7 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-position: center bottom;
-  background-size: auto 170%;
-  filter: brightness(1.12) saturate(0.68);
-}
-
-/* Lift the wall and floor enough for dark robes to stay legible. */
-.backdrop::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(245, 238, 225, 0.1);
-}
-
-.backdropCredit {
-  position: absolute;
-  z-index: 5;
-  top: 9px;
-  left: 12px;
-  padding: 2px 5px;
-  color: #332b23;
-  background: rgba(255, 255, 255, 0.72);
-  font-size: 10px;
-}
-
-.backdropCredit a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.backdropCredit a:hover {
-  text-decoration: underline;
+  background: #fff;
 }
 
 /* The discussion occupies the full upper stage; the transcript runs below it. */
@@ -329,10 +299,6 @@
 }
 
 @media (max-width: 900px) {
-  .backdrop {
-    background-size: auto 300%;
-  }
-
   .namePlate {
     display: none;
   }

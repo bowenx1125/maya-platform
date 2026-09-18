@@ -11,6 +11,7 @@ import {
   type AvatarState,
 } from "../avatar";
 import {
+  STAGE_CHAIR_ASSETS,
   STAGE_CHARACTER_ASSETS,
   STAGE_DECODER_PATH,
   isStageAssetUrl,
@@ -243,6 +244,7 @@ export class ScholarStage {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly loader = new GLTFLoader();
+  private readonly textureLoader = new THREE.TextureLoader();
   private readonly draco = new DRACOLoader();
   private readonly seatClipPlane = new THREE.Plane(
     new THREE.Vector3(0, 1, 0),
@@ -254,6 +256,7 @@ export class ScholarStage {
 
   private templates: THREE.Object3D[] = [];
   private templateScales: number[] = [];
+  private chairTextures: (THREE.Texture | null)[] = [null, null];
   private loading = 0;
   private table: THREE.Group | null = null;
   private readonly chairs: THREE.Group[] = [];
@@ -357,6 +360,8 @@ export class ScholarStage {
     }
     this.characters.length = 0;
     this.clearChairs();
+    for (const texture of this.chairTextures) texture?.dispose();
+    this.chairTextures = [null, null];
     for (const template of this.templates) {
       if (template) disposeObject(template);
     }
@@ -373,15 +378,31 @@ export class ScholarStage {
   }
 
   private load(): void {
-    for (const url of STAGE_CHARACTER_ASSETS) {
+    for (const url of [...STAGE_CHARACTER_ASSETS, ...STAGE_CHAIR_ASSETS]) {
       if (!isStageAssetUrl(url)) {
         this.onError?.(new Error("stage_asset_rejected"));
         return;
       }
     }
-    this.loading = STAGE_CHARACTER_ASSETS.length;
+    this.loading = STAGE_CHARACTER_ASSETS.length + STAGE_CHAIR_ASSETS.length;
     this.templates = new Array(STAGE_CHARACTER_ASSETS.length);
     this.templateScales = new Array(STAGE_CHARACTER_ASSETS.length);
+    STAGE_CHAIR_ASSETS.forEach((url, index) => {
+      this.textureLoader.load(
+        url,
+        (texture) => {
+          if (this.disposed || this.loading < 0) {
+            texture.dispose();
+            return;
+          }
+          texture.colorSpace = THREE.SRGBColorSpace;
+          this.chairTextures[index] = texture;
+          this.assetLoaded();
+        },
+        undefined,
+        (cause) => this.assetFailed(cause),
+      );
+    });
     STAGE_CHARACTER_ASSETS.forEach((url, index) => {
       this.loader.load(
         url,
@@ -395,24 +416,31 @@ export class ScholarStage {
           this.templateScales[index] =
             size.y > 0 ? NORMALISED_HEIGHT / size.y : 1;
           this.templates[index] = gltf.scene;
-          this.loading -= 1;
-          if (this.loading === 0) {
-            if (this.pending) {
-              this.rebuild(this.pending);
-              this.pending = null;
-            }
-            this.startLoop();
-            this.onReady?.();
-          }
+          this.assetLoaded();
         },
         undefined,
         (cause) => {
-          if (this.disposed || this.loading < 0) return;
-          this.loading = -1;
-          this.onError?.(new Error("stage_asset_failed", { cause }));
+          this.assetFailed(cause);
         },
       );
     });
+  }
+
+  private assetLoaded(): void {
+    this.loading -= 1;
+    if (this.loading !== 0) return;
+    if (this.pending) {
+      this.rebuild(this.pending);
+      this.pending = null;
+    }
+    this.startLoop();
+    this.onReady?.();
+  }
+
+  private assetFailed(cause: unknown): void {
+    if (this.disposed || this.loading < 0) return;
+    this.loading = -1;
+    this.onError?.(new Error("stage_asset_failed", { cause }));
   }
 
   private buildTable(): void {
@@ -435,11 +463,11 @@ export class ScholarStage {
     group.add(pedestal);
 
     const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.72, 32),
+      new THREE.CircleGeometry(0.55, 32),
       new THREE.MeshBasicMaterial({
         color: 0x34291e,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.09,
         depthWrite: false,
       }),
     );
@@ -475,6 +503,11 @@ export class ScholarStage {
     this.characters.length = 0;
     this.clearChairs();
     if (this.templates.length === 0) return;
+    const [chairBack, chairFront] = this.chairTextures;
+    if (!chairBack || !chairFront) {
+      this.onError?.(new Error("stage_asset_failed"));
+      return;
+    }
 
     const count = Math.max(1, specs.length);
     specs.forEach((spec, index) => {
@@ -495,7 +528,13 @@ export class ScholarStage {
       root.rotation.y = facing;
       poseArms(root);
 
-      const chair = this.buildChair(seatX, seatZ, facing);
+      const chair = this.buildChair(
+        seatX,
+        seatZ,
+        facing,
+        chairBack,
+        chairFront,
+      );
       this.scene.add(chair);
       this.chairs.push(chair);
 
@@ -538,47 +577,31 @@ export class ScholarStage {
     this.chairs.length = 0;
   }
 
-  private buildChair(x: number, z: number, facing: number): THREE.Group {
+  private buildChair(
+    x: number,
+    z: number,
+    facing: number,
+    backTexture: THREE.Texture,
+    frontTexture: THREE.Texture,
+  ): THREE.Group {
     const chair = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({
-      color: 0x57402b,
-      roughness: 0.82,
-    });
-    const addPart = (
-      width: number,
-      height: number,
-      depth: number,
-      px: number,
-      py: number,
-      pz: number,
-    ) => {
-      const part = new THREE.Mesh(
-        new THREE.BoxGeometry(width, height, depth),
-        wood,
+    const addLayer = (texture: THREE.Texture, depth: number) => {
+      const layer = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.9, 1.25),
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
       );
-      part.position.set(px, py, pz);
-      chair.add(part);
+      layer.position.set(0, 0.2, depth);
+      chair.add(layer);
     };
-    addPart(0.5, 0.06, 0.42, 0, 0.26, 0);
-    for (const side of [-1, 1]) {
-      addPart(0.045, 0.7, 0.045, side * 0.22, -0.09, 0.16);
-      addPart(0.045, 1.18, 0.045, side * 0.22, 0.13, -0.16);
-    }
-    addPart(0.48, 0.2, 0.035, 0, 0.62, -0.16);
-    const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.33, 24),
-      new THREE.MeshBasicMaterial({
-        color: 0x34291e,
-        transparent: true,
-        opacity: 0.14,
-        depthWrite: false,
-      }),
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = FLOOR_Y - 0.02;
-    chair.add(shadow);
-    chair.position.set(x, 0, z - 0.16);
-    chair.rotation.y = facing;
+    addLayer(backTexture, -0.25);
+    addLayer(frontTexture, 0.25);
+    chair.position.set(x, 0, z);
+    chair.rotation.y = facing * 0.7;
     return chair;
   }
 
@@ -617,6 +640,9 @@ export class ScholarStage {
     );
     root.traverse((object) => {
       if (!isMorphMesh(object)) return;
+      // The elder FBX includes a wide decorative plane named "aa" that
+      // otherwise leaves detached fragments across the classroom stage.
+      if (object.name === "aa") object.visible = false;
       object.frustumCulled = false;
       if (object.morphTargetDictionary && object.morphTargetInfluences) {
         meshes.push(object);
