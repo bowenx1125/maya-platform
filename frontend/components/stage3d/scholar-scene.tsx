@@ -177,6 +177,24 @@ export function ScholarScene({
         className={styles.backdrop}
         style={{ backgroundImage: `url(${STAGE_BACKDROP_ASSET})` }}
       />
+      <span className={styles.backdropCredit}>
+        背景摄影：
+        <a
+          href="https://commons.wikimedia.org/wiki/File:Temple-courtyard.jpg"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Mrs cardboardbird
+        </a>
+        {" · "}
+        <a
+          href="https://creativecommons.org/licenses/by-sa/3.0/"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          CC BY-SA 3.0
+        </a>
+      </span>
       <div className={styles.canvasViewport}>
         <canvas
           className={styles.canvas}

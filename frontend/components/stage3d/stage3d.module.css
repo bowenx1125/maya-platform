@@ -2,8 +2,7 @@
    Everything here is scoped to Debates (beta); the classic stage imports none
    of it. */
 
-/* The scene is the page, not a panel on it: the ink-wash ground runs edge to
-   edge and every control floats above it. */
+/* The scene fills the display while the transcript stays below the bench. */
 .scene {
   position: absolute;
   inset: 0;
@@ -16,30 +15,43 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-position: center 58%;
-  background-size: cover;
-  opacity: 0.62;
-  filter: saturate(0.55);
+  background-position: center bottom;
+  background-size: auto 170%;
+  filter: brightness(1.12) saturate(0.68);
 }
 
-/* A soft vignette so the figures sit in the paper rather than on top of it. */
+/* Lift the wall and floor enough for dark robes to stay legible. */
 .backdrop::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(
-    ellipse 68% 58% at 44% 62%,
-    transparent 40%,
-    rgba(232, 226, 214, 0.55) 100%
-  );
+  background: rgba(245, 238, 225, 0.1);
 }
 
-/* The beta Public Debate panel floats above the right side of the bench. Keep
-   the renderer and its DOM anchors inside the remaining canvas so the camera
-   uses the same width and height that the teacher can actually see. */
+.backdropCredit {
+  position: absolute;
+  z-index: 5;
+  top: 9px;
+  left: 12px;
+  padding: 2px 5px;
+  color: #332b23;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+}
+
+.backdropCredit a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.backdropCredit a:hover {
+  text-decoration: underline;
+}
+
+/* The discussion occupies the full upper stage; the transcript runs below it. */
 .canvasViewport {
   position: absolute;
-  inset: 0 480px 0 0;
+  inset: 0 0 236px;
   overflow: hidden;
   min-width: 0;
 }
@@ -244,13 +256,14 @@
 .joinCard {
   position: absolute;
   z-index: 9;
-  top: 50%;
-  left: calc((100% - 480px) / 2);
-  transform: translate(-50%, -50%);
+  top: 20px;
+  right: 20px;
+  left: auto;
+  transform: none;
   display: grid;
   align-items: center;
   justify-items: center;
-  width: min(390px, calc(100% - 520px));
+  width: min(220px, calc(100% - 40px));
   gap: 11px;
   padding: 20px;
   border: 1px solid rgba(38, 31, 24, 0.12);
@@ -261,7 +274,7 @@
 
 .joinCard svg {
   display: block;
-  width: min(340px, 100%, calc(100dvh - 230px));
+  width: min(180px, 100%, calc(100dvh - 280px));
   height: auto;
   border-radius: 10px;
 }
@@ -296,7 +309,7 @@
   position: absolute;
   z-index: 9;
   left: 20px;
-  bottom: 20px;
+  bottom: 254px;
   padding: 6px 12px 7px;
   border: 1px solid rgba(38, 31, 24, 0.14);
   border-radius: 999px;
@@ -316,6 +329,10 @@
 }
 
 @media (max-width: 900px) {
+  .backdrop {
+    background-size: auto 300%;
+  }
+
   .namePlate {
     display: none;
   }
@@ -344,8 +361,10 @@
   .joinCard {
     top: 22dvh;
     left: 50%;
+    right: auto;
     width: min(310px, calc(100% - 32px));
     padding: 12px;
+    transform: translate(-50%, -50%);
   }
 
   .joinCard svg {

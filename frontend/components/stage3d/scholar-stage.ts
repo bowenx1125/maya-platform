@@ -96,6 +96,7 @@ const CAMERA_EDGE_MARGIN = 1.08;
 const TABLE_RADIUS = 0.95;
 const TABLE_TOP_Y = 0.72;
 const TABLE_CENTER_Z = 0.2;
+const FLOOR_Y = -0.42;
 // The bundled figures stand; hide lower legs until seated assets are approved.
 const SEAT_CLIP_Y = 0.22;
 // Spread wide enough that five upper bodies read as distinct speakers from
@@ -149,23 +150,68 @@ function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
   return Boolean((object as MorphMesh).isMesh);
 }
 
+function aimBone(
+  root: THREE.Object3D,
+  bone: THREE.Object3D,
+  endpoint: THREE.Object3D,
+  target: THREE.Vector3,
+): void {
+  root.updateMatrixWorld(true);
+  const origin = bone.getWorldPosition(new THREE.Vector3());
+  const direction = endpoint.getWorldPosition(new THREE.Vector3()).sub(origin);
+  const desired = target.clone().sub(origin);
+  if (direction.lengthSq() < 0.0001 || desired.lengthSq() < 0.0001) return;
+  const worldDelta = new THREE.Quaternion().setFromUnitVectors(
+    direction.normalize(),
+    desired.normalize(),
+  );
+  const parentRotation = bone.parent?.getWorldQuaternion(
+    new THREE.Quaternion(),
+  );
+  if (!parentRotation) return;
+  bone.quaternion.premultiply(
+    parentRotation
+      .clone()
+      .invert()
+      .multiply(worldDelta)
+      .multiply(parentRotation),
+  );
+  root.updateMatrixWorld(true);
+}
+
 function poseArms(root: THREE.Object3D): void {
+  const center = root.getWorldPosition(new THREE.Vector3());
   for (const suffix of ["l", "r"]) {
     const shoulder = findBone(root, [
       `upperarm_${suffix}`,
       `shoulder_${suffix}`,
     ]);
     const elbow = findBone(root, [`lowerarm_${suffix}`, `elbow_${suffix}`]);
-    if (!shoulder || !elbow) continue;
+    const wrist = findBone(root, [`hand_${suffix}`, `wrist_${suffix}`]);
+    if (!shoulder || !elbow || !wrist) continue;
     root.updateMatrixWorld(true);
-    const before = elbow.getWorldPosition(new THREE.Vector3()).y;
-    shoulder.rotateZ(0.1);
-    root.updateMatrixWorld(true);
-    const direction = Math.sign(
-      elbow.getWorldPosition(new THREE.Vector3()).y - before,
+    const upper = shoulder.getWorldPosition(new THREE.Vector3());
+    aimBone(
+      root,
+      shoulder,
+      elbow,
+      new THREE.Vector3(
+        upper.x + (center.x - upper.x) * 0.32,
+        upper.y - 0.32,
+        upper.z + 0.1,
+      ),
     );
-    shoulder.rotateZ(-0.1);
-    shoulder.rotateZ(direction > 0 ? -1.35 : 1.35);
+    const lower = elbow.getWorldPosition(new THREE.Vector3());
+    aimBone(
+      root,
+      elbow,
+      wrist,
+      new THREE.Vector3(
+        lower.x + (center.x - lower.x) * 0.35,
+        lower.y - 0.17,
+        lower.z + 0.18,
+      ),
+    );
   }
 }
 
@@ -210,6 +256,7 @@ export class ScholarStage {
   private templateScales: number[] = [];
   private loading = 0;
   private table: THREE.Group | null = null;
+  private readonly chairs: THREE.Group[] = [];
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
   private frame: number | null = null;
@@ -309,6 +356,7 @@ export class ScholarStage {
       disposeObject(character.root, false);
     }
     this.characters.length = 0;
+    this.clearChairs();
     for (const template of this.templates) {
       if (template) disposeObject(template);
     }
@@ -378,12 +426,26 @@ export class ScholarStage {
     top.position.set(0, TABLE_TOP_Y, TABLE_CENTER_Z);
     group.add(top);
 
+    const pedestalHeight = TABLE_TOP_Y - FLOOR_Y - 0.035;
     const pedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.28, TABLE_TOP_Y - 0.035, 16),
+      new THREE.CylinderGeometry(0.16, 0.28, pedestalHeight, 16),
       new THREE.MeshStandardMaterial({ color: 0x5f3d22, roughness: 0.8 }),
     );
-    pedestal.position.set(0, (TABLE_TOP_Y - 0.035) / 2, TABLE_CENTER_Z);
+    pedestal.position.set(0, FLOOR_Y + pedestalHeight / 2, TABLE_CENTER_Z);
     group.add(pedestal);
+
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.72, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x34291e,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+      }),
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(0, FLOOR_Y - 0.02, TABLE_CENTER_Z);
+    group.add(shadow);
 
     this.table = group;
     this.scene.add(group);
@@ -411,6 +473,7 @@ export class ScholarStage {
       disposeObject(character.root, false);
     }
     this.characters.length = 0;
+    this.clearChairs();
     if (this.templates.length === 0) return;
 
     const count = Math.max(1, specs.length);
@@ -425,11 +488,16 @@ export class ScholarStage {
       const offset = this.seatOffset(index, count);
       const seatX = offset.x;
       const seatZ = TABLE_CENTER_Z + offset.z;
+      const facing = Math.atan2(-seatX, TABLE_CENTER_Z - seatZ);
       root.position.set(seatX, -0.42, seatZ);
       // Faces the table centre; the camera sits across it, so everyone reads
       // as being in conversation and mostly toward the viewer.
-      root.rotation.y = Math.atan2(-seatX, TABLE_CENTER_Z - seatZ);
+      root.rotation.y = facing;
       poseArms(root);
+
+      const chair = this.buildChair(seatX, seatZ, facing);
+      this.scene.add(chair);
+      this.chairs.push(chair);
 
       const meshes: MorphMesh[] = [];
       this.styleFigure(root, spec.config, meshes);
@@ -460,6 +528,58 @@ export class ScholarStage {
       this.characters.push(character);
     });
     this.updateCameraFraming();
+  }
+
+  private clearChairs(): void {
+    for (const chair of this.chairs) {
+      this.scene.remove(chair);
+      disposeObject(chair);
+    }
+    this.chairs.length = 0;
+  }
+
+  private buildChair(x: number, z: number, facing: number): THREE.Group {
+    const chair = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({
+      color: 0x57402b,
+      roughness: 0.82,
+    });
+    const addPart = (
+      width: number,
+      height: number,
+      depth: number,
+      px: number,
+      py: number,
+      pz: number,
+    ) => {
+      const part = new THREE.Mesh(
+        new THREE.BoxGeometry(width, height, depth),
+        wood,
+      );
+      part.position.set(px, py, pz);
+      chair.add(part);
+    };
+    addPart(0.5, 0.06, 0.42, 0, 0.26, 0);
+    for (const side of [-1, 1]) {
+      addPart(0.045, 0.7, 0.045, side * 0.22, -0.09, 0.16);
+      addPart(0.045, 1.18, 0.045, side * 0.22, 0.13, -0.16);
+    }
+    addPart(0.48, 0.2, 0.035, 0, 0.62, -0.16);
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.33, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x34291e,
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+      }),
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = FLOOR_Y - 0.02;
+    chair.add(shadow);
+    chair.position.set(x, 0, z - 0.16);
+    chair.rotation.y = facing;
+    return chair;
   }
 
   /**

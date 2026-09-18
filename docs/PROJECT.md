@@ -320,7 +320,9 @@ desktop/390px UI was inspected. Classroom audit remains open.
 
 Bubble follows audio; text survives errors. Two licensed FBXs became textured
 GLBs; five wider seats and moving jaw bones render in Chrome desktop/mobile.
-Sitting is approximate; Mac untested. ZIPs untracked, no push. Student voice
-clones owner-only; UI shows ID. Earlier frontend focused 36/36, full 325/17/1;
-type/lint pass. Backend Ruff/format/mypy pass; pytest blocked on Windows.
+Sep 18: arm bones are lowered from T-pose, the stage is centred above a bottom
+transcript, and chairs/table meet a stone-courtyard backdrop on desktop/mobile.
+The figures still approximate sitting; Mac untested. ZIPs untracked, no push.
+Student voice clones owner-only; UI shows ID. Current frontend scene 3/3,
+full 325/17/1; type/lint pass. Backend Ruff/format/mypy pass; pytest blocked on Windows.
 Three voices/cloud TTS remain open.

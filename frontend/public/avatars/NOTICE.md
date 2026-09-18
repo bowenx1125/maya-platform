@@ -27,8 +27,15 @@ owner. **This inclusion is not a public asset licence clearance:** confirm its
 terms for classroom and any public use before Maya is deployed or shared
 outside the private demo.
 
-The animated character bodies that shipped alongside it were removed. They
-carried a skeleton and no blendshapes, so a speaking Agent could never open its
-mouth; the bench now uses `female_1.glb` above, whose full ARKit morph set is
-what lets a speech read as speech. Dropping them also took the stage assets
-from 11.9 MB to 3.8 MB and removed an unresolved licence question with them.
+The Debates (beta) bench now uses the owner's purchased `elder-scholar.glb`
+and `noble-scholar.glb`, converted from the supplied FBX model pack. These
+figures have rigged jaws for the initial speech animation and no lip-sync
+blendshapes. The owner's authorization covers this private classroom demo;
+do not redistribute the model files independently.
+
+## `temple-courtyard.jpg`
+
+Background photograph: Mrs cardboardbird, [Temple-courtyard.jpg](https://commons.wikimedia.org/wiki/File:Temple-courtyard.jpg),
+[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/). The local
+file is a 1280-pixel Wikimedia thumbnail; the app changes its on-screen
+crop, brightness and saturation. The image remains under CC BY-SA 3.0.
