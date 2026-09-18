@@ -222,6 +222,7 @@ export function ScholarScene({
             aria-live="polite"
             className={styles.bubble}
             data-side={bubbleSide}
+            data-vertical={speaking.y < 190 ? "below" : "above"}
             style={{ left: `${speaking.x}px`, top: `${speaking.y}px` }}
           >
             <span className={styles.bubbleWho}>{speakingCharacter?.name}</span>

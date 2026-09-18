@@ -120,6 +120,7 @@ type Character = {
   torsoRest: THREE.Quaternion | null;
   jawBone: THREE.Object3D | null;
   jawRest: THREE.Quaternion | null;
+  hasSpeechMorph: boolean;
   homeZ: number;
   state: AvatarState;
   stateStartedAt: number;
@@ -512,6 +513,11 @@ export class ScholarStage {
         torsoRest: torsoBone?.quaternion.clone() ?? null,
         jawBone,
         jawRest: jawBone?.quaternion.clone() ?? null,
+        hasSpeechMorph: meshes.some(
+          (mesh) =>
+            mesh.morphTargetDictionary?.mouthOpen !== undefined ||
+            mesh.morphTargetDictionary?.jawOpen !== undefined,
+        ),
         homeZ: standingZ,
         state: "idle",
         stateStartedAt: performance.now(),
@@ -666,7 +672,7 @@ export class ScholarStage {
     // Figures without morph targets still speak: rotate the jaw bone by the
     // same motion frame and settle back to its rest pose when not talking.
     if (character.jawBone && character.jawRest) {
-      if (character.state === "speaking" && character.meshes.length === 0) {
+      if (character.state === "speaking" && !character.hasSpeechMorph) {
         this.setRotation(
           character.jawBone,
           character.jawRest,

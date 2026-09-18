@@ -146,6 +146,14 @@
   transform: translate(calc(-100% - 14px), -170%);
 }
 
+.bubble[data-vertical="below"] {
+  transform: translate(14px, 18px);
+}
+
+.bubble[data-side="left"][data-vertical="below"] {
+  transform: translate(calc(-100% - 14px), 18px);
+}
+
 .bubbleWho {
   display: block;
   margin-bottom: 5px;

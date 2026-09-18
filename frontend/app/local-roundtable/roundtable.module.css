@@ -1,0 +1,138 @@
+.page {
+  position: relative;
+  height: 100dvh;
+  min-height: 560px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.toolbar {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #e4e4e4;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.controls button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #b7bbc1;
+  border-radius: 6px;
+  background: #fff;
+  color: #20242a;
+  font: inherit;
+  cursor: pointer;
+}
+
+.controls button:hover:not(:disabled) {
+  background: #eff7f3;
+}
+
+.controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.transcript {
+  position: absolute;
+  z-index: 8;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 236px;
+  padding: 16px 24px;
+  border-top: 1px solid #dfe4e2;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.transcriptHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transcriptHeading h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcriptHeading span {
+  flex: 0 0 auto;
+  color: #59636a;
+  font-size: 0.82rem;
+}
+
+.turns {
+  overflow-y: auto;
+}
+
+.turn {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf0ee;
+}
+
+.turn strong {
+  font-size: 0.9rem;
+}
+
+.turn p {
+  min-height: 1.5em;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.turn[data-active="true"] strong {
+  color: #17694b;
+}
+
+@media (max-width: 700px) {
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .transcript {
+    padding: 12px;
+  }
+
+  .transcriptHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+}

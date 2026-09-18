@@ -299,11 +299,8 @@ This supersedes the previous teacher deletion prohibition.
 Existing real LLM four-round generation, Embedding and Report configuration is
 preserved; TTS/Voice remain as configured. Real Provider acceptance remains manual.
 
-Account integration checks: frontend 334 passed/1 skipped; backend 1339 passed/24
-skipped. Fixture/schema repairs were not rerun; no full backend pass is claimed.
-Contract, boundary, format, backend lint/mypy and frontend type checks passed.
-Docker builds/health and foreign-key check passed after the 0027-to-0029 upgrade;
-Home/Accounts returned HTTP 200. Classroom audit remains with the owner.
+Account integration had partial frontend 334/1 and backend 1339/24 results;
+contracts, lint, types and Docker health passed. Classroom audit remained open.
 
 ## Accounts and student workspace design
 
@@ -311,10 +308,8 @@ Accounts, student routes and QR interaction share teacher typography, white/
 pale-yellow surfaces, gold dividers and responsive spacing. Home/group lists show
 Agent names and status; Description lives in Agent Info; Homeward returns to
 Accounts. Duplicate panels, counters and title prose are removed. Content,
-validation, consent and Provider configuration are unchanged. Before final copy
-edits, frontend passed 334/1 skipped; a later focused run passed 9/10, with an
-old Download RAG assertion updated but not rerun. Type/lint/build passed;
-desktop/390px UI was inspected. Classroom audit remains open.
+validation, consent and Provider configuration are unchanged. Type/lint/build
+passed and desktop/390px UI was inspected; classroom audit remains open.
 
 ## Classroom display — September 18, 2026
 
@@ -324,7 +319,12 @@ Sep 18: hands hang beside thighs, the stage is centred above a bottom
 transcript, and the background is white. Chairs and seated clipping are gone;
 the elder's stray accessory mesh is hidden in stage clones. Mac untested.
 ZIPs untracked, no push.
-Student voice clones owner-only; UI shows ID. Current frontend scene 3/3,
-full 325/17/1; type/lint/build pass. Backend Ruff/format/mypy pass; pytest blocked on Windows.
-Three voices/cloud TTS remain open.
-Sep 18: teacher picks 2-5 speakers; count is visible. Two stand opposite across the table; 3-5 retain ring spacing.
+Student clone IDs remain owner-only. Teacher selects 2-5 speakers: two stand
+opposite; 3-5 form a ring. Beta transcript follows audio and falls back to full
+text on failure. Local `/local-roundtable` imports a generated WAV directory;
+Chromium played two Qwen3-TTS turns in sequence with 3D speaker motion and
+audio-paced text. Desktop/mobile rendered; Mac untested. Local Qwen3.6 text,
+two Qwen3-TTS CustomVoice turns and a female sample are not Maya Provider
+integration. Full Windows pytest and frontend suite retain known failures.
+Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
+request was sent.

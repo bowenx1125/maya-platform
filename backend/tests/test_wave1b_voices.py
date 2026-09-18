@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import io
 import os
 import wave
@@ -32,6 +31,7 @@ from app.modules.voices.crypto import (
     encrypt_external_voice_id,
 )
 from app.modules.voices.fallback import FallbackEnrollmentError, enroll_system_fallback
+from app.modules.voices.lease_lock import lock_exclusive, unlock
 from app.modules.voices.uploads import (
     VoiceUploadDisconnected,
     VoiceUploadTooLarge,
@@ -1914,15 +1914,15 @@ def test_startup_cleanup_never_removes_an_aged_but_locked_active_request(
     request.mkdir(parents=True)
     marker = request / ".active"
     marker.touch()
-    lease = marker.open("rb")
-    fcntl.flock(lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    lease = marker.open("r+b" if os.name == "nt" else "rb")
+    lock_exclusive(lease)
     try:
         os.utime(request, (1_000.0, 1_000.0))
         os.utime(marker, (1_000.0, 1_000.0))
         assert cleanup_voice_temp_dirs(data_root, age_seconds=900, now=10_000.0) == []
         assert request.exists()
     finally:
-        fcntl.flock(lease.fileno(), fcntl.LOCK_UN)
+        unlock(lease)
         lease.close()
     assert cleanup_voice_temp_dirs(data_root, age_seconds=900, now=10_000.0) == [request_id]
     assert not request.exists()

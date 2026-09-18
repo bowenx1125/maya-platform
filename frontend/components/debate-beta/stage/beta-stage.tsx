@@ -3663,6 +3663,24 @@ export function BetaDebateStage({
               thing twice and pushed the first speech down. */}
 
           <SpeechStream
+            activeReveal={
+              bubbleTurn
+                ? {
+                    turnId: bubbleTurn.id,
+                    progress:
+                      playback.status === "playing" ||
+                      playback.status === "paused"
+                        ? bubblePlayback?.turnId === bubbleTurn.id
+                          ? bubblePlayback.failed
+                            ? 1
+                            : bubblePlayback.duration > 0
+                              ? bubblePlayback.elapsed / bubblePlayback.duration
+                              : 0
+                          : 0
+                        : 1,
+                  }
+                : null
+            }
             showTurnCount={false}
             styles={styles}
             describe={(participantId) => {

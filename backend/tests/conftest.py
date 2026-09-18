@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
+import os
+import subprocess
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,7 +52,22 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
     }
     credential_file = tmp_path / "demo_users.yaml"
     credential_file.write_text(yaml.safe_dump(credentials), encoding="utf-8")
-    credential_file.chmod(0o600)
+    if os.name == "nt":
+        identity = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        sid = next(csv.reader(io.StringIO(identity.stdout)))[1]
+        subprocess.run(
+            ["icacls", str(credential_file), "/inheritance:r", "/grant:r", f"*{sid}:F"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    else:
+        credential_file.chmod(0o600)
 
     def factory(
         *,
