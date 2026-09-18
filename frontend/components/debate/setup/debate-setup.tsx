@@ -670,6 +670,12 @@ export function TeacherDebateCreate({
         </div>
 
         <SectionCard className={sectionStyles.section} title="Agents Order">
+          <p className={styles.listMeta} role="status">
+            {copy(t, "debateSelectCount").replace(
+              "{count}",
+              `${selectedIds.length}/5`,
+            )}
+          </p>
           {candidates.length === 0 ? (
             <EmptyCard title={copy(t, "debateNoCandidates")} />
           ) : (

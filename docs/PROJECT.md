@@ -327,3 +327,4 @@ ZIPs untracked, no push.
 Student voice clones owner-only; UI shows ID. Current frontend scene 3/3,
 full 325/17/1; type/lint/build pass. Backend Ruff/format/mypy pass; pytest blocked on Windows.
 Three voices/cloud TTS remain open.
+Sep 18: teacher picks 2-5 speakers; count is visible. Two stand opposite across the table; 3-5 retain ring spacing.

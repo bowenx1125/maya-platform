@@ -15,6 +15,7 @@ import {
   STAGE_DECODER_PATH,
   isStageAssetUrl,
 } from "./assets";
+import { standingPlacement } from "./placement";
 
 export type StageCharacter = {
   id: string;
@@ -453,22 +454,6 @@ export class ScholarStage {
     this.scene.add(group);
   }
 
-  // Half-step spacing keeps the front of the table clear of a central figure.
-  private ringOffset(
-    index: number,
-    count: number,
-  ): {
-    x: number;
-    z: number;
-  } {
-    const angle =
-      count === 1 ? 0 : -Math.PI + (2 * Math.PI * (index + 0.5)) / count;
-    return {
-      x: Math.sin(angle) * STANDING_RADIUS,
-      z: -Math.cos(angle) * STANDING_RADIUS,
-    };
-  }
-
   private rebuild(specs: StageCharacter[]): void {
     for (const character of this.characters) {
       this.scene.remove(character.root);
@@ -488,12 +473,11 @@ export class ScholarStage {
         this.templates[templateIndex] as THREE.Object3D,
       );
       root.scale.setScalar(this.templateScales[templateIndex]);
-      const offset = this.ringOffset(index, count);
+      const offset = standingPlacement(index, count);
       const standingX = offset.x;
       const standingZ = TABLE_CENTER_Z + offset.z;
-      const facing = Math.atan2(-standingX, TABLE_CENTER_Z - standingZ);
       root.position.set(standingX, FLOOR_Y, standingZ);
-      root.rotation.y = facing * 0.65;
+      root.rotation.y = offset.yaw;
       poseArms(root);
       const shadow = new THREE.Mesh(
         new THREE.CircleGeometry(0.3, 24),
