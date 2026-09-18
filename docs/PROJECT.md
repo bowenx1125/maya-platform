@@ -320,7 +320,7 @@ desktop/390px UI was inspected. Classroom audit remains open.
 
 Bubble follows audio; text survives errors. Two licensed FBXs became textured
 GLBs; five standing figures encircle the table and jaw bones move in Chrome/Edge.
-Sep 18: arm bones are lowered from T-pose, the stage is centred above a bottom
+Sep 18: hands hang beside thighs, the stage is centred above a bottom
 transcript, and the background is white. Chairs and seated clipping are gone;
 the elder's stray accessory mesh is hidden in stage clones. Mac untested.
 ZIPs untracked, no push.

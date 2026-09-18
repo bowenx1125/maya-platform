@@ -175,7 +175,7 @@ function aimBone(
 }
 
 function poseArms(root: THREE.Object3D): void {
-  const center = root.getWorldPosition(new THREE.Vector3());
+  // Local targets keep the same resting pose when figures turn around the table.
   for (const suffix of ["l", "r"]) {
     const shoulder = findBone(root, [
       `upperarm_${suffix}`,
@@ -185,26 +185,31 @@ function poseArms(root: THREE.Object3D): void {
     const wrist = findBone(root, [`hand_${suffix}`, `wrist_${suffix}`]);
     if (!shoulder || !elbow || !wrist) continue;
     root.updateMatrixWorld(true);
-    const upper = shoulder.getWorldPosition(new THREE.Vector3());
+    const upper = root.worldToLocal(
+      shoulder.getWorldPosition(new THREE.Vector3()),
+    );
+    const side = Math.sign(upper.x);
     aimBone(
       root,
       shoulder,
       elbow,
-      new THREE.Vector3(
-        upper.x + (center.x - upper.x) * 0.32,
-        upper.y - 0.32,
-        upper.z + 0.1,
+      root.localToWorld(
+        new THREE.Vector3(
+          upper.x + side * 0.01,
+          upper.y - 0.45,
+          upper.z + 0.05,
+        ),
       ),
     );
-    const lower = elbow.getWorldPosition(new THREE.Vector3());
+    const lower = root.worldToLocal(
+      elbow.getWorldPosition(new THREE.Vector3()),
+    );
     aimBone(
       root,
       elbow,
       wrist,
-      new THREE.Vector3(
-        lower.x + (center.x - lower.x) * 0.35,
-        lower.y - 0.17,
-        lower.z + 0.18,
+      root.localToWorld(
+        new THREE.Vector3(lower.x + side * 0.06, lower.y - 0.4, lower.z + 0.12),
       ),
     );
   }
