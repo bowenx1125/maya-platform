@@ -233,6 +233,47 @@ function disposeObject(root: THREE.Object3D, disposeGeometry = true): void {
   });
 }
 
+function makeSoftShadow(): THREE.DataTexture {
+  const size = 64;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const radius = Math.hypot(x - size / 2, y - size / 2) / (size / 2);
+      const alpha = Math.max(0, 1 - radius * radius);
+      const offset = (y * size + x) * 4;
+      pixels[offset] = 255;
+      pixels[offset + 1] = 255;
+      pixels[offset + 2] = 255;
+      pixels[offset + 3] = Math.round(alpha * alpha * 255);
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function makeWoodTexture(): THREE.DataTexture {
+  const size = 256;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const line = y + Math.sin(x * 0.035) * 3 + Math.sin(x * 0.12);
+      const grain = Math.sin(line * 0.42) * 7 + Math.sin(line * 1.7) * 2;
+      const seam = Math.min(y % 74, 74 - (y % 74)) < 1.5 ? -19 : 0;
+      const shade = grain + seam + ((x * 13 + y * 7) % 17) * 0.3;
+      const offset = (y * size + x) * 4;
+      pixels[offset] = 119 + shade;
+      pixels[offset + 1] = 77 + shade * 0.7;
+      pixels[offset + 2] = 45 + shade * 0.5;
+      pixels[offset + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 /**
  * One WebGL context, one render loop, every speaker in it.
  *
@@ -246,6 +287,8 @@ export class ScholarStage {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly loader = new GLTFLoader();
   private readonly draco = new DRACOLoader();
+  private readonly shadowTexture = makeSoftShadow();
+  private readonly woodTexture = makeWoodTexture();
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
@@ -286,12 +329,12 @@ export class ScholarStage {
     this.camera.lookAt(CAMERA_TARGET);
     this.scene.add(this.camera);
 
-    this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x4a5464, 2.1));
-    const key = new THREE.DirectionalLight(0xfff3e2, 1.9);
-    key.position.set(2.4, 4.2, 3.6);
+    this.scene.add(new THREE.HemisphereLight(0xffefd9, 0x687583, 1.75));
+    const key = new THREE.DirectionalLight(0xffedcf, 2.15);
+    key.position.set(-3.2, 4.2, 2.8);
     this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xcfdcf2, 0.55);
-    fill.position.set(-3, 1.4, 2);
+    const fill = new THREE.DirectionalLight(0xcbd9e9, 0.7);
+    fill.position.set(3, 1.4, 2);
     this.scene.add(fill);
 
     this.buildTable();
@@ -364,6 +407,8 @@ export class ScholarStage {
       disposeObject(this.table);
       this.table = null;
     }
+    this.shadowTexture.dispose();
+    this.woodTexture.dispose();
     this.draco.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -424,26 +469,53 @@ export class ScholarStage {
     const group = new THREE.Group();
 
     const top = new THREE.Mesh(
-      new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.07, 40),
-      new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.7 }),
+      new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.085, 64),
+      new THREE.MeshStandardMaterial({ color: 0x583822, roughness: 0.83 }),
     );
     top.position.set(0, TABLE_TOP_Y, TABLE_CENTER_Z);
     group.add(top);
 
+    const surface = new THREE.Mesh(
+      new THREE.CircleGeometry(TABLE_RADIUS - 0.045, 64),
+      new THREE.MeshStandardMaterial({
+        map: this.woodTexture,
+        roughness: 0.78,
+        side: THREE.DoubleSide,
+      }),
+    );
+    surface.rotation.x = -Math.PI / 2;
+    surface.position.set(0, TABLE_TOP_Y + 0.044, TABLE_CENTER_Z);
+    group.add(surface);
+
+    for (const radius of [TABLE_RADIUS - 0.09, TABLE_RADIUS - 0.14]) {
+      const inlay = new THREE.Mesh(
+        new THREE.TorusGeometry(radius, 0.004, 4, 64),
+        new THREE.MeshStandardMaterial({ color: 0xa47b4e, roughness: 0.65 }),
+      );
+      inlay.rotation.x = -Math.PI / 2;
+      inlay.position.set(0, TABLE_TOP_Y + 0.046, TABLE_CENTER_Z);
+      group.add(inlay);
+    }
+
     const pedestalHeight = TABLE_TOP_Y - FLOOR_Y - 0.035;
     const pedestal = new THREE.Mesh(
       new THREE.CylinderGeometry(0.16, 0.28, pedestalHeight, 16),
-      new THREE.MeshStandardMaterial({ color: 0x5f3d22, roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({
+        color: 0xc9b49e,
+        map: this.woodTexture,
+        roughness: 0.86,
+      }),
     );
     pedestal.position.set(0, FLOOR_Y + pedestalHeight / 2, TABLE_CENTER_Z);
     group.add(pedestal);
 
     const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.55, 32),
+      new THREE.CircleGeometry(0.68, 40),
       new THREE.MeshBasicMaterial({
         color: 0x34291e,
+        map: this.shadowTexture,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.32,
         depthWrite: false,
       }),
     );
@@ -481,11 +553,12 @@ export class ScholarStage {
       root.rotation.y = offset.yaw;
       poseArms(root);
       const shadow = new THREE.Mesh(
-        new THREE.CircleGeometry(0.3, 24),
+        new THREE.CircleGeometry(0.38, 32),
         new THREE.MeshBasicMaterial({
           color: 0x34291e,
+          map: this.shadowTexture,
           transparent: true,
-          opacity: 0.17,
+          opacity: 0.3,
           depthWrite: false,
         }),
       );

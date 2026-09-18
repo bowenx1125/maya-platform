@@ -269,7 +269,7 @@ describe("terminal segments replay controller", () => {
       Array.from(panel.querySelectorAll("button,a")).map(
         (node) => node.textContent,
       ),
-    ).toEqual(["Next", "Back", "Replay", "Conclude"]);
+    ).toEqual(["Next", "Back", "Replay", "Conclude", "Published transcript"]);
     expect(
       screen.queryByRole("button", { name: "Replay whole debate" }),
     ).toBeNull();

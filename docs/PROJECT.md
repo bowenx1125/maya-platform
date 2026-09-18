@@ -314,17 +314,19 @@ passed and desktop/390px UI was inspected; classroom audit remains open.
 ## Classroom display — September 18, 2026
 
 Bubble follows audio; text survives errors. Two licensed FBXs became textured
-GLBs; five standing figures encircle the table and jaw bones move in Chrome/Edge.
-Sep 18: hands hang beside thighs, the stage is centred above a bottom
-transcript, with a supplied courtyard backdrop. Chairs and seated clipping are gone;
-the elder's stray accessory mesh is hidden in stage clones. Mac untested.
-ZIPs untracked, no push.
-Student clone IDs remain owner-only. Teacher selects 2-5 speakers: two stand
-opposite; 3-5 form a ring. Beta transcript follows audio and falls back to full
-text on failure. Full-stage `/local-roundtable` imports a generated WAV directory;
+GLBs; 2-5 figures stand with lowered hands and moving jaws in Chrome/Edge.
+The supplied courtyard replaced chairs/seating; a stray elder accessory is
+hidden in stage clones. ZIPs untracked, no push.
+Student clone IDs remain owner-only. Two speakers stand opposite; 3-5 form a
+ring. Beta transcript follows audio and falls back to full text on failure.
+Full-stage `/local-roundtable` imports a generated WAV directory;
 Chromium played two Qwen3-TTS turns in sequence with 3D speaker motion and
-audio-paced text. Desktop/mobile rendered; Mac untested. Local Qwen3.6 text,
-two Qwen3-TTS CustomVoice turns and a female sample are not Maya Provider
-integration. Full Windows pytest and frontend suite retain known failures.
+audio-paced text. Desktop/mobile rendered; Mac untested. Local Qwen3.6 and
+Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
+failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
+Sep 18: controls/fonts, wood table, left lighting and contact shadows polished;
+1280/390/320px inspected. Immerse shares the full scene; teacher commands stay
+in a dock with expandable transcript. Teacher/Mac visual audit remains open.
+World exploration deferred; no Marble call or key.

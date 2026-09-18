@@ -872,10 +872,10 @@
   width: auto;
   height: 214px;
   overflow: hidden;
-  border: 1px solid #e5d8bf;
-  border-radius: 24px;
-  background: rgba(253, 251, 246, 0.94);
-  box-shadow: 0 22px 54px rgba(48, 38, 24, 0.16);
+  border: 1px solid rgba(43, 72, 65, 0.22);
+  border-radius: 8px;
+  background: rgba(250, 251, 248, 0.96);
+  box-shadow: 0 16px 42px rgba(19, 35, 32, 0.2);
   backdrop-filter: blur(16px) saturate(1.15);
   -webkit-backdrop-filter: blur(16px) saturate(1.15);
 }
@@ -902,8 +902,8 @@
   flex: 0 0 auto;
   grid-template-rows: none;
   gap: 0;
-  border-left: 1px solid #deceb0;
-  background: #fbf4e5;
+  border-left: 1px solid #d9e1da;
+  background: #f2f5f1;
 }
 
 .stagePanel {
@@ -959,15 +959,17 @@
 
 .stagePanel :is(button, a) {
   width: 100%;
-  min-height: 36px;
+  min-height: 40px;
   padding: 8px 10px;
   border: 0;
   border-radius: 6px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.7);
   box-shadow: none;
-  color: #655332;
-  font-size: 0.8rem;
-  font-weight: 600;
+  color: #27443d;
+  font-family:
+    "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 650;
   text-decoration: none;
   transition:
     transform 160ms ease,
@@ -976,8 +978,8 @@
 }
 
 .stagePanel :is(button, a):hover:not(:disabled) {
-  background: rgba(196, 164, 104, 0.16);
-  color: #382d19;
+  background: #e3eee8;
+  color: #173d35;
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -1002,11 +1004,10 @@
 
 .streamHeader h2 {
   color: var(--ink-deep);
-  font-family: var(--brush);
-  font-size: 1.44rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  -webkit-text-stroke: 0.3px rgba(34, 24, 17, 0.28);
+  font-family: var(--script);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .streamSpeech {
@@ -1017,9 +1018,9 @@
 }
 
 .streamWho {
-  font-family: var(--brush);
-  font-size: 1.1rem;
-  letter-spacing: 0.03em;
+  font-family: var(--script);
+  font-size: 1rem;
+  letter-spacing: 0;
 }
 
 .streamMeta,
@@ -1096,6 +1097,66 @@
 .turnProgress[data-connected="false"] {
   color: #963c34;
   background: #f8e1dd;
+}
+
+.speechColumn[hidden] {
+  display: none;
+}
+
+.stageColumns[data-transcript-open="false"] {
+  right: auto;
+  bottom: 12px;
+  left: 50%;
+  display: block;
+  width: min(860px, calc(100% - 24px));
+  height: auto;
+  min-height: 0;
+  transform: translateX(-50%);
+}
+
+.stageColumns[data-transcript-open="false"] .avatarColumn {
+  border: 0;
+}
+
+.stageColumns[data-transcript-open="false"] .stagePanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.stageColumns[data-transcript-open="false"] .stagePanel :is(button, a) {
+  flex: 1 1 88px;
+  width: auto;
+  white-space: nowrap;
+}
+
+.stagePanel .transcriptToggle {
+  border: 1px solid #c8d8ce;
+  background: #e6efe9;
+}
+
+.stagePanel :global(.primary-action):not(:disabled) {
+  background: #236b5c;
+  color: #fff;
+}
+
+.stagePanel :global(.primary-action):hover:not(:disabled) {
+  background: #1a5549;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .stageColumns[data-transcript-open="false"] {
+    right: auto;
+    bottom: 8px;
+    left: 50%;
+    width: calc(100% - 16px);
+    height: auto;
+    min-height: 0;
+    flex-direction: initial;
+  }
 }
 
 .streamItem details > summary {

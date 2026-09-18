@@ -704,6 +704,7 @@ export function BetaDebateStage({
   const beta = betaLabels ?? defaultBetaStageLabels;
   const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
   const [barragePaused, setBarragePaused] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
   const onInteractionOpenedRef = useRef(onInteractionOpened);
   useEffect(() => {
     onInteractionOpenedRef.current = onInteractionOpened;
@@ -3434,6 +3435,9 @@ export function BetaDebateStage({
   const currentTurnNumber = progressTurn
     ? Math.min(totalTurns, Math.max(0, progressTurn.turn_index + 1))
     : 0;
+  const transcriptRequired =
+    providerGate !== null || Boolean(controlError && blockedBy);
+  const transcriptOpen = showTranscript || transcriptRequired;
 
   return (
     <section
@@ -3472,6 +3476,10 @@ export function BetaDebateStage({
       <ScholarScene
         bubbleText={bubbleText}
         characters={stageCharacters}
+        /* Full-bleed courtyard like /local-roundtable: the classroom layout
+           reserved a transcript band under the bench, which cropped the scene
+           behind the floating teacher panel. */
+        layout="preview"
         loadingLabel={beta.sceneLoading}
         overlay={
           <>
@@ -3513,7 +3521,10 @@ export function BetaDebateStage({
         visuals={stageVisuals}
       />
 
-      <div className={styles.stageColumns}>
+      <div
+        className={styles.stageColumns}
+        data-transcript-open={transcriptOpen}
+      >
         <div className={styles.avatarColumn}>
           {/* Controls and status sit in the blank space under the face
               instead of in bands of their own above the columns, so the
@@ -3561,6 +3572,21 @@ export function BetaDebateStage({
               replayButton
             )}
 
+            <button
+              aria-controls="beta-stage-transcript"
+              aria-expanded={transcriptOpen}
+              className={styles.transcriptToggle}
+              disabled={transcriptRequired}
+              onClick={() => setShowTranscript((current) => !current)}
+              type="button"
+            >
+              {transcriptOpen && !transcriptRequired
+                ? outputLanguage === "zh"
+                  ? "收起记录"
+                  : "Hide transcript"
+                : labels.transcript}
+            </button>
+
             <audio
               ref={audioRef}
               aria-label={labels.audioLabel}
@@ -3575,7 +3601,11 @@ export function BetaDebateStage({
           </div>
         </div>
 
-        <div className={styles.speechColumn}>
+        <div
+          className={styles.speechColumn}
+          hidden={!transcriptOpen}
+          id="beta-stage-transcript"
+        >
           {providerGate ? (
             <section
               className={styles.providerGateCard}
