@@ -112,11 +112,11 @@
   gap: 6px;
   padding: 5px 14px 6px;
   transform: translate(-50%, -190%);
-  border: 1px solid rgba(41, 56, 52, 0.12);
+  border: 1px solid rgba(211, 167, 74, 0.52);
   border-radius: 6px;
   background: rgba(251, 250, 246, 0.94);
   box-shadow: 0 4px 14px rgba(36, 28, 20, 0.16);
-  color: #2a251f;
+  color: var(--ink);
   font-size: clamp(0.95rem, 1.2vw, 1.15rem);
   font-weight: 600;
   line-height: 1.4;
@@ -126,8 +126,8 @@
 }
 
 .namePlate[data-current="true"] {
-  background: #2b2620;
-  color: #f7f2e8;
+  background: var(--indigo-dark);
+  color: #fff;
 }
 
 /* Keep the short current utterance above its speaker; the transcript below
@@ -138,11 +138,11 @@
   width: min(290px, 62%);
   padding: 9px 12px 10px;
   transform: translate(-50%, calc(-100% - 16px));
-  border: 1px solid rgba(38, 31, 24, 0.1);
+  border: 1px solid rgba(211, 167, 74, 0.55);
   border-radius: 8px;
   background: rgba(255, 254, 250, 0.98);
   box-shadow: 0 10px 26px rgba(39, 31, 23, 0.2);
-  color: #221d18;
+  color: var(--ink);
   font-size: 0.95rem;
   line-height: 1.5;
   font-family:
@@ -156,8 +156,8 @@
   left: calc(50% + var(--bubble-pointer-offset, 0px));
   width: 10px;
   height: 10px;
-  border-right: 1px solid rgba(38, 31, 24, 0.1);
-  border-bottom: 1px solid rgba(38, 31, 24, 0.1);
+  border-right: 1px solid rgba(211, 167, 74, 0.55);
+  border-bottom: 1px solid rgba(211, 167, 74, 0.55);
   background: rgba(255, 254, 250, 0.98);
   content: "";
   transform: translate(-50%, -50%) rotate(45deg);
@@ -166,7 +166,7 @@
 .bubbleWho {
   display: block;
   margin-bottom: 3px;
-  color: #255c53;
+  color: var(--indigo-dark);
   font-size: 0.95rem;
   font-weight: 700;
   text-transform: none;

@@ -872,10 +872,10 @@
   width: auto;
   height: 214px;
   overflow: hidden;
-  border: 1px solid rgba(43, 72, 65, 0.22);
+  border: 1px solid rgba(211, 167, 74, 0.52);
   border-radius: 8px;
-  background: rgba(250, 251, 248, 0.96);
-  box-shadow: 0 16px 42px rgba(19, 35, 32, 0.2);
+  background: rgba(252, 250, 246, 0.96);
+  box-shadow: 0 16px 42px rgba(39, 35, 61, 0.2);
   backdrop-filter: blur(16px) saturate(1.15);
   -webkit-backdrop-filter: blur(16px) saturate(1.15);
 }
@@ -902,8 +902,8 @@
   flex: 0 0 auto;
   grid-template-rows: none;
   gap: 0;
-  border-left: 1px solid #d9e1da;
-  background: #f2f5f1;
+  border-left: 1px solid var(--line);
+  background: var(--gold-soft);
 }
 
 .stagePanel {
@@ -965,7 +965,7 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.7);
   box-shadow: none;
-  color: #27443d;
+  color: var(--indigo-dark);
   font-family:
     "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   font-size: 0.82rem;
@@ -978,8 +978,8 @@
 }
 
 .stagePanel :is(button, a):hover:not(:disabled) {
-  background: #e3eee8;
-  color: #173d35;
+  background: var(--gold-soft);
+  color: var(--indigo-dark);
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -1133,17 +1133,17 @@
 }
 
 .stagePanel .transcriptToggle {
-  border: 1px solid #c8d8ce;
-  background: #e6efe9;
+  border: 1px solid var(--gold);
+  background: var(--gold-soft);
 }
 
 .stagePanel :global(.primary-action):not(:disabled) {
-  background: #236b5c;
+  background: var(--indigo);
   color: #fff;
 }
 
 .stagePanel :global(.primary-action):hover:not(:disabled) {
-  background: #1a5549;
+  background: var(--indigo-dark);
   color: #fff;
 }
 

@@ -89,12 +89,12 @@ const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
 const CAMERA_FOV_DEGREES = 34;
 const DEFAULT_CAMERA_Z = 5.0;
-const CAMERA_HEIGHT = 2.3;
-const CAMERA_TARGET = new THREE.Vector3(0, 0.8, 0.2);
+const CAMERA_HEIGHT = 1.78;
+const CAMERA_TARGET = new THREE.Vector3(0, 0.74, 0.2);
 const CAMERA_DEPTH_MARGIN = 0.35;
 const CAMERA_EDGE_MARGIN = 1.08;
 
-const TABLE_RADIUS = 0.95;
+const TABLE_RADIUS = 0.86;
 const TABLE_TOP_Y = 0.72;
 const TABLE_CENTER_Z = 0.2;
 const FLOOR_Y = -0.42;
@@ -469,7 +469,7 @@ export class ScholarStage {
     const group = new THREE.Group();
 
     const top = new THREE.Mesh(
-      new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.085, 64),
+      new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.06, 64),
       new THREE.MeshStandardMaterial({ color: 0x583822, roughness: 0.83 }),
     );
     top.position.set(0, TABLE_TOP_Y, TABLE_CENTER_Z);
@@ -484,7 +484,7 @@ export class ScholarStage {
       }),
     );
     surface.rotation.x = -Math.PI / 2;
-    surface.position.set(0, TABLE_TOP_Y + 0.044, TABLE_CENTER_Z);
+    surface.position.set(0, TABLE_TOP_Y + 0.031, TABLE_CENTER_Z);
     group.add(surface);
 
     for (const radius of [TABLE_RADIUS - 0.09, TABLE_RADIUS - 0.14]) {
@@ -493,13 +493,13 @@ export class ScholarStage {
         new THREE.MeshStandardMaterial({ color: 0xa47b4e, roughness: 0.65 }),
       );
       inlay.rotation.x = -Math.PI / 2;
-      inlay.position.set(0, TABLE_TOP_Y + 0.046, TABLE_CENTER_Z);
+      inlay.position.set(0, TABLE_TOP_Y + 0.033, TABLE_CENTER_Z);
       group.add(inlay);
     }
 
-    const pedestalHeight = TABLE_TOP_Y - FLOOR_Y - 0.035;
+    const pedestalHeight = TABLE_TOP_Y - FLOOR_Y - 0.03;
     const pedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.28, pedestalHeight, 16),
+      new THREE.CylinderGeometry(0.13, 0.21, pedestalHeight, 16),
       new THREE.MeshStandardMaterial({
         color: 0xc9b49e,
         map: this.woodTexture,

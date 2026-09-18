@@ -28,14 +28,14 @@
 
 .controls {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   max-width: 100%;
   padding: 4px;
   overflow-x: auto;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(211, 167, 74, 0.52);
   border-radius: 8px;
-  background: rgba(23, 42, 43, 0.88);
-  box-shadow: 0 8px 24px rgba(17, 24, 22, 0.19);
+  background: rgba(252, 250, 246, 0.94);
+  box-shadow: 0 8px 24px rgba(39, 35, 61, 0.18);
   backdrop-filter: blur(14px);
 }
 
@@ -49,7 +49,7 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #f8f6ef;
+  color: var(--indigo-dark);
   font: inherit;
   font-size: 0.84rem;
   font-weight: 650;
@@ -58,13 +58,18 @@
 }
 
 .controls button:nth-of-type(2):not(:disabled) {
-  background: #d7a362;
-  color: #25302a;
+  background: var(--indigo);
+  color: #fff;
 }
 
 .controls button:hover:not(:disabled) {
-  background: #28665b;
-  color: #fff;
+  background: var(--gold-soft);
+  color: var(--indigo-dark);
+}
+
+.controls button:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: -2px;
 }
 
 .controls button:disabled {
@@ -85,8 +90,9 @@
   margin: 0;
   padding: 6px 10px;
   border-radius: 6px;
-  background: rgba(23, 42, 43, 0.86);
-  color: #f8f6ef;
+  border: 1px solid rgba(211, 167, 74, 0.5);
+  background: rgba(252, 250, 246, 0.96);
+  color: var(--ink);
   font-size: 0.82rem;
 }
 
@@ -100,8 +106,8 @@
   grid-template-rows: auto 1fr;
   height: clamp(220px, 34dvh, 360px);
   padding: 16px 24px;
-  border-top: 1px solid #dfe4e2;
-  background: rgba(251, 251, 248, 0.98);
+  border-top: 2px solid var(--gold);
+  background: rgba(252, 250, 246, 0.98);
   font-family:
     "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
 }
@@ -129,7 +135,7 @@
 
 .transcriptHeading span {
   flex: 0 0 auto;
-  color: #59636a;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 
@@ -142,7 +148,7 @@
   grid-template-columns: 72px 1fr;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid #edf0ee;
+  border-bottom: 1px solid var(--line);
 }
 
 .turn strong {
@@ -157,7 +163,7 @@
 }
 
 .turn[data-active="true"] strong {
-  color: #17694b;
+  color: var(--indigo-dark);
 }
 
 @media (max-width: 700px) {

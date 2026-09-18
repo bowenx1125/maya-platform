@@ -326,7 +326,7 @@ Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
 failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
-Sep 18: controls/fonts, wood table, left lighting and contact shadows polished;
-1280/390/320px inspected. Immerse shares the full scene; teacher commands stay
-in a dock with expandable transcript. Teacher/Mac visual audit remains open.
+Sep 18: table perspective, branded controls, lighting and shadows polished;
+desktop/390/320px inspected. Immerse shares the scene; teacher commands stay
+in a dock with transcript toggle. Teacher/Mac visual audit remains open.
 World exploration deferred; no Marble call or key.
