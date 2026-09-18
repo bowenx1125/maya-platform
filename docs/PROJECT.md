@@ -273,14 +273,11 @@ Preview starts with a yellow Background card when Background is non-blank.
 
 ## Stalled-debate correction
 
-Long Background text previously hit the local 8,000-token per-item Embedding cap
-before any Provider call. That item/query cap is removed; request-level Provider
-capacity controls remain. A subsequent Retry exposed a second false rejection in
-the LLM prose scanner. LLM boundaries now validate JSON shape and approved field
-classes without rejecting teacher/RAG/classroom text by keyword, phone, email,
-UUID, path or identity pattern. Credentials and endpoints remain absent from the
-outbound DTO. Existing failed turns still require one explicit Retry/Refresh after
-the corrected backend is deployed.
+The local 8,000-token per-item Embedding cap was removed for long Backgrounds;
+request-level limits remain. LLM validation now checks JSON/approved fields,
+not keywords or identity patterns in teacher/RAG/classroom prose. Credentials
+and endpoints remain absent from outbound DTOs. Existing failed turns need an
+explicit Retry/Refresh after the backend update.
 
 ## Account integration — September 12, 2026
 
@@ -302,27 +299,28 @@ This supersedes the previous teacher deletion prohibition.
 Existing real LLM four-round generation, Embedding and Report configuration is
 preserved; TTS/Voice remain as configured. Real Provider acceptance remains manual.
 
-Account integration verification: frontend 334 passed/1 skipped; backend 1339
-passed/24 skipped, including five new integration tests. Thirty-three shared-fixture
-setup errors and three old-schema fixture failures were adapted without a local
-rerun per owner request. No full backend-suite pass is claimed. Contract, boundary,
-format, backend lint/mypy and frontend type checks passed.
-
-Docker backend/frontend builds succeeded and both services are healthy after the
-0027-to-0029 upgrade; foreign-key check is clean. Home and Accounts return HTTP 200.
-Private configuration is unchanged. Classroom behavior awaits the owner's audit.
+Account integration checks: frontend 334 passed/1 skipped; backend 1339 passed/24
+skipped. Fixture/schema repairs were not rerun; no full backend pass is claimed.
+Contract, boundary, format, backend lint/mypy and frontend type checks passed.
+Docker builds/health and foreign-key check passed after the 0027-to-0029 upgrade;
+Home/Accounts returned HTTP 200. Classroom audit remains with the owner.
 
 ## Accounts and student workspace design
 
-Accounts, student routes and QR interaction share teacher Inter typography, white
-cards, pale-yellow content, gold dividers and responsive spacing. Actions use
-single words. Home/group lists show Agent names and draft/published status;
-Description is edited inside Agent Info. Homeward returns teachers to Accounts.
-Duplicate version panels, technical counters and explanatory title prose are removed.
-Authored content, validation, consent and Provider configuration remain unchanged.
+Accounts, student routes and QR interaction share teacher typography, white/
+pale-yellow surfaces, gold dividers and responsive spacing. Home/group lists show
+Agent names and status; Description lives in Agent Info; Homeward returns to
+Accounts. Duplicate panels, counters and title prose are removed. Content,
+validation, consent and Provider configuration are unchanged. Before final copy
+edits, frontend passed 334/1 skipped; a later focused run passed 9/10, with an
+old Download RAG assertion updated but not rerun. Type/lint/build passed;
+desktop/390px UI was inspected. Classroom audit remains open.
 
-The earlier frontend suite passed 334 tests/1 skipped before final copy revisions.
-Latest refinement: one focused run passed 9/10; the remaining assertion used an old
-Download RAG button name and was updated without rerunning, per owner request.
-Type/lint and frontend build pass. Desktop and 390px UI were visually inspected
-and refined; final classroom behavior remains for owner audit. README is current.
+## Classroom display — September 18, 2026
+
+Beta bubble follows audio time (116-code-point window); mouth stops on
+pause/error, and text survives audio failure. Focused 34/34, type/lint pass;
+full frontend 323/19/1 skipped (older UI assertions). Browser audit is open.
+Target: fixed 2–5-seat roundtable, simple mouth, three voice types and
+student-owned clones. FBX/C4D/Maya need conversion/Mac tests; current clones
+remain group-visible.

@@ -23,8 +23,16 @@ vi.mock("../components/avatar/avatar-preview", () => ({
 }));
 
 vi.mock("../components/stage3d/scholar-scene", () => ({
-  ScholarScene: ({ bubbleText }: { bubbleText?: string }) => (
-    <aside data-testid="speech-bubble">{bubbleText}</aside>
+  ScholarScene: ({
+    bubbleText,
+    visuals,
+  }: {
+    bubbleText?: string;
+    visuals: Record<string, string>;
+  }) => (
+    <aside data-motion={Object.values(visuals)[0]} data-testid="speech-bubble">
+      {bubbleText}
+    </aside>
   ),
 }));
 
@@ -332,6 +340,118 @@ describe("terminal segments replay controller", () => {
         "A retained paragraph",
       ),
     );
+  });
+
+  it("beta reveals saved speech with audio time and stops mouth movement on pause", async () => {
+    const initial = detail();
+    initial.status = "running";
+    initial.playback = {
+      ...initial.playback,
+      status: "ready",
+      current_turn_id: turnId,
+    };
+    const socket = new ReplaySocket();
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+    try {
+      render(renderStage("beta", initial, apiFor(initial), socket));
+      const bubble = screen.getByTestId("speech-bubble");
+      const audio = screen.getByLabelText(
+        "Classroom audio",
+      ) as HTMLAudioElement;
+      Object.defineProperty(audio, "duration", {
+        configurable: true,
+        value: 10,
+      });
+      Object.defineProperty(audio, "currentTime", {
+        configurable: true,
+        writable: true,
+        value: 0,
+      });
+      expect(bubble.textContent).toBe("");
+
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      act(() => socket.emitOpen());
+      act(() => socket.emitMessage(acquired()));
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .some(
+              (command) => command.command_type === "playback.media.prepare",
+            ),
+        ).toBe(true),
+      );
+      act(() =>
+        socket.emitMessage({
+          ...acquired(),
+          message_type: "media.prepared",
+          turn_id: turnId,
+          media_url: `/api/v1/debates/${debateId}/audio/${turnId}?media_ticket=${"a".repeat(43)}`,
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .some((command) => command.command_type === "playback.started_ack"),
+        ).toBe(true),
+      );
+      fireEvent.loadedMetadata(audio);
+      audio.currentTime = 5;
+      fireEvent.timeUpdate(audio);
+      expect(bubble.textContent).toBe("");
+
+      act(() =>
+        socket.emitMessage({
+          event_id: "90000000-0000-4000-8000-000000000005",
+          event_type: "playback.started",
+          event_version: 1,
+          debate_id: debateId,
+          sequence: 5,
+          occurred_at: "2026-09-08T00:00:00Z",
+          payload: {
+            turn_id: turnId,
+            slot: "A",
+            round_no: 1,
+            speech: initial.public_turns[0].speech,
+            sources: [],
+            playback_url: `/api/v1/debates/${debateId}/audio/${turnId}`,
+            avatar_states: [
+              {
+                participant_id: participantId,
+                slot: "A",
+                motion_state: "speaking",
+                expression: "neutral",
+              },
+            ],
+            cursor_ms: 0,
+            playback_rate: 1,
+          },
+        }),
+      );
+      expect(bubble.textContent).toBe(
+        initial.public_turns[0].speech.slice(
+          0,
+          Math.round(initial.public_turns[0].speech.length / 2),
+        ),
+      );
+      fireEvent.playing(audio);
+      expect(bubble.getAttribute("data-motion")).toBe("speaking");
+      fireEvent.pause(audio);
+      expect(bubble.getAttribute("data-motion")).toBe("idle");
+      expect(bubble.textContent).toBeTruthy();
+      Object.defineProperty(audio, "error", {
+        configurable: true,
+        value: { code: 3 },
+      });
+      fireEvent.error(audio);
+      expect(bubble.textContent).toBe(initial.public_turns[0].speech);
+      expect(bubble.getAttribute("data-motion")).toBe("idle");
+    } finally {
+      play.mockRestore();
+    }
   });
 
   it("beta keeps the bubble after audio ends and releases authority until an explicit Replay", async () => {
