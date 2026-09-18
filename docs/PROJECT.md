@@ -318,9 +318,9 @@ desktop/390px UI was inspected. Classroom audit remains open.
 
 ## Classroom display — September 18, 2026
 
-Bubble follows audio; mouth stops on pause/error, text survives playback error.
-GLB roundtable: Chrome desktop/mobile renders and moves;
-Mac untested. User FBX local pending license/conversion. Student clones
-owner-only for list/detail/preview/media/delete/bind; UI shows ID. Frontend
-focused 36/36, type/lint pass; full 325/17/1. Backend Ruff/format/Linux
-mypy pass; pytest blocked (Windows fcntl, no Docker). Three voices/cloud TTS open.
+Bubble follows audio; text survives errors. Two licensed FBXs became textured
+GLBs; five wider seats and moving jaw bones render in Chrome desktop/mobile.
+Sitting is approximate; Mac untested. ZIPs untracked, no push. Student voice
+clones owner-only; UI shows ID. Earlier frontend focused 36/36, full 325/17/1;
+type/lint pass. Backend Ruff/format/mypy pass; pytest blocked on Windows.
+Three voices/cloud TTS remain open.

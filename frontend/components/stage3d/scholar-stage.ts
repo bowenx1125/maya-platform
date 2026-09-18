@@ -11,7 +11,7 @@ import {
   type AvatarState,
 } from "../avatar";
 import {
-  STAGE_BASE_ASSET,
+  STAGE_CHARACTER_ASSETS,
   STAGE_DECODER_PATH,
   isStageAssetUrl,
 } from "./assets";
@@ -96,11 +96,15 @@ const CAMERA_EDGE_MARGIN = 1.08;
 const TABLE_RADIUS = 0.95;
 const TABLE_TOP_Y = 0.72;
 const TABLE_CENTER_Z = 0.2;
-// The bundled figure stands; hide lower legs until seated assets are approved.
+// The bundled figures stand; hide lower legs until seated assets are approved.
 const SEAT_CLIP_Y = 0.22;
-const SEAT_RADIUS = 1.45;
-const SEAT_MAX_ARC = 1.25;
-const SEAT_ARC_PER_SEAT = 0.3;
+// Spread wide enough that five upper bodies read as distinct speakers from
+// the fixed camera without breaking the roundtable composition.
+const SEAT_RADIUS = 2.15;
+const SEAT_MAX_ARC = 2.0;
+const SEAT_ARC_PER_SEAT = 0.44;
+/** Jaw opening angle while a character is speaking, in radians. */
+const JAW_OPEN_ANGLE = 0.28;
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
@@ -117,11 +121,17 @@ type Character = {
   neckRest: THREE.Quaternion | null;
   torsoBone: THREE.Object3D | null;
   torsoRest: THREE.Quaternion | null;
+  jawBone: THREE.Object3D | null;
+  jawRest: THREE.Quaternion | null;
   homeZ: number;
   state: AvatarState;
   stateStartedAt: number;
   forward: number;
 };
+
+/** Bone naming differs between the two purchased figures. */
+const JAW_BONE_NAMES = ["bone_jaw", "jawjoint_m"];
+const HEAD_BONE_NAMES = ["head", "head_m"];
 
 function findBone(
   root: THREE.Object3D,
@@ -137,6 +147,26 @@ function findBone(
 
 function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
   return Boolean((object as MorphMesh).isMesh);
+}
+
+function poseArms(root: THREE.Object3D): void {
+  for (const suffix of ["l", "r"]) {
+    const shoulder = findBone(root, [
+      `upperarm_${suffix}`,
+      `shoulder_${suffix}`,
+    ]);
+    const elbow = findBone(root, [`lowerarm_${suffix}`, `elbow_${suffix}`]);
+    if (!shoulder || !elbow) continue;
+    root.updateMatrixWorld(true);
+    const before = elbow.getWorldPosition(new THREE.Vector3()).y;
+    shoulder.rotateZ(0.1);
+    root.updateMatrixWorld(true);
+    const direction = Math.sign(
+      elbow.getWorldPosition(new THREE.Vector3()).y - before,
+    );
+    shoulder.rotateZ(-0.1);
+    shoulder.rotateZ(direction > 0 ? -1.35 : 1.35);
+  }
 }
 
 function disposeObject(root: THREE.Object3D, disposeGeometry = true): void {
@@ -158,15 +188,8 @@ function disposeObject(root: THREE.Object3D, disposeGeometry = true): void {
 /**
  * One WebGL context, one render loop, every speaker in it.
  *
- * A canvas per Agent was the obvious shape and the wrong one: five contexts
- * mean five loops and five copies of the same mesh. The figure is loaded once
- * and cloned per speaker, so a five-Agent bench costs one download.
- *
- * There are no animation clips, and that is the trade that matters. A bench of
- * separately animated bodies could wave and sit but carried no blendshapes at
- * all, so a speaking Agent could never open its mouth. This figure carries the
- * full ARKit morph set instead, and a speech that moves the mouth reads as
- * speech from the back of a room where a gesture does not.
+ * Two figures are loaded once and cloned per speaker. Neither purchased
+ * model contains speech clips, so their jaw bones carry the first pass.
  */
 export class ScholarStage {
   private readonly canvas: HTMLCanvasElement;
@@ -183,8 +206,9 @@ export class ScholarStage {
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
 
-  private template: THREE.Object3D | null = null;
-  private templateScale = 1;
+  private templates: THREE.Object3D[] = [];
+  private templateScales: number[] = [];
+  private loading = 0;
   private table: THREE.Group | null = null;
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
@@ -252,7 +276,7 @@ export class ScholarStage {
   }
 
   setCharacters(specs: StageCharacter[]): void {
-    if (!this.template) {
+    if (this.loading !== 0 || this.templates.some((template) => !template)) {
       this.pending = specs;
       this.updateCameraFraming();
       return;
@@ -285,8 +309,11 @@ export class ScholarStage {
       disposeObject(character.root, false);
     }
     this.characters.length = 0;
-    if (this.template) disposeObject(this.template);
-    this.template = null;
+    for (const template of this.templates) {
+      if (template) disposeObject(template);
+    }
+    this.templates.length = 0;
+    this.templateScales.length = 0;
     if (this.table) {
       this.scene.remove(this.table);
       disposeObject(this.table);
@@ -298,36 +325,46 @@ export class ScholarStage {
   }
 
   private load(): void {
-    if (!isStageAssetUrl(STAGE_BASE_ASSET)) {
-      this.onError?.(new Error("stage_asset_rejected"));
-      return;
+    for (const url of STAGE_CHARACTER_ASSETS) {
+      if (!isStageAssetUrl(url)) {
+        this.onError?.(new Error("stage_asset_rejected"));
+        return;
+      }
     }
-    this.loader.load(
-      STAGE_BASE_ASSET,
-      (gltf) => {
-        if (this.disposed) {
-          disposeObject(gltf.scene);
-          return;
-        }
-        const bounds = new THREE.Box3().setFromObject(gltf.scene);
-        const size = bounds.getSize(new THREE.Vector3());
-        this.templateScale = size.y > 0 ? NORMALISED_HEIGHT / size.y : 1;
-        this.template = gltf.scene;
-        if (this.pending) {
-          this.rebuild(this.pending);
-          this.pending = null;
-        }
-        this.startLoop();
-        this.onReady?.();
-      },
-      undefined,
-      (cause) => {
-        if (this.disposed) return;
-        this.onError?.(
-          cause instanceof Error ? cause : new Error("stage_asset_failed"),
-        );
-      },
-    );
+    this.loading = STAGE_CHARACTER_ASSETS.length;
+    this.templates = new Array(STAGE_CHARACTER_ASSETS.length);
+    this.templateScales = new Array(STAGE_CHARACTER_ASSETS.length);
+    STAGE_CHARACTER_ASSETS.forEach((url, index) => {
+      this.loader.load(
+        url,
+        (gltf) => {
+          if (this.disposed || this.loading < 0) {
+            disposeObject(gltf.scene);
+            return;
+          }
+          const bounds = new THREE.Box3().setFromObject(gltf.scene);
+          const size = bounds.getSize(new THREE.Vector3());
+          this.templateScales[index] =
+            size.y > 0 ? NORMALISED_HEIGHT / size.y : 1;
+          this.templates[index] = gltf.scene;
+          this.loading -= 1;
+          if (this.loading === 0) {
+            if (this.pending) {
+              this.rebuild(this.pending);
+              this.pending = null;
+            }
+            this.startLoop();
+            this.onReady?.();
+          }
+        },
+        undefined,
+        (cause) => {
+          if (this.disposed || this.loading < 0) return;
+          this.loading = -1;
+          this.onError?.(new Error("stage_asset_failed", { cause }));
+        },
+      );
+    });
   }
 
   private buildTable(): void {
@@ -374,12 +411,17 @@ export class ScholarStage {
       disposeObject(character.root, false);
     }
     this.characters.length = 0;
-    if (!this.template) return;
+    if (this.templates.length === 0) return;
 
     const count = Math.max(1, specs.length);
     specs.forEach((spec, index) => {
-      const root = cloneSkinned(this.template as THREE.Object3D);
-      root.scale.setScalar(this.templateScale);
+      // Deterministic variant per seat: load order is the roster order, so a
+      // given roster always renders the same mix of the two figures.
+      const templateIndex = index % this.templates.length;
+      const root = cloneSkinned(
+        this.templates[templateIndex] as THREE.Object3D,
+      );
+      root.scale.setScalar(this.templateScales[templateIndex]);
       const offset = this.seatOffset(index, count);
       const seatX = offset.x;
       const seatZ = TABLE_CENTER_Z + offset.z;
@@ -387,12 +429,14 @@ export class ScholarStage {
       // Faces the table centre; the camera sits across it, so everyone reads
       // as being in conversation and mostly toward the viewer.
       root.rotation.y = Math.atan2(-seatX, TABLE_CENTER_Z - seatZ);
+      poseArms(root);
 
       const meshes: MorphMesh[] = [];
       this.styleFigure(root, spec.config, meshes);
-      const headBone = findBone(root, ["head"]);
+      const headBone = findBone(root, HEAD_BONE_NAMES);
       const neckBone = findBone(root, ["neck"]);
       const torsoBone = findBone(root, ["spine2", "spine1", "spine"]);
+      const jawBone = findBone(root, JAW_BONE_NAMES);
 
       const character: Character = {
         spec,
@@ -404,6 +448,8 @@ export class ScholarStage {
         neckRest: neckBone?.quaternion.clone() ?? null,
         torsoBone,
         torsoRest: torsoBone?.quaternion.clone() ?? null,
+        jawBone,
+        jawRest: jawBone?.quaternion.clone() ?? null,
         homeZ: seatZ,
         state: "idle",
         stateStartedAt: performance.now(),
@@ -421,26 +467,12 @@ export class ScholarStage {
    * roster grows, by pulling the fixed camera straight back along its axis.
    */
   private updateCameraFraming(): void {
-    let minX = -(TABLE_RADIUS + 0.55);
-    let maxX = TABLE_RADIUS + 0.55;
-    if (this.characters.length > 0) {
-      minX = Infinity;
-      maxX = -Infinity;
-      for (const character of this.characters) {
-        const bounds = new THREE.Box3().setFromObject(character.root);
-        minX = Math.min(minX, bounds.min.x);
-        maxX = Math.max(maxX, bounds.max.x);
-      }
-    } else if (this.pending && this.pending.length > 1) {
-      const count = this.pending.length;
-      const arc = Math.min(SEAT_MAX_ARC, (count - 1) * SEAT_ARC_PER_SEAT);
-      const outer = Math.sin(arc / 2) * SEAT_RADIUS + TABLE_RADIUS * 0.55;
-      minX = -outer;
-      maxX = outer;
-    }
-
-    const halfWidth =
-      Math.max(Math.abs(minX), Math.abs(maxX)) * CAMERA_EDGE_MARGIN;
+    // Imported skinned-mesh bounds include distant rig helpers; frame the
+    // authored seat layout instead of letting those helpers shrink the stage.
+    const count = this.characters.length || this.pending?.length || 1;
+    const arc = Math.min(SEAT_MAX_ARC, (count - 1) * SEAT_ARC_PER_SEAT);
+    const outer = Math.sin(arc / 2) * SEAT_RADIUS + 0.62;
+    const halfWidth = Math.max(TABLE_RADIUS + 0.55, outer) * CAMERA_EDGE_MARGIN;
     const aspect = Math.max(this.camera.aspect, 0.1);
     const halfFovRadians = THREE.MathUtils.degToRad(CAMERA_FOV_DEGREES / 2);
     const requiredDistance =
@@ -476,6 +508,10 @@ export class ScholarStage {
       const styled = sources.map((source) => {
         const material = source.clone() as THREE.MeshStandardMaterial;
         material.clippingPlanes = [this.seatClipPlane];
+        // The purchased figures already carry authored textures, so only
+        // themes are hinted at through eye color on plain (texture-less)
+        // materials — their albedo is never tinted wholesale.
+        if (material.map) return material;
         if (material.color) {
           if (name.includes("eye")) material.color.copy(eye);
           else if (name.includes("head") || name.includes("body"))
@@ -560,6 +596,22 @@ export class ScholarStage {
       } else {
         if (mouth !== undefined) influences[mouth] *= 0.8;
         if (jaw !== undefined) influences[jaw] *= 0.8;
+      }
+    }
+
+    // Figures without morph targets still speak: rotate the jaw bone by the
+    // same motion frame and settle back to its rest pose when not talking.
+    if (character.jawBone && character.jawRest) {
+      if (character.state === "speaking" && character.meshes.length === 0) {
+        this.setRotation(
+          character.jawBone,
+          character.jawRest,
+          frame.jawOpen * JAW_OPEN_ANGLE,
+          0,
+          0,
+        );
+      } else {
+        character.jawBone.quaternion.copy(character.jawRest);
       }
     }
 

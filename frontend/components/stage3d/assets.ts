@@ -1,16 +1,18 @@
 /**
  * Stage assets for Debates (beta).
  *
- * One figure, shared by every speaker on the bench. It is the same asset the
- * platform's avatar preview already uses, chosen over a set of separately
- * animated bodies for one reason: those bodies carried a skeleton and no
- * blendshapes, so a speaking Agent could not open its mouth. This one carries
- * the full ARKit morph set, which is what lets a speech look like speech.
+ * Two purchased figures, shared by every speaker on the bench and cloned per
+ * Agent so a five-Agent bench costs two downloads. Both figures have jaw
+ * bones, which the stage animates for first-pass mouth movement.
  */
 
 export const STAGE_ASSET_ROOT = "/avatars/";
 
-export const STAGE_BASE_ASSET = `${STAGE_ASSET_ROOT}female_1.glb`;
+/** Load order doubles as the deterministic variant order for seat slots. */
+export const STAGE_CHARACTER_ASSETS = [
+  `${STAGE_ASSET_ROOT}elder-scholar.glb`,
+  `${STAGE_ASSET_ROOT}noble-scholar.glb`,
+];
 
 /** Draco decoder, served locally so the scene never reaches a CDN. */
 export const STAGE_DECODER_PATH = `${STAGE_ASSET_ROOT}draco/`;
