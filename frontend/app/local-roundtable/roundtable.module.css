@@ -107,7 +107,9 @@
   height: clamp(220px, 34dvh, 360px);
   padding: 16px 24px;
   border-top: 2px solid var(--gold);
-  background: rgba(252, 250, 246, 0.98);
+  background: rgba(252, 250, 246, 0.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   font-family:
     "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
 }
