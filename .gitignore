@@ -52,3 +52,7 @@ backend/data.quarantine-*/
 docker-compose.override.yml
 htmlcov/
 backend/config/provider-policies/
+
+# Locally reconstructed stage media; never commit generated assets.
+frontend/public/stage/*.ply
+frontend/public/stage/*.sog

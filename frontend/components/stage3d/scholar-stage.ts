@@ -1,3 +1,4 @@
+import type { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -102,6 +103,20 @@ const STANDING_RADIUS = 1.6;
 /** Jaw opening angle while a character is speaking, in radians. */
 const JAW_OPEN_ANGLE = 0.28;
 
+/**
+ * Opt-in splat backdrop: the camera parameters replicate the BLUNT
+ * normalization exactly, so the SOG lines up with the authored stage without
+ * any per-asset calibration. The source render was 1448x1086.
+ */
+const STAGE_SPLAT_URL = "/stage/courtyard-normalized.sog";
+const SPLAT_CAMERA_FOV_DEGREES = 56.35;
+const SPLAT_CAMERA_POSITION = new THREE.Vector3(0, 0, -61.8);
+const SPLAT_CAMERA_UP = new THREE.Vector3(0, -1, 0);
+const SPLAT_CAMERA_FAR = 300;
+const SPLAT_SOURCE_ASPECT = 1448 / 1086;
+/** Background drift is a garnish, never the focus of the classroom. */
+const SPLAT_MOTION_SCALE = 0.15;
+
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
   morphTargetInfluences?: number[];
@@ -145,6 +160,30 @@ function findBone(
 
 function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
   return Boolean((object as MorphMesh).isMesh);
+}
+
+/** The splat backdrop is opt-in: only ?splat=1 ever starts the download. */
+export function splatBackdropRequested(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("splat") === "1";
+}
+
+/**
+ * The splat is a cover-fit backdrop. Its source aspect is narrower than most
+ * viewports, so on wide canvases the vertical FOV is pulled in (zoom in) while
+ * the full width still fills the frame — the same behavior CSS `cover` gives
+ * the static background image it replaces.
+ */
+function splatCameraFov(aspect: number): number {
+  const source = SPLAT_CAMERA_FOV_DEGREES;
+  if (aspect >= SPLAT_SOURCE_ASPECT) {
+    const halfWidth =
+      Math.tan(THREE.MathUtils.degToRad(source / 2)) * SPLAT_SOURCE_ASPECT;
+    return THREE.MathUtils.radToDeg(
+      2 * Math.atan(halfWidth / Math.max(aspect, 0.01)),
+    );
+  }
+  return source;
 }
 
 function aimBone(
@@ -308,6 +347,15 @@ export class ScholarStage {
   private resting = true;
   private reducedMotion = false;
 
+  // Splat backdrop state: everything here stays null until ?splat=1 opts in
+  // and the Spark module has actually loaded, so the default path is untouched.
+  private splatLoaded = false;
+  private splatScene: THREE.Scene | null = null;
+  private splatCamera: THREE.PerspectiveCamera | null = null;
+  private sparkRenderer: SparkRenderer | null = null;
+  private splatMesh: SplatMesh | null = null;
+  private splatToken = 0;
+
   private readonly projection = new THREE.Vector3();
   private readonly offsetEuler = new THREE.Euler();
   private readonly offsetQuat = new THREE.Quaternion();
@@ -359,6 +407,7 @@ export class ScholarStage {
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.resize();
     this.load();
+    if (splatBackdropRequested()) void this.loadSplatBackdrop();
   }
 
   setCharacters(specs: StageCharacter[]): void {
@@ -409,6 +458,7 @@ export class ScholarStage {
     }
     this.shadowTexture.dispose();
     this.woodTexture.dispose();
+    this.disposeSplatBackdrop();
     this.draco.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -462,6 +512,82 @@ export class ScholarStage {
     if (this.disposed || this.loading < 0) return;
     this.loading = -1;
     this.onError?.(new Error("stage_asset_failed", { cause }));
+  }
+
+  /**
+   * Load the optional courtyard splat in its own scene, but render it through
+   * the same WebGL renderer and canvas as the character stage. Failure keeps
+   * the procedural table and the static CSS backdrop exactly as they were.
+   */
+  private async loadSplatBackdrop(): Promise<void> {
+    const token = ++this.splatToken;
+    let pendingSpark: SparkRenderer | null = null;
+    let pendingMesh: SplatMesh | null = null;
+    try {
+      const sparkModule = await import("@sparkjsdev/spark");
+      if (this.disposed || token !== this.splatToken) return;
+
+      const scene = new THREE.Scene();
+      const spark = new sparkModule.SparkRenderer({ renderer: this.renderer });
+      pendingSpark = spark;
+      scene.add(spark);
+      const mesh = new sparkModule.SplatMesh({ url: STAGE_SPLAT_URL });
+      pendingMesh = mesh;
+      scene.add(mesh);
+
+      const camera = new THREE.PerspectiveCamera(1, 1, 0.1, SPLAT_CAMERA_FAR);
+      camera.position.copy(SPLAT_CAMERA_POSITION);
+      camera.up.copy(SPLAT_CAMERA_UP);
+      camera.lookAt(0, 0, 0);
+
+      // Wait for the splat data itself; a missing or broken SOG leaves the
+      // fallback stage untouched instead of swapping to an empty backdrop.
+      await mesh.initialized;
+      if (this.disposed || token !== this.splatToken) {
+        mesh.dispose();
+        spark.dispose();
+        return;
+      }
+
+      this.sparkRenderer = spark;
+      this.splatMesh = mesh;
+      pendingSpark = null;
+      pendingMesh = null;
+      this.splatScene = scene;
+      this.splatCamera = camera;
+      this.splatLoaded = true;
+      if (this.table) this.table.visible = false;
+      this.splatCamera.fov = splatCameraFov(this.camera.aspect);
+      this.splatCamera.aspect = this.camera.aspect;
+      this.splatCamera.updateProjectionMatrix();
+      this.resize();
+    } catch {
+      pendingMesh?.dispose();
+      pendingSpark?.dispose();
+      if (token === this.splatToken && !this.disposed) {
+        // The stage's onError flips the whole scene to "failed", so a missing
+        // splat only logs and keeps the table + CSS backdrop fallback.
+        this.disposeSplatBackdrop();
+        console.warn("stage_splat_unavailable");
+      }
+    }
+  }
+
+  private disposeSplatBackdrop(): void {
+    // Any later load result sees the bump and cleans up after itself.
+    this.splatToken += 1;
+    this.splatLoaded = false;
+    if (this.table) this.table.visible = true;
+    if (this.splatMesh) {
+      this.splatMesh.dispose();
+      this.splatMesh = null;
+    }
+    if (this.sparkRenderer) {
+      this.sparkRenderer.dispose();
+      this.sparkRenderer = null;
+    }
+    this.splatScene = null;
+    this.splatCamera = null;
   }
 
   private buildTable(): void {
@@ -817,14 +943,35 @@ export class ScholarStage {
       if (this.disposed) return;
       const delta = Math.min(this.clock.getDelta(), 0.1);
       const elapsed = (performance.now() - this.startedAt) / 1000;
+      if (this.splatLoaded && this.splatScene && this.splatCamera) {
+        this.updateSplatMotion(elapsed);
+        this.renderer.autoClear = false;
+        this.renderer.clear();
+        this.renderer.render(this.splatScene, this.splatCamera);
+        // The splat pass never writes depth, so clear it before the opaque
+        // figures or the depth buffer from the backdrop would cull them.
+        this.renderer.clearDepth();
+      }
       for (const character of this.characters) {
         this.animateCharacter(character, delta, elapsed);
       }
       this.renderer.render(this.scene, this.camera);
+      this.renderer.autoClear = true;
       this.emitAnchors(performance.now());
       this.frame = requestAnimationFrame(step);
     };
     this.frame = requestAnimationFrame(step);
+  }
+
+  /**
+   * The very slow background drift keeps the backdrop alive without pulling
+   * attention; reduced-motion users get the fully still courtyard.
+   */
+  private updateSplatMotion(elapsed: number): void {
+    if (!this.splatMesh) return;
+    const drift = this.reducedMotion ? 0 : SPLAT_MOTION_SCALE;
+    this.splatMesh.position.x = Math.sin(elapsed * 0.1) * drift;
+    this.splatMesh.position.y = Math.cos(elapsed * 0.13) * drift;
   }
 
   private resize(): void {
@@ -843,6 +990,12 @@ export class ScholarStage {
     this.camera.aspect = width / height;
     this.updateCameraFraming();
     this.camera.updateProjectionMatrix();
+    if (this.splatCamera) {
+      const aspect = this.camera.aspect;
+      this.splatCamera.aspect = aspect;
+      this.splatCamera.fov = splatCameraFov(aspect);
+      this.splatCamera.updateProjectionMatrix();
+    }
     this.renderer.setSize(width, height, false);
   }
 }

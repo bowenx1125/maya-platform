@@ -1,4 +1,4 @@
-# ADR-007: Keep the single-image courtyard splat out of the classroom stage
+# ADR-007: Trial the single-image courtyard splat in a fixed view
 
 ## Context
 
@@ -22,15 +22,17 @@ reconstruction. The low-spec classroom display has not been profiled.
 
 ## Decision
 
-Do not replace the classroom backdrop or hide the Three.js table with this
-asset. Keep the existing stage while retaining the local PLY, SOG, images and
-viewer for comparison. A production splat needs consistent overlapping real
-views or a world-generation service result, a visually accepted table and
-floor, measured Chrome/Edge performance, and a fallback when loading fails.
+Keep the default classroom stage unchanged. The local `?splat=1` trial loads
+the ignored SOG in the existing WebGL canvas, overlays the figures and hides
+the procedural table only after loading succeeds. Missing media or decode
+failure keeps the static courtyard and procedural table. The view remains
+fixed, with only subtle background drift. A production splat needs consistent
+overlapping real views or a world-generation service result, a visually
+accepted table and floor, and measured Chrome/Edge performance.
 
-When an accepted SOG exists, render it in the existing Three.js scene via a
-compatible splat renderer rather than introducing a second WebGL scene. Avoid
-embedding generated media or provider responses in the repository.
+The trial uses Spark in the existing Three.js renderer and canvas, with a
+separate scene and camera for the calibrated single-view splat. Avoid embedding
+generated media or provider responses in the repository.
 
 ## References
 
