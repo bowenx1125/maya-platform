@@ -11,7 +11,6 @@ import {
   type AvatarState,
 } from "../avatar";
 import {
-  STAGE_CHAIR_ASSETS,
   STAGE_CHARACTER_ASSETS,
   STAGE_DECODER_PATH,
   isStageAssetUrl,
@@ -88,9 +87,9 @@ const SPEAKER_STEP_FORWARD = 0.16;
 const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
 const CAMERA_FOV_DEGREES = 34;
-const DEFAULT_CAMERA_Z = 3.6;
+const DEFAULT_CAMERA_Z = 5.6;
 const CAMERA_HEIGHT = 2.3;
-const CAMERA_TARGET = new THREE.Vector3(0, 1.0, 0.2);
+const CAMERA_TARGET = new THREE.Vector3(0, 0.4, 0.2);
 const CAMERA_DEPTH_MARGIN = 0.35;
 const CAMERA_EDGE_MARGIN = 1.08;
 
@@ -98,13 +97,7 @@ const TABLE_RADIUS = 0.95;
 const TABLE_TOP_Y = 0.72;
 const TABLE_CENTER_Z = 0.2;
 const FLOOR_Y = -0.42;
-// The bundled figures stand; hide lower legs until seated assets are approved.
-const SEAT_CLIP_Y = 0.22;
-// Spread wide enough that five upper bodies read as distinct speakers from
-// the fixed camera without breaking the roundtable composition.
-const SEAT_RADIUS = 2.15;
-const SEAT_MAX_ARC = 2.0;
-const SEAT_ARC_PER_SEAT = 0.44;
+const STANDING_RADIUS = 1.6;
 /** Jaw opening angle while a character is speaking, in radians. */
 const JAW_OPEN_ANGLE = 0.28;
 
@@ -116,6 +109,7 @@ type MorphMesh = THREE.Mesh & {
 type Character = {
   spec: StageCharacter;
   root: THREE.Object3D;
+  shadow: THREE.Mesh;
   meshes: MorphMesh[];
   headBone: THREE.Object3D | null;
   headRest: THREE.Quaternion | null;
@@ -244,22 +238,15 @@ export class ScholarStage {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly loader = new GLTFLoader();
-  private readonly textureLoader = new THREE.TextureLoader();
   private readonly draco = new DRACOLoader();
-  private readonly seatClipPlane = new THREE.Plane(
-    new THREE.Vector3(0, 1, 0),
-    -SEAT_CLIP_Y,
-  );
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
 
   private templates: THREE.Object3D[] = [];
   private templateScales: number[] = [];
-  private chairTextures: (THREE.Texture | null)[] = [null, null];
   private loading = 0;
   private table: THREE.Group | null = null;
-  private readonly chairs: THREE.Group[] = [];
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
   private frame: number | null = null;
@@ -285,7 +272,7 @@ export class ScholarStage {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEGREES, 1, 0.1, 60);
-    // A fixed high seat across the table: the whole composition is built for
+    // A fixed view across the table: the whole composition is built for
     // this one perspective, so the camera never moves — only the framing
     // distance adapts as the roster grows.
     this.camera.position.set(0, CAMERA_HEIGHT, DEFAULT_CAMERA_Z);
@@ -310,7 +297,6 @@ export class ScholarStage {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.localClippingEnabled = true;
 
     if (typeof window.matchMedia === "function") {
       this.reducedMotion = window.matchMedia(
@@ -357,11 +343,10 @@ export class ScholarStage {
     for (const character of this.characters) {
       this.scene.remove(character.root);
       disposeObject(character.root, false);
+      this.scene.remove(character.shadow);
+      disposeObject(character.shadow);
     }
     this.characters.length = 0;
-    this.clearChairs();
-    for (const texture of this.chairTextures) texture?.dispose();
-    this.chairTextures = [null, null];
     for (const template of this.templates) {
       if (template) disposeObject(template);
     }
@@ -378,31 +363,15 @@ export class ScholarStage {
   }
 
   private load(): void {
-    for (const url of [...STAGE_CHARACTER_ASSETS, ...STAGE_CHAIR_ASSETS]) {
+    for (const url of STAGE_CHARACTER_ASSETS) {
       if (!isStageAssetUrl(url)) {
         this.onError?.(new Error("stage_asset_rejected"));
         return;
       }
     }
-    this.loading = STAGE_CHARACTER_ASSETS.length + STAGE_CHAIR_ASSETS.length;
+    this.loading = STAGE_CHARACTER_ASSETS.length;
     this.templates = new Array(STAGE_CHARACTER_ASSETS.length);
     this.templateScales = new Array(STAGE_CHARACTER_ASSETS.length);
-    STAGE_CHAIR_ASSETS.forEach((url, index) => {
-      this.textureLoader.load(
-        url,
-        (texture) => {
-          if (this.disposed || this.loading < 0) {
-            texture.dispose();
-            return;
-          }
-          texture.colorSpace = THREE.SRGBColorSpace;
-          this.chairTextures[index] = texture;
-          this.assetLoaded();
-        },
-        undefined,
-        (cause) => this.assetFailed(cause),
-      );
-    });
     STAGE_CHARACTER_ASSETS.forEach((url, index) => {
       this.loader.load(
         url,
@@ -479,19 +448,19 @@ export class ScholarStage {
     this.scene.add(group);
   }
 
-  // The far arc keeps faces visible to the classroom while preserving a roundtable layout.
-  private seatOffset(
+  // Half-step spacing keeps the front of the table clear of a central figure.
+  private ringOffset(
     index: number,
     count: number,
   ): {
     x: number;
     z: number;
   } {
-    const arc = Math.min(SEAT_MAX_ARC, (count - 1) * SEAT_ARC_PER_SEAT);
-    const angle = count === 1 ? 0 : -arc / 2 + (arc * index) / (count - 1);
+    const angle =
+      count === 1 ? 0 : -Math.PI + (2 * Math.PI * (index + 0.5)) / count;
     return {
-      x: Math.sin(angle) * SEAT_RADIUS,
-      z: -Math.cos(angle) * SEAT_RADIUS,
+      x: Math.sin(angle) * STANDING_RADIUS,
+      z: -Math.cos(angle) * STANDING_RADIUS,
     };
   }
 
@@ -499,15 +468,11 @@ export class ScholarStage {
     for (const character of this.characters) {
       this.scene.remove(character.root);
       disposeObject(character.root, false);
+      this.scene.remove(character.shadow);
+      disposeObject(character.shadow);
     }
     this.characters.length = 0;
-    this.clearChairs();
     if (this.templates.length === 0) return;
-    const [chairBack, chairFront] = this.chairTextures;
-    if (!chairBack || !chairFront) {
-      this.onError?.(new Error("stage_asset_failed"));
-      return;
-    }
 
     const count = Math.max(1, specs.length);
     specs.forEach((spec, index) => {
@@ -518,25 +483,25 @@ export class ScholarStage {
         this.templates[templateIndex] as THREE.Object3D,
       );
       root.scale.setScalar(this.templateScales[templateIndex]);
-      const offset = this.seatOffset(index, count);
-      const seatX = offset.x;
-      const seatZ = TABLE_CENTER_Z + offset.z;
-      const facing = Math.atan2(-seatX, TABLE_CENTER_Z - seatZ);
-      root.position.set(seatX, -0.42, seatZ);
-      // Faces the table centre; the camera sits across it, so everyone reads
-      // as being in conversation and mostly toward the viewer.
-      root.rotation.y = facing;
+      const offset = this.ringOffset(index, count);
+      const standingX = offset.x;
+      const standingZ = TABLE_CENTER_Z + offset.z;
+      const facing = Math.atan2(-standingX, TABLE_CENTER_Z - standingZ);
+      root.position.set(standingX, FLOOR_Y, standingZ);
+      root.rotation.y = facing * 0.65;
       poseArms(root);
-
-      const chair = this.buildChair(
-        seatX,
-        seatZ,
-        facing,
-        chairBack,
-        chairFront,
+      const shadow = new THREE.Mesh(
+        new THREE.CircleGeometry(0.3, 24),
+        new THREE.MeshBasicMaterial({
+          color: 0x34291e,
+          transparent: true,
+          opacity: 0.08,
+          depthWrite: false,
+        }),
       );
-      this.scene.add(chair);
-      this.chairs.push(chair);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.set(standingX, FLOOR_Y - 0.02, standingZ);
+      this.scene.add(shadow);
 
       const meshes: MorphMesh[] = [];
       this.styleFigure(root, spec.config, meshes);
@@ -548,6 +513,7 @@ export class ScholarStage {
       const character: Character = {
         spec,
         root,
+        shadow,
         meshes,
         headBone,
         headRest: headBone?.quaternion.clone() ?? null,
@@ -557,7 +523,7 @@ export class ScholarStage {
         torsoRest: torsoBone?.quaternion.clone() ?? null,
         jawBone,
         jawRest: jawBone?.quaternion.clone() ?? null,
-        homeZ: seatZ,
+        homeZ: standingZ,
         state: "idle",
         stateStartedAt: performance.now(),
         forward: 0,
@@ -569,57 +535,21 @@ export class ScholarStage {
     this.updateCameraFraming();
   }
 
-  private clearChairs(): void {
-    for (const chair of this.chairs) {
-      this.scene.remove(chair);
-      disposeObject(chair);
-    }
-    this.chairs.length = 0;
-  }
-
-  private buildChair(
-    x: number,
-    z: number,
-    facing: number,
-    backTexture: THREE.Texture,
-    frontTexture: THREE.Texture,
-  ): THREE.Group {
-    const chair = new THREE.Group();
-    const addLayer = (texture: THREE.Texture, depth: number) => {
-      const layer = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.9, 1.25),
-        new THREE.MeshBasicMaterial({
-          map: texture,
-          transparent: true,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        }),
-      );
-      layer.position.set(0, 0.2, depth);
-      chair.add(layer);
-    };
-    addLayer(backTexture, -0.25);
-    addLayer(frontTexture, 0.25);
-    chair.position.set(x, 0, z);
-    chair.rotation.y = facing * 0.7;
-    return chair;
-  }
-
   /**
    * Keep heads, table and bubbles inside the visible safe viewport as the
    * roster grows, by pulling the fixed camera straight back along its axis.
    */
   private updateCameraFraming(): void {
     // Imported skinned-mesh bounds include distant rig helpers; frame the
-    // authored seat layout instead of letting those helpers shrink the stage.
-    const count = this.characters.length || this.pending?.length || 1;
-    const arc = Math.min(SEAT_MAX_ARC, (count - 1) * SEAT_ARC_PER_SEAT);
-    const outer = Math.sin(arc / 2) * SEAT_RADIUS + 0.62;
+    // authored standing ring instead of letting those helpers shrink the stage.
+    const outer = STANDING_RADIUS + 0.5;
     const halfWidth = Math.max(TABLE_RADIUS + 0.55, outer) * CAMERA_EDGE_MARGIN;
     const aspect = Math.max(this.camera.aspect, 0.1);
     const halfFovRadians = THREE.MathUtils.degToRad(CAMERA_FOV_DEGREES / 2);
     const requiredDistance =
-      halfWidth / Math.tan(halfFovRadians) / aspect + CAMERA_DEPTH_MARGIN;
+      halfWidth / Math.tan(halfFovRadians) / aspect +
+      STANDING_RADIUS +
+      CAMERA_DEPTH_MARGIN;
     this.camera.position.z = Math.max(DEFAULT_CAMERA_Z, requiredDistance);
     this.camera.lookAt(CAMERA_TARGET);
   }
@@ -653,7 +583,6 @@ export class ScholarStage {
         : [object.material];
       const styled = sources.map((source) => {
         const material = source.clone() as THREE.MeshStandardMaterial;
-        material.clippingPlanes = [this.seatClipPlane];
         // The purchased figures already carry authored textures, so only
         // themes are hinted at through eye color on plain (texture-less)
         // materials — their albedo is never tinted wholesale.
@@ -767,6 +696,7 @@ export class ScholarStage {
       4.5,
       delta,
     );
+    character.shadow.position.z = character.root.position.z;
   }
 
   private setRotation(

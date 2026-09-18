@@ -319,11 +319,10 @@ desktop/390px UI was inspected. Classroom audit remains open.
 ## Classroom display — September 18, 2026
 
 Bubble follows audio; text survives errors. Two licensed FBXs became textured
-GLBs; five wider seats and moving jaw bones render in Chrome desktop/mobile.
+GLBs; five standing figures encircle the table and jaw bones move in Chrome/Edge.
 Sep 18: arm bones are lowered from T-pose, the stage is centred above a bottom
-transcript, and a white backdrop replaces the incompatible courtyard photo.
-Chairs use seat-angled back/front image layers; the elder's stray accessory
-mesh is hidden in stage clones. Sitting remains approximate; Mac untested.
+transcript, and the background is white. Chairs and seated clipping are gone;
+the elder's stray accessory mesh is hidden in stage clones. Mac untested.
 ZIPs untracked, no push.
 Student voice clones owner-only; UI shows ID. Current frontend scene 3/3,
 full 325/17/1; type/lint/build pass. Backend Ruff/format/mypy pass; pytest blocked on Windows.
