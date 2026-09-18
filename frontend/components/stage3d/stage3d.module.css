@@ -149,7 +149,7 @@
   z-index: 5;
   max-width: min(320px, 42%);
   padding: 12px 15px 13px;
-  transform: translate(14px, -104%);
+  transform: translate(14px, -170%);
   border: 1px solid rgba(38, 31, 24, 0.1);
   border-radius: 16px;
   background: rgba(255, 253, 248, 0.96);
@@ -161,7 +161,7 @@
 }
 
 .bubble[data-side="left"] {
-  transform: translate(calc(-100% - 14px), -104%);
+  transform: translate(calc(-100% - 14px), -170%);
 }
 
 .bubbleWho {
@@ -316,6 +316,20 @@
 }
 
 @media (max-width: 900px) {
+  .namePlate {
+    display: none;
+  }
+
+  .bubble,
+  .bubble[data-side="left"] {
+    top: auto !important;
+    bottom: 8px;
+    left: 50% !important;
+    width: min(300px, calc(100% - 24px));
+    max-width: none;
+    transform: translateX(-50%);
+  }
+
   /* On a narrow screen the Public Debate panel moves below the scene. The
      44dvh viewport leaves a small breathing gap above its 56dvh panel. */
   .canvasViewport {

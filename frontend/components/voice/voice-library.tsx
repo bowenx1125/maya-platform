@@ -195,6 +195,9 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
                   </span>
                   <StatusBadge status={profile.status} />
                 </div>
+                <p className={styles.profileId}>
+                  {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
+                </p>
                 {preview[profile.id] ? (
                   <audio
                     className={styles.audio}

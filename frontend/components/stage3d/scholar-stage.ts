@@ -82,15 +82,25 @@ const EXPRESSION_TARGETS: Record<AvatarExpression, Record<string, number>> = {
 const EXPRESSION_STRENGTH: Record<AvatarConfig["expression_strength"], number> =
   { low: 0.35, medium: 0.65, high: 1 };
 
-/** How far the speaker steps out of the line, in model heights. */
+/** How far the speaker leans toward the table, in model heights. */
 const SPEAKER_STEP_FORWARD = 0.16;
 const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
 const CAMERA_FOV_DEGREES = 34;
-const DEFAULT_CAMERA_Z = 4.4;
-const CAMERA_TARGET_Y = 1.24;
+const DEFAULT_CAMERA_Z = 3.6;
+const CAMERA_HEIGHT = 2.3;
+const CAMERA_TARGET = new THREE.Vector3(0, 1.0, 0.2);
 const CAMERA_DEPTH_MARGIN = 0.35;
 const CAMERA_EDGE_MARGIN = 1.08;
+
+const TABLE_RADIUS = 0.95;
+const TABLE_TOP_Y = 0.72;
+const TABLE_CENTER_Z = 0.2;
+// The bundled figure stands; hide lower legs until seated assets are approved.
+const SEAT_CLIP_Y = 0.22;
+const SEAT_RADIUS = 1.45;
+const SEAT_MAX_ARC = 1.25;
+const SEAT_ARC_PER_SEAT = 0.3;
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
@@ -102,8 +112,11 @@ type Character = {
   root: THREE.Object3D;
   meshes: MorphMesh[];
   headBone: THREE.Object3D | null;
+  headRest: THREE.Quaternion | null;
   neckBone: THREE.Object3D | null;
+  neckRest: THREE.Quaternion | null;
   torsoBone: THREE.Object3D | null;
+  torsoRest: THREE.Quaternion | null;
   homeZ: number;
   state: AvatarState;
   stateStartedAt: number;
@@ -126,11 +139,11 @@ function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
   return Boolean((object as MorphMesh).isMesh);
 }
 
-function disposeObject(root: THREE.Object3D): void {
+function disposeObject(root: THREE.Object3D, disposeGeometry = true): void {
   const seen = new Set<THREE.Material>();
   root.traverse((object) => {
     if (!isMorphMesh(object)) return;
-    object.geometry.dispose();
+    if (disposeGeometry) object.geometry.dispose();
     const materials = Array.isArray(object.material)
       ? object.material
       : [object.material];
@@ -162,12 +175,17 @@ export class ScholarStage {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly loader = new GLTFLoader();
   private readonly draco = new DRACOLoader();
+  private readonly seatClipPlane = new THREE.Plane(
+    new THREE.Vector3(0, 1, 0),
+    -SEAT_CLIP_Y,
+  );
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
 
   private template: THREE.Object3D | null = null;
   private templateScale = 1;
+  private table: THREE.Group | null = null;
   private readonly characters: Character[] = [];
   private pending: StageCharacter[] | null = null;
   private frame: number | null = null;
@@ -193,9 +211,11 @@ export class ScholarStage {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEGREES, 1, 0.1, 60);
-    // Keep the normalized feet line above the lower edge; the old target was
-    // high enough to clip shoes at the default distance.
-    this.camera.position.set(0, CAMERA_TARGET_Y, DEFAULT_CAMERA_Z);
+    // A fixed high seat across the table: the whole composition is built for
+    // this one perspective, so the camera never moves — only the framing
+    // distance adapts as the roster grows.
+    this.camera.position.set(0, CAMERA_HEIGHT, DEFAULT_CAMERA_Z);
+    this.camera.lookAt(CAMERA_TARGET);
     this.scene.add(this.camera);
 
     this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x4a5464, 2.1));
@@ -206,6 +226,8 @@ export class ScholarStage {
     fill.position.set(-3, 1.4, 2);
     this.scene.add(fill);
 
+    this.buildTable();
+
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
@@ -214,6 +236,7 @@ export class ScholarStage {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.localClippingEnabled = true;
 
     if (typeof window.matchMedia === "function") {
       this.reducedMotion = window.matchMedia(
@@ -259,11 +282,16 @@ export class ScholarStage {
     window.removeEventListener("resize", this.resizeHandler);
     for (const character of this.characters) {
       this.scene.remove(character.root);
-      disposeObject(character.root);
+      disposeObject(character.root, false);
     }
     this.characters.length = 0;
     if (this.template) disposeObject(this.template);
     this.template = null;
+    if (this.table) {
+      this.scene.remove(this.table);
+      disposeObject(this.table);
+      this.table = null;
+    }
     this.draco.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -302,37 +330,81 @@ export class ScholarStage {
     );
   }
 
+  private buildTable(): void {
+    if (this.table) return;
+    const group = new THREE.Group();
+
+    const top = new THREE.Mesh(
+      new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.07, 40),
+      new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.7 }),
+    );
+    top.position.set(0, TABLE_TOP_Y, TABLE_CENTER_Z);
+    group.add(top);
+
+    const pedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.28, TABLE_TOP_Y - 0.035, 16),
+      new THREE.MeshStandardMaterial({ color: 0x5f3d22, roughness: 0.8 }),
+    );
+    pedestal.position.set(0, (TABLE_TOP_Y - 0.035) / 2, TABLE_CENTER_Z);
+    group.add(pedestal);
+
+    this.table = group;
+    this.scene.add(group);
+  }
+
+  // The far arc keeps faces visible to the classroom while preserving a roundtable layout.
+  private seatOffset(
+    index: number,
+    count: number,
+  ): {
+    x: number;
+    z: number;
+  } {
+    const arc = Math.min(SEAT_MAX_ARC, (count - 1) * SEAT_ARC_PER_SEAT);
+    const angle = count === 1 ? 0 : -arc / 2 + (arc * index) / (count - 1);
+    return {
+      x: Math.sin(angle) * SEAT_RADIUS,
+      z: -Math.cos(angle) * SEAT_RADIUS,
+    };
+  }
+
   private rebuild(specs: StageCharacter[]): void {
     for (const character of this.characters) {
       this.scene.remove(character.root);
-      disposeObject(character.root);
+      disposeObject(character.root, false);
     }
     this.characters.length = 0;
     if (!this.template) return;
 
     const count = Math.max(1, specs.length);
-    // A gentle arc rather than a straight rank: the far speakers turn a little
-    // toward the middle, which is what makes a bench read as a conversation.
-    const spread = count === 1 ? 0 : Math.min(0.86, 2.5 / count);
     specs.forEach((spec, index) => {
       const root = cloneSkinned(this.template as THREE.Object3D);
       root.scale.setScalar(this.templateScale);
-      const centred = index - (count - 1) / 2;
-      const homeZ = -Math.abs(centred) * 0.24;
-      root.position.set(centred * spread * 1.4, 0, homeZ);
-      root.rotation.y = -centred * 0.17;
+      const offset = this.seatOffset(index, count);
+      const seatX = offset.x;
+      const seatZ = TABLE_CENTER_Z + offset.z;
+      root.position.set(seatX, -0.42, seatZ);
+      // Faces the table centre; the camera sits across it, so everyone reads
+      // as being in conversation and mostly toward the viewer.
+      root.rotation.y = Math.atan2(-seatX, TABLE_CENTER_Z - seatZ);
 
       const meshes: MorphMesh[] = [];
       this.styleFigure(root, spec.config, meshes);
+      const headBone = findBone(root, ["head"]);
+      const neckBone = findBone(root, ["neck"]);
+      const torsoBone = findBone(root, ["spine2", "spine1", "spine"]);
 
       const character: Character = {
         spec,
         root,
         meshes,
-        headBone: findBone(root, ["head"]),
-        neckBone: findBone(root, ["neck"]),
-        torsoBone: findBone(root, ["spine2", "spine1", "spine"]),
-        homeZ,
+        headBone,
+        headRest: headBone?.quaternion.clone() ?? null,
+        neckBone,
+        neckRest: neckBone?.quaternion.clone() ?? null,
+        torsoBone,
+        torsoRest: torsoBone?.quaternion.clone() ?? null,
+        homeZ: seatZ,
         state: "idle",
         stateStartedAt: performance.now(),
         forward: 0,
@@ -344,10 +416,13 @@ export class ScholarStage {
     this.updateCameraFraming();
   }
 
-  /** Keep every figure inside the visible safe viewport as the bench grows. */
+  /**
+   * Keep heads, table and bubbles inside the visible safe viewport as the
+   * roster grows, by pulling the fixed camera straight back along its axis.
+   */
   private updateCameraFraming(): void {
-    let minX = -0.55;
-    let maxX = 0.55;
+    let minX = -(TABLE_RADIUS + 0.55);
+    let maxX = TABLE_RADIUS + 0.55;
     if (this.characters.length > 0) {
       minX = Infinity;
       maxX = -Infinity;
@@ -358,10 +433,10 @@ export class ScholarStage {
       }
     } else if (this.pending && this.pending.length > 1) {
       const count = this.pending.length;
-      const spread = Math.min(0.86, 2.5 / count);
-      const outer = ((count - 1) / 2) * spread * 1.4;
-      minX = -outer - 0.55;
-      maxX = outer + 0.55;
+      const arc = Math.min(SEAT_MAX_ARC, (count - 1) * SEAT_ARC_PER_SEAT);
+      const outer = Math.sin(arc / 2) * SEAT_RADIUS + TABLE_RADIUS * 0.55;
+      minX = -outer;
+      maxX = outer;
     }
 
     const halfWidth =
@@ -371,6 +446,7 @@ export class ScholarStage {
     const requiredDistance =
       halfWidth / Math.tan(halfFovRadians) / aspect + CAMERA_DEPTH_MARGIN;
     this.camera.position.z = Math.max(DEFAULT_CAMERA_Z, requiredDistance);
+    this.camera.lookAt(CAMERA_TARGET);
   }
 
   private styleFigure(
@@ -399,6 +475,7 @@ export class ScholarStage {
         : [object.material];
       const styled = sources.map((source) => {
         const material = source.clone() as THREE.MeshStandardMaterial;
+        material.clippingPlanes = [this.seatClipPlane];
         if (material.color) {
           if (name.includes("eye")) material.color.copy(eye);
           else if (name.includes("head") || name.includes("body"))
@@ -448,29 +525,28 @@ export class ScholarStage {
       character.spec.config.motion_style,
     );
 
-    if (!this.reducedMotion) {
-      // Additive on the upper body rather than on the root: rotating the whole
-      // figure reads as the person swaying, not as attention moving.
-      const calm = this.resting ? 0.45 : 1;
-      this.addRotation(
-        character.torsoBone,
-        frame.rotationX * 0.35 * calm,
-        frame.rotationY * 0.5 * calm,
-        frame.rotationZ * calm,
-      );
-      this.addRotation(
-        character.neckBone,
-        frame.rotationX * 0.5 * calm,
-        frame.rotationY * 0.6 * calm,
-        0,
-      );
-      this.addRotation(
-        character.headBone,
-        frame.rotationX * calm,
-        frame.rotationY * calm,
-        frame.rotationZ * 0.6 * calm,
-      );
-    }
+    const calm = this.reducedMotion ? 0 : this.resting ? 0.45 : 1;
+    this.setRotation(
+      character.torsoBone,
+      character.torsoRest,
+      frame.rotationX * 0.35 * calm,
+      frame.rotationY * 0.5 * calm,
+      frame.rotationZ * calm,
+    );
+    this.setRotation(
+      character.neckBone,
+      character.neckRest,
+      frame.rotationX * 0.5 * calm,
+      frame.rotationY * 0.6 * calm,
+      0,
+    );
+    this.setRotation(
+      character.headBone,
+      character.headRest,
+      frame.rotationX * calm,
+      frame.rotationY * calm,
+      frame.rotationZ * 0.6 * calm,
+    );
 
     for (const mesh of character.meshes) {
       const dictionary = mesh.morphTargetDictionary;
@@ -495,13 +571,16 @@ export class ScholarStage {
     );
   }
 
-  private addRotation(
+  private setRotation(
     bone: THREE.Object3D | null,
+    rest: THREE.Quaternion | null,
     x: number,
     y: number,
     z: number,
   ): void {
-    if (!bone || (!x && !y && !z)) return;
+    if (!bone || !rest) return;
+    bone.quaternion.copy(rest);
+    if (!x && !y && !z) return;
     this.offsetEuler.set(x, y, z, "XYZ");
     this.offsetQuat.setFromEuler(this.offsetEuler);
     bone.quaternion.multiply(this.offsetQuat);

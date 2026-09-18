@@ -298,6 +298,9 @@ def media_path_for_preview(
                 and_(
                     VoiceProfile.scope == "group",
                     Group.id == VoicePreview.group_id,
+                    # A preview is only playable by the uploading student;
+                    # a profile with a missing owner fails closed.
+                    VoiceProfile.consent_actor_user_id == context.user.id,
                     scoped_group_member.user_id == context.user.id,
                     scoped_course_member.user_id == context.user.id,
                 ),

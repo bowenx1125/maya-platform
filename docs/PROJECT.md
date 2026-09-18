@@ -318,9 +318,9 @@ desktop/390px UI was inspected. Classroom audit remains open.
 
 ## Classroom display — September 18, 2026
 
-Beta bubble follows audio time (116-code-point window); mouth stops on
-pause/error, and text survives audio failure. Focused 34/34, type/lint pass;
-full frontend 323/19/1 skipped (older UI assertions). Browser audit is open.
-Target: fixed 2–5-seat roundtable, simple mouth, three voice types and
-student-owned clones. FBX/C4D/Maya need conversion/Mac tests; current clones
-remain group-visible.
+Bubble follows audio; mouth stops on pause/error, text survives playback error.
+GLB roundtable: Chrome desktop/mobile renders and moves;
+Mac untested. User FBX local pending license/conversion. Student clones
+owner-only for list/detail/preview/media/delete/bind; UI shows ID. Frontend
+focused 36/36, type/lint pass; full 325/17/1. Backend Ruff/format/Linux
+mypy pass; pytest blocked (Windows fcntl, no Docker). Three voices/cloud TTS open.
