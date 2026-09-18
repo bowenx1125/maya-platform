@@ -88,9 +88,9 @@ const SPEAKER_STEP_FORWARD = 0.16;
 const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
 const CAMERA_FOV_DEGREES = 34;
-const DEFAULT_CAMERA_Z = 5.6;
+const DEFAULT_CAMERA_Z = 5.0;
 const CAMERA_HEIGHT = 2.3;
-const CAMERA_TARGET = new THREE.Vector3(0, 0.4, 0.2);
+const CAMERA_TARGET = new THREE.Vector3(0, 0.8, 0.2);
 const CAMERA_DEPTH_MARGIN = 0.35;
 const CAMERA_EDGE_MARGIN = 1.08;
 
@@ -443,7 +443,7 @@ export class ScholarStage {
       new THREE.MeshBasicMaterial({
         color: 0x34291e,
         transparent: true,
-        opacity: 0.09,
+        opacity: 0.18,
         depthWrite: false,
       }),
     );
@@ -485,7 +485,7 @@ export class ScholarStage {
         new THREE.MeshBasicMaterial({
           color: 0x34291e,
           transparent: true,
-          opacity: 0.08,
+          opacity: 0.17,
           depthWrite: false,
         }),
       );
@@ -545,7 +545,12 @@ export class ScholarStage {
       halfWidth / Math.tan(halfFovRadians) / aspect +
       STANDING_RADIUS +
       CAMERA_DEPTH_MARGIN;
-    this.camera.position.z = Math.max(DEFAULT_CAMERA_Z, requiredDistance);
+    const rosterSize = this.pending?.length ?? this.characters.length;
+    const distance =
+      aspect < 0.75 && rosterSize === 2
+        ? requiredDistance * 0.86
+        : requiredDistance;
+    this.camera.position.z = Math.max(DEFAULT_CAMERA_Z, distance);
     this.camera.lookAt(CAMERA_TARGET);
   }
 

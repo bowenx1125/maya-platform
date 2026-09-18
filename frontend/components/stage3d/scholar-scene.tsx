@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
@@ -24,6 +25,7 @@ export type ScholarSceneProps = {
   bubbleText?: string;
   loadingLabel: string;
   unavailableLabel: string;
+  layout?: "classroom" | "preview";
   /** Barrage lanes, the join card and the teacher's pause control. */
   overlay?: ReactNode;
 };
@@ -45,6 +47,7 @@ export function ScholarScene({
   bubbleText,
   loadingLabel,
   unavailableLabel,
+  layout = "classroom",
   overlay,
 }: ScholarSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -54,6 +57,7 @@ export function ScholarScene({
   const latestRestingRef = useRef(resting);
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   // This effect runs before the stage-import effect below. Keeping the latest
   // values outside the async callback prevents a roster change during GLB
@@ -66,6 +70,7 @@ export function ScholarScene({
 
   const handleAnchors = useCallback((next: StageAnchor[]) => {
     setAnchors(next);
+    setViewportWidth(canvasRef.current?.clientWidth ?? 0);
   }, []);
   const anchorsRef = useRef(handleAnchors);
   useEffect(() => {
@@ -165,12 +170,23 @@ export function ScholarScene({
   const anchorById = new Map(anchors.map((anchor) => [anchor.id, anchor]));
   const speaking = speakingId ? anchorById.get(speakingId) : undefined;
   const speakingCharacter = characters.find((item) => item.id === speakingId);
-  // A speaker standing in slot E would otherwise push its own bubble off the
-  // right edge, so the bubble changes side once the head passes mid-stage.
-  const bubbleSide = speaking && speaking.nx > 0.56 ? "left" : "right";
+  const bubbleWindow = Array.from(bubbleText ?? "")
+    .slice(-52)
+    .join("");
+  const bubbleHalfWidth = Math.min(145, viewportWidth * 0.31);
+  const bubbleX = speaking
+    ? Math.max(
+        bubbleHalfWidth + 8,
+        Math.min(viewportWidth - bubbleHalfWidth - 8, speaking.x),
+      )
+    : 0;
 
   return (
-    <div className={styles.scene} data-scene-status={status}>
+    <div
+      className={styles.scene}
+      data-layout={layout}
+      data-scene-status={status}
+    >
       <div aria-hidden="true" className={styles.backdrop} />
       <div className={styles.canvasViewport}>
         <canvas
@@ -204,6 +220,7 @@ export function ScholarScene({
           ? characters.map((character) => {
               const anchor = anchorById.get(character.id);
               if (!anchor?.visible) return null;
+              if (character.id === speakingId && bubbleWindow) return null;
               return (
                 <span
                   className={styles.namePlate}
@@ -217,16 +234,20 @@ export function ScholarScene({
             })
           : null}
 
-        {status === "ready" && speaking?.visible && bubbleText ? (
+        {status === "ready" && speaking?.visible && bubbleWindow ? (
           <div
             aria-live="polite"
             className={styles.bubble}
-            data-side={bubbleSide}
-            data-vertical={speaking.y < 190 ? "below" : "above"}
-            style={{ left: `${speaking.x}px`, top: `${speaking.y}px` }}
+            style={
+              {
+                left: `${bubbleX}px`,
+                top: `${speaking.y}px`,
+                "--bubble-pointer-offset": `${speaking.x - bubbleX}px`,
+              } as CSSProperties
+            }
           >
             <span className={styles.bubbleWho}>{speakingCharacter?.name}</span>
-            {bubbleText}
+            {bubbleWindow}
           </div>
         ) : null}
       </div>

@@ -316,12 +316,12 @@ passed and desktop/390px UI was inspected; classroom audit remains open.
 Bubble follows audio; text survives errors. Two licensed FBXs became textured
 GLBs; five standing figures encircle the table and jaw bones move in Chrome/Edge.
 Sep 18: hands hang beside thighs, the stage is centred above a bottom
-transcript, and the background is white. Chairs and seated clipping are gone;
+transcript, with a supplied courtyard backdrop. Chairs and seated clipping are gone;
 the elder's stray accessory mesh is hidden in stage clones. Mac untested.
 ZIPs untracked, no push.
 Student clone IDs remain owner-only. Teacher selects 2-5 speakers: two stand
 opposite; 3-5 form a ring. Beta transcript follows audio and falls back to full
-text on failure. Local `/local-roundtable` imports a generated WAV directory;
+text on failure. Full-stage `/local-roundtable` imports a generated WAV directory;
 Chromium played two Qwen3-TTS turns in sequence with 3D speaker motion and
 audio-paced text. Desktop/mobile rendered; Mac untested. Local Qwen3.6 text,
 two Qwen3-TTS CustomVoice turns and a female sample are not Maya Provider

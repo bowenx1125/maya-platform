@@ -7,5 +7,5 @@ export function standingPlacement(index: number, count: number) {
   const x = Math.sin(angle) * STANDING_RADIUS;
   const z = -Math.cos(angle) * STANDING_RADIUS;
   const towardTable = Math.atan2(-x, -z);
-  return { x, z, yaw: towardTable * (count === 2 ? 1 : 0.65) };
+  return { x, z, yaw: towardTable * (count === 2 ? 0.72 : 0.65) };
 }

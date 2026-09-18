@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { standingPlacement } from "../components/stage3d/placement";
 
 describe("roundtable standing placement", () => {
-  it("puts two speakers on opposite sides, looking directly at each other", () => {
+  it("puts two speakers opposite each other with both faces visible", () => {
     const left = standingPlacement(0, 2);
     const right = standingPlacement(1, 2);
 
     expect(left.x).toBeCloseTo(-right.x);
     expect(left.z).toBeCloseTo(right.z);
-    expect(left.yaw).toBeCloseTo(Math.PI / 2);
-    expect(right.yaw).toBeCloseTo(-Math.PI / 2);
+    expect(left.yaw).toBeCloseTo((Math.PI / 2) * 0.72);
+    expect(right.yaw).toBeCloseTo((-Math.PI / 2) * 0.72);
   });
 
   it.each([3, 4, 5])("spaces %i speakers evenly around the table", (count) => {

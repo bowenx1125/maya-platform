@@ -173,4 +173,20 @@ describe("ScholarScene asynchronous initialization", () => {
     stage.options.onReady?.();
     expect(stage.rosters).toHaveLength(rosterCount);
   });
+
+  it("marks the local preview layout without changing classroom defaults", () => {
+    const view = render(
+      <ScholarScene
+        characters={[]}
+        layout="preview"
+        loadingLabel="Loading"
+        resting
+        unavailableLabel="Unavailable"
+        visuals={{}}
+      />,
+    );
+    expect(
+      view.container.querySelector('[data-layout="preview"]'),
+    ).toBeTruthy();
+  });
 });

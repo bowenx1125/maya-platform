@@ -34,7 +34,8 @@ export default function LocalRoundtablePage() {
   const [index, setIndex] = useState(-1);
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [message, setMessage] = useState("选择本地生成目录，开始语音演示");
+  const [message, setMessage] = useState("");
+  const [showTranscript, setShowTranscript] = useState(false);
 
   useEffect(() => {
     pickerRef.current?.setAttribute("webkitdirectory", "");
@@ -130,6 +131,7 @@ export default function LocalRoundtablePage() {
     <main className={styles.page}>
       <ScholarScene
         characters={characters}
+        layout="preview"
         visuals={visuals}
         resting={!playing}
         speakingId={playing ? `speaker-${index}` : null}
@@ -152,8 +154,13 @@ export default function LocalRoundtablePage() {
             ref={pickerRef}
             type="file"
           />
-          <button onClick={() => pickerRef.current?.click()} type="button">
-            选择目录
+          <button
+            aria-label="选择本地语音目录"
+            onClick={() => pickerRef.current?.click()}
+            type="button"
+          >
+            <span className={styles.longLabel}>选择目录</span>
+            <span className={styles.shortLabel}>目录</span>
           </button>
           <button
             disabled={!debate}
@@ -195,13 +202,35 @@ export default function LocalRoundtablePage() {
           >
             下一位
           </button>
+          <button
+            aria-label={showTranscript ? "收起文字记录" : "显示文字记录"}
+            aria-controls="local-roundtable-transcript"
+            aria-expanded={showTranscript}
+            onClick={() => setShowTranscript((current) => !current)}
+            type="button"
+          >
+            <span className={styles.longLabel}>
+              {showTranscript ? "收起记录" : "文字记录"}
+            </span>
+            <span className={styles.shortLabel}>记录</span>
+          </button>
         </div>
       </header>
 
-      <section className={styles.transcript} aria-label="辩论文字">
+      {message ? (
+        <p className={styles.status} role="status">
+          {message}
+        </p>
+      ) : null}
+
+      <section
+        aria-label="辩论文字"
+        className={styles.transcript}
+        hidden={!showTranscript}
+        id="local-roundtable-transcript"
+      >
         <div className={styles.transcriptHeading}>
           <h2>{debate?.manifest.topic ?? "发言记录"}</h2>
-          <span role="status">{message}</span>
         </div>
         <div className={styles.turns}>
           {debate?.manifest.turns.map((entry, turnIndex) => {
