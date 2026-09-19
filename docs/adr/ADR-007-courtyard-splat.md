@@ -34,6 +34,12 @@ The trial uses Spark in the existing Three.js renderer and canvas, with a
 separate scene and camera for the calibrated single-view splat. Avoid embedding
 generated media or provider responses in the repository.
 
+The SOG trial is visibly soft because the source is a single-image depth lift.
+For the same fixed-view constraint, `?depth=1` instead uses the sharp source
+texture on a depth-displaced mesh. It keeps mild spatial parallax without
+discarding image detail, remains opt-in, and falls back to the static courtyard
+and procedural table when either local texture is unavailable.
+
 ## References
 
 - [BLUNT](https://github.com/SonnyC56/blunt)

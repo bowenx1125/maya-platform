@@ -328,5 +328,5 @@ Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
 Sep 18: perspective, controls and lighting polished; desktop/390/320px checked.
 Immerse keeps the teacher dock; local transcript translucent. Teacher/Mac audit
-open. Courtyard PLY/SOG is a fixed-view trial (`?splat=1`), not the default; see
+open. Courtyard trials: soft SOG (`?splat=1`), sharp mesh (`?depth=1`); see
 [ADR-007](adr/ADR-007-courtyard-splat.md).

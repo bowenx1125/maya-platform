@@ -117,6 +117,27 @@ const SPLAT_SOURCE_ASPECT = 1448 / 1086;
 /** Background drift is a garnish, never the focus of the classroom. */
 const SPLAT_MOTION_SCALE = 0.15;
 
+/**
+ * Opt-in depth-mesh backdrop: the same courtyard front view as the splat
+ * trial, as a sharp color image plus a matching depth map (dark near, bright
+ * far). The vertex shader re-projects the source pixels with these camera
+ * constants, so the fixed front view reproduces the original composition.
+ */
+const STAGE_DEPTH_COLOR_URL = "/stage/courtyard-depth-color.png";
+const STAGE_DEPTH_MAP_URL = "/stage/courtyard-depth-map.png";
+const DEPTH_CAMERA_FOV_DEGREES = 56.35;
+const DEPTH_SOURCE_ASPECT = 1448 / 1086;
+/** Artist-chosen remap of the depth ramp onto view-space distances. */
+const DEPTH_NEAR = 1;
+const DEPTH_FAR = 5;
+const DEPTH_CAMERA_FAR = 10;
+const DEPTH_MESH_SEGMENTS_X = 200;
+const DEPTH_MESH_SEGMENTS_Y = 150;
+/** Plane overscan, so parallax shifts never expose the mesh border. */
+const DEPTH_EDGE_BLEED = 1.05;
+/** Parallax amplitude as a fraction of the remapped depth range. */
+const DEPTH_PARALLAX_SCALE = 0.004;
+
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
   morphTargetInfluences?: number[];
@@ -162,29 +183,111 @@ function isMorphMesh(object: THREE.Object3D): object is MorphMesh {
   return Boolean((object as MorphMesh).isMesh);
 }
 
+/**
+ * Which opt-in backdrop the URL asks for, if any. depth wins over splat so
+ * the heavier Spark/SOG download never starts when both flags are present.
+ */
+export type StageBackdropMode = "depth" | "splat" | null;
+
+export function stageBackdropMode(): StageBackdropMode {
+  if (typeof window === "undefined") return null;
+  const search = new URLSearchParams(window.location.search);
+  if (search.get("depth") === "1") return "depth";
+  if (search.get("splat") === "1") return "splat";
+  return null;
+}
+
 /** The splat backdrop is opt-in: only ?splat=1 ever starts the download. */
 export function splatBackdropRequested(): boolean {
-  if (typeof window === "undefined") return false;
-  return new URLSearchParams(window.location.search).get("splat") === "1";
+  return stageBackdropMode() === "splat";
+}
+
+/** The depth-mesh backdrop is opt-in: only ?depth=1 ever loads its textures. */
+export function depthBackdropRequested(): boolean {
+  return stageBackdropMode() === "depth";
 }
 
 /**
- * The splat is a cover-fit backdrop. Its source aspect is narrower than most
+ * Both backdrops are cover-fit: their source aspect is narrower than most
  * viewports, so on wide canvases the vertical FOV is pulled in (zoom in) while
  * the full width still fills the frame — the same behavior CSS `cover` gives
- * the static background image it replaces.
+ * the static background image they replace.
  */
-function splatCameraFov(aspect: number): number {
-  const source = SPLAT_CAMERA_FOV_DEGREES;
-  if (aspect >= SPLAT_SOURCE_ASPECT) {
+function backdropCameraFov(
+  aspect: number,
+  sourceFovDegrees: number,
+  sourceAspect: number,
+): number {
+  if (aspect >= sourceAspect) {
     const halfWidth =
-      Math.tan(THREE.MathUtils.degToRad(source / 2)) * SPLAT_SOURCE_ASPECT;
+      Math.tan(THREE.MathUtils.degToRad(sourceFovDegrees / 2)) * sourceAspect;
     return THREE.MathUtils.radToDeg(
       2 * Math.atan(halfWidth / Math.max(aspect, 0.01)),
     );
   }
-  return source;
+  return sourceFovDegrees;
 }
+
+function splatCameraFov(aspect: number): number {
+  return backdropCameraFov(
+    aspect,
+    SPLAT_CAMERA_FOV_DEGREES,
+    SPLAT_SOURCE_ASPECT,
+  );
+}
+
+function depthCameraFov(aspect: number): number {
+  return backdropCameraFov(
+    aspect,
+    DEPTH_CAMERA_FOV_DEGREES,
+    DEPTH_SOURCE_ASPECT,
+  );
+}
+
+/**
+ * The vertex shader re-projects each source pixel: it remaps the depth ramp
+ * onto a view distance and unprojects the plane's NDC exactly as the source
+ * render camera (vertical FOV 56.35, aspect 1448/1086) did, then renders
+ * through a cover-fit camera so the fixed front view matches the image.
+ */
+const DEPTH_VERTEX_SHADER = /* glsl */ `
+  uniform sampler2D uDepth;
+  uniform vec2 uParallax;
+  uniform float uNear;
+  uniform float uFar;
+  uniform float uTanHalfFov;
+  uniform float uSourceAspect;
+  uniform float uBleed;
+  varying vec2 vUv;
+
+  void main() {
+    // uv follows the overscanned NDC, so the un-overscanned frame samples the
+    // image 1:1 and the bleed margin clamps off edge pixels instead of zooming.
+    vec2 ndc = position.xy * uBleed;
+    vUv = ndc * 0.5 + 0.5;
+    // Dark depth means near, bright means far.
+    float dist = mix(uNear, uFar, texture2D(uDepth, uv).r);
+    vec3 view = vec3(
+      ndc.x * uTanHalfFov * uSourceAspect * dist,
+      ndc.y * uTanHalfFov * dist,
+      -dist
+    );
+    // A virtual camera translation: near pixels shift more than far ones.
+    view.xy -= uParallax;
+    gl_Position = projectionMatrix * vec4(view, 1.0);
+  }
+`;
+
+const DEPTH_FRAGMENT_SHADER = /* glsl */ `
+  uniform sampler2D uColor;
+  varying vec2 vUv;
+
+  void main() {
+    gl_FragColor = vec4(texture2D(uColor, vUv).rgb, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
 
 function aimBone(
   root: THREE.Object3D,
@@ -356,6 +459,16 @@ export class ScholarStage {
   private splatMesh: SplatMesh | null = null;
   private splatToken = 0;
 
+  // Depth backdrop state stays null until ?depth=1 opts in and both textures
+  // have loaded, keeping its resources out of the default and splat paths.
+  private depthScene: THREE.Scene | null = null;
+  private depthCamera: THREE.PerspectiveCamera | null = null;
+  private depthMesh: THREE.Mesh | null = null;
+  private depthMaterial: THREE.ShaderMaterial | null = null;
+  private depthTextures: THREE.Texture[] = [];
+  private depthLoaded = false;
+  private depthToken = 0;
+
   private readonly projection = new THREE.Vector3();
   private readonly offsetEuler = new THREE.Euler();
   private readonly offsetQuat = new THREE.Quaternion();
@@ -407,7 +520,9 @@ export class ScholarStage {
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.resize();
     this.load();
-    if (splatBackdropRequested()) void this.loadSplatBackdrop();
+    const backdrop = stageBackdropMode();
+    if (backdrop === "depth") void this.loadDepthBackdrop();
+    if (backdrop === "splat") void this.loadSplatBackdrop();
   }
 
   setCharacters(specs: StageCharacter[]): void {
@@ -459,6 +574,7 @@ export class ScholarStage {
     this.shadowTexture.dispose();
     this.woodTexture.dispose();
     this.disposeSplatBackdrop();
+    this.disposeDepthBackdrop();
     this.draco.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -588,6 +704,147 @@ export class ScholarStage {
     }
     this.splatScene = null;
     this.splatCamera = null;
+  }
+
+  /**
+   * The depth backdrop loads as one all-or-nothing unit: any failed texture
+   * leaves the procedural table visible and the CSS courtyard untouched.
+   */
+  private async loadDepthBackdrop(): Promise<void> {
+    const token = ++this.depthToken;
+    const loader = new THREE.TextureLoader();
+    let colorTexture: THREE.Texture | null = null;
+    let depthTexture: THREE.Texture | null = null;
+    let geometry: THREE.PlaneGeometry | null = null;
+    let material: THREE.ShaderMaterial | null = null;
+    let adopted = false;
+    try {
+      // allSettled so a fulfilled texture never leaks when the other fails.
+      const results = await Promise.allSettled([
+        this.loadDepthTexture(loader, STAGE_DEPTH_COLOR_URL),
+        this.loadDepthTexture(loader, STAGE_DEPTH_MAP_URL),
+      ]);
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) throw failed.reason;
+      [colorTexture, depthTexture] = results.map(
+        (result) => (result as PromiseFulfilledResult<THREE.Texture>).value,
+      );
+      if (this.disposed || token !== this.depthToken) return;
+
+      geometry = new THREE.PlaneGeometry(
+        2,
+        2,
+        DEPTH_MESH_SEGMENTS_X,
+        DEPTH_MESH_SEGMENTS_Y,
+      );
+      material = new THREE.ShaderMaterial({
+        vertexShader: DEPTH_VERTEX_SHADER,
+        fragmentShader: DEPTH_FRAGMENT_SHADER,
+        uniforms: {
+          uColor: { value: colorTexture },
+          uDepth: { value: depthTexture },
+          uParallax: { value: new THREE.Vector2(0, 0) },
+          uNear: { value: DEPTH_NEAR },
+          uFar: { value: DEPTH_FAR },
+          // The source camera constants: NDC is unprojected exactly as the
+          // courtyard was rendered, so the fixed view keeps the composition.
+          uTanHalfFov: {
+            value: Math.tan(
+              THREE.MathUtils.degToRad(DEPTH_CAMERA_FOV_DEGREES / 2),
+            ),
+          },
+          uSourceAspect: { value: DEPTH_SOURCE_ASPECT },
+          uBleed: { value: DEPTH_EDGE_BLEED },
+        },
+      });
+      colorTexture.colorSpace = THREE.SRGBColorSpace;
+      depthTexture.colorSpace = THREE.NoColorSpace;
+      for (const texture of [colorTexture, depthTexture]) {
+        // Mipmaps would average neighbouring depths and bleed displacement
+        // across silhouette edges, so the source resolution is kept.
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+      }
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.frustumCulled = false;
+      const scene = new THREE.Scene();
+      scene.add(mesh);
+      const camera = new THREE.PerspectiveCamera(
+        depthCameraFov(this.camera.aspect),
+        this.camera.aspect,
+        0.1,
+        DEPTH_CAMERA_FAR,
+      );
+      // The unprojection happens in the shader, so the render camera just
+      // frames the result from the source viewpoint (origin, looking -Z).
+      camera.position.set(0, 0, 0);
+      camera.lookAt(0, 0, -1);
+
+      this.depthTextures = [colorTexture, depthTexture];
+      this.depthMaterial = material;
+      this.depthMesh = mesh;
+      this.depthScene = scene;
+      this.depthCamera = camera;
+      adopted = true;
+      this.depthLoaded = true;
+      // Only now is the flat image trusted to replace the modeled table.
+      if (this.table) this.table.visible = false;
+      this.resize();
+    } catch (cause) {
+      if (token === this.depthToken && !this.disposed) {
+        // The stage's onError flips the whole scene to "failed", so a missing
+        // depth asset only logs and keeps the table + CSS backdrop fallback.
+        console.warn("stage_depth_unavailable", cause);
+      }
+    } finally {
+      if (!adopted) {
+        colorTexture?.dispose();
+        depthTexture?.dispose();
+        material?.dispose();
+        geometry?.dispose();
+      }
+    }
+  }
+
+  private loadDepthTexture(
+    loader: THREE.TextureLoader,
+    url: string,
+  ): Promise<THREE.Texture> {
+    return new Promise<THREE.Texture>((resolve, reject) => {
+      loader.load(url, resolve, undefined, (cause) => {
+        reject(
+          cause instanceof Error
+            ? cause
+            : new Error("stage_depth_texture_failed"),
+        );
+      });
+    });
+  }
+
+  private disposeDepthBackdrop(): void {
+    // Any later load result sees the bump and cleans up after itself.
+    this.depthToken += 1;
+    this.depthLoaded = false;
+    if (this.table) this.table.visible = true;
+    if (this.depthMesh) {
+      this.depthScene?.remove(this.depthMesh);
+      this.depthMesh.geometry.dispose();
+      this.depthMesh = null;
+    }
+    if (this.depthMaterial) {
+      this.depthMaterial.dispose();
+      this.depthMaterial = null;
+    }
+    for (const texture of this.depthTextures) texture.dispose();
+    this.depthTextures = [];
+    this.depthScene = null;
+    this.depthCamera = null;
   }
 
   private buildTable(): void {
@@ -943,7 +1200,15 @@ export class ScholarStage {
       if (this.disposed) return;
       const delta = Math.min(this.clock.getDelta(), 0.1);
       const elapsed = (performance.now() - this.startedAt) / 1000;
-      if (this.splatLoaded && this.splatScene && this.splatCamera) {
+      if (this.depthLoaded && this.depthScene && this.depthCamera) {
+        this.updateDepthMotion(elapsed);
+        this.renderer.autoClear = false;
+        this.renderer.clear();
+        this.renderer.render(this.depthScene, this.depthCamera);
+        // The depth backdrop pass writes real depth; clear it before the
+        // figures or the backdrop's z-buffer values would cull them.
+        this.renderer.clearDepth();
+      } else if (this.splatLoaded && this.splatScene && this.splatCamera) {
         this.updateSplatMotion(elapsed);
         this.renderer.autoClear = false;
         this.renderer.clear();
@@ -974,6 +1239,21 @@ export class ScholarStage {
     this.splatMesh.position.y = Math.cos(elapsed * 0.13) * drift;
   }
 
+  /**
+   * A near-imperceptible virtual camera sway, disabled for reduced motion.
+   * The mesh's overscan border absorbs the shift so no gap ever shows.
+   */
+  private updateDepthMotion(elapsed: number): void {
+    if (!this.depthMaterial) return;
+    const drift = this.reducedMotion
+      ? 0
+      : DEPTH_PARALLAX_SCALE * (DEPTH_FAR - DEPTH_NEAR);
+    this.depthMaterial.uniforms.uParallax.value.set(
+      Math.sin(elapsed * 0.11) * drift,
+      Math.cos(elapsed * 0.14) * drift,
+    );
+  }
+
   private resize(): void {
     const parent = this.canvas.parentElement;
     const width = Math.max(
@@ -995,6 +1275,12 @@ export class ScholarStage {
       this.splatCamera.aspect = aspect;
       this.splatCamera.fov = splatCameraFov(aspect);
       this.splatCamera.updateProjectionMatrix();
+    }
+    if (this.depthCamera) {
+      const aspect = this.camera.aspect;
+      this.depthCamera.aspect = aspect;
+      this.depthCamera.fov = depthCameraFov(aspect);
+      this.depthCamera.updateProjectionMatrix();
     }
     this.renderer.setSize(width, height, false);
   }
