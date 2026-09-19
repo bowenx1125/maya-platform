@@ -39,18 +39,23 @@
   height: 100%;
 }
 
-.cameraRoute {
+.cameraControls {
   position: absolute;
   z-index: 7;
   right: 20px;
   bottom: 18px;
   display: grid;
+  grid-template-areas:
+    ". . forward . ."
+    "turn-left left reset right turn-right"
+    ". . backward . .";
   grid-template-columns: repeat(5, 36px);
+  grid-template-rows: repeat(3, 36px);
   gap: 3px;
   pointer-events: auto;
 }
 
-.cameraRoute button {
+.cameraControls button {
   display: grid;
   place-items: center;
   width: 36px;
@@ -68,20 +73,45 @@
   backdrop-filter: blur(7px);
 }
 
-.cameraRoute button:hover,
-.cameraRoute button:focus-visible {
+.cameraControls button:hover,
+.cameraControls button:focus-visible {
   border-color: #b78631;
   background: rgba(255, 249, 230, 0.98);
   outline: 2px solid rgba(183, 134, 49, 0.24);
   outline-offset: 1px;
 }
 
-.cameraRoute button:active {
+.cameraControls button:active {
   transform: translateY(1px);
 }
 
 .cameraOverview {
+  grid-area: reset;
   color: #8b4f23 !important;
+}
+
+.cameraForward {
+  grid-area: forward;
+}
+
+.cameraBackward {
+  grid-area: backward;
+}
+
+.cameraLeft {
+  grid-area: left;
+}
+
+.cameraRight {
+  grid-area: right;
+}
+
+.cameraTurnLeft {
+  grid-area: turn-left;
+}
+
+.cameraTurnRight {
+  grid-area: turn-right;
 }
 
 .sceneNotice {

@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  allowedDevOrigins: ["127.0.0.1"],
   // Next 16 writes its own AGENTS.md and CLAUDE.md into this package on every
   // dev start. The repository already has authoritative agent rules at its
   // root, so the generated copies are noise the boundary check would flag.

@@ -11,9 +11,8 @@ import {
 
 import type { AvatarState } from "../avatar";
 import type {
-  DepthCameraRouteDirection,
-  DepthCameraZoomDirection,
   StageAnchor,
+  StageCameraCommand,
   StageCharacter,
 } from "./scholar-stage";
 import styles from "./stage3d.module.css";
@@ -63,10 +62,10 @@ export function ScholarScene({
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [depthCameraControls] = useState(
+  const [stageCameraControls] = useState(
     () =>
       typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("depth") === "1",
+      new URLSearchParams(window.location.search).get("splat") === "1",
   );
 
   // This effect runs before the stage-import effect below. Keeping the latest
@@ -168,30 +167,33 @@ export function ScholarScene({
     stageRef.current?.setResting(latestRestingRef.current);
   }, [resting]);
 
-  const stepDepthCamera = useCallback(
-    (direction: DepthCameraRouteDirection) => {
-      stageRef.current?.stepDepthCamera(direction);
-    },
-    [],
-  );
-
-  const resetDepthCamera = useCallback(() => {
-    stageRef.current?.resetDepthCamera();
+  const moveStageCamera = useCallback((command: StageCameraCommand) => {
+    stageRef.current?.moveStageCamera(command);
   }, []);
 
-  const zoomDepthCamera = useCallback((direction: DepthCameraZoomDirection) => {
-    stageRef.current?.zoomDepthCamera(direction);
+  const resetStageCamera = useCallback(() => {
+    stageRef.current?.resetStageCamera();
   }, []);
 
   useEffect(() => {
-    if (!depthCameraControls) return undefined;
-    const directions: Record<string, DepthCameraRouteDirection> = {
-      ArrowLeft: "previous",
-      a: "previous",
-      A: "previous",
-      ArrowRight: "next",
-      d: "next",
-      D: "next",
+    if (!stageCameraControls) return undefined;
+    const commands: Record<string, StageCameraCommand> = {
+      ArrowUp: "forward",
+      w: "forward",
+      W: "forward",
+      ArrowDown: "backward",
+      s: "backward",
+      S: "backward",
+      a: "left",
+      A: "left",
+      d: "right",
+      D: "right",
+      ArrowLeft: "turn-left",
+      q: "turn-left",
+      Q: "turn-left",
+      ArrowRight: "turn-right",
+      e: "turn-right",
+      E: "turn-right",
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
@@ -204,27 +206,17 @@ export function ScholarScene({
       }
       if (["Home", "r", "R"].includes(event.key)) {
         event.preventDefault();
-        resetDepthCamera();
+        resetStageCamera();
         return;
       }
-      if (["-", "_"].includes(event.key)) {
-        event.preventDefault();
-        zoomDepthCamera("out");
-        return;
-      }
-      if (["+", "="].includes(event.key)) {
-        event.preventDefault();
-        zoomDepthCamera("in");
-        return;
-      }
-      const direction = directions[event.key];
-      if (!direction) return;
+      const command = commands[event.key];
+      if (!command) return;
       event.preventDefault();
-      stepDepthCamera(direction);
+      moveStageCamera(command);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [depthCameraControls, resetDepthCamera, stepDepthCamera, zoomDepthCamera]);
+  }, [moveStageCamera, resetStageCamera, stageCameraControls]);
 
   const visualKey = characters
     .map((item) => `${item.id}:${visuals[item.id] ?? "idle"}`)
@@ -319,24 +311,35 @@ export function ScholarScene({
           </div>
         ) : null}
 
-        {status === "ready" && depthCameraControls ? (
+        {status === "ready" && stageCameraControls ? (
           <div
-            aria-label="场景机位"
-            className={styles.cameraRoute}
+            aria-label="场景相机"
+            className={styles.cameraControls}
             role="group"
           >
             <button
-              aria-label="拉远视角"
-              onClick={() => zoomDepthCamera("out")}
-              title="拉远视角"
+              aria-label="镜头向前移动"
+              className={styles.cameraForward}
+              onClick={() => moveStageCamera("forward")}
+              title="向前移动"
               type="button"
             >
-              −
+              ↑
             </button>
             <button
-              aria-label="上一个机位"
-              onClick={() => stepDepthCamera("previous")}
-              title="上一个机位"
+              aria-label="镜头向左转"
+              className={styles.cameraTurnLeft}
+              onClick={() => moveStageCamera("turn-left")}
+              title="向左转"
+              type="button"
+            >
+              ↶
+            </button>
+            <button
+              aria-label="镜头向左移动"
+              className={styles.cameraLeft}
+              onClick={() => moveStageCamera("left")}
+              title="向左移动"
               type="button"
             >
               ←
@@ -344,27 +347,38 @@ export function ScholarScene({
             <button
               aria-label="返回全景"
               className={styles.cameraOverview}
-              onClick={resetDepthCamera}
+              onClick={resetStageCamera}
               title="返回全景"
               type="button"
             >
               ◎
             </button>
             <button
-              aria-label="下一个机位"
-              onClick={() => stepDepthCamera("next")}
-              title="下一个机位"
+              aria-label="镜头向右移动"
+              className={styles.cameraRight}
+              onClick={() => moveStageCamera("right")}
+              title="向右移动"
               type="button"
             >
               →
             </button>
             <button
-              aria-label="拉近视角"
-              onClick={() => zoomDepthCamera("in")}
-              title="拉近视角"
+              aria-label="镜头向右转"
+              className={styles.cameraTurnRight}
+              onClick={() => moveStageCamera("turn-right")}
+              title="向右转"
               type="button"
             >
-              +
+              ↷
+            </button>
+            <button
+              aria-label="镜头向后移动"
+              className={styles.cameraBackward}
+              onClick={() => moveStageCamera("backward")}
+              title="向后移动"
+              type="button"
+            >
+              ↓
             </button>
           </div>
         ) : null}

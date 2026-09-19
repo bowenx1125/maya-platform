@@ -25,10 +25,9 @@ reconstruction. The low-spec classroom display has not been profiled.
 Keep the default classroom stage unchanged. The local `?splat=1` trial loads
 the ignored SOG in the existing WebGL canvas, overlays the figures and hides
 the procedural table only after loading succeeds. Missing media or decode
-failure keeps the static courtyard and procedural table. The view remains
-fixed, with only subtle background drift. A production splat needs consistent
-overlapping real views or a world-generation service result, a visually
-accepted table and floor, and measured Chrome/Edge performance.
+failure keeps the static courtyard and procedural table. A production splat
+needs consistent overlapping real views or a world-generation service result,
+a visually accepted table and floor, and measured Chrome/Edge performance.
 
 The trial uses Spark in the existing Three.js renderer and canvas, with a
 separate scene and camera for the calibrated single-view splat. Avoid embedding
@@ -46,13 +45,14 @@ shadow fixed under it. Slots A-E are five stable world positions; roster size
 and speaking state never translate a figure. Backdrop geometry never controls
 the character collision height.
 
-The depth trial uses a bounded camera route: overview, left-front, left-rear,
-rear-center, right-rear, right-front, then overview. Each close-up looks at its
-fixed slot while the background shader follows with conservative parallax. The
-damped route and bounded foreground zoom prove the figures are 3D without
-exposing the single image's unreconstructed back side. Zoom-out never widens
-the backdrop past its source coverage, and reset always returns to the authored
-overview and standard scale.
+The SOG trial is the navigation surface. Figures, table and splat mesh keep
+fixed world transforms. WASD translates one bounded camera rig, Q/E or the
+arrow controls rotate it, and reset returns to the authored overview. The same
+rig drives the foreground perspective camera and the calibrated SOG camera;
+there is no character follow, FOV zoom, model translation or background drift.
+The small bounds demonstrate spatial motion without claiming this single-image
+reconstruction has complete side or rear geometry. The sharp `?depth=1` trial
+remains a fixed view.
 
 ## References
 

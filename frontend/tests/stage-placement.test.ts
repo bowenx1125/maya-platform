@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   STAGE_SLOTS,
-  stageCameraRoute,
   standingPlacement,
 } from "../components/stage3d/placement";
 
@@ -26,17 +25,5 @@ describe("roundtable standing placement", () => {
     expect(standingPlacement("C")).toEqual(standingPlacement("C"));
     expect(standingPlacement("E").x).toBe(0);
     expect(standingPlacement("E").z).toBeLessThan(standingPlacement("C").z);
-  });
-
-  it("routes only through occupied slots in a stable spatial sweep", () => {
-    expect(stageCameraRoute(["A", "B"])).toEqual(["overview", "A", "B"]);
-    expect(stageCameraRoute(STAGE_SLOTS)).toEqual([
-      "overview",
-      "A",
-      "C",
-      "E",
-      "D",
-      "B",
-    ]);
   });
 });
