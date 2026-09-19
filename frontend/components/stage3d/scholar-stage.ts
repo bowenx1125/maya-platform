@@ -140,6 +140,14 @@ const DEPTH_MESH_SEGMENTS_Y = 150;
 const DEPTH_EDGE_BLEED = 1.05;
 /** Parallax amplitude as a fraction of the remapped depth range. */
 const DEPTH_PARALLAX_SCALE = 0.004;
+const DEPTH_CAMERA_LATERAL_STEP = 0.045;
+const DEPTH_CAMERA_DOLLY_STEP = 0.08;
+const DEPTH_CAMERA_LATERAL_LIMIT = 0.18;
+const DEPTH_CAMERA_DOLLY_LIMIT = 0.24;
+const DEPTH_FOREGROUND_LATERAL_SCALE = 2;
+const DEPTH_FOREGROUND_DOLLY_SCALE = 3;
+
+export type DepthCameraDirection = "forward" | "backward" | "left" | "right";
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
@@ -256,6 +264,7 @@ function depthCameraFov(aspect: number): number {
 const DEPTH_VERTEX_SHADER = /* glsl */ `
   uniform sampler2D uDepth;
   uniform vec2 uParallax;
+  uniform float uDolly;
   uniform float uNear;
   uniform float uFar;
   uniform float uTanHalfFov;
@@ -273,7 +282,7 @@ const DEPTH_VERTEX_SHADER = /* glsl */ `
     vec3 view = vec3(
       ndc.x * uTanHalfFov * uSourceAspect * dist,
       ndc.y * uTanHalfFov * dist,
-      -dist
+      -(dist - uDolly)
     );
     // A virtual camera translation: near pixels shift more than far ones.
     view.xy -= uParallax;
@@ -450,6 +459,7 @@ export class ScholarStage {
   private lastAnchorAt = 0;
   private width = 0;
   private height = 0;
+  private cameraBaseZ = DEFAULT_CAMERA_Z;
   private disposed = false;
   private resting = true;
   private reducedMotion = false;
@@ -472,6 +482,8 @@ export class ScholarStage {
   private depthTextures: THREE.Texture[] = [];
   private depthLoaded = false;
   private depthToken = 0;
+  private readonly depthCameraTarget = new THREE.Vector2();
+  private readonly depthCameraCurrent = new THREE.Vector2();
 
   private readonly projection = new THREE.Vector3();
   private readonly offsetEuler = new THREE.Euler();
@@ -551,6 +563,33 @@ export class ScholarStage {
     character.stateStartedAt = performance.now();
     character.forward = state === "speaking" ? SPEAKER_STEP_FORWARD : 0;
     this.applyExpression(character);
+  }
+
+  moveDepthCamera(direction: DepthCameraDirection): void {
+    if (stageBackdropMode() !== "depth") return;
+    if (direction === "left") {
+      this.depthCameraTarget.x -= DEPTH_CAMERA_LATERAL_STEP;
+    } else if (direction === "right") {
+      this.depthCameraTarget.x += DEPTH_CAMERA_LATERAL_STEP;
+    } else if (direction === "forward") {
+      this.depthCameraTarget.y += DEPTH_CAMERA_DOLLY_STEP;
+    } else {
+      this.depthCameraTarget.y -= DEPTH_CAMERA_DOLLY_STEP;
+    }
+    this.depthCameraTarget.x = THREE.MathUtils.clamp(
+      this.depthCameraTarget.x,
+      -DEPTH_CAMERA_LATERAL_LIMIT,
+      DEPTH_CAMERA_LATERAL_LIMIT,
+    );
+    this.depthCameraTarget.y = THREE.MathUtils.clamp(
+      this.depthCameraTarget.y,
+      -DEPTH_CAMERA_DOLLY_LIMIT,
+      DEPTH_CAMERA_DOLLY_LIMIT,
+    );
+  }
+
+  resetDepthCamera(): void {
+    this.depthCameraTarget.set(0, 0);
   }
 
   dispose(): void {
@@ -754,6 +793,7 @@ export class ScholarStage {
           uColor: { value: colorTexture },
           uDepth: { value: depthTexture },
           uParallax: { value: new THREE.Vector2(0, 0) },
+          uDolly: { value: 0 },
           uNear: { value: DEPTH_NEAR },
           uFar: { value: DEPTH_FAR },
           // The source camera constants: NDC is unprojected exactly as the
@@ -1071,7 +1111,19 @@ export class ScholarStage {
       aspect < 0.75 && rosterSize === 2
         ? requiredDistance * 0.86
         : requiredDistance;
-    this.camera.position.z = Math.max(DEFAULT_CAMERA_Z, distance);
+    this.cameraBaseZ = Math.max(DEFAULT_CAMERA_Z, distance);
+    this.applyDepthForegroundCamera();
+  }
+
+  private applyDepthForegroundCamera(): void {
+    const depthMode = stageBackdropMode() === "depth";
+    this.camera.position.x = depthMode
+      ? this.depthCameraCurrent.x * DEPTH_FOREGROUND_LATERAL_SCALE
+      : 0;
+    this.camera.position.z = depthMode
+      ? this.cameraBaseZ -
+        this.depthCameraCurrent.y * DEPTH_FOREGROUND_DOLLY_SCALE
+      : this.cameraBaseZ;
     this.camera.lookAt(CAMERA_TARGET);
   }
 
@@ -1269,7 +1321,7 @@ export class ScholarStage {
       const delta = Math.min(this.clock.getDelta(), 0.1);
       const elapsed = (performance.now() - this.startedAt) / 1000;
       if (this.depthLoaded && this.depthScene && this.depthCamera) {
-        this.updateDepthMotion(elapsed);
+        this.updateDepthMotion(elapsed, delta);
         this.renderer.autoClear = false;
         this.renderer.clear();
         this.renderer.render(this.depthScene, this.depthCamera);
@@ -1311,15 +1363,29 @@ export class ScholarStage {
    * A near-imperceptible virtual camera sway, disabled for reduced motion.
    * The mesh's overscan border absorbs the shift so no gap ever shows.
    */
-  private updateDepthMotion(elapsed: number): void {
+  private updateDepthMotion(elapsed: number, delta: number): void {
     if (!this.depthMaterial) return;
+    this.depthCameraCurrent.x = THREE.MathUtils.damp(
+      this.depthCameraCurrent.x,
+      this.depthCameraTarget.x,
+      7,
+      delta,
+    );
+    this.depthCameraCurrent.y = THREE.MathUtils.damp(
+      this.depthCameraCurrent.y,
+      this.depthCameraTarget.y,
+      7,
+      delta,
+    );
     const drift = this.reducedMotion
       ? 0
       : DEPTH_PARALLAX_SCALE * (DEPTH_FAR - DEPTH_NEAR);
     this.depthMaterial.uniforms.uParallax.value.set(
-      Math.sin(elapsed * 0.11) * drift,
+      this.depthCameraCurrent.x + Math.sin(elapsed * 0.11) * drift,
       Math.cos(elapsed * 0.14) * drift,
     );
+    this.depthMaterial.uniforms.uDolly.value = this.depthCameraCurrent.y;
+    this.applyDepthForegroundCamera();
   }
 
   private resize(): void {

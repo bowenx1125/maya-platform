@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarState, AvatarConfig } from "../components/avatar";
@@ -17,6 +17,8 @@ const stageMock = vi.hoisted(() => {
     rosters: unknown[][];
     visuals: { id: string; state: string }[];
     resting: boolean[];
+    cameraMoves: string[];
+    cameraResets: number;
     disposed: boolean;
   };
 
@@ -27,6 +29,8 @@ const stageMock = vi.hoisted(() => {
     readonly rosters: unknown[][] = [];
     readonly visuals: { id: string; state: string }[] = [];
     readonly resting: boolean[] = [];
+    readonly cameraMoves: string[] = [];
+    cameraResets = 0;
     disposed = false;
 
     constructor(options: StageOptions) {
@@ -46,6 +50,14 @@ const stageMock = vi.hoisted(() => {
       this.resting.push(value);
     }
 
+    moveDepthCamera(direction: string): void {
+      this.cameraMoves.push(direction);
+    }
+
+    resetDepthCamera(): void {
+      this.cameraResets += 1;
+    }
+
     dispose(): void {
       this.disposed = true;
     }
@@ -62,6 +74,7 @@ afterEach(() => cleanup());
 
 beforeEach(() => {
   stageMock.instances.length = 0;
+  window.history.replaceState(null, "", "/");
 });
 
 const avatarConfig: AvatarConfig = {
@@ -188,5 +201,24 @@ describe("ScholarScene asynchronous initialization", () => {
     expect(
       view.container.querySelector('[data-layout="preview"]'),
     ).toBeTruthy();
+  });
+
+  it("wires depth camera buttons and keyboard movement to the stage", async () => {
+    window.history.replaceState(null, "", "/?depth=1");
+    const view = renderScene(
+      [character("participant-a", "A", "River Keeper")],
+      { "participant-a": "idle" },
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    const stage = stageMock.instances[0];
+    stage.options.onReady?.();
+
+    const forward = await view.findByRole("button", { name: "相机向前" });
+    fireEvent.click(forward);
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(stage.cameraMoves).toEqual(["forward", "left"]);
+
+    fireEvent.click(view.getByRole("button", { name: "复位相机" }));
+    expect(stage.cameraResets).toBe(1);
   });
 });

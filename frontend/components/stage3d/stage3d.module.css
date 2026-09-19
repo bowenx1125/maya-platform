@@ -39,6 +39,73 @@
   height: 100%;
 }
 
+.cameraPad {
+  position: absolute;
+  z-index: 7;
+  right: 20px;
+  bottom: 18px;
+  display: grid;
+  grid-template-areas:
+    ". forward ."
+    "left reset right"
+    ". backward .";
+  grid-template-columns: repeat(3, 36px);
+  grid-template-rows: repeat(3, 36px);
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.cameraPad button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(191, 144, 55, 0.66);
+  border-radius: 5px;
+  background: rgba(255, 253, 246, 0.88);
+  box-shadow: 0 3px 10px rgba(48, 36, 23, 0.18);
+  color: var(--indigo-dark, #303c66);
+  font:
+    700 1.12rem/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+  backdrop-filter: blur(7px);
+}
+
+.cameraPad button:hover,
+.cameraPad button:focus-visible {
+  border-color: #b78631;
+  background: rgba(255, 249, 230, 0.98);
+  outline: 2px solid rgba(183, 134, 49, 0.24);
+  outline-offset: 1px;
+}
+
+.cameraPad button:active {
+  transform: translateY(1px);
+}
+
+.cameraForward {
+  grid-area: forward;
+}
+
+.cameraBackward {
+  grid-area: backward;
+}
+
+.cameraLeft {
+  grid-area: left;
+}
+
+.cameraRight {
+  grid-area: right;
+}
+
+.cameraReset {
+  grid-area: reset;
+  color: #8b4f23 !important;
+}
+
 .sceneNotice {
   position: absolute;
   z-index: 4;

@@ -45,6 +45,12 @@ resolves each visible model bound onto one top surface, while a compact contact
 shadow follows forward speech movement. Backdrop geometry never controls the
 character collision height.
 
+The depth trial exposes bounded forward, backward, left and right camera steps.
+The background shader and foreground perspective camera move together with a
+damped transition; a reset control returns both to the authored viewpoint.
+The limits demonstrate parallax without pretending the single image has a
+reconstructed back side.
+
 ## References
 
 - [BLUNT](https://github.com/SonnyC56/blunt)

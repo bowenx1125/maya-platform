@@ -10,7 +10,11 @@ import {
 } from "react";
 
 import type { AvatarState } from "../avatar";
-import type { StageAnchor, StageCharacter } from "./scholar-stage";
+import type {
+  DepthCameraDirection,
+  StageAnchor,
+  StageCharacter,
+} from "./scholar-stage";
 import styles from "./stage3d.module.css";
 
 export type ScholarSceneProps = {
@@ -58,6 +62,11 @@ export function ScholarScene({
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [depthCameraControls] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("depth") === "1",
+  );
 
   // This effect runs before the stage-import effect below. Keeping the latest
   // values outside the async callback prevents a roster change during GLB
@@ -158,6 +167,44 @@ export function ScholarScene({
     stageRef.current?.setResting(latestRestingRef.current);
   }, [resting]);
 
+  const moveDepthCamera = useCallback((direction: DepthCameraDirection) => {
+    stageRef.current?.moveDepthCamera(direction);
+  }, []);
+
+  useEffect(() => {
+    if (!depthCameraControls) return undefined;
+    const directions: Record<string, DepthCameraDirection> = {
+      ArrowUp: "forward",
+      w: "forward",
+      W: "forward",
+      ArrowDown: "backward",
+      s: "backward",
+      S: "backward",
+      ArrowLeft: "left",
+      a: "left",
+      A: "left",
+      ArrowRight: "right",
+      d: "right",
+      D: "right",
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      const direction = directions[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      moveDepthCamera(direction);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [depthCameraControls, moveDepthCamera]);
+
   const visualKey = characters
     .map((item) => `${item.id}:${visuals[item.id] ?? "idle"}`)
     .join("|");
@@ -248,6 +295,56 @@ export function ScholarScene({
           >
             <span className={styles.bubbleWho}>{speakingCharacter?.name}</span>
             {bubbleWindow}
+          </div>
+        ) : null}
+
+        {status === "ready" && depthCameraControls ? (
+          <div aria-label="场景视角" className={styles.cameraPad} role="group">
+            <button
+              aria-label="相机向前"
+              className={styles.cameraForward}
+              onClick={() => moveDepthCamera("forward")}
+              title="向前"
+              type="button"
+            >
+              ↑
+            </button>
+            <button
+              aria-label="相机向左"
+              className={styles.cameraLeft}
+              onClick={() => moveDepthCamera("left")}
+              title="向左"
+              type="button"
+            >
+              ←
+            </button>
+            <button
+              aria-label="复位相机"
+              className={styles.cameraReset}
+              onClick={() => stageRef.current?.resetDepthCamera()}
+              title="复位"
+              type="button"
+            >
+              ↺
+            </button>
+            <button
+              aria-label="相机向右"
+              className={styles.cameraRight}
+              onClick={() => moveDepthCamera("right")}
+              title="向右"
+              type="button"
+            >
+              →
+            </button>
+            <button
+              aria-label="相机向后"
+              className={styles.cameraBackward}
+              onClick={() => moveDepthCamera("backward")}
+              title="向后"
+              type="button"
+            >
+              ↓
+            </button>
           </div>
         ) : null}
       </div>
