@@ -40,6 +40,11 @@ texture on a depth-displaced mesh. It keeps mild spatial parallax without
 discarding image detail, remains opt-in, and falls back to the static courtyard
 and procedural table when either local texture is unavailable.
 
+Characters stay in the foreground Three.js scene. An invisible floor slab
+resolves each visible model bound onto one top surface, while a compact contact
+shadow follows forward speech movement. Backdrop geometry never controls the
+character collision height.
+
 ## References
 
 - [BLUNT](https://github.com/SonnyC56/blunt)

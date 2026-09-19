@@ -99,6 +99,9 @@ const TABLE_RADIUS = 0.86;
 const TABLE_TOP_Y = 0.72;
 const TABLE_CENTER_Z = 0.2;
 const FLOOR_Y = -0.42;
+const FLOOR_COLLIDER_WIDTH = 7.2;
+const FLOOR_COLLIDER_DEPTH = 6.4;
+const FLOOR_COLLIDER_THICKNESS = 0.08;
 const STANDING_RADIUS = 1.6;
 /** Jaw opening angle while a character is speaking, in radians. */
 const JAW_OPEN_ANGLE = 0.28;
@@ -431,6 +434,7 @@ export class ScholarStage {
   private readonly draco = new DRACOLoader();
   private readonly shadowTexture = makeSoftShadow();
   private readonly woodTexture = makeWoodTexture();
+  private readonly floorCollider: THREE.Mesh;
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
@@ -498,6 +502,7 @@ export class ScholarStage {
     fill.position.set(3, 1.4, 2);
     this.scene.add(fill);
 
+    this.floorCollider = this.buildFloorCollider();
     this.buildTable();
 
     this.renderer = new THREE.WebGLRenderer({
@@ -571,6 +576,8 @@ export class ScholarStage {
       disposeObject(this.table);
       this.table = null;
     }
+    this.scene.remove(this.floorCollider);
+    disposeObject(this.floorCollider);
     this.shadowTexture.dispose();
     this.woodTexture.dispose();
     this.disposeSplatBackdrop();
@@ -910,6 +917,62 @@ export class ScholarStage {
     this.scene.add(group);
   }
 
+  /**
+   * A shallow invisible slab gives every figure the same collision surface.
+   * It remains separate from the visual backdrop because that backdrop can be
+   * CSS, splats, or a depth mesh depending on the selected trial.
+   */
+  private buildFloorCollider(): THREE.Mesh {
+    const collider = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        FLOOR_COLLIDER_WIDTH,
+        FLOOR_COLLIDER_THICKNESS,
+        FLOOR_COLLIDER_DEPTH,
+      ),
+      new THREE.MeshBasicMaterial(),
+    );
+    collider.name = "stage-floor-collider";
+    collider.position.set(
+      0,
+      FLOOR_Y - FLOOR_COLLIDER_THICKNESS / 2,
+      TABLE_CENTER_Z,
+    );
+    collider.visible = false;
+    this.scene.add(collider);
+    return collider;
+  }
+
+  /** Resolve vertical overlap against the slab and return its top surface. */
+  private groundCharacter(root: THREE.Object3D): number {
+    root.updateWorldMatrix(true, true);
+    const body = new THREE.Box3();
+    root.traverse((object) => {
+      if (!isMorphMesh(object) || !object.visible) return;
+      let ancestor = object.parent;
+      while (ancestor && ancestor !== root) {
+        if (!ancestor.visible) return;
+        ancestor = ancestor.parent;
+      }
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      if (object.geometry.boundingBox) {
+        body.union(
+          object.geometry.boundingBox.clone().applyMatrix4(object.matrixWorld),
+        );
+      }
+    });
+    const floor = new THREE.Box3().setFromObject(this.floorCollider);
+    if (body.isEmpty()) return floor.max.y;
+    const center = body.getCenter(new THREE.Vector3());
+    const insideFloor =
+      center.x >= floor.min.x &&
+      center.x <= floor.max.x &&
+      center.z >= floor.min.z &&
+      center.z <= floor.max.z;
+    const groundY = insideFloor ? floor.max.y : FLOOR_Y;
+    root.position.y += groundY - body.min.y;
+    return groundY;
+  }
+
   private rebuild(specs: StageCharacter[]): void {
     for (const character of this.characters) {
       this.scene.remove(character.root);
@@ -932,25 +995,27 @@ export class ScholarStage {
       const offset = standingPlacement(index, count);
       const standingX = offset.x;
       const standingZ = TABLE_CENTER_Z + offset.z;
-      root.position.set(standingX, FLOOR_Y, standingZ);
+      root.position.set(standingX, 0, standingZ);
       root.rotation.y = offset.yaw;
       poseArms(root);
+      const meshes: MorphMesh[] = [];
+      this.styleFigure(root, spec.config, meshes);
+      const groundY = this.groundCharacter(root);
       const shadow = new THREE.Mesh(
-        new THREE.CircleGeometry(0.38, 32),
+        new THREE.CircleGeometry(0.34, 32),
         new THREE.MeshBasicMaterial({
           color: 0x34291e,
           map: this.shadowTexture,
           transparent: true,
-          opacity: 0.3,
+          opacity: 0.4,
           depthWrite: false,
         }),
       );
       shadow.rotation.x = -Math.PI / 2;
-      shadow.position.set(standingX, FLOOR_Y - 0.02, standingZ);
+      shadow.scale.y = 0.58;
+      shadow.position.set(standingX, groundY + 0.004, standingZ);
       this.scene.add(shadow);
 
-      const meshes: MorphMesh[] = [];
-      this.styleFigure(root, spec.config, meshes);
       const headBone = findBone(root, HEAD_BONE_NAMES);
       const neckBone = findBone(root, ["neck"]);
       const torsoBone = findBone(root, ["spine2", "spine1", "spine"]);
@@ -1028,7 +1093,10 @@ export class ScholarStage {
       if (!isMorphMesh(object)) return;
       // The elder FBX includes a wide decorative plane named "aa" that
       // otherwise leaves detached fragments across the classroom stage.
-      if (object.name === "aa") object.visible = false;
+      if (object.name === "aa") {
+        object.visible = false;
+        return;
+      }
       object.frustumCulled = false;
       if (object.morphTargetDictionary && object.morphTargetInfluences) {
         meshes.push(object);

@@ -326,7 +326,7 @@ Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
 failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
-Sep 18: perspective, controls and lighting polished; desktop/390/320px checked.
+Sep 19: controls, grounding and lighting polished; 390/320px checked.
 Immerse keeps the teacher dock; local transcript translucent. Teacher/Mac audit
 open. Courtyard trials: soft SOG (`?splat=1`), sharp mesh (`?depth=1`); see
 [ADR-007](adr/ADR-007-courtyard-splat.md).
