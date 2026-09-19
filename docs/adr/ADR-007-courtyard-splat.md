@@ -41,15 +41,18 @@ discarding image detail, remains opt-in, and falls back to the static courtyard
 and procedural table when either local texture is unavailable.
 
 Characters stay in the foreground Three.js scene. An invisible floor slab
-resolves each visible model bound onto one top surface, while a compact contact
-shadow follows forward speech movement. Backdrop geometry never controls the
-character collision height.
+resolves each visible model bound onto one top surface, with a compact contact
+shadow fixed under it. Slots A-E are five stable world positions; roster size
+and speaking state never translate a figure. Backdrop geometry never controls
+the character collision height.
 
-The depth trial exposes bounded forward, backward, left and right camera steps.
-The background shader and foreground perspective camera move together with a
-damped transition; a reset control returns both to the authored viewpoint.
-The limits demonstrate parallax without pretending the single image has a
-reconstructed back side.
+The depth trial uses a bounded camera route: overview, left-front, left-rear,
+rear-center, right-rear, right-front, then overview. Each close-up looks at its
+fixed slot while the background shader follows with conservative parallax. The
+damped route and bounded foreground zoom prove the figures are 3D without
+exposing the single image's unreconstructed back side. Zoom-out never widens
+the backdrop past its source coverage, and reset always returns to the authored
+overview and standard scale.
 
 ## References
 

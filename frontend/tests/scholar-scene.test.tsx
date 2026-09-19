@@ -17,7 +17,8 @@ const stageMock = vi.hoisted(() => {
     rosters: unknown[][];
     visuals: { id: string; state: string }[];
     resting: boolean[];
-    cameraMoves: string[];
+    cameraSteps: string[];
+    cameraZooms: string[];
     cameraResets: number;
     disposed: boolean;
   };
@@ -29,7 +30,8 @@ const stageMock = vi.hoisted(() => {
     readonly rosters: unknown[][] = [];
     readonly visuals: { id: string; state: string }[] = [];
     readonly resting: boolean[] = [];
-    readonly cameraMoves: string[] = [];
+    readonly cameraSteps: string[] = [];
+    readonly cameraZooms: string[] = [];
     cameraResets = 0;
     disposed = false;
 
@@ -50,8 +52,12 @@ const stageMock = vi.hoisted(() => {
       this.resting.push(value);
     }
 
-    moveDepthCamera(direction: string): void {
-      this.cameraMoves.push(direction);
+    stepDepthCamera(direction: string): void {
+      this.cameraSteps.push(direction);
+    }
+
+    zoomDepthCamera(direction: string): void {
+      this.cameraZooms.push(direction);
     }
 
     resetDepthCamera(): void {
@@ -203,7 +209,7 @@ describe("ScholarScene asynchronous initialization", () => {
     ).toBeTruthy();
   });
 
-  it("wires depth camera buttons and keyboard movement to the stage", async () => {
+  it("wires the guided camera route to buttons and keyboard", async () => {
     window.history.replaceState(null, "", "/?depth=1");
     const view = renderScene(
       [character("participant-a", "A", "River Keeper")],
@@ -213,12 +219,17 @@ describe("ScholarScene asynchronous initialization", () => {
     const stage = stageMock.instances[0];
     stage.options.onReady?.();
 
-    const forward = await view.findByRole("button", { name: "相机向前" });
-    fireEvent.click(forward);
+    const next = await view.findByRole("button", { name: "下一个机位" });
+    fireEvent.click(next);
     fireEvent.keyDown(window, { key: "ArrowLeft" });
-    expect(stage.cameraMoves).toEqual(["forward", "left"]);
+    expect(stage.cameraSteps).toEqual(["next", "previous"]);
 
-    fireEvent.click(view.getByRole("button", { name: "复位相机" }));
-    expect(stage.cameraResets).toBe(1);
+    fireEvent.click(view.getByRole("button", { name: "拉远视角" }));
+    fireEvent.keyDown(window, { key: "+" });
+    expect(stage.cameraZooms).toEqual(["out", "in"]);
+
+    fireEvent.click(view.getByRole("button", { name: "返回全景" }));
+    fireEvent.keyDown(window, { key: "Home" });
+    expect(stage.cameraResets).toBe(2);
   });
 });

@@ -326,7 +326,7 @@ Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
 failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
-Sep 19: bounded camera controls and grounding; 390/320px checked.
+Sep 19: five fixed slots, guided camera route and grounding; 390/320px checked.
 Immerse keeps the teacher dock; local transcript translucent. Teacher/Mac audit
 open. Courtyard trials: soft SOG (`?splat=1`), sharp mesh (`?depth=1`); see
 [ADR-007](adr/ADR-007-courtyard-splat.md).

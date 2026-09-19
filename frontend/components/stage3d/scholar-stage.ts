@@ -16,11 +16,17 @@ import {
   STAGE_DECODER_PATH,
   isStageAssetUrl,
 } from "./assets";
-import { standingPlacement } from "./placement";
+import {
+  STAGE_STANDING_RADIUS,
+  stageCameraRoute,
+  standingPlacement,
+  type StageCameraStop,
+  type StageSlot,
+} from "./placement";
 
 export type StageCharacter = {
   id: string;
-  slot: "A" | "B" | "C" | "D" | "E";
+  slot: StageSlot;
   name: string;
   config: AvatarConfig;
 };
@@ -84,8 +90,6 @@ const EXPRESSION_TARGETS: Record<AvatarExpression, Record<string, number>> = {
 const EXPRESSION_STRENGTH: Record<AvatarConfig["expression_strength"], number> =
   { low: 0.35, medium: 0.65, high: 1 };
 
-/** How far the speaker leans toward the table, in model heights. */
-const SPEAKER_STEP_FORWARD = 0.16;
 const NORMALISED_HEIGHT = 1.7;
 const ANCHOR_INTERVAL_MS = 60;
 const CAMERA_FOV_DEGREES = 34;
@@ -102,7 +106,6 @@ const FLOOR_Y = -0.42;
 const FLOOR_COLLIDER_WIDTH = 7.2;
 const FLOOR_COLLIDER_DEPTH = 6.4;
 const FLOOR_COLLIDER_THICKNESS = 0.08;
-const STANDING_RADIUS = 1.6;
 /** Jaw opening angle while a character is speaking, in radians. */
 const JAW_OPEN_ANGLE = 0.28;
 
@@ -140,14 +143,16 @@ const DEPTH_MESH_SEGMENTS_Y = 150;
 const DEPTH_EDGE_BLEED = 1.05;
 /** Parallax amplitude as a fraction of the remapped depth range. */
 const DEPTH_PARALLAX_SCALE = 0.004;
-const DEPTH_CAMERA_LATERAL_STEP = 0.045;
-const DEPTH_CAMERA_DOLLY_STEP = 0.08;
-const DEPTH_CAMERA_LATERAL_LIMIT = 0.18;
-const DEPTH_CAMERA_DOLLY_LIMIT = 0.24;
-const DEPTH_FOREGROUND_LATERAL_SCALE = 2;
-const DEPTH_FOREGROUND_DOLLY_SCALE = 3;
+const DEPTH_ROUTE_PARALLAX = 0.13;
+const DEPTH_ROUTE_DOLLY = 0.2;
+const DEPTH_ROUTE_CLOSE_DISTANCE = 2.7;
+const DEPTH_ROUTE_DAMPING = 3.8;
+const DEPTH_ZOOM_STEP = 0.05;
+const DEPTH_ZOOM_MIN = 0.85;
+const DEPTH_ZOOM_MAX = 1.15;
 
-export type DepthCameraDirection = "forward" | "backward" | "left" | "right";
+export type DepthCameraRouteDirection = "previous" | "next";
+export type DepthCameraZoomDirection = "in" | "out";
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
@@ -168,10 +173,8 @@ type Character = {
   jawBone: THREE.Object3D | null;
   jawRest: THREE.Quaternion | null;
   hasSpeechMorph: boolean;
-  homeZ: number;
   state: AvatarState;
   stateStartedAt: number;
-  forward: number;
 };
 
 /** Bone naming differs between the two purchased figures. */
@@ -484,6 +487,21 @@ export class ScholarStage {
   private depthToken = 0;
   private readonly depthCameraTarget = new THREE.Vector2();
   private readonly depthCameraCurrent = new THREE.Vector2();
+  private depthCameraStop: StageCameraStop = "overview";
+  private readonly foregroundCameraPosition = new THREE.Vector3(
+    0,
+    CAMERA_HEIGHT,
+    DEFAULT_CAMERA_Z,
+  );
+  private readonly foregroundCameraPositionTarget = new THREE.Vector3(
+    0,
+    CAMERA_HEIGHT,
+    DEFAULT_CAMERA_Z,
+  );
+  private readonly foregroundCameraLookAt = CAMERA_TARGET.clone();
+  private readonly foregroundCameraLookAtTarget = CAMERA_TARGET.clone();
+  private depthCameraZoom = 1;
+  private depthCameraZoomTarget = 1;
 
   private readonly projection = new THREE.Vector3();
   private readonly offsetEuler = new THREE.Euler();
@@ -499,9 +517,8 @@ export class ScholarStage {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEGREES, 1, 0.1, 60);
-    // A fixed view across the table: the whole composition is built for
-    // this one perspective, so the camera never moves — only the framing
-    // distance adapts as the roster grows.
+    // The overview is the stable teaching view. The opt-in depth trial may
+    // leave it only through the bounded route defined above.
     this.camera.position.set(0, CAMERA_HEIGHT, DEFAULT_CAMERA_Z);
     this.camera.lookAt(CAMERA_TARGET);
     this.scene.add(this.camera);
@@ -561,35 +578,35 @@ export class ScholarStage {
     if (!character || character.state === state) return;
     character.state = state;
     character.stateStartedAt = performance.now();
-    character.forward = state === "speaking" ? SPEAKER_STEP_FORWARD : 0;
     this.applyExpression(character);
   }
 
-  moveDepthCamera(direction: DepthCameraDirection): void {
+  stepDepthCamera(direction: DepthCameraRouteDirection): void {
     if (stageBackdropMode() !== "depth") return;
-    if (direction === "left") {
-      this.depthCameraTarget.x -= DEPTH_CAMERA_LATERAL_STEP;
-    } else if (direction === "right") {
-      this.depthCameraTarget.x += DEPTH_CAMERA_LATERAL_STEP;
-    } else if (direction === "forward") {
-      this.depthCameraTarget.y += DEPTH_CAMERA_DOLLY_STEP;
-    } else {
-      this.depthCameraTarget.y -= DEPTH_CAMERA_DOLLY_STEP;
-    }
-    this.depthCameraTarget.x = THREE.MathUtils.clamp(
-      this.depthCameraTarget.x,
-      -DEPTH_CAMERA_LATERAL_LIMIT,
-      DEPTH_CAMERA_LATERAL_LIMIT,
+    const route = stageCameraRoute(
+      this.characters.map((character) => character.spec.slot),
     );
-    this.depthCameraTarget.y = THREE.MathUtils.clamp(
-      this.depthCameraTarget.y,
-      -DEPTH_CAMERA_DOLLY_LIMIT,
-      DEPTH_CAMERA_DOLLY_LIMIT,
+    const currentIndex = Math.max(0, route.indexOf(this.depthCameraStop));
+    const step = direction === "next" ? 1 : -1;
+    this.depthCameraStop =
+      route[(currentIndex + step + route.length) % route.length] ?? "overview";
+    this.updateDepthCameraTargets();
+  }
+
+  zoomDepthCamera(direction: DepthCameraZoomDirection): void {
+    if (stageBackdropMode() !== "depth") return;
+    const step = direction === "in" ? DEPTH_ZOOM_STEP : -DEPTH_ZOOM_STEP;
+    this.depthCameraZoomTarget = THREE.MathUtils.clamp(
+      this.depthCameraZoomTarget + step,
+      DEPTH_ZOOM_MIN,
+      DEPTH_ZOOM_MAX,
     );
   }
 
   resetDepthCamera(): void {
-    this.depthCameraTarget.set(0, 0);
+    this.depthCameraStop = "overview";
+    this.depthCameraZoomTarget = 1;
+    this.updateDepthCameraTargets();
   }
 
   dispose(): void {
@@ -1021,9 +1038,14 @@ export class ScholarStage {
       disposeObject(character.shadow);
     }
     this.characters.length = 0;
+    if (
+      this.depthCameraStop !== "overview" &&
+      !specs.some((spec) => spec.slot === this.depthCameraStop)
+    ) {
+      this.depthCameraStop = "overview";
+    }
     if (this.templates.length === 0) return;
 
-    const count = Math.max(1, specs.length);
     specs.forEach((spec, index) => {
       // Deterministic variant per seat: load order is the roster order, so a
       // given roster always renders the same mix of the two figures.
@@ -1032,7 +1054,7 @@ export class ScholarStage {
         this.templates[templateIndex] as THREE.Object3D,
       );
       root.scale.setScalar(this.templateScales[templateIndex]);
-      const offset = standingPlacement(index, count);
+      const offset = standingPlacement(spec.slot);
       const standingX = offset.x;
       const standingZ = TABLE_CENTER_Z + offset.z;
       root.position.set(standingX, 0, standingZ);
@@ -1079,10 +1101,8 @@ export class ScholarStage {
             mesh.morphTargetDictionary?.mouthOpen !== undefined ||
             mesh.morphTargetDictionary?.jawOpen !== undefined,
         ),
-        homeZ: standingZ,
         state: "idle",
         stateStartedAt: performance.now(),
-        forward: 0,
       };
       this.applyExpression(character);
       this.scene.add(root);
@@ -1092,19 +1112,19 @@ export class ScholarStage {
   }
 
   /**
-   * Keep heads, table and bubbles inside the visible safe viewport as the
-   * roster grows, by pulling the fixed camera straight back along its axis.
+   * Keep every reserved slot, the table and bubbles inside the overview. The
+   * close-up route derives from the same responsive base distance.
    */
   private updateCameraFraming(): void {
     // Imported skinned-mesh bounds include distant rig helpers; frame the
     // authored standing ring instead of letting those helpers shrink the stage.
-    const outer = STANDING_RADIUS + 0.5;
+    const outer = STAGE_STANDING_RADIUS + 0.5;
     const halfWidth = Math.max(TABLE_RADIUS + 0.55, outer) * CAMERA_EDGE_MARGIN;
     const aspect = Math.max(this.camera.aspect, 0.1);
     const halfFovRadians = THREE.MathUtils.degToRad(CAMERA_FOV_DEGREES / 2);
     const requiredDistance =
       halfWidth / Math.tan(halfFovRadians) / aspect +
-      STANDING_RADIUS +
+      STAGE_STANDING_RADIUS +
       CAMERA_DEPTH_MARGIN;
     const rosterSize = this.pending?.length ?? this.characters.length;
     const distance =
@@ -1112,19 +1132,52 @@ export class ScholarStage {
         ? requiredDistance * 0.86
         : requiredDistance;
     this.cameraBaseZ = Math.max(DEFAULT_CAMERA_Z, distance);
+    this.updateDepthCameraTargets();
+    if (this.depthCameraStop === "overview") {
+      this.foregroundCameraPosition.copy(this.foregroundCameraPositionTarget);
+      this.foregroundCameraLookAt.copy(this.foregroundCameraLookAtTarget);
+    }
     this.applyDepthForegroundCamera();
+  }
+
+  private updateDepthCameraTargets(): void {
+    const stop = this.depthCameraStop;
+    if (stop === "overview") {
+      this.depthCameraTarget.set(0, 0);
+      this.foregroundCameraPositionTarget.set(
+        0,
+        CAMERA_HEIGHT,
+        this.cameraBaseZ,
+      );
+      this.foregroundCameraLookAtTarget.copy(CAMERA_TARGET);
+      return;
+    }
+
+    const placement = standingPlacement(stop);
+    const worldZ = TABLE_CENTER_Z + placement.z;
+    this.depthCameraTarget.set(
+      (placement.x / STAGE_STANDING_RADIUS) * DEPTH_ROUTE_PARALLAX,
+      DEPTH_ROUTE_DOLLY,
+    );
+    this.foregroundCameraPositionTarget.set(
+      placement.x * 0.42,
+      1.52,
+      Math.max(worldZ + DEPTH_ROUTE_CLOSE_DISTANCE, 1.75),
+    );
+    this.foregroundCameraLookAtTarget.set(placement.x, 0.7, worldZ);
   }
 
   private applyDepthForegroundCamera(): void {
     const depthMode = stageBackdropMode() === "depth";
-    this.camera.position.x = depthMode
-      ? this.depthCameraCurrent.x * DEPTH_FOREGROUND_LATERAL_SCALE
-      : 0;
-    this.camera.position.z = depthMode
-      ? this.cameraBaseZ -
-        this.depthCameraCurrent.y * DEPTH_FOREGROUND_DOLLY_SCALE
-      : this.cameraBaseZ;
-    this.camera.lookAt(CAMERA_TARGET);
+    if (!depthMode) {
+      this.camera.zoom = 1;
+      this.camera.updateProjectionMatrix();
+      this.camera.position.set(0, CAMERA_HEIGHT, this.cameraBaseZ);
+      this.camera.lookAt(CAMERA_TARGET);
+      return;
+    }
+    this.camera.position.copy(this.foregroundCameraPosition);
+    this.camera.lookAt(this.foregroundCameraLookAt);
   }
 
   private styleFigure(
@@ -1265,14 +1318,6 @@ export class ScholarStage {
         character.jawBone.quaternion.copy(character.jawRest);
       }
     }
-
-    character.root.position.z = THREE.MathUtils.damp(
-      character.root.position.z,
-      character.homeZ + character.forward,
-      4.5,
-      delta,
-    );
-    character.shadow.position.z = character.root.position.z;
   }
 
   private setRotation(
@@ -1377,6 +1422,56 @@ export class ScholarStage {
       7,
       delta,
     );
+    this.foregroundCameraPosition.x = THREE.MathUtils.damp(
+      this.foregroundCameraPosition.x,
+      this.foregroundCameraPositionTarget.x,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.foregroundCameraPosition.y = THREE.MathUtils.damp(
+      this.foregroundCameraPosition.y,
+      this.foregroundCameraPositionTarget.y,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.foregroundCameraPosition.z = THREE.MathUtils.damp(
+      this.foregroundCameraPosition.z,
+      this.foregroundCameraPositionTarget.z,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.foregroundCameraLookAt.x = THREE.MathUtils.damp(
+      this.foregroundCameraLookAt.x,
+      this.foregroundCameraLookAtTarget.x,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.foregroundCameraLookAt.y = THREE.MathUtils.damp(
+      this.foregroundCameraLookAt.y,
+      this.foregroundCameraLookAtTarget.y,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.foregroundCameraLookAt.z = THREE.MathUtils.damp(
+      this.foregroundCameraLookAt.z,
+      this.foregroundCameraLookAtTarget.z,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.depthCameraZoom = THREE.MathUtils.damp(
+      this.depthCameraZoom,
+      this.depthCameraZoomTarget,
+      DEPTH_ROUTE_DAMPING,
+      delta,
+    );
+    this.camera.zoom = this.depthCameraZoom;
+    this.camera.updateProjectionMatrix();
+    if (this.depthCamera) {
+      // The single source image has no pixels outside its authored frame.
+      // Keep zoom-out on the real 3D foreground instead of stretching edges.
+      this.depthCamera.zoom = Math.max(1, this.depthCameraZoom);
+      this.depthCamera.updateProjectionMatrix();
+    }
     const drift = this.reducedMotion
       ? 0
       : DEPTH_PARALLAX_SCALE * (DEPTH_FAR - DEPTH_NEAR);
