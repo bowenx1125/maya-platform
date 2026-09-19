@@ -108,12 +108,14 @@ const FLOOR_COLLIDER_THICKNESS = 0.08;
 const JAW_OPEN_ANGLE = 0.28;
 
 /**
- * A complete multi-view Gaussian scene used to prove real world-space camera
+ * A full-panorama Gaussian scene used to prove real world-space camera
  * motion. The ignored local asset is replaceable without changing navigation.
  */
-const STAGE_SPLAT_URL = "/stage/courtyard-world.spz";
+const STAGE_SPLAT_URL = "/stage/courtyard-360.spz";
+const STAGE_SPLAT_PANORAMA_URL = "/stage/courtyard-equirect.png";
 const SPLAT_CAMERA_FOV_DEGREES = 58;
 const SPLAT_CAMERA_FAR = 160;
+const SPLAT_PANORAMA_RADIUS = 150;
 
 const FIRST_PERSON_EYE_Y = FLOOR_Y + 1.6;
 const FIRST_PERSON_START = new THREE.Vector3(0, FIRST_PERSON_EYE_Y, -5.4);
@@ -162,6 +164,13 @@ const DEPTH_EDGE_BLEED = 1.05;
 const DEPTH_PARALLAX_SCALE = 0.004;
 export type StageCameraCommand =
   "forward" | "backward" | "left" | "right" | "turn-left" | "turn-right";
+
+/** Positive yaw looks left in the stage's +Z-forward coordinate system. */
+export function stageCameraTurnSign(command: StageCameraCommand): -1 | 0 | 1 {
+  if (command === "turn-left") return 1;
+  if (command === "turn-right") return -1;
+  return 0;
+}
 
 type MorphMesh = THREE.Mesh & {
   morphTargetDictionary?: Record<string, number>;
@@ -474,6 +483,8 @@ export class ScholarStage {
   private splatScene: THREE.Scene | null = null;
   private sparkRenderer: SparkRenderer | null = null;
   private splatMesh: SplatMesh | null = null;
+  private splatPanorama: THREE.Mesh | null = null;
+  private splatPanoramaTexture: THREE.Texture | null = null;
   private splatToken = 0;
 
   // Depth backdrop state stays null until ?depth=1 opts in and both textures
@@ -530,7 +541,7 @@ export class ScholarStage {
     ) {
       return;
     }
-    this.cameraYaw += event.movementX * STAGE_CAMERA_MOUSE_SENSITIVITY;
+    this.cameraYaw -= event.movementX * STAGE_CAMERA_MOUSE_SENSITIVITY;
     this.cameraPitch = THREE.MathUtils.clamp(
       this.cameraPitch - event.movementY * STAGE_CAMERA_MOUSE_SENSITIVITY,
       -STAGE_CAMERA_PITCH_LIMIT,
@@ -621,8 +632,7 @@ export class ScholarStage {
   moveStageCamera(command: StageCameraCommand): void {
     if (stageBackdropMode() !== "splat") return;
     if (command === "turn-left" || command === "turn-right") {
-      const direction = command === "turn-right" ? 1 : -1;
-      this.cameraYaw += direction * STAGE_CAMERA_TURN_NUDGE;
+      this.cameraYaw += stageCameraTurnSign(command) * STAGE_CAMERA_TURN_NUDGE;
       this.applyStageCamera();
       return;
     }
@@ -777,18 +787,44 @@ export class ScholarStage {
     const token = ++this.splatToken;
     let pendingSpark: SparkRenderer | null = null;
     let pendingMesh: SplatMesh | null = null;
+    let pendingPanorama: THREE.Mesh | null = null;
+    let pendingPanoramaTexture: THREE.Texture | null = null;
     try {
       const sparkModule = await import("@sparkjsdev/spark");
       if (this.disposed || token !== this.splatToken) return;
 
       const scene = new THREE.Scene();
-      // A solid sky also prevents the retired photographic fallback from
-      // showing through open courtyards between the generated splats.
       scene.background = new THREE.Color(0xb7d5ec);
+      const panoramaTexture = await new THREE.TextureLoader().loadAsync(
+        STAGE_SPLAT_PANORAMA_URL,
+      );
+      pendingPanoramaTexture = panoramaTexture;
+      if (this.disposed || token !== this.splatToken) {
+        panoramaTexture.dispose();
+        return;
+      }
+      panoramaTexture.colorSpace = THREE.SRGBColorSpace;
+      const panorama = new THREE.Mesh(
+        new THREE.SphereGeometry(SPLAT_PANORAMA_RADIUS, 64, 32),
+        new THREE.MeshBasicMaterial({
+          map: panoramaTexture,
+          side: THREE.BackSide,
+        }),
+      );
+      pendingPanorama = panorama;
+      panorama.rotation.y = Math.PI;
+      panorama.position.copy(FIRST_PERSON_START);
+      scene.add(panorama);
       const spark = new sparkModule.SparkRenderer({ renderer: this.renderer });
       pendingSpark = spark;
       scene.add(spark);
       const mesh = new sparkModule.SplatMesh({ url: STAGE_SPLAT_URL });
+      // BLUNT's cube-face unprojection uses image-down Y; the stage is Y-up.
+      mesh.scale.y = -1;
+      mesh.position.copy(FIRST_PERSON_START);
+      // Overlapping cube faces otherwise accumulate enough alpha to wash out
+      // the sharp same-source panorama behind the depth reconstruction.
+      mesh.opacity = 0.012;
       pendingMesh = mesh;
       scene.add(mesh);
 
@@ -798,13 +834,20 @@ export class ScholarStage {
       if (this.disposed || token !== this.splatToken) {
         mesh.dispose();
         spark.dispose();
+        panorama.geometry.dispose();
+        (panorama.material as THREE.Material).dispose();
+        panoramaTexture.dispose();
         return;
       }
 
       this.sparkRenderer = spark;
       this.splatMesh = mesh;
+      this.splatPanorama = panorama;
+      this.splatPanoramaTexture = panoramaTexture;
       pendingSpark = null;
       pendingMesh = null;
+      pendingPanorama = null;
+      pendingPanoramaTexture = null;
       this.splatScene = scene;
       this.splatLoaded = true;
       this.updateStageProjection();
@@ -813,6 +856,11 @@ export class ScholarStage {
     } catch {
       pendingMesh?.dispose();
       pendingSpark?.dispose();
+      pendingPanorama?.geometry.dispose();
+      if (pendingPanorama) {
+        (pendingPanorama.material as THREE.Material).dispose();
+      }
+      pendingPanoramaTexture?.dispose();
       if (token === this.splatToken && !this.disposed) {
         // The stage's onError flips the whole scene to "failed", so a missing
         // splat only logs and keeps the table + CSS backdrop fallback.
@@ -835,6 +883,13 @@ export class ScholarStage {
       this.sparkRenderer.dispose();
       this.sparkRenderer = null;
     }
+    if (this.splatPanorama) {
+      this.splatPanorama.geometry.dispose();
+      (this.splatPanorama.material as THREE.Material).dispose();
+      this.splatPanorama = null;
+    }
+    this.splatPanoramaTexture?.dispose();
+    this.splatPanoramaTexture = null;
     this.splatScene = null;
     if (restoreProjection) {
       this.updateStageProjection();
@@ -1529,8 +1584,8 @@ export class ScholarStage {
     if (this.overviewProgress === 1) return;
 
     const turn =
-      (this.activeCameraCommands.has("turn-right") ? 1 : 0) -
-      (this.activeCameraCommands.has("turn-left") ? 1 : 0);
+      (this.activeCameraCommands.has("turn-left") ? 1 : 0) -
+      (this.activeCameraCommands.has("turn-right") ? 1 : 0);
     if (turn) this.cameraYaw += turn * STAGE_CAMERA_TURN_SPEED * delta;
 
     const forward =

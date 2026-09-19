@@ -4,7 +4,16 @@ import {
   depthBackdropRequested,
   splatBackdropRequested,
   stageBackdropMode,
+  stageCameraTurnSign,
 } from "../components/stage3d/scholar-stage";
+
+describe("stage camera turn direction", () => {
+  it("uses positive yaw for left and negative yaw for right", () => {
+    expect(stageCameraTurnSign("turn-left")).toBe(1);
+    expect(stageCameraTurnSign("turn-right")).toBe(-1);
+    expect(stageCameraTurnSign("forward")).toBe(0);
+  });
+});
 
 describe("stageBackdropMode", () => {
   it("is off by default and needs exactly splat=1", () => {

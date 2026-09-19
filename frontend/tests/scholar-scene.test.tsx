@@ -239,6 +239,10 @@ describe("ScholarScene asynchronous initialization", () => {
     fireEvent.keyUp(window, { key: "d" });
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     fireEvent.keyUp(window, { key: "ArrowLeft" });
+    fireEvent.keyDown(window, { key: "q" });
+    fireEvent.keyUp(window, { key: "q" });
+    fireEvent.keyDown(window, { key: "e" });
+    fireEvent.keyUp(window, { key: "e" });
     expect(stage.cameraMoves).toEqual(["forward"]);
     expect(stage.cameraInputs).toEqual([
       { command: "left", active: true },
@@ -247,6 +251,10 @@ describe("ScholarScene asynchronous initialization", () => {
       { command: "right", active: false },
       { command: "turn-left", active: true },
       { command: "turn-left", active: false },
+      { command: "turn-left", active: true },
+      { command: "turn-left", active: false },
+      { command: "turn-right", active: true },
+      { command: "turn-right", active: false },
     ]);
 
     fireEvent.click(view.getByRole("button", { name: "切换鸟瞰" }));

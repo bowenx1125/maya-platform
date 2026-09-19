@@ -8,10 +8,11 @@ occupy fixed 3D world coordinates while only the camera moves. The desired
 experience matches a scanned environment imported into an engine, not a flat
 background shifted behind camera-relative figures.
 
-Three courtyard views were generated locally. Their architecture, plants and
-table details drift between views, so they are not a trustworthy capture of one
-scene for multi-view reconstruction. The images and reconstructed media remain
-under ignored `data/courtyard-splat/`; no generated media enters Git.
+Independently generated courtyard views drifted in architecture, plants and
+table details, so they were not a trustworthy capture of one scene. A single
+2:1 equirectangular courtyard is now the visual authority. The source and
+reconstructed media remain under ignored `data/courtyard-splat/`; no generated
+media enters Git.
 
 BLUNT with the Apache-2.0 Depth Anything V2 metric-outdoor small model lifted
 the front view to a 1,228,800-Gaussian PLY. PlayCanvas SplatTransform 3.4.2
@@ -20,35 +21,40 @@ missing surfaces and a broken table silhouette. That single-image lift cannot
 be the navigation surface.
 
 The public painted-room prototype proved the camera path, but it did not match
-Maya's national-style visual language. It has now been replaced by a local,
-deterministic courtyard: `scripts/generate_courtyard_splat.py` authors fixed
-Gaussian floor, hall, gallery, roof, lattice, lantern and planter surfaces in
-the same coordinates as the debate stage. It projects the approved courtyard
-image onto surfaces visible from the reset pose, while side and rear surfaces
-retain procedural material colours. PlayCanvas SplatTransform 3.4.2 compresses
-the resulting PLY as SPZ version 3; Spark 2.2 does not render version 4 here.
+Maya's national-style visual language. BLUNT's cube-face Depth Anything V2
+pipeline now lifts the authoritative panorama into 1,531,786 Gaussians while
+preserving the capture origin. PlayCanvas SplatTransform 3.4.2 compresses the
+PLY to a 15 MB SPZ version 3; Spark 2.2 does not render version 4 here. A
+same-source equirectangular sphere supplies continuous sharp colour behind the
+sparse translucent splats. Translation therefore exposes restrained parallax
+without the blue gaps and severe blur of the first reconstruction.
 
 ## Decision
 
 Keep the default classroom stage unchanged. The local `?splat=1` route loads
-`frontend/public/stage/courtyard-world.spz` in a separate Three.js scene but
-renders it with the exact same live perspective camera used for figures and the
-procedural table. The generated splat already occupies stage coordinates, so it
-has no runtime scale, rotation or translation. A solid sky hides the retired
-photographic fallback through open areas. There is no splat camera,
-screen-space compensation, figure follow, root animation or FOV zoom. Missing
-media or decode failure keeps the static courtyard fallback.
+`courtyard-360.spz` and `courtyard-equirect.png` in a separate Three.js scene,
+but renders them with the exact same live perspective camera used for figures
+and the procedural table. Their capture origin is fixed to the authored reset
+pose; the splat only converts image-down Y to stage-up Y. There is no second
+camera, screen-space compensation, figure follow, root animation or FOV zoom.
+Missing media or decode failure keeps the static courtyard fallback.
 
 The binary and intermediate PLY remain ignored generated media. Rebuild them
 locally with:
 
 ```powershell
-py -3 scripts/generate_courtyard_splat.py `
-  data/courtyard-splat/national-courtyard.ply `
-  --texture frontend/public/stage/courtyard.png
+data/courtyard-splat/.venv/Scripts/python.exe `
+  data/courtyard-splat/blunt-source/blunt.py `
+  data/courtyard-splat/source/courtyard-equirect.png `
+  --mode 360 --engine da2 --device cpu --resolution 768 `
+  --depth-mode metric-outdoor --fast --no-normalize `
+  -o data/courtyard-splat/courtyard-360-origin.ply
 pnpm dlx @playcanvas/splat-transform -w `
-  data/courtyard-splat/national-courtyard.ply `
-  frontend/public/stage/courtyard-world.spz --spz-version 3
+  data/courtyard-splat/courtyard-360-origin.ply `
+  frontend/public/stage/courtyard-360.spz --spz-version 3
+py -3 scripts/render_courtyard_view_sets.py `
+  data/courtyard-splat/source/courtyard-equirect.png `
+  data/courtyard-splat/view-sets --views 24 --width 960 --height 540
 ```
 
 The old single-image SOG and `?depth=1` depth mesh remain historical experiments.
@@ -62,7 +68,7 @@ mesh, so explicit conservative world-space proxies provide walk bounds plus
 table and loaded-figure collision at a fixed eye height.
 
 WASD continuously translates relative to yaw; A is camera-left and D is
-camera-right. Q/E and arrow controls rotate,
+camera-right. Q/left-arrow turn left and E/right-arrow turn right,
 and clicking the canvas enables pointer-lock mouse look. Reset restores the
 authored first-person pose. Overview saves the exact pose, follows a cubic curve
 up and back while looking at the stage, and reverses the same curve before
@@ -72,10 +78,10 @@ never change world transforms, collision or the path.
 
 Local Chrome inspection covered first-person approach, table collision, yaw,
 left/right parallax, overview round-trip, 1920x1080 and 4:3 layouts. The current
-asset is a fixed architectural approximation, not a captured photogrammetry
-scene; oblique and rear material quality remains lower than the approved reset
-view. Ordinary-Mac performance and Chrome/Edge classroom acceptance are still
-unmeasured.
+asset is a monocular depth reconstruction, not captured photogrammetry; the 96
+derived views share one camera centre and must not be treated as translated
+multi-view evidence. Ordinary-Mac performance and Chrome/Edge classroom
+acceptance are still unmeasured.
 
 ## References
 
