@@ -108,32 +108,39 @@ const FLOOR_COLLIDER_THICKNESS = 0.08;
 const JAW_OPEN_ANGLE = 0.28;
 
 /**
- * Opt-in splat backdrop: the camera parameters replicate the BLUNT
- * normalization exactly, so the SOG lines up with the authored stage without
- * any per-asset calibration. The source render was 1448x1086.
+ * A complete multi-view Gaussian scene used to prove real world-space camera
+ * motion. The ignored local asset is replaceable without changing navigation.
  */
-const STAGE_SPLAT_URL = "/stage/courtyard-normalized.sog";
-const SPLAT_CAMERA_FOV_DEGREES = 56.35;
-const SPLAT_CAMERA_POSITION = new THREE.Vector3(0, 0, -61.8);
-const SPLAT_CAMERA_UP = new THREE.Vector3(0, -1, 0);
-const SPLAT_CAMERA_FAR = 300;
-const SPLAT_SOURCE_ASPECT = 1448 / 1086;
-const SPLAT_SOURCE_CAMERA_DISTANCE = SPLAT_CAMERA_POSITION.length();
-const SPLAT_SOURCE_CAMERA_QUATERNION = (() => {
-  const camera = new THREE.PerspectiveCamera();
-  camera.position.copy(SPLAT_CAMERA_POSITION);
-  camera.up.copy(SPLAT_CAMERA_UP);
-  camera.lookAt(0, 0, 0);
-  return camera.quaternion.clone();
-})();
+const STAGE_SPLAT_URL = "/stage/prototype-world.spz";
+const SPLAT_CAMERA_FOV_DEGREES = 58;
+const SPLAT_CAMERA_FAR = 160;
+const SPLAT_WORLD_SCALE = 2;
+const SPLAT_WORLD_Y = 1.78;
 
-const STAGE_CAMERA_MOVE_STEP = 0.1;
-const STAGE_CAMERA_TURN_STEP = THREE.MathUtils.degToRad(1.5);
-const STAGE_CAMERA_LATERAL_LIMIT = 0.2;
-const STAGE_CAMERA_FORWARD_LIMIT = 0.4;
-const STAGE_CAMERA_BACKWARD_LIMIT = 0.3;
-const STAGE_CAMERA_YAW_LIMIT = THREE.MathUtils.degToRad(4.5);
-const STAGE_CAMERA_DAMPING = 7;
+const FIRST_PERSON_EYE_Y = FLOOR_Y + 1.6;
+const FIRST_PERSON_START = new THREE.Vector3(0, FIRST_PERSON_EYE_Y, -5.4);
+const FIRST_PERSON_YAW = 0;
+const FIRST_PERSON_PITCH = THREE.MathUtils.degToRad(-4);
+const STAGE_CAMERA_MOVE_SPEED = 1.65;
+const STAGE_CAMERA_TURN_SPEED = THREE.MathUtils.degToRad(90);
+const STAGE_CAMERA_NUDGE = 0.22;
+const STAGE_CAMERA_TURN_NUDGE = THREE.MathUtils.degToRad(7.5);
+const STAGE_CAMERA_MOUSE_SENSITIVITY = 0.0022;
+const STAGE_CAMERA_PITCH_LIMIT = THREE.MathUtils.degToRad(55);
+const STAGE_WALK_MIN_X = -3.4;
+const STAGE_WALK_MAX_X = 3.4;
+const STAGE_WALK_MIN_Z = -6.4;
+const STAGE_WALK_MAX_Z = 3.1;
+const STAGE_CAMERA_COLLISION_RADIUS = 0.2;
+const TABLE_COLLISION_RADIUS = TABLE_RADIUS + 0.38;
+const CHARACTER_COLLISION_RADIUS = 0.48;
+const OVERVIEW_POSITION = new THREE.Vector3(0, 2.7, -5.8);
+const OVERVIEW_TARGET = new THREE.Vector3(0, 0.35, TABLE_CENTER_Z);
+const OVERVIEW_TRANSITION_SECONDS = 1.55;
+const MIN_RENDER_PIXEL_RATIO = 0.75;
+const MAX_RENDER_PIXEL_RATIO = 1.5;
+const SLOW_FRAME_SECONDS = 1 / 27;
+const SLOW_FRAME_THRESHOLD = 100;
 
 /**
  * Opt-in depth-mesh backdrop: the same courtyard front view as the splat
@@ -244,14 +251,6 @@ function backdropCameraFov(
     );
   }
   return sourceFovDegrees;
-}
-
-function splatCameraFov(aspect: number): number {
-  return backdropCameraFov(
-    aspect,
-    SPLAT_CAMERA_FOV_DEGREES,
-    SPLAT_SOURCE_ASPECT,
-  );
 }
 
 function depthCameraFov(aspect: number): number {
@@ -471,18 +470,13 @@ export class ScholarStage {
   private resting = true;
   private reducedMotion = false;
 
-  // Splat backdrop state: everything here stays null until ?splat=1 opts in
-  // and the Spark module has actually loaded, so the default path is untouched.
+  // The splat scene has a fixed transform and shares the live stage camera.
+  // There is deliberately no second camera or screen-space alignment layer.
   private splatLoaded = false;
   private splatScene: THREE.Scene | null = null;
-  private splatCamera: THREE.PerspectiveCamera | null = null;
   private sparkRenderer: SparkRenderer | null = null;
   private splatMesh: SplatMesh | null = null;
   private splatToken = 0;
-  private readonly splatReferenceCamera = new THREE.PerspectiveCamera();
-  private readonly splatStageToSourceQuaternion = new THREE.Quaternion();
-  private readonly splatQuaternionScratch = new THREE.Quaternion();
-  private splatStageScale = 1;
 
   // Depth backdrop state stays null until ?depth=1 opts in and both textures
   // have loaded, keeping its resources out of the default and splat paths.
@@ -493,18 +487,59 @@ export class ScholarStage {
   private depthTextures: THREE.Texture[] = [];
   private depthLoaded = false;
   private depthToken = 0;
-  private readonly cameraOffset = new THREE.Vector3();
-  private readonly cameraOffsetTarget = new THREE.Vector3();
-  private cameraYaw = 0;
-  private cameraYawTarget = 0;
+  private readonly activeCameraCommands = new Set<StageCameraCommand>();
+  private readonly firstPersonPosition = FIRST_PERSON_START.clone();
+  private cameraYaw = FIRST_PERSON_YAW;
+  private cameraPitch = FIRST_PERSON_PITCH;
   private readonly cameraDirection = new THREE.Vector3();
+  private readonly cameraRight = new THREE.Vector3();
   private readonly cameraLookAt = new THREE.Vector3();
+  private readonly cameraCandidate = new THREE.Vector3();
+  private overviewCurve: THREE.CubicBezierCurve3 | null = null;
+  private readonly overviewStartQuaternion = new THREE.Quaternion();
+  private readonly overviewEndQuaternion = new THREE.Quaternion();
+  private overviewProgress = 0;
+  private overviewTarget = 0;
+  private savedFirstPerson: {
+    position: THREE.Vector3;
+    yaw: number;
+    pitch: number;
+  } | null = null;
+  private renderPixelRatio = Math.min(
+    window.devicePixelRatio || 1,
+    MAX_RENDER_PIXEL_RATIO,
+  );
+  private slowFrameCount = 0;
 
   private readonly projection = new THREE.Vector3();
   private readonly offsetEuler = new THREE.Euler();
   private readonly offsetQuat = new THREE.Quaternion();
   private readonly clock = new THREE.Clock();
   private readonly resizeHandler = () => this.resize();
+  private readonly canvasClickHandler = () => {
+    if (
+      stageBackdropMode() === "splat" &&
+      document.pointerLockElement !== this.canvas
+    ) {
+      void this.canvas.requestPointerLock?.();
+    }
+  };
+  private readonly mouseMoveHandler = (event: MouseEvent) => {
+    if (
+      document.pointerLockElement !== this.canvas ||
+      this.overviewTarget !== 0 ||
+      this.overviewProgress !== 0
+    ) {
+      return;
+    }
+    this.cameraYaw += event.movementX * STAGE_CAMERA_MOUSE_SENSITIVITY;
+    this.cameraPitch = THREE.MathUtils.clamp(
+      this.cameraPitch - event.movementY * STAGE_CAMERA_MOUSE_SENSITIVITY,
+      -STAGE_CAMERA_PITCH_LIMIT,
+      STAGE_CAMERA_PITCH_LIMIT,
+    );
+    this.applyStageCamera();
+  };
 
   constructor(options: ScholarStageOptions) {
     this.canvas = options.canvas;
@@ -513,9 +548,14 @@ export class ScholarStage {
     this.onAnchors = options.onAnchors;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEGREES, 1, 0.1, 60);
-    // Figures and stage geometry stay in world space. Only this camera and the
-    // calibrated splat camera receive navigation transforms.
+    this.camera = new THREE.PerspectiveCamera(
+      CAMERA_FOV_DEGREES,
+      1,
+      0.1,
+      SPLAT_CAMERA_FAR,
+    );
+    // Figures, table and splat remain in world space. Navigation mutates this
+    // camera only, which prevents any apparent character follow behavior.
     this.camera.position.set(0, CAMERA_HEIGHT, DEFAULT_CAMERA_Z);
     this.camera.lookAt(CAMERA_TARGET);
     this.scene.add(this.camera);
@@ -531,13 +571,14 @@ export class ScholarStage {
     this.floorCollider = this.buildFloorCollider();
     this.buildTable();
 
+    const backdrop = stageBackdropMode();
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
-      antialias: true,
+      antialias: backdrop !== "splat",
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(this.renderPixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     if (typeof window.matchMedia === "function") {
@@ -549,9 +590,10 @@ export class ScholarStage {
     this.draco.setDecoderPath(STAGE_DECODER_PATH);
     this.loader.setDRACOLoader(this.draco);
     window.addEventListener("resize", this.resizeHandler, { passive: true });
+    this.canvas.addEventListener("click", this.canvasClickHandler);
+    document.addEventListener("mousemove", this.mouseMoveHandler);
     this.resize();
     this.load();
-    const backdrop = stageBackdropMode();
     if (backdrop === "depth") void this.loadDepthBackdrop();
     if (backdrop === "splat") void this.loadSplatBackdrop();
   }
@@ -582,44 +624,66 @@ export class ScholarStage {
     if (stageBackdropMode() !== "splat") return;
     if (command === "turn-left" || command === "turn-right") {
       const direction = command === "turn-right" ? 1 : -1;
-      this.cameraYawTarget = THREE.MathUtils.clamp(
-        this.cameraYawTarget + direction * STAGE_CAMERA_TURN_STEP,
-        -STAGE_CAMERA_YAW_LIMIT,
-        STAGE_CAMERA_YAW_LIMIT,
-      );
+      this.cameraYaw += direction * STAGE_CAMERA_TURN_NUDGE;
+      this.applyStageCamera();
       return;
     }
+    this.moveFirstPerson(command, STAGE_CAMERA_NUDGE);
+    this.applyStageCamera();
+  }
 
-    const forwardX = Math.sin(this.cameraYawTarget);
-    const forwardZ = -Math.cos(this.cameraYawTarget);
-    const rightX = Math.cos(this.cameraYawTarget);
-    const rightZ = Math.sin(this.cameraYawTarget);
-    if (command === "forward" || command === "backward") {
-      const direction = command === "forward" ? 1 : -1;
-      this.cameraOffsetTarget.x +=
-        forwardX * STAGE_CAMERA_MOVE_STEP * direction;
-      this.cameraOffsetTarget.z +=
-        forwardZ * STAGE_CAMERA_MOVE_STEP * direction;
-    } else {
-      const direction = command === "right" ? 1 : -1;
-      this.cameraOffsetTarget.x += rightX * STAGE_CAMERA_MOVE_STEP * direction;
-      this.cameraOffsetTarget.z += rightZ * STAGE_CAMERA_MOVE_STEP * direction;
-    }
-    this.cameraOffsetTarget.x = THREE.MathUtils.clamp(
-      this.cameraOffsetTarget.x,
-      -STAGE_CAMERA_LATERAL_LIMIT,
-      STAGE_CAMERA_LATERAL_LIMIT,
-    );
-    this.cameraOffsetTarget.z = THREE.MathUtils.clamp(
-      this.cameraOffsetTarget.z,
-      -STAGE_CAMERA_FORWARD_LIMIT,
-      STAGE_CAMERA_BACKWARD_LIMIT,
-    );
+  setStageCameraInput(command: StageCameraCommand, active: boolean): void {
+    if (active) this.activeCameraCommands.add(command);
+    else this.activeCameraCommands.delete(command);
+  }
+
+  clearStageCameraInput(): void {
+    this.activeCameraCommands.clear();
   }
 
   resetStageCamera(): void {
-    this.cameraOffsetTarget.set(0, 0, 0);
-    this.cameraYawTarget = 0;
+    this.clearStageCameraInput();
+    this.savedFirstPerson = null;
+    this.overviewCurve = null;
+    this.overviewProgress = 0;
+    this.overviewTarget = 0;
+    this.firstPersonPosition.copy(FIRST_PERSON_START);
+    this.cameraYaw = FIRST_PERSON_YAW;
+    this.cameraPitch = FIRST_PERSON_PITCH;
+    this.applyStageCamera();
+  }
+
+  toggleStageOverview(): void {
+    if (stageBackdropMode() !== "splat") return;
+    if (this.overviewTarget === 1) {
+      this.overviewTarget = 0;
+      return;
+    }
+    if (this.overviewProgress > 0) {
+      this.overviewTarget = 1;
+      return;
+    }
+
+    this.clearStageCameraInput();
+    this.savedFirstPerson = {
+      position: this.firstPersonPosition.clone(),
+      yaw: this.cameraYaw,
+      pitch: this.cameraPitch,
+    };
+    const start = this.firstPersonPosition.clone();
+    const rise = Math.max(1.7, (OVERVIEW_POSITION.y - start.y) * 0.55);
+    this.overviewCurve = new THREE.CubicBezierCurve3(
+      start,
+      start.clone().add(new THREE.Vector3(0, rise, -0.7)),
+      OVERVIEW_POSITION.clone().add(new THREE.Vector3(0, 0.45, 1.3)),
+      OVERVIEW_POSITION,
+    );
+    this.overviewStartQuaternion.copy(this.camera.quaternion);
+    const overviewCamera = this.camera.clone();
+    overviewCamera.position.copy(OVERVIEW_POSITION);
+    overviewCamera.lookAt(OVERVIEW_TARGET);
+    this.overviewEndQuaternion.copy(overviewCamera.quaternion);
+    this.overviewTarget = 1;
   }
 
   dispose(): void {
@@ -628,6 +692,10 @@ export class ScholarStage {
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;
     window.removeEventListener("resize", this.resizeHandler);
+    this.canvas.removeEventListener("click", this.canvasClickHandler);
+    document.removeEventListener("mousemove", this.mouseMoveHandler);
+    if (document.pointerLockElement === this.canvas)
+      document.exitPointerLock?.();
     for (const character of this.characters) {
       this.scene.remove(character.root);
       disposeObject(character.root, false);
@@ -706,11 +774,7 @@ export class ScholarStage {
     this.onError?.(new Error("stage_asset_failed", { cause }));
   }
 
-  /**
-   * Load the optional courtyard splat in its own scene, but render it through
-   * the same WebGL renderer and canvas as the character stage. Failure keeps
-   * the procedural table and the static CSS backdrop exactly as they were.
-   */
+  /** Load the optional full-world splat with one fixed world transform. */
   private async loadSplatBackdrop(): Promise<void> {
     const token = ++this.splatToken;
     let pendingSpark: SparkRenderer | null = null;
@@ -725,14 +789,12 @@ export class ScholarStage {
       scene.add(spark);
       const mesh = new sparkModule.SplatMesh({ url: STAGE_SPLAT_URL });
       pendingMesh = mesh;
+      mesh.rotation.x = Math.PI;
+      mesh.scale.setScalar(SPLAT_WORLD_SCALE);
+      mesh.position.y = SPLAT_WORLD_Y;
       scene.add(mesh);
 
-      const camera = new THREE.PerspectiveCamera(1, 1, 0.1, SPLAT_CAMERA_FAR);
-      camera.position.copy(SPLAT_CAMERA_POSITION);
-      camera.up.copy(SPLAT_CAMERA_UP);
-      camera.lookAt(0, 0, 0);
-
-      // Wait for the splat data itself; a missing or broken SOG leaves the
+      // Wait for the splat data itself; a missing or broken SPZ leaves the
       // fallback stage untouched instead of swapping to an empty backdrop.
       await mesh.initialized;
       if (this.disposed || token !== this.splatToken) {
@@ -746,11 +808,9 @@ export class ScholarStage {
       pendingSpark = null;
       pendingMesh = null;
       this.splatScene = scene;
-      this.splatCamera = camera;
       this.splatLoaded = true;
-      if (this.table) this.table.visible = false;
       this.updateStageProjection();
-      this.updateCameraFraming();
+      this.resetStageCamera();
       this.resize();
     } catch {
       pendingMesh?.dispose();
@@ -769,7 +829,6 @@ export class ScholarStage {
     this.splatToken += 1;
     const restoreProjection = this.splatLoaded && !this.disposed;
     this.splatLoaded = false;
-    if (this.table) this.table.visible = true;
     if (this.splatMesh) {
       this.splatMesh.dispose();
       this.splatMesh = null;
@@ -779,7 +838,6 @@ export class ScholarStage {
       this.sparkRenderer = null;
     }
     this.splatScene = null;
-    this.splatCamera = null;
     if (restoreProjection) {
       this.updateStageProjection();
       this.updateCameraFraming();
@@ -1126,6 +1184,10 @@ export class ScholarStage {
    * Keep every reserved slot, the table and bubbles inside the reset view.
    */
   private updateCameraFraming(): void {
+    if (stageBackdropMode() === "splat") {
+      this.applyStageCamera();
+      return;
+    }
     // Imported skinned-mesh bounds include distant rig helpers; frame the
     // authored standing ring instead of letting those helpers shrink the stage.
     const outer = STAGE_STANDING_RADIUS + 0.5;
@@ -1142,29 +1204,7 @@ export class ScholarStage {
         ? requiredDistance * 0.86
         : requiredDistance;
     this.cameraBaseZ = Math.max(DEFAULT_CAMERA_Z, distance);
-    this.updateSplatCameraCalibration();
     this.applyStageCamera();
-  }
-
-  /**
-   * Relate the authored stage world to the normalized SOG world with one
-   * rigid similarity transform. Mapping the live stage camera through this
-   * transform gives both render passes the exact same physical camera pose.
-   */
-  private updateSplatCameraCalibration(): void {
-    this.splatReferenceCamera.position.set(0, CAMERA_HEIGHT, this.cameraBaseZ);
-    this.splatReferenceCamera.up.set(0, 1, 0);
-    this.splatReferenceCamera.lookAt(CAMERA_TARGET);
-    this.splatStageScale =
-      this.splatReferenceCamera.position.distanceTo(CAMERA_TARGET) /
-      SPLAT_SOURCE_CAMERA_DISTANCE;
-    this.splatStageToSourceQuaternion
-      .copy(SPLAT_SOURCE_CAMERA_QUATERNION)
-      .multiply(
-        this.splatQuaternionScratch
-          .copy(this.splatReferenceCamera.quaternion)
-          .invert(),
-      );
   }
 
   private applyStageCamera(): void {
@@ -1174,25 +1214,78 @@ export class ScholarStage {
       return;
     }
 
-    this.camera.position.set(
-      this.cameraOffset.x,
-      CAMERA_HEIGHT,
-      this.cameraBaseZ + this.cameraOffset.z,
-    );
-    const pitch = Math.atan2(
-      CAMERA_TARGET.y - CAMERA_HEIGHT,
-      this.cameraBaseZ - CAMERA_TARGET.z,
-    );
-    const horizontal = Math.cos(pitch);
+    this.camera.position.copy(this.firstPersonPosition);
+    const horizontal = Math.cos(this.cameraPitch);
     this.cameraDirection.set(
       Math.sin(this.cameraYaw) * horizontal,
-      Math.sin(pitch),
-      -Math.cos(this.cameraYaw) * horizontal,
+      Math.sin(this.cameraPitch),
+      Math.cos(this.cameraYaw) * horizontal,
     );
     this.cameraLookAt
       .copy(this.camera.position)
       .addScaledVector(this.cameraDirection, 10);
     this.camera.lookAt(this.cameraLookAt);
+  }
+
+  private moveFirstPerson(command: StageCameraCommand, distance: number): void {
+    if (this.overviewTarget !== 0 || this.overviewProgress !== 0) return;
+    const forward = command === "forward" || command === "backward";
+    const direction = command === "backward" || command === "left" ? -1 : 1;
+    if (!forward && command !== "left" && command !== "right") return;
+
+    this.cameraDirection.set(
+      Math.sin(this.cameraYaw),
+      0,
+      Math.cos(this.cameraYaw),
+    );
+    this.cameraRight.set(
+      Math.cos(this.cameraYaw),
+      0,
+      -Math.sin(this.cameraYaw),
+    );
+    const axis = forward ? this.cameraDirection : this.cameraRight;
+    this.moveCameraWithCollision(
+      axis.x * distance * direction,
+      axis.z * distance * direction,
+    );
+  }
+
+  private moveCameraWithCollision(dx: number, dz: number): void {
+    this.cameraCandidate.copy(this.firstPersonPosition);
+    this.cameraCandidate.x += dx;
+    if (!this.cameraPositionBlocked(this.cameraCandidate)) {
+      this.firstPersonPosition.x = this.cameraCandidate.x;
+    }
+    this.cameraCandidate.copy(this.firstPersonPosition);
+    this.cameraCandidate.z += dz;
+    if (!this.cameraPositionBlocked(this.cameraCandidate)) {
+      this.firstPersonPosition.z = this.cameraCandidate.z;
+    }
+  }
+
+  private cameraPositionBlocked(position: THREE.Vector3): boolean {
+    if (
+      position.x < STAGE_WALK_MIN_X ||
+      position.x > STAGE_WALK_MAX_X ||
+      position.z < STAGE_WALK_MIN_Z ||
+      position.z > STAGE_WALK_MAX_Z
+    ) {
+      return true;
+    }
+    const tableDistance = Math.hypot(position.x, position.z - TABLE_CENTER_Z);
+    if (
+      tableDistance <
+      TABLE_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS
+    ) {
+      return true;
+    }
+    return this.characters.some((character) => {
+      const root = character.root.position;
+      return (
+        Math.hypot(position.x - root.x, position.z - root.z) <
+        CHARACTER_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS
+      );
+    });
   }
 
   private styleFigure(
@@ -1380,6 +1473,10 @@ export class ScholarStage {
       if (this.disposed) return;
       const delta = Math.min(this.clock.getDelta(), 0.1);
       const elapsed = (performance.now() - this.startedAt) / 1000;
+      if (stageBackdropMode() === "splat") {
+        this.updateStageCamera(delta);
+        this.adaptRendererResolution(delta);
+      }
       if (this.depthLoaded && this.depthScene && this.depthCamera) {
         this.updateDepthMotion(elapsed);
         this.renderer.autoClear = false;
@@ -1388,11 +1485,10 @@ export class ScholarStage {
         // The depth backdrop pass writes real depth; clear it before the
         // figures or the backdrop's z-buffer values would cull them.
         this.renderer.clearDepth();
-      } else if (this.splatLoaded && this.splatScene && this.splatCamera) {
-        this.updateSplatCamera(delta);
+      } else if (this.splatLoaded && this.splatScene) {
         this.renderer.autoClear = false;
         this.renderer.clear();
-        this.renderer.render(this.splatScene, this.splatCamera);
+        this.renderer.render(this.splatScene, this.camera);
         // The splat pass never writes depth, so clear it before the opaque
         // figures or the depth buffer from the backdrop would cull them.
         this.renderer.clearDepth();
@@ -1408,36 +1504,82 @@ export class ScholarStage {
     this.frame = requestAnimationFrame(step);
   }
 
-  private updateSplatCamera(delta: number): void {
-    if (!this.splatCamera) return;
-    this.cameraOffset.x = THREE.MathUtils.damp(
-      this.cameraOffset.x,
-      this.cameraOffsetTarget.x,
-      STAGE_CAMERA_DAMPING,
-      delta,
-    );
-    this.cameraOffset.z = THREE.MathUtils.damp(
-      this.cameraOffset.z,
-      this.cameraOffsetTarget.z,
-      STAGE_CAMERA_DAMPING,
-      delta,
-    );
-    this.cameraYaw = THREE.MathUtils.damp(
-      this.cameraYaw,
-      this.cameraYawTarget,
-      STAGE_CAMERA_DAMPING,
-      delta,
-    );
-    this.applyStageCamera();
+  private updateStageCamera(delta: number): void {
+    if (this.overviewCurve && this.overviewProgress !== this.overviewTarget) {
+      const direction = this.overviewTarget > this.overviewProgress ? 1 : -1;
+      this.overviewProgress = THREE.MathUtils.clamp(
+        this.overviewProgress +
+          direction * (delta / OVERVIEW_TRANSITION_SECONDS),
+        0,
+        1,
+      );
+      const eased = THREE.MathUtils.smootherstep(this.overviewProgress, 0, 1);
+      this.overviewCurve.getPoint(eased, this.camera.position);
+      this.camera.quaternion
+        .copy(this.overviewStartQuaternion)
+        .slerp(this.overviewEndQuaternion, eased);
+      if (this.overviewProgress === 0 && this.savedFirstPerson) {
+        this.firstPersonPosition.copy(this.savedFirstPerson.position);
+        this.cameraYaw = this.savedFirstPerson.yaw;
+        this.cameraPitch = this.savedFirstPerson.pitch;
+        this.savedFirstPerson = null;
+        this.overviewCurve = null;
+        this.applyStageCamera();
+      }
+      return;
+    }
+    if (this.overviewProgress === 1) return;
 
-    this.splatCamera.position
-      .copy(this.camera.position)
-      .sub(CAMERA_TARGET)
-      .applyQuaternion(this.splatStageToSourceQuaternion)
-      .multiplyScalar(1 / this.splatStageScale);
-    this.splatCamera.quaternion
-      .copy(this.splatStageToSourceQuaternion)
-      .multiply(this.camera.quaternion);
+    const turn =
+      (this.activeCameraCommands.has("turn-right") ? 1 : 0) -
+      (this.activeCameraCommands.has("turn-left") ? 1 : 0);
+    if (turn) this.cameraYaw += turn * STAGE_CAMERA_TURN_SPEED * delta;
+
+    const forward =
+      (this.activeCameraCommands.has("forward") ? 1 : 0) -
+      (this.activeCameraCommands.has("backward") ? 1 : 0);
+    const lateral =
+      (this.activeCameraCommands.has("right") ? 1 : 0) -
+      (this.activeCameraCommands.has("left") ? 1 : 0);
+    if (forward || lateral) {
+      this.cameraDirection.set(
+        Math.sin(this.cameraYaw),
+        0,
+        Math.cos(this.cameraYaw),
+      );
+      this.cameraRight.set(
+        Math.cos(this.cameraYaw),
+        0,
+        -Math.sin(this.cameraYaw),
+      );
+      const length = Math.hypot(forward, lateral) || 1;
+      const distance = (STAGE_CAMERA_MOVE_SPEED * delta) / length;
+      this.moveCameraWithCollision(
+        (this.cameraDirection.x * forward + this.cameraRight.x * lateral) *
+          distance,
+        (this.cameraDirection.z * forward + this.cameraRight.z * lateral) *
+          distance,
+      );
+    }
+    this.applyStageCamera();
+  }
+
+  private adaptRendererResolution(delta: number): void {
+    if (delta > SLOW_FRAME_SECONDS) this.slowFrameCount += 1;
+    else this.slowFrameCount = Math.max(0, this.slowFrameCount - 2);
+    if (
+      this.slowFrameCount < SLOW_FRAME_THRESHOLD ||
+      this.renderPixelRatio <= MIN_RENDER_PIXEL_RATIO
+    ) {
+      return;
+    }
+    this.slowFrameCount = 0;
+    this.renderPixelRatio = Math.max(
+      MIN_RENDER_PIXEL_RATIO,
+      this.renderPixelRatio - 0.25,
+    );
+    this.renderer.setPixelRatio(this.renderPixelRatio);
+    this.renderer.setSize(this.width, this.height, false);
   }
 
   /**
@@ -1482,14 +1624,9 @@ export class ScholarStage {
   }
 
   private updateStageProjection(): void {
-    const aspect = this.camera.aspect;
     this.camera.fov = this.splatLoaded
-      ? splatCameraFov(aspect)
+      ? SPLAT_CAMERA_FOV_DEGREES
       : CAMERA_FOV_DEGREES;
     this.camera.updateProjectionMatrix();
-    if (!this.splatCamera) return;
-    this.splatCamera.aspect = aspect;
-    this.splatCamera.fov = this.camera.fov;
-    this.splatCamera.updateProjectionMatrix();
   }
 }

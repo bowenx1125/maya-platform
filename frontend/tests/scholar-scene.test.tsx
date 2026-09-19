@@ -18,7 +18,10 @@ const stageMock = vi.hoisted(() => {
     visuals: { id: string; state: string }[];
     resting: boolean[];
     cameraMoves: string[];
+    cameraInputs: { command: string; active: boolean }[];
     cameraResets: number;
+    overviewToggles: number;
+    cameraClears: number;
     disposed: boolean;
   };
 
@@ -30,7 +33,10 @@ const stageMock = vi.hoisted(() => {
     readonly visuals: { id: string; state: string }[] = [];
     readonly resting: boolean[] = [];
     readonly cameraMoves: string[] = [];
+    readonly cameraInputs: { command: string; active: boolean }[] = [];
     cameraResets = 0;
+    overviewToggles = 0;
+    cameraClears = 0;
     disposed = false;
 
     constructor(options: StageOptions) {
@@ -54,8 +60,20 @@ const stageMock = vi.hoisted(() => {
       this.cameraMoves.push(command);
     }
 
+    setStageCameraInput(command: string, active: boolean): void {
+      this.cameraInputs.push({ command, active });
+    }
+
+    clearStageCameraInput(): void {
+      this.cameraClears += 1;
+    }
+
     resetStageCamera(): void {
       this.cameraResets += 1;
+    }
+
+    toggleStageOverview(): void {
+      this.overviewToggles += 1;
     }
 
     dispose(): void {
@@ -216,11 +234,20 @@ describe("ScholarScene asynchronous initialization", () => {
     const forward = await view.findByRole("button", { name: "镜头向前移动" });
     fireEvent.click(forward);
     fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyUp(window, { key: "a" });
     fireEvent.keyDown(window, { key: "ArrowLeft" });
-    expect(stage.cameraMoves).toEqual(["forward", "left", "turn-left"]);
+    fireEvent.keyUp(window, { key: "ArrowLeft" });
+    expect(stage.cameraMoves).toEqual(["forward"]);
+    expect(stage.cameraInputs).toEqual([
+      { command: "left", active: true },
+      { command: "left", active: false },
+      { command: "turn-left", active: true },
+      { command: "turn-left", active: false },
+    ]);
 
-    fireEvent.click(view.getByRole("button", { name: "返回全景" }));
+    fireEvent.click(view.getByRole("button", { name: "切换鸟瞰" }));
     fireEvent.keyDown(window, { key: "Home" });
-    expect(stage.cameraResets).toBe(2);
+    expect(stage.overviewToggles).toBe(1);
+    expect(stage.cameraResets).toBe(1);
   });
 });

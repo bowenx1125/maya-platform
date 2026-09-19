@@ -326,7 +326,8 @@ Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
 failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
-Sep 19: five fixed slots, one calibrated SOG camera pose and grounding.
-Immerse keeps the teacher dock; local transcript translucent. Teacher/Mac audit
-open. Courtyard trials: soft SOG (`?splat=1`), sharp mesh (`?depth=1`); see
+Sep 19: `?splat=1` renders an SPZ, table and five fixed slots through
+one world camera. Chrome exercised WASD/QE, pointer look, collision, reset and
+reversible overview at 1920x1080 and 4:3. Courtyard art, Mac FPS and teacher
+acceptance remain open; see
 [ADR-007](adr/ADR-007-courtyard-splat.md).

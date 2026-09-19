@@ -175,6 +175,10 @@ export function ScholarScene({
     stageRef.current?.resetStageCamera();
   }, []);
 
+  const toggleStageOverview = useCallback(() => {
+    stageRef.current?.toggleStageOverview();
+  }, []);
+
   useEffect(() => {
     if (!stageCameraControls) return undefined;
     const commands: Record<string, StageCameraCommand> = {
@@ -195,15 +199,13 @@ export function ScholarScene({
       e: "turn-right",
       E: "turn-right",
     };
+    const editableTarget = (target: EventTarget | null) =>
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      (target instanceof HTMLElement && target.isContentEditable);
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
+      if (editableTarget(target)) return;
       if (["Home", "r", "R"].includes(event.key)) {
         event.preventDefault();
         resetStageCamera();
@@ -212,11 +214,26 @@ export function ScholarScene({
       const command = commands[event.key];
       if (!command) return;
       event.preventDefault();
-      moveStageCamera(command);
+      stageRef.current?.setStageCameraInput(command, true);
     };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (editableTarget(event.target)) return;
+      const command = commands[event.key];
+      if (!command) return;
+      event.preventDefault();
+      stageRef.current?.setStageCameraInput(command, false);
+    };
+    const handleBlur = () => stageRef.current?.clearStageCameraInput();
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [moveStageCamera, resetStageCamera, stageCameraControls]);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      handleBlur();
+    };
+  }, [resetStageCamera, stageCameraControls]);
 
   const visualKey = characters
     .map((item) => `${item.id}:${visuals[item.id] ?? "idle"}`)
@@ -345,10 +362,10 @@ export function ScholarScene({
               ←
             </button>
             <button
-              aria-label="返回全景"
+              aria-label="切换鸟瞰"
               className={styles.cameraOverview}
-              onClick={resetStageCamera}
-              title="返回全景"
+              onClick={toggleStageOverview}
+              title="切换鸟瞰"
               type="button"
             >
               ◎
