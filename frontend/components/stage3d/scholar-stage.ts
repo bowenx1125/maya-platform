@@ -111,11 +111,9 @@ const JAW_OPEN_ANGLE = 0.28;
  * A complete multi-view Gaussian scene used to prove real world-space camera
  * motion. The ignored local asset is replaceable without changing navigation.
  */
-const STAGE_SPLAT_URL = "/stage/prototype-world.spz";
+const STAGE_SPLAT_URL = "/stage/courtyard-world.spz";
 const SPLAT_CAMERA_FOV_DEGREES = 58;
 const SPLAT_CAMERA_FAR = 160;
-const SPLAT_WORLD_SCALE = 2;
-const SPLAT_WORLD_Y = 1.78;
 
 const FIRST_PERSON_EYE_Y = FLOOR_Y + 1.6;
 const FIRST_PERSON_START = new THREE.Vector3(0, FIRST_PERSON_EYE_Y, -5.4);
@@ -784,14 +782,14 @@ export class ScholarStage {
       if (this.disposed || token !== this.splatToken) return;
 
       const scene = new THREE.Scene();
+      // A solid sky also prevents the retired photographic fallback from
+      // showing through open courtyards between the generated splats.
+      scene.background = new THREE.Color(0xb7d5ec);
       const spark = new sparkModule.SparkRenderer({ renderer: this.renderer });
       pendingSpark = spark;
       scene.add(spark);
       const mesh = new sparkModule.SplatMesh({ url: STAGE_SPLAT_URL });
       pendingMesh = mesh;
-      mesh.rotation.x = Math.PI;
-      mesh.scale.setScalar(SPLAT_WORLD_SCALE);
-      mesh.position.y = SPLAT_WORLD_Y;
       scene.add(mesh);
 
       // Wait for the splat data itself; a missing or broken SPZ leaves the
@@ -1239,9 +1237,9 @@ export class ScholarStage {
       Math.cos(this.cameraYaw),
     );
     this.cameraRight.set(
-      Math.cos(this.cameraYaw),
+      -Math.cos(this.cameraYaw),
       0,
-      -Math.sin(this.cameraYaw),
+      Math.sin(this.cameraYaw),
     );
     const axis = forward ? this.cameraDirection : this.cameraRight;
     this.moveCameraWithCollision(
@@ -1548,9 +1546,9 @@ export class ScholarStage {
         Math.cos(this.cameraYaw),
       );
       this.cameraRight.set(
-        Math.cos(this.cameraYaw),
+        -Math.cos(this.cameraYaw),
         0,
-        -Math.sin(this.cameraYaw),
+        Math.sin(this.cameraYaw),
       );
       const length = Math.hypot(forward, lateral) || 1;
       const distance = (STAGE_CAMERA_MOVE_SPEED * delta) / length;

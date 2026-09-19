@@ -235,12 +235,16 @@ describe("ScholarScene asynchronous initialization", () => {
     fireEvent.click(forward);
     fireEvent.keyDown(window, { key: "a" });
     fireEvent.keyUp(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "d" });
+    fireEvent.keyUp(window, { key: "d" });
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     fireEvent.keyUp(window, { key: "ArrowLeft" });
     expect(stage.cameraMoves).toEqual(["forward"]);
     expect(stage.cameraInputs).toEqual([
       { command: "left", active: true },
       { command: "left", active: false },
+      { command: "right", active: true },
+      { command: "right", active: false },
       { command: "turn-left", active: true },
       { command: "turn-left", active: false },
     ]);
