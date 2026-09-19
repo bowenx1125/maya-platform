@@ -47,12 +47,13 @@ the character collision height.
 
 The SOG trial is the navigation surface. Figures, table and splat mesh keep
 fixed world transforms. WASD translates one bounded camera rig, Q/E or the
-arrow controls rotate it, and reset returns to the authored overview. The same
-rig drives the foreground perspective camera and the calibrated SOG camera;
-there is no character follow, FOV zoom, model translation or background drift.
-The small bounds demonstrate spatial motion without claiming this single-image
-reconstruction has complete side or rear geometry. The sharp `?depth=1` trial
-remains a fixed view.
+arrow controls rotate it, and reset returns to the authored overview. The SOG
+camera is the exact rigid-similarity mapping of the foreground camera and uses
+the same projection, so both passes form one visual world instead of following
+separate motion scales. There is no character follow, FOV zoom, model
+translation or background drift. The small bounds demonstrate spatial motion
+without claiming this single-image reconstruction has complete side or rear
+geometry. The sharp `?depth=1` trial remains a fixed view.
 
 ## References
 

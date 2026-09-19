@@ -118,8 +118,14 @@ const SPLAT_CAMERA_POSITION = new THREE.Vector3(0, 0, -61.8);
 const SPLAT_CAMERA_UP = new THREE.Vector3(0, -1, 0);
 const SPLAT_CAMERA_FAR = 300;
 const SPLAT_SOURCE_ASPECT = 1448 / 1086;
-const SPLAT_CAMERA_TRANSLATION_SCALE =
-  Math.abs(SPLAT_CAMERA_POSITION.z) / DEFAULT_CAMERA_Z;
+const SPLAT_SOURCE_CAMERA_DISTANCE = SPLAT_CAMERA_POSITION.length();
+const SPLAT_SOURCE_CAMERA_QUATERNION = (() => {
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.copy(SPLAT_CAMERA_POSITION);
+  camera.up.copy(SPLAT_CAMERA_UP);
+  camera.lookAt(0, 0, 0);
+  return camera.quaternion.clone();
+})();
 
 const STAGE_CAMERA_MOVE_STEP = 0.1;
 const STAGE_CAMERA_TURN_STEP = THREE.MathUtils.degToRad(1.5);
@@ -473,6 +479,10 @@ export class ScholarStage {
   private sparkRenderer: SparkRenderer | null = null;
   private splatMesh: SplatMesh | null = null;
   private splatToken = 0;
+  private readonly splatReferenceCamera = new THREE.PerspectiveCamera();
+  private readonly splatStageToSourceQuaternion = new THREE.Quaternion();
+  private readonly splatQuaternionScratch = new THREE.Quaternion();
+  private splatStageScale = 1;
 
   // Depth backdrop state stays null until ?depth=1 opts in and both textures
   // have loaded, keeping its resources out of the default and splat paths.
@@ -739,9 +749,8 @@ export class ScholarStage {
       this.splatCamera = camera;
       this.splatLoaded = true;
       if (this.table) this.table.visible = false;
-      this.splatCamera.fov = splatCameraFov(this.camera.aspect);
-      this.splatCamera.aspect = this.camera.aspect;
-      this.splatCamera.updateProjectionMatrix();
+      this.updateStageProjection();
+      this.updateCameraFraming();
       this.resize();
     } catch {
       pendingMesh?.dispose();
@@ -758,6 +767,7 @@ export class ScholarStage {
   private disposeSplatBackdrop(): void {
     // Any later load result sees the bump and cleans up after itself.
     this.splatToken += 1;
+    const restoreProjection = this.splatLoaded && !this.disposed;
     this.splatLoaded = false;
     if (this.table) this.table.visible = true;
     if (this.splatMesh) {
@@ -770,6 +780,10 @@ export class ScholarStage {
     }
     this.splatScene = null;
     this.splatCamera = null;
+    if (restoreProjection) {
+      this.updateStageProjection();
+      this.updateCameraFraming();
+    }
   }
 
   /**
@@ -1117,7 +1131,7 @@ export class ScholarStage {
     const outer = STAGE_STANDING_RADIUS + 0.5;
     const halfWidth = Math.max(TABLE_RADIUS + 0.55, outer) * CAMERA_EDGE_MARGIN;
     const aspect = Math.max(this.camera.aspect, 0.1);
-    const halfFovRadians = THREE.MathUtils.degToRad(CAMERA_FOV_DEGREES / 2);
+    const halfFovRadians = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const requiredDistance =
       halfWidth / Math.tan(halfFovRadians) / aspect +
       STAGE_STANDING_RADIUS +
@@ -1128,7 +1142,29 @@ export class ScholarStage {
         ? requiredDistance * 0.86
         : requiredDistance;
     this.cameraBaseZ = Math.max(DEFAULT_CAMERA_Z, distance);
+    this.updateSplatCameraCalibration();
     this.applyStageCamera();
+  }
+
+  /**
+   * Relate the authored stage world to the normalized SOG world with one
+   * rigid similarity transform. Mapping the live stage camera through this
+   * transform gives both render passes the exact same physical camera pose.
+   */
+  private updateSplatCameraCalibration(): void {
+    this.splatReferenceCamera.position.set(0, CAMERA_HEIGHT, this.cameraBaseZ);
+    this.splatReferenceCamera.up.set(0, 1, 0);
+    this.splatReferenceCamera.lookAt(CAMERA_TARGET);
+    this.splatStageScale =
+      this.splatReferenceCamera.position.distanceTo(CAMERA_TARGET) /
+      SPLAT_SOURCE_CAMERA_DISTANCE;
+    this.splatStageToSourceQuaternion
+      .copy(SPLAT_SOURCE_CAMERA_QUATERNION)
+      .multiply(
+        this.splatQuaternionScratch
+          .copy(this.splatReferenceCamera.quaternion)
+          .invert(),
+      );
   }
 
   private applyStageCamera(): void {
@@ -1394,22 +1430,14 @@ export class ScholarStage {
     );
     this.applyStageCamera();
 
-    this.splatCamera.position.set(
-      SPLAT_CAMERA_POSITION.x +
-        this.cameraOffset.x * SPLAT_CAMERA_TRANSLATION_SCALE,
-      SPLAT_CAMERA_POSITION.y,
-      SPLAT_CAMERA_POSITION.z -
-        this.cameraOffset.z * SPLAT_CAMERA_TRANSLATION_SCALE,
-    );
-    this.cameraDirection.set(
-      Math.sin(this.cameraYaw),
-      0,
-      Math.cos(this.cameraYaw),
-    );
-    this.cameraLookAt
-      .copy(this.splatCamera.position)
-      .addScaledVector(this.cameraDirection, 100);
-    this.splatCamera.lookAt(this.cameraLookAt);
+    this.splatCamera.position
+      .copy(this.camera.position)
+      .sub(CAMERA_TARGET)
+      .applyQuaternion(this.splatStageToSourceQuaternion)
+      .multiplyScalar(1 / this.splatStageScale);
+    this.splatCamera.quaternion
+      .copy(this.splatStageToSourceQuaternion)
+      .multiply(this.camera.quaternion);
   }
 
   /**
@@ -1442,14 +1470,8 @@ export class ScholarStage {
     this.width = width;
     this.height = height;
     this.camera.aspect = width / height;
+    this.updateStageProjection();
     this.updateCameraFraming();
-    this.camera.updateProjectionMatrix();
-    if (this.splatCamera) {
-      const aspect = this.camera.aspect;
-      this.splatCamera.aspect = aspect;
-      this.splatCamera.fov = splatCameraFov(aspect);
-      this.splatCamera.updateProjectionMatrix();
-    }
     if (this.depthCamera) {
       const aspect = this.camera.aspect;
       this.depthCamera.aspect = aspect;
@@ -1457,5 +1479,17 @@ export class ScholarStage {
       this.depthCamera.updateProjectionMatrix();
     }
     this.renderer.setSize(width, height, false);
+  }
+
+  private updateStageProjection(): void {
+    const aspect = this.camera.aspect;
+    this.camera.fov = this.splatLoaded
+      ? splatCameraFov(aspect)
+      : CAMERA_FOV_DEGREES;
+    this.camera.updateProjectionMatrix();
+    if (!this.splatCamera) return;
+    this.splatCamera.aspect = aspect;
+    this.splatCamera.fov = this.camera.fov;
+    this.splatCamera.updateProjectionMatrix();
   }
 }
