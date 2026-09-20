@@ -326,7 +326,12 @@ Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
 failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
-Sep 20: `?splat=1` renders a fixed Gaussian-derived depth shell, table and
-scaled slots through one camera. Chrome verified A/Q left, D/E right, mouse
-look, collision and overview. Mac FPS and teacher acceptance remain open; see
+Sep 20: `?splat=1` now renders the stable `courtyard-360.spz` through Spark
+2.2 with the same live camera as the fixed table and figure slots. A
+same-source far panorama fills monocular reconstruction holes; the displaced
+depth shell is retained only when SPZ loading fails. Chromium verified a
+nonblank Spark shader pass, camera approach, A/Q left, D/E right, collision
+and overview; targeted stage tests and frontend typecheck pass. The table is
+about 2.1 metres wide and splat-mode adults normalize to about 1.68 metres.
+Mac FPS, source-capture sharpness and teacher acceptance remain open; see
 [ADR-007](adr/ADR-007-courtyard-splat.md).

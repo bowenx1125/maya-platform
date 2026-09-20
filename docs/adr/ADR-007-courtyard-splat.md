@@ -29,27 +29,29 @@ runtime combined sparse splats with a radius-150 panorama sphere, but the
 recording showed that the courtyard still behaved like a camera-relative image
 during translation.
 
-The corrected runtime rasterizes the 1,531,786 Gaussian centres into a radial
-depth texture, displaces a 256 by 128 equirectangular shell on the CPU, and maps
-the sharp source panorama onto that fixed geometry. Pole rows converge toward
-one radius so overview camera pitch does not expose a starburst. This gives
-continuous colour, actual translational parallax, and lower classroom GPU and
-download cost than drawing the translucent SPZ over the same image.
+The first correction rasterized the 1,531,786 Gaussian centres into a radial
+depth texture and displaced a 256 by 128 equirectangular shell on the CPU. It
+reduced holes but still looked like a painted surface when the camera moved.
+The owner subsequently chose real Gaussian rendering despite that monocular
+reconstruction limit. Spark 2.2 therefore renders the stable SPZ again at
+full opacity. A same-source radius-150 panorama sits behind it only to fill
+surfaces the single image could not reconstruct; it does not replace the SPZ.
 
 ## Decision
 
-Keep the default classroom stage unchanged. The local `?splat=1` route loads
-`courtyard-equirect.png` and its Gaussian-derived radial depth map in a separate
-Three.js scene, then renders it with the exact same live perspective camera
-used for figures and the procedural table. The capture origin is fixed to the
-authored reset pose. There is no second camera, screen-space compensation,
-figure follow, root animation or FOV zoom. Missing media or decode failure
-keeps the static courtyard fallback.
+Keep the default classroom stage unchanged. The local `?splat=1` route creates
+one Spark renderer and loads `courtyard-360.spz` into a separate Three.js scene,
+then renders that scene with the exact same live perspective camera used for
+figures and the procedural table. BLUNT's negative-Y panorama convention is
+mirrored once at the fixed capture origin. A same-source far sphere fills only
+unreconstructed holes. If SPZ loading fails, the previous Gaussian-derived
+radial depth shell is the fallback. There is no second camera, screen-space
+compensation, figure follow, root animation or FOV zoom.
 
 The navigable variant moves the complete table-and-figure arrangement 0.95
-world units into the courtyard and normalizes figures to 1.52 units so an
-adult reads below the reconstructed doorway. Those values apply only to the
-opt-in courtyard and do not alter the teacher's default stage.
+world units into the courtyard, uses a roughly 2.1-metre table and normalizes
+figures to 1.68 units. Those figure values apply only to the opt-in courtyard;
+the table size is shared with the default stage.
 
 The binary and intermediate PLY remain ignored generated media. Rebuild them
 locally with:
@@ -93,12 +95,13 @@ restoring that pose. Debate audio, mouth animation and bubbles continue during
 the transition. Sustained slow frames may lower render pixel ratio to 0.75, but
 never change world transforms, collision or the path.
 
-Local Chrome inspection covered first-person approach, table collision, yaw,
-left/right shell parallax, overview round-trip, 1920x1080 and 4:3 layouts. The
+Local Chromium inspection covered a nonblank Spark shader pass, first-person
+approach, table collision and the fixed figure/table transforms. Earlier Chrome
+inspection covered yaw, overview round-trip, 1920x1080 and 4:3 layouts. The
 current asset is a monocular depth reconstruction, not captured photogrammetry;
-the 96 derived views share one camera centre and must not be treated as
-translated multi-view evidence. Ordinary-Mac performance and Chrome/Edge
-classroom acceptance are still unmeasured.
+derived views share one camera centre and must not be treated as translated
+multi-view evidence. Source sharpness, ordinary-Mac performance and classroom
+acceptance remain open.
 
 ## References
 
