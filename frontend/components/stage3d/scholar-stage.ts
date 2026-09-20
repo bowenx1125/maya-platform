@@ -1,4 +1,3 @@
-import type { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -89,6 +88,7 @@ const EXPRESSION_STRENGTH: Record<AvatarConfig["expression_strength"], number> =
   { low: 0.35, medium: 0.65, high: 1 };
 
 const NORMALISED_HEIGHT = 1.7;
+const SPLAT_CHARACTER_HEIGHT = 1.52;
 const ANCHOR_INTERVAL_MS = 60;
 const CAMERA_FOV_DEGREES = 34;
 const DEFAULT_CAMERA_Z = 5.0;
@@ -100,6 +100,7 @@ const CAMERA_EDGE_MARGIN = 1.08;
 const TABLE_RADIUS = 0.86;
 const TABLE_TOP_Y = 0.72;
 const TABLE_CENTER_Z = 0.2;
+const SPLAT_STAGE_CENTER_Z = 1.15;
 const FLOOR_Y = -0.42;
 const FLOOR_COLLIDER_WIDTH = 7.2;
 const FLOOR_COLLIDER_DEPTH = 6.4;
@@ -111,11 +112,13 @@ const JAW_OPEN_ANGLE = 0.28;
  * A full-panorama Gaussian scene used to prove real world-space camera
  * motion. The ignored local asset is replaceable without changing navigation.
  */
-const STAGE_SPLAT_URL = "/stage/courtyard-360.spz";
 const STAGE_SPLAT_PANORAMA_URL = "/stage/courtyard-equirect.png";
+const STAGE_SPLAT_DEPTH_URL = "/stage/courtyard-equirect-depth.png";
 const SPLAT_CAMERA_FOV_DEGREES = 58;
 const SPLAT_CAMERA_FAR = 160;
-const SPLAT_PANORAMA_RADIUS = 150;
+const SPLAT_DEPTH_MAX = 40;
+const SPLAT_SHELL_SEGMENTS_X = 256;
+const SPLAT_SHELL_SEGMENTS_Y = 128;
 
 const FIRST_PERSON_EYE_Y = FLOOR_Y + 1.6;
 const FIRST_PERSON_START = new THREE.Vector3(0, FIRST_PERSON_EYE_Y, -5.4);
@@ -134,8 +137,8 @@ const STAGE_WALK_MAX_Z = 3.1;
 const STAGE_CAMERA_COLLISION_RADIUS = 0.2;
 const TABLE_COLLISION_RADIUS = TABLE_RADIUS + 0.38;
 const CHARACTER_COLLISION_RADIUS = 0.48;
-const OVERVIEW_POSITION = new THREE.Vector3(0, 2.7, -5.8);
-const OVERVIEW_TARGET = new THREE.Vector3(0, 0.35, TABLE_CENTER_Z);
+const OVERVIEW_POSITION = new THREE.Vector3(0, 2.25, -6.2);
+const OVERVIEW_TARGET = new THREE.Vector3(0, 0.48, SPLAT_STAGE_CENTER_Z);
 const OVERVIEW_TRANSITION_SECONDS = 1.55;
 const MIN_RENDER_PIXEL_RATIO = 0.75;
 const MAX_RENDER_PIXEL_RATIO = 1.5;
@@ -314,6 +317,45 @@ const DEPTH_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
+function displaceSplatShell(
+  geometry: THREE.SphereGeometry,
+  depthTexture: THREE.Texture,
+): void {
+  const image = depthTexture.image as HTMLImageElement;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context || canvas.width === 0 || canvas.height === 0) {
+    throw new Error("stage_splat_depth_unreadable");
+  }
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const positions = geometry.getAttribute("position");
+  const uvs = geometry.getAttribute("uv");
+  const direction = new THREE.Vector3();
+  for (let index = 0; index < positions.count; index += 1) {
+    const u = THREE.MathUtils.clamp(uvs.getX(index), 0, 1);
+    const v = THREE.MathUtils.clamp(uvs.getY(index), 0, 1);
+    const pixelX = Math.min(canvas.width - 1, Math.floor(u * canvas.width));
+    const pixelY = Math.min(
+      canvas.height - 1,
+      Math.floor((1 - v) * canvas.height),
+    );
+    const depth = pixels[(pixelY * canvas.width + pixelX) * 4] / 255;
+    const radius = Math.max(depth * SPLAT_DEPTH_MAX, 0.5);
+    direction
+      .set(positions.getX(index), positions.getY(index), positions.getZ(index))
+      .normalize()
+      .multiplyScalar(radius);
+    positions.setXYZ(index, direction.x, direction.y, direction.z);
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
 function aimBone(
   root: THREE.Object3D,
   bone: THREE.Object3D,
@@ -457,6 +499,8 @@ export class ScholarStage {
   private readonly shadowTexture = makeSoftShadow();
   private readonly woodTexture = makeWoodTexture();
   private readonly floorBounds: THREE.Box3;
+  private readonly stageCenterZ: number;
+  private readonly characterHeight: number;
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
@@ -481,10 +525,8 @@ export class ScholarStage {
   // There is deliberately no second camera or screen-space alignment layer.
   private splatLoaded = false;
   private splatScene: THREE.Scene | null = null;
-  private sparkRenderer: SparkRenderer | null = null;
-  private splatMesh: SplatMesh | null = null;
   private splatPanorama: THREE.Mesh | null = null;
-  private splatPanoramaTexture: THREE.Texture | null = null;
+  private splatPanoramaTextures: THREE.Texture[] = [];
   private splatToken = 0;
 
   // Depth backdrop state stays null until ?depth=1 opts in and both textures
@@ -555,6 +597,11 @@ export class ScholarStage {
     this.onReady = options.onReady;
     this.onError = options.onError;
     this.onAnchors = options.onAnchors;
+    const backdrop = stageBackdropMode();
+    this.stageCenterZ =
+      backdrop === "splat" ? SPLAT_STAGE_CENTER_Z : TABLE_CENTER_Z;
+    this.characterHeight =
+      backdrop === "splat" ? SPLAT_CHARACTER_HEIGHT : NORMALISED_HEIGHT;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -580,7 +627,6 @@ export class ScholarStage {
     this.floorBounds = this.buildFloorBounds();
     this.buildTable();
 
-    const backdrop = stageBackdropMode();
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
@@ -751,7 +797,7 @@ export class ScholarStage {
           const bounds = new THREE.Box3().setFromObject(gltf.scene);
           const size = bounds.getSize(new THREE.Vector3());
           this.templateScales[index] =
-            size.y > 0 ? NORMALISED_HEIGHT / size.y : 1;
+            size.y > 0 ? this.characterHeight / size.y : 1;
           this.templates[index] = gltf.scene;
           this.assetLoaded();
         },
@@ -783,85 +829,89 @@ export class ScholarStage {
   /** Load the optional full-world splat with one fixed world transform. */
   private async loadSplatBackdrop(): Promise<void> {
     const token = ++this.splatToken;
-    let pendingSpark: SparkRenderer | null = null;
-    let pendingMesh: SplatMesh | null = null;
     let pendingPanorama: THREE.Mesh | null = null;
-    let pendingPanoramaTexture: THREE.Texture | null = null;
+    let pendingPanoramaTextures: THREE.Texture[] = [];
     try {
-      const sparkModule = await import("@sparkjsdev/spark");
-      if (this.disposed || token !== this.splatToken) return;
-
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xb7d5ec);
-      const panoramaTexture = await new THREE.TextureLoader().loadAsync(
-        STAGE_SPLAT_PANORAMA_URL,
+      const loader = new THREE.TextureLoader();
+      const results = await Promise.allSettled([
+        this.loadDepthTexture(loader, STAGE_SPLAT_PANORAMA_URL),
+        this.loadDepthTexture(loader, STAGE_SPLAT_DEPTH_URL),
+      ]);
+      pendingPanoramaTextures = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
       );
-      pendingPanoramaTexture = panoramaTexture;
+      const failed = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failed) throw failed.reason;
+      const [panoramaTexture, depthTexture] = results.map(
+        (result) => (result as PromiseFulfilledResult<THREE.Texture>).value,
+      );
+      pendingPanoramaTextures = [panoramaTexture, depthTexture];
       if (this.disposed || token !== this.splatToken) {
         panoramaTexture.dispose();
+        depthTexture.dispose();
         return;
       }
       panoramaTexture.colorSpace = THREE.SRGBColorSpace;
+      depthTexture.colorSpace = THREE.NoColorSpace;
+      for (const texture of [panoramaTexture, depthTexture]) {
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+      }
+      const panoramaGeometry = new THREE.SphereGeometry(
+        1,
+        SPLAT_SHELL_SEGMENTS_X,
+        SPLAT_SHELL_SEGMENTS_Y,
+      );
+      displaceSplatShell(panoramaGeometry, depthTexture);
+      depthTexture.dispose();
+      pendingPanoramaTextures = [panoramaTexture];
       const panorama = new THREE.Mesh(
-        new THREE.SphereGeometry(SPLAT_PANORAMA_RADIUS, 64, 32),
+        panoramaGeometry,
         new THREE.MeshBasicMaterial({
           map: panoramaTexture,
-          side: THREE.BackSide,
+          side: THREE.DoubleSide,
         }),
       );
       pendingPanorama = panorama;
+      // This enclosing shell is always around the navigable area. Skipping
+      // per-frame culling also avoids edge flicker at deep concave sections.
+      panorama.frustumCulled = false;
       panorama.rotation.y = Math.PI;
       panorama.position.copy(FIRST_PERSON_START);
       scene.add(panorama);
-      const spark = new sparkModule.SparkRenderer({ renderer: this.renderer });
-      pendingSpark = spark;
-      scene.add(spark);
-      const mesh = new sparkModule.SplatMesh({ url: STAGE_SPLAT_URL });
-      // BLUNT's cube-face unprojection uses image-down Y; the stage is Y-up.
-      mesh.scale.y = -1;
-      mesh.position.copy(FIRST_PERSON_START);
-      // Overlapping cube faces otherwise accumulate enough alpha to wash out
-      // the sharp same-source panorama behind the depth reconstruction.
-      mesh.opacity = 0.003;
-      pendingMesh = mesh;
-      scene.add(mesh);
-
-      // Wait for the splat data itself; a missing or broken SPZ leaves the
-      // fallback stage untouched instead of swapping to an empty backdrop.
-      await mesh.initialized;
       if (this.disposed || token !== this.splatToken) {
-        mesh.dispose();
-        spark.dispose();
         panorama.geometry.dispose();
         (panorama.material as THREE.Material).dispose();
         panoramaTexture.dispose();
+        depthTexture.dispose();
         return;
       }
 
-      this.sparkRenderer = spark;
-      this.splatMesh = mesh;
       this.splatPanorama = panorama;
-      this.splatPanoramaTexture = panoramaTexture;
-      pendingSpark = null;
-      pendingMesh = null;
+      this.splatPanoramaTextures = [panoramaTexture];
       pendingPanorama = null;
-      pendingPanoramaTexture = null;
+      pendingPanoramaTextures = [];
       this.splatScene = scene;
       this.splatLoaded = true;
       this.updateStageProjection();
       this.resetStageCamera();
       this.resize();
     } catch {
-      pendingMesh?.dispose();
-      pendingSpark?.dispose();
       pendingPanorama?.geometry.dispose();
       if (pendingPanorama) {
         (pendingPanorama.material as THREE.Material).dispose();
       }
-      pendingPanoramaTexture?.dispose();
+      pendingPanoramaTextures.forEach((texture) => texture.dispose());
       if (token === this.splatToken && !this.disposed) {
         // The stage's onError flips the whole scene to "failed", so a missing
-        // splat only logs and keeps the table + CSS backdrop fallback.
+        // backdrop only logs and keeps the table + CSS image fallback.
         this.disposeSplatBackdrop();
         console.warn("stage_splat_unavailable");
       }
@@ -873,21 +923,13 @@ export class ScholarStage {
     this.splatToken += 1;
     const restoreProjection = this.splatLoaded && !this.disposed;
     this.splatLoaded = false;
-    if (this.splatMesh) {
-      this.splatMesh.dispose();
-      this.splatMesh = null;
-    }
-    if (this.sparkRenderer) {
-      this.sparkRenderer.dispose();
-      this.sparkRenderer = null;
-    }
     if (this.splatPanorama) {
       this.splatPanorama.geometry.dispose();
       (this.splatPanorama.material as THREE.Material).dispose();
       this.splatPanorama = null;
     }
-    this.splatPanoramaTexture?.dispose();
-    this.splatPanoramaTexture = null;
+    this.splatPanoramaTextures.forEach((texture) => texture.dispose());
+    this.splatPanoramaTextures = [];
     this.splatScene = null;
     if (restoreProjection) {
       this.updateStageProjection();
@@ -1045,7 +1087,7 @@ export class ScholarStage {
       new THREE.CylinderGeometry(TABLE_RADIUS, TABLE_RADIUS, 0.06, 64),
       new THREE.MeshStandardMaterial({ color: 0x583822, roughness: 0.83 }),
     );
-    top.position.set(0, TABLE_TOP_Y, TABLE_CENTER_Z);
+    top.position.set(0, TABLE_TOP_Y, this.stageCenterZ);
     group.add(top);
 
     const surface = new THREE.Mesh(
@@ -1057,7 +1099,7 @@ export class ScholarStage {
       }),
     );
     surface.rotation.x = -Math.PI / 2;
-    surface.position.set(0, TABLE_TOP_Y + 0.031, TABLE_CENTER_Z);
+    surface.position.set(0, TABLE_TOP_Y + 0.031, this.stageCenterZ);
     group.add(surface);
 
     for (const radius of [TABLE_RADIUS - 0.09, TABLE_RADIUS - 0.14]) {
@@ -1066,7 +1108,7 @@ export class ScholarStage {
         new THREE.MeshStandardMaterial({ color: 0xa47b4e, roughness: 0.65 }),
       );
       inlay.rotation.x = -Math.PI / 2;
-      inlay.position.set(0, TABLE_TOP_Y + 0.033, TABLE_CENTER_Z);
+      inlay.position.set(0, TABLE_TOP_Y + 0.033, this.stageCenterZ);
       group.add(inlay);
     }
 
@@ -1079,7 +1121,7 @@ export class ScholarStage {
         roughness: 0.86,
       }),
     );
-    pedestal.position.set(0, FLOOR_Y + pedestalHeight / 2, TABLE_CENTER_Z);
+    pedestal.position.set(0, FLOOR_Y + pedestalHeight / 2, this.stageCenterZ);
     group.add(pedestal);
 
     const shadow = new THREE.Mesh(
@@ -1093,7 +1135,7 @@ export class ScholarStage {
       }),
     );
     shadow.rotation.x = -Math.PI / 2;
-    shadow.position.set(0, FLOOR_Y - 0.02, TABLE_CENTER_Z);
+    shadow.position.set(0, FLOOR_Y - 0.02, this.stageCenterZ);
     group.add(shadow);
 
     this.table = group;
@@ -1109,12 +1151,12 @@ export class ScholarStage {
       new THREE.Vector3(
         -FLOOR_COLLIDER_WIDTH / 2,
         FLOOR_Y - FLOOR_COLLIDER_THICKNESS,
-        TABLE_CENTER_Z - FLOOR_COLLIDER_DEPTH / 2,
+        this.stageCenterZ - FLOOR_COLLIDER_DEPTH / 2,
       ),
       new THREE.Vector3(
         FLOOR_COLLIDER_WIDTH / 2,
         FLOOR_Y,
-        TABLE_CENTER_Z + FLOOR_COLLIDER_DEPTH / 2,
+        this.stageCenterZ + FLOOR_COLLIDER_DEPTH / 2,
       ),
     );
   }
@@ -1170,7 +1212,7 @@ export class ScholarStage {
       root.scale.setScalar(this.templateScales[templateIndex]);
       const offset = standingPlacement(spec.slot);
       const standingX = offset.x;
-      const standingZ = TABLE_CENTER_Z + offset.z;
+      const standingZ = this.stageCenterZ + offset.z;
       root.position.set(standingX, 0, standingZ);
       root.rotation.y = offset.yaw;
       poseArms(root);
@@ -1317,7 +1359,10 @@ export class ScholarStage {
     ) {
       return true;
     }
-    const tableDistance = Math.hypot(position.x, position.z - TABLE_CENTER_Z);
+    const tableDistance = Math.hypot(
+      position.x,
+      position.z - this.stageCenterZ,
+    );
     if (
       tableDistance <
       TABLE_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS

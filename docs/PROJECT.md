@@ -326,7 +326,7 @@ Qwen3-TTS samples are not Maya Provider integration. Full suites retain known
 failures.
 Cloud TTS, classroom acceptance and voice cloning remain open; no paid Provider
 request was sent.
-Sep 19: `?splat=1` renders a 360-courtyard SPZ plus fixed table/slots
-through one camera. Chrome verified A/Q left, D/E right, mouse look, collision,
-reset/overview at 1920x1080 and 4:3. Mac FPS and teacher acceptance remain open; see
+Sep 20: `?splat=1` renders a fixed Gaussian-derived depth shell, table and
+scaled slots through one camera. Chrome verified A/Q left, D/E right, mouse
+look, collision and overview. Mac FPS and teacher acceptance remain open; see
 [ADR-007](adr/ADR-007-courtyard-splat.md).

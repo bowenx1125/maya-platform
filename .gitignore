@@ -60,3 +60,5 @@ frontend/public/stage/*.spz
 frontend/public/stage/courtyard-depth-color.png
 frontend/public/stage/courtyard-depth-map.png
 frontend/public/stage/courtyard-equirect.png
+frontend/public/stage/courtyard-equirect-depth.png
+frontend/public/stage/courtyard-equirect-depth.json

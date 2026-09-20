@@ -24,20 +24,32 @@ The public painted-room prototype proved the camera path, but it did not match
 Maya's national-style visual language. BLUNT's cube-face Depth Anything V2
 pipeline now lifts the authoritative panorama into 1,531,786 Gaussians while
 preserving the capture origin. PlayCanvas SplatTransform 3.4.2 compresses the
-PLY to a 15 MB SPZ version 3; Spark 2.2 does not render version 4 here. A
-same-source equirectangular sphere supplies continuous sharp colour behind the
-sparse translucent splats. Translation therefore exposes restrained parallax
-without the blue gaps and severe blur of the first reconstruction.
+PLY to a 15 MB SPZ version 3; Spark 2.2 does not render version 4 here. The first
+runtime combined sparse splats with a radius-150 panorama sphere, but the
+recording showed that the courtyard still behaved like a camera-relative image
+during translation.
+
+The corrected runtime rasterizes the 1,531,786 Gaussian centres into a radial
+depth texture, displaces a 256 by 128 equirectangular shell on the CPU, and maps
+the sharp source panorama onto that fixed geometry. Pole rows converge toward
+one radius so overview camera pitch does not expose a starburst. This gives
+continuous colour, actual translational parallax, and lower classroom GPU and
+download cost than drawing the translucent SPZ over the same image.
 
 ## Decision
 
 Keep the default classroom stage unchanged. The local `?splat=1` route loads
-`courtyard-360.spz` and `courtyard-equirect.png` in a separate Three.js scene,
-but renders them with the exact same live perspective camera used for figures
-and the procedural table. Their capture origin is fixed to the authored reset
-pose; the splat only converts image-down Y to stage-up Y. There is no second
-camera, screen-space compensation, figure follow, root animation or FOV zoom.
-Missing media or decode failure keeps the static courtyard fallback.
+`courtyard-equirect.png` and its Gaussian-derived radial depth map in a separate
+Three.js scene, then renders it with the exact same live perspective camera
+used for figures and the procedural table. The capture origin is fixed to the
+authored reset pose. There is no second camera, screen-space compensation,
+figure follow, root animation or FOV zoom. Missing media or decode failure
+keeps the static courtyard fallback.
+
+The navigable variant moves the complete table-and-figure arrangement 0.95
+world units into the courtyard and normalizes figures to 1.52 units so an
+adult reads below the reconstructed doorway. Those values apply only to the
+opt-in courtyard and do not alter the teacher's default stage.
 
 The binary and intermediate PLY remain ignored generated media. Rebuild them
 locally with:
@@ -52,6 +64,10 @@ data/courtyard-splat/.venv/Scripts/python.exe `
 pnpm dlx @playcanvas/splat-transform -w `
   data/courtyard-splat/courtyard-360-origin.ply `
   frontend/public/stage/courtyard-360.spz --spz-version 3
+py -3 scripts/build_courtyard_depth_shell.py `
+  data/courtyard-splat/courtyard-360-origin.ply `
+  frontend/public/stage/courtyard-equirect-depth.png `
+  --width 1024 --height 512 --max-depth 40
 py -3 scripts/render_courtyard_view_sets.py `
   data/courtyard-splat/source/courtyard-equirect.png `
   data/courtyard-splat/view-sets --views 24 --width 960 --height 540
@@ -78,11 +94,11 @@ the transition. Sustained slow frames may lower render pixel ratio to 0.75, but
 never change world transforms, collision or the path.
 
 Local Chrome inspection covered first-person approach, table collision, yaw,
-left/right parallax, overview round-trip, 1920x1080 and 4:3 layouts. The current
-asset is a monocular depth reconstruction, not captured photogrammetry; the 96
-derived views share one camera centre and must not be treated as translated
-multi-view evidence. Ordinary-Mac performance and Chrome/Edge classroom
-acceptance are still unmeasured.
+left/right shell parallax, overview round-trip, 1920x1080 and 4:3 layouts. The
+current asset is a monocular depth reconstruction, not captured photogrammetry;
+the 96 derived views share one camera centre and must not be treated as
+translated multi-view evidence. Ordinary-Mac performance and Chrome/Edge
+classroom acceptance are still unmeasured.
 
 ## References
 
