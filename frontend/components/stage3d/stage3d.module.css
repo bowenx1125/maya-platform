@@ -55,6 +55,40 @@
   pointer-events: auto;
 }
 
+.scenePackPicker {
+  position: absolute;
+  z-index: 7;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px 7px 11px;
+  border: 1px solid rgba(191, 144, 55, 0.58);
+  border-radius: 5px;
+  background: rgba(255, 253, 246, 0.9);
+  box-shadow: 0 3px 12px rgba(48, 36, 23, 0.16);
+  color: #5f4826;
+  font:
+    600 0.8rem/1.2 "Songti SC",
+    "Noto Serif CJK SC",
+    serif;
+  white-space: nowrap;
+  backdrop-filter: blur(7px);
+}
+
+.scenePackPicker select {
+  max-width: 132px;
+  border: 0;
+  background: transparent;
+  color: var(--indigo-dark, #303c66);
+  font:
+    700 0.84rem/1.2 system-ui,
+    sans-serif;
+  cursor: pointer;
+  outline: 0;
+}
+
 .cameraControls button {
   display: grid;
   place-items: center;
@@ -451,5 +485,16 @@
 
   .barrage {
     height: 112px;
+  }
+}
+
+@media (max-width: 600px) {
+  .scenePackPicker {
+    top: 64px;
+  }
+
+  .cameraControls {
+    right: 10px;
+    bottom: 10px;
   }
 }

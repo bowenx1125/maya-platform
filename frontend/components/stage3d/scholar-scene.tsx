@@ -16,6 +16,7 @@ import type {
   StageCharacter,
 } from "./scholar-stage";
 import styles from "./stage3d.module.css";
+import { requestedStageScenePack, STAGE_SCENE_PACKS } from "./scene-packs";
 
 export type ScholarSceneProps = {
   characters: StageCharacter[];
@@ -62,6 +63,9 @@ export function ScholarScene({
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [scenePackId, setScenePackId] = useState(
+    () => requestedStageScenePack().id,
+  );
   const [stageCameraControls] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -177,6 +181,14 @@ export function ScholarScene({
 
   const toggleStageOverview = useCallback(() => {
     stageRef.current?.toggleStageOverview();
+  }, []);
+
+  const changeScenePack = useCallback((id: string) => {
+    setScenePackId(id);
+    stageRef.current?.setScenePack(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("scene", id);
+    window.history.replaceState(null, "", url);
   }, []);
 
   useEffect(() => {
@@ -329,75 +341,91 @@ export function ScholarScene({
         ) : null}
 
         {status === "ready" && stageCameraControls ? (
-          <div
-            aria-label="场景相机"
-            className={styles.cameraControls}
-            role="group"
-          >
-            <button
-              aria-label="镜头向前移动"
-              className={styles.cameraForward}
-              onClick={() => moveStageCamera("forward")}
-              title="向前移动"
-              type="button"
+          <>
+            <label className={styles.scenePackPicker}>
+              <span>院落</span>
+              <select
+                aria-label="切换院落场景"
+                onChange={(event) => changeScenePack(event.target.value)}
+                value={scenePackId}
+              >
+                {STAGE_SCENE_PACKS.map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div
+              aria-label="场景相机"
+              className={styles.cameraControls}
+              role="group"
             >
-              ↑
-            </button>
-            <button
-              aria-label="镜头向左转"
-              className={styles.cameraTurnLeft}
-              onClick={() => moveStageCamera("turn-left")}
-              title="向左转"
-              type="button"
-            >
-              ↶
-            </button>
-            <button
-              aria-label="镜头向左移动"
-              className={styles.cameraLeft}
-              onClick={() => moveStageCamera("left")}
-              title="向左移动"
-              type="button"
-            >
-              ←
-            </button>
-            <button
-              aria-label="切换鸟瞰"
-              className={styles.cameraOverview}
-              onClick={toggleStageOverview}
-              title="切换鸟瞰"
-              type="button"
-            >
-              ◎
-            </button>
-            <button
-              aria-label="镜头向右移动"
-              className={styles.cameraRight}
-              onClick={() => moveStageCamera("right")}
-              title="向右移动"
-              type="button"
-            >
-              →
-            </button>
-            <button
-              aria-label="镜头向右转"
-              className={styles.cameraTurnRight}
-              onClick={() => moveStageCamera("turn-right")}
-              title="向右转"
-              type="button"
-            >
-              ↷
-            </button>
-            <button
-              aria-label="镜头向后移动"
-              className={styles.cameraBackward}
-              onClick={() => moveStageCamera("backward")}
-              title="向后移动"
-              type="button"
-            >
-              ↓
-            </button>
-          </div>
+              <button
+                aria-label="镜头向前移动"
+                className={styles.cameraForward}
+                onClick={() => moveStageCamera("forward")}
+                title="向前移动"
+                type="button"
+              >
+                ↑
+              </button>
+              <button
+                aria-label="镜头向左转"
+                className={styles.cameraTurnLeft}
+                onClick={() => moveStageCamera("turn-left")}
+                title="向左转"
+                type="button"
+              >
+                ↶
+              </button>
+              <button
+                aria-label="镜头向左移动"
+                className={styles.cameraLeft}
+                onClick={() => moveStageCamera("left")}
+                title="向左移动"
+                type="button"
+              >
+                ←
+              </button>
+              <button
+                aria-label="切换鸟瞰"
+                className={styles.cameraOverview}
+                onClick={toggleStageOverview}
+                title="切换鸟瞰"
+                type="button"
+              >
+                ◎
+              </button>
+              <button
+                aria-label="镜头向右移动"
+                className={styles.cameraRight}
+                onClick={() => moveStageCamera("right")}
+                title="向右移动"
+                type="button"
+              >
+                →
+              </button>
+              <button
+                aria-label="镜头向右转"
+                className={styles.cameraTurnRight}
+                onClick={() => moveStageCamera("turn-right")}
+                title="向右转"
+                type="button"
+              >
+                ↷
+              </button>
+              <button
+                aria-label="镜头向后移动"
+                className={styles.cameraBackward}
+                onClick={() => moveStageCamera("backward")}
+                title="向后移动"
+                type="button"
+              >
+                ↓
+              </button>
+            </div>
+          </>
         ) : null}
       </div>
 

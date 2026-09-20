@@ -17,10 +17,16 @@ import {
   isStageAssetUrl,
 } from "./assets";
 import {
+  stageCameraPositionBlocked,
   STAGE_STANDING_RADIUS,
   standingPlacement,
   type StageSlot,
 } from "./placement";
+import {
+  requestedStageScenePack,
+  stageScenePack,
+  type StageScenePack,
+} from "./scene-packs";
 
 export type StageCharacter = {
   id: string;
@@ -113,9 +119,6 @@ const JAW_OPEN_ANGLE = 0.28;
  * A full-panorama Gaussian scene used to prove real world-space camera
  * motion. The ignored local asset is replaceable without changing navigation.
  */
-const STAGE_SPLAT_URL = "/stage/courtyard-360.spz";
-const STAGE_SPLAT_PANORAMA_URL = "/stage/courtyard-equirect.png";
-const STAGE_SPLAT_DEPTH_URL = "/stage/courtyard-equirect-depth.png";
 const SPLAT_CAMERA_FOV_DEGREES = 58;
 const SPLAT_CAMERA_FAR = 160;
 const SPLAT_PANORAMA_RADIUS = 150;
@@ -124,7 +127,8 @@ const SPLAT_SHELL_SEGMENTS_X = 256;
 const SPLAT_SHELL_SEGMENTS_Y = 128;
 
 const FIRST_PERSON_EYE_Y = FLOOR_Y + 1.6;
-const FIRST_PERSON_START = new THREE.Vector3(0, FIRST_PERSON_EYE_Y, -5.4);
+const SPLAT_CAPTURE_ORIGIN = new THREE.Vector3(0, FIRST_PERSON_EYE_Y, -5.4);
+const FIRST_PERSON_START = SPLAT_CAPTURE_ORIGIN.clone();
 const FIRST_PERSON_YAW = 0;
 const FIRST_PERSON_PITCH = THREE.MathUtils.degToRad(-4);
 const STAGE_CAMERA_MOVE_SPEED = 1.65;
@@ -133,13 +137,8 @@ const STAGE_CAMERA_NUDGE = 0.22;
 const STAGE_CAMERA_TURN_NUDGE = THREE.MathUtils.degToRad(7.5);
 const STAGE_CAMERA_MOUSE_SENSITIVITY = 0.0022;
 const STAGE_CAMERA_PITCH_LIMIT = THREE.MathUtils.degToRad(55);
-const STAGE_WALK_MIN_X = -3.4;
-const STAGE_WALK_MAX_X = 3.4;
-const STAGE_WALK_MIN_Z = -6.4;
-const STAGE_WALK_MAX_Z = 3.1;
 const STAGE_CAMERA_COLLISION_RADIUS = 0.2;
 const TABLE_COLLISION_RADIUS = TABLE_RADIUS + 0.38;
-const CHARACTER_COLLISION_RADIUS = 0.48;
 const OVERVIEW_POSITION = new THREE.Vector3(0, 2.25, -6.2);
 const OVERVIEW_TARGET = new THREE.Vector3(0, 0.48, SPLAT_STAGE_CENTER_Z);
 const OVERVIEW_TRANSITION_SECONDS = 1.55;
@@ -176,6 +175,11 @@ export function stageCameraTurnSign(command: StageCameraCommand): -1 | 0 | 1 {
   if (command === "turn-left") return 1;
   if (command === "turn-right") return -1;
   return 0;
+}
+
+export function stageSplatCameraFov(aspect: number): number {
+  const blend = THREE.MathUtils.clamp((aspect - 0.5) / 0.4, 0, 1);
+  return THREE.MathUtils.lerp(72, SPLAT_CAMERA_FOV_DEGREES, blend);
 }
 
 type MorphMesh = THREE.Mesh & {
@@ -533,6 +537,7 @@ export class ScholarStage {
   private splatPanorama: THREE.Mesh | null = null;
   private splatPanoramaTextures: THREE.Texture[] = [];
   private splatToken = 0;
+  private activeSplatPack = requestedStageScenePack();
 
   // Depth backdrop state stays null until ?depth=1 opts in and both textures
   // have loaded, keeping its resources out of the default and splat paths.
@@ -700,6 +705,15 @@ export class ScholarStage {
     this.activeCameraCommands.clear();
   }
 
+  setScenePack(id: string): void {
+    if (stageBackdropMode() !== "splat") return;
+    const next = stageScenePack(id);
+    if (next.id === this.activeSplatPack.id) return;
+    this.activeSplatPack = next;
+    this.disposeSplatBackdrop();
+    void this.loadSplatBackdrop();
+  }
+
   resetStageCamera(): void {
     this.clearStageCameraInput();
     this.savedFirstPerson = null;
@@ -834,6 +848,7 @@ export class ScholarStage {
   /** Load the optional full-world splat with one fixed world transform. */
   private async loadSplatBackdrop(): Promise<void> {
     const token = ++this.splatToken;
+    const pack = this.activeSplatPack;
     let pendingSpark: SparkRenderer | null = null;
     let pendingMesh: SplatMesh | null = null;
     try {
@@ -845,11 +860,11 @@ export class ScholarStage {
       const spark = new sparkModule.SparkRenderer({ renderer: this.renderer });
       pendingSpark = spark;
       scene.add(spark);
-      const mesh = new sparkModule.SplatMesh({ url: STAGE_SPLAT_URL });
+      const mesh = new sparkModule.SplatMesh({ url: pack.splatUrl });
       // BLUNT stores panorama-up as negative Y. Mirroring only that axis keeps
       // the authored longitude and metric depth aligned with the stage camera.
       mesh.scale.y = -1;
-      mesh.position.copy(FIRST_PERSON_START);
+      mesh.position.copy(SPLAT_CAPTURE_ORIGIN);
       pendingMesh = mesh;
       scene.add(mesh);
 
@@ -863,7 +878,9 @@ export class ScholarStage {
       // A monocular lift cannot invent surfaces hidden behind depth edges.
       // The same-source far sphere fills only those holes; the visible
       // courtyard geometry and camera parallax still come from the SPZ.
-      await this.loadSplatPanoramaFill(scene, token);
+      if (pack.panoramaUrl) {
+        await this.loadSplatPanoramaFill(scene, token, pack.panoramaUrl);
+      }
       if (this.disposed || token !== this.splatToken) {
         mesh.dispose();
         spark.dispose();
@@ -887,7 +904,8 @@ export class ScholarStage {
     }
 
     try {
-      await this.loadSplatPanoramaFallback(token);
+      if (!pack.panoramaUrl || !pack.depthUrl) throw new Error("no_fallback");
+      await this.loadSplatPanoramaFallback(token, pack);
     } catch {
       if (token === this.splatToken && !this.disposed) {
         // Missing Gaussian and fallback media must not fail the whole stage.
@@ -897,7 +915,10 @@ export class ScholarStage {
     }
   }
 
-  private async loadSplatPanoramaFallback(token: number): Promise<void> {
+  private async loadSplatPanoramaFallback(
+    token: number,
+    pack: StageScenePack,
+  ): Promise<void> {
     let pendingPanorama: THREE.Mesh | null = null;
     let pendingPanoramaTextures: THREE.Texture[] = [];
     try {
@@ -905,8 +926,8 @@ export class ScholarStage {
       scene.background = new THREE.Color(0xb7d5ec);
       const loader = new THREE.TextureLoader();
       const results = await Promise.allSettled([
-        this.loadDepthTexture(loader, STAGE_SPLAT_PANORAMA_URL),
-        this.loadDepthTexture(loader, STAGE_SPLAT_DEPTH_URL),
+        this.loadDepthTexture(loader, pack.panoramaUrl as string),
+        this.loadDepthTexture(loader, pack.depthUrl as string),
       ]);
       pendingPanoramaTextures = results.flatMap((result) =>
         result.status === "fulfilled" ? [result.value] : [],
@@ -953,7 +974,7 @@ export class ScholarStage {
       // per-frame culling also avoids edge flicker at deep concave sections.
       panorama.frustumCulled = false;
       panorama.rotation.y = Math.PI;
-      panorama.position.copy(FIRST_PERSON_START);
+      panorama.position.copy(SPLAT_CAPTURE_ORIGIN);
       scene.add(panorama);
       if (this.disposed || token !== this.splatToken) {
         panorama.geometry.dispose();
@@ -985,13 +1006,12 @@ export class ScholarStage {
   private async loadSplatPanoramaFill(
     scene: THREE.Scene,
     token: number,
+    panoramaUrl: string,
   ): Promise<void> {
     let texture: THREE.Texture | null = null;
     let panorama: THREE.Mesh | null = null;
     try {
-      texture = await new THREE.TextureLoader().loadAsync(
-        STAGE_SPLAT_PANORAMA_URL,
-      );
+      texture = await new THREE.TextureLoader().loadAsync(panoramaUrl);
       if (this.disposed || token !== this.splatToken) {
         texture.dispose();
         return;
@@ -1002,7 +1022,7 @@ export class ScholarStage {
         new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide }),
       );
       panorama.rotation.y = Math.PI;
-      panorama.position.copy(FIRST_PERSON_START);
+      panorama.position.copy(SPLAT_CAPTURE_ORIGIN);
       panorama.frustumCulled = false;
       scene.add(panorama);
       this.splatPanorama = panorama;
@@ -1455,31 +1475,12 @@ export class ScholarStage {
   }
 
   private cameraPositionBlocked(position: THREE.Vector3): boolean {
-    if (
-      position.x < STAGE_WALK_MIN_X ||
-      position.x > STAGE_WALK_MAX_X ||
-      position.z < STAGE_WALK_MIN_Z ||
-      position.z > STAGE_WALK_MAX_Z
-    ) {
-      return true;
-    }
-    const tableDistance = Math.hypot(
-      position.x,
-      position.z - this.stageCenterZ,
+    return stageCameraPositionBlocked(
+      position,
+      SPLAT_CAPTURE_ORIGIN,
+      this.stageCenterZ,
+      TABLE_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS,
     );
-    if (
-      tableDistance <
-      TABLE_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS
-    ) {
-      return true;
-    }
-    return this.characters.some((character) => {
-      const root = character.root.position;
-      return (
-        Math.hypot(position.x - root.x, position.z - root.z) <
-        CHARACTER_COLLISION_RADIUS + STAGE_CAMERA_COLLISION_RADIUS
-      );
-    });
   }
 
   private styleFigure(
@@ -1819,7 +1820,7 @@ export class ScholarStage {
 
   private updateStageProjection(): void {
     this.camera.fov = this.splatLoaded
-      ? SPLAT_CAMERA_FOV_DEGREES
+      ? stageSplatCameraFov(this.camera.aspect)
       : CAMERA_FOV_DEGREES;
     this.camera.updateProjectionMatrix();
   }

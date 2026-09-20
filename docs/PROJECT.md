@@ -335,3 +335,19 @@ and overview; targeted stage tests and frontend typecheck pass. The table is
 about 2.1 metres wide and splat-mode adults normalize to about 1.68 metres.
 Mac FPS, source-capture sharpness and teacher acceptance remain open; see
 [ADR-007](adr/ADR-007-courtyard-splat.md).
+Sep 20 follow-up: splat preview now switches among four distinct local SPZ
+assets without moving the live table or figures. The camera remains the only
+moving world-space object, with a 2.5 metre circular limit around the capture
+origin; the table and all five reserved standing slots remain collision
+volumes even when a slot is empty. The five positions now surround the table
+instead of stacking on its camera-facing side. Chromium verified the main and
+procedural packs and the scene URL state; 17 focused tests, frontend typecheck
+and lint pass (four pre-existing lint warnings remain).
+
+The external courtyard capture workspace now plans four packs with eight
+translated camera positions and four headings at each position: 32 views per
+pack, 128 total. Pure-Python validation and a four-view Blender/OptiX smoke
+render pass. The preview geometry is still intentionally primitive and was not
+promoted to a production splat. The supplied 3DMax and UE5 project contain no
+FBX/OBJ/GLB export, and no matching editor is installed; their source assets
+therefore remain an editor-export route, not a completed browser background.

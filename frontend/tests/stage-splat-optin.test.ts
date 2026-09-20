@@ -5,6 +5,7 @@ import {
   splatBackdropRequested,
   stageBackdropMode,
   stageCameraTurnSign,
+  stageSplatCameraFov,
 } from "../components/stage3d/scholar-stage";
 
 describe("stage camera turn direction", () => {
@@ -12,6 +13,14 @@ describe("stage camera turn direction", () => {
     expect(stageCameraTurnSign("turn-left")).toBe(1);
     expect(stageCameraTurnSign("turn-right")).toBe(-1);
     expect(stageCameraTurnSign("forward")).toBe(0);
+  });
+});
+
+describe("responsive splat projection", () => {
+  it("widens narrow screens without changing normal desktop framing", () => {
+    expect(stageSplatCameraFov(0.46)).toBe(72);
+    expect(stageSplatCameraFov(0.7)).toBeGreaterThan(58);
+    expect(stageSplatCameraFov(1)).toBe(58);
   });
 });
 

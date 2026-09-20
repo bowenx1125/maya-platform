@@ -22,6 +22,7 @@ const stageMock = vi.hoisted(() => {
     cameraResets: number;
     overviewToggles: number;
     cameraClears: number;
+    scenePacks: string[];
     disposed: boolean;
   };
 
@@ -37,6 +38,7 @@ const stageMock = vi.hoisted(() => {
     cameraResets = 0;
     overviewToggles = 0;
     cameraClears = 0;
+    readonly scenePacks: string[] = [];
     disposed = false;
 
     constructor(options: StageOptions) {
@@ -74,6 +76,10 @@ const stageMock = vi.hoisted(() => {
 
     toggleStageOverview(): void {
       this.overviewToggles += 1;
+    }
+
+    setScenePack(id: string): void {
+      this.scenePacks.push(id);
     }
 
     dispose(): void {
@@ -261,5 +267,11 @@ describe("ScholarScene asynchronous initialization", () => {
     fireEvent.keyDown(window, { key: "Home" });
     expect(stage.overviewToggles).toBe(1);
     expect(stage.cameraResets).toBe(1);
+
+    fireEvent.change(view.getByRole("combobox", { name: "切换院落场景" }), {
+      target: { value: "procedural" },
+    });
+    expect(stage.scenePacks).toEqual(["procedural"]);
+    expect(window.location.search).toContain("scene=procedural");
   });
 });
