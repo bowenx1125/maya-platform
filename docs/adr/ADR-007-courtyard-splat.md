@@ -60,12 +60,13 @@ py -3 scripts/render_courtyard_view_sets.py `
 The old single-image SOG and `?depth=1` depth mesh remain historical experiments.
 Neither qualifies as a navigable world and neither informs the new camera path.
 
-An invisible floor slab resolves each visible model bound onto one top surface,
-with a compact contact shadow fixed under it. Slots A-E are five stable world
-positions; roster size and speaking state never translate a figure. Speaking
-may animate bones and morph targets only. The splat has no trusted collision
-mesh, so explicit conservative world-space proxies provide walk bounds plus
-table and loaded-figure collision at a fixed eye height.
+A non-renderable `Box3` resolves each visible model bound onto one floor
+surface, with a compact contact shadow fixed under it. Slots A-E are five
+stable world positions; roster size and speaking state never translate a
+figure. Speaking may animate bones and morph targets only. The splat has no
+trusted collision mesh, so numeric world-space bounds provide walk limits plus
+table and loaded-figure collision at a fixed eye height. No collision material
+or wall is attached to either render scene.
 
 WASD continuously translates relative to yaw; A is camera-left and D is
 camera-right. Q/left-arrow turn left and E/right-arrow turn right,

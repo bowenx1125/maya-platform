@@ -456,7 +456,7 @@ export class ScholarStage {
   private readonly draco = new DRACOLoader();
   private readonly shadowTexture = makeSoftShadow();
   private readonly woodTexture = makeWoodTexture();
-  private readonly floorCollider: THREE.Mesh;
+  private readonly floorBounds: THREE.Box3;
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private readonly onAnchors?: (anchors: StageAnchor[]) => void;
@@ -577,7 +577,7 @@ export class ScholarStage {
     fill.position.set(3, 1.4, 2);
     this.scene.add(fill);
 
-    this.floorCollider = this.buildFloorCollider();
+    this.floorBounds = this.buildFloorBounds();
     this.buildTable();
 
     const backdrop = stageBackdropMode();
@@ -721,8 +721,6 @@ export class ScholarStage {
       disposeObject(this.table);
       this.table = null;
     }
-    this.scene.remove(this.floorCollider);
-    disposeObject(this.floorCollider);
     this.shadowTexture.dispose();
     this.woodTexture.dispose();
     this.disposeSplatBackdrop();
@@ -824,7 +822,7 @@ export class ScholarStage {
       mesh.position.copy(FIRST_PERSON_START);
       // Overlapping cube faces otherwise accumulate enough alpha to wash out
       // the sharp same-source panorama behind the depth reconstruction.
-      mesh.opacity = 0.012;
+      mesh.opacity = 0.003;
       pendingMesh = mesh;
       scene.add(mesh);
 
@@ -1103,28 +1101,22 @@ export class ScholarStage {
   }
 
   /**
-   * A shallow invisible slab gives every figure the same collision surface.
-   * It remains separate from the visual backdrop because that backdrop can be
-   * CSS, splats, or a depth mesh depending on the selected trial.
+   * A non-renderable box gives every figure the same collision surface. It is
+   * data rather than scene geometry, so no material can leak into the image.
    */
-  private buildFloorCollider(): THREE.Mesh {
-    const collider = new THREE.Mesh(
-      new THREE.BoxGeometry(
-        FLOOR_COLLIDER_WIDTH,
-        FLOOR_COLLIDER_THICKNESS,
-        FLOOR_COLLIDER_DEPTH,
+  private buildFloorBounds(): THREE.Box3 {
+    return new THREE.Box3(
+      new THREE.Vector3(
+        -FLOOR_COLLIDER_WIDTH / 2,
+        FLOOR_Y - FLOOR_COLLIDER_THICKNESS,
+        TABLE_CENTER_Z - FLOOR_COLLIDER_DEPTH / 2,
       ),
-      new THREE.MeshBasicMaterial(),
+      new THREE.Vector3(
+        FLOOR_COLLIDER_WIDTH / 2,
+        FLOOR_Y,
+        TABLE_CENTER_Z + FLOOR_COLLIDER_DEPTH / 2,
+      ),
     );
-    collider.name = "stage-floor-collider";
-    collider.position.set(
-      0,
-      FLOOR_Y - FLOOR_COLLIDER_THICKNESS / 2,
-      TABLE_CENTER_Z,
-    );
-    collider.visible = false;
-    this.scene.add(collider);
-    return collider;
   }
 
   /** Resolve vertical overlap against the slab and return its top surface. */
@@ -1145,7 +1137,7 @@ export class ScholarStage {
         );
       }
     });
-    const floor = new THREE.Box3().setFromObject(this.floorCollider);
+    const floor = this.floorBounds;
     if (body.isEmpty()) return floor.max.y;
     const center = body.getCenter(new THREE.Vector3());
     const insideFloor =
