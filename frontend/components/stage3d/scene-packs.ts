@@ -16,6 +16,11 @@ export const STAGE_SCENE_PACKS: readonly StageScenePack[] = [
     depthUrl: "/stage/courtyard-equirect-depth.png",
   },
   {
+    id: "early-courtyard",
+    label: "早期院落",
+    splatUrl: "/stage/courtyard-normalized.sog",
+  },
+  {
     id: "photo",
     label: "照片重建",
     splatUrl: "/stage/courtyard-photo-transformed.spz",

@@ -7,11 +7,11 @@ import {
 } from "../components/stage3d/scene-packs";
 
 describe("local stage scene packs", () => {
-  it("offers four distinct local splat resources", () => {
-    expect(STAGE_SCENE_PACKS).toHaveLength(4);
-    expect(new Set(STAGE_SCENE_PACKS.map((pack) => pack.id)).size).toBe(4);
+  it("offers five distinct local splat resources", () => {
+    expect(STAGE_SCENE_PACKS).toHaveLength(5);
+    expect(new Set(STAGE_SCENE_PACKS.map((pack) => pack.id)).size).toBe(5);
     expect(new Set(STAGE_SCENE_PACKS.map((pack) => pack.splatUrl)).size).toBe(
-      4,
+      5,
     );
   });
 

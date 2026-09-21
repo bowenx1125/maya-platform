@@ -343,6 +343,9 @@ volumes even when a slot is empty. The five positions now surround the table
 instead of stacking on its camera-facing side. Chromium verified the main and
 procedural packs and the scene URL state; 17 focused tests, frontend typecheck
 and lint pass (four pre-existing lint warnings remain).
+Sep 21: restored the earlier `courtyard-normalized.sog` as an explicit
+historical comparison pack named `early-courtyard`; it does not replace the
+current `courtyard-360.spz` main pack.
 
 The external courtyard capture workspace now plans four packs with eight
 translated camera positions and four headings at each position: 32 views per
