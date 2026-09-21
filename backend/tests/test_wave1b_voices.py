@@ -395,7 +395,9 @@ def test_group_voice_is_owner_private_within_the_same_group(
     assert denied_delete.status_code == 404
 
     # The uploading student retains full access after the denied probes.
-    login(client, "bowen")
+    # Relogin rotates the session and its CSRF token, so rebind the local
+    # token for the requests below.
+    csrf = login(client, "bowen")[1]
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() != []
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
     assert client.get(media_url).status_code == 200
@@ -420,7 +422,7 @@ def test_group_voice_is_owner_private_within_the_same_group(
     )
     assert denied_bind.status_code == 422, denied_bind.text
     assert denied_bind.json()["code"] == "voice_enrollment_failed"
-    login(client, "bowen")
+    csrf = login(client, "bowen")[1]
     bound = client.patch(
         f"/api/v1/agent-versions/{draft['id']}",
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},

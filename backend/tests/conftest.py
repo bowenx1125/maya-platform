@@ -56,14 +56,14 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
         identity = subprocess.run(
             ["whoami", "/user", "/fo", "csv", "/nh"],
             capture_output=True,
-            text=True,
             check=True,
         )
-        sid = next(csv.reader(io.StringIO(identity.stdout)))[1]
+        # Localized console output: decode in the ANSI code page. text=True
+        # dies under a UTF-8 mode interpreter before the value is ever used.
+        sid = next(csv.reader(io.StringIO(identity.stdout.decode("mbcs", errors="replace"))))[1]
         subprocess.run(
             ["icacls", str(credential_file), "/inheritance:r", "/grant:r", f"*{sid}:F"],
             capture_output=True,
-            text=True,
             check=True,
         )
     else:

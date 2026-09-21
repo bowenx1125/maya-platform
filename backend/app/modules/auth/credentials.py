@@ -369,28 +369,51 @@ def parse_accounts_markdown(source: str) -> DesiredAccountGraph:
     return DesiredAccountGraph(tuple(rows))
 
 
+def _decode_console_output(raw: bytes | None) -> str:
+    """Decode localized console output using the system ANSI code page."""
+
+    if raw is None:
+        return ""
+    try:
+        return raw.decode("mbcs")
+    except (LookupError, UnicodeDecodeError):
+        return raw.decode("utf-8", errors="replace")
+
+
 def _private_file_permissions(path: Path, mode: int) -> bool:
     if os.name != "nt":
         return stat.S_IMODE(mode) == 0o600
     try:
+        # whoami/icacls print localized text in the system's ANSI code page.
+        # Decoding with text=True fails whenever that is not UTF-8 (a UTF-8
+        # mode interpreter turns a decode error into a None stdout), so the
+        # raw bytes are decoded explicitly and leniently instead.
         identity = subprocess.run(
             ["whoami", "/user", "/fo", "csv", "/nh"],
             capture_output=True,
-            text=True,
             check=True,
         )
-        rows = list(csv.reader(io.StringIO(identity.stdout)))
+        rows = list(
+            csv.reader(
+                io.StringIO(_decode_console_output(identity.stdout)),
+            )
+        )
         if len(rows) != 1 or len(rows[0]) != 2:
             return False
-        acl = subprocess.run(
-            ["icacls", str(path)], capture_output=True, text=True, check=True
-        ).stdout.splitlines()[0]
-        grant = acl.removeprefix(str(path)).strip()
+        acl = subprocess.run(["icacls", str(path)], capture_output=True, check=True)
+        acl_first_line = _decode_console_output(acl.stdout).splitlines()[0]
+        grant = acl_first_line.removeprefix(str(path)).strip()
         return grant.casefold() in {
             f"{rows[0][0]}:(F)".casefold(),
             f"{rows[0][1]}:(F)".casefold(),
         }
-    except (OSError, subprocess.CalledProcessError, IndexError):
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+        IndexError,
+        UnicodeDecodeError,
+    ):
+        # Any probe failure must fail closed, not propagate into startup.
         return False
 
 

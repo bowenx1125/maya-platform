@@ -82,9 +82,13 @@ A non-renderable `Box3` resolves each visible model bound onto one floor
 surface, with a compact contact shadow fixed under it. Slots A-E are five
 stable world positions; roster size and speaking state never translate a
 figure. Speaking may animate bones and morph targets only. The splat has no
-trusted collision mesh, so numeric world-space bounds provide walk limits plus
-table and loaded-figure collision at a fixed eye height. No collision material
-or wall is attached to either render scene.
+trusted collision mesh, so the camera is bounded by a numeric 2.5-metre walk
+circle around the capture origin. The table and slot exclusion volumes exist
+in `stageCameraPositionBlocked`, but the walk circle keeps the camera over
+four metres from every one of them, so the active constraint in practice is
+the walk circle alone; they are retained as safety rails for any future
+larger walk bound. No collision material or wall is attached to either render
+scene.
 
 WASD continuously translates relative to yaw; A is camera-left and D is
 camera-right. Q/left-arrow turn left and E/right-arrow turn right,

@@ -66,11 +66,15 @@ export function ScholarScene({
   const [scenePackId, setScenePackId] = useState(
     () => requestedStageScenePack().id,
   );
-  const [stageCameraControls] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("splat") === "1",
-  );
+  const [stageCameraControls] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const search = new URLSearchParams(window.location.search);
+    // Mirror stageBackdropMode's precedence: depth wins over splat, so a
+    // splat-render that will never happen must not show dead camera buttons.
+    // Kept inline because the stage class itself is imported dynamically.
+    if (search.get("depth") === "1") return false;
+    return search.get("splat") === "1";
+  });
 
   // This effect runs before the stage-import effect below. Keeping the latest
   // values outside the async callback prevents a roster change during GLB
@@ -214,6 +218,7 @@ export function ScholarScene({
     const editableTarget = (target: EventTarget | null) =>
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
       (target instanceof HTMLElement && target.isContentEditable);
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;

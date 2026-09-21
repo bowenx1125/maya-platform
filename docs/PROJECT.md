@@ -338,8 +338,10 @@ Mac FPS, source-capture sharpness and teacher acceptance remain open; see
 Sep 20 follow-up: splat preview now switches among four distinct local SPZ
 assets without moving the live table or figures. The camera remains the only
 moving world-space object, with a 2.5 metre circular limit around the capture
-origin; the table and all five reserved standing slots remain collision
-volumes even when a slot is empty. The five positions now surround the table
+origin; the table and all five reserved standing slots are declared collision
+volumes even when a slot is empty, though the walk circle already keeps the
+camera over four metres from each, so the walk circle is the active bound.
+The five positions now surround the table
 instead of stacking on its camera-facing side. Chromium verified the main and
 procedural packs and the scene URL state; 17 focused tests, frontend typecheck
 and lint pass (four pre-existing lint warnings remain).

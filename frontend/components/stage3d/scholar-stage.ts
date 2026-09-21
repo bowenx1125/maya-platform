@@ -687,6 +687,10 @@ export class ScholarStage {
 
   moveStageCamera(command: StageCameraCommand): void {
     if (stageBackdropMode() !== "splat") return;
+    // Same guard as moveFirstPerson: during the overview round trip the live
+    // camera follows the transition curve, so an applyStageCamera() here would
+    // teleport it back to the ground pose and freeze all camera input.
+    if (this.overviewTarget !== 0 || this.overviewProgress !== 0) return;
     if (command === "turn-left" || command === "turn-right") {
       this.cameraYaw += stageCameraTurnSign(command) * STAGE_CAMERA_TURN_NUDGE;
       this.applyStageCamera();

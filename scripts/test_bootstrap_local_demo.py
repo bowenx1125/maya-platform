@@ -28,9 +28,12 @@ def main() -> None:
         accounts_path = root / "backend/config/demo-accounts/accounts.private.md"
         if os.name == "nt":
             for path in (env_path, accounts_path):
-                acl = subprocess.run(
-                    ["icacls", str(path)], capture_output=True, text=True, check=True
-                ).stdout.splitlines()[0]
+                acl_raw = subprocess.run(
+                    ["icacls", str(path)], capture_output=True, check=True
+                ).stdout
+                # icacls prints localized text in the ANSI code page; text=True
+                # fails outright under a UTF-8 mode interpreter.
+                acl = acl_raw.decode("mbcs", errors="replace").splitlines()[0]
                 if acl.count(":(F)") != 1 or "(I)" in acl:
                     raise AssertionError(
                         "bootstrap files must have one non-inherited full-access ACE"
