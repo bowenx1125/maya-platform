@@ -94,7 +94,7 @@ describe("KnowledgeLibrary integration", () => {
         target: { value: "# Shared evidence" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
 
     await waitFor(() =>
       expect(createLibraryKnowledge).toHaveBeenCalledTimes(1),
@@ -150,7 +150,7 @@ describe("KnowledgeLibrary integration", () => {
       target: { value: "updated.md" },
     });
     fireEvent.change(editContent, { target: { value: "# Updated" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
 
     await waitFor(() =>
       expect(replaceKnowledgeDocument).toHaveBeenCalledTimes(1),
@@ -162,6 +162,39 @@ describe("KnowledgeLibrary integration", () => {
     expect(hash).toBe("a".repeat(64));
     expect(revision).toBe(1);
     await waitFor(() => expect(screen.getByText("updated.md")).toBeTruthy());
+  });
+
+  it("keeps one editor active and gives changed content a new mutation identity", async () => {
+    const createLibraryKnowledge = vi
+      .fn()
+      .mockRejectedValue(new TypeError("connection reset"));
+    renderLibrary({
+      knowledge: vi.fn().mockResolvedValue([documentFixture()]),
+      createLibraryKnowledge,
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    const editor = screen.getByRole("textbox", { name: "Markdown content" });
+    fireEvent.change(editor, { target: { value: "# First" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(createLibraryKnowledge).toHaveBeenCalledTimes(2),
+    );
+    const firstKey = createLibraryKnowledge.mock.calls[0][2].idempotency.key;
+    expect(createLibraryKnowledge.mock.calls[1][2].idempotency.key).toBe(
+      firstKey,
+    );
+    await screen.findByRole("button", { name: "Done" });
+    fireEvent.change(editor, { target: { value: "# Changed" } });
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(createLibraryKnowledge).toHaveBeenCalledTimes(3),
+    );
+    expect(createLibraryKnowledge.mock.calls[2][2].idempotency.key).not.toBe(
+      firstKey,
+    );
   });
 
   it("refreshes the authoritative list after a replacement conflict", async () => {
@@ -203,7 +236,7 @@ describe("KnowledgeLibrary integration", () => {
         target: { value: "# Changed" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(knowledge).toHaveBeenCalledTimes(2));
     expect(screen.getByText(/source changed elsewhere/i)).toBeTruthy();
@@ -238,8 +271,15 @@ describe("KnowledgeLibrary integration", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Markdown 内容" }), {
       target: { value: "# Error" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByRole("alert").textContent).toContain("network failure");
+    expect(
+      screen.getByRole("textbox", { name: "Markdown 内容" }),
+    ).toHaveProperty("value", "# Error");
+    fireEvent.click(await screen.findByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("textbox", { name: "Markdown 内容" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
   });
 });

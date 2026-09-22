@@ -8,6 +8,7 @@ import { DebateStage } from "../../../../../components/debate/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
 import { DebatePreview } from "../../../../../components/debate/preview";
 import { AppShell } from "../../../../../components/app-shell";
+import { WorkspaceAction } from "../../../../../components/workspace-actions";
 import {
   RouteGuard,
   useSession,
@@ -399,6 +400,7 @@ export default function TeacherDebateControlPage() {
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
+        <WorkspaceAction name="back" href="/teacher/debates" />
         {loading && !detail ? <LoadingCard /> : null}
         {!loading && error && !detail ? (
           <ErrorNotice error={error} onRetry={() => void load()} />
@@ -406,8 +408,6 @@ export default function TeacherDebateControlPage() {
         {detail && debateId ? (
           detail.turn_protocol === "segments_v2" ? (
             <DebatePreview
-              backHref="/teacher/debates"
-              backLabel={t("debateBack")}
               detail={detail}
               error={error ? localizeError(error, locale) : null}
               onRetryTurn={(turnId) => void retryPreviewTurn(turnId)}
@@ -426,9 +426,6 @@ export default function TeacherDebateControlPage() {
               <DebateStage
                 headerActions={
                   <>
-                    <Link className="secondary-action" href="/teacher/debates">
-                      {t("debateBack")}
-                    </Link>
                     {detail.status === "running" &&
                     detail.playback.mode === "live" ? (
                       <>

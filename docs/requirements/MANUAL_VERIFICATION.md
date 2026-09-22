@@ -20,11 +20,22 @@ real-provider acceptance.
 
 ## Agent workspace
 
-- Use the single sidebar **New** for the current page: Chat, Debate, Agent/version,
-  knowledge or voice creation. It is disabled where no creation is available;
-  no duplicate in-content New button remains. Creation forms support cancellation.
-- Create an Agent, edit its Description in **Info → Edit**, compile and confirm its
-  Persona, enable at least one indexed Markdown document and publish.
+- Verify sidebar **New / Back / Done** appear in this order, only when available;
+  no duplicate creation, return or submission button remains in the content.
+  Chat has New/Send only; fullscreen Immerse retains its own controls. File pickers
+  and explicit safety/consent dialogs remain separate.
+- In Workspace, New creates an Agent. Opening an Agent shows its current version
+  directly, without Info or a version chooser. New there creates the next version,
+  or opens its existing draft instead of making a duplicate.
+- Compile saves current edits before compiling. After Persona confirmation and
+  indexed knowledge selection, Done saves changes and publishes only if the
+  returned server revision passes all checks; success returns to Agent inspection.
+- Back warns before discarding unsaved Agent edits. A revision conflict or failed
+  request keeps the editor and local content; ambiguous retries keep request identity.
+- Knowledge has one active editor; failed creation retains text, Back cancels,
+  and changed content uses a new request identity. Voice Done requires file + consent.
+- Debate Ruleset editing temporarily uses Back/Done for cancel/save; leaving it
+  restores the debate's Back/Done. Saving rules must not create a Debate.
 - Confirm drafts remain editable while published versions and snapshots remain
   immutable.
 - Enroll a voice and confirm only the uploading student can list, preview, bind,

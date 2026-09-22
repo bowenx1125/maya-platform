@@ -139,7 +139,9 @@ describe("private Agent chat", () => {
     );
     await screen.findByTestId("avatar");
     const nav = within(screen.getByRole("navigation"));
-    fireEvent.click(nav.getByRole("button", { name: "New" }));
+    expect(nav.queryByText("Back")).toBeNull();
+    expect(nav.queryByText("Done")).toBeNull();
+    fireEvent.click(await nav.findByRole("button", { name: "New" }));
     expect(state.api.createConversation).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(

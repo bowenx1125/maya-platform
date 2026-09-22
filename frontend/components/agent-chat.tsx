@@ -8,7 +8,7 @@ import { useT } from "./locale";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
-import { WorkspaceNew } from "./workspace-new";
+import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
 
 export function AgentChat() {
@@ -124,7 +124,8 @@ export function AgentChat() {
   return (
     <>
       <PageIntro title="Chat" />
-      <WorkspaceNew
+      <WorkspaceAction
+        name="new"
         disabled={
           busy || !agents.some((agent) => agent.version_id === versionId)
         }

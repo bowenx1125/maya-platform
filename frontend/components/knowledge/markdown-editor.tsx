@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import type { FormEvent } from "react";
 
 import type { KnowledgeDocument } from "../../lib/api";
 import { useT } from "../locale";
+import { WorkspaceAction } from "../workspace-actions";
 
 /** A narrow editable view with the authoritative replacement CAS fields. */
 export type EditableKnowledgeDocument = Pick<
@@ -40,6 +41,7 @@ export type MarkdownEditorProps = {
     request: KnowledgeReplacementRequest,
   ) => Promise<unknown> | unknown;
   onCancel?: () => void;
+  onChange?: () => void;
 };
 
 /**
@@ -70,8 +72,10 @@ export function MarkdownEditor({
   onCreate,
   onReplace,
   onCancel,
+  onChange,
 }: MarkdownEditorProps) {
   const t = useT();
+  const formId = useId();
   const replacing = Boolean(document);
   const [filename, setFilename] = useState(
     document?.source_filename ?? initialFilename ?? "notes.md",
@@ -79,20 +83,6 @@ export function MarkdownEditor({
   const [content, setContent] = useState(initialContent);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setFilename(document?.source_filename ?? initialFilename ?? "notes.md");
-      setContent(initialContent);
-      setError(null);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [
-    document?.id,
-    document?.source_filename,
-    initialFilename,
-    initialContent,
-  ]);
 
   const trimmedFilename = filename.trim();
   const validFilename =
@@ -107,6 +97,7 @@ export function MarkdownEditor({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (disabled || submitting) return;
     if (!validFilename || !validContent) {
       setError(t("knowledgeEditorInvalid"));
       return;
@@ -144,17 +135,29 @@ export function MarkdownEditor({
 
   return (
     <form
+      id={formId}
       className="stack-form"
       onSubmit={submit}
       data-mode={replacing ? "replace" : "create"}
     >
+      <WorkspaceAction name="done" form={formId} disabled={!canSubmit} />
+      {onCancel ? (
+        <WorkspaceAction
+          name="back"
+          disabled={disabled || submitting}
+          onClick={onCancel}
+        />
+      ) : null}
       <label>
         <span>{t("knowledgeFilename")}</span>
         <input
           type="text"
           value={filename}
           disabled={disabled || submitting}
-          onChange={(event) => setFilename(event.target.value)}
+          onChange={(event) => {
+            onChange?.();
+            setFilename(event.target.value);
+          }}
           placeholder={t("knowledgeFilenamePlaceholder")}
           aria-invalid={filename.length > 0 && !validFilename}
         />
@@ -165,7 +168,10 @@ export function MarkdownEditor({
           className="markdown-editor"
           value={content}
           disabled={disabled || submitting}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(event) => {
+            onChange?.();
+            setContent(event.target.value);
+          }}
           aria-label={t("knowledgeContent")}
           rows={10}
         />
@@ -175,25 +181,6 @@ export function MarkdownEditor({
           {error}
         </div>
       ) : null}
-      <div className="button-row">
-        <button className="primary-action" type="submit" disabled={!canSubmit}>
-          {submitting
-            ? t("knowledgeSaving")
-            : replacing
-              ? t("knowledgeReplace")
-              : t("knowledgeAdd")}
-        </button>
-        {onCancel ? (
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={disabled || submitting}
-            onClick={onCancel}
-          >
-            {t("knowledgeCancel")}
-          </button>
-        ) : null}
-      </div>
     </form>
   );
 }

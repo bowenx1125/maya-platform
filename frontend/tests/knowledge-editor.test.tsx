@@ -1,13 +1,22 @@
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderComponent,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildMarkdownFile, MarkdownEditor } from "../components/knowledge";
+import { AppShell } from "../components/app-shell";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({}),
+  usePathname: () => "/student/groups/group/knowledge",
+}));
+vi.mock("../components/session-provider", () => ({ useSession: () => ({}) }));
+function render(ui: Parameters<typeof renderComponent>[0]) {
+  return renderComponent(<AppShell role="student">{ui}</AppShell>);
+}
 
 afterEach(cleanup);
 
@@ -16,9 +25,7 @@ describe("MarkdownEditor", () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(<MarkdownEditor onCreate={onCreate} />);
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Add$/ })).toBeTruthy(),
-    );
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "lesson.md" },
     });
@@ -28,14 +35,14 @@ describe("MarkdownEditor", () => {
         target: { value: "# Lesson\n\nShared evidence." },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
     const file = onCreate.mock.calls[0][0] as File;
     expect(file.name).toBe("lesson.md");
     expect(file.type).toBe("text/markdown");
     expect(await file.text()).toContain("Shared evidence.");
-    expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
   it("passes old document CAS values to the copy-on-write callback", async () => {
@@ -57,7 +64,7 @@ describe("MarkdownEditor", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Save$/ })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
     );
     fireEvent.change(
       screen.getByRole("textbox", { name: /Markdown content/ }),
@@ -65,7 +72,7 @@ describe("MarkdownEditor", () => {
         target: { value: "# New\n\nReplacement" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(onReplace).toHaveBeenCalledTimes(1));
     const request = onReplace.mock.calls[0][0];

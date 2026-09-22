@@ -30,7 +30,7 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { AppShell } from "../components/app-shell";
-import { WorkspaceNew } from "../components/workspace-new";
+import { WorkspaceAction } from "../components/workspace-actions";
 
 function renderTeacherShell(pathname: string) {
   navigation.pathname = pathname;
@@ -75,9 +75,7 @@ describe("PW3-E teacher information architecture", () => {
     ).toBeNull();
 
     expect(screen.getByRole("button", { name: "Logout" })).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
     expect(screen.getAllByRole("link", { name: "Mayaform" })).toHaveLength(1);
     expect(document.querySelectorAll(".brand-dot")).toHaveLength(1);
   });
@@ -119,17 +117,21 @@ describe("PW3-E teacher information architecture", () => {
     ).not.toContain("active");
   });
 
-  it("places the page's New action in navigation and disables it when the page removes it", () => {
+  it("shows available actions in order and removes them with their page", () => {
     const run = vi.fn();
     const view = render(
       <AppShell role="teacher">
-        <WorkspaceNew onClick={run} />
+        <WorkspaceAction name="new" onClick={run} />
+        <WorkspaceAction name="back" href="/teacher" />
+        <WorkspaceAction name="done" onClick={run} disabled />
         <p>Content</p>
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
     fireEvent.click(nav.getByRole("button", { name: "New" }));
     expect(run).toHaveBeenCalledTimes(1);
+    expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(nav.getByRole("link", { name: "Back" })).toBeTruthy();
     expect(
       within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
     ).toBeNull();
@@ -138,15 +140,14 @@ describe("PW3-E teacher information architecture", () => {
         <p>Read only</p>
       </AppShell>,
     );
-    expect(
-      nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(nav.queryByRole("link", { name: "Back" })).toBeNull();
   });
 
   it("uses a real navigation link for routed creation", () => {
     render(
       <AppShell role="teacher">
-        <WorkspaceNew href="/teacher/debates/new" />
+        <WorkspaceAction name="new" href="/teacher/debates/new" />
       </AppShell>,
     );
     expect(
@@ -154,5 +155,39 @@ describe("PW3-E teacher information architecture", () => {
         .getByRole("link", { name: "New" })
         .getAttribute("href"),
     ).toBe("/teacher/debates/new");
+  });
+
+  it("orders New, Back, Done and submits the active form from the sidebar", () => {
+    const submit = vi.fn();
+    render(
+      <AppShell role="teacher">
+        <WorkspaceAction name="done" form="active-form" />
+        <WorkspaceAction name="back" href="/teacher" />
+        <WorkspaceAction name="new" onClick={vi.fn()} />
+        <form
+          id="active-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <input aria-label="Name" required />
+        </form>
+      </AppShell>,
+    );
+    const nav = screen.getByRole("navigation");
+    expect(
+      Array.from(nav.children)
+        .slice(-3)
+        .map((item) => item.textContent),
+    ).toEqual(["New", "Back", "Done"]);
+    fireEvent.click(within(nav).getByRole("button", { name: "Done" }));
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Valid" },
+    });
+    fireEvent.click(within(nav).getByRole("button", { name: "Done" }));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(within(screen.getByRole("main")).queryByRole("button")).toBeNull();
   });
 });

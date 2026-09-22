@@ -7,7 +7,7 @@ import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
-import { WorkspaceNew } from "../workspace-new";
+import { WorkspaceAction } from "../workspace-actions";
 import {
   EmptyCard,
   ErrorNotice,
@@ -148,7 +148,8 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
   return (
     <div className={styles.voicePanel}>
       <PageIntro title={t("voices")} />
-      <WorkspaceNew
+      <WorkspaceAction
+        name="new"
         disabled={busy || creating}
         onClick={() => setCreating(true)}
       />
@@ -162,6 +163,20 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
       ) : null}
       {creating ? (
         <SectionCard>
+          <WorkspaceAction
+            name="back"
+            disabled={busy}
+            onClick={() => {
+              setCreating(false);
+              setFile(null);
+              setConsent(false);
+            }}
+          />
+          <WorkspaceAction
+            name="done"
+            disabled={!file || !consent || busy}
+            onClick={() => void submitEnrollment()}
+          />
           <div className={styles.uploadCard}>
             <input
               className={styles.fileInput}
@@ -180,26 +195,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
               />
               <span>{t("voiceConsentLabel")}</span>
             </label>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={!file || !consent || busy}
-              onClick={() => void submitEnrollment()}
-            >
-              {busy ? t("voiceProcessing") : t("voiceUploadCreate")}
-            </button>
-            <button
-              className="text-link"
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setCreating(false);
-                setFile(null);
-                setConsent(false);
-              }}
-            >
-              {t("cancel")}
-            </button>
           </div>
         </SectionCard>
       ) : null}

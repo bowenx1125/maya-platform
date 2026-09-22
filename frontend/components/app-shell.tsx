@@ -7,7 +7,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import workspaceStyles from "./workspace-theme.module.css";
 import styles from "./app-shell.module.css";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
-import { WorkspaceNewContext, type WorkspaceNewAction } from "./workspace-new";
+import {
+  WorkspaceActionsContext,
+  type WorkspaceActions,
+} from "./workspace-actions";
 
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
@@ -24,10 +27,10 @@ export function AppShell({
   const router = useRouter();
   const pathname = usePathname();
   const [busy, setBusy] = useState(false);
-  const groupId = user?.groups[0]?.group_id;
+  const groupId = user?.groups?.[0]?.group_id;
   const courseId = user?.courses?.[0]?.course_id;
   const [live, setLive] = useState(false);
-  const [newAction, setNewAction] = useState<WorkspaceNewAction | null>(null);
+  const [actions, setActions] = useState<WorkspaceActions>({});
 
   useEffect(() => {
     if (
@@ -125,9 +128,14 @@ export function AppShell({
         { href: "/teacher/roster", label: t("accounts"), icon: "accounts" },
       ];
 
-  const activePath = pathname.startsWith("/teacher/debates-beta/")
-    ? pathname.replace("/teacher/debates-beta/", "/teacher/debates/")
-    : pathname;
+  const activePath =
+    isStudent &&
+    groupId &&
+    /^\/student\/(agents|agent-versions)\//.test(pathname)
+      ? `/student/groups/${groupId}`
+      : pathname.startsWith("/teacher/debates-beta/")
+        ? pathname.replace("/teacher/debates-beta/", "/teacher/debates/")
+        : pathname;
   const activeHref =
     links
       .filter(
@@ -140,7 +148,7 @@ export function AppShell({
     (isStudent ? "/student" : "/teacher");
 
   return (
-    <WorkspaceNewContext.Provider value={setNewAction}>
+    <WorkspaceActionsContext.Provider value={setActions}>
       <div className={styles.frame}>
         <header className={styles.sidebar}>
           <nav
@@ -176,22 +184,42 @@ export function AppShell({
                 </Link>
               ),
             )}
-            {newAction?.href && !newAction.disabled ? (
-              <Link className={styles.link} href={newAction.href}>
-                <WorkspaceIcon name="new" />
-                <span>New</span>
-              </Link>
-            ) : (
-              <button
-                className={`${styles.link} ${styles.newAction}`}
-                type="button"
-                disabled={!newAction || newAction.disabled}
-                onClick={newAction?.onClick}
-              >
-                <WorkspaceIcon name="new" />
-                <span>New</span>
-              </button>
-            )}
+            {(
+              [
+                ["new", "New"],
+                ["back", "Back"],
+                ["done", "Done"],
+              ] as const
+            ).map(([name, label]) => {
+              const action = actions[name];
+              if (!action || action.disabled) return null;
+              const content = (
+                <>
+                  <WorkspaceIcon name={name} />
+                  <span>{label}</span>
+                </>
+              );
+              return action.href ? (
+                <Link
+                  key={name}
+                  className={styles.link}
+                  href={action.href}
+                  onClick={action.onClick}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <button
+                  key={name}
+                  className={`${styles.link} ${styles.action}`}
+                  type={action.form ? "submit" : "button"}
+                  form={action.form}
+                  onClick={action.onClick}
+                >
+                  {content}
+                </button>
+              );
+            })}
           </nav>
           <div className={styles.account}>
             <button
@@ -213,6 +241,6 @@ export function AppShell({
           {children}
         </main>
       </div>
-    </WorkspaceNewContext.Provider>
+    </WorkspaceActionsContext.Provider>
   );
 }

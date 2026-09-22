@@ -12,6 +12,7 @@ import type {
   DebateCreateController,
 } from "../components/debate/setup/debate-setup";
 import { TeacherDebateCreate } from "../components/debate/setup/debate-setup";
+import { AppShell } from "../components/app-shell";
 import {
   phaseLabel,
   resolveDebateRoundPhase,
@@ -21,7 +22,10 @@ import type { PublishedAgentSummary } from "../lib/api";
 const useSessionMock = vi.hoisted(() => vi.fn());
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => "/teacher/debates/new",
+}));
 vi.mock("../components/session-provider", () => ({
   useSession: useSessionMock,
 }));
@@ -83,7 +87,11 @@ function renderCreate(create = vi.fn().mockResolvedValue(createdDebate())) {
     api: {},
     user: { courses: [{ course_id: courseId, role: "teacher" }] },
   });
-  render(<TeacherDebateCreate controller={setupController(create)} />);
+  render(
+    <AppShell role="teacher">
+      <TeacherDebateCreate controller={setupController(create)} />
+    </AppShell>,
+  );
   return create;
 }
 

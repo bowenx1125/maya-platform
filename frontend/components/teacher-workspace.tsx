@@ -1,5 +1,7 @@
 "use client";
 
+import { WorkspaceAction } from "./workspace-actions";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -224,6 +226,7 @@ export function TeacherAgentDetail({
   return (
     <div className={detailStyles.page}>
       <PageIntro title={agent.name} />
+      <WorkspaceAction name="back" href="/teacher" />
       {agent.status === "archived" ? (
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}
@@ -232,11 +235,6 @@ export function TeacherAgentDetail({
         <SectionCard
           title="Profile"
           className={`${detailStyles.card} ${detailStyles.profile}`}
-          action={
-            <Link className="secondary-action" href="/teacher">
-              {t("debateBack")}
-            </Link>
-          }
         >
           {selectedVersion ? (
             <div className={detailStyles.avatar}>

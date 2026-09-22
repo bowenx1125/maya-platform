@@ -400,13 +400,6 @@
   border-color: #d6bd86;
 }
 
-.createActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
 .selectedControlsOpen {
   grid-template-columns: auto minmax(160px, 1fr);
 }

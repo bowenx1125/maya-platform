@@ -163,7 +163,7 @@ stored separately (migration0026); titles display Topic only. Outbound text
 gets NFC/control cleanup and whitespace folding without removing meaningful
 punctuation; Background is unverified scenario data; provider budgets remain;
 draft edits invalidate old Preview plans; creation has separate white
-Topic/Background cards, Done beside Back, and Ruleset language selection.
+Topic/Background cards, sidebar Back/Done, and Ruleset language selection.
 
 ## Frozen Markdown Ruleset and current Report repair
 
@@ -171,8 +171,9 @@ Default teaching content lives only in
 backend/app/modules/debates/default_rules/zh.md and en.md, loaded through a
 teacher-scoped read-only endpoint. Agents Order is followed by one Debate
 Ruleset row: compact language switch and Edit. Selected-language Markdown is
-rendered full-width; Edit shows raw text; Save updates that language and
-returns to rendered mode. Done is disabled while editing; the old Multi-round
+rendered full-width; Edit shows raw text; sidebar Done updates that language,
+Back discards the edit. Both return to rendered mode and restore the debate
+creation actions; saving rules never creates a debate. The old Multi-round
 Civilization/phase block is removed and Topic/Background use white textareas.
 Create freezes both authored Markdown files and eight complete System messages
 (four per language) in rule_snapshot_json. Markdown is sent intact, with no
@@ -269,29 +270,35 @@ username/group/status. Chat shows one current Agent name. Components is compact
 with one Check: skip Ready/deferred items, confirm the maximum paid calls, stop
 on failure. Mode changes invalidate only that item; key changes invalidate all.
 Live places full public speech history below the scene and reconnects by reentry.
-One sidebar New replaces in-page creation buttons; pages without a creation action
-disable it. Chat, Debates, Agent/version and library creation retain their existing
-handlers and permissions. Knowledge/voice creation forms open on demand.
+Sidebar New/Back/Done replace duplicate page actions and hide when unavailable;
+Chat has New/Send only, fullscreen Immerse keeps its controls. Agent entry directly
+shows the current version; New creates or opens its next-version draft. Student
+Done saves edits then publishes the returned revision only if server checks pass;
+Compile also saves first. Back warns about unsaved Agent edits. Workspace drops
+the duplicate knowledge summary; libraries keep one editor with Back/Done. Failed
+creation retains text, unchanged retries retain identity and edits rotate it.
 Chat New clears the composer without saving an empty conversation; the first
 message saves it. Older empty records are hidden, not deleted.
 
-Acceptance: frontend 372 passed, one skipped; typecheck passed, lint has four
-existing warnings. Final backend run: 1384 passed, 21 skipped and the documented
+Acceptance: frontend 377 passed, one skipped; typecheck passed, lint has four
+existing warnings. Base-release backend run: 1384 passed, 21 skipped and the documented
 two-writer knowledge-test flake failed; its immediate isolated rerun passed.
-All nine workspace tests passed, including real-adapter two-message history and
-idempotency using a fake transport. Ruff, mypy (202 files), formatting, frozen API,
-generated types/WS, route/response fixtures, boundary and reset-safety gates passed.
-Production frontend built; backend reused unchanged installed dependencies and
-rebuilt application layers offline. Containers were healthy after recreation.
+Base checks: nine workspace tests, Ruff, mypy, formatting and all contract,
+boundary and reset-safety gates passed. Images built with unchanged dependencies;
+containers were healthy after recreation.
 
 Browser checks covered teacher/student Chat, history, source display, ownership
 isolation (cross-user reads return 404), Components, Accounts and 375px/desktop
 layout. Ready/Completed Immerse controls remain 104x44px desktop, with transparent
 parent; Transcript preserves Public Debate and completion state. Two identities
 verified saved replay, Live late entry/reentry and public history without student
-controls; completion switches Live offline. Sidebar New was verified enabled on
-creation pages, disabled on read-only/form pages, with library Cancel restoring it.
+controls; completion switches Live offline.
 Existing classrooms, Agent assets, login and TTS configuration survive.
+
+Sidebar follow-up: IAB at 1440px/375px verified create/cancel, direct Agent view,
+existing-draft New and Ruleset Done. No overflow or duplicate page actions;
+Chat and Ready Immerse keep their exceptions. Obsolete Info tests/styles were
+replaced by flow tests. No backend changes or new provider calls; no Agent published.
 
 Real acceptance in this change used 11 assistant-initiated paid calls: four Chat
 messages (four Embedding plus four LLM), one LLM Check and two Report Checks.

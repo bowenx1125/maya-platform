@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ReportMarkdown } from "../../report/report-markdown";
 import { SectionCard } from "../../ui";
+import { WorkspaceAction } from "../../workspace-actions";
 import styles from "./ruleset-editor.module.css";
 import sectionStyles from "./create-section.module.css";
 
@@ -50,28 +51,45 @@ export function RulesetEditor({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className={styles.action}
-            disabled={disabled}
-            onClick={() => {
-              if (editing) {
-                onSave({ ...prompts, [language]: draft[language] });
-                setMode("details");
-                onEditingChange(false);
-              } else {
+          {!editing ? (
+            <button
+              type="button"
+              className={styles.action}
+              disabled={disabled}
+              onClick={() => {
                 setDraft({ ...prompts });
                 setMode("edit");
                 onEditingChange(true);
-              }
-            }}
-          >
-            {editing ? "Save" : "Edit"}
-          </button>
+              }}
+            >
+              Edit
+            </button>
+          ) : null}
         </div>
       }
     >
       <div id="ruleset-content" className={styles.content}>
+        {editing ? (
+          <>
+            <WorkspaceAction
+              name="back"
+              disabled={disabled}
+              onClick={() => {
+                setMode("details");
+                onEditingChange(false);
+              }}
+            />
+            <WorkspaceAction
+              name="done"
+              disabled={disabled}
+              onClick={() => {
+                onSave({ ...prompts, [language]: draft[language] });
+                setMode("details");
+                onEditingChange(false);
+              }}
+            />
+          </>
+        ) : null}
         {editing ? (
           <textarea
             aria-label={language === "zh" ? "中文规则" : "English rules"}

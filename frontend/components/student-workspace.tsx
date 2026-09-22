@@ -1,6 +1,6 @@
 "use client";
 
-import { WorkspaceNew } from "./workspace-new";
+import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,6 @@ import {
   isAmbiguousMutationFailure,
   type AgentSummary,
   type GroupDetail,
-  type KnowledgeDocument,
   type PlatformApi,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
@@ -143,7 +142,6 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   const { api } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 
@@ -151,16 +149,14 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextGroup, nextAgents, nextDocuments] = await Promise.all([
+      const [nextGroup, nextAgents] = await Promise.all([
         api.group(groupId),
         // Archived rows are legacy data only; they remain discoverable for
         // explicit safe deletion and are not offered as archive actions.
         api.agents(groupId, true),
-        api.knowledge(groupId),
       ]);
       setGroup(nextGroup);
       setAgents(nextAgents);
-      setDocuments(nextDocuments);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -186,50 +182,21 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   return (
     <>
       <PageIntro title={t("groupWorkspace")} />
-      <WorkspaceNew href={`/student/groups/${groupId}/agents/new`} />
-      <div className="workspace-grid">
-        <SectionCard title={t("agents")}>
-          {agents.length === 0 ? (
-            <EmptyCard title={t("noAgents")} />
-          ) : (
-            <div className="agent-list">
-              {agents.map((agent) => (
-                <GroupAgentRow agent={agent} key={agent.id} />
-              ))}
-            </div>
-          )}
-        </SectionCard>
-        <SectionCard
-          title={t("knowledgePage")}
-
-          action={
-            <Link
-              className="text-link"
-              href={`/student/groups/${groupId}/knowledge`}
-            >
-              {t("manageFiles")}
-            </Link>
-          }
-        >
-          {documents.length === 0 ? (
-            <p className="muted-copy">{t("noMarkdown")}</p>
-          ) : (
-            <div className="compact-list">
-              {documents.slice(0, 6).map((document) => (
-                <div className="list-row" key={document.id}>
-                  <span>
-                    <strong>{document.source_filename}</strong>
-                    <small>
-                      {document.char_count.toLocaleString()} {t("characters")}
-                    </small>
-                  </span>
-                  <StatusBadge status={document.index_status} />
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-      </div>
+      <WorkspaceAction
+        name="new"
+        href={`/student/groups/${groupId}/agents/new`}
+      />
+      <SectionCard title={t("agents")}>
+        {agents.length === 0 ? (
+          <EmptyCard title={t("noAgents")} />
+        ) : (
+          <div className="agent-list">
+            {agents.map((agent) => (
+              <GroupAgentRow agent={agent} key={agent.id} />
+            ))}
+          </div>
+        )}
+      </SectionCard>
       <SectionCard title={t("members")}>
         <div className="member-grid">
           {(group.members ?? []).map((member) => (
@@ -319,18 +286,31 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     void createAgent();
   }
 
   return (
     <>
       <PageIntro title={t("newAgent")} />
+      <WorkspaceAction
+        name="back"
+        href={`/student/groups/${groupId}`}
+        disabled={busy}
+      />
+      <WorkspaceAction name="done" form="create-agent-form" disabled={busy} />
       <SectionCard title={t("agentIdentity")}>
-        <form className="stack-form wide-form" onSubmit={submit}>
+        <form
+          id="create-agent-form"
+          className="stack-form wide-form"
+          onSubmit={submit}
+          aria-busy={busy}
+        >
           <label>
             <span>{t("agentName")}</span>
             <input
               value={name}
+              disabled={busy}
               maxLength={120}
               onChange={(event) => {
                 abandonCreateIntent();
@@ -345,6 +325,7 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
             </span>
             <textarea
               value={description}
+              disabled={busy}
               maxLength={500}
               onChange={(event) => {
                 abandonCreateIntent();
@@ -359,17 +340,6 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
               onRetry={retryable ? () => void createAgent() : undefined}
             />
           ) : null}
-          <div className="button-row">
-            <Link
-              className="secondary-action"
-              href={`/student/groups/${groupId}`}
-            >
-              {t("cancel")}
-            </Link>
-            <button className="primary-action" type="submit" disabled={busy}>
-              {busy ? t("creating") : t("createV10")}
-            </button>
-          </div>
         </form>
       </SectionCard>
     </>

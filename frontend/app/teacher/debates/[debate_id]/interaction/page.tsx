@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "../../../../../components/app-shell";
+import { WorkspaceAction } from "../../../../../components/workspace-actions";
 import { TeacherWave3 } from "../../../../../components/wave3";
 import {
   ErrorNotice,
@@ -60,18 +60,14 @@ export default function TeacherDebateInteractionPage() {
         {detail && debateId ? (
           <>
             <PageIntro title={t("wave3Title")} />
+            <WorkspaceAction
+              name="back"
+              href={`/teacher/debates/${debateId}/control`}
+            />
             {error ? (
               <ErrorNotice error={error} onRetry={() => void load()} />
             ) : null}
             <TeacherWave3 api={api} debateId={debateId} detail={detail} />
-            <div className="button-row">
-              <Link
-                className="secondary-action"
-                href={`/teacher/debates/${debateId}/control`}
-              >
-                {t("wave3BackToPlayback")}
-              </Link>
-            </div>
           </>
         ) : null}
       </AppShell>

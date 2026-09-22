@@ -249,7 +249,6 @@ button:disabled {
 .stack-form label small,
 .document-main small,
 .list-row small,
-.version-summary p,
 .teaching-note-grid p,
 .published-card p,
 .course-context span,
@@ -840,7 +839,6 @@ details > summary {
 .compact-list,
 .agent-list,
 .document-list,
-.version-list,
 .snapshot-files {
   display: grid;
   gap: 8px;
@@ -849,7 +847,6 @@ details > summary {
 .list-row,
 .agent-row,
 .document-row,
-.version-summary,
 .snapshot-file {
   display: flex;
   align-items: center;
@@ -1384,27 +1381,6 @@ details > summary {
   background: #e9e5f8;
   font-size: 0.7rem;
   font-weight: 760;
-}
-
-.version-summary {
-  padding: 15px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-}
-
-.version-summary:last-child {
-  border-bottom: 0;
-}
-
-.version-summary strong {
-  font-size: 0.95rem;
-}
-
-.version-summary p {
-  margin: 7px 0 0;
-  line-height: 1.45;
 }
 
 .teacher-version {

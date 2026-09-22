@@ -40,21 +40,9 @@ const enMessages = {
   createAgent: "New",
   name: "Name",
   description: "Description",
-  editDescription: "Edit",
-  saveDescription: "Save",
   deleteAgent: "Delete",
   deleteAgentConfirm:
     "Delete this Agent permanently? Draft state will be removed; shared group files stay.",
-  discardDescription: "Discard",
-  discardDescriptionConfirm:
-    "Discard unsaved description edits and leave this Agent page?",
-  currentMetadata: "Current Agent metadata",
-  metadataConflict:
-    "The description changed elsewhere. Your draft is still here; review the current value and save again.",
-  metadataSaved: "Description saved.",
-  legacyInactive: "Legacy inactive",
-  continueDraft: "Edit",
-  createVersion: "New",
   readOnly: "Read-only published snapshot",
   noResults: "Nothing here yet",
   retryConflict: "The draft changed elsewhere. Your local text is still here.",
@@ -232,7 +220,6 @@ const enMessages = {
   statusInterrupted: "interrupted",
   studentHome: "Home",
   homeward: "Homeward",
-  agentInfo: "Info",
   welcomeBack: "Welcome back",
   studentHomeLede:
     "Build an Agent with a clear identity, a selected evidence set, and a release that a teacher can inspect.",
@@ -318,9 +305,6 @@ const enMessages = {
     "A draft is the safe place to revise prompt, evidence, and release checks.",
   noEditableDraft: "None",
   openWorkbench: "Edit",
-  versionHistory: "Versions",
-  versionHistoryLede:
-    "The full release trail stays available for your group, including snapshots used in prior classroom work.",
   noVersions: "None",
   inspectRelease: "Check",
   immutable: "Immutable",
@@ -329,6 +313,7 @@ const enMessages = {
   workbenchLede:
     "Edit the draft, select evidence, test retrieval, then publish only when the server checklist is clear.",
   unsavedChanges: "Unsaved local changes",
+  discardDraftConfirm: "Discard unsaved changes?",
   saveBeforePublish:
     "Save your local AGENT.md, avatar, or voice changes before publishing.",
   conflictDetail:
@@ -786,20 +771,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   createAgent: "新建",
   name: "名称",
   description: "简介",
-  editDescription: "编辑简介",
-  saveDescription: "保存",
   deleteAgent: "删除",
   deleteAgentConfirm:
     "确定永久删除这个智能体吗？只删除草稿状态，不删除小组共享文件。",
-  discardDescription: "放弃简介修改",
-  discardDescriptionConfirm: "放弃未保存的简介修改并离开智能体页面吗？",
-  currentMetadata: "当前智能体元数据",
-  metadataConflict:
-    "简介已在其他位置更新。本地草稿仍保留，请检查当前值后再次保存。",
-  metadataSaved: "简介已保存。",
-  legacyInactive: "历史停用",
-  continueDraft: "编辑",
-  createVersion: "创建下一版本",
   readOnly: "已发布快照（只读）",
   noResults: "这里还没有内容",
   retryConflict: "草稿已在其他地方更新，本地文字仍然保留。",
@@ -972,7 +946,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   statusInterrupted: "已中断",
   studentHome: "首页",
   homeward: "Homeward",
-  agentInfo: "信息",
   welcomeBack: "欢迎回来",
   studentHomeLede: "构建清晰的人设、明确的证据集，以及教师可以检查的发布版本。",
   currentCourse: "当前课程",
@@ -1047,8 +1020,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   draftStatusLede: "草稿是修改提示词、证据和发布检查项的安全空间。",
   noEditableDraft: "无",
   openWorkbench: "编辑",
-  versionHistory: "版本",
-  versionHistoryLede: "完整版本轨迹会保留在小组内，包括过往课堂使用的快照。",
   noVersions: "无",
   inspectRelease: "查看",
   immutable: "不可变",
@@ -1056,6 +1027,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   backToAgent: "返回",
   workbenchLede: "编辑草稿、选择证据、测试检索，服务器检查通过后再发布。",
   unsavedChanges: "本地有未保存修改",
+  discardDraftConfirm: "放弃未保存的修改？",
   saveBeforePublish: "发布前请先保存本地 AGENT.md、形象或音色修改。",
   conflictDetail:
     "本地 AGENT.md 和证据选择未变。重新进入前，请复制保留你的修改。",

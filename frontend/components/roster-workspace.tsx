@@ -10,6 +10,7 @@ import {
 } from "../lib/api";
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
+import { WorkspaceAction } from "./workspace-actions";
 import {
   EmptyCard,
   ErrorNotice,
@@ -171,7 +172,9 @@ export function RosterWorkspace() {
                 return (
                   <div className="list-row account-row" key={entry.user_id}>
                     <form
+                      id={`roster-edit-${entry.user_id}`}
                       className="stack-form account-edit"
+                      aria-busy={pending}
                       onSubmit={(event) => {
                         event.preventDefault();
                         void mutate(entry, {
@@ -182,10 +185,21 @@ export function RosterWorkspace() {
                         });
                       }}
                     >
+                      <WorkspaceAction
+                        name="done"
+                        form={`roster-edit-${entry.user_id}`}
+                        disabled={pending}
+                      />
+                      <WorkspaceAction
+                        name="back"
+                        onClick={() => setEditing(null)}
+                        disabled={pending}
+                      />
                       <label>
                         <span>{t("displayNameLabel")}</span>
                         <input
                           value={draft.display_name}
+                          disabled={pending}
                           maxLength={200}
                           onChange={(event) =>
                             setDraft((previous) => ({
@@ -201,6 +215,7 @@ export function RosterWorkspace() {
                         <input
                           list="roster-group-names"
                           value={draft.group_name}
+                          disabled={pending}
                           maxLength={200}
                           onChange={(event) =>
                             setDraft((previous) => ({
@@ -210,23 +225,6 @@ export function RosterWorkspace() {
                           }
                         />
                       </label>
-                      <div className="button-row">
-                        <button
-                          className="inline-button"
-                          type="submit"
-                          disabled={pending}
-                        >
-                          {t("save")}
-                        </button>
-                        <button
-                          className="inline-button"
-                          type="button"
-                          disabled={pending}
-                          onClick={() => setEditing(null)}
-                        >
-                          {t("cancel")}
-                        </button>
-                      </div>
                     </form>
                   </div>
                 );

@@ -39,7 +39,7 @@ import {
 } from "../../ui";
 import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
-import { WorkspaceNew } from "../../workspace-new";
+import { WorkspaceAction } from "../../workspace-actions";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
 
@@ -137,7 +137,11 @@ export function TeacherDebateList({
   return (
     <div className={styles.pageStack}>
       <PageIntro title={t("debatePreviewTitle")} />
-      <WorkspaceNew href="/teacher/debates/new" disabled={!courseId} />
+      <WorkspaceAction
+        name="new"
+        href="/teacher/debates/new"
+        disabled={!courseId}
+      />
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
@@ -502,6 +506,16 @@ export function TeacherDebateCreate({
   return (
     <div className={styles.pageStack}>
       <PageIntro title={copy(t, "newDebateTitle")} />
+      {!rulesEditing ? (
+        <WorkspaceAction name="back" href="/teacher/debates" disabled={busy} />
+      ) : null}
+      {!rulesEditing ? (
+        <WorkspaceAction
+          name="done"
+          form="create-debate-form"
+          disabled={busy || candidates.length === 0}
+        />
+      ) : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form
         id="create-debate-form"
@@ -512,23 +526,6 @@ export function TeacherDebateCreate({
           <SectionCard
             title={copy(t, "debateTopic")}
             className={`${styles.topicCard} ${sectionStyles.section}`}
-            action={
-              <div className={styles.createActions}>
-                <Link className="secondary-action" href="/teacher/debates">
-                  {copy(t, "debateBack")}
-                </Link>
-                <button
-                  className="primary-action"
-                  form="create-debate-form"
-                  disabled={busy || rulesEditing || candidates.length === 0}
-                  type="submit"
-                >
-                  {busy
-                    ? copy(t, "debateCreating")
-                    : copy(t, "debateCreateAction")}
-                </button>
-              </div>
-            }
           >
             <div>
               <textarea

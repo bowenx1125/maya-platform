@@ -256,6 +256,7 @@ export function PersonaPreview({
   previousSpec,
   diagnostics = [],
   confirmed = false,
+  disabled = false,
   onCompile,
   onConfirm,
 }: {
@@ -264,6 +265,7 @@ export function PersonaPreview({
   previousSpec?: PersonaPreviewSpec | null;
   diagnostics?: readonly PersonaPreviewDiagnostic[];
   confirmed?: boolean;
+  disabled?: boolean;
   onCompile?: () => void;
   onConfirm?: () => void;
 }) {
@@ -290,6 +292,7 @@ export function PersonaPreview({
               className="primary-action compact-action"
               type="button"
               onClick={onConfirm}
+              disabled={disabled}
             >
               Confirm
             </button>
@@ -298,6 +301,7 @@ export function PersonaPreview({
               className="primary-action compact-action"
               type="button"
               onClick={onCompile}
+              disabled={disabled}
             >
               Compile
             </button>

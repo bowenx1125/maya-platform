@@ -12,7 +12,7 @@ import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
-import { WorkspaceNew } from "../workspace-new";
+import { WorkspaceAction } from "../workspace-actions";
 import {
   EmptyCard,
   ErrorNotice,
@@ -249,14 +249,15 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
   }
 
   if (loading) return <LoadingCard />;
-  if (error && documents.length === 0) {
+  if (error && documents.length === 0 && !creating && !editing) {
     return <ErrorNotice error={error} onRetry={retry} />;
   }
 
   return (
     <>
       <PageIntro title={t("knowledgePageTitle")} />
-      <WorkspaceNew
+      <WorkspaceAction
+        name="new"
         disabled={busyId !== null || creating || editing !== null}
         onClick={() => setCreating(true)}
       />
@@ -275,92 +276,109 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
         <SectionCard>
           <MarkdownEditor
             disabled={busyId !== null}
-            onCreate={(file) => void create(file)}
-            onCancel={() => setCreating(false)}
+            onCreate={create}
+            onChange={() => {
+              mutationStore.abandon(`knowledge-create:${groupId}`);
+              clearMutationState();
+            }}
+            onCancel={() => {
+              mutationStore.abandon(`knowledge-create:${groupId}`);
+              clearMutationState();
+              setCreating(false);
+            }}
           />
         </SectionCard>
       ) : null}
       {editing ? (
         <SectionCard title={t("knowledgeEditTitle")}>
           <MarkdownEditor
+            key={editing.id + editing.content_hash}
             document={editing}
             initialContent={editingContent}
             disabled={busyId !== null}
-            onReplace={(request) => void replace(request)}
+            onReplace={replace}
+            onChange={() => {
+              mutationStore.abandon(`knowledge-replace:${editing.id}`);
+              clearMutationState();
+            }}
             onCancel={() => {
+              mutationStore.abandon(`knowledge-replace:${editing.id}`);
+              clearMutationState();
               setEditing(null);
               setEditingContent("");
             }}
           />
         </SectionCard>
       ) : null}
-      <SectionCard title={`${documents.length} ${t("fileCount")}`}>
-        {documents.length === 0 ? (
-          <EmptyCard title={t("knowledgeNoFiles")} />
-        ) : (
-          <div className="document-list">
-            {documents.map((document) => (
-              <div className="document-row library-row" key={document.id}>
-                <span className="document-main">
-                  <strong>{document.source_filename}</strong>
-                  <small>
-                    {document.char_count.toLocaleString()} {t("characters")} ·{" "}
-                    {document.index_revision} · {document.workspace_state}
-                  </small>
-                </span>
-                <StatusBadge
-                  status={document.index_status}
-                  tone={
-                    document.index_status === "ready"
-                      ? "good"
-                      : document.index_status === "failed"
-                        ? "bad"
-                        : "warn"
-                  }
-                />
-                <div className="row-actions">
-                  <button
-                    className="inline-button"
-                    type="button"
-                    disabled={busyId === document.id}
-                    onClick={() => void beginEdit(document)}
-                  >
-                    {t("edit")}
-                  </button>
-                  <button
-                    className="inline-button"
-                    type="button"
-                    disabled={busyId === document.id}
-                    onClick={() => void download(document)}
-                  >
-                    {t("download")}
-                  </button>
-                  {document.index_status === "failed" ? (
+      {!creating && !editing ? (
+        <SectionCard title={`${documents.length} ${t("fileCount")}`}>
+          {documents.length === 0 ? (
+            <EmptyCard title={t("knowledgeNoFiles")} />
+          ) : (
+            <div className="document-list">
+              {documents.map((document) => (
+                <div className="document-row library-row" key={document.id}>
+                  <span className="document-main">
+                    <strong>{document.source_filename}</strong>
+                    <small>
+                      {document.char_count.toLocaleString()} {t("characters")} ·{" "}
+                      {document.index_revision} · {document.workspace_state}
+                    </small>
+                  </span>
+                  <StatusBadge
+                    status={document.index_status}
+                    tone={
+                      document.index_status === "ready"
+                        ? "good"
+                        : document.index_status === "failed"
+                          ? "bad"
+                          : "warn"
+                    }
+                  />
+                  <div className="row-actions">
                     <button
                       className="inline-button"
                       type="button"
-                      disabled={busyId === document.id}
-                      onClick={() => void reindex(document)}
+                      disabled={busyId !== null}
+                      onClick={() => void beginEdit(document)}
                     >
-                      {t("reindex")}
+                      {t("edit")}
                     </button>
-                  ) : null}
-                  {document.workspace_state === "active" ? (
                     <button
-                      className="inline-button danger-button"
+                      className="inline-button"
                       type="button"
-                      disabled={busyId === document.id}
-                      onClick={() => void hide(document)}
+                      disabled={busyId !== null}
+                      onClick={() => void download(document)}
                     >
-                      {t("hide")}
+                      {t("download")}
                     </button>
-                  ) : null}
+                    {document.index_status === "failed" ? (
+                      <button
+                        className="inline-button"
+                        type="button"
+                        disabled={busyId !== null}
+                        onClick={() => void reindex(document)}
+                      >
+                        {t("reindex")}
+                      </button>
+                    ) : null}
+                    {document.workspace_state === "active" ? (
+                      <button
+                        className="inline-button danger-button"
+                        type="button"
+                        disabled={busyId !== null}
+                        onClick={() => void hide(document)}
+                      >
+                        {t("hide")}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      ) : null}
     </>
   );
 }

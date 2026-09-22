@@ -61,7 +61,6 @@ function renderPreview(snapshot: DebatePreviewSnapshot) {
   return render(
     <LocaleProvider initialLocale="en">
       <DebatePreview
-        backHref="/teacher/debates"
         detail={snapshot}
         onRetryTurn={() => undefined}
         openClassroomHref="/teacher/debates-beta/debate-a/control"

@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
+import { AppShell } from "../components/app-shell";
 import { buildPersonaTemplate } from "../components/persona";
 import { LanguageSwitcher, LocaleProvider } from "../components/locale";
 import { SessionProvider, useSession } from "../components/session-provider";
@@ -21,10 +22,11 @@ import type {
 } from "../lib/api";
 import { PlatformApiError } from "../lib/api";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
+  usePathname: () => "/student/agent-versions/version-id/edit",
 }));
 
 // Keep the integration test on the real AgentWorkbench/SessionProvider path
@@ -179,6 +181,7 @@ function makeApi() {
     avatarTemplates: vi.fn(async () => makeTemplates()),
     voiceProfiles: vi.fn(async () => []),
     updateDraft: vi.fn(async () => version),
+    compilePersona: vi.fn(),
     uploadKnowledge: vi.fn(async (..._args: unknown[]) => ({
       agent_version: version,
       document,
@@ -204,7 +207,9 @@ function renderWorkbench(
       <SessionProvider api={api}>
         <IdentityProbe onChange={onIdentityChange} />
         <LanguageSwitcher />
-        <AgentWorkbench versionId="version-id" />
+        <AppShell role="student">
+          <AgentWorkbench versionId="version-id" />
+        </AppShell>
       </SessionProvider>
     </LocaleProvider>,
   );
@@ -214,27 +219,109 @@ describe("Wave 1C real workbench locale boundary", () => {
   afterEach(() => {
     cleanup();
     navigation.push.mockReset();
+    navigation.replace.mockReset();
+    vi.restoreAllMocks();
   });
 
-  it("does not publish unsaved local AGENT/avatar/voice state", async () => {
-    const publish = vi.fn();
+  it("saves local edits before Done publishes the returned revision", async () => {
     const { api } = makeApi();
-    api.publish = publish;
+    const saved = makeVersion({ revision: 1, agent_md: "# Local Agent" });
+    api.updateDraft.mockResolvedValue(saved);
+    api.publish.mockResolvedValue({ ...saved, state: "published" });
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
-    );
+    await screen.findByRole("button", { name: "Done" });
     const editor = screen.getByLabelText("AGENT.md editor");
     fireEvent.change(editor, { target: { value: "# Local Agent" } });
+    expect(screen.getAllByText("Unsaved local changes")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(api.publish).toHaveBeenCalledWith(
+        "version-id",
+        1,
+        expect.anything(),
+      ),
+    );
+    expect(api.updateDraft).toHaveBeenCalledWith(
+      "version-id",
+      expect.objectContaining({
+        expected_revision: 0,
+        agent_md: "# Local Agent",
+      }),
+    );
+    expect(api.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(
+      api.publish.mock.invocationCallOrder[0],
+    );
+    expect(navigation.replace).toHaveBeenCalledWith("/student/agents/agent-id");
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+  });
 
-    const publishButton = screen.getByRole("button", {
-      name: "Publish",
+  it("keeps Done from publishing when saving introduces new server blockers", async () => {
+    const { api } = makeApi();
+    api.updateDraft.mockResolvedValue(
+      makeVersion({
+        revision: 1,
+        agent_md: "# Local Agent",
+        publish_blockers: ["persona_compile_required"],
+      }),
+    );
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    await screen.findByRole("button", { name: "Done" });
+    fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
+      target: { value: "# Local Agent" },
     });
-    expect((publishButton as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByText("Unsaved local changes")).toHaveLength(2);
-    fireEvent.click(publishButton);
-    expect(publish).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Done" })).toBeNull(),
+    );
+    expect(api.updateDraft).toHaveBeenCalledTimes(1);
+    expect(api.publish).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Compile" })).toBeTruthy();
+    expect(screen.getByLabelText("AGENT.md editor")).toHaveProperty(
+      "value",
+      "# Local Agent",
+    );
+  });
+
+  it("compiles the saved revision instead of the stale server draft", async () => {
+    const { api } = makeApi();
+    api.updateDraft.mockResolvedValue(
+      makeVersion({ revision: 1, agent_md: "# Local Agent" }),
+    );
+    api.compilePersona.mockResolvedValue({
+      raw_agent_md_hash: "hash",
+      persona_spec: null,
+      persona_spec_hash: "spec",
+      diagnostics: [],
+    });
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    await screen.findByRole("button", { name: "Compile" });
+    fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
+      target: { value: "# Local Agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Compile" }));
+    await waitFor(() =>
+      expect(api.compilePersona).toHaveBeenCalledWith("version-id", 1),
+    );
+    expect(api.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(
+      api.compilePersona.mock.invocationCallOrder[0],
+    );
+    expect(api.publish).not.toHaveBeenCalled();
+  });
+
+  it("keeps Back in the sidebar and asks before discarding local edits", async () => {
+    const { api } = makeApi();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const back = await screen.findByRole("link", { name: "Back" });
+    fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
+      target: { value: "# Unsaved" },
+    });
+    expect(back.closest("nav")).not.toBeNull();
+    expect(back.getAttribute("href")).toBe("/student/agents/agent-id");
+    expect(fireEvent.click(back)).toBe(false);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(api.updateDraft).not.toHaveBeenCalled();
   });
 
   it("writes the frozen English outline even when the interface is Chinese", async () => {
@@ -275,7 +362,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
     );
     const countsBefore = {
       me: api.me.mock.calls.length,
@@ -355,12 +442,12 @@ describe("Wave 1C real workbench locale boundary", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
     );
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Conflict stays local" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "Your local AGENT.md",
@@ -393,5 +480,6 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.knowledge.mock.calls.length).toBe(countsBefore.knowledge);
     expect(api.ragPreview.mock.calls.length).toBe(countsBefore.ragPreview);
     expect(api.updateDraft).toHaveBeenCalledTimes(1);
+    expect(api.publish).not.toHaveBeenCalled();
   });
 });

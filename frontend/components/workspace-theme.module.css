@@ -69,7 +69,6 @@
 .surface :global(.compact-list),
 .surface :global(.agent-list),
 .surface :global(.document-list),
-.surface :global(.version-list),
 .surface :global(.snapshot-files) {
   gap: 12px;
 }
@@ -77,7 +76,6 @@
 .surface :global(.list-row),
 .surface :global(.agent-row),
 .surface :global(.document-row),
-.surface :global(.version-summary),
 .surface :global(.snapshot-file),
 .surface :global(.member-chip) {
   min-width: 0;
@@ -235,26 +233,6 @@
   overflow-wrap: anywhere;
 }
 
-.surface :global(.student-agent-entry) {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
-}
-
-.surface :global(.description-edit-trigger) {
-  min-width: 0;
-  width: 100%;
-  min-height: 44px;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-content);
-  text-align: left;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 @media (max-width: 900px) {
   .surface :global(.workbench-grid),
   .surface :global(.workspace-grid) {
@@ -267,8 +245,7 @@
     --workspace-inset: 20px;
   }
   .surface :global(.account-row),
-  .surface :global(.account-edit),
-  .surface :global(.student-agent-entry) {
+  .surface :global(.account-edit) {
     grid-template-columns: minmax(0, 1fr);
   }
   .surface :global(.account-row) > :global(.button-row) {
@@ -280,8 +257,7 @@
   .surface :global(.stat-row) > div {
     padding: 10px 8px;
   }
-  .surface :global(.document-row),
-  .surface :global(.version-summary) {
+  .surface :global(.document-row) {
     flex-wrap: wrap;
   }
   .surface :global(.document-main) {
@@ -300,28 +276,6 @@
   }
 }
 
-.surface :global(.agent-row-link) {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-  text-decoration: none;
-}
-.surface :global(.student-agent-entry) > :global(.description-edit-trigger) {
-  padding: 0 0 0 16px;
-  border: 0;
-  border-left: 1px solid var(--workspace-divider);
-  border-radius: 0;
-  background: transparent;
-}
-@media (max-width: 600px) {
-  .surface :global(.student-agent-entry) > :global(.description-edit-trigger) {
-    padding: 12px 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--workspace-divider);
-  }
-}
-
 .surface :global(.rendered-persona) {
   white-space: normal;
 }
@@ -336,15 +290,4 @@
   overflow-wrap: anywhere;
   font-size: 0.9rem;
   font-weight: 700;
-}
-.surface :global(.agent-info-description) {
-  padding: 16px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 14px;
-  background: var(--workspace-content);
-}
-.surface :global(.agent-info-description) p {
-  margin: 8px 0 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }

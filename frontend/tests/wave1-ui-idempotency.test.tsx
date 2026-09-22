@@ -15,7 +15,7 @@ import {
 } from "../lib/api";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
-const router = vi.hoisted(() => ({ push: vi.fn() }));
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
@@ -35,6 +35,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   useSessionMock.mockReset();
   router.push.mockReset();
+  router.replace.mockReset();
 });
 
 function createdAgent(): AgentDetail {
@@ -103,10 +104,14 @@ describe("Wave 1A UI idempotency wiring", () => {
     });
     useSessionMock.mockReturnValue({ api: { createAgent } });
 
-    render(<CreateAgentForm groupId="group-id" />);
+    render(
+      <AppShell role="student">
+        <CreateAgentForm groupId="group-id" />
+      </AppShell>,
+    );
     const name = screen.getByLabelText("Agent name");
     fireEvent.change(name, { target: { value: "First Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("alert").textContent).toContain("Request failed");
@@ -116,7 +121,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     expect(keys[1]).toBe(keys[0]);
 
     fireEvent.change(name, { target: { value: "Second Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(3));
     expect(keys[2]).not.toBe(keys[1]);
     expect(router.push).toHaveBeenCalledWith(
@@ -174,11 +179,15 @@ describe("Wave 1A UI idempotency wiring", () => {
     };
     useSessionMock.mockReturnValue({ api });
 
-    render(<AgentWorkbench versionId="version-id" />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy(),
+    render(
+      <AppShell role="student">
+        <AgentWorkbench versionId="version-id" />
+      </AppShell>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => {
       expect(api.publish).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("alert").textContent).toContain(
@@ -212,9 +221,13 @@ describe("Wave 1A UI idempotency wiring", () => {
     };
     useSessionMock.mockReturnValue({ api });
 
-    render(<AgentWorkbench versionId="version-id" />);
-    await screen.findByRole("button", { name: "Publish" });
-    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    render(
+      <AppShell role="student">
+        <AgentWorkbench versionId="version-id" />
+      </AppShell>,
+    );
+    await screen.findByRole("button", { name: "Done" });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     const link = await screen.findByRole("link", {
       name: "Review",
@@ -353,7 +366,11 @@ describe("Wave 1A UI idempotency wiring", () => {
     };
     useSessionMock.mockReturnValue({ api });
 
-    render(<AgentWorkbench versionId="version-id" />);
+    render(
+      <AppShell role="student">
+        <AgentWorkbench versionId="version-id" />
+      </AppShell>,
+    );
     await waitFor(() =>
       expect(screen.getAllByLabelText("Upload")).toHaveLength(2),
     );

@@ -60,8 +60,6 @@ export type DebatePreviewSnapshot = {
 
 export function DebatePreview({
   detail,
-  backHref,
-  backLabel = "Back",
   openClassroomHref,
   onRetryTurn,
   retryingTurnId = null,
@@ -69,8 +67,6 @@ export function DebatePreview({
   actions,
 }: {
   detail: DebatePreviewSnapshot;
-  backHref?: string;
-  backLabel?: string;
   openClassroomHref: string;
   onRetryTurn?: (turnId: string) => void;
   retryingTurnId?: string | null;
@@ -100,11 +96,6 @@ export function DebatePreview({
         <div className={styles.headerActions}>
           {actions}
           <div className={styles.navigationActions}>
-            {backHref ? (
-              <Link className="secondary-action" href={backHref}>
-                {backLabel}
-              </Link>
-            ) : null}
             {progress.ready ? (
               <Link className="primary-action" href={openClassroomHref}>
                 Immerse

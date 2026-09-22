@@ -8,6 +8,8 @@ export type WorkspaceIconName =
   | "chat"
   | "live"
   | "new"
+  | "back"
+  | "done"
   | "logout";
 
 const paths: Record<WorkspaceIconName, string> = {
@@ -22,6 +24,8 @@ const paths: Record<WorkspaceIconName, string> = {
   chat: "M21 11a8 8 0 0 1-8 8H7l-5 3 2-6a8 8 0 0 1-1-5 8 8 0 0 1 8-8h2a8 8 0 0 1 8 8ZM8 10h8M8 14h5",
   live: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM10 8l6 4-6 4z",
   new: "M12 5v14M5 12h14",
+  back: "M19 12H5m7-7-7 7 7 7",
+  done: "m5 12 4 4L19 6",
   logout: "M9 4H4v16h5M9 12h12m-4-4 4 4-4 4",
 };
 

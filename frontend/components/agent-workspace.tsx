@@ -1,11 +1,11 @@
 "use client";
 
-import { WorkspaceNew } from "./workspace-new";
+import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent, MouseEvent, ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import {
   PlatformApiError,
@@ -45,10 +45,6 @@ import {
   StatusBadge,
 } from "./ui";
 
-type AgentDetailWithMetadata = AgentDetail & {
-  metadata_revision?: number;
-};
-
 type PersonaVersionFields = {
   persona_spec_json?: unknown;
   persona_spec?: unknown;
@@ -75,28 +71,6 @@ type PersonaApi = PlatformApi & {
   ) => Promise<AgentVersion>;
 };
 
-type AgentMetadataApi = PlatformApi & {
-  updateAgentMetadata: (
-    agentId: string,
-    body: {
-      expected_metadata_revision: number;
-      description: string | null;
-    },
-  ) => Promise<AgentDetail>;
-  deleteAgent: (
-    agentId: string,
-    options?: { idempotency?: IdempotencyHandle },
-  ) => Promise<unknown>;
-};
-
-function isMetadataRevisionConflict(error: unknown): boolean {
-  return (
-    error instanceof PlatformApiError &&
-    error.status === 409 &&
-    error.code === "stale_metadata_revision"
-  );
-}
-
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
   const { api } = useSession();
@@ -106,20 +80,10 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [descriptionDraft, setDescriptionDraft] = useState("");
-  const [editingDescription, setEditingDescription] = useState(false);
-  const [descriptionSaving, setDescriptionSaving] = useState(false);
-  const [metadataConflict, setMetadataConflict] = useState(false);
-  const mutationStore = useIdempotencyStore();
   const [retryAction, setRetryAction] = useState<
     "delete" | "nextVersion" | null
   >(null);
-  const deleteIntent = `agent-delete:${agentId}`;
-  const nextVersionIntent = `agent-next-version:${agentId}`;
-  const metadataApi = api as AgentMetadataApi;
-  // Recovery callbacks can render while an action error is present, before
-  // the normal loaded-view narrowing below.
-  const currentAgent = agent as AgentDetail;
+  const mutationStore = useIdempotencyStore();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,9 +95,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
       ]);
       setAgent(nextAgent);
       setVersions(nextVersions);
-      setDescriptionDraft(nextAgent.description ?? "");
-      setEditingDescription(false);
-      setMetadataConflict(false);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -141,327 +102,134 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     }
   }, [agentId, api]);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void load();
-    }, 0);
+    const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  async function createNextVersion() {
+    const intent = "agent-next-version:" + agentId;
+    const handle = mutationStore.handleFor(intent);
+    setBusy(true);
+    setError(null);
+    setRetryAction(null);
+    try {
+      const next = await api.nextVersion(agentId, { idempotency: handle });
+      mutationStore.finish(intent, handle);
+      router.push("/student/agent-versions/" + next.id + "/edit");
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) setRetryAction("nextVersion");
+      else mutationStore.abandon(intent, handle);
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAgent(retry = false) {
+    if (!agent || (!retry && !window.confirm(t("deleteAgentConfirm")))) return;
+    const intent = "agent-delete:" + agentId;
+    const handle = mutationStore.handleFor(intent);
+    setBusy(true);
+    setError(null);
+    setRetryAction(null);
+    try {
+      await api.deleteAgent(agentId, { idempotency: handle });
+      mutationStore.finish(intent, handle);
+      router.replace("/student/groups/" + agent.group_id);
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) setRetryAction("delete");
+      else mutationStore.abandon(intent, handle);
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <LoadingCard />;
-  if (error || !agent)
+  if (!agent)
     return (
       <ErrorNotice
         error={error ?? new Error(t("agentNotFound"))}
-        onRetry={
-          retryAction === "delete"
-            ? () => void deleteAgent(true)
-            : retryAction === "nextVersion"
-              ? () => void createNextVersion()
-              : () => void load()
-        }
+        onRetry={() => void load()}
       />
     );
-
   const draft =
-    versions.find((version) => version.state === "draft") ??
-    versions.find((version) => version.id === agent.current_draft_version_id);
+    versions.find((version) => version.id === agent.current_draft_version_id) ??
+    versions.find((version) => version.state === "draft");
   const current =
     versions.find(
       (version) => version.id === agent.current_published_version_id,
     ) ?? versions.find((version) => version.state === "published");
-  const descriptionDirty =
-    descriptionDraft !== (currentAgent.description ?? "");
-  const canHardDelete =
-    !currentAgent.current_published_version_id &&
+  const visible = current ?? draft;
+  const canDelete =
+    !agent.current_published_version_id &&
     versions.every(
-      (version) =>
-        version.state === "draft" && version.knowledge_snapshot_id == null,
+      (version) => version.state === "draft" && !version.knowledge_snapshot_id,
     );
-
-  function abandonDeleteIntent() {
-    mutationStore.abandon(deleteIntent);
-  }
-
-  async function deleteAgent(retry = false) {
-    if (
-      !retry &&
-      descriptionDirty &&
-      !window.confirm(t("discardDescriptionConfirm"))
-    )
-      return;
-    if (!retry && !window.confirm(t("deleteAgentConfirm"))) return;
-    if (!retry) {
-      abandonDeleteIntent();
-      mutationStore.abandon(nextVersionIntent);
-    }
-    setBusy(true);
-    setError(null);
-    setRetryAction(null);
-    setMetadataConflict(false);
-    const handle = mutationStore.handleFor(deleteIntent);
-    try {
-      await metadataApi.deleteAgent(currentAgent.id, { idempotency: handle });
-      mutationStore.finish(deleteIntent, handle);
-      router.replace(`/student/groups/${currentAgent.group_id}`);
-    } catch (cause) {
-      if (isAmbiguousMutationFailure(cause)) {
-        setRetryAction("delete");
-      } else {
-        mutationStore.abandon(deleteIntent, handle);
-      }
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createNextVersion() {
-    abandonDeleteIntent();
-    const handle = mutationStore.handleFor(nextVersionIntent);
-    setBusy(true);
-    setError(null);
-    setRetryAction(null);
-    try {
-      const next = await api.nextVersion(currentAgent.id, {
-        idempotency: handle,
-      });
-      mutationStore.finish(nextVersionIntent, handle);
-      router.push(`/student/agent-versions/${next.id}/edit`);
-    } catch (cause) {
-      if (isAmbiguousMutationFailure(cause)) {
-        setRetryAction("nextVersion");
-      } else {
-        mutationStore.abandon(nextVersionIntent, handle);
-      }
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveDescription() {
-    if (!descriptionDirty) {
-      setEditingDescription(false);
-      return;
-    }
-    setDescriptionSaving(true);
-    setError(null);
-    setRetryAction(null);
-    setMetadataConflict(false);
-    const localDraft = descriptionDraft;
-    try {
-      const next = await metadataApi.updateAgentMetadata(currentAgent.id, {
-        expected_metadata_revision:
-          (currentAgent as AgentDetailWithMetadata).metadata_revision ?? 0,
-        description: descriptionDraft,
-      });
-      setAgent(next);
-      setDescriptionDraft(next.description ?? "");
-      setEditingDescription(false);
-    } catch (cause) {
-      if (isMetadataRevisionConflict(cause)) {
-        try {
-          const authoritative = await metadataApi.agent(currentAgent.id);
-          setAgent(authoritative);
-          setDescriptionDraft(localDraft);
-          setEditingDescription(true);
-          setMetadataConflict(true);
-          setError(null);
-        } catch (refreshError) {
-          setError(refreshError);
-        }
-      } else {
-        setError(cause);
-      }
-    } finally {
-      setDescriptionSaving(false);
-    }
-  }
-
-  function cancelDescription() {
-    setDescriptionDraft(currentAgent.description ?? "");
-    setEditingDescription(false);
-    setMetadataConflict(false);
-    setError(null);
-  }
-
-  function returnToGroup(event: MouseEvent<HTMLAnchorElement>) {
-    if (descriptionDirty && !window.confirm(t("discardDescriptionConfirm"))) {
-      event.preventDefault();
-    }
-  }
-
+  const actions = (
+    <div className="button-row">
+      {draft && !current ? (
+        <Link
+          className="secondary-action"
+          href={"/student/agent-versions/" + draft.id + "/edit"}
+        >
+          {t("edit")}
+        </Link>
+      ) : null}
+      {canDelete ? (
+        <button
+          className="text-link danger-button"
+          type="button"
+          disabled={busy}
+          onClick={() => void deleteAgent()}
+        >
+          {t("deleteAgent")}
+        </button>
+      ) : null}
+    </div>
+  );
   return (
     <>
-      <PageIntro title={agent.name} />
-      {!draft && current ? (
-        <WorkspaceNew
-          disabled={busy || descriptionSaving || agent.status === "archived"}
-          onClick={() => void createNextVersion()}
-        />
-      ) : null}
       {error ? (
         <ErrorNotice
           error={error}
           onRetry={
-            isMetadataRevisionConflict(error)
-              ? undefined
-              : retryAction === "delete"
-                ? () => void deleteAgent(true)
-                : retryAction === "nextVersion"
-                  ? () => void createNextVersion()
-                  : () => void load()
+            retryAction === "delete"
+              ? () => void deleteAgent(true)
+              : retryAction === "nextVersion"
+                ? () => void createNextVersion()
+                : () => void load()
           }
         />
       ) : null}
-      {metadataConflict ? (
-        <div className="notice notice-warning" role="alert">
-          {t("metadataConflict")}
-        </div>
+      {current ? (
+        <WorkspaceAction
+          name="new"
+          disabled={busy || agent.status === "archived"}
+          href={
+            draft ? "/student/agent-versions/" + draft.id + "/edit" : undefined
+          }
+          onClick={draft ? undefined : () => void createNextVersion()}
+        />
       ) : null}
-      <SectionCard
-        title={t("agentInfo")}
-        action={
-          <div className="button-row">
-            <div className="button-row">
-              <Link
-                className="secondary-action"
-                href={`/student/groups/${agent.group_id}`}
-                onClick={returnToGroup}
-              >
-                {t("returnWorkspace")}
-              </Link>
-              {canHardDelete ? (
-                <button
-                  className="secondary-action"
-                  type="button"
-                  disabled={busy || descriptionSaving}
-                  onClick={() => void deleteAgent()}
-                >
-                  {t("deleteAgent")}
-                </button>
-              ) : null}
-              {draft ? (
-                <Link
-                  className="primary-action"
-                  href={`/student/agent-versions/${draft.id}/edit`}
-                >
-                  {t("continueDraft")}
-                </Link>
-              ) : null}
-            </div>
-            {!editingDescription ? (
-              <button
-                className="inline-button"
-                type="button"
-                onClick={() => setEditingDescription(true)}
-              >
-                {t("edit")}
-              </button>
-            ) : undefined}
-          </div>
-        }
-      >
-        {editingDescription ? (
-          <div className="stack-form">
-            <label>
-              <span>{t("shortDescription")}</span>
-              <textarea
-                aria-label={t("description")}
-                value={descriptionDraft}
-                rows={4}
-                disabled={descriptionSaving}
-                onChange={(event) => setDescriptionDraft(event.target.value)}
-              />
-            </label>
-            <div className="button-row">
-              <button
-                className="primary-action"
-                type="button"
-                disabled={descriptionSaving || !descriptionDirty}
-                onClick={() => void saveDescription()}
-              >
-                {descriptionSaving ? t("saving") : t("saveDescription")}
-              </button>
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={descriptionSaving}
-                onClick={cancelDescription}
-              >
-                {t("cancel")}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="agent-info-description">
-            <span className="section-label">{t("description")}</span>
-            <p>{agent.description || "—"}</p>
-          </div>
-        )}
-      </SectionCard>
-      <SectionCard title={t("versionHistory")}>
-        {versions.length === 0 ? (
-          <p className="muted-copy">{t("noVersions")}</p>
-        ) : (
-          <div className="version-list">
-            {versions
-              .slice()
-              .sort((a, b) =>
-                b.version_label.localeCompare(a.version_label, undefined, {
-                  numeric: true,
-                }),
-              )
-              .map((version) => (
-                <VersionSummary
-                  key={version.id}
-                  version={version}
-                  current={version.id === current?.id}
-                />
-              ))}
-          </div>
-        )}
-      </SectionCard>
+      {visible ? (
+        <ReadOnlyVersion version={visible} agent={agent} actions={actions} />
+      ) : (
+        <SectionCard action={actions}>
+          <WorkspaceAction
+            name="back"
+            href={`/student/groups/${agent.group_id}`}
+          />
+          <EmptyCard title={t("noVersions")} />
+        </SectionCard>
+      )}
     </>
-  );
-}
-
-function VersionSummary({
-  version,
-  current = false,
-  action,
-}: {
-  version: AgentVersion;
-  current?: boolean;
-  action?: ReactNode;
-}) {
-  const t = useT();
-  return (
-    <div className="version-summary">
-      <div>
-        <div className="chip-row">
-          <strong>{version.version_label}</strong>
-          <StatusBadge status={version.state} />
-          {current ? (
-            <span className="current-label">{t("current")}</span>
-          ) : null}
-        </div>
-      </div>
-      {action ??
-        (version.state !== "draft" ? (
-          <Link
-            className="text-link"
-            href={`/student/agent-versions/${version.id}`}
-          >
-            {t("inspectRelease")}
-          </Link>
-        ) : null)}
-    </div>
   );
 }
 
 export function AgentWorkbench({ versionId }: { versionId: string }) {
   const t = useT();
+  const router = useRouter();
   const { locale } = useLocale();
   const { api } = useSession();
   const [version, setVersion] = useState<AgentVersion | null>(null);
@@ -659,6 +427,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       setAvatarConfig(next.avatar_config);
       setVoiceProfileId(next.voice_profile_id ?? null);
       setNotice("draftSavedNotice");
+      return next;
     } catch (cause) {
       if (isConflict(cause)) setConflict(true);
       setError(cause);
@@ -669,6 +438,8 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
 
   async function compilePersonaDraft() {
     if (!personaApi.compilePersona) return;
+    const saved = localDirty ? await saveDraft() : currentVersion;
+    if (!saved) return;
     abandonUploadIntent();
     abandonPublishIntent();
     setSaving(true);
@@ -677,10 +448,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     setNotice(null);
     setConflict(false);
     try {
-      const result = await personaApi.compilePersona(
-        currentVersion.id,
-        currentVersion.revision,
-      );
+      const result = await personaApi.compilePersona(saved.id, saved.revision);
       setVersion((current) => {
         if (!current) return current;
         return {
@@ -868,8 +636,8 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   async function publish(retry = false) {
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
-    if (localDirty) return;
-    if (blockers.length > 0) return;
+    const saved = localDirty ? await saveDraft() : currentVersion;
+    if (!saved || (saved.publish_blockers ?? []).length > 0) return;
     if (!retry) abandonUploadIntent();
     setSaving(true);
     setError(null);
@@ -877,15 +645,14 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     setNotice(null);
     const handle = mutationStore.handleFor(publishIntent);
     try {
-      const next = await api.publish(
-        currentVersion.id,
-        currentVersion.revision,
-        { idempotency: handle },
-      );
+      const next = await api.publish(saved.id, saved.revision, {
+        idempotency: handle,
+      });
       mutationStore.finish(publishIntent, handle);
       setRetryAction(null);
       setVersion(next);
       setNotice("publishedNotice");
+      router.replace(`/student/agents/${currentAgent.id}`);
     } catch (cause) {
       setProviderConfirmationRequired(
         cause instanceof PlatformApiError &&
@@ -907,6 +674,20 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
+      <WorkspaceAction
+        name="back"
+        href={`/student/agents/${agent.id}`}
+        disabled={saving}
+        onClick={(event) => {
+          if (localDirty && !window.confirm(t("discardDraftConfirm")))
+            event.preventDefault();
+        }}
+      />
+      <WorkspaceAction
+        name="done"
+        disabled={saving || (!localDirty && blockers.length > 0)}
+        onClick={() => void publish()}
+      />
       <div className="workbench-meta">
         <StatusBadge status="draft" />
         {localDirty ? (
@@ -915,11 +696,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           </span>
         ) : null}
       </div>
-      {localDirty ? (
-        <div className="notice notice-warning" role="status" aria-live="polite">
-          <strong>{t("unsavedChanges")}</strong>
-        </div>
-      ) : null}
       {conflict ? <DraftConflictNotice /> : null}
       {error && !conflict ? (
         <>
@@ -961,51 +737,31 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             title={t("agentMd")}
             action={
               <div className="button-row">
-                <div className="button-row">
-                  <Link
-                    className="secondary-action"
-                    href={`/student/agents/${agent.id}`}
-                  >
-                    {t("backToAgent")}
-                  </Link>
-                  <button
-                    className="primary-action"
-                    type="button"
-                    disabled={saving || blockers.length > 0 || localDirty}
-                    title={localDirty ? t("saveBeforePublish") : undefined}
-                    onClick={() => void publish()}
-                  >
-                    {saving ? t("working") : t("publish")}
-                  </button>
-                </div>
-                {
-                  <div className="button-row">
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={() => {
-                        abandonUploadIntent();
-                        abandonPublishIntent();
-                        setAgentMd(buildPersonaTemplate(agent.name));
-                      }}
-                    >
-                      {t("insertOutline")}
-                    </button>
-                    <label className="secondary-action file-button">
-                      {t("uploadMd")}
-                      <input
-                        type="file"
-                        accept=".md,text/markdown"
-                        disabled={saving}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void uploadAgentMd(file);
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                }
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    abandonUploadIntent();
+                    abandonPublishIntent();
+                    setAgentMd(buildPersonaTemplate(agent.name));
+                  }}
+                >
+                  {t("insertOutline")}
+                </button>
+                <label className="secondary-action file-button">
+                  {t("uploadMd")}
+                  <input
+                    type="file"
+                    accept=".md,text/markdown"
+                    disabled={saving}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadAgentMd(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
               </div>
             }
           >
@@ -1014,6 +770,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               aria-label={`${t("agentMd")} ${t("editor")}`}
               maxLength={12000}
               value={agentMd}
+              disabled={saving}
               onChange={(event) => {
                 abandonUploadIntent();
                 abandonPublishIntent();
@@ -1024,14 +781,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               <span>
                 {agentMd.length.toLocaleString()} / 12,000 {t("characters")}
               </span>
-              <button
-                className="primary-action compact-action"
-                type="button"
-                disabled={saving || !localDirty}
-                onClick={() => void saveDraft()}
-              >
-                {saving ? t("saving") : t("save")}
-              </button>
             </div>
           </SectionCard>
           <PersonaPreview
@@ -1047,6 +796,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   ))
             }
             confirmed={personaConfirmed}
+            disabled={saving}
             onCompile={() => void compilePersonaDraft()}
             onConfirm={() => void confirmPersonaDraft()}
           />
@@ -1285,9 +1035,11 @@ function ChatResult({ result }: { result: TestChatResponse }) {
 function ReadOnlyVersion({
   version,
   agent,
+  actions,
 }: {
   version: AgentVersion;
   agent: AgentDetail;
+  actions?: ReactNode;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -1311,19 +1063,10 @@ function ReadOnlyVersion({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
+      <WorkspaceAction name="back" href={`/student/groups/${agent.group_id}`} />
       <div className="workbench-grid">
         <div className="workbench-main">
-          <SectionCard
-            title={t("agentMd")}
-            action={
-              <Link
-                className="secondary-action"
-                href={`/student/agents/${agent.id}`}
-              >
-                {t("backToAgent")}
-              </Link>
-            }
-          >
+          <SectionCard title={t("agentMd")} action={actions}>
             <ReportMarkdown className="read-only-markdown rendered-persona">
               {version.agent_md || t("noPrompt")}
             </ReportMarkdown>

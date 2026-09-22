@@ -14,6 +14,7 @@ import { LocaleProvider } from "../components/locale";
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
+  usePathname: () => "/teacher/roster",
 }));
 
 vi.mock("../components/session-provider", () => ({
@@ -22,6 +23,7 @@ vi.mock("../components/session-provider", () => ({
 
 import { useSession } from "../components/session-provider";
 import { RosterWorkspace } from "../components/roster-workspace";
+import { AppShell } from "../components/app-shell";
 
 const mockedUseSession = vi.mocked(useSession);
 const courseId = "course-id";
@@ -109,7 +111,9 @@ function mount(api: ReturnType<typeof apiForTeacher>, locale: "en" | "zh") {
   } as never);
   return render(
     <LocaleProvider initialLocale={locale}>
-      <RosterWorkspace />
+      <AppShell role="teacher">
+        <RosterWorkspace />
+      </AppShell>
     </LocaleProvider>,
   );
 }
@@ -150,7 +154,7 @@ describe("teacher account management", () => {
 
     const nameField = screen.getByLabelText("Display name");
     fireEvent.change(nameField, { target: { value: "Ada Lovelace" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
 
     await waitFor(() =>
       expect(api.updateCourseMember).toHaveBeenCalledWith(courseId, studentId, {

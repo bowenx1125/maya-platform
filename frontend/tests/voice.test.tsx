@@ -49,10 +49,8 @@ describe("M08 voice library", () => {
       ).toBe(false),
     );
     fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const button = screen.getByRole("button", {
-      name: /^upload$/i,
-    });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 
     const input = screen.getByLabelText(
       "Voice sample file",
@@ -61,9 +59,14 @@ describe("M08 voice library", () => {
       type: "audio/wav",
     });
     fireEvent.change(input, { target: { files: [file] } });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     fireEvent.click(screen.getByRole("checkbox"));
-    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(await screen.findByRole("button", { name: "Done" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByLabelText("Voice sample file")).toBeNull();
+    expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
+    expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 
   it("shows a platform preview URL and only confirms after preview", async () => {

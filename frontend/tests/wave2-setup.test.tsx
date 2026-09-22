@@ -2,7 +2,7 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderComponent,
   screen,
   waitFor,
   within,
@@ -20,7 +20,10 @@ import { localizeError } from "../lib/i18n";
 const useSessionMock = vi.hoisted(() => vi.fn());
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => "/teacher/debates/new",
+}));
 vi.mock("../components/session-provider", () => ({
   useSession: useSessionMock,
 }));
@@ -32,6 +35,11 @@ import {
 } from "../components/debate/setup/debate-setup";
 
 const courseId = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b";
+import { AppShell } from "../components/app-shell";
+
+function render(ui: Parameters<typeof renderComponent>[0]) {
+  return renderComponent(<AppShell role="teacher">{ui}</AppShell>);
+}
 
 afterEach(() => {
   cleanup();
@@ -493,7 +501,7 @@ describe("Wave 2 teacher debate setup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -573,14 +581,9 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 仅本场中文修改" },
     });
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Done",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "English" }));
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
@@ -672,7 +675,12 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   render(<TeacherDebateList />);
   await screen.findByText("Needs recovery");
   expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
-  expect(screen.queryByRole("link", { name: "New" })).toBeNull();
+  expect(
+    within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
+  ).toBeNull();
+  expect(
+    within(screen.getByRole("navigation")).getByRole("link", { name: "New" }),
+  ).toBeTruthy();
   fireEvent.focus(window);
   await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
   expect(api.remakeDebate).not.toHaveBeenCalled();

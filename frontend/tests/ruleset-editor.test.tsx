@@ -1,6 +1,20 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderComponent,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
+import { AppShell } from "../components/app-shell";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({}),
+  usePathname: () => "/teacher/debates/new",
+}));
+vi.mock("../components/session-provider", () => ({ useSession: () => ({}) }));
+function render(ui: Parameters<typeof renderComponent>[0]) {
+  return renderComponent(<AppShell role="teacher">{ui}</AppShell>);
+}
 import {
   RulesetEditor,
   type TeachingPrompts,
@@ -57,7 +71,7 @@ describe("per-debate Markdown rules editor", () => {
       target: { value: "# 本场新规则\n\n给一个例子。" },
     });
     expect(saved).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(editing).toHaveBeenLastCalledWith(false);
     expect(saved).toHaveBeenCalledWith({
       zh: "# 本场新规则\n\n给一个例子。",
