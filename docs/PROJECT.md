@@ -163,7 +163,8 @@ configured real DashScope adapters with independent authorization; Embedding
 is 1024-dimensional. Teacher lists/creation use yellow rows on white paper;
 Devocalize/Destroy sit beside Rebirth; Immerse uses
 their action styling; failed actions preserve the row. Stage titles are
-removed; speech scrolls above compact gold controls and bubbles persist until
+removed; the bottom operation panel always shows the speech beside two-column
+light controls, with no separate transcript toggle; bubbles persist until
 Next; Interact/Hide preserves its QR session; Conclude shows Evaluation sorted
 by score without name prefixes, plus Report Version/History; Audio Ready
 indicates retained audio.

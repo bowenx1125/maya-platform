@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ScholarSceneProps } from "../components/stage3d/scholar-scene";
@@ -153,7 +153,7 @@ function renderStage(readOnly = true) {
 }
 
 describe("BetaDebateStage scene layout", () => {
-  it("opts into the full-viewport preview courtyard scene", () => {
+  it("keeps the full-viewport courtyard scene", () => {
     renderStage();
 
     const scene = screen.getByTestId("scholar-scene");
@@ -161,20 +161,18 @@ describe("BetaDebateStage scene layout", () => {
     expect(scholarSceneProps[0].layout).toBe("preview");
   });
 
-  it("keeps the teacher operation panel rendered beside the scene", () => {
+  it("keeps speech visible and controls in the restored operation panel", () => {
     renderStage(false);
 
     const scene = screen.getByTestId("scholar-scene");
     const panel = scene.nextElementSibling as HTMLElement;
     expect(panel.className).toContain("stageColumns");
-    expect(panel.getAttribute("data-transcript-open")).toBe("false");
-    const toggle = screen.getByRole("button", { name: "Published transcript" });
     expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(toggle);
-    expect(panel.getAttribute("data-transcript-open")).toBe("true");
     expect(
-      panel.querySelector("#beta-stage-transcript")?.hasAttribute("hidden"),
-    ).toBe(false);
+      screen.queryByRole("button", { name: "Published transcript" }),
+    ).toBeNull();
+    const speeches = panel.querySelectorAll('article[class*="streamItem"]');
+    expect(speeches).toHaveLength(1);
+    expect(speeches[0].textContent).toContain("A full-bleed speech.");
   });
 });

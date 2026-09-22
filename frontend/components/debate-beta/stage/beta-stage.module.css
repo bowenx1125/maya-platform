@@ -959,17 +959,15 @@
 
 .stagePanel :is(button, a) {
   width: 100%;
-  min-height: 40px;
+  min-height: 36px;
   padding: 8px 10px;
   border: 0;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.7);
+  background: transparent;
   box-shadow: none;
-  color: var(--indigo-dark);
-  font-family:
-    "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
-  font-size: 0.82rem;
-  font-weight: 650;
+  color: #655332;
+  font-size: 0.8rem;
+  font-weight: 600;
   text-decoration: none;
   transition:
     transform 160ms ease,
@@ -978,8 +976,8 @@
 }
 
 .stagePanel :is(button, a):hover:not(:disabled) {
-  background: var(--gold-soft);
-  color: var(--indigo-dark);
+  background: rgba(196, 164, 104, 0.16);
+  color: #382d19;
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -1097,66 +1095,6 @@
 .turnProgress[data-connected="false"] {
   color: #963c34;
   background: #f8e1dd;
-}
-
-.speechColumn[hidden] {
-  display: none;
-}
-
-.stageColumns[data-transcript-open="false"] {
-  right: auto;
-  bottom: 12px;
-  left: 50%;
-  display: block;
-  width: min(860px, calc(100% - 24px));
-  height: auto;
-  min-height: 0;
-  transform: translateX(-50%);
-}
-
-.stageColumns[data-transcript-open="false"] .avatarColumn {
-  border: 0;
-}
-
-.stageColumns[data-transcript-open="false"] .stagePanel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 6px;
-}
-
-.stageColumns[data-transcript-open="false"] .stagePanel :is(button, a) {
-  flex: 1 1 88px;
-  width: auto;
-  white-space: nowrap;
-}
-
-.stagePanel .transcriptToggle {
-  border: 1px solid var(--gold);
-  background: var(--gold-soft);
-}
-
-.stagePanel :global(.primary-action):not(:disabled) {
-  background: var(--indigo);
-  color: #fff;
-}
-
-.stagePanel :global(.primary-action):hover:not(:disabled) {
-  background: var(--indigo-dark);
-  color: #fff;
-}
-
-@media (max-width: 900px) {
-  .stageColumns[data-transcript-open="false"] {
-    right: auto;
-    bottom: 8px;
-    left: 50%;
-    width: calc(100% - 16px);
-    height: auto;
-    min-height: 0;
-    flex-direction: initial;
-  }
 }
 
 .streamItem details > summary {
