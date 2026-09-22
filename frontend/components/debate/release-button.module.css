@@ -1,5 +1,0 @@
-/* The recovery sits inline beside whatever needed it, so it stays narrow. */
-.releaseSlot {
-  display: grid;
-  gap: 6px;
-}

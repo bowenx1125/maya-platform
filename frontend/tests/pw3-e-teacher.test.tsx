@@ -133,7 +133,7 @@ describe("PW3-E teacher shell and responsive contract", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the stalled row unchanged when Refresh fails", async () => {
+  it("keeps the stalled row visible when a background list read fails", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = {
       debates: vi.fn().mockResolvedValue([
@@ -169,17 +169,18 @@ describe("PW3-E teacher shell and responsive contract", () => {
         <TeacherDebateList />
       </LocaleProvider>,
     );
-    const resume = await screen.findByRole("button", { name: "Refresh" });
-    fireEvent.click(resume);
-    await waitFor(() => expect(api.remakeDebate).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(resume).toHaveProperty("disabled", false));
-    expect(resume.textContent).toBe("Refresh");
+    await screen.findByText("A stalled classroom");
+    api.debates.mockRejectedValue(new Error("Network unavailable"));
+    fireEvent.focus(window);
+    await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    expect(api.remakeDebate).not.toHaveBeenCalled();
     expect(screen.getByText("A stalled classroom")).toBeTruthy();
     expect(screen.getByText("Stalled")).toBeTruthy();
     expect(
       screen.queryByText("That action is not available in the current state."),
     ).toBeNull();
-    expect(api.debates).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText("Network unavailable")).toBeNull();
   });
 
   it.each([{ locale: "en" as const }, { locale: "zh" as const }])(

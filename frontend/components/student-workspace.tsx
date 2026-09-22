@@ -1,5 +1,7 @@
 "use client";
 
+import { WorkspaceNew } from "./workspace-new";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -83,7 +85,7 @@ export function StudentDashboard() {
 
   return (
     <>
-      <PageIntro eyebrow={t("studentHome")} title={t("appName")} />
+      <PageIntro title={t("appName")} />
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
@@ -183,21 +185,8 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("groupWorkspace")}
-        title={group.name}
-
-        action={
-          <div className="button-row">
-            <Link
-              className="primary-action"
-              href={`/student/groups/${groupId}/agents/new`}
-            >
-              {t("createAgent")}
-            </Link>
-          </div>
-        }
-      />
+      <PageIntro title={t("groupWorkspace")} />
+      <WorkspaceNew href={`/student/groups/${groupId}/agents/new`} />
       <div className="workspace-grid">
         <SectionCard title={t("agents")}>
           {agents.length === 0 ? (
@@ -335,7 +324,7 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <PageIntro eyebrow={t("agents")} title={t("newAgent")} />
+      <PageIntro title={t("newAgent")} />
       <SectionCard title={t("agentIdentity")}>
         <form className="stack-form wide-form" onSubmit={submit}>
           <label>

@@ -8,6 +8,12 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceLibrary } from "../components/voice/voice-library";
+import { AppShell } from "../components/app-shell";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({}),
+  usePathname: () => "/student/groups/group-a/voices",
+}));
 
 const api = {
   voiceProfiles: vi.fn(),
@@ -29,10 +35,20 @@ afterEach(() => {
 describe("M08 voice library", () => {
   it("requires consent and a local file before enrollment", async () => {
     api.voiceProfiles.mockResolvedValue([]);
-    render(<VoiceLibrary groupId="group-a" />);
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
     await waitFor(() =>
       expect(api.voiceProfiles).toHaveBeenCalledWith("group-a"),
     );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
     const button = screen.getByRole("button", {
       name: /^upload$/i,
     });

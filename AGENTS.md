@@ -17,6 +17,12 @@ Work on a branch. Never commit directly to `main` unless the user says so.
 
 ## 2. How to write code here
 
+**Simplicity first.** Solve the requested problem with the smallest clear change.
+Do not add unrequested features, speculative extension points or dependencies
+that existing code can reasonably replace. Keep single-use code in place;
+introduce an abstraction only for a concrete shared need. UI redesigns preserve
+existing wording unless a copy change is explicitly requested.
+
 **Match the surrounding code.** Comment density, naming, error handling and
 module layout are already consistent; follow what is next to your change
 rather than importing a different style.

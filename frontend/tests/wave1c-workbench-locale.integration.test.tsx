@@ -333,7 +333,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "切换到英文" }));
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(api.uploadKnowledge).toHaveBeenCalledTimes(2));
     const secondCall = api.uploadKnowledge.mock.calls[1];
     expect(secondCall[2]).toBe(firstUploadFile);
@@ -380,7 +380,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
     ).toBe("# Conflict stays local");
     expect(screen.getByRole("alert").textContent).toContain(
-      "本地 AGENT.md 和证据选择仍保留",
+      "本地 AGENT.md 和证据选择未变",
     );
     expect(screen.getAllByText("版本冲突")).toHaveLength(1);
     const afterSwitch = identities.at(-1);

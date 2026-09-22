@@ -138,6 +138,12 @@ export type DemoComponent = {
 export type DemoComposition = {
   components: DemoComponent[];
 };
+export type ChatAgent = components["schemas"]["ChatAgent"];
+export type ChatSession = components["schemas"]["ChatSession"];
+export type ChatTurn = components["schemas"]["ChatTurn"];
+export type ProviderSettings = components["schemas"]["ProviderSettings"];
+export type LiveSummary = components["schemas"]["LiveSummary"];
+export type LiveSnapshot = components["schemas"]["LiveSnapshot"];
 export type DemoBaseline = {
   agent_id: string;
   version_id: string;
@@ -437,13 +443,18 @@ export class PlatformApi {
     return payload as T;
   }
 
-  private async postJson<T>(path: string, body: unknown): Promise<T> {
+  private async postJson<T>(
+    path: string,
+    body: unknown,
+    keepalive = false,
+  ): Promise<T> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     const response = await fetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method: "POST",
         credentials: "include",
+        keepalive,
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": this.csrfToken ?? "",
@@ -569,6 +580,67 @@ export class PlatformApi {
   /** Read the safe composition badge used by the authenticated Demo shell. */
   async demoStatus(): Promise<DemoRuntimeStatus> {
     return this.getJson<DemoRuntimeStatus>("demo/status");
+  }
+
+  chatAgents(courseId: string): Promise<ChatAgent[]> {
+    return this.getJson(`courses/${courseId}/chat-agents`);
+  }
+
+  conversations(): Promise<ChatSession[]> {
+    return this.getJson("conversations");
+  }
+
+  createConversation(versionId: string): Promise<ChatSession> {
+    return this.postJson("conversations", { version_id: versionId });
+  }
+
+  conversation(id: string): Promise<ChatSession> {
+    return this.getJson(`conversations/${id}`);
+  }
+
+  sendConversation(
+    id: string,
+    body: components["schemas"]["SendChat"],
+  ): Promise<ChatSession> {
+    return this.postJson(`conversations/${id}/messages`, body);
+  }
+
+  providerSettings(courseId: string): Promise<ProviderSettings> {
+    return this.getJson(`courses/${courseId}/provider-settings`);
+  }
+
+  updateProviderSettings(
+    courseId: string,
+    body: components["schemas"]["UpdateProviderSettings"],
+  ): Promise<ProviderSettings> {
+    return this.postJson(`courses/${courseId}/provider-settings`, body);
+  }
+
+  checkProvider(
+    courseId: string,
+    component: DemoComponentKey,
+    body: components["schemas"]["CheckProvider"],
+  ): Promise<ProviderSettings> {
+    return this.postJson(
+      `courses/${courseId}/provider-settings/${component}/check`,
+      body,
+    );
+  }
+
+  classroomLive(courseId: string): Promise<LiveSummary | null> {
+    return this.getJson(`courses/${courseId}/live`);
+  }
+
+  liveSnapshot(debateId: string): Promise<LiveSnapshot> {
+    return this.getJson(`live/${debateId}`);
+  }
+
+  updateClassroomLive(
+    debateId: string,
+    body: components["schemas"]["LiveHeartbeat"],
+    keepalive = false,
+  ): Promise<LiveSummary | null> {
+    return this.postJson(`debates/${debateId}/live`, body, keepalive);
   }
 
   async course(courseId: string): Promise<CourseDetail> {

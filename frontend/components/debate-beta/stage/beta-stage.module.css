@@ -1,1111 +1,273 @@
 .stage {
-  display: grid;
-  gap: 20px;
-  min-width: 0;
-  padding-bottom: 32px;
-}
-
-.stageHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-  padding: 22px 24px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.96),
-    rgba(250, 247, 239, 0.93)
-  );
-  box-shadow: 0 18px 42px rgba(55, 47, 74, 0.07);
-}
-
-.stageHeader h1 {
-  max-width: 900px;
-  margin: 5px 0 8px;
-  color: var(--ink);
-  font-size: clamp(1.3rem, 2.4vw, 2.1rem);
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-}
-
-.stageHeader p {
-  max-width: 720px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.87rem;
-  line-height: 1.5;
-}
-
-.eyebrow {
-  color: var(--indigo);
-  font-size: 0.68rem;
-  font-weight: 820;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.statusCluster {
-  display: grid;
-  flex: 0 0 auto;
-  justify-items: end;
-  gap: 7px;
-}
-
-.connectionPill,
-.playbackStatus,
-.currentMark,
-.roundMark {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 760;
-  white-space: nowrap;
-}
-
-.connectionPill {
-  color: #23664d;
-  background: #e4f2e9;
-}
-
-.connectionPill[data-state="connecting"],
-.connectionPill[data-state="reconnecting"] {
-  color: #825e10;
-  background: var(--gold-soft);
-}
-
-.connectionPill[data-state="disconnected"] {
-  color: #864544;
-  background: #f8e9e5;
-}
-
-.playbackStatus {
-  color: var(--muted);
-  background: rgba(241, 237, 248, 0.9);
-  text-transform: capitalize;
-}
-
-.connectionOverlay {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-  padding: 11px 15px;
-  border: 1px solid #ead8a6;
-  border-radius: 14px;
-  color: #705415;
-  background: #fff8df;
-  font-size: 0.83rem;
-  font-weight: 760;
-}
-
-.connectionOverlay small {
-  flex: 1 1 220px;
-  color: #866f38;
-  font-size: 0.75rem;
-  font-weight: 550;
-}
-
-.reconnectButton {
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid #d9c27e;
-  border-radius: 999px;
-  color: #6d5314;
-  background: #fffdf2;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 760;
-  cursor: pointer;
-}
-
-.reconnectButton:hover:not(:disabled) {
-  background: #fff5d3;
-}
-
-.reconnectButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.overlayDot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #d39e25;
-  box-shadow: 0 0 0 4px rgba(211, 158, 37, 0.15);
-}
-
-.avatarGrid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  min-width: 0;
-}
-
-.avatarCard {
-  display: grid;
-  min-width: 0;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 10px 26px rgba(55, 47, 74, 0.045);
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
-}
-
-.avatarCardCurrent {
-  border-color: #d5ab4c;
-  box-shadow:
-    0 0 0 3px rgba(213, 171, 76, 0.22),
-    0 15px 30px rgba(86, 66, 29, 0.1);
-  transform: translateY(-2px);
-}
-
-.avatarCardTop,
-.avatarIdentity,
-.transcriptItemTop,
-.speechHeader,
-.transcriptHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.slotMark {
-  display: inline-grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--indigo-dark);
-  background: var(--gold-soft);
-  font-size: 0.84rem;
-  font-weight: 850;
-}
-
-.currentMark {
-  min-height: 24px;
-  color: #79540b;
-  background: var(--gold-soft);
-  font-size: 0.65rem;
-}
-
-.avatar {
-  min-width: 0;
-  height: clamp(132px, 17vw, 220px);
-}
-
-.avatarIdentity {
-  display: block;
-  min-width: 0;
-}
-
-.avatarIdentity h2 {
-  overflow: hidden;
-  margin: 0;
-  color: var(--ink);
-  font-size: 0.96rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.avatarIdentity span {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Two columns and nothing beneath them: the speaking face on the left, every
-   speech on the right. The speeches get the larger share because they are what
-   a classroom reads. */
-.stageColumns {
-  display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.6fr);
-  gap: 18px;
-  /* Stretch, not start: the face and the panel beneath it fill the same
-     height as the speeches, so the stage reads as two rectangles that end on
-     the same line instead of a tall column beside a short one. */
-  align-items: stretch;
-}
-
-@media (max-width: 900px) {
-  .stageColumns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.avatarColumn {
-  display: grid;
-  /* The face keeps its natural size; the panel takes the rest, which is what
-     makes the column bottom meet the speech column's. */
-  grid-template-rows: auto 1fr;
-  gap: 12px;
-  min-width: 0;
-}
-
-/* Everything a teacher drives the lesson with, in the space the face leaves. */
-.stagePanel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--surface);
-}
-
-.stagePanel .statusCluster {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.stagePanel .controlsArea {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0;
-  border: none;
-  background: none;
-}
-
-.stagePanel .controlButtons {
-  display: grid;
-  gap: 8px;
-}
-
-.stagePanel .controlButtons button {
-  width: 100%;
-}
-
-/* Controls lead the stage instead of trailing it, on the row that also carries
-   the page's own Finish. */
-.speechColumn,
-.transcriptCard,
-.controlsArea {
-  min-width: 0;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.speechCard,
-.waitingCard,
-.failureCard {
-  min-width: 0;
-}
-
-.speechHeader {
-  align-items: flex-start;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.speechHeader h2,
-.transcriptHeader h2 {
-  margin: 5px 0 0;
-  color: var(--ink);
-  font-size: 1.05rem;
-}
-
-.roundMark {
-  color: var(--indigo-dark);
-  background: #f1edf8;
-}
-
-.speechText {
-  margin: 17px 0 20px;
-  color: var(--ink);
-  font-size: 1.02rem;
-  line-height: 1.72;
-  white-space: pre-wrap;
-}
-
-.sourceBlock {
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
-
-.sourceBlock h3 {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.sourceBlock ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.sourceBlock li {
-  padding: 5px 8px;
-  border-radius: 8px;
-  color: var(--indigo-dark);
-  background: #f4f0fb;
-  font-size: 0.75rem;
-}
-
-.sourceBlock p,
-.waitingCard,
-.emptyTranscript {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.55;
-}
-
-.waitingCard {
-  display: grid;
-  min-height: 170px;
-  place-items: center;
-  padding: 20px;
-  border: 1px dashed #cfc6dc;
-  border-radius: 15px;
-  background: #faf8fc;
-  text-align: center;
-}
-
-.failureCard {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-top: 14px;
-  padding: 12px 14px;
-  border: 1px solid #ecc9bf;
-  border-radius: 13px;
-  color: #874940;
-  background: #fff3ef;
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
-.failureCard span {
-  flex: 1 1 220px;
-}
-
-.providerGateCard {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid #cfc6dc;
-  border-radius: 13px;
-  color: var(--ink);
-  background: #faf8fc;
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
-.providerGateCard ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.providerGateCard li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.providerGateCard button,
-.providerGateCard a {
-  width: fit-content;
-}
-
-.transcriptHeader {
-  align-items: flex-start;
-  padding-bottom: 13px;
-  border-bottom: 1px solid var(--line);
-}
-
-.transcriptHeader > span {
-  display: inline-grid;
-  min-width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--indigo-dark);
-  background: #f1edf8;
-  font-size: 0.74rem;
-  font-weight: 800;
-}
-
-.emptyTranscript {
-  padding: 22px 0 5px;
-}
-
-.transcriptList {
-  display: grid;
-  max-height: 440px;
-  gap: 10px;
-  overflow: auto;
-  padding-top: 12px;
-}
-
-.transcriptItem {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid #ebe6f0;
-  border-radius: 13px;
-  background: #fcfbfd;
-}
-
-.transcriptItemTop {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 720;
-}
-
-.transcriptItem p {
-  margin: 8px 0 10px;
-  color: var(--ink);
-  font-size: 0.79rem;
-  line-height: 1.52;
-}
-
-.controlsArea {
-  display: grid;
-  gap: 10px;
-}
-
-.controlButtons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-}
-
-.busyMessage,
-.controllerMessage {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.77rem;
-}
-
-.stage button {
-  min-height: 44px;
-}
-
-.dangerAction {
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid #d9a39a;
-  border-radius: 999px;
-  color: #7f3e38;
-  background: #fff0ed;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 760;
-  cursor: pointer;
-}
-
-.dangerAction:hover:not(:disabled) {
-  background: #f9dfda;
-}
-
-.dangerAction:disabled {
-  cursor: not-allowed;
-  opacity: 0.56;
-}
-
-.stage audio {
-  display: none;
-}
-
-@media (max-width: 1040px) {
-  .avatarGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .stageColumns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 620px) {
-  .stage {
-    gap: 13px;
-  }
-
-  .stageHeader {
-    display: grid;
-    gap: 14px;
-    padding: 17px;
-  }
-
-  .statusCluster {
-    display: flex;
-    justify-content: flex-start;
-  }
-
-  .avatarGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .avatarCard {
-    padding: 9px;
-    border-radius: 15px;
-  }
-
-  .avatar {
-    height: 145px;
-  }
-
-  .speechColumn,
-  .transcriptCard,
-  .controlsArea {
-    padding: 14px;
-    border-radius: 16px;
-  }
-
-  .speechText {
-    font-size: 0.94rem;
-    line-height: 1.6;
-  }
-
-  .controlButtons > button {
-    flex: 1 1 calc(50% - 9px);
-  }
-}
-
-@media (max-width: 360px) {
-  .stageHeader h1 {
-    font-size: 1.15rem;
-  }
-
-  .avatarGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .avatar {
-    height: 122px;
-  }
-
-  .avatarIdentity h2 {
-    font-size: 0.86rem;
-  }
-
-  .currentMark {
-    display: none;
-  }
-
-  .controlButtons > button {
-    flex-basis: 100%;
-  }
-}
-
-/* The merged speech stream.
-   The stage used to show the current speech in one panel and the published
-   transcript in another: the newest turn appeared twice, and the panel sat
-   blank whenever nothing was playing. One stream that grows downward gives a
-   classroom a single place to look, at a size that reads from the back. */
-.streamCard {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--surface);
-}
-
-.streamHeader {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.streamHeader h2 {
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 1.32rem;
-}
-
-.streamCount {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.streamList {
-  display: grid;
-  gap: 18px;
-  /* clamp, not min(): a viewport that reports zero height - an embedded or
-     hidden pane - made min() resolve to 0 and the list became an invisible,
-     unscrollable strip with its content overflowing. The floor keeps it
-     usable whatever the viewport claims. */
-  max-height: clamp(380px, 66vh, 760px);
-  padding-right: 6px;
-  overflow-y: auto;
-  scroll-behavior: smooth;
-}
-
-.streamItem {
-  display: grid;
-  gap: 8px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.streamItem:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.streamItemTop {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.streamWho {
-  color: var(--ink);
-  font-size: 0.86rem;
-  font-weight: 680;
-}
-
-.streamMeta {
-  flex: 1 1 auto;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.streamReplay {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.streamReplay:hover {
-  border-color: var(--indigo);
-  color: var(--indigo);
-}
-
-/* Deliberately larger than the old transcript text: this is now the only
-   place the speech appears, and it is read from across a room. */
-.streamSpeech {
-  margin: 0;
-  color: var(--ink);
-  font-size: 1.35rem;
-  line-height: 1.62;
-  white-space: pre-wrap;
-}
-
-.streamEmpty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.stageStatus {
-  margin: 0 0 4px;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-/* The caret only marks a speech still being revealed. */
-.caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 2px;
-  background: var(--indigo);
-  vertical-align: text-bottom;
-  animation: caretBlink 1s steps(2, start) infinite;
-}
-
-@keyframes caretBlink {
-  to {
-    visibility: hidden;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .caret {
-    animation: none;
-  }
-  .streamList {
-    scroll-behavior: auto;
-  }
-}
-
-.streamSources {
-  display: grid;
-  gap: 4px;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.streamSources h3 {
-  margin: 0;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.streamSources ul {
-  margin: 0;
-  padding-left: 16px;
-}
-
-/* The page-owned controls: one row under Start and Next, same width. */
-.panelActions {
-  display: grid;
-  gap: 8px;
-}
-
-.panelActions > * {
-  width: 100%;
-  text-align: center;
-}
-
-/* Which debate is holding the slot, next to the failure that named it. */
-.blockingTopic {
-  font-weight: 640;
-}
-
-/* "SOURCES: baseline.md" - one line under the speech it justifies. */
-.streamSourcesLabel {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* The lesson's state reads with the heading, at the heading's weight. */
-.streamState {
-  color: var(--indigo);
-  font-size: 0.72em;
-  font-weight: 640;
-  text-transform: lowercase;
-}
-
-/* ---------------------------------------------------------------------------
-   Debates (beta) overrides.
-
-   The classic stage is a document: bands of cards down a scrolling page. This
-   one is a room. The ink-wash ground and the bench fill the viewport, and
-   every control floats on top of it in frosted glass, which is the whole point
-   of the beta surface being separate.
-
-   Everything above this line is the classic stage's stylesheet, copied so the
-   classic surface can keep changing without dragging the beta stage with it.
-   ------------------------------------------------------------------------ */
-
-.stage {
-  /* The prototype's own type: a running-script display face for names and
-     titles over a Song serif for reading. Both fall back through the CJK
-     families a Mac, a Windows machine and a Linux box actually ship. */
-  --brush:
-    "STXingkai", "Xingkai SC", "HanziPen SC", "STKaiti", "Kaiti SC", "KaiTi",
-    "BiauKai", "Songti SC", serif;
-  --script:
-    "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun",
-    serif;
-  --ink-deep: #1d1a17;
-  --ink-quiet: rgba(29, 26, 23, 0.68);
-
   position: fixed;
   z-index: 1;
   inset: 0;
-  display: block;
-  gap: 0;
   overflow: hidden;
-  padding: 0;
   background: #ece8e0;
-  font-family: var(--script);
+  font-family: var(--font-ui, system-ui);
 }
-
-/* ---------- the floating panel ---------- */
-
-.stageColumns {
-  position: absolute;
-  z-index: 8;
-  top: auto;
-  right: 22px;
-  bottom: 22px;
-  left: 22px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
-  gap: 0;
-  width: auto;
-  height: 214px;
-  overflow: hidden;
-  border: 1px solid rgba(211, 167, 74, 0.52);
-  border-radius: 8px;
-  background: rgba(252, 250, 246, 0.96);
-  box-shadow: 0 16px 42px rgba(39, 35, 61, 0.2);
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
-}
-
-/* Speeches on top, controls beneath them: the panel reads the way the room
-   does, newest word above the buttons that produce the next one. */
-.speechColumn {
-  display: flex;
-  order: 1;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  padding: 0;
-  overflow: hidden;
-  border: none;
-  border-radius: 0;
-  background: none;
-}
-
-.avatarColumn {
-  display: flex;
-  order: 2;
-  flex: 0 0 auto;
-  flex-direction: column;
-  min-height: 0;
-  grid-template-rows: none;
-  gap: 0;
-  border-left: 1px solid var(--line);
-  background: var(--gold-soft);
-}
-
-.stagePanel {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(44px, 1fr);
-  align-content: stretch;
-  gap: 8px;
-  min-height: 0;
-  padding: 12px;
-  border: none;
-  border-radius: 0;
-  background: none;
-}
-
-.streamCard {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  padding: 18px 18px 8px;
-  border: none;
-  border-radius: 0;
-  background: none;
-}
-
-.streamList {
-  flex: 1 1 auto;
-  align-content: start;
-  min-height: 0;
-  /* The panel's own height is the bound now, not a viewport fraction. */
-  max-height: none;
-  padding-right: 8px;
-  padding-bottom: 0;
-  scroll-padding-bottom: 8px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.stagePanel .controlsArea,
-.stagePanel .controlButtons,
-.stagePanel .panelActions {
-  display: contents;
-}
-
-.stagePanel .statusCluster:empty {
+.stage audio {
   display: none;
 }
-
-.stagePanel .statusCluster,
-.stagePanel [role="status"],
-.stagePanel [role="alert"] {
-  grid-column: 1 / -1;
-}
-
-.stagePanel :is(button, a) {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  box-shadow: none;
-  color: #655332;
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-decoration: none;
-  transition:
-    transform 160ms ease,
-    box-shadow 160ms ease,
-    background 160ms ease;
-}
-
-.stagePanel :is(button, a):hover:not(:disabled) {
-  background: rgba(196, 164, 104, 0.16);
-  color: #382d19;
-  box-shadow: none;
-  transform: translateY(-1px);
-}
-
-.stagePanel button:disabled {
-  opacity: 0.5;
-}
-
-.streamHeader {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-}
-
-.streamParagraphs {
-  display: grid;
-  gap: 14px;
-}
-
-.streamState {
-  color: #80673d;
-}
-
-.streamHeader h2 {
-  color: var(--ink-deep);
-  font-family: var(--script);
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.streamSpeech {
-  color: var(--ink-deep);
-  font-family: var(--script);
-  font-size: 0.98rem;
-  line-height: 1.86;
-}
-
-.streamWho {
-  font-family: var(--script);
-  font-size: 1rem;
-  letter-spacing: 0;
-}
-
-.streamMeta,
-.streamSources,
-.streamCount {
-  color: var(--ink-quiet);
-}
-
-/* Buttons keep the platform's own shape; only the ground under them changes. */
-.stagePanel .playbackStatus,
-.stagePanel .statusCluster {
-  color: var(--ink-quiet);
-}
-
-.streamItem {
-  border-bottom-color: rgba(38, 31, 24, 0.1);
-}
-
-/* Notices float in the corner the panel leaves free rather than pushing the
-   speeches down inside it. */
-.connectionOverlay {
+.controlsDock {
   position: absolute;
-  z-index: 9;
-  bottom: 254px;
-  left: 22px;
-  max-width: min(460px, calc(100vw - 44px));
+  z-index: 12;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-
-.failureCard,
-.providerGateCard {
-  margin: 0 18px;
+.panelActions {
+  display: contents;
 }
-
-@media (max-width: 900px) {
-  .stageColumns {
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
-    width: auto;
-    height: 56dvh;
-    min-height: 300px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .avatarColumn {
-    border-top: 1px solid #deceb0;
-    border-left: 0;
-  }
-
-  .connectionOverlay {
-    right: 12px;
-    bottom: calc(56dvh + 22px);
-    left: 12px;
-    max-width: none;
-  }
+.stage .controlsDock :is(button, a) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 104px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ink);
+  font: 500 14px/1.2 var(--font-ui, system-ui);
+  text-decoration: none;
+  box-shadow: 0 2px 10px rgba(35, 28, 18, 0.1);
+  cursor: pointer;
+  transition: background 160ms ease;
 }
-
+.stage .controlsDock :global(.primary-action) {
+  border-color: transparent;
+  background: var(--accent-fill, #d3a74a);
+  color: var(--on-accent, #332811);
+}
+.stage .controlsDock :is(button, a):hover:not(:disabled),
+.stage .controlsDock button[aria-expanded="true"] {
+  background: var(--accent-soft, #f6ecd3);
+}
+.stage .controlsDock button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.transcriptDrawer {
+  position: absolute;
+  z-index: 10;
+  top: max(20px, env(safe-area-inset-top));
+  right: 136px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  width: min(460px, calc(100% - 152px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 12px 40px rgba(35, 28, 18, 0.14);
+}
+.transcriptDrawer[hidden] {
+  display: none;
+}
+.streamCard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100%;
+  min-height: 0;
+  padding: 24px;
+}
+.streamHeader {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.streamHeader h2 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.streamState {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: lowercase;
+}
 .turnProgress {
-  margin-left: auto;
-  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   min-height: 28px;
-  padding: 3px 12px;
+  margin-left: auto;
+  padding: 3px 10px;
   border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
   color: #23664d;
   background: #e4f2e9;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .turnProgress[data-connected="false"] {
   color: #963c34;
   background: #f8e1dd;
 }
-
-.streamItem details > summary {
+.streamList {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 24px;
   min-height: 0;
-  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.streamItem {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.streamItem:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.streamItemTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.streamWho {
+  font-size: 14px;
+  font-weight: 600;
+}
+.streamMeta,
+.streamCount,
+.streamSources,
+.streamSourcesLabel {
+  color: var(--muted);
+  font-size: 12px;
+}
+.streamMeta {
+  flex: 1;
+}
+.streamParagraphs {
+  display: grid;
+  gap: 12px;
+}
+.streamSpeech {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.streamEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.streamReplay,
+.streamReplayAll {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--surface);
+  cursor: pointer;
+}
+.streamSources ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: var(--accent);
+  vertical-align: text-bottom;
+}
+.notices,
+.connectionOverlay {
+  position: absolute;
+  z-index: 13;
+  top: 20px;
+  left: 20px;
+  max-width: min(420px, calc(100% - 160px));
+}
+.notices {
+  top: auto;
+  bottom: 20px;
+}
+.failureCard,
+.providerGateCard,
+.connectionOverlay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.providerGateCard ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.blockingTopic {
+  font-weight: 600;
+}
+.reconnectButton {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.stage .joinCard {
+  top: 20px;
+  right: 136px;
+  left: auto;
+  width: min(220px, calc(100% - 152px));
+  transform: none;
+}
+@media (max-width: 600px) {
+  .controlsDock {
+    top: max(12px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+  }
+  .stage .controlsDock :is(button, a) {
+    width: 88px;
+  }
+  .transcriptDrawer {
+    top: 12px;
+    right: 104px;
+    bottom: 12px;
+    width: calc(100% - 112px);
+    border-radius: 16px;
+  }
+  .streamCard {
+    padding: 16px;
+  }
+  .stage .joinCard {
+    top: 12px;
+    right: 104px;
+    width: calc(100% - 112px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage .controlsDock :is(button, a) {
+    transition: none;
+  }
 }

@@ -119,11 +119,10 @@ describe("G2 session and draft recovery paths", () => {
     expect(preserveDraftOnRetry(stale)).toBe(true);
     expect(preserveDraftOnRetry(otherConflict)).toBe(false);
 
-    const refresh = vi.fn();
-    render(<DraftConflictNotice onRefresh={refresh} />);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(refresh).toHaveBeenCalledTimes(1);
+    render(<DraftConflictNotice />);
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(screen.getByRole("alert").textContent).toContain("local AGENT.md");
+    expect(screen.getByRole("alert").textContent).toContain("Copy your edits");
   });
 });
 

@@ -288,7 +288,12 @@ export function SpeechStream({
             in a separate pill under the face. */}
         <h2>
           {labels.transcript}
-          {status ? <span className={styles.streamState}>{status}</span> : null}
+          {status ? (
+            <>
+              {" "}
+              <span className={styles.streamState}>{status}</span>
+            </>
+          ) : null}
         </h2>
         {showTurnCount && turns.length ? (
           <span className={styles.streamCount}>{turns.length}</span>

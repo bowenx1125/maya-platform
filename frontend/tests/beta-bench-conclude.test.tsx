@@ -124,7 +124,6 @@ vi.mock("../components/locale", () => ({
       debateProviderGateReview: "Review",
       debateProviderGateReviewAll: "Review all",
       debateProviderGateConfirmed: "Confirmed",
-      debateProviderGateRefresh: "Refresh",
       debateProviderGateRetry: "Retry",
       debateNoPublishedSpeech: "No published speech",
       errorAudioNotRetained: "Audio not retained",

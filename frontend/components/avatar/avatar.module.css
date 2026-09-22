@@ -10,10 +10,7 @@
   overflow: hidden;
   border: 1px solid var(--workspace-border, rgba(35, 57, 72, 0.12));
   border-radius: 1.25rem;
-  background: var(
-    --workspace-content,
-    linear-gradient(145deg, #f7f3ed 0%, #eef4f1 100%)
-  );
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .canvasFrame {
@@ -39,8 +36,8 @@
   aspect-ratio: 1;
   border: 1px solid rgba(35, 57, 72, 0.14);
   border-radius: 50%;
-  background: radial-gradient(circle at 34% 28%, #f3c9a5, #a9715c 72%);
-  color: #fffaf3;
+  background: var(--accent-soft, #f6ecd3);
+  color: var(--accent, #76591f);
   font-size: clamp(2rem, 8vw, 4rem);
   font-weight: 720;
   letter-spacing: 0.03em;
@@ -58,7 +55,7 @@
   bottom: 0.8rem;
   max-width: calc(100% - 1.6rem);
   overflow: hidden;
-  color: #334855;
+  color: var(--ink, #1d1d1f);
   font-size: 0.77rem;
   font-weight: 650;
   text-overflow: ellipsis;
@@ -70,7 +67,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: #526771;
+  color: var(--muted, #62626a);
   font-size: 0.86rem;
 }
 
@@ -104,7 +101,7 @@
   min-height: 2.75rem;
   border: 1px solid rgba(35, 57, 72, 0.18);
   border-radius: 0.7rem;
-  background: #fffdfa;
+  background: var(--surface, #fff);
   color: var(--workspace-label, #213a47);
   font: inherit;
 }
@@ -166,8 +163,8 @@
 .templateMeta {
   display: block;
   margin-top: 0.2rem;
-  color: #6b7d84;
-  font-size: 0.68rem;
+  color: var(--muted, #62626a);
+  font-size: 0.75rem;
 }
 
 .stateButton {
@@ -177,7 +174,7 @@
 
 .message {
   margin: 0;
-  color: #5f7078;
+  color: var(--muted, #62626a);
   font-size: 0.82rem;
   line-height: 1.5;
 }

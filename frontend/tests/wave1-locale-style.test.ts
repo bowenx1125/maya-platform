@@ -13,12 +13,18 @@ describe("Wave 1A locale and V2 style boundary", () => {
     expect(statusLabel("published", "zh")).toBe("已发布");
   });
 
-  it("guards the compact V2 sans typography without a full visual snapshot", () => {
+  it("keeps workspace system typography scoped and removes visible page-title styles", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
-    expect(css).not.toMatch(/Georgia|Times New Roman|Times,/);
-    expect(css).toMatch(
-      /\.page-intro h1\s*\{[\s\S]*font-size:\s*clamp\(2rem, 4vw, 3\.25rem\)/,
+    const workspace = readFileSync(
+      resolve(process.cwd(), "components/workspace-appearance.module.css"),
+      "utf8",
     );
+    expect(css).not.toMatch(/Georgia|Times New Roman|Times,/);
+    expect(css).not.toContain(".page-intro");
+    expect(css).toMatch(/\.sr-only\s*\{[\s\S]*?position:\s*absolute/);
+    expect(workspace).toMatch(/--font-ui:\s*-apple-system,/);
+    expect(workspace).toMatch(/font-family:\s*var\(--font-ui\)/);
+    expect(workspace).toMatch(/font-size:\s*16px/);
     expect(css).toMatch(/font-family:\s*\n\s*Inter,/);
   });
 

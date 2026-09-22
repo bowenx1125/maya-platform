@@ -75,7 +75,6 @@ export function TeacherDashboard() {
   return (
     <div className="teacher-home-layout">
       <PageIntro
-        eyebrow={t("teacherCourse")}
         title={
           course?.name === "Maya Cultural Exchange Demo"
             ? t("appName")
@@ -140,9 +139,6 @@ function PublishedAgentCard({
         >
           {version.version_label}
         </span>
-        <p title={item.agent.description ?? undefined}>
-          {item.agent.description}
-        </p>
       </div>
     </Link>
   );
@@ -227,15 +223,7 @@ export function TeacherAgentDetail({
 
   return (
     <div className={detailStyles.page}>
-      <PageIntro
-        eyebrow="Agent"
-        title={agent.name}
-        action={
-          <Link className="secondary-action" href="/teacher">
-            {t("debateBack")}
-          </Link>
-        }
-      />
+      <PageIntro title={agent.name} />
       {agent.status === "archived" ? (
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}
@@ -244,6 +232,11 @@ export function TeacherAgentDetail({
         <SectionCard
           title="Profile"
           className={`${detailStyles.card} ${detailStyles.profile}`}
+          action={
+            <Link className="secondary-action" href="/teacher">
+              {t("debateBack")}
+            </Link>
+          }
         >
           {selectedVersion ? (
             <div className={detailStyles.avatar}>

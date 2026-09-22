@@ -12,6 +12,7 @@ import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
+import { WorkspaceNew } from "../workspace-new";
 import {
   EmptyCard,
   ErrorNotice,
@@ -46,6 +47,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [editing, setEditing] = useState<KnowledgeDocument | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -91,6 +93,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
       });
       mutationStore.finish(intent, handle);
       setDocuments((current) => [...current, mutation.document]);
+      setCreating(false);
       setNotice("knowledgeSaved");
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) {
@@ -252,7 +255,11 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <PageIntro eyebrow={t("knowledgePage")} title={t("knowledgePageTitle")} />
+      <PageIntro title={t("knowledgePageTitle")} />
+      <WorkspaceNew
+        disabled={busyId !== null || creating || editing !== null}
+        onClick={() => setCreating(true)}
+      />
       {error ? <ErrorNotice error={error} onRetry={retry} /> : null}
       {conflict ? (
         <div className="notice notice-warning" role="status">
@@ -264,12 +271,15 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
           {t(notice)}
         </div>
       ) : null}
-      <SectionCard title={t("knowledgeCreateTitle")}>
-        <MarkdownEditor
-          disabled={busyId !== null}
-          onCreate={(file) => void create(file)}
-        />
-      </SectionCard>
+      {creating ? (
+        <SectionCard>
+          <MarkdownEditor
+            disabled={busyId !== null}
+            onCreate={(file) => void create(file)}
+            onCancel={() => setCreating(false)}
+          />
+        </SectionCard>
+      ) : null}
       {editing ? (
         <SectionCard title={t("knowledgeEditTitle")}>
           <MarkdownEditor

@@ -53,7 +53,7 @@ const secretPatterns = [
 const assignmentPattern =
   /^[ \t]*(?:DASHSCOPE_API_KEY|DEEPL_API_KEY|OPENAI_API_KEY|SESSION_SECRET|SECRET_KEY|API_KEY)[ \t]*[=:][ \t]*([^\r\n]*)$/gm;
 const genericSecretAssignmentPattern =
-  /^[ \t]*["']?(?:api[_-]+key|access[_-]+token|secret(?:[_-]+key)?|provider[_-]+key|external[_-]+voice[_-]+id)["']?[ \t]*[=:][ \t]*["']?([^"',\r\n}]*)/gim;
+  /^[ \t]*["']?(?:api[_-]+key|access[_-]+token|secret(?:[_-]+key)?|provider[_-]+key|external[_-]+voice[_-]+id)["']?[ \t]*[=:][ \t]*["']?([^"',\r\n}{\[]*)/gim;
 
 const gitRoot = execFileSync(
   "git",
@@ -200,6 +200,30 @@ if (process.argv.includes("--probe-generated")) {
       "utf8",
     );
     const probeFailures = [];
+    // A schema property describes a write-only field, not a secret value.
+    // Nested scalar assignments must still be caught by the same scanner.
+    writeFileSync(
+      resolve(probeRoot, "schema.json"),
+      JSON.stringify(
+        {
+          properties: {
+            api_key: { type: "string", format: "password", writeOnly: true },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      resolve(probeRoot, "credential.json"),
+      JSON.stringify(
+        {
+          nested: { api_key: "unapproved-scalar-value" },
+        },
+        null,
+        2,
+      ),
+    );
     const originalFailures = [...boundaryFailures];
     boundaryFailures.length = 0;
     walk(probeRoot);
@@ -210,6 +234,14 @@ if (process.argv.includes("--probe-generated")) {
       throw new Error(
         "generated-source secret probe did not detect the simulated key/supplier URL",
       );
+    if (
+      probeFailures.some((value) => value.endsWith("/schema.json")) ||
+      !probeFailures.some((value) => value.endsWith("/credential.json"))
+    ) {
+      throw new Error(
+        "schema metadata and nested credential values were not distinguished",
+      );
+    }
     console.log(
       "generated-source secret probe passed: simulated key and supplier URL were detected without touching product files",
     );

@@ -65,7 +65,6 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   providerGateReview: "Review exact disclosure",
   providerGateReviewAll: "Review all turn approvals",
   providerGateConfirmed: "Disclosure confirmed",
-  providerGateRefresh: "Refresh",
   providerGateRetry: "Retry this turn",
   noPublishedSpeech: "The server has not published a speech for this turn yet.",
   audioNotRetained: "This audio is no longer retained.",

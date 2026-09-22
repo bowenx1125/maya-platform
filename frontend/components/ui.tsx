@@ -88,27 +88,8 @@ export function StatusBadge({
   );
 }
 
-export function PageIntro({
-  eyebrow,
-  title,
-  description,
-  action,
-}: {
-  eyebrow?: string;
-  title: string;
-  description?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="page-intro">
-      <div>
-        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
-        <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
-      </div>
-      {action ? <div className="page-intro-action">{action}</div> : null}
-    </div>
-  );
+export function PageIntro({ title }: { title: string }) {
+  return <h1 className="sr-only">{title}</h1>;
 }
 
 export function SectionCard({

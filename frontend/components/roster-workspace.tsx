@@ -8,8 +8,7 @@ import {
   type RosterEntry,
   type UpdateCourseMemberRequest,
 } from "../lib/api";
-import { roleLabel } from "../lib/i18n";
-import { useLocale, useT } from "./locale";
+import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -25,15 +24,8 @@ type Draft = { display_name: string; group_name: string };
 /** A password produced by a reset, held only until the page is reloaded. */
 type IssuedPassword = { user_id: string; username: string; password: string };
 
-function sourceKey(source: string) {
-  return source === "catalog"
-    ? ("sourceCatalog" as const)
-    : ("sourceDatabase" as const);
-}
-
 export function RosterWorkspace() {
   const t = useT();
-  const { locale } = useLocale();
   const { api, user, refresh } = useSession();
   const router = useRouter();
   const [entries, setEntries] = useState<RosterEntry[]>([]);
@@ -165,7 +157,7 @@ export function RosterWorkspace() {
 
   return (
     <div className="account-layout">
-      <PageIntro eyebrow={t("accountsEyebrow")} title={t("accounts")} />
+      <PageIntro title={t("accounts")} />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
       <SectionCard title={`${t("members")} · ${entries.length}`}>
@@ -243,16 +235,11 @@ export function RosterWorkspace() {
                 <div className="list-row account-row" key={entry.user_id}>
                   <span>
                     <span className="roster-headline">
-                      <strong>{entry.display_name}</strong>
+                      <strong>{entry.username}</strong>
                       <StatusBadge
                         status={entry.status}
                         tone={entry.status === "active" ? "good" : "neutral"}
                       />
-                    </span>
-                    <span className="account-meta">
-                      <small>{entry.username}</small>
-                      <small>{roleLabel(entry.role, locale)}</small>
-                      <small>{t(sourceKey(entry.source))}</small>
                     </span>
                     <span className="group-label">{groupSummary(entry)}</span>
                     {issued && issued.user_id === entry.user_id ? (

@@ -89,9 +89,7 @@ describe("M13 teacher interaction panel", () => {
       rawHeading.compareDocumentPosition(voteHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: /End collection & prepare report/ }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Conclude/ }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

@@ -59,25 +59,19 @@ export default function TeacherDebateInteractionPage() {
         ) : null}
         {detail && debateId ? (
           <>
-            <PageIntro
-              eyebrow={t("debates")}
-              title={t("wave3Title")}
-              action={
-                // One Back, and it returns to the stage this page was opened
-                // from. A second link to the debate list sat beside it saying
-                // the same word for a different destination.
-                <Link
-                  className="secondary-action"
-                  href={`/teacher/debates/${debateId}/control`}
-                >
-                  {t("wave3BackToPlayback")}
-                </Link>
-              }
-            />
+            <PageIntro title={t("wave3Title")} />
             {error ? (
               <ErrorNotice error={error} onRetry={() => void load()} />
             ) : null}
             <TeacherWave3 api={api} debateId={debateId} detail={detail} />
+            <div className="button-row">
+              <Link
+                className="secondary-action"
+                href={`/teacher/debates/${debateId}/control`}
+              >
+                {t("wave3BackToPlayback")}
+              </Link>
+            </div>
           </>
         ) : null}
       </AppShell>

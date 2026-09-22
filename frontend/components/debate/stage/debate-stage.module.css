@@ -18,7 +18,7 @@
     rgba(255, 255, 255, 0.96),
     rgba(250, 247, 239, 0.93)
   );
-  box-shadow: 0 18px 42px rgba(55, 47, 74, 0.07);
+  box-shadow: 0 18px 42px rgba(20, 25, 40, 0.07);
 }
 
 .stageHeader h1 {
@@ -155,7 +155,7 @@
   border: 1px solid var(--line);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 10px 26px rgba(55, 47, 74, 0.045);
+  box-shadow: 0 10px 26px rgba(20, 25, 40, 0.045);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -163,7 +163,7 @@
 }
 
 .avatarCardCurrent {
-  border-color: #d5ab4c;
+  border-color: var(--accent, #76591f);
   box-shadow:
     0 0 0 3px rgba(213, 171, 76, 0.22),
     0 15px 30px rgba(86, 66, 29, 0.1);
@@ -195,7 +195,7 @@
 
 .currentMark {
   min-height: 24px;
-  color: #79540b;
+  color: var(--ink, #1d1d1f);
   background: var(--gold-soft);
   font-size: 0.65rem;
 }
@@ -326,7 +326,7 @@
 
 .roundMark {
   color: var(--indigo-dark);
-  background: #f1edf8;
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .speechText {
@@ -363,7 +363,7 @@
   padding: 5px 8px;
   border-radius: 8px;
   color: var(--indigo-dark);
-  background: #f4f0fb;
+  background: var(--surface-subtle, #f5f5f7);
   font-size: 0.75rem;
 }
 
@@ -381,9 +381,9 @@
   min-height: 170px;
   place-items: center;
   padding: 20px;
-  border: 1px dashed #cfc6dc;
+  border: 1px dashed var(--line, #dedee3);
   border-radius: 15px;
-  background: #faf8fc;
+  background: var(--surface-subtle, #f5f5f7);
   text-align: center;
 }
 
@@ -411,10 +411,10 @@
   gap: 10px;
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid #cfc6dc;
+  border: 1px solid var(--line, #dedee3);
   border-radius: 13px;
   color: var(--ink);
-  background: #faf8fc;
+  background: var(--surface-subtle, #f5f5f7);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -453,7 +453,7 @@
   place-items: center;
   border-radius: 9px;
   color: var(--indigo-dark);
-  background: #f1edf8;
+  background: var(--surface-subtle, #f5f5f7);
   font-size: 0.74rem;
   font-weight: 800;
 }
@@ -473,9 +473,9 @@
 .transcriptItem {
   min-width: 0;
   padding: 12px;
-  border: 1px solid #ebe6f0;
+  border: 1px solid var(--line, #dedee3);
   border-radius: 13px;
-  background: #fcfbfd;
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .transcriptItemTop {

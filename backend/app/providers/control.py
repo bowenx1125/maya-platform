@@ -40,6 +40,7 @@ FIXED_MODELS: Mapping[str, str] = MappingProxyType(
         "llm_debate": "qwen3.7-plus-2026-05-26",
         "llm_debate_turn": "qwen3.7-plus-2026-05-26",
         "llm_maya_report": "qwen3.7-plus-2026-05-26",
+        "llm_agent_chat": "qwen3.7-plus-2026-05-26",
         "tts": "qwen3-tts-vc-2026-01-22",
         "voice_enrollment": "qwen-voice-enrollment",
     }
@@ -143,6 +144,7 @@ _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
         "llm_debate_turn": LLM_DEBATE_TURN_BUCKET,
         "llm_barrage_insight": LLM_BARRAGE_INSIGHT_BUCKET,
         "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
+        "llm_agent_chat": LLM_DEBATE_TURN_BUCKET,
         "tts_synthesis": TTS_SYNTHESIS_BUCKET,
         "tts": TTS_SYNTHESIS_BUCKET,
         "voice_enrollment": VOICE_ENROLLMENT_BUCKET,
@@ -496,6 +498,7 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "anonymous_insight_summary",
         "anonymous_classroom_barrage",
         "session_discussion_memory",
+        "private_conversation_messages",
         "aggregate_vote_count",
         "aggregate_evidence_grade",
         "current_tts_speech",

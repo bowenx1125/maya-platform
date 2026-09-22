@@ -238,6 +238,10 @@ describe("student and teacher snapshot selection", () => {
         "11111111-1111-4111-8111-111111111111",
       ),
     );
-    expect(screen.getByText("Version")).toBeTruthy();
+    expect(screen.queryByText("Version")).toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Published Agent · V1.0" })
+        .className,
+    ).toBe("sr-only");
   });
 });

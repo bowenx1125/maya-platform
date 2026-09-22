@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -376,12 +377,14 @@ describe("Wave 2 M12 playback stage", () => {
     );
 
     await waitFor(() => expect(socket.hasListeners("message")).toBe(true));
-    socket.emit("message", {
-      ...envelope("error", 1, {
-        code: "provider_confirmation_required",
-        message: "Teacher confirmation is required.",
-        recoverable: true,
-      }),
+    await act(async () => {
+      socket.emit("message", {
+        ...envelope("error", 1, {
+          code: "provider_confirmation_required",
+          message: "Teacher confirmation is required.",
+          recoverable: true,
+        }),
+      });
     });
     await waitFor(() =>
       expect(api.listProviderDataCallManifests).toHaveBeenCalledWith(debateId),
@@ -405,7 +408,11 @@ describe("Wave 2 M12 playback stage", () => {
         .some((command) => command.command_type === "playback.media.prepare"),
     ).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    fireEvent.focus(window);
+    await waitFor(() =>
+      expect(api.listProviderDataCallManifests).toHaveBeenCalledTimes(2),
+    );
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Retry this turn" }),

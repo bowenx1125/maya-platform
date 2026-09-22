@@ -97,7 +97,7 @@ describe("teacher debate turn approval route controller", () => {
     ).toBeTruthy();
     expect(screen.queryByText("private backend detail")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(fixtures.list).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Debate turn approvals")).toBeTruthy();
   });

@@ -1,9 +1,9 @@
 .inspector {
   margin-top: 12px;
-  border: 1px solid rgba(84, 73, 166, 0.2);
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 9px 11px;
-  background: rgba(247, 245, 252, 0.74);
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .inspector summary {
@@ -21,7 +21,7 @@
   margin-left: 4px;
   border-radius: 999px;
   color: var(--indigo-dark);
-  background: rgba(84, 73, 166, 0.12);
+  background: var(--accent-soft, #f6ecd3);
   font-size: 0.72rem;
 }
 
@@ -42,7 +42,7 @@
 }
 
 .claim {
-  border: 1px solid rgba(232, 225, 216, 0.95);
+  border: 1px solid var(--line, #dedee3);
   border-radius: 10px;
   padding: 9px;
   background: rgba(255, 255, 255, 0.66);
@@ -150,7 +150,7 @@
 .mode[data-grade="indirect"] {
   border-color: transparent;
   background: var(--gold-soft);
-  color: #8a6a1f;
+  color: var(--ink, #1d1d1f);
 }
 
 .modeScore {

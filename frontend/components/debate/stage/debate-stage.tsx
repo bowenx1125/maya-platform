@@ -17,7 +17,6 @@ import type {
   ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
-import { ReleaseButton } from "../release-button";
 import { SpeechStream, type StreamTurn } from "./speech-stream";
 import { expectedTurnCount } from "../../../lib/debate-rounds";
 import {
@@ -1799,6 +1798,14 @@ export function DebateStage({
     [api, debateId],
   );
 
+  useEffect(() => {
+    const code = providerGate?.code;
+    if (!code) return;
+    const syncApprovals = () => void refreshProviderGate(code);
+    window.addEventListener("focus", syncApprovals);
+    return () => window.removeEventListener("focus", syncApprovals);
+  }, [providerGate?.code, refreshProviderGate]);
+
   const retryProviderPreparation = useCallback(
     async (turnId: string) => {
       if (readOnly || providerRetryBusy) return;
@@ -3462,13 +3469,6 @@ export function DebateStage({
               ) : (
                 <span>{labels.providerGateEmpty}</span>
               )}
-              <button
-                type="button"
-                disabled={providerGate.loading}
-                onClick={() => void refreshProviderGate(providerGate.code)}
-              >
-                {labels.providerGateRefresh}
-              </button>
             </section>
           ) : null}
 
@@ -3480,13 +3480,6 @@ export function DebateStage({
                   <span className={styles.blockingTopic}>
                     {blockedBy.topic}
                   </span>
-                  <ReleaseButton
-                    debateId={blockedBy.id}
-                    onReleased={() => {
-                      setBlockedBy(null);
-                      setControlError(null);
-                    }}
-                  />
                 </>
               ) : null}
             </div>

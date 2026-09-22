@@ -18,7 +18,6 @@ import type {
   ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
-import { ReleaseButton } from "../../debate/release-button";
 import {
   SpeechStream,
   type StreamTurn,
@@ -704,11 +703,59 @@ export function BetaDebateStage({
   const beta = betaLabels ?? defaultBetaStageLabels;
   const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
   const [barragePaused, setBarragePaused] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const transcriptRef = useRef<HTMLElement>(null);
+  const transcriptToggleRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!transcriptOpen) return;
+    transcriptRef.current?.focus();
+    const list = transcriptRef.current?.querySelector<HTMLElement>(
+      `.${styles.streamList}`,
+    );
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [transcriptOpen]);
   const onInteractionOpenedRef = useRef(onInteractionOpened);
   useEffect(() => {
     onInteractionOpenedRef.current = onInteractionOpened;
   }, [onInteractionOpened]);
   const labelsRef = useRef(labels);
+
+  useEffect(() => {
+    if (readOnly || typeof api.updateClassroomLive !== "function") return;
+    const update = api.updateClassroomLive.bind(api);
+    const lease_id = makeId();
+    let stopped = false;
+    let pending: Promise<unknown> | null = null;
+    const close = () =>
+      update(debateId, { lease_id, active: false }, true).catch(
+        () => undefined,
+      );
+    const publish = () => {
+      if (stopped || pending) return;
+      const state = playbackRef.current;
+      const active =
+        !["stopped", "completed"].includes(state.status) &&
+        (detailRef.current.status === "draft" || controllerReadyRef.current);
+      pending = update(debateId, {
+        lease_id,
+        active,
+        controller_epoch: controllerEpochRef.current,
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          pending = null;
+          if (stopped) void close();
+        });
+    };
+    publish();
+    const timer = window.setInterval(publish, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      if (!pending) void close();
+    };
+  }, [api, debateId, readOnly]);
 
   const [audioPointerOverride, setAudioPointerOverride] = useState<{
     source: string | null | undefined;
@@ -1931,6 +1978,14 @@ export function BetaDebateStage({
     },
     [api, debateId],
   );
+
+  useEffect(() => {
+    const code = providerGate?.code;
+    if (!code) return;
+    const syncApprovals = () => void refreshProviderGate(code);
+    window.addEventListener("focus", syncApprovals);
+    return () => window.removeEventListener("focus", syncApprovals);
+  }, [providerGate?.code, refreshProviderGate]);
 
   const retryProviderPreparation = useCallback(
     async (turnId: string) => {
@@ -3341,11 +3396,6 @@ export function BetaDebateStage({
     (playback.status === "completed"
       ? publicTurns[publicTurns.length - 1]
       : null);
-  // Only whoever is speaking. Three idle faces beside the speeches told a
-  // classroom nothing and took the width the speeches needed; before anyone
-  // speaks the first participant stands in so the column is never empty.
-  // The whole bench, not just whoever is speaking: with full figures the
-  // listeners carry information the head-only stage could not show.
   const stageCharacters: StageCharacter[] = detailState.participants.map(
     (participant) => ({
       id: participant.id,
@@ -3445,11 +3495,6 @@ export function BetaDebateStage({
       data-classroom-phase={phase}
       aria-label={labels.stageTitle}
     >
-      {/* No heading of its own: the page already titles this stage with the
-          same topic, and the status it used to carry now sits with the
-          controls under the face. A second copy of the title told a reader
-          nothing and pushed the debate itself further down. */}
-
       {!suppressConnectionUi && connectionRecovery ? (
         <div className={styles.connectionOverlay} role="status">
           <button
@@ -3481,7 +3526,10 @@ export function BetaDebateStage({
               paused={barragePaused}
             />
             {joinUrl && joinCodeVisible ? (
-              <div className={stage3d.joinCard} id="classroom-join-code">
+              <div
+                className={`${stage3d.joinCard} ${styles.joinCard}`}
+                id="classroom-join-code"
+              >
                 {/* QrCode brings its own caption with the URL under it, so the
                     card adds only the running count beside the symbol. */}
                 <QrCode label={beta.joinLabel} value={joinUrl} />
@@ -3513,210 +3561,191 @@ export function BetaDebateStage({
         visuals={stageVisuals}
       />
 
-      <div className={styles.stageColumns}>
-        <div className={styles.avatarColumn}>
-          {/* Controls and status sit in the blank space under the face
-              instead of in bands of their own above the columns, so the
-              stage reads as two rectangles ending on the same line. */}
-          <div className={styles.stagePanel}>
-            {!readOnly ? (
-              <div className={styles.controlsArea}>
-                <div
-                  className={styles.controlButtons}
-                  role="group"
-                  aria-label={labels.stageTitle}
-                >
-                  {/* One button, because a teacher only ever has one move.
-                      It says Start until the debate has begun and Next after,
-                      so the room advances on a single place to press instead
-                      of a pair where one is always dead. */}
-                  <button
-                    className="primary-action"
-                    type="button"
-                    disabled={canStart ? busyAction !== null : !canAdvance}
-                    onClick={() => void runControl(canStart ? "start" : "next")}
-                  >
-                    {canStart ? labels.start : finalActionLabel}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Back, End and the classroom-interaction entry sit under Start
-                and Next rather than up in the page header. They belong with
-                the other things a teacher presses, and the header had grown a
-                row of links that repeated what the stage already offered. */}
-            {headerActions ? (
-              <div className={styles.panelActions}>
-                {typeof headerActions === "function" ? (
-                  headerActions(replayButton)
-                ) : (
-                  <>
-                    {headerActions}
-                    {replayButton}
-                  </>
-                )}
-              </div>
+      <div
+        className={styles.controlsDock}
+        role="group"
+        aria-label={labels.stageTitle}
+      >
+        {!readOnly ? (
+          <button
+            className="primary-action"
+            type="button"
+            disabled={canStart ? busyAction !== null : !canAdvance}
+            onClick={() => void runControl(canStart ? "start" : "next")}
+          >
+            {canStart ? labels.start : finalActionLabel}
+          </button>
+        ) : null}
+        {headerActions ? (
+          <div className={styles.panelActions}>
+            {typeof headerActions === "function" ? (
+              headerActions(replayButton)
             ) : (
-              replayButton
+              <>
+                {headerActions}
+                {replayButton}
+              </>
             )}
-
-            <audio
-              ref={audioRef}
-              aria-label={labels.audioLabel}
-              preload="auto"
-              onEnded={onAudioEnded}
-              onError={onAudioError}
-              onLoadedMetadata={onAudioLoadedMetadata}
-              onPlaying={() => setAudioPlayingTurnId(audioTurnRef.current)}
-              onPause={() => setAudioPlayingTurnId(null)}
-              onTimeUpdate={onAudioTimeUpdate}
-            />
           </div>
-        </div>
-
-        <div className={styles.speechColumn}>
-          {providerGate ? (
-            <section
-              className={styles.providerGateCard}
-              data-testid="provider-query-gate"
-              aria-label={labels.providerGateTitle}
-            >
-              <a
-                href={`/teacher/provider-approvals/debates/${debateId}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {labels.providerGateReviewAll}
-              </a>
-              {providerGate.loading ? (
-                <span>{labels.providerGateLoading}</span>
-              ) : providerGate.error ? null : providerGate.value?.items
-                  .length ? (
-                <ul>
-                  {providerGate.value.items
-                    .filter(
-                      (item) =>
-                        item.manifest_hash ===
-                        providerGate.selectedManifestHash,
-                    )
-                    .map((item) => (
-                      <li key={item.manifest_hash}>
-                        {item.confirmed ? null : (
-                          <a
-                            href={`/teacher/provider-disclosures/${item.manifest_hash}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {labels.providerGateReview}
-                          </a>
-                        )}
-                        {item.confirmed && item.turn_id ? (
-                          <button
-                            type="button"
-                            disabled={providerRetryBusy || readOnly}
-                            onClick={() =>
-                              void retryProviderPreparation(
-                                item.turn_id as string,
-                              )
-                            }
-                          >
-                            {labels.providerGateRetry}
-                          </button>
-                        ) : null}
-                      </li>
-                    ))}
-                </ul>
-              ) : (
-                <span>{labels.providerGateEmpty}</span>
-              )}
-              <button
-                type="button"
-                disabled={providerGate.loading}
-                onClick={() => void refreshProviderGate(providerGate.code)}
-              >
-                {labels.providerGateRefresh}
-              </button>
-            </section>
-          ) : null}
-
-          {controlError && blockedBy ? (
-            <div className={styles.failureCard}>
-              {blockedBy ? (
-                <>
-                  <span className={styles.blockingTopic}>
-                    {blockedBy.topic}
-                  </span>
-                  <ReleaseButton
-                    debateId={blockedBy.id}
-                    onReleased={() => {
-                      setBlockedBy(null);
-                      setControlError(null);
-                    }}
-                  />
-                </>
-              ) : null}
-            </div>
-          ) : null}
-          {/* The panel under the face already carries this state. A second
-              wording of it at the top-left of the speeches said the same
-              thing twice and pushed the first speech down. */}
-
-          <SpeechStream
-            activeReveal={
-              bubbleTurn
-                ? {
-                    turnId: bubbleTurn.id,
-                    progress:
-                      playback.status === "playing" ||
-                      playback.status === "paused"
-                        ? bubblePlayback?.turnId === bubbleTurn.id
-                          ? bubblePlayback.failed
-                            ? 1
-                            : bubblePlayback.duration > 0
-                              ? bubblePlayback.elapsed / bubblePlayback.duration
-                              : 0
-                          : 0
-                        : 1,
-                  }
-                : null
-            }
-            showTurnCount={false}
-            styles={styles}
-            describe={(participantId) => {
-              const owner = participantById.get(participantId);
-              return {
-                slot: "",
-                name: owner?.agent_name ?? participantId,
-              };
-            }}
-            emptyMessage={labels.noPublishedSpeech ?? ""}
-            labels={labels}
-            status={visibleStatus}
-            phaseOf={(turn) => {
-              if (detailState.teaching_protocol === "four_round_v1") {
-                return teachingRoundLabel(turn.round_no, outputLanguage);
-              }
-              const phase = visibleRoundPhase(
-                turn as unknown as VisiblePlaybackTurn,
-                detailState,
-              );
-              return phase ? phaseLabel(phase, labels) : null;
-            }}
-            headerAction={
-              <span
-                className={styles.turnProgress}
-                data-connected={connection === "connected"}
-                aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
-                role="status"
-              >
-                {currentTurnNumber}/{totalTurns}
-              </span>
-            }
-            turns={publicTurns as unknown as StreamTurn[]}
-          />
-        </div>
+        ) : (
+          replayButton
+        )}
+        <button
+          ref={transcriptToggleRef}
+          className="secondary-action"
+          type="button"
+          aria-expanded={transcriptOpen}
+          aria-controls="debate-transcript"
+          onClick={() => setTranscriptOpen((open) => !open)}
+        >
+          {beta.transcriptToggle}
+        </button>
+        <audio
+          ref={audioRef}
+          aria-label={labels.audioLabel}
+          preload="auto"
+          onEnded={onAudioEnded}
+          onError={onAudioError}
+          onLoadedMetadata={onAudioLoadedMetadata}
+          onPlaying={() => setAudioPlayingTurnId(audioTurnRef.current)}
+          onPause={() => setAudioPlayingTurnId(null)}
+          onTimeUpdate={onAudioTimeUpdate}
+        />
       </div>
+      <div className={styles.notices}>
+        {providerGate ? (
+          <section
+            className={styles.providerGateCard}
+            data-testid="provider-query-gate"
+            aria-label={labels.providerGateTitle}
+          >
+            <a
+              href={`/teacher/provider-approvals/debates/${debateId}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {labels.providerGateReviewAll}
+            </a>
+            {providerGate.loading ? (
+              <span>{labels.providerGateLoading}</span>
+            ) : providerGate.error ? null : providerGate.value?.items.length ? (
+              <ul>
+                {providerGate.value.items
+                  .filter(
+                    (item) =>
+                      item.manifest_hash === providerGate.selectedManifestHash,
+                  )
+                  .map((item) => (
+                    <li key={item.manifest_hash}>
+                      {item.confirmed ? null : (
+                        <a
+                          href={`/teacher/provider-disclosures/${item.manifest_hash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {labels.providerGateReview}
+                        </a>
+                      )}
+                      {item.confirmed && item.turn_id ? (
+                        <button
+                          type="button"
+                          disabled={providerRetryBusy || readOnly}
+                          onClick={() =>
+                            void retryProviderPreparation(
+                              item.turn_id as string,
+                            )
+                          }
+                        >
+                          {labels.providerGateRetry}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <span>{labels.providerGateEmpty}</span>
+            )}
+          </section>
+        ) : null}
+
+        {controlError && blockedBy ? (
+          <div className={styles.failureCard}>
+            {blockedBy ? (
+              <>
+                <span className={styles.blockingTopic}>{blockedBy.topic}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <aside
+        ref={transcriptRef}
+        id="debate-transcript"
+        className={styles.transcriptDrawer}
+        hidden={!transcriptOpen}
+        aria-label={labels.transcript}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setTranscriptOpen(false);
+            transcriptToggleRef.current?.focus();
+          }
+        }}
+      >
+        <SpeechStream
+          activeReveal={
+            bubbleTurn
+              ? {
+                  turnId: bubbleTurn.id,
+                  progress:
+                    playback.status === "playing" ||
+                    playback.status === "paused"
+                      ? bubblePlayback?.turnId === bubbleTurn.id
+                        ? bubblePlayback.failed
+                          ? 1
+                          : bubblePlayback.duration > 0
+                            ? bubblePlayback.elapsed / bubblePlayback.duration
+                            : 0
+                        : 0
+                      : 1,
+                }
+              : null
+          }
+          showTurnCount={false}
+          styles={styles}
+          describe={(participantId) => {
+            const owner = participantById.get(participantId);
+            return {
+              slot: "",
+              name: owner?.agent_name ?? participantId,
+            };
+          }}
+          emptyMessage={labels.noPublishedSpeech ?? ""}
+          labels={labels}
+          status={visibleStatus}
+          phaseOf={(turn) => {
+            if (detailState.teaching_protocol === "four_round_v1") {
+              return teachingRoundLabel(turn.round_no, outputLanguage);
+            }
+            const phase = visibleRoundPhase(
+              turn as unknown as VisiblePlaybackTurn,
+              detailState,
+            );
+            return phase ? phaseLabel(phase, labels) : null;
+          }}
+          headerAction={
+            <span
+              className={styles.turnProgress}
+              data-connected={connection === "connected"}
+              aria-label={`Turn ${currentTurnNumber} of ${totalTurns}, ${connection === "connected" ? "connected" : "disconnected"}`}
+              role="status"
+            >
+              {currentTurnNumber}/{totalTurns}
+            </span>
+          }
+          turns={publicTurns as unknown as StreamTurn[]}
+        />
+      </aside>
     </section>
   );
 }

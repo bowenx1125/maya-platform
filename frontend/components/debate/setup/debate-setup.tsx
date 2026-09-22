@@ -39,6 +39,7 @@ import {
 } from "../../ui";
 import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
+import { WorkspaceNew } from "../../workspace-new";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
 
@@ -81,8 +82,6 @@ export function TeacherDebateList({
   const [error, setError] = useState<unknown>(null);
   const courseId = teacherCourseId(user);
   const loadSequence = useRef(0);
-  const remakeInFlight = useRef(false);
-  const [remaking, setRemaking] = useState(false);
 
   const load = useCallback(
     async (silent = false) => {
@@ -135,72 +134,12 @@ export function TeacherDebateList({
     };
   }, [load]);
 
-  const remakeAll = async () => {
-    if (remakeInFlight.current || !courseId) return;
-    remakeInFlight.current = true;
-    setRemaking(true);
-    try {
-      const latest = controller
-        ? await controller.load(courseId)
-        : await api.debates(courseId);
-      for (const row of latest) {
-        try {
-          if (stalled(row) || row.status === "failed") {
-            const snapshot = await api.debate(row.id);
-            await api.remakeDebate(
-              row.id,
-              {
-                expected_revision: snapshot.revision,
-                expected_control_version: snapshot.playback.control_version,
-              },
-              { idempotency: createIdempotencyHandle() },
-            );
-          }
-          if (["completed", "debate_finished"].includes(row.status)) {
-            const report = await api.getCurrentReport(row.id);
-            if (report.generation_status === "failed")
-              await api.regenerateReport(row.id, {
-                idempotency: createIdempotencyHandle(),
-              });
-          }
-        } catch {
-          /* One blocked request must not prevent refreshing other debates. */
-        }
-      }
-    } catch {
-      /* The final refresh retains the last visible list on connection loss. */
-    } finally {
-      await load(true);
-      remakeInFlight.current = false;
-      setRemaking(false);
-    }
-  };
-
   return (
     <div className={styles.pageStack}>
-      <PageIntro
-        eyebrow={t("debates")}
-        title={t("debatePreviewTitle")}
-        action={
-          <div className="row-actions">
-            <Link className="primary-action" href="/teacher/debates/new">
-              {t("newDebate")}
-            </Link>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={remaking}
-              onClick={() => void remakeAll()}
-            >
-              {remaking ? "Refresh..." : "Refresh"}
-            </button>
-          </div>
-        }
-      />
+      <PageIntro title={t("debatePreviewTitle")} />
+      <WorkspaceNew href="/teacher/debates/new" disabled={!courseId} />
       {loading ? <LoadingCard /> : null}
-      {error ? (
-        <ErrorNotice error={error} onRetry={() => void remakeAll()} />
-      ) : null}
+      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
         <SectionCard>
           {debates.length === 0 ? (
@@ -238,7 +177,6 @@ export function TeacherDebateList({
                     ) ? (
                       <ClassroomResetButton
                         debateId={debate.id}
-                        action="rebirth"
                         onDone={() => void load(true)}
                       />
                     ) : null}
@@ -283,39 +221,16 @@ export function TeacherDebateList({
   );
 }
 
-/**
- * How ready a draft is, in the words the teacher acts on.
- *
- * "Thinking" while it warms, with the share done, and "Ready" once every turn
- * is generated. Either way the debate can be started: an unwarmed turn simply
- * waits where it always did.
- */
-/** A debate whose generation stopped and is still worth resuming.
-
- * Only while it could still reach the end: a stopped or failed debate has a
- * failed turn in its history too, and calling that a stall would offer a
- * Resume that leads nowhere.
- */
-function stalled(debate: DebateSummary): boolean {
-  return (
-    debate.stall != null &&
-    (debate.status === "draft" || debate.status === "running")
-  );
-}
-
 function ClassroomResetButton({
   debateId,
-  action,
   onDone,
 }: {
   debateId: string;
-  action: "remake" | "rebirth";
   onDone: () => void;
 }) {
   const { api } = useSession();
   const [busy, setBusy] = useState(false);
   const active = useRef(false);
-  const label = action === "rebirth" ? "Rebirth" : "Refresh";
   return (
     <button
       className="secondary-action"
@@ -325,9 +240,7 @@ function ClassroomResetButton({
         if (active.current) return;
         if (
           !window.confirm(
-            action === "rebirth"
-              ? "Keep Preview and reset this classroom? Messages, Report and the final round will be removed."
-              : "Recover this turn and continue the debate? Failed generation may call the provider again.",
+            "Keep Preview and reset this classroom? Messages, Report and the final round will be removed.",
           )
         )
           return;
@@ -335,7 +248,7 @@ function ClassroomResetButton({
         setBusy(true);
         try {
           const detail = await api.debate(debateId);
-          await api[action === "rebirth" ? "rebirthDebate" : "remakeDebate"](
+          await api.rebirthDebate(
             debateId,
             {
               expected_revision: detail.revision,
@@ -343,11 +256,6 @@ function ClassroomResetButton({
             },
             { idempotency: createIdempotencyHandle() },
           );
-          if (action === "remake" && detail.report_status === "failed") {
-            await api.regenerateReport(debateId, {
-              idempotency: createIdempotencyHandle(),
-            });
-          }
         } catch {
           // A refused action leaves the row unchanged.
         } finally {
@@ -357,7 +265,7 @@ function ClassroomResetButton({
         }
       }}
     >
-      {label}
+      Rebirth
     </button>
   );
 }
@@ -593,25 +501,7 @@ export function TeacherDebateCreate({
 
   return (
     <div className={styles.pageStack}>
-      <PageIntro
-        eyebrow={copy(t, "newDebate")}
-        title={copy(t, "newDebateTitle")}
-        action={
-          <div className={styles.createActions}>
-            <Link className="secondary-action" href="/teacher/debates">
-              {copy(t, "debateBack")}
-            </Link>
-            <button
-              className="primary-action"
-              form="create-debate-form"
-              disabled={busy || rulesEditing || candidates.length === 0}
-              type="submit"
-            >
-              {busy ? copy(t, "debateCreating") : copy(t, "debateCreateAction")}
-            </button>
-          </div>
-        }
-      />
+      <PageIntro title={copy(t, "newDebateTitle")} />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form
         id="create-debate-form"
@@ -622,6 +512,23 @@ export function TeacherDebateCreate({
           <SectionCard
             title={copy(t, "debateTopic")}
             className={`${styles.topicCard} ${sectionStyles.section}`}
+            action={
+              <div className={styles.createActions}>
+                <Link className="secondary-action" href="/teacher/debates">
+                  {copy(t, "debateBack")}
+                </Link>
+                <button
+                  className="primary-action"
+                  form="create-debate-form"
+                  disabled={busy || rulesEditing || candidates.length === 0}
+                  type="submit"
+                >
+                  {busy
+                    ? copy(t, "debateCreating")
+                    : copy(t, "debateCreateAction")}
+                </button>
+              </div>
+            }
           >
             <div>
               <textarea

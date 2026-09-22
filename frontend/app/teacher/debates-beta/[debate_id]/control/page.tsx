@@ -152,7 +152,6 @@ export default function TeacherDebateControlPage() {
       providerGateReview: t("debateProviderGateReview"),
       providerGateReviewAll: t("debateProviderGateReviewAll"),
       providerGateConfirmed: t("debateProviderGateConfirmed"),
-      providerGateRefresh: t("debateProviderGateRefresh"),
       providerGateRetry: t("debateProviderGateRetry"),
       noPublishedSpeech: t("debateNoPublishedSpeech"),
       audioNotRetained: t("errorAudioNotRetained"),

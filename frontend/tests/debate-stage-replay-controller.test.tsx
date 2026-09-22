@@ -264,12 +264,12 @@ describe("terminal segments replay controller", () => {
     );
     const next = screen.getByRole("button", { name: "Next" });
     expect(next).toHaveProperty("disabled", true);
-    const panel = next.closest('[class*="stagePanel"]')!;
+    const panel = next.closest('[class*="controlsDock"]')!;
     expect(
       Array.from(panel.querySelectorAll("button,a")).map(
         (node) => node.textContent,
       ),
-    ).toEqual(["Next", "Back", "Replay", "Conclude"]);
+    ).toEqual(["Next", "Back", "Replay", "Conclude", "Transcript"]);
     expect(
       screen.queryByRole("button", { name: "Replay whole debate" }),
     ).toBeNull();

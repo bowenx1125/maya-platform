@@ -7,7 +7,7 @@ from importlib import import_module
 from typing import BinaryIO
 
 if os.name == "nt":
-    import msvcrt
+    msvcrt = import_module("msvcrt")
 else:
     fcntl = import_module("fcntl")
 

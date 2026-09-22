@@ -102,3 +102,18 @@ Next.js frontend. Audio remains authoritative for active-speaker motion and prog
 speech display; saved text remains readable when media fails. Optional Gaussian scene
 packs are local experiments outside version control and are not a runtime dependency of
 the default classroom.
+
+## Private Chat and student Live
+
+Workspace routes reuse session/course authorization. Conversations bind one owner
+to an immutable published Agent version and its knowledge snapshot; no teacher
+override reads another user's private history. A revision fence serializes messages,
+and a stable request ID prevents duplicate paid work. LLM and retrieval use the
+existing disclosure, policy and operation ledger; unknown acceptance is terminal.
+
+Teacher Immerse renews a short Live lease. Students receive an allowlisted snapshot
+and retained audio through separate read-only routes. Controller epochs, private
+notes and unpublished turns are excluded; joining never triggers generation.
+Installation-wide Provider preferences are teacher-only in the single-course Demo,
+encrypted at rest, revisioned and applied only while generation is idle. See
+[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) for deferred speech work.

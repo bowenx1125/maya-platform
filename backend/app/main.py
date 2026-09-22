@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -26,7 +27,7 @@ from app.core.errors import (
     request_validation_handler,
 )
 from app.core.logging import configure_application_logging
-from app.core.models import Course
+from app.core.models import Course, ProviderOperation
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.dependencies import get_db
 from app.modules.auth.router import router as auth_router
@@ -79,6 +80,11 @@ from app.modules.reports.service import (
 from app.modules.reports.task_manager import ReportTaskManager
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
+from app.modules.workspace.chat import router as chat_router
+from app.modules.workspace.live import router as live_router
+from app.modules.workspace.models import Conversation, ConversationTurn, ProviderPreferences
+from app.modules.workspace.providers import preferences_settings
+from app.modules.workspace.providers import router as provider_settings_router
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import tts_provider
 from app.providers.llm_adapter import DashScopeLLMConfig
@@ -91,26 +97,9 @@ from app.seed import COURSE_ID, seed_demo_data
 logger = logging.getLogger("maya.backend")
 
 
-def create_app(
-    settings: Settings | None = None,
-    database: Database | None = None,
-    initialize_database: bool = True,
-) -> FastAPI:
-    """Build an isolated application instance.
-
-    Tests pass their own Settings/Database, while production uses the cached
-    environment configuration and the configured SQLite file.
-    """
-
-    configure_application_logging()
-    runtime_settings = settings or get_settings()
-    runtime_database = database or Database(
-        runtime_settings.database_url,
-        runtime_settings.resolved_data_root,
-    )
-    playback_tasks = TaskManager()
-    playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
-    selected_tts = tts_provider(runtime_settings)
+def build_report_runtime(
+    runtime_settings: Settings, runtime_database: Database
+) -> RealReportRuntime | None:
     report_runtime: RealReportRuntime | None = None
     if runtime_settings.report_provider == "dashscope":
         report_policy_hash = runtime_settings.report_policy_hash or ""
@@ -144,6 +133,30 @@ def create_app(
             ),
             repository=ProviderRepository(runtime_database, require_export_confirmation=False),
         )
+    return report_runtime
+
+
+def create_app(
+    settings: Settings | None = None,
+    database: Database | None = None,
+    initialize_database: bool = True,
+) -> FastAPI:
+    """Build an isolated application instance.
+
+    Tests pass their own Settings/Database, while production uses the cached
+    environment configuration and the configured SQLite file.
+    """
+
+    configure_application_logging()
+    runtime_settings = settings or get_settings()
+    runtime_database = database or Database(
+        runtime_settings.database_url,
+        runtime_settings.resolved_data_root,
+    )
+    playback_tasks = TaskManager()
+    playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
+    selected_tts = tts_provider(runtime_settings)
+    report_runtime = build_report_runtime(runtime_settings, runtime_database)
     event_hub = DebateEventHub(SqlEventStore(runtime_database.session_factory))
     wave3_events = Wave3EventPublisher(runtime_database.session_factory, event_hub)
     report_tasks = ReportTaskManager(
@@ -256,6 +269,32 @@ def create_app(
                 runtime_database.initialize_schema()
             else:
                 runtime_database.upgrade_schema()
+            with runtime_database.session() as session:
+                preferences = session.get(ProviderPreferences, 1)
+                if preferences is not None:
+                    next_settings = preferences_settings(app.state.base_settings, preferences)
+                    app.state.prepare_provider_settings(next_settings)()
+                for conversation in session.scalars(
+                    select(Conversation).where(Conversation.active_request_id.is_not(None))
+                ):
+                    turn = session.get(ConversationTurn, conversation.active_request_id)
+                    if turn is not None and turn.state == "pending":
+                        turn.state = "acceptance_unknown" if turn.mode == "real" else "failed"
+                        turn.safe_error_code = "chat_interrupted"
+                    conversation.active_request_id = None
+            with runtime_database.session() as session:
+                stranded = list(
+                    session.scalars(
+                        select(ProviderOperation.id).where(
+                            ProviderOperation.provider_operation == "llm_agent_chat",
+                            ProviderOperation.state.in_(("reserved", "sending", "accepted")),
+                        )
+                    )
+                )
+            for operation_id in stranded:
+                ProviderRepository(runtime_database).recover_one(
+                    operation_id, staged_response_complete=False
+                )
             if runtime_settings.demo_mode:
                 # Parse first, then seed a fresh organization and apply the
                 # complete private-account desired graph in one BEGIN
@@ -325,10 +364,26 @@ def create_app(
     app.state.prewarm_scheduler = prewarm
     app.state.report_task_manager = report_tasks
     app.state.report_runtime = report_runtime
-    if settings is not None:
-        # Route dependencies use get_settings; keep injected app instances
-        # internally consistent without changing global process settings.
-        app.dependency_overrides[get_settings] = lambda: runtime_settings
+    app.state.base_settings = runtime_settings
+    app.state.workspace_lock = RLock()
+    app.dependency_overrides[get_settings] = lambda: app.state.settings
+
+    def prepare_provider_settings(next_settings: Settings) -> Any:
+        next_preparer = SqlTurnPreparer(settings=next_settings)
+        next_report = build_report_runtime(next_settings, runtime_database)
+
+        def apply() -> None:
+            nonlocal runtime_settings
+            playback_service.turn_preparer = next_preparer
+            playback_service.settings = next_settings
+            report_tasks.real_runtime = next_report
+            app.state.report_runtime = next_report
+            runtime_settings = next_settings
+            app.state.settings = next_settings
+
+        return apply
+
+    app.state.prepare_provider_settings = prepare_provider_settings
 
     def request_provider_disclosure_service(
         db: Session = Depends(get_db),
@@ -426,6 +481,9 @@ def create_app(
     app.include_router(interaction_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
     app.include_router(provider_disclosure_router, prefix="/api/v1")
+    app.include_router(chat_router, prefix="/api/v1")
+    app.include_router(live_router, prefix="/api/v1")
+    app.include_router(provider_settings_router, prefix="/api/v1")
     app.include_router(demo_baseline_router, prefix="/api/v1")
     app.include_router(demo_acceptance_router, prefix="/api/v1")
 

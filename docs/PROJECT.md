@@ -67,13 +67,6 @@ correctness scores. Actual outbound prompts and synthetic I/O:
 acceptance reviews actual answers, new points, evidence and reasoned
 disagreement; string similarity and keyword counts are not hard failure gates.
 
-## Report loading correction
-
-Bibliographic URLs stay allowed; failed jobs settle aggregate and revision;
-startup reconciles orphan generating jobs without paid calls; UI ignores stale
-status responses and failed history reads cannot hide a ready report; logs
-hold safe codes/types, never response bodies.
-
 ## Verification boundary
 
 Operational browser acceptance is recorded below; complete RAG/content quality
@@ -88,9 +81,8 @@ Prompt-only; S IDs remain metadata; report language follows the debate,
 renders Markdown without executing raw HTML, and does not reject prose for
 rhetorical/length rules; schema 0025 removed old report word-count publication
 limits. Larger Stage names omit A/B/C. Replay uses saved text/audio, hides
-Open Message and collects no new barrages; 3D controls stay in two columns:
-Next/Back then End/Interact during live playback, and disabled Next/Back then
-Replay/Conclude at completion.
+Open Message and collects no new barrages. Immerse controls are now a fixed-size
+right-edge stack; a separate Transcript button toggles the speech sidebar.
 
 ## Classroom actions
 
@@ -113,20 +105,11 @@ Replay/Conclude at completion.
   to a Preview-ready draft with new-identity final turns. Each Rebirth funds
   one additional final round (within the per-turn attempt cap); it calls no
   Provider and regenerates no Preview.
-- **Remake** supersedes Resume/Release in the list. The owner's later
-  correction explicitly supersedes the earlier stop-to-Stopped proposal: Remake
-  recovers a current/adjacent failed turn and leaves the classroom resumable;
-  End remains stop. Saved speech/audio are reused; missing saved audio uses the
-  dedicated TTS path. A settled failed paid turn can get a new identity and a
-  bounded new attempt on the teacher's explicit click, while old charges stay.
-  Accepted results are recovered locally; sending/acceptance-unknown requests
-  are not duplicated. One global Refresh (Remake recovery) sits beside New; no
-  per-row Remake remains. It refreshes every record and recovers failed/stalled
-  work, following the first incomplete eligible turn or the retained playback
-  checkpoint and using current server versions. No generic failure prose enters
-  the list. Recovery endpoints keep authentication, CSRF, idempotency and
-  control checks; only Destroy ignores old versions; audits separate fresh
-  generation authorization from media-only recovery and prior costs remain.
+- **Remake** remains a guarded recovery API, not a visible Refresh action. The
+  latest UI removes all Refresh buttons, bulk retry and blocked-lesson recovery
+  buttons. List/focus reads never regenerate failures. Explicit recovery retains
+  prior charges, reuses saved results, and cannot duplicate sending or unknown
+  acceptance. End remains stop; auth, CSRF, identity and control guards remain.
 
 ## Playback and retrieval
 
@@ -146,25 +129,18 @@ writer transaction, restoring immutability triggers on success or rollback;
 Devocalize/Revocalize survive failures; consent, cost, identity and state
 guards remain, none establishing real-service acceptance.
 
-## Prompt-only repetition correction
-
-Prompts anchor each speaker in its own Persona, RAG and prior position, asking
-later turns to add evidence, answers or judgment; agreement is allowed, with no
-similarity rejection or rewriting; teaching quality still needs manual review;
-an Embedding connection issue stays deferred at the owner's request.
-
 ## Runtime and established UI
 
 Next.js, FastAPI, SQLite/local files and Caddy share port 8080. Inspect active
 SQLite only inside its container; preserve private configuration, knowledge
 and runtime data. TTS/Voice remain Mock; Debate LLM, Embedding and Report use
 configured real DashScope adapters with independent authorization; Embedding
-is 1024-dimensional. Teacher lists/creation use yellow rows on white paper;
-Devocalize/Destroy sit beside Rebirth; Immerse uses
-their action styling; failed actions preserve the row. Stage titles are
-removed; the bottom operation panel always shows the speech beside two-column
-light controls, with no separate transcript toggle; bubbles persist until
-Next; Interact/Hide preserves its QR session; Conclude shows Evaluation sorted
+is 1024-dimensional. Devocalize/Destroy sit beside Rebirth; failed actions
+preserve the row. Stage titles and the bottom operation panel are removed.
+Small fixed-size buttons stand alone on the far right, without a backing board.
+Transcript toggles a separate sidebar with Public Debate, status, progress and
+Check RAG; Escape closes it and restores focus. Bubbles persist until Next;
+Interact/Hide preserves its QR session; Conclude shows Evaluation sorted
 by score without name prefixes, plus Report Version/History; Audio Ready
 indicates retained audio.
 
@@ -211,38 +187,18 @@ System messages; repair appends feedback to the same message. UI rejects
 executable HTML/unsafe links; provider budgets and authorization are unchanged;
 model compliance stays manual; Chinese direct/contextual/no_match wording is
 “RAG证实”/“RAG提示”/“我感觉”, editable Prompt guidance only; no-match reasoning
-states assumptions without inventing facts. 3D Stage removes the transcript
-header count and visible connection wording; a single current/total bubble
-sits at the transcript top right, outside controls, following the displayed
-turn (e.g. 4/12): green when connected, red otherwise, with accessible
-nonvisual connection text; existing 3D network recovery uses Back/re-entry and
-sign-in/reload actions remain. Report preserves complete evidence within total
-request budgets and drops obsolete translated_markdown failure fields;
-diagnostics keep safe validation paths; the owner reset the affected lesson,
-preventing replay of its original failed Report. Creation defaults to Chinese;
-language changes outside Edit preserve independent CN/EN drafts and only the
-selected language drives generation; draft updates that omit language preserve
-it. Creation uses linked-height
-Topic/Background inputs and newest-first Agents Order with version/group,
-stable selection and per-Agent stance/notes; mobile stacks. Navigation:
-Home/Classroom; list: Debates/New; the separate Beta list is removed (old URL
-redirects), nested 3D controls remain. Immerse opens the same control route
-from ready Preview or each eligible list row; action order is Rebirth when
-completed, Immerse, Devocalize/Revocalize, Destroy; audio restoration shows
-disabled Revocalize...; stage ready label is Ready. Mayaform brands Home/login/
-navigation; teacher surfaces share yellow/white cards, gold dividers, 24/18px
-panel insets and 20px section gaps. Agent Profile shows the full body;
-immutable RAG documents keep Check and Download; Evaluation and Report use
-yellow content in white shells with version actions at the top right. 3D
-Replay is hidden before completion;
-conclude waits for playback completion. Stage shows Waiting when Next is
-enabled, otherwise Generating; replay recovery uses saved media and existing
-controller acquisition; readiness reads do not enable retries or auto-advance;
-already-ready notifications skip refresh; live starts and controller handoff
-clear legacy replay cursors; report bibliographic prose no longer triggers
-private-input keyword rejection; relationship/schema checks remain; retained
-report input validates; Agent.md has a 12,000-character total budget, no
-field/list caps.
+states assumptions without inventing facts. Transcript has one current/total
+indicator with nonvisual connection status. Network recovery uses Back/reentry;
+Report keeps complete evidence within request budgets and safe error paths.
+Creation defaults to Chinese, preserves independent CN/EN drafts and omitted
+language, uses linked-height Topic/Background and newest-first Agents Order;
+mobile stacks. The separate Beta list redirects to Debates. Row actions remain
+Rebirth, Immerse, Devocalize/Revocalize and Destroy. Full Agent Profile and
+immutable RAG Check/Download remain. Replay and Conclude require completion;
+saved media/controller recovery never automatically retries generation or advances.
+Live starts/handoff clear replay cursors. Report bibliographic prose is not a
+private-input keyword failure; relationship/schema guards remain. Agent.md has
+a 12,000-character total budget without field/list caps.
 
 ## Obsolete protocol removal — September 10, 2026
 
@@ -253,47 +209,15 @@ branches are removed. The API and WebSocket contracts accept only
 database depends on them; obsolete length and prior-round-only test baselines
 no longer block every-round RAG and same-round context.
 
-## Preview Background module
-
-Preview starts with a yellow Background card when Background is non-blank.
-
-## Stalled-debate correction
-
-The local 8,000-token per-item Embedding cap was removed for long Backgrounds;
-request-level limits remain. LLM validation checks JSON/approved fields, not
-keywords or identity patterns in prose; credentials and endpoints stay absent
-from outbound DTOs; failed turns need one explicit Retry/Refresh after deploy.
-
 ## Account integration — September 12, 2026
 
-The owner approves PR 28's single-course Demo, open student registration
-without invitations, five-character passwords, and distinct
-unknown-username/wrong-password messages; multi-course registration stays
-deferred. Catalog accounts remain source-managed; teacher edits apply to
-registered accounts; migration 0029 backfills NFKC/casefold username keys and
-NFKC/whitespace/casefold course-group keys with database uniqueness;
-registration claims run in one writer transaction; duplicate claims return a
-form alert without changing an existing login; registration and teacher moves
-share group normalization/upsert; canonical collisions stop migration.
-
-Teacher access persists in teacher_group_access across catalog sync. Enter
-grants full workspace CRUD under the teacher identity; Groups has Enter only
-and Homeward returns to Accounts. No course subtitle; publication/history,
-CSRF, course and provider consent/cost rules remain; this supersedes the
-previous teacher deletion prohibition; existing real LLM four-round
-generation, Embedding and Report configuration is preserved; TTS/Voice stay as
-configured; real Provider acceptance is manual; account integration had
-partial backend 1339/24 results; contracts, lint and types passed. Classroom
-behavior remains a manual acceptance boundary.
-
-## Accounts and student workspace design
-
-Accounts, student routes and QR interaction share teacher typography, white/
-pale-yellow surfaces, gold dividers and responsive spacing. Home/group lists
-show Agent names and status; Description lives in Agent Info; Homeward returns
-to Accounts; duplicate panels, counters and title prose are removed; content,
-validation, consent and Provider configuration are unchanged; type/lint/build
-passed and desktop/390px UI was inspected; classroom audit stays open.
+Single-course Demo: open student registration, five-character passwords,
+distinct unknown-user/wrong-password errors; multi-course registration deferred.
+Catalog accounts stay source-managed. Migration 0029 enforces canonical username
+and group uniqueness; collisions stop migration, duplicates never alter a login.
+Teacher group access survives catalog sync: Enter grants workspace CRUD under
+the teacher identity; Homeward returns to Accounts. CSRF, publication, course,
+provider consent and cost boundaries remain; TTS/Voice configuration is preserved.
 
 ## Classroom display — September 18, 2026
 
@@ -309,12 +233,6 @@ current assertions and the four-round manual checklist remain.
 
 ## Operation panel and browser acceptance — September 22, 2026
 
-Controls fill the panel: four equal 119x90px desktop targets, 166x44px at 390px,
-no horizontal overflow and visible keyboard focus. The oversized collapsed
-panel stays absent. Frontend: 364 passed, one skipped; types passed; lint has
-four existing warnings. Frontend Docker rebuild passed; app/frontend/backend
-health returned 200. No backend code changed.
-
 The owner approved ending the previous lesson, retaining its content. One Ready
 three-Agent debate completed Start, Next, Interact/Hide, Check RAG, four rounds/
 12 turns, Conclude and Version 1 Report. Replay and reload preserved the result.
@@ -326,6 +244,67 @@ votes were sent. Real speech and classroom-scale acceptance remain unverified.
 Retained Preview turns 5/6 and 8/9 have identical speech ignoring whitespace;
 list text says “2 Rounds” despite the four-round snapshot. Neither was rewritten.
 Performance and full RAG teaching quality remain open.
-[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) proposes GitHub reuse
-boundaries for text/voice/3D chat, five Provider controls and student Live;
-those new features are not implemented or accepted yet.
+[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) records the accepted
+integration/reuse boundaries. This earlier acceptance does not cover the new work below.
+
+## Working — workspace, private Chat and Live, September 22, 2026
+
+Private teacher/student Chat uses existing published Agents and 3D previews.
+The approved scope includes Provider controls, read-only Live and non-login UI;
+no effort selector, Chat uploads or new framework dependency. AGENTS.md sets
+simplicity first; permissions, prompts and safety/cost confirmations remain.
+
+Migration 0030 adds owner-bound conversation history, encrypted local Provider
+preferences and 20-second Live leases. Chat freezes the published version/snapshot,
+retains history and sources, uses request identity and revision fences, and stops
+on unknown Provider acceptance. Five components remain visible: LLM/Embedding/Report
+can switch; TTS/Voice remain deferred. Existing classroom audio configuration is not
+changed. Live uses student-only snapshots/authorized retained audio, never controller
+messages or new generation per spectator.
+
+Non-login UI uses ui-ux-pro-max and Web Interface Guidelines: scoped system fonts,
+gray/white surfaces, login warm yellow, original mark in the Mayaform nav item,
+no separate brand/header, no visible page titles or Refresh. Accounts keeps
+username/group/status. Chat shows one current Agent name. Components is compact
+with one Check: skip Ready/deferred items, confirm the maximum paid calls, stop
+on failure. Mode changes invalidate only that item; key changes invalidate all.
+Live places full public speech history below the scene and reconnects by reentry.
+One sidebar New replaces in-page creation buttons; pages without a creation action
+disable it. Chat, Debates, Agent/version and library creation retain their existing
+handlers and permissions. Knowledge/voice creation forms open on demand.
+Chat New clears the composer without saving an empty conversation; the first
+message saves it. Older empty records are hidden, not deleted.
+
+Acceptance: frontend 372 passed, one skipped; typecheck passed, lint has four
+existing warnings. Final backend run: 1384 passed, 21 skipped and the documented
+two-writer knowledge-test flake failed; its immediate isolated rerun passed.
+All nine workspace tests passed, including real-adapter two-message history and
+idempotency using a fake transport. Ruff, mypy (202 files), formatting, frozen API,
+generated types/WS, route/response fixtures, boundary and reset-safety gates passed.
+Production frontend built; backend reused unchanged installed dependencies and
+rebuilt application layers offline. Containers were healthy after recreation.
+
+Browser checks covered teacher/student Chat, history, source display, ownership
+isolation (cross-user reads return 404), Components, Accounts and 375px/desktop
+layout. Ready/Completed Immerse controls remain 104x44px desktop, with transparent
+parent; Transcript preserves Public Debate and completion state. Two identities
+verified saved replay, Live late entry/reentry and public history without student
+controls; completion switches Live offline. Sidebar New was verified enabled on
+creation pages, disabled on read-only/form pages, with library Cancel restoring it.
+Existing classrooms, Agent assets, login and TTS configuration survive.
+
+Real acceptance in this change used 11 assistant-initiated paid calls: four Chat
+messages (four Embedding plus four LLM), one LLM Check and two Report Checks.
+Two-message retest returned 90/180 characters with one/two sources; repeated same
+request and history reads made no extra calls. A manual second-message failure was
+reproduced offline: multiplying an early float disagreed with the stored decimal
+budget; multiplication now stays Decimal until conversion. The failed request made
+no new provider call and remains in history; user-generated content was not edited.
+Live replay and all-Ready Check made no generation calls. The workspace ledger
+also includes concurrent user tests: 17 successful paid calls total (7 Embedding,
+10 LLM including checks) at this acceptance snapshot, not all assistant requests.
+
+User chose Bailian Beijing for later real-time face-to-face voice, explicitly after
+this manual-audit delivery. No real-time service has been called or installed;
+TTS/Voice remain Mock/Deferred. Full RAG teaching quality, real speech, classroom
+load and public deployment remain unverified.

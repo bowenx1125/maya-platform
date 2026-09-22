@@ -7,7 +7,7 @@
   border: 1px solid var(--line);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 18px 46px rgba(55, 47, 74, 0.08);
+  box-shadow: 0 18px 46px rgba(20, 25, 40, 0.08);
 }
 
 .panelHeader,
@@ -173,7 +173,7 @@
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: #ece7df;
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .voteTrack span {
@@ -244,20 +244,19 @@
 }
 
 .primaryButton {
-  color: white;
-  background: var(--indigo);
+  color: var(--on-accent, #332811);
+  background: var(--accent-fill, #d3a74a);
 }
 
 .secondaryButton {
   color: var(--indigo-dark);
-  border-color: #d8cfee;
-  background: #f4f0fc;
+  border-color: var(--line);
+  background: var(--accent-soft, #f6ecd3);
 }
 
 .primaryButton:hover:not(:disabled),
 .secondaryButton:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(84, 73, 166, 0.15);
+  background: var(--accent-soft, #f6ecd3);
 }
 
 .primaryButton:disabled,
@@ -328,7 +327,7 @@
 .field input:focus,
 .audienceSection textarea:focus {
   border-color: var(--indigo);
-  outline: 3px solid rgba(84, 73, 166, 0.18);
+  outline: 3px solid var(--accent, #76591f);
 }
 
 .audienceSections {
@@ -426,19 +425,19 @@
 .audienceCard h1 {
   margin: 0;
   padding-bottom: 16px;
-  border-bottom: 1px solid #e4d5b7;
+  border-bottom: 1px solid var(--line, #dedee3);
   font-weight: 760;
   line-height: 1.4;
 }
 .audienceCard .audienceSection {
   padding: 16px;
-  border-color: #e5d8bf;
+  border-color: var(--line, #dedee3);
   border-radius: 14px;
-  background: #fbf4e5;
+  background: var(--surface-subtle, #f5f5f7);
 }
 .audienceCard .sectionHeading {
   padding-bottom: 12px;
-  border-bottom: 1px solid #e4d5b7;
+  border-bottom: 1px solid var(--line, #dedee3);
   font-size: 0.9rem;
   font-weight: 650;
 }
@@ -447,7 +446,7 @@
   border: 0;
   border-radius: 6px;
   background: var(--gold-soft);
-  color: #655332;
+  color: var(--ink, #1d1d1f);
   font-size: 0.8rem;
   font-weight: 600;
   box-shadow: none;
@@ -456,15 +455,15 @@
   font-weight: 600;
 }
 .audienceCard :is(input, textarea):focus-visible {
-  border-color: #b59859;
-  outline: 2px solid #b59859;
+  border-color: var(--accent, #76591f);
+  outline: 2px solid var(--accent, #76591f);
   outline-offset: 2px;
 }
 .audienceCard .choice {
-  border-color: #e5d8bf;
+  border-color: var(--line, #dedee3);
 }
 .audienceCard .choice input {
-  accent-color: #b59859;
+  accent-color: var(--accent, #76591f);
 }
 @media (max-width: 600px) {
   .audienceCard {

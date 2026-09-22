@@ -72,10 +72,8 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Rebirth and Remake extend the existing classroom command surface; account
-  // management and student self-registration add seven more. The 84 this
-  // branched from was already one behind main's own contract, which counts 85.
-  if (platformOperationCount !== 92 || placeholderCount !== 0) {
+  // Private Chat, Provider settings and student Live add twelve operations.
+  if (platformOperationCount !== 104 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

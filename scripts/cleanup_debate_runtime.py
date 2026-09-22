@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-SCHEMA_HEAD = "0029_account_keys_teacher_access"
+SCHEMA_HEAD = "0030_workspace_chat_live"
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 
@@ -35,6 +35,7 @@ DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 # ``debate_id`` names a targeted Debate are owned by this cleanup.  Account,
 # course and other unscoped audit rows remain preserved.
 TARGET_TABLES = (
+    "classroom_live_presence",
     "debates",
     "debate_participants",
     "debate_turns",
@@ -71,6 +72,9 @@ TARGET_TABLES = (
 )
 
 PRESERVED_TABLES = (
+    "agent_conversations",
+    "agent_conversation_turns",
+    "provider_preferences",
     "user_credentials",
     "teacher_group_access",
     "users",

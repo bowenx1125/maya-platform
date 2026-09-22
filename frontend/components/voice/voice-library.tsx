@@ -7,6 +7,7 @@ import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
+import { WorkspaceNew } from "../workspace-new";
 import {
   EmptyCard,
   ErrorNotice,
@@ -29,6 +30,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
   const { api } = useSession();
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -66,6 +68,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
       idempotency.finish("voice-enroll");
       setFile(null);
       setConsent(false);
+      setCreating(false);
       setNotice("voiceProfileCreatedNotice");
       await load();
     } catch (cause) {
@@ -144,7 +147,11 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
 
   return (
     <div className={styles.voicePanel}>
-      <PageIntro eyebrow={t("voiceProfilesEyebrow")} title={t("voices")} />
+      <PageIntro title={t("voices")} />
+      <WorkspaceNew
+        disabled={busy || creating}
+        onClick={() => setCreating(true)}
+      />
       {error ? (
         <ErrorNotice error={error} onRetry={() => setError(null)} />
       ) : null}
@@ -153,35 +160,49 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
           {t(notice)}
         </div>
       ) : null}
-      <SectionCard title={t("voiceCreateTitle")}>
-        <div className={styles.uploadCard}>
-          <input
-            className={styles.fileInput}
-            type="file"
-            accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            aria-label={t("voiceSampleFile")}
-          />
-          {file ? <p className={styles.hint}>{file.name}</p> : null}
-          <label className={styles.consent} title={t("voiceConsent")}>
+      {creating ? (
+        <SectionCard>
+          <div className={styles.uploadCard}>
             <input
-              type="checkbox"
-              aria-label={t("voiceConsent")}
-              checked={consent}
-              onChange={(event) => setConsent(event.target.checked)}
+              className={styles.fileInput}
+              type="file"
+              accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              aria-label={t("voiceSampleFile")}
             />
-            <span>{t("voiceConsentLabel")}</span>
-          </label>
-          <button
-            className="primary-action"
-            type="button"
-            disabled={!file || !consent || busy}
-            onClick={() => void submitEnrollment()}
-          >
-            {busy ? t("voiceProcessing") : t("voiceUploadCreate")}
-          </button>
-        </div>
-      </SectionCard>
+            {file ? <p className={styles.hint}>{file.name}</p> : null}
+            <label className={styles.consent} title={t("voiceConsent")}>
+              <input
+                type="checkbox"
+                aria-label={t("voiceConsent")}
+                checked={consent}
+                onChange={(event) => setConsent(event.target.checked)}
+              />
+              <span>{t("voiceConsentLabel")}</span>
+            </label>
+            <button
+              className="primary-action"
+              type="button"
+              disabled={!file || !consent || busy}
+              onClick={() => void submitEnrollment()}
+            >
+              {busy ? t("voiceProcessing") : t("voiceUploadCreate")}
+            </button>
+            <button
+              className="text-link"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setCreating(false);
+                setFile(null);
+                setConsent(false);
+              }}
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </SectionCard>
+      ) : null}
       <SectionCard title={t("voiceGroupTitle")}>
         {profiles.length === 0 ? (
           <EmptyCard title={t("voiceNoCustom")} />

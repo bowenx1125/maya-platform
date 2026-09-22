@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ScholarSceneProps } from "../components/stage3d/scholar-scene";
@@ -65,7 +65,7 @@ function detail(): DebateDetail {
     course_id: courseId,
     topic: "Should the bench fill the screen?",
     background: "",
-    status: "running",
+    status: "debate_finished",
     created_at: "2026-09-07T00:00:00Z",
     audio_restore_needed: false,
     prepared_turns: 1,
@@ -146,6 +146,7 @@ function renderStage(readOnly = true) {
       api={api}
       debateId={debateId}
       detail={detail()}
+      labels={{ transcript: "Public Debate", phaseFinished: "Completed" }}
       readOnly={readOnly}
       socketFactory={() => new IdleSocket()}
     />,
@@ -161,18 +162,30 @@ describe("BetaDebateStage scene layout", () => {
     expect(scholarSceneProps[0].layout).toBe("preview");
   });
 
-  it("keeps speech visible and controls in the restored operation panel", () => {
+  it("separates fixed controls from the toggleable transcript and retains its heading", () => {
     renderStage(false);
 
     const scene = screen.getByTestId("scholar-scene");
-    const panel = scene.nextElementSibling as HTMLElement;
-    expect(panel.className).toContain("stageColumns");
+    const dock = scene.nextElementSibling as HTMLElement;
+    expect(dock.className).toContain("controlsDock");
     expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
+    expect(dock.querySelector("article")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Transcript" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("complementary")).toBeNull();
+    fireEvent.click(toggle);
+    const drawer = screen.getByRole("complementary", { name: "Public Debate" });
     expect(
-      screen.queryByRole("button", { name: "Published transcript" }),
-    ).toBeNull();
-    const speeches = panel.querySelectorAll('article[class*="streamItem"]');
+      screen.getByRole("heading", { name: "Public Debate Completed" }),
+    ).toBeTruthy();
+    const speeches = drawer.querySelectorAll('article[class*="streamItem"]');
     expect(speeches).toHaveLength(1);
     expect(speeches[0].textContent).toContain("A full-bleed speech.");
+    fireEvent.keyDown(drawer, { key: "Escape" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("complementary")).toBeNull();
   });
 });

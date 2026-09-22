@@ -68,7 +68,7 @@
   border-radius: 5px;
   background: rgba(255, 253, 246, 0.9);
   box-shadow: 0 3px 12px rgba(48, 36, 23, 0.16);
-  color: #5f4826;
+  color: var(--ink, #1d1d1f);
   font:
     600 0.8rem/1.2 "Songti SC",
     "Noto Serif CJK SC",
@@ -109,7 +109,7 @@
 
 .cameraControls button:hover,
 .cameraControls button:focus-visible {
-  border-color: #b78631;
+  border-color: var(--accent, #76591f);
   background: rgba(255, 249, 230, 0.98);
   outline: 2px solid rgba(183, 134, 49, 0.24);
   outline-offset: 1px;
@@ -158,7 +158,7 @@
   transform: translate(-50%, -50%);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  color: #3a352e;
+  color: var(--ink, #1d1d1f);
   font-size: 0.88rem;
   letter-spacing: 0.05em;
 }
@@ -179,7 +179,7 @@
 
 .sceneFallback p {
   margin: 0;
-  color: #5c5449;
+  color: var(--muted, #62626a);
   font-size: 0.9rem;
 }
 
@@ -204,7 +204,7 @@
 }
 
 .sceneFallback li[data-state="speaking"] {
-  border-color: #d5ab4c;
+  border-color: var(--accent, #76591f);
   box-shadow: 0 0 0 2px rgba(213, 171, 76, 0.24);
 }
 
@@ -247,15 +247,14 @@
   width: min(290px, 62%);
   padding: 9px 12px 10px;
   transform: translate(-50%, calc(-100% - 16px));
-  border: 1px solid rgba(211, 167, 74, 0.55);
-  border-radius: 8px;
-  background: rgba(255, 254, 250, 0.98);
+  border: 1px solid var(--line, #dedee3);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 10px 26px rgba(39, 31, 23, 0.2);
   color: var(--ink);
   font-size: 0.95rem;
   line-height: 1.5;
-  font-family:
-    "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+  font-family: var(--font-ui, system-ui);
   pointer-events: none;
 }
 
@@ -265,9 +264,9 @@
   left: calc(50% + var(--bubble-pointer-offset, 0px));
   width: 10px;
   height: 10px;
-  border-right: 1px solid rgba(211, 167, 74, 0.55);
-  border-bottom: 1px solid rgba(211, 167, 74, 0.55);
-  background: rgba(255, 254, 250, 0.98);
+  border-right: 1px solid var(--line, #dedee3);
+  border-bottom: 1px solid var(--line, #dedee3);
+  background: rgba(255, 255, 255, 0.96);
   content: "";
   transform: translate(-50%, -50%) rotate(45deg);
 }
@@ -307,7 +306,7 @@
   padding: 3px 12px 4px;
   border-radius: 999px;
   background: rgba(252, 250, 245, 0.82);
-  color: #221d18;
+  color: var(--ink, #1d1d1f);
   font-size: 0.9rem;
   line-height: 1.55;
   white-space: nowrap;
@@ -381,12 +380,12 @@
 }
 
 .joinCopy strong {
-  color: #221d18;
+  color: var(--ink, #1d1d1f);
   font-size: 0.8rem;
 }
 
 .joinCopy span {
-  color: #6d6459;
+  color: var(--muted, #62626a);
   font-size: 0.7rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -409,7 +408,7 @@
   border: 1px solid rgba(38, 31, 24, 0.14);
   border-radius: 999px;
   background: rgba(252, 250, 245, 0.94);
-  color: #221d18;
+  color: var(--ink, #1d1d1f);
   font-size: 0.76rem;
   cursor: pointer;
 }

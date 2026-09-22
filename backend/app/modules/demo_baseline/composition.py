@@ -40,6 +40,8 @@ def demo_composition(settings: Settings, db: Session | None = None) -> DemoCompo
     embedding_mode, embedding_unreviewed = real(settings.embedding_provider)
     llm_mode, llm_unreviewed = real(settings.llm_provider)
     report_mode, report_unreviewed = real(settings.report_provider)
+    tts_mode, _ = real(settings.tts_provider)
+    voice_mode, _ = real(settings.voice_provider)
     return DemoComposition(
         components=(
             DemoComponent(
@@ -54,8 +56,8 @@ def demo_composition(settings: Settings, db: Session | None = None) -> DemoCompo
                 mode=llm_mode,
                 policy_unreviewed=llm_unreviewed,
             ),
-            DemoComponent(key="tts", label="TTS", mode="mock"),
-            DemoComponent(key="voice", label="Voice", mode="mock"),
+            DemoComponent(key="tts", label="TTS", mode=tts_mode),
+            DemoComponent(key="voice", label="Voice", mode=voice_mode),
             DemoComponent(
                 key="report",
                 label="Maya Report",

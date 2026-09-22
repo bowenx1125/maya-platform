@@ -19,12 +19,14 @@ const router = vi.hoisted(() => ({ push: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
+  usePathname: () => "/student/agents/agent-id",
 }));
 vi.mock("../components/session-provider", () => ({
   useSession: useSessionMock,
 }));
 
 import { AgentOverview, AgentWorkbench } from "../components/agent-workspace";
+import { AppShell } from "../components/app-shell";
 import { KnowledgeLibrary } from "../components/knowledge";
 import { CreateAgentForm } from "../components/student-workspace";
 
@@ -108,7 +110,7 @@ describe("Wave 1A UI idempotency wiring", () => {
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("alert").textContent).toContain("Request failed");
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
@@ -141,7 +143,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reindex" }));
 
     await waitFor(() => expect(reindex).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(reindex).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -183,7 +185,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         "connection reset",
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -242,7 +244,11 @@ describe("Wave 1A UI idempotency wiring", () => {
     useSessionMock.mockReturnValue({ api });
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<AgentOverview agentId="agent-id" />);
+    render(
+      <AppShell role="student">
+        <AgentOverview agentId="agent-id" />
+      </AppShell>,
+    );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy(),
     );
@@ -252,7 +258,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         "connection reset",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(deleteAgent).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
     expect(window.confirm).toHaveBeenCalledTimes(1);
@@ -296,9 +302,15 @@ describe("Wave 1A UI idempotency wiring", () => {
     };
     useSessionMock.mockReturnValue({ api });
 
-    render(<AgentOverview agentId="agent-id" />);
+    render(
+      <AppShell role="student">
+        <AgentOverview agentId="agent-id" />
+      </AppShell>,
+    );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "New" })).toBeTruthy(),
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
     );
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     await waitFor(() =>
@@ -306,7 +318,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         "connection reset",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(nextVersion).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
     expect(router.push).toHaveBeenCalledWith(
@@ -354,7 +366,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         "connection reset",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -384,7 +396,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         "connection reset",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(hideKnowledge).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
     expect(window.confirm).toHaveBeenCalledTimes(1);
@@ -411,7 +423,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         "refresh unavailable",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(knowledge).toHaveBeenCalledTimes(3));
     expect(reindex).toHaveBeenCalledTimes(1);
   });

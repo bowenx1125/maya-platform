@@ -1,5 +1,5 @@
 :global(body):has(.page) {
-  background: #fbf4e5;
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .page {
@@ -54,7 +54,7 @@
 .progressCard {
   display: grid;
   gap: 0.8rem;
-  background: #fbf4e5;
+  background: var(--surface-subtle, #f5f5f7);
 }
 
 .progressLine {
@@ -97,14 +97,14 @@
   gap: var(--workspace-gap);
   min-width: 0;
   padding: var(--workspace-inset);
-  border: 1px solid #e5d8bf;
+  border: 1px solid var(--line, #dedee3);
   border-radius: 20px;
   background: #fff;
 }
 
 .turnCard {
-  background: #fbf4e5;
-  border: 1px solid #e5d8bf;
+  background: var(--surface-subtle, #f5f5f7);
+  border: 1px solid var(--line, #dedee3);
   border-radius: 14px;
   display: grid;
   gap: 0.9rem;
@@ -219,7 +219,7 @@
 }
 
 .source {
-  background: rgba(84, 73, 166, 0.05);
+  background: var(--surface-subtle, #f7f6f3);
   border-radius: 0.6rem;
   display: grid;
   gap: 0.2rem;
@@ -280,6 +280,6 @@
   margin-left: 6px;
   border-radius: 999px;
   color: var(--indigo-dark);
-  background: rgba(84, 73, 166, 0.12);
+  background: var(--accent-soft, #f6ecd3);
   font-size: 0.72rem;
 }

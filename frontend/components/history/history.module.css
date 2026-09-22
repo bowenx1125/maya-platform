@@ -44,7 +44,7 @@
 .turn,
 .barrage,
 .revision {
-  border: 1px solid rgba(232, 225, 216, 0.95);
+  border: 1px solid var(--line, #dedee3);
   border-radius: 14px;
   padding: 14px;
   background: rgba(252, 250, 246, 0.72);
@@ -115,7 +115,7 @@
   border-radius: 12px;
   padding: 11px 13px;
   color: var(--muted);
-  background: rgba(246, 236, 211, 0.52);
+  background: var(--surface-subtle, #f5f5f7);
   font-size: 0.86rem;
   line-height: 1.5;
 }
@@ -153,7 +153,7 @@
 .statusGenerating,
 .statusPartial {
   color: var(--indigo-dark);
-  background: rgba(84, 73, 166, 0.12);
+  background: var(--accent-soft, #f6ecd3);
 }
 
 @media (max-width: 560px) {

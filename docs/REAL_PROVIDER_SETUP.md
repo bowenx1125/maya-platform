@@ -102,3 +102,19 @@ policy fails before it reaches the database.
 
 Seeded Agents keep Mock embedding identity by design. A real Snapshot embedding
 belongs to an Agent a student publishes, never to a seeded one.
+
+## Local web controls
+
+After the reviewed configuration is in place, teachers can use **Components** on
+Home to switch LLM, Embedding and Report between Real and Mock without restarting.
+Active classroom/generation/chat work blocks changes. Web preferences override the
+corresponding environment selectors and survive restarts; TTS/Voice stay deferred.
+
+Selecting Real without a credential opens the API Key dialog; an authentication
+failure during Check also opens it. The server encrypts the credential and never
+returns its value. This does not replace reviewed policies, region or price cards.
+The single **Check** reads current settings, skips Ready/deferred components and
+asks for the exact maximum paid calls before checking the rest, one call per
+component, stopping on failure. Mode changes invalidate only that component;
+key changes invalidate all checks. All-Ready Check makes no provider call. Report
+Check proves connectivity, not report quality. Saved results retain their identity.

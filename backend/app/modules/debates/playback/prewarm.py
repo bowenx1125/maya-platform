@@ -55,6 +55,10 @@ class PrewarmScheduler:
 
         return self._owner
 
+    @property
+    def busy(self) -> bool:
+        return self._task is not None and not self._task.done()
+
     def bind_running_loop(self) -> None:
         self._loop = asyncio.get_running_loop()
 

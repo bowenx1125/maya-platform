@@ -634,7 +634,7 @@ it("updates debate progress in place without opening the debate", async () => {
   }
 });
 
-it("places one global Refresh beside New and recovers only stalled records", async () => {
+it("removes bulk Refresh and never retries stalled records when reading the list", async () => {
   const failed = {
     id: "failed",
     course_id: courseId,
@@ -671,15 +671,10 @@ it("places one global Refresh beside New and recovers only stalled records", asy
   useSessionMock.mockReturnValue({ ...teacherSession(), api });
   render(<TeacherDebateList />);
   await screen.findByText("Needs recovery");
-  expect(screen.getAllByRole("button", { name: "Refresh" })).toHaveLength(1);
-  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-  await waitFor(() => expect(api.remakeDebate).toHaveBeenCalledTimes(1));
-  expect(api.remakeDebate.mock.calls[0][0]).toBe("failed");
-  expect(api.debate).toHaveBeenCalledTimes(1);
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Refresh" })).toHaveProperty(
-      "disabled",
-      false,
-    ),
-  );
+  expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "New" })).toBeNull();
+  fireEvent.focus(window);
+  await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
+  expect(api.remakeDebate).not.toHaveBeenCalled();
+  expect(api.debate).not.toHaveBeenCalled();
 });

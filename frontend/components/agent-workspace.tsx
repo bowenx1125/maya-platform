@@ -1,5 +1,7 @@
 "use client";
 
+import { WorkspaceNew } from "./workspace-new";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -291,48 +293,13 @@ export function AgentOverview({ agentId }: { agentId: string }) {
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("agentWorkspace")}
-        title={agent.name}
-        action={
-          <div className="button-row">
-            <Link
-              className="secondary-action"
-              href={`/student/groups/${agent.group_id}`}
-              onClick={returnToGroup}
-            >
-              {t("returnWorkspace")}
-            </Link>
-            {canHardDelete ? (
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={busy || descriptionSaving}
-                onClick={() => void deleteAgent()}
-              >
-                {t("deleteAgent")}
-              </button>
-            ) : null}
-            {draft ? (
-              <Link
-                className="primary-action"
-                href={`/student/agent-versions/${draft.id}/edit`}
-              >
-                {t("continueDraft")}
-              </Link>
-            ) : current ? (
-              <button
-                className="primary-action"
-                type="button"
-                disabled={busy || agent.status === "archived"}
-                onClick={() => void createNextVersion()}
-              >
-                {t("createNextVersion")}
-              </button>
-            ) : null}
-          </div>
-        }
-      />
+      <PageIntro title={agent.name} />
+      {!draft && current ? (
+        <WorkspaceNew
+          disabled={busy || descriptionSaving || agent.status === "archived"}
+          onClick={() => void createNextVersion()}
+        />
+      ) : null}
       {error ? (
         <ErrorNotice
           error={error}
@@ -355,15 +322,44 @@ export function AgentOverview({ agentId }: { agentId: string }) {
       <SectionCard
         title={t("agentInfo")}
         action={
-          !editingDescription ? (
-            <button
-              className="inline-button"
-              type="button"
-              onClick={() => setEditingDescription(true)}
-            >
-              {t("edit")}
-            </button>
-          ) : undefined
+          <div className="button-row">
+            <div className="button-row">
+              <Link
+                className="secondary-action"
+                href={`/student/groups/${agent.group_id}`}
+                onClick={returnToGroup}
+              >
+                {t("returnWorkspace")}
+              </Link>
+              {canHardDelete ? (
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={busy || descriptionSaving}
+                  onClick={() => void deleteAgent()}
+                >
+                  {t("deleteAgent")}
+                </button>
+              ) : null}
+              {draft ? (
+                <Link
+                  className="primary-action"
+                  href={`/student/agent-versions/${draft.id}/edit`}
+                >
+                  {t("continueDraft")}
+                </Link>
+              ) : null}
+            </div>
+            {!editingDescription ? (
+              <button
+                className="inline-button"
+                type="button"
+                onClick={() => setEditingDescription(true)}
+              >
+                {t("edit")}
+              </button>
+            ) : undefined}
+          </div>
         }
       >
         {editingDescription ? (
@@ -910,29 +906,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("agentWorkbench")}
-        title={`${agent.name} · ${version.version_label}`}
-        action={
-          <div className="button-row">
-            <Link
-              className="secondary-action"
-              href={`/student/agents/${agent.id}`}
-            >
-              {t("backToAgent")}
-            </Link>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={saving || blockers.length > 0 || localDirty}
-              title={localDirty ? t("saveBeforePublish") : undefined}
-              onClick={() => void publish()}
-            >
-              {saving ? t("working") : t("publish")}
-            </button>
-          </div>
-        }
-      />
+      <PageIntro title={`${agent.name} · ${version.version_label}`} />
       <div className="workbench-meta">
         <StatusBadge status="draft" />
         {localDirty ? (
@@ -946,9 +920,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           <strong>{t("unsavedChanges")}</strong>
         </div>
       ) : null}
-      {conflict ? (
-        <DraftConflictNotice onRefresh={() => void load(true)} />
-      ) : null}
+      {conflict ? <DraftConflictNotice /> : null}
       {error && !conflict ? (
         <>
           <ErrorNotice
@@ -989,30 +961,51 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             title={t("agentMd")}
             action={
               <div className="button-row">
-                <button
-                  className="secondary-action"
-                  type="button"
-                  onClick={() => {
-                    abandonUploadIntent();
-                    abandonPublishIntent();
-                    setAgentMd(buildPersonaTemplate(agent.name));
-                  }}
-                >
-                  {t("insertOutline")}
-                </button>
-                <label className="secondary-action file-button">
-                  {t("uploadMd")}
-                  <input
-                    type="file"
-                    accept=".md,text/markdown"
-                    disabled={saving}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void uploadAgentMd(file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
+                <div className="button-row">
+                  <Link
+                    className="secondary-action"
+                    href={`/student/agents/${agent.id}`}
+                  >
+                    {t("backToAgent")}
+                  </Link>
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={saving || blockers.length > 0 || localDirty}
+                    title={localDirty ? t("saveBeforePublish") : undefined}
+                    onClick={() => void publish()}
+                  >
+                    {saving ? t("working") : t("publish")}
+                  </button>
+                </div>
+                {
+                  <div className="button-row">
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={() => {
+                        abandonUploadIntent();
+                        abandonPublishIntent();
+                        setAgentMd(buildPersonaTemplate(agent.name));
+                      }}
+                    >
+                      {t("insertOutline")}
+                    </button>
+                    <label className="secondary-action file-button">
+                      {t("uploadMd")}
+                      <input
+                        type="file"
+                        accept=".md,text/markdown"
+                        disabled={saving}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadAgentMd(file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                }
               </div>
             }
           >
@@ -1100,11 +1093,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 </select>
               </label>
             </div>
-            <p className="muted-copy">
-              {voiceProfileId
-                ? t("customVoiceReady")
-                : t("platformVoiceFallback")}
-            </p>
           </SectionCard>
           <SectionCard
             title={t("evidenceSet")}
@@ -1242,15 +1230,12 @@ export function preserveDraftOnRetry(error: unknown): boolean {
   return isConflict(error);
 }
 
-export function DraftConflictNotice({ onRefresh }: { onRefresh: () => void }) {
+export function DraftConflictNotice() {
   const t = useT();
   return (
     <div className="notice notice-warning" role="alert">
       <strong>{t("revisionConflict")}</strong>
       <span>{t("conflictDetail")}</span>
-      <button className="inline-button" type="button" onClick={onRefresh}>
-        {t("refreshServer")}
-      </button>
     </div>
   );
 }
@@ -1325,21 +1310,20 @@ function ReadOnlyVersion({
 
   return (
     <>
-      <PageIntro
-        eyebrow={t("publishedSnapshot")}
-        title={`${agent.name} · ${version.version_label}`}
-        action={
-          <Link
-            className="secondary-action"
-            href={`/student/agents/${agent.id}`}
-          >
-            {t("backToAgent")}
-          </Link>
-        }
-      />
+      <PageIntro title={`${agent.name} · ${version.version_label}`} />
       <div className="workbench-grid">
         <div className="workbench-main">
-          <SectionCard title={t("agentMd")}>
+          <SectionCard
+            title={t("agentMd")}
+            action={
+              <Link
+                className="secondary-action"
+                href={`/student/agents/${agent.id}`}
+              >
+                {t("backToAgent")}
+              </Link>
+            }
+          >
             <ReportMarkdown className="read-only-markdown rendered-persona">
               {version.agent_md || t("noPrompt")}
             </ReportMarkdown>

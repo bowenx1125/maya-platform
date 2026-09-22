@@ -1,18 +1,15 @@
-/* Student and account workspaces share the teacher's paper/card hierarchy. */
+/* Shared content hierarchy for both authenticated workspaces. */
 .surface {
-  --workspace-content: #fbf4e5;
-  --workspace-selected: #b59859;
-  --workspace-label: #655332;
-  --workspace-border: #e5d8bf;
-  --workspace-divider: #e4d5b7;
-  --surface-subtle: var(--workspace-content);
-  --surface: #fff;
-  --accent: #b59859;
+  --workspace-content: var(--surface-subtle);
+  --workspace-selected: var(--accent);
+  --workspace-label: var(--ink);
+  --workspace-border: var(--line);
+  --workspace-divider: var(--line);
   display: grid;
   align-content: start;
   gap: var(--workspace-gap);
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -22,24 +19,6 @@
 .surface :global(.workbench-grid),
 .surface :global(.section-card) {
   margin-bottom: 0;
-}
-
-.surface :global(.page-intro) {
-  margin: 0;
-  align-items: center;
-  gap: var(--section-content-gap);
-}
-
-.surface :global(.page-intro) h1 {
-  margin: 8px 0 0;
-  font-weight: 760;
-  letter-spacing: -0.045em;
-}
-
-.surface :global(.page-intro) p {
-  margin: 8px 0 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
 }
 
 .surface :global(.section-card) {
@@ -58,7 +37,7 @@
 
 .surface :global(.section-card-header) h2 {
   margin: 0;
-  font-size: 1.24rem;
+  font-size: 20px;
   line-height: 1.4;
   letter-spacing: -0.025em;
 }
@@ -111,15 +90,15 @@
 
 .surface :global(a.list-row):hover,
 .surface :global(a.agent-row):hover {
-  background: #f7ecd6;
-  border-color: #cbb588;
+  background: var(--surface-hover, #ededf0);
+  border-color: var(--line, #dedee3);
 }
 
 .surface :global(.list-row) strong,
 .surface :global(.agent-row) strong,
 .surface :global(.document-main) strong {
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .surface :global(.list-row) small,
@@ -141,61 +120,6 @@
 .surface :global(.row-actions) {
   gap: 6px;
   flex-wrap: wrap;
-}
-
-.surface :global(.primary-action),
-.surface :global(.secondary-action),
-.surface :global(.inline-button),
-.surface :global(.text-link) {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  color: #655332;
-  background: transparent;
-  box-shadow: none;
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  line-height: 1.25;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    background 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
-}
-
-.surface :global(.primary-action) {
-  background: var(--gold-soft);
-  color: #58431d;
-}
-
-.surface :global(.danger-button) {
-  color: var(--red);
-}
-
-.surface :global(.primary-action):hover:not(:disabled),
-.surface :global(.secondary-action):hover:not(:disabled),
-.surface :global(.inline-button):hover:not(:disabled),
-.surface :global(.text-link):hover {
-  background: rgba(196, 164, 104, 0.16);
-  color: #382d19;
-  transform: translateY(-1px);
-}
-
-.surface :is(button, a, input, select, textarea, summary):focus-visible {
-  outline: 2px solid #b59859;
-  outline-offset: 3px;
-}
-
-.surface :is(button, input, select, textarea):disabled {
-  cursor: default;
-  opacity: 0.5;
 }
 
 .surface :global(.stack-form) {
@@ -260,8 +184,8 @@
 
 .surface :global(.avatar-orb) {
   border-color: var(--workspace-border);
-  background: #f6ecd3;
-  color: #79623d;
+  background: var(--surface-subtle, #f5f5f7);
+  color: var(--ink, #1d1d1f);
   border-radius: 12px;
 }
 
@@ -279,7 +203,7 @@
 
 .surface :global(.empty-mark) {
   background: var(--gold-soft);
-  color: #8a6a1f;
+  color: var(--ink, #1d1d1f);
 }
 
 .surface :global(.account-row) {
@@ -305,16 +229,9 @@
   justify-content: flex-end;
 }
 
-.surface :global(.account-meta) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  color: var(--muted);
-}
-
 .surface :global(.group-label) {
-  color: #796f5e;
-  font-size: 0.75rem;
+  color: var(--muted, #62626a);
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 
@@ -347,14 +264,7 @@
 
 @media (max-width: 600px) {
   .surface {
-    --workspace-inset: 18px;
-  }
-  .surface :global(.page-intro) {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .surface :global(.page-intro-action) {
-    width: 100%;
+    --workspace-inset: 20px;
   }
   .surface :global(.account-row),
   .surface :global(.account-edit),

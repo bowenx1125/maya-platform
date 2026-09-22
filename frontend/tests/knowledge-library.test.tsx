@@ -10,6 +10,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlatformApiError, type KnowledgeDocument } from "../lib/api";
 import { LocaleProvider } from "../components/locale";
 import { KnowledgeLibrary } from "../components/knowledge";
+import { AppShell } from "../components/app-shell";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({}),
+  usePathname: () => "/student/groups/group-id/knowledge",
+}));
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 
@@ -47,7 +53,9 @@ function renderLibrary(
   useSessionMock.mockReturnValue({ api });
   return render(
     <LocaleProvider initialLocale={locale}>
-      <KnowledgeLibrary groupId="group-id" />
+      <AppShell role="student">
+        <KnowledgeLibrary groupId="group-id" />
+      </AppShell>
     </LocaleProvider>,
   );
 }
@@ -71,8 +79,12 @@ describe("KnowledgeLibrary integration", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^Add$/ })).toBeTruthy(),
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
     );
+    expect(screen.queryByRole("button", { name: /^Add$/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "shared.md" },
     });
@@ -92,12 +104,13 @@ describe("KnowledgeLibrary integration", () => {
     expect(file.name).toBe("shared.md");
     expect(file.type).toBe("text/markdown");
     await waitFor(() => expect(screen.getByText("shared.md")).toBeTruthy());
-    expect(
-      screen.getByRole("heading", {
-        name: "New",
-      }),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Add$/ })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "New" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add$/ })).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
   });
 
   it("downloads the original before editing and submits document CAS values", async () => {
@@ -129,11 +142,11 @@ describe("KnowledgeLibrary integration", () => {
       const textboxes = screen.getAllByRole("textbox", {
         name: "Markdown content",
       });
-      expect(textboxes).toHaveLength(2);
-      expect(textboxes[1]).toHaveProperty("value", "# Original\n\nSource");
-      return textboxes[1];
+      expect(textboxes).toHaveLength(1);
+      expect(textboxes[0]).toHaveProperty("value", "# Original\n\nSource");
+      return textboxes[0];
     });
-    fireEvent.change(screen.getAllByPlaceholderText("evidence.md")[1], {
+    fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "updated.md" },
     });
     fireEvent.change(editContent, { target: { value: "# Updated" } });
@@ -185,7 +198,7 @@ describe("KnowledgeLibrary integration", () => {
       expect(screen.getByDisplayValue("# Original")).toBeTruthy(),
     );
     fireEvent.change(
-      screen.getAllByRole("textbox", { name: "Markdown content" })[1],
+      screen.getByRole("textbox", { name: "Markdown content" }),
       {
         target: { value: "# Changed" },
       },
@@ -213,8 +226,11 @@ describe("KnowledgeLibrary integration", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^添加$/ })).toBeTruthy(),
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
     );
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
     expect(screen.queryByRole("button", { name: /^Add$/ })).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "error.md" },

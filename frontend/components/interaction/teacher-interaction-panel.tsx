@@ -64,7 +64,6 @@ export function TeacherInteractionPanel({
           >
             {busy ? t("interactionOpening") : t("interactionOpen")}
           </button>
-          <p className={styles.helper}>{t("interactionAvailability")}</p>
         </div>
       ) : null}
 

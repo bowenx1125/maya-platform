@@ -51,7 +51,8 @@ export type DebatePlaybackApi = Pick<
   | "retryDebatePreparation"
   | "listProviderDataCallManifests"
   | "replayDebate"
->;
+> &
+  Partial<Pick<PlatformApi, "updateClassroomLive">>;
 
 export type DebateStartRequest = Parameters<PlatformApi["startDebate"]>[1];
 export type AdvancePlaybackRequest = Parameters<
@@ -116,7 +117,6 @@ export type PlaybackStageLabels = {
   providerGateReview?: string;
   providerGateReviewAll?: string;
   providerGateConfirmed?: string;
-  providerGateRefresh?: string;
   providerGateRetry?: string;
   noPublishedSpeech?: string;
   audioNotRetained?: string;

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -125,12 +126,21 @@ describe("teacher account management", () => {
     mount(api, "en");
     await waitFor(() => expect(api.courseRoster).toHaveBeenCalled());
 
-    expect(await screen.findByText("New Student")).toBeTruthy();
-    expect(screen.getByText("Bowen Student 1")).toBeTruthy();
-    // One editable account yields one Edit control; the catalog identity is
-    // named by its source instead of carrying controls it cannot honour.
+    const account = (await screen.findByText("new-student")).closest(
+      ".account-row",
+    ) as HTMLElement;
+    expect(within(account).getByText("Team Aurora")).toBeTruthy();
+    expect(within(account).getByText(/^active$/i)).toBeTruthy();
+    expect(screen.getByText("student-bowen-1")).toBeTruthy();
+    expect(screen.queryByText("New Student")).toBeNull();
+    expect(screen.queryByText("Self-registered")).toBeNull();
+    expect(screen.queryByText("Student view")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Accounts" }).className).toBe(
+      "sr-only",
+    );
+    // Removing source labels must not give catalog identities edit controls.
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
-    expect(screen.getAllByText(/Demo catalog/)).toHaveLength(2);
+    expect(screen.queryByText("Demo catalog")).toBeNull();
   });
 
   it("saves a renamed student", async () => {
@@ -227,7 +237,11 @@ describe("teacher account management", () => {
   it("renders the Chinese copy for the same surface", async () => {
     const api = apiForTeacher();
     mount(api, "zh");
-    expect(await screen.findByText("自主注册", { exact: false })).toBeTruthy();
+    expect(await screen.findByText("new-student")).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 1 })[0].className).toBe(
+      "sr-only",
+    );
+    expect(screen.queryByText("自主注册", { exact: false })).toBeNull();
     expect(screen.getAllByRole("button", { name: "编辑" })).toHaveLength(1);
   });
 });

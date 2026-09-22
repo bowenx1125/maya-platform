@@ -78,6 +78,18 @@ const implementedOperationIds = new Set([
   "connectDebateEvents",
   "getDebateTranscript",
   "streamRetainedTurnAudio",
+  "listChatAgents",
+  "listConversations",
+  "createConversation",
+  "getConversation",
+  "sendConversationMessage",
+  "getProviderSettings",
+  "updateProviderSettings",
+  "checkProvider",
+  "updateClassroomLive",
+  "getClassroomLive",
+  "getLiveSnapshot",
+  "getLiveAudio",
 ]);
 const methods = new Set([
   "get",

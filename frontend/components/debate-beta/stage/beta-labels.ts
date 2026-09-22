@@ -15,6 +15,7 @@ export type BetaStageLabels = {
   barrageCount: (count: number) => string;
   openInteraction: string;
   hideInteraction: string;
+  transcriptToggle: string;
   interactionOpening: string;
   interactionClosedHint: string;
 };
@@ -29,6 +30,7 @@ export const defaultBetaStageLabels: BetaStageLabels = {
   barrageCount: (count) => `${count} message${count === 1 ? "" : "s"}`,
   openInteraction: "Interact",
   hideInteraction: "Hide",
+  transcriptToggle: "Transcript",
   interactionOpening: "Opening…",
   interactionClosedHint:
     "Open classroom messages to show a join code on the stage.",
@@ -44,6 +46,7 @@ export const betaStageLabelsZh: BetaStageLabels = {
   barrageCount: (count) => `${count} 条弹幕`,
   openInteraction: "开启课堂弹幕",
   hideInteraction: "隐藏",
+  transcriptToggle: "发言记录",
   interactionOpening: "正在开启…",
   interactionClosedHint: "开启课堂弹幕后，讲席上会出现扫码入口。",
 };

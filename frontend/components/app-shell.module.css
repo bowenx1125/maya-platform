@@ -1,0 +1,181 @@
+.frame {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  height: 100dvh;
+  padding: 32px 16px 20px;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.homeMark {
+  /* Keep the original brand mark independent of the workspace accent. */
+  --indigo: #5449a6;
+  --gold: #d3a74a;
+  flex: 0 0 12px;
+  margin-right: 8px;
+}
+
+.navigation {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.link svg {
+  flex: 0 0 auto;
+}
+
+.newAction {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.newAction:disabled {
+  opacity: 0.4;
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
+.disabled {
+  opacity: 0.45;
+}
+.link.live {
+  color: var(--green);
+  background: #eaf5ee;
+}
+
+.link:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.link.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.account {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+  padding: 18px 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.logout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.logout:hover {
+  color: var(--ink);
+}
+
+.main {
+  width: min(100%, 1320px);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 48px clamp(24px, 4vw, 64px) 80px;
+}
+
+@media (max-width: 900px) {
+  .frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: auto;
+    gap: 12px;
+    padding: 24px 24px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .link {
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 8px;
+    font-size: 14px;
+  }
+  .account {
+    align-self: start;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .logout svg {
+    display: none;
+  }
+  .logout {
+    padding: 8px;
+  }
+  .main {
+    padding: 32px 24px 64px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    padding: 20px 16px 12px;
+  }
+  .main {
+    padding: 28px 16px 48px;
+  }
+  .link {
+    font-size: 14px;
+    gap: 6px;
+  }
+  .link svg {
+    width: 17px;
+    height: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link {
+    transition: none;
+  }
+}
