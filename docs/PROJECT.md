@@ -1,6 +1,6 @@
 # Maya Platform
 
-Maya teaches through published Agents, Persona/RAG knowledge, classroom
+Maya teaches through published Agent Markdown, RAG knowledge, classroom
 debates, student messages and independent reports. Progress authority;
 [AGENTS.md](../AGENTS.md) defines work. Latest user decisions prevail.
 
@@ -146,15 +146,10 @@ indicates retained audio.
 
 ## Remaining scope
 
-Full RAG quality acceptance remains incomplete: 徐伯闻 owns acceptance; 古月 owns
-3D/voice/TTS and Kaikai accounts/student UI. Classroom-scale load, public
-deployment, monitoring, backup/restore, real speech and data/licensing
-governance stay outside this local Demo scope.
-[ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/) and [ADRs](adr/)
-hold stable design references; preview and Stage Check RAG count unique
-evidence sources; Waiting/Finish-blocked prose, generic 3D error text and
-audio replacement dialogs are gone. Current automated checks do not replace
-the owner's classroom content and visual audit.
+徐伯闻 owns content acceptance, 古月 3D/voice/TTS, Kaikai accounts/student UI.
+Full RAG quality, classroom load, public deployment, monitoring, backup/restore
+and real speech remain unverified. [ARCHITECTURE.md](ARCHITECTURE.md),
+[contracts](../contracts/) and [ADRs](adr/) hold stable design references.
 
 ## Topic and Background
 
@@ -203,12 +198,9 @@ a 12,000-character total budget without field/list caps.
 
 ## Obsolete protocol removal — September 10, 2026
 
-The two old demo RuleSets, their Prompt module and generation/retrieval/Mock
-branches are removed. The API and WebSocket contracts accept only
-`ordered_multi_expert_mutual_learning_v1`; new Debates use four-round
-`segments_v2`; migration files and stored-result readers remain because the
-database depends on them; obsolete length and prior-round-only test baselines
-no longer block every-round RAG and same-round context.
+Old RuleSets and their branches are removed. Only
+`ordered_multi_expert_mutual_learning_v1` is accepted; new Debates use four-round
+`segments_v2`. Migration files and stored-result readers remain for retained data.
 
 ## Account integration — September 12, 2026
 
@@ -248,70 +240,80 @@ Performance and full RAG teaching quality remain open.
 [ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) records the accepted
 integration/reuse boundaries. This earlier acceptance does not cover the new work below.
 
-## Working — workspace, private Chat and Live, September 22, 2026
+## Working — workspace, private Chats and Live
 
-Private teacher/student Chat uses existing published Agents and 3D previews.
-The approved scope includes Provider controls, read-only Live and non-login UI;
-no effort selector, Chat uploads or new framework dependency. AGENTS.md sets
-simplicity first; permissions, prompts and safety/cost confirmations remain.
+Migration 0030 adds owner-bound history, encrypted local Provider preferences and
+20-second Live leases. Chats freezes a published version/snapshot and uses request
+identity, revision fences and a cost ledger. Unknown provider acceptance stops a
+conversation. Five components remain visible: LLM/Embedding/Report can switch;
+TTS/Voice stay Mock/Deferred. Student Live shares public content and retained audio,
+never controller messages or a new generation request per spectator.
 
-Migration 0030 adds owner-bound conversation history, encrypted local Provider
-preferences and 20-second Live leases. Chat freezes the published version/snapshot,
-retains history and sources, uses request identity and revision fences, and stops
-on unknown Provider acceptance. Five components remain visible: LLM/Embedding/Report
-can switch; TTS/Voice remain deferred. Existing classroom audio configuration is not
-changed. Live uses student-only snapshots/authorized retained audio, never controller
-messages or new generation per spectator.
+Non-login UI follows ui-ux-pro-max: system fonts, gray/white surfaces, login warm
+yellow and original mark in the Mayaform navigation item. No separate brand, visible
+page titles or Refresh. Accounts keeps username/group/status. Components has one
+Check, skips Ready/deferred items, confirms the maximum paid calls and stops on
+failure. Mode/key changes invalidate the relevant checks. Live keeps speech history.
 
-Non-login UI uses ui-ux-pro-max and Web Interface Guidelines: scoped system fonts,
-gray/white surfaces, login warm yellow, original mark in the Mayaform nav item,
-no separate brand/header, no visible page titles or Refresh. Accounts keeps
-username/group/status. Chat shows one current Agent name. Components is compact
-with one Check: skip Ready/deferred items, confirm the maximum paid calls, stop
-on failure. Mode changes invalidate only that item; key changes invalidate all.
-Live places full public speech history below the scene and reconnects by reentry.
-Sidebar New/Back/Done replace duplicate page actions and hide when unavailable;
-Chat has New/Send only, fullscreen Immerse keeps its controls. Agent entry directly
-shows the current version; New creates or opens its next-version draft. Student
-Done saves edits then publishes the returned revision only if server checks pass;
-Compile also saves first. Back warns about unsaved Agent edits. Workspace drops
-the duplicate knowledge summary; libraries keep one editor with Back/Done. Failed
-creation retains text, unchanged retries retain identity and edits rotate it.
-Chat New clears the composer without saving an empty conversation; the first
-message saves it. Older empty records are hidden, not deleted.
+Sidebar New/Back/Done hide when unavailable and replace duplicate page actions.
+Chats has New and Send only; fullscreen Immerse keeps its controls. Agent entry
+shows the current version, New opens/creates its next draft. Done saves then publishes
+the returned revision when checks pass; Back warns about unsaved edits. Libraries
+have one Back/Done editor. Failed creation retains text and retry identity.
 
-Acceptance: frontend 377 passed, one skipped; typecheck passed, lint has four
-existing warnings. Base-release backend run: 1384 passed, 21 skipped and the documented
-two-writer knowledge-test flake failed; its immediate isolated rerun passed.
-Base checks: nine workspace tests, Ruff, mypy, formatting and all contract,
-boundary and reset-safety gates passed. Images built with unchanged dependencies;
-containers were healthy after recreation.
+Earlier deployed browser acceptance covered both identities, owner-only history,
+Components/Accounts, 375px/desktop, Replay and Live. Immerse buttons retained
+104x44px desktop dimensions; Docker and retained classroom/assets were healthy.
+That release made 11 assistant-paid calls: 4 Chat Embedding + 4 Chat LLM,
+1 LLM Check and 2 Report Checks. Repeated requests/history added none. Decimal
+budget multiplication fixed a second-message failure before dispatch. Concurrent
+user work brought that dated ledger to 17 successes (7 Embedding, 10 LLM/checks);
+these counts do not describe the new checkpoint or later user requests.
 
-Browser checks covered teacher/student Chat, history, source display, ownership
-isolation (cross-user reads return 404), Components, Accounts and 375px/desktop
-layout. Ready/Completed Immerse controls remain 104x44px desktop, with transparent
-parent; Transcript preserves Public Debate and completion state. Two identities
-verified saved replay, Live late entry/reentry and public history without student
-controls; completion switches Live offline.
-Existing classrooms, Agent assets, login and TTS configuration survive.
+## Working — free Markdown, deletion and composer checkpoint
 
-Sidebar follow-up: IAB at 1440px/375px verified create/cancel, direct Agent view,
-existing-draft New and Ruleset Done. No overflow or duplicate page actions;
-Chat and Ready Immerse keep their exceptions. Obsolete Info tests/styles were
-replaced by flow tests. No backend changes or new provider calls; no Agent published.
+Agent.md now passes directly to Chats and Debate generation as authored Chinese/
+English Markdown, maximum 12,000 characters. Its optional default template covers
+identity, characteristics and four thinking questions; no chapter parser, per-field
+caps, semantic rules or executed ToT/ReAct. Persona/Compile/Confirm and Test Chat UI
+are removed. Legacy columns, frozen API routes and historical codecs remain for
+saved data; they no longer gate publishing. RAG content is unrestricted, capped at
+100,000 characters per file, not across all files; file access and non-execution
+boundaries remain. Old classroom rules/results are not rewritten.
 
-Real acceptance in this change used 11 assistant-initiated paid calls: four Chat
-messages (four Embedding plus four LLM), one LLM Check and two Report Checks.
-Two-message retest returned 90/180 characters with one/two sources; repeated same
-request and history reads made no extra calls. A manual second-message failure was
-reproduced offline: multiplying an early float disagreed with the stored decimal
-budget; multiplication now stays Decimal until conversion. The failed request made
-no new provider call and remains in history; user-generated content was not edited.
-Live replay and all-Ready Check made no generation calls. The workspace ledger
-also includes concurrent user tests: 17 successful paid calls total (7 Embedding,
-10 LLM including checks) at this acceptance snapshot, not all assistant requests.
+Migration 0031 adds a shared Agent tombstone. Workspace Delete removes teacher/
+student access, retains immutable assets and private chats read-only, and preserves
+shared knowledge/voice files. Any Debate reference or active publication blocks
+deletion under the same writer lock as concurrent creation/publication.
 
-User chose Bailian Beijing for later real-time face-to-face voice, explicitly after
-this manual-audit delivery. No real-time service has been called or installed;
-TTS/Voice remain Mock/Deferred. Full RAG teaching quality, real speech, classroom
-load and public deployment remain unverified.
+Chats is the visible label; Message and redundant knowledge revision/status copy
+are removed. Switching Agent restores nonempty history; New alone starts fresh.
+Sending clears the draft immediately and shows the user message while waiting;
+the accessible arrow sits inside the composer. A network failure restores text
+and preserves request identity. Same-conversation saved history is sent on reentry;
+no cross-chat personal memory is promised.
+
+Acceptance: backend 1391 passed/21 skipped; frontend 373 passed/1 skipped, plus
+23 focused UI checks. Types, Ruff, format, API/WS/boundary/reset and migration probes
+passed; old migration seeds now use historical columns, not today's ORM. Docker
+rebuilt/restarted, migration 0031/readiness/integrity passed after SQLite backup.
+Teacher Chats checked at 1440px/375px without overflow; arrow is 44x44px inside the
+composer. No new real calls, live Agent deletion or classroom generation. Obsolete
+Persona UI/tests and duplicate full Prompts removed; provider quality remains unverified.
+
+## Next atomic task
+
+Next: Chats-only model/effort selection using configured credentials, independent
+of teacher defaults. Catalog, supported-effort mapping, routing, per-model policy/
+pricing and UI are not implemented. Keys stay server-side; introduce public model
+labels/opaque IDs, never imply all models are enabled or silently map unsupported
+effort. Prefer assistant-ui, AI Elements or Agno Agent UI after pinned-code/license/
+dependency review (ADR-008); no new dependency/copy yet. Preserve owner history,
+RAG and deduplication, no third-party cloud history; compatible extras may stay.
+
+User requests stopping at the nearest tested atomic boundary when Codex remaining
+usage reaches 3%, with docs, GitHub sync, Docker restart and a continuation prompt;
+no reset credit is authorized. This checkpoint reached 3%; resume with routing work.
+Later real-time face-to-face voice uses Bailian Beijing, after text/UI manual audit.
+TTS configuration stays untouched. Full RAG teaching quality, real speech,
+classroom-scale load and public deployment remain unverified.

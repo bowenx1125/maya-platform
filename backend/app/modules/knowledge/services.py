@@ -49,6 +49,7 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.modules.agents.markdown import markdown_hash
 from app.modules.agents.persona import (
     PersonaCompilerVersion,
     PersonaDiagnostic,
@@ -57,7 +58,6 @@ from app.modules.agents.persona import (
 )
 from app.modules.agents.persona_service import (
     is_persona_confirmed,
-    persona_publication_blocker,
 )
 from app.modules.agents.schemas import (
     AgentDetail,
@@ -195,6 +195,7 @@ def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAge
         )
         .where(
             Agent.id == agent_id,
+            Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
             or_(
                 and_(CourseMember.role == "teacher", published_version),
@@ -219,6 +220,7 @@ def visible_version(db: Session, context: AuthContext, version_id: str) -> Scope
         )
         .where(
             AgentVersion.id == version_id,
+            Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
             or_(
                 and_(
@@ -247,6 +249,7 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
         )
         .where(
             KnowledgeSnapshot.id == snapshot_id,
+            Agent.deleted_at.is_(None),
             AgentVersion.state.in_(("published", "superseded")),
             CourseMember.user_id == context.user.id,
             or_(CourseMember.role == "teacher", WorkspaceMember.user_id.is_not(None)),
@@ -269,6 +272,7 @@ def visible_student_version(db: Session, context: AuthContext, version_id: str) 
         )
         .where(
             AgentVersion.id == version_id,
+            Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
         )
     ).first()
@@ -288,6 +292,7 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
         )
         .where(
             Agent.id == agent_id,
+            Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
         )
     ).first()
@@ -834,8 +839,7 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
     docs = _enabled_documents(db, version.id)
     if not docs:
         result.append("rag_missing")
-    total = sum(document.char_count for document in docs)
-    if total > MAX_RAG_CHARS:
+    if any(document.char_count > MAX_RAG_CHARS for document in docs):
         result.append("rag_over_limit")
     statuses = {document.index_status for document in docs}
     if statuses & {"pending", "indexing"}:
@@ -848,9 +852,6 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
         validate_avatar_config(json.loads(version.avatar_config_json))
     except Exception:
         result.append("avatar_missing")
-    persona_blocker = persona_publication_blocker(version)
-    if persona_blocker is not None:
-        result.append(persona_blocker)
     return result
 
 
@@ -1177,8 +1178,7 @@ def create_snapshot(
         if (
             embedding_candidate.agent_version_id != version.id
             or build.draft_revision != expected
-            or build.persona_spec_hash != str(version.persona_spec_hash or "")
-            or not is_persona_confirmed(version)
+            or build.persona_spec_hash != markdown_hash(version.agent_md)
             or not provider_operation_ids
         ):
             raise invalid_state("The confirmed embedding build no longer matches this draft.")

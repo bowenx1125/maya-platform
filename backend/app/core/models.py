@@ -222,6 +222,7 @@ class Agent(Base):
         Integer, nullable=False, default=0, server_default="0"
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # This pointer is deliberately validated by the service against the same
     # agent and a published state.  A direct FK would create a migration cycle
     # with agent_versions on SQLite.

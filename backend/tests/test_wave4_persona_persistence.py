@@ -222,15 +222,15 @@ def test_compile_failure_does_not_keep_prior_persona_and_publish_blocks_strict_t
         json={"expected_revision": 1},
     )
     assert failed.json()["compiled"] is True
-    # A strict Persona source cannot publish before confirmation, even though
-    # other historical Agent drafts retain their old publication path.
+    # Legacy compilation is no longer a publication gate. Knowledge still is.
     publish = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "persona-api-publish-003"}),
         json={"expected_revision": 1},
     )
     assert publish.status_code == 422
-    assert publish.json()["code"] == "persona_confirmation_required"
+    assert publish.json()["code"] == "rag_missing"
+    assert not any("persona" in item for item in publish.json()["details"]["publish_blockers"])
 
 
 def test_publishing_confirmed_persona_rebinds_confirmation_to_immutable_revision(
@@ -541,18 +541,14 @@ def test_0009_does_not_backfill_existing_legacy_agent_versions(tmp_path: Path) -
     with database.session() as session:
         seed_legacy_organization(session)
         now = datetime.now(UTC)
-        agent = Agent(
-            id="legacy-persona-agent",
-            group_id=GROUP_DEMO_ID,
-            name="Legacy Agent",
-            description="",
-            metadata_revision=0,
-            status="active",
-            current_published_version_id=None,
-            created_at=now,
-            updated_at=now,
+        session.execute(
+            text(
+                "INSERT INTO agents "
+                "(id,group_id,name,description,metadata_revision,status,created_at,updated_at) "
+                "VALUES ('legacy-persona-agent',:group_id,'Legacy Agent','',0,'active',:now,:now)"
+            ),
+            {"group_id": GROUP_DEMO_ID, "now": now},
         )
-        session.add(agent)
         session.flush()
     with database.engine.begin() as connection:
         connection.execute(

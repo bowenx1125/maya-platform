@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Literal, cast
 
+from app.modules.agents.markdown import AgentMarkdown
 from app.modules.agents.persona import (
     PersonaProviderViewV1,
     PersonaProviderViewV2,
@@ -213,18 +214,21 @@ def _persona_list(value: Sequence[str], label: str) -> None:
 
 def coerce_persona(
     value: (
-        PersonaSpecV1
+        AgentMarkdown
+        | PersonaSpecV1
         | PersonaSpecV2
         | PersonaProviderViewV1
         | PersonaProviderViewV2
         | Mapping[str, object]
     ),
-) -> SegmentPersona:
+) -> SegmentPersona | AgentMarkdown:
     """Project an existing Persona type onto the five semantic sections."""
 
-    if isinstance(value, SegmentPersona):
+    if isinstance(value, (SegmentPersona, AgentMarkdown)):
         return value
     raw = _persona_mapping(value)
+    if set(raw) == {"name", "markdown"}:
+        return AgentMarkdown.model_validate(raw)
     if "identity" in raw:
         identity_raw = _object(raw.get("identity"), "persona.identity")
         required = {
@@ -473,7 +477,7 @@ class SegmentInputSnapshot:
     topic: str
     language: SegmentLanguage
     round: SegmentRound
-    persona: SegmentPersona
+    persona: SegmentPersona | AgentMarkdown
     history: tuple[SegmentHistory, ...]
     sources: tuple[SegmentSource, ...]
     barrages: tuple[SegmentBarrage, ...]
@@ -594,7 +598,8 @@ class SegmentInputSnapshot:
         round_number: int,
         round_total: int,
         persona: (
-            PersonaSpecV1
+            AgentMarkdown
+            | PersonaSpecV1
             | PersonaSpecV2
             | PersonaProviderViewV1
             | PersonaProviderViewV2
@@ -640,7 +645,9 @@ class SegmentInputSnapshot:
             _text(self.frozen_system_prompt, "frozen_system_prompt")
         if self.language not in {"en", "zh"}:
             raise _error("language must be en or zh.", code="language_invalid")
-        if not isinstance(self.round, SegmentRound) or not isinstance(self.persona, SegmentPersona):
+        if not isinstance(self.round, SegmentRound) or not isinstance(
+            self.persona, (SegmentPersona, AgentMarkdown)
+        ):
             raise _error("snapshot round and persona must be typed.", code="input_shape_invalid")
         history = tuple(self.history)
         sources = tuple(self.sources)
@@ -855,7 +862,8 @@ def build_segment_input(
     context: GenerationContext,
     *,
     persona: (
-        PersonaSpecV1
+        AgentMarkdown
+        | PersonaSpecV1
         | PersonaSpecV2
         | PersonaProviderViewV1
         | PersonaProviderViewV2

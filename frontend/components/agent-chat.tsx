@@ -20,6 +20,7 @@ export function AgentChat() {
   const [selected, setSelected] = useState<ChatSession | null>(null);
   const [versionId, setVersionId] = useState("");
   const [draft, setDraft] = useState("");
+  const [pendingMessage, setPendingMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -39,10 +40,9 @@ export function AgentChat() {
         if (!active) return;
         setAgents(catalog);
         setSessions(history);
-        setSelected(history[0] ?? null);
-        setVersionId(
-          history[0]?.agent.version_id ?? catalog[0]?.version_id ?? "",
-        );
+        const recent = history.find((session) => session.turns.length > 0);
+        setSelected(recent ?? null);
+        setVersionId(recent?.agent.version_id ?? catalog[0]?.version_id ?? "");
       })
       .catch((cause) => {
         if (active) setError(cause);
@@ -80,6 +80,8 @@ export function AgentChat() {
     const message = draft.trim();
     if (!message || busy) return;
     setBusy(true);
+    setPendingMessage(message);
+    setDraft("");
     setError(null);
     try {
       const session = selected ?? (await api.createConversation(versionId));
@@ -113,7 +115,9 @@ export function AgentChat() {
       }
     } catch (cause) {
       setError(cause);
+      setDraft(message);
     } finally {
+      setPendingMessage("");
       setBusy(false);
     }
   }
@@ -123,11 +127,13 @@ export function AgentChat() {
     selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
   return (
     <>
-      <PageIntro title="Chat" />
+      <PageIntro title="Chats" />
       <WorkspaceAction
         name="new"
         disabled={
-          busy || !agents.some((agent) => agent.version_id === versionId)
+          busy ||
+          character?.available === false ||
+          !agents.some((agent) => agent.version_id === versionId)
         }
         onClick={start}
       />
@@ -144,7 +150,13 @@ export function AgentChat() {
               disabled={busy}
               onChange={(event) => {
                 setVersionId(event.target.value);
-                setSelected(null);
+                setSelected(
+                  sessions.find(
+                    (session) =>
+                      session.agent.version_id === event.target.value &&
+                      session.turns.length > 0,
+                  ) ?? null,
+                );
                 setDraft("");
                 request.current = null;
               }}
@@ -233,10 +245,13 @@ export function AgentChat() {
                   </div>
                 </div>
               ))}
-              {busy ? (
-                <div className={styles.pending} role="status">
-                  <span className="spinner" aria-hidden="true" />
-                  {t("loading")}
+              {pendingMessage ? (
+                <div className={styles.exchange}>
+                  <div className={styles.userMessage}>{pendingMessage}</div>
+                  <div className={styles.pending} role="status">
+                    <span className="spinner" aria-hidden="true" />
+                    {t("loading")}
+                  </div>
                 </div>
               ) : null}
               <div ref={endRef} />
@@ -245,13 +260,13 @@ export function AgentChat() {
               className={styles.composer}
               onSubmit={(event) => void send(event)}
             >
-              <label htmlFor="chat-message">Message</label>
               <textarea
                 id="chat-message"
+                aria-label="Message"
                 value={draft}
                 maxLength={4000}
                 rows={3}
-                disabled={busy}
+                disabled={busy || character?.available === false}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (
@@ -266,9 +281,14 @@ export function AgentChat() {
               />
               <button
                 type="submit"
-                className="primary-action"
+                className={`${styles.sendButton} primary-action`}
+                aria-label={
+                  character?.available === false ? "Read-only" : "Send"
+                }
+                title={character?.available === false ? "Read-only" : "Send"}
                 disabled={
                   busy ||
+                  character?.available === false ||
                   !draft.trim() ||
                   !versionId ||
                   selected?.turns.some(
@@ -278,7 +298,19 @@ export function AgentChat() {
                   )
                 }
               >
-                Send
+                <svg
+                  viewBox="0 0 24 24"
+                  width="22"
+                  height="22"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 19V5m-7 7 7-7 7 7" />
+                </svg>
               </button>
             </form>
           </section>

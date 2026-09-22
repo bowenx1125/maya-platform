@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-SCHEMA_HEAD = "0030_workspace_chat_live"
+SCHEMA_HEAD = "0031_agent_deletion"
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 

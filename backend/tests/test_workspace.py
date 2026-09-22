@@ -126,7 +126,11 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
         "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
     ).json()
     url = f"/api/v1/conversations/{created['id']}/messages"
-    for revision in range(2):
+    for revision in range(3):
+        if revision == 2:
+            _, csrf = login(client)
+            headers = {"X-CSRF-Token": csrf}
+            assert len(client.get(f"/api/v1/conversations/{created['id']}").json()["turns"]) == 2
         body = {
             "request_id": str(uuid4()),
             "expected_revision": revision,
@@ -143,12 +147,18 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
         "user",
         "assistant",
         "user",
+        "assistant",
+        "user",
     ]
+    assert [
+        message["content"] for message in transport.call_args.kwargs["json"]["messages"][1:]
+    ] == ["Question 0", "A considered reply", "Question 1", "A considered reply", "Question 2"]
+    assert "agent_markdown" in transport.call_args.kwargs["json"]["messages"][0]["content"]
     with database.session() as db:
         operations = list(
             db.scalars(select(ProviderOperation).where(ProviderOperation.scope_id == created["id"]))
         )
-        assert len(operations) == 2
+        assert len(operations) == 3
         assert all(operation.state == "succeeded" for operation in operations)
 
 

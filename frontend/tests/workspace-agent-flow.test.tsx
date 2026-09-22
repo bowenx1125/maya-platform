@@ -234,4 +234,37 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
   });
+
+  it("deletes a Workspace Agent only after confirmation and retains a blocked row", async () => {
+    api.group.mockResolvedValue({
+      id: "group-id",
+      course_id: "course-id",
+      name: "Group",
+      members: [],
+    });
+    api.agents.mockResolvedValue([agent()]);
+    vi.spyOn(window, "confirm")
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+    api.deleteAgent
+      .mockRejectedValueOnce(new Error("Used by a Debate"))
+      .mockResolvedValue(undefined);
+    render(
+      <AppShell role="student">
+        <GroupWorkspace groupId="group-id" />
+      </AppShell>,
+    );
+    const button = await screen.findByRole("button", { name: "Delete" });
+    expect(button.closest("a")).toBeNull();
+    fireEvent.click(button);
+    expect(api.deleteAgent).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("link", { name: /Agent/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: /Agent/ })).toBeNull(),
+    );
+    expect(api.deleteAgent).toHaveBeenCalledTimes(2);
+  });
 });

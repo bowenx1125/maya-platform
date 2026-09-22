@@ -83,7 +83,7 @@ export function AppShell({
   }[] = isStudent
     ? [
         { href: "/student", label: t("appName"), icon: "home" },
-        { href: "/student/chat", label: "Chat", icon: "chat" },
+        { href: "/student/chat", label: "Chats", icon: "chat" },
         { href: "/student/live", label: "Live", icon: "live", disabled: !live },
         // Back to the roster, not the dashboard: the roster is the only door
         // into a group for a teacher, so it is the page they left to get here
@@ -123,7 +123,7 @@ export function AppShell({
       ]
     : [
         { href: "/teacher", label: t("appName"), icon: "home" },
-        { href: "/teacher/chat", label: "Chat", icon: "chat" },
+        { href: "/teacher/chat", label: "Chats", icon: "chat" },
         { href: "/teacher/debates", label: t("debateList"), icon: "classroom" },
         { href: "/teacher/roster", label: t("accounts"), icon: "accounts" },
       ];

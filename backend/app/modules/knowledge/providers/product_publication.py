@@ -35,7 +35,7 @@ from app.core.models import (
     ProviderExportManifest,
     ProviderPolicySnapshot,
 )
-from app.modules.agents.persona_service import is_persona_confirmed
+from app.modules.agents.markdown import markdown_hash
 from app.modules.knowledge.markdown import MAX_RAG_CHARS, normalize_markdown
 from app.modules.knowledge.services import document_file_content
 from app.providers.control import (
@@ -164,7 +164,7 @@ def _owner_rows(
     if course is None or group is None or version is None:
         raise _product_error("embedding publication owner was not found", "owner_not_found")
     agent = db.get(Agent, version.agent_id)
-    if agent is None:
+    if agent is None or agent.deleted_at is not None:
         raise _product_error("embedding publication agent was not found", "owner_not_found")
     if group.course_id != course.id or agent.group_id != group.id or version.agent_id != agent.id:
         raise _product_error("embedding publication owner does not match", "owner_mismatch")
@@ -172,11 +172,6 @@ def _owner_rows(
         raise _product_error("embedding publication revision is stale", "revision_stale")
     if version.state != "draft":
         raise _product_error("only a draft AgentVersion can be published", "version_immutable")
-    if not is_persona_confirmed(version):
-        raise _product_error(
-            "the current Persona confirmation is required",
-            "persona_confirmation_required",
-        )
     return course, group, agent, version
 
 
@@ -241,13 +236,13 @@ def _enabled_documents(
                 source_sha256=source_hash,
             )
         )
-    if sum(len(document.text) for document in documents) > MAX_RAG_CHARS:
-        raise _product_error("enabled documents exceed the publication limit", "rag_over_limit")
+    if any(len(document.text) > MAX_RAG_CHARS for document in documents):
+        raise _product_error("a document exceeds the publication limit", "rag_over_limit")
     return tuple(documents)
 
 
 def _scan_document_outbound_texts(documents: tuple[SnapshotBuildInputDocument, ...]) -> None:
-    """Reject private/credential-shaped document text before export hashing."""
+    """Require text values before export hashing; do not restrict authored content."""
 
     try:
         scan_real_embedding_texts(
@@ -316,21 +311,21 @@ def prepare_real_snapshot_build(
             agent_version_id=agent_version_id,
             expected_revision=expected_revision,
         )
-        if not version.persona_spec_hash:
-            raise _product_error("PersonaSpec hash is missing", "persona_confirmation_required")
+        if not version.agent_md.strip() or len(version.agent_md) > 12_000:
+            raise _product_error("Agent Markdown is empty or too long", "agent_md_invalid")
         documents = _enabled_documents(db, version=version, group=group, data_root=root)
         _scan_document_outbound_texts(documents)
         snapshot_id, build_id = _deterministic_ids(
             agent_version_id=version.id,
             revision=version.revision,
-            persona_spec_hash=version.persona_spec_hash,
+            persona_spec_hash=markdown_hash(version.agent_md),
             documents=documents,
         )
         return prepare_snapshot_build(
             agent_version_id=version.id,
             knowledge_snapshot_id=snapshot_id,
             draft_revision=version.revision,
-            persona_spec_hash=version.persona_spec_hash,
+            persona_spec_hash=markdown_hash(version.agent_md),
             documents=documents,
             build_id=build_id,
             embedding_provider=REAL_EMBEDDING_PROVIDER,

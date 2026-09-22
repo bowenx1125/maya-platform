@@ -231,7 +231,10 @@ export function TeacherAgentDetail({
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}
       <div className={detailStyles.overview}>
-        <TeacherPersona key={selectedVersion?.id} version={selectedVersion} />
+        <TeacherAgentMarkdown
+          key={selectedVersion?.id}
+          version={selectedVersion}
+        />
         <SectionCard
           title="Profile"
           className={`${detailStyles.card} ${detailStyles.profile}`}
@@ -325,10 +328,10 @@ export function TeacherAgentDetail({
   );
 }
 
-function TeacherPersona({ version }: { version?: AgentVersion }) {
+function TeacherAgentMarkdown({ version }: { version?: AgentVersion }) {
   return (
     <SectionCard
-      title="Persona"
+      title="AGENT.md"
       className={`${detailStyles.card} ${detailStyles.personaCard}`}
       action={
         version ? (
@@ -337,11 +340,11 @@ function TeacherPersona({ version }: { version?: AgentVersion }) {
       }
     >
       {version?.agent_md ? (
-        <ReportMarkdown className={detailStyles.persona} label="Persona">
+        <ReportMarkdown className={detailStyles.persona} label="AGENT.md">
           {version.agent_md}
         </ReportMarkdown>
       ) : (
-        <p className={detailStyles.empty}>No Persona</p>
+        <p className={detailStyles.empty}>—</p>
       )}
     </SectionCard>
   );

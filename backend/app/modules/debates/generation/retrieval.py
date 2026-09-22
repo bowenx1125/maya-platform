@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
+from app.modules.agents.markdown import AgentMarkdown
 from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
@@ -398,9 +399,11 @@ def build_turn_subqueries(
     )
 
 
-def _segment_persona_focus(persona: SegmentPersona) -> str:
+def _segment_persona_focus(persona: SegmentPersona | AgentMarkdown) -> str:
     """Render only Persona fields useful for evidence matching."""
 
+    if isinstance(persona, AgentMarkdown):
+        return f"Agent: {persona.name}\nAgent Markdown:\n{persona.markdown}"
     return "\n".join(
         (
             f"Persona name: {persona.name}",
@@ -467,12 +470,17 @@ def build_segment_subqueries(
             "segments_v2 retrieval Persona is invalid.", technical=False
         ) from exc
 
+    initial_position = (
+        context.participant.initial_position_summary
+        if isinstance(segment_persona, AgentMarkdown)
+        else segment_persona.initial_position
+    )
     if context.teaching_protocol == TEACHING_PROTOCOL and context.turn.round_no > 1:
         visible = visible_predecessors(context)
         own_id = context.participant.participant_id
         own_turns = [item for item in visible if item.participant_id == own_id]
         opening = next((item.speech for item in own_turns if item.round_no == 1), "")
-        own_position = opening or segment_persona.initial_position
+        own_position = opening or initial_position
         if context.turn.round_no == 2:
             agents = sorted(context.participants, key=lambda item: item.order_index)
             ids = [item.participant_id for item in agents]
@@ -575,10 +583,7 @@ def build_segment_subqueries(
         queries = [
             TurnSubquery(
                 "updated_position",
-                (
-                    f"{topic}\nCurrent position: "
-                    f"{current_position or segment_persona.initial_position}"
-                ),
+                (f"{topic}\nCurrent position: {current_position or initial_position}"),
             ),
             TurnSubquery(
                 "rebuttal",
@@ -605,7 +610,7 @@ def build_segment_subqueries(
                 "updated_position",
                 (
                     f"Topic:\n{topic}\n"
-                    f"Current Persona position:\n{segment_persona.initial_position}\n"
+                    f"Current Agent focus:\n{_segment_persona_focus(segment_persona)}\n"
                     "Find evidence that supports or qualifies this considered position."
                 ),
             )

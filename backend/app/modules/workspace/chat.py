@@ -48,6 +48,7 @@ def agent_view(version: AgentVersion, agent: Agent, course_id: str) -> ChatAgent
         name=agent.name,
         version_label=f"V1.{version.version_seq}",
         avatar_config=AvatarConfig.model_validate_json(version.avatar_config_json),
+        available=agent.deleted_at is None,
     )
 
 
@@ -112,6 +113,7 @@ def list_agents(
         .where(
             Group.course_id == str(course_id),
             Agent.status == "active",
+            Agent.deleted_at.is_(None),
             AgentVersion.state == "published",
             AgentVersion.knowledge_snapshot_id.is_not(None),
         )
@@ -135,6 +137,10 @@ def list_conversations(
         )
         .where(Conversation.user_id == context.user.id)
         .order_by(
+            select(func.max(ConversationTurn.created_at))
+            .where(ConversationTurn.conversation_id == Conversation.id)
+            .scalar_subquery()
+            .desc(),
             Conversation.created_at.desc(),
             Conversation.id,
         )
@@ -157,6 +163,7 @@ def create_conversation(
         or agent is None
         or group is None
         or agent.status != "active"
+        or agent.deleted_at is not None
         or version.state != "published"
         or agent.current_published_version_id != version.id
         or not version.knowledge_snapshot_id
@@ -203,6 +210,10 @@ def send_message(
     settings: Settings = Depends(get_settings),
 ) -> ChatSession:
     row = owned_conversation(db, context, str(conversation_id))
+    version = db.get(AgentVersion, row.agent_version_id)
+    agent = db.get(Agent, version.agent_id) if version else None
+    if agent is None or agent.deleted_at is not None:
+        raise conflict("agent_deleted", "This Agent was deleted. The conversation is read-only.")
     request_id = str(payload.request_id)
     message = payload.message.strip()
     if not message:
@@ -266,7 +277,12 @@ def send_message(
     try:
         version = db.get(AgentVersion, row.agent_version_id)
         agent = db.get(Agent, version.agent_id) if version else None
-        if version is None or agent is None or version.knowledge_snapshot_id != row.snapshot_id:
+        if (
+            version is None
+            or agent is None
+            or agent.deleted_at is not None
+            or version.knowledge_snapshot_id != row.snapshot_id
+        ):
             raise not_found()
         if settings.llm_provider == "mock":
             reply = f"Mock · {agent.name}\n\n{message}"

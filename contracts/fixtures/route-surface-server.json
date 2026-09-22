@@ -2146,7 +2146,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Eligible Agent and its draft state deleted."
+            "description": "Shared Agent removed; existing chats retained read-only."
           },
           "403": {
             "$ref": "#/components/responses/Error"
@@ -5343,6 +5343,11 @@
       "ChatAgent": {
         "additionalProperties": false,
         "properties": {
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
           "agent_id": {
             "format": "uuid",
             "title": "Agent Id",

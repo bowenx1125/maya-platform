@@ -32,10 +32,7 @@ from app.core.models import (
     ProviderPolicySnapshot,
     SnapshotDocument,
 )
-from app.modules.agents.persona_service import (
-    PERSONA_CONFIRMATION_REQUIRED,
-    is_persona_confirmed,
-)
+from app.modules.agents.markdown import AgentMarkdown, markdown_hash
 from app.modules.debates.generation import (
     FinalReadyTurn,
     GenerationContext,
@@ -59,7 +56,6 @@ from app.modules.debates.generation.mutual_learning_prompts import (
 )
 from app.modules.debates.generation.prompt_request import (
     PromptRequestV1,
-    confirmed_persona_provider_view,
 )
 from app.modules.debates.generation.recovery import LLMRecoveryService
 from app.modules.debates.generation.recovery_input import (
@@ -1379,14 +1375,6 @@ class SqlTurnPreparer:
         current = next((row for row in turn_rows if row.id == str(turn.id)), None)
         if current is None:
             raise ValueError("planned turn is unavailable")
-        # Historical completed Debates are read/replay-only and do not enter
-        # this generation adapter.  Any running generation that reaches this
-        # boundary must nevertheless bind every frozen AgentVersion to an
-        # exact, current Persona confirmation.  This deliberately ignores
-        # ``persona_required``: pre-activation running rows may be legacy, but
-        # they cannot resume or call a provider without the exact Persona
-        # integrity tuple.
-        self._require_confirmed_personas(db, participant_rows)
         participants = tuple(self._participant(db, row) for row in participant_rows)
         participant = next(
             (item for item in participants if item.participant_id == current.participant_id),
@@ -1886,42 +1874,13 @@ class SqlTurnPreparer:
         return generation_fence(db, debate, turn)
 
     @staticmethod
-    def _require_confirmed_personas(
-        db: Session,
-        rows: list[DebateParticipant],
-    ) -> None:
-        blocked: list[str] = []
-        for row in rows:
-            version = db.get(AgentVersion, row.agent_version_id)
-            # Preserve the adapter's existing unavailable-version diagnostic;
-            # the subsequent participant projection reports that typed error.
-            if version is not None and not is_persona_confirmed(version):
-                blocked.append(str(row.agent_version_id))
-        if blocked:
-            raise PlatformError(
-                PERSONA_CONFIRMATION_REQUIRED,
-                "Every running Debate participant must have a confirmed Persona.",
-                422,
-                {"agent_version_ids": blocked},
-            )
-
-    @staticmethod
     def _participant(db: Session, row: DebateParticipant) -> ParticipantContext:
         version = db.get(AgentVersion, row.agent_version_id)
         if version is None or version.state not in {"published", "superseded"}:
             raise ValueError("frozen AgentVersion is unavailable")
         if str(version.knowledge_snapshot_id or "") != str(row.knowledge_snapshot_id):
             raise ValueError("frozen AgentVersion snapshot does not match participant")
-        persona = None
-        persona_hash = getattr(version, "persona_spec_hash", None)
-        persona_json = getattr(version, "persona_spec_json", None)
-        if persona_json is not None or persona_hash is not None:
-            if not isinstance(persona_json, str) or not isinstance(persona_hash, str):
-                raise ValueError("frozen Persona fields are incomplete")
-            persona, persona_hash = confirmed_persona_provider_view(
-                persona_json,
-                expected_persona_spec_hash=persona_hash,
-            )
+        authored = AgentMarkdown(name=row.agent_name, markdown=version.agent_md)
         return ParticipantContext(
             participant_id=row.id,
             agent_id=row.agent_id,
@@ -1936,8 +1895,8 @@ class SqlTurnPreparer:
             initial_position_summary=row.initial_position_summary,
             current_position_summary=row.current_position_summary,
             teacher_note=row.teacher_note,
-            persona=persona,
-            persona_spec_hash=persona_hash,
+            persona=authored,
+            persona_spec_hash=markdown_hash(version.agent_md),
         )
 
     @staticmethod

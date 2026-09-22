@@ -5,35 +5,26 @@ import { WorkspaceAction } from "./workspace-actions";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import {
   PlatformApiError,
   isAmbiguousMutationFailure,
   isConflict,
   type IdempotencyHandle,
-  type PlatformApi,
   type AgentDetail,
   type AgentVersion,
   type AvatarTemplate,
   type KnowledgeDocument,
   type KnowledgeSnapshot,
-  type PersonaCompileResponse,
-  type ConfirmPersonaRequest,
   type RagPreview,
-  type TestChatResponse,
   type VoiceProfile,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
-import {
-  buildPersonaTemplate,
-  PersonaPreview,
-  type PersonaPreviewDiagnostic,
-  type PersonaPreviewSpec,
-} from "./persona";
+import { buildAgentTemplate } from "./agent-template";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import {
@@ -44,32 +35,6 @@ import {
   SectionCard,
   StatusBadge,
 } from "./ui";
-
-type PersonaVersionFields = {
-  persona_spec_json?: unknown;
-  persona_spec?: unknown;
-  previous_persona_spec_json?: unknown;
-  previous_persona_spec?: unknown;
-  persona_diagnostics?: readonly PersonaPreviewDiagnostic[];
-  persona_diagnostics_json?: unknown;
-  raw_agent_md_hash?: string | null;
-  persona_spec_hash?: string | null;
-  persona_compiler_version?: string | null;
-  persona_confirmation_revision?: number | null;
-  student_confirmed_at?: string | null;
-  persona_confirmed?: boolean;
-};
-
-type PersonaApi = PlatformApi & {
-  compilePersona: (
-    versionId: string,
-    expectedRevision: number,
-  ) => Promise<PersonaCompileResponse>;
-  confirmPersona: (
-    versionId: string,
-    body: ConfirmPersonaRequest,
-  ) => Promise<AgentVersion>;
-};
 
 export function AgentOverview({ agentId }: { agentId: string }) {
   const t = useT();
@@ -247,9 +212,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   const [error, setError] = useState<unknown>(null);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState<MessageKey | null>(null);
-  const [chatMessage, setChatMessage] = useState("");
-  const [chatBusy, setChatBusy] = useState(false);
-  const [chatResult, setChatResult] = useState<TestChatResponse | null>(null);
   const mutationStore = useIdempotencyStore();
   const [retryAction, setRetryAction] = useState<
     "uploadKnowledge" | "publish" | null
@@ -342,50 +304,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     rag_index_pending: t("knowledge"),
     rag_index_failed: t("knowledge"),
     avatar_missing: t("avatarDesign"),
-    persona_compile_required: "Persona",
-    persona_confirmation_required: "Persona",
   };
 
   // The recovery action can be rendered while the previous request is still
   // represented by `error`; keep these bindings initialized for its callback.
   const currentVersion = version as AgentVersion;
   const currentAgent = agent as AgentDetail;
-  const personaApi = api as PersonaApi;
-  const personaVersion = (currentVersion ?? {}) as AgentVersion &
-    PersonaVersionFields;
-  const structuredPersona =
-    localDirty || !version
-      ? null
-      : parsePersonaSpec(
-          personaVersion.persona_spec_json ?? personaVersion.persona_spec,
-        );
-  const previousPersona = version
-    ? parsePersonaSpec(
-        personaVersion.previous_persona_spec_json ??
-          personaVersion.previous_persona_spec ??
-          parsePersonaVersionSpec(
-            agent?.versions
-              ?.filter((candidate) => candidate.state !== "draft")
-              .slice()
-              .sort((left, right) =>
-                right.version_label.localeCompare(
-                  left.version_label,
-                  undefined,
-                  {
-                    numeric: true,
-                  },
-                ),
-              )[0],
-          ),
-      )
-    : null;
-  const personaConfirmed = Boolean(
-    !localDirty &&
-    (personaVersion.persona_confirmed ??
-      (personaVersion.persona_confirmation_revision != null &&
-        personaVersion.student_confirmed_at)),
-  );
-
   if (loading) return <LoadingCard />;
   // Keep the loaded workbench mounted for mutation errors so local AGENT.md,
   // avatar/voice edits, selected documents, and retry handles remain visible
@@ -428,71 +352,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       setVoiceProfileId(next.voice_profile_id ?? null);
       setNotice("draftSavedNotice");
       return next;
-    } catch (cause) {
-      if (isConflict(cause)) setConflict(true);
-      setError(cause);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function compilePersonaDraft() {
-    if (!personaApi.compilePersona) return;
-    const saved = localDirty ? await saveDraft() : currentVersion;
-    if (!saved) return;
-    abandonUploadIntent();
-    abandonPublishIntent();
-    setSaving(true);
-    setError(null);
-    setProviderConfirmationRequired(false);
-    setNotice(null);
-    setConflict(false);
-    try {
-      const result = await personaApi.compilePersona(saved.id, saved.revision);
-      setVersion((current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          raw_agent_md_hash: result.raw_agent_md_hash,
-          persona_spec: result.persona_spec,
-          persona_spec_hash: result.persona_spec_hash,
-          persona_compiler_version: result.compiler_version,
-          persona_diagnostics: result.diagnostics,
-          persona_confirmation_revision: null,
-          student_confirmed_at: null,
-          persona_confirmed: false,
-        } as AgentVersion;
-      });
-    } catch (cause) {
-      if (isConflict(cause)) setConflict(true);
-      setError(cause);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function confirmPersonaDraft() {
-    if (
-      !personaApi.confirmPersona ||
-      !personaVersion.raw_agent_md_hash ||
-      !personaVersion.persona_spec_hash
-    )
-      return;
-    abandonUploadIntent();
-    abandonPublishIntent();
-    setSaving(true);
-    setError(null);
-    setNotice(null);
-    setConflict(false);
-    try {
-      const next = await personaApi.confirmPersona(currentVersion.id, {
-        expected_revision: currentVersion.revision,
-        raw_agent_md_hash: personaVersion.raw_agent_md_hash,
-        persona_spec_hash: personaVersion.persona_spec_hash,
-        compiler_version:
-          personaVersion.persona_compiler_version ?? "persona_template_v1",
-      });
-      setVersion(next);
     } catch (cause) {
       if (isConflict(cause)) setConflict(true);
       setError(cause);
@@ -619,20 +478,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     }
   }
 
-  async function askAgent(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!chatMessage.trim()) return;
-    setChatBusy(true);
-    setError(null);
-    try {
-      setChatResult(await api.testChat(currentVersion.id, chatMessage.trim()));
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setChatBusy(false);
-    }
-  }
-
   async function publish(retry = false) {
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
@@ -744,7 +589,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   onClick={() => {
                     abandonUploadIntent();
                     abandonPublishIntent();
-                    setAgentMd(buildPersonaTemplate(agent.name));
+                    setAgentMd(buildAgentTemplate(agent.name, locale));
                   }}
                 >
                   {t("insertOutline")}
@@ -783,23 +628,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               </span>
             </div>
           </SectionCard>
-          <PersonaPreview
-            rawAgentMd={agentMd}
-            spec={structuredPersona}
-            previousSpec={previousPersona}
-            diagnostics={
-              localDirty
-                ? []
-                : (personaVersion.persona_diagnostics ??
-                  parsePersonaDiagnostics(
-                    personaVersion.persona_diagnostics_json,
-                  ))
-            }
-            confirmed={personaConfirmed}
-            disabled={saving}
-            onCompile={() => void compilePersonaDraft()}
-            onConfirm={() => void confirmPersonaDraft()}
-          />
           {avatarConfig ? (
             <SectionCard title={t("avatarDesign")}>
               <AvatarEditor
@@ -904,24 +732,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               </div>
             )}
           </SectionCard>
-          <SectionCard title={t("testChat")} className="chat-card">
-            <form className="chat-form" onSubmit={askAgent}>
-              <textarea
-                aria-label={t("testChatMessage")}
-                value={chatMessage}
-                onChange={(event) => setChatMessage(event.target.value)}
-                rows={3}
-              />
-              <button
-                className="primary-action"
-                type="submit"
-                disabled={chatBusy || !chatMessage.trim()}
-              >
-                {chatBusy ? t("retrieving") : t("testDraft")}
-              </button>
-            </form>
-            {chatResult ? <ChatResult result={chatResult} /> : null}
-          </SectionCard>
         </div>
         <aside className="workbench-side">
           <SectionCard title={t("publishChecklist")}>
@@ -986,48 +796,6 @@ export function DraftConflictNotice() {
     <div className="notice notice-warning" role="alert">
       <strong>{t("revisionConflict")}</strong>
       <span>{t("conflictDetail")}</span>
-    </div>
-  );
-}
-
-function groundingLabel(
-  mode: TestChatResponse["grounding_mode"],
-  t: ReturnType<typeof useT>,
-): string {
-  if (mode === "rag_grounded") return t("groundingRag");
-  if (mode === "general_reasoning") return t("groundingGeneral");
-  return t("groundingMixed");
-}
-
-function ChatResult({ result }: { result: TestChatResponse }) {
-  const t = useT();
-  const matched = result.retrieval_status === "matched";
-  return (
-    <div
-      className={`chat-result ${matched ? "chat-matched" : "chat-no-match"}`}
-    >
-      <div className="chip-row">
-        <StatusBadge
-          status={result.retrieval_status}
-          tone={matched ? "good" : "warn"}
-        />
-        <span>{groundingLabel(result.grounding_mode, t)}</span>
-      </div>
-      <p>{result.answer}</p>
-      <div className="source-row">
-        {matched ? (
-          result.sources.map((source) => (
-            <span
-              className="source-chip"
-              key={`${source.source_filename}-${source.chunk_id ?? "source"}`}
-            >
-              {source.source_filename}
-            </span>
-          ))
-        ) : (
-          <span className="muted-copy">{t("noSources")}</span>
-        )}
-      </div>
     </div>
   );
 }
@@ -1299,108 +1067,4 @@ function downloadText(content: string, filename: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
-}
-
-function parsePersonaSpec(value: unknown): PersonaPreviewSpec | null {
-  const candidate =
-    typeof value === "string"
-      ? parseJson(value)
-      : value && typeof value === "object"
-        ? value
-        : null;
-  if (!candidate || typeof candidate !== "object") return null;
-  const record = candidate as Record<string, unknown>;
-  const identity = record.identity;
-  const style = record.speaking_style;
-  if (!isRecord(identity) || !isRecord(style)) return null;
-  if (
-    typeof identity.name !== "string" ||
-    typeof identity.role !== "string" ||
-    typeof identity.historical_or_cultural_context !== "string" ||
-    typeof style.tone !== "string" ||
-    typeof style.argument_pattern !== "string" ||
-    typeof style.concession_style !== "string" ||
-    typeof style.question_style !== "string" ||
-    typeof record.initial_position !== "string" ||
-    !isStringArray(record.cultural_lens) ||
-    !isStringArray(record.core_values) ||
-    (record.debate_strategy !== undefined &&
-      !isStringArray(record.debate_strategy)) ||
-    (record.boundaries !== undefined && !isStringArray(record.boundaries))
-  )
-    return null;
-  const spec: PersonaPreviewSpec = {
-    schema_version:
-      typeof record.schema_version === "string"
-        ? record.schema_version
-        : undefined,
-    identity: {
-      name: identity.name,
-      role: identity.role,
-      historical_or_cultural_context: identity.historical_or_cultural_context,
-    },
-    cultural_lens: record.cultural_lens,
-    core_values: record.core_values,
-    initial_position: record.initial_position,
-    speaking_style: {
-      tone: style.tone,
-      argument_pattern: style.argument_pattern,
-      concession_style: style.concession_style,
-      question_style: style.question_style,
-    },
-    source_agent_md_hash:
-      typeof record.source_agent_md_hash === "string"
-        ? record.source_agent_md_hash
-        : undefined,
-    compiler_version:
-      typeof record.compiler_version === "string"
-        ? record.compiler_version
-        : undefined,
-  };
-  if (isStringArray(record.debate_strategy)) {
-    spec.debate_strategy = record.debate_strategy;
-  }
-  if (isStringArray(record.boundaries)) {
-    spec.boundaries = record.boundaries;
-  }
-  return spec;
-}
-
-function parsePersonaVersionSpec(value: unknown): PersonaPreviewSpec | null {
-  if (isRecord(value)) {
-    return parsePersonaSpec(value.persona_spec ?? value.persona_spec_json);
-  }
-  return null;
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function parsePersonaDiagnostics(value: unknown): PersonaPreviewDiagnostic[] {
-  const candidate =
-    typeof value === "string"
-      ? parseJson(value)
-      : Array.isArray(value)
-        ? value
-        : [];
-  if (!Array.isArray(candidate)) return [];
-  return candidate.filter(
-    (item): item is PersonaPreviewDiagnostic =>
-      isRecord(item) && typeof item.message === "string",
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === "string")
-  );
 }

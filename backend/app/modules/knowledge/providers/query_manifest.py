@@ -18,6 +18,7 @@ from app.core.models import (
     KnowledgeSnapshot,
     ProviderPolicySnapshot,
 )
+from app.modules.agents.markdown import markdown_hash
 from app.modules.knowledge.vector import EmbeddingIdentityV1
 from app.providers.control import (
     ExportFieldV1,
@@ -109,6 +110,7 @@ def _assert_snapshot_owner(
     group = db.get(Group, group_id)
     if (
         agent is None
+        or agent.deleted_at is not None
         or group is None
         or group.course_id != course_id
         or agent.group_id != group.id
@@ -116,7 +118,7 @@ def _assert_snapshot_owner(
         or version.state not in {"published", "superseded"}
         or str(version.knowledge_snapshot_id or "") != snapshot.id
         or snapshot.agent_version_id != version.id
-        or str(version.persona_spec_hash or "") != persona_spec_hash
+        or persona_spec_hash not in {markdown_hash(version.agent_md), version.persona_spec_hash}
     ):
         raise QueryManifestError("the frozen query Snapshot owner changed")
     persisted = EmbeddingIdentityV1(

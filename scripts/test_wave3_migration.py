@@ -21,7 +21,8 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.db import Database  # noqa: E402
-from app.seed import COURSE_ID, TEACHER_ID, seed_demo_data  # noqa: E402
+from app.seed import COURSE_ID, TEACHER_ID  # noqa: E402
+from tests.legacy_organization import seed_legacy_organization  # noqa: E402
 
 REVISION_0006 = "0006_pre_wave3_polish"
 REVISION_0007 = "0007_wave3_interaction_report"
@@ -68,7 +69,7 @@ def seed_populated_0006(path: Path, data_root: Path) -> None:
     now = datetime.now(UTC)
     try:
         with database.session() as session:
-            seed_demo_data(session)
+            seed_legacy_organization(session)
             session.execute(
                 text(
                     "INSERT INTO debates "

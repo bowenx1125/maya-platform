@@ -51,6 +51,21 @@ const conversation = {
   turns: [],
   created_at: "2026-09-22T00:00:00Z",
 };
+const completedConversation = {
+  ...conversation,
+  revision: 1,
+  turns: [
+    {
+      id: "turn",
+      user_text: "Hello",
+      assistant_text: "A considered reply",
+      mode: "mock",
+      state: "ready",
+      sources: [],
+      safe_error_code: null,
+    },
+  ],
+};
 const settings = {
   revision: 0,
   credential_ready: false,
@@ -66,21 +81,7 @@ beforeEach(() => {
     chatAgents: vi.fn().mockResolvedValue([agent]),
     conversations: vi.fn().mockResolvedValue([]),
     createConversation: vi.fn().mockResolvedValue(conversation),
-    sendConversation: vi.fn().mockResolvedValue({
-      ...conversation,
-      revision: 1,
-      turns: [
-        {
-          id: "turn",
-          user_text: "Hello",
-          assistant_text: "A considered reply",
-          mode: "mock",
-          state: "ready",
-          sources: [],
-          safe_error_code: null,
-        },
-      ],
-    }),
+    sendConversation: vi.fn().mockResolvedValue(completedConversation),
     conversation: vi.fn().mockResolvedValue(conversation),
     providerSettings: vi.fn().mockResolvedValue(settings),
     updateProviderSettings: vi
@@ -193,7 +194,7 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByTestId("avatar");
-    expect(screen.getByRole("heading", { name: "Chat" }).className).toBe(
+    expect(screen.getByRole("heading", { name: "Chats" }).className).toBe(
       "sr-only",
     );
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
@@ -226,7 +227,8 @@ describe("private Agent chat", () => {
   });
 
   it("reuses an uncertain request ID instead of creating a second paid request", async () => {
-    state.api.conversations.mockResolvedValue([conversation]);
+    state.api.conversations.mockResolvedValue([completedConversation]);
+    state.api.sendConversation.mockClear();
     state.api.sendConversation.mockRejectedValueOnce(
       new Error("Network unavailable"),
     );
@@ -247,6 +249,61 @@ describe("private Agent chat", () => {
       state.api.sendConversation.mock.calls[1][1],
     );
     expect(state.api.createConversation).not.toHaveBeenCalled();
+  });
+
+  it("moves the draft into the transcript immediately and keeps the icon inside the composer", async () => {
+    let resolve!: (value: unknown) => void;
+    const saved = completedConversation;
+    state.api.sendConversation.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    const input = await screen.findByRole("textbox", { name: "Message" });
+    expect(screen.queryByText("Message")).toBeNull();
+    fireEvent.change(input, { target: { value: "Hello" } });
+    const button = screen.getByRole("button", { name: "Send" });
+    expect(button.closest("form")).toBe(input.closest("form"));
+    expect(button.textContent).toBe("");
+    expect(button.querySelector("svg")).not.toBeNull();
+    fireEvent.click(button);
+    expect(input).toHaveProperty("value", "");
+    expect(within(screen.getByRole("log")).getByText("Hello")).toBeTruthy();
+    expect(button).toHaveProperty("disabled", true);
+    await act(async () => resolve(saved));
+    expect(within(screen.getByRole("log")).getAllByText("Hello")).toHaveLength(
+      1,
+    );
+    expect(screen.getByText("A considered reply")).toBeTruthy();
+  });
+
+  it("keeps deleted Agent history readable without allowing a new message", async () => {
+    const saved = completedConversation;
+    state.api.conversations.mockResolvedValue([
+      { ...saved, agent: { ...agent, available: false } },
+    ]);
+    state.api.chatAgents.mockResolvedValue([]);
+    state.api.sendConversation.mockClear();
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    await screen.findByText("A considered reply");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Read-only" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(state.api.sendConversation).not.toHaveBeenCalled();
   });
 });
 

@@ -289,7 +289,7 @@ def test_delete_eligible_agent_removes_only_agent_draft_state(client: TestClient
     assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 200
 
 
-def test_delete_preserves_group_voice_files_audit_and_removes_draft_associations(
+def test_delete_hides_agent_and_preserves_versions_group_files_and_audit(
     client: TestClient,
 ) -> None:
     """The delete boundary removes Agent-owned draft rows, never group data."""
@@ -390,9 +390,11 @@ def test_delete_preserves_group_voice_files_audit_and_removes_draft_associations
     )
     assert deleted.status_code == 204, deleted.text
     with database.session() as session:
-        assert session.get(Agent, agent["id"]) is None
-        assert session.get(AgentVersion, version_id) is None
-        assert session.get(AgentVersionDocument, (version_id, document_id)) is None
+        retained = session.get(Agent, agent["id"])
+        assert retained is not None and retained.deleted_at is not None
+        assert retained.status == "archived"
+        assert session.get(AgentVersion, version_id) is not None
+        assert session.get(AgentVersionDocument, (version_id, document_id)) is not None
         assert session.get(KnowledgeDocument, document_id) is not None
         assert session.get(StoredFile, source_file_id) is not None
         assert session.get(StoredFile, stored_file_id) is not None
@@ -435,7 +437,9 @@ def test_delete_rejects_history_teacher_and_cross_group(
     assert cross_group.status_code == 404, cross_group.text
 
 
-def test_delete_rejects_published_history_with_stable_code(client: TestClient) -> None:
+def test_delete_removes_unreferenced_published_agent_from_both_workspaces(
+    client: TestClient,
+) -> None:
     _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-published-agent-001")
     metadata = client.patch(
@@ -497,9 +501,18 @@ def test_delete_rejects_published_history_with_stable_code(client: TestClient) -
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-published-delete-001"}),
     )
-    assert rejected.status_code == 409, rejected.text
-    assert rejected.json()["code"] == "agent_history_retained"
-    assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 200
+    assert rejected.status_code == 204, rejected.text
+    assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 404
+    assert not any(
+        item["id"] == agent["id"]
+        for item in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents").json()
+    )
+    login(client, "maya")
+    assert not any(
+        item["agent"]["id"] == agent["id"]
+        for item in client.get(f"/api/v1/courses/{COURSE_ID}/published-agents").json()
+    )
+    assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
 
 
 def test_archived_legacy_agent_without_history_remains_delete_eligible(
@@ -549,10 +562,10 @@ def test_double_delete_with_a_new_key_is_a_stable_not_found(client: TestClient) 
     assert second.status_code == 404, second.text
 
 
-def test_delete_rejects_snapshot_participant_and_formerly_published_draft(
+def test_delete_preserves_snapshots_and_formerly_published_drafts(
     client: TestClient,
 ) -> None:
-    """Every retained-history shape is rejected before ORM deletion."""
+    """Tombstones preserve immutable records instead of bypassing their FKs."""
 
     app = cast(Any, client.app)
     database = app.state.database
@@ -607,8 +620,8 @@ def test_delete_rejects_snapshot_participant_and_formerly_published_draft(
             f"/api/v1/agents/{agent_id}",
             headers=_headers(csrf, **{"Idempotency-Key": f"wave3-history-{index}-001"}),
         )
-        assert response.status_code == 409, response.text
-        assert response.json()["code"] == "agent_history_retained"
+        assert response.status_code == 204, response.text
+        assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
     with database.session() as session:
         assert session.get(Agent, snapshot_agent_id) is not None
         assert session.get(AgentVersion, formerly_draft_id) is not None
@@ -815,16 +828,23 @@ def test_delete_and_create_debate_race_is_fk_safe(
     delete_result = first_result if operation_order == "delete-first" else second_result
     debate_result = second_result if operation_order == "delete-first" else first_result
 
-    assert _result_code(delete_result) == "agent_history_retained", repr(delete_result)
-    assert not isinstance(debate_result, Exception), repr(debate_result)
     with database.session() as session:
-        assert session.get(Agent, first_agent_id) is not None
+        retained = session.get(Agent, first_agent_id)
+        assert retained is not None
         participants = session.scalars(
             select(DebateParticipant).where(
                 DebateParticipant.agent_id == first_agent_id,
             )
         ).all()
-        assert len(participants) == 1
+        if _result_status(delete_result) == 204:
+            assert isinstance(debate_result, PlatformError), repr(debate_result)
+            assert retained.deleted_at is not None
+            assert len(participants) == 0
+        else:
+            assert _result_code(delete_result) == "agent_history_retained", repr(delete_result)
+            assert not isinstance(debate_result, Exception), repr(debate_result)
+            assert retained.deleted_at is None
+            assert len(participants) == 1
 
 
 @pytest.mark.parametrize("publish_first", [False, True])
@@ -942,7 +962,7 @@ def test_http_publish_delete_order_has_stable_envelopes_and_terminal_claims(
         assert claims[publish_key] == "abandoned"
         assert claims[delete_key] == "completed"
         assert snapshots == []
-        assert versions == []
+        assert len(versions) == 1 and versions[0].state == "draft"
         assert guards == []
         assert snapshot_operations == []
         assert snapshot_files == []

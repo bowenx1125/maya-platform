@@ -18,7 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.db import Database  # noqa: E402
-from app.seed import seed_demo_data  # noqa: E402
+from tests.legacy_organization import seed_legacy_organization  # noqa: E402
 from test_wave2_migration import (  # noqa: E402
     PRE_WAVE_3_POLISH_REVISION,
     WAVE_0_REVISION,
@@ -42,7 +42,7 @@ def _seed_legacy(path: Path, data_root: Path) -> dict[str, str]:
     wave_zero = Database(database_url(path), data_root)
     try:
         with wave_zero.session() as session:
-            seed_demo_data(session)
+            seed_legacy_organization(session)
     finally:
         wave_zero.dispose()
     run_alembic(path, WAVE_1B_REVISION)

@@ -34,9 +34,9 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 
 ## 一次课堂
 
-**New / Back / Done** 统一在侧栏，只显示当前可用的操作；主内容区不重复放创建、返回和提交按钮。Chat 只有 New 和 Send；全屏 Immerse 保留自己的控制键。
+**New / Back / Done** 统一在侧栏，只显示当前可用的操作；主内容区不重复放创建、返回和提交按钮。Chats 只有 New 和输入框内的发送箭头；全屏 Immerse 保留自己的控制键。
 
-1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；编写 AGENT.md、启用知识文档并完成 Persona 的 **Compile / Confirm**，配置形象及声音，侧栏 **Done** 发布。Compile / Done 会先保存本地修改，发布检查和教师授权仍有效。点击 Agent 直接检查当前版本；此处 **New** 创建下一版，已有草稿则直接打开。
+1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；自由编写中英文 AGENT.md（最多 12,000 字符）、启用 RAG（每文件最多 100,000 字符），配置形象及声音，侧栏 **Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chats** 与已发布 Agent 多轮对话。点击 Agent 直接检查当前版本；此处 **New** 创建下一版，已有草稿则直接打开。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
 2. **创建辩论**：教师进入 **Debates → New**，填写 Topic / Background，选择 2–5 位 Agent、顺序和立场，确认 Ruleset 的语言及内容后点击 **Done**。
 3. **准备前三轮**：Preview 展示 Background 和各轮发言。固定流程为 **Opening → Discussion → Response → Conclusion**；前三轮保存正文与音频，后续发言能看到此前成功完成的发言，包括同轮上下文。
 4. **进入课堂**：准备就绪后点击 **Immerse**。操作键独立放在屏幕最右侧；**Transcript** 展开发言记录侧栏，保留 Public Debate、课堂状态和 Check RAG。**Interact / Hide** 显示或收起消息二维码；Hide 不关闭已有扫码入口。第四轮冻结可用消息后生成回应。

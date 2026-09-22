@@ -215,7 +215,7 @@ def test_round_barrier_hides_same_round_and_shares_all_prior_rounds() -> None:
     assert "private teacher note 1" not in build_mutual_learning_prompt(final_prompt)
 
 
-def test_new_debate_requires_confirmed_persona_and_legacy_creation_is_unavailable(
+def test_new_debate_accepts_published_markdown_without_persona_and_rejects_legacy_protocol(
     app_factory: object,
 ) -> None:
     from fastapi.testclient import TestClient
@@ -259,8 +259,8 @@ def test_new_debate_requires_confirmed_persona_and_legacy_creation_is_unavailabl
             headers=_headers(csrf, **{"Idempotency-Key": "wave4-persona-required"}),
             json=payload,
         )
-        assert rejected.status_code == 422
-        assert rejected.json()["code"] == "persona_confirmation_required"
+        assert rejected.status_code == 201, rejected.text
+        assert len(rejected.json()["participants"]) == 2
 
         legacy = client.post(
             f"/api/v1/courses/{COURSE_ID}/debates",

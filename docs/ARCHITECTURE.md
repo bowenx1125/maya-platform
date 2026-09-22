@@ -39,9 +39,10 @@ backend.
 `Agent -> AgentVersion -> KnowledgeSnapshot -> SnapshotDocument/KnowledgeChunk`
 
 Publishing never edits an earlier version or snapshot. A DebateParticipant freezes the
-exact AgentVersion and KnowledgeSnapshot used by that debate. New Persona/Embedding
-contracts apply only to new versions/snapshots; legacy rows remain readable and
-reproducible.
+exact AgentVersion and KnowledgeSnapshot used by that debate. Current generation
+uses published Agent Markdown directly; legacy Persona envelopes remain readable.
+Agent deletion is a shared tombstone: any Debate reference blocks it, while private
+chat history and immutable snapshots survive read-only. Shared source files survive.
 
 ## RAG and evidence
 
@@ -52,11 +53,12 @@ immutable rows and server-derived source/speech locations. It does not certify t
 
 ## Prompt and context
 
-The rules engine owns order, phase, retry budget and terminal behavior. Student persona
-content is untrusted and cannot override platform rules. Each turn continues to receive
-the full text of every predecessor turn. Wave 4 may serialize one persona and one rule
-block per request and reuse stable receipts on structure-only retry, but it cannot
-replace the predecessor transcript with summaries.
+The rules engine owns order, phase, retry budget and terminal behavior. Agent.md is
+free-form Chinese/English Markdown capped at 12,000 characters, not a parsed Persona.
+RAG is free-form with a 100,000-character per-file cap, no aggregate or semantic gate.
+Teacher Ruleset Markdown owns classroom guidance. Each turn receives successful
+predecessor speeches; private Chats sends only its own chronological history.
+Frozen envelopes and receipts are reused on authorized structure-only repair.
 
 ## Persistent state machines
 

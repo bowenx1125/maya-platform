@@ -23,6 +23,7 @@ class ChatAgent(ClosedModel):
     name: str
     version_label: str
     avatar_config: AvatarConfig
+    available: bool = True
 
 
 class ChatSource(ClosedModel):

@@ -1567,6 +1567,11 @@ export interface components {
         /** ChatAgent */
         ChatAgent: {
             /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /**
              * Agent Id
              * Format: uuid
              */
@@ -4353,7 +4358,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Eligible Agent and its draft state deleted. */
+            /** @description Shared Agent removed; existing chats retained read-only. */
             204: {
                 headers: {
                     [name: string]: unknown;

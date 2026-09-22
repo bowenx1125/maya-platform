@@ -130,7 +130,7 @@ def idempotency_conflict() -> PlatformError:
 def rag_over_limit() -> PlatformError:
     return unprocessable(
         "rag_over_limit",
-        "The enabled Markdown knowledge exceeds the 100000 character limit.",
+        "A Markdown file exceeds the 100000 character limit.",
     )
 
 

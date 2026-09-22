@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.agents.markdown import AgentMarkdown
 from app.modules.agents.persona import (
     PersonaProviderViewVersionDTO,
     PersonaSpecVersion,
@@ -430,10 +431,8 @@ class ParticipantContext:
     initial_position_summary: str = ""
     current_position_summary: str = ""
     teacher_note: str = ""
-    # New W4-PROMPT callers provide the confirmed structured Persona here.
-    # Legacy contexts may leave it unset; the legacy RuleSet path never reads
-    # this field and therefore keeps its historical raw-input semantics.
-    persona: PersonaSpecVersion | PersonaProviderViewVersionDTO | None = None
+    # Legacy structured inputs remain readable; current adapters send Markdown.
+    persona: AgentMarkdown | PersonaSpecVersion | PersonaProviderViewVersionDTO | None = None
     persona_spec_hash: str | None = None
 
     def __post_init__(self) -> None:
@@ -450,7 +449,7 @@ class ParticipantContext:
             return self.current_position_summary
         if self.initial_position_summary:
             return self.initial_position_summary
-        if self.persona is not None:
+        if self.persona is not None and not isinstance(self.persona, AgentMarkdown):
             return self.persona.initial_position
         return ""
 

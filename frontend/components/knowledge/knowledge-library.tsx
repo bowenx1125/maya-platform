@@ -321,8 +321,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                   <span className="document-main">
                     <strong>{document.source_filename}</strong>
                     <small>
-                      {document.char_count.toLocaleString()} {t("characters")} ·{" "}
-                      {document.index_revision} · {document.workspace_state}
+                      {document.char_count.toLocaleString()} {t("characters")}
                     </small>
                   </span>
                   <StatusBadge

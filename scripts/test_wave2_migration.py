@@ -41,7 +41,7 @@ from app.core.models import (
     VoiceProfile,
     VoiceProviderOperation,
 )
-from app.seed import seed_demo_data
+from tests.legacy_organization import seed_legacy_organization
 
 WAVE_0_REVISION = "0001_wave0_baseline"
 WAVE_1_REVISION = "0002_wave1_agents_rag"
@@ -1421,7 +1421,7 @@ def main() -> None:
         run_alembic(populated, WAVE_0_REVISION)
         wave0 = Database(database_url(populated), root)
         with wave0.session() as session:
-            seed_demo_data(session)
+            seed_legacy_organization(session)
         wave0.dispose()
         run_alembic(populated, WAVE_1B_REVISION)
         database = Database(database_url(populated), root)

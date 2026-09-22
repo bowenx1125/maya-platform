@@ -7,7 +7,6 @@ from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
-from app.core.errors import PlatformError
 from app.modules.agents.persona import (
     PERSONA_COMPILER_VERSION,
     PersonaIdentity,
@@ -307,15 +306,14 @@ def test_long_dimension_projection_preserves_complete_sentence_boundary() -> Non
 
 
 @pytest.mark.parametrize("rule_set_id", (_RULE_SET,))
-def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provider(
+def test_sql_adapter_uses_published_markdown_without_a_persona_confirmation(
     app_factory: object,
     rule_set_id: str,
 ) -> None:
-    """A migration-era pending run fails closed before retrieval or Mock calls."""
+    """Authored Markdown is usable without the removed compile/confirm workflow."""
 
     from app.core.models import AgentVersion
     from app.modules.debates.models import Debate, DebateParticipant
-    from app.modules.debates.setup.rules import canonical_rule_snapshot_json
     from app.modules.debates.setup.service import commit_start_plan
     from fastapi.testclient import TestClient
     from sqlalchemy import select
@@ -373,9 +371,6 @@ def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provide
             turns = commit_start_plan(db, debate_id=debate_id)
             assert len(turns) == 8
             debate.rule_set_id = rule_set_id
-            debate.rule_snapshot_json = canonical_rule_snapshot_json(
-                rule_set_id=rule_set_id  # type: ignore[arg-type]
-            )
             debate.status = "running"
             participant_rows = list(
                 db.scalars(
@@ -399,16 +394,11 @@ def test_sql_adapter_rejects_unconfirmed_running_legacy_or_mutual_before_provide
             db.flush()
             assert all(turn.generation_status == "pending" for turn in turns)
             llm = MockLLMProvider()
-            with pytest.raises(PlatformError) as raised:
-                SqlTurnPreparer(settings=settings, llm=llm)(
-                    db,
-                    debate,
-                    turns[0],
-                    attempt=1,
-                    cancellation_generation=0,
-                )
-            assert raised.value.code == "persona_confirmation_required"
-            assert raised.value.details == {
-                "agent_version_ids": [row.agent_version_id for row in participant_rows]
-            }
-            assert llm.call_count == 0
+            SqlTurnPreparer(settings=settings, llm=llm)(
+                db,
+                debate,
+                turns[0],
+                attempt=1,
+                cancellation_generation=0,
+            )
+            assert llm.call_count == 1

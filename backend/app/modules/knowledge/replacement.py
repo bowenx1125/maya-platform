@@ -288,26 +288,8 @@ def replace_document_copy_on_write(
                 raise stale_revision(current_revision)
             raise invalid_state("The draft document references changed during replacement.")
 
-        # Check each affected draft against the resulting enabled total.  A
-        # disabled relation is replaced too, but contributes no characters.
-        for capture in captured_references:
-            rows = db.execute(
-                select(AgentVersionDocument, KnowledgeDocument)
-                .join(
-                    KnowledgeDocument,
-                    KnowledgeDocument.id == AgentVersionDocument.document_id,
-                )
-                .where(AgentVersionDocument.agent_version_id == capture.version_id)
-            ).all()
-            enabled_total = sum(
-                replacement.char_count
-                if relation.document_id == old_document_id and relation.enabled
-                else document.char_count
-                for relation, document in rows
-                if relation.enabled
-            )
-            if enabled_total > MAX_RAG_CHARS:
-                raise rag_over_limit()
+        if replacement.char_count > MAX_RAG_CHARS:
+            raise rag_over_limit()
 
         timestamp = now_utc()
         stored_file = StoredFile(

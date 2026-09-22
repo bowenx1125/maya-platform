@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import inspect, select, text
+from sqlalchemy.orm import load_only
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
@@ -32,8 +33,8 @@ from app.seed import (  # noqa: E402
     STUDENT_IDS,
     TEACHER_ID,
     row_fingerprint,
-    seed_demo_data,
 )
+from tests.legacy_organization import seed_legacy_organization  # noqa: E402
 
 WAVE_0_REVISION = "0001_wave0_baseline"
 
@@ -69,13 +70,20 @@ def fixed_rows(database: Database) -> dict[str, Any]:
     with database.session() as session:
         users = sorted(
             (row.id, row.username, row.display_name, row.status)
-            for row in session.scalars(select(User)).all()
+            for row in session.scalars(
+                select(User).options(
+                    load_only(User.id, User.username, User.display_name, User.status)
+                )
+            ).all()
         )
         courses = sorted(
             (row.id, row.code, row.name) for row in session.scalars(select(Course)).all()
         )
         groups = sorted(
-            (row.id, row.course_id, row.name) for row in session.scalars(select(Group)).all()
+            (row.id, row.course_id, row.name)
+            for row in session.scalars(
+                select(Group).options(load_only(Group.id, Group.course_id, Group.name))
+            ).all()
         )
         course_members = sorted(
             (row.course_id, row.user_id, row.role)
@@ -88,7 +96,11 @@ def fixed_rows(database: Database) -> dict[str, Any]:
         fingerprints = {
             **{
                 f"user:{row.id}": row_fingerprint(row, ("username", "display_name", "status"))
-                for row in session.scalars(select(User)).all()
+                for row in session.scalars(
+                    select(User).options(
+                        load_only(User.id, User.username, User.display_name, User.status)
+                    )
+                ).all()
             },
             **{
                 f"course:{row.id}": row_fingerprint(row, ("code", "name"))
@@ -96,7 +108,9 @@ def fixed_rows(database: Database) -> dict[str, Any]:
             },
             **{
                 f"group:{row.id}": row_fingerprint(row, ("course_id", "name"))
-                for row in session.scalars(select(Group)).all()
+                for row in session.scalars(
+                    select(Group).options(load_only(Group.id, Group.course_id, Group.name))
+                ).all()
             },
         }
     return {
@@ -245,7 +259,7 @@ def main() -> None:
             if current_revision(database) != WAVE_0_REVISION:
                 raise AssertionError("database did not stop at the exact Wave 0 revision")
             with database.session() as session:
-                seed_demo_data(session)
+                seed_legacy_organization(session)
             before = fixed_rows(database)
             assert_seed_shape(before)
             before_digest = digest(before)

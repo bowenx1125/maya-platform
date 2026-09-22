@@ -33,7 +33,6 @@ from app.core.models import (
     FileOperation,
     Group,
     IdempotencyRecord,
-    KnowledgeSnapshot,
 )
 from app.modules.agents.persona import (
     raw_agent_md_hash,
@@ -45,7 +44,6 @@ from app.modules.agents.persona_service import (
 from app.modules.agents.persona_service import (
     PersonaDomainError,
     PersonaService,
-    persona_publication_blocker,
 )
 from app.modules.agents.schemas import (
     AgentCreateRequest,
@@ -182,6 +180,7 @@ def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> A
         )
         .where(
             Agent.id == agent_id,
+            Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
             or_(
                 CourseMember.role == "teacher",
@@ -199,7 +198,7 @@ def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> A
 def _agent_has_history(db: Session, agent_id: str) -> bool:
     """Check every retained Agent history source while the writer lock is held."""
 
-    # A publish claim has to exclude a concurrent hard delete even while its
+    # A publish claim has to exclude concurrent removal even while its
     # immutable snapshot is being staged on disk.  The guard is a durable,
     # Agent-scoped FileOperation row and is joined to the still-pending publish
     # claim so a failed/abandoned request never becomes permanent history.
@@ -215,40 +214,6 @@ def _agent_has_history(db: Session, agent_id: str) -> bool:
         )
     )
     if publish_guard is not None:
-        return True
-
-    # A non-null current pointer is itself a historical reference.  Keep a
-    # malformed legacy pointer conservative rather than deleting an Agent
-    # whose published lineage may only be partially represented in the DB.
-    if db.scalar(
-        select(Agent.current_published_version_id).where(
-            Agent.id == agent_id,
-            Agent.current_published_version_id.is_not(None),
-        )
-    ):
-        return True
-
-    # A non-draft version or any snapshot binding is historical even if a
-    # malformed/legacy row lost the current pointer.  This is intentionally
-    # broader than only checking ``current_published_version_id``.
-    version_history = db.scalar(
-        select(AgentVersion.id).where(
-            AgentVersion.agent_id == agent_id,
-            or_(
-                AgentVersion.state.in_(("published", "superseded")),
-                AgentVersion.knowledge_snapshot_id.is_not(None),
-            ),
-        )
-    )
-    if version_history is not None:
-        return True
-
-    snapshot_history = db.scalar(
-        select(KnowledgeSnapshot.id)
-        .join(AgentVersion, AgentVersion.id == KnowledgeSnapshot.agent_version_id)
-        .where(AgentVersion.agent_id == agent_id)
-    )
-    if snapshot_history is not None:
         return True
 
     # Debate models are a vertical Wave 2 module.  Importing lazily keeps the
@@ -563,6 +528,7 @@ def list_group_agents(
         )
         .where(
             Agent.group_id == str(group_id),
+            Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
             or_(
                 and_(CourseMember.role == "teacher", published_version),
@@ -721,7 +687,7 @@ def update_agent_metadata(
     status_code=204,
     operation_id="deleteAgent",
     responses={
-        204: {"description": "Eligible Agent and its draft state deleted."},
+        204: {"description": "Shared Agent removed; existing chats retained read-only."},
         403: {"model": Error, "description": "CSRF failure or group workspace access required."},
         404: {"model": Error, "description": "Agent not found."},
         409: {"model": Error, "description": "Agent history is retained."},
@@ -734,7 +700,7 @@ def delete_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Hard-delete only an Agent with no immutable or debate history.
+    """Remove a shared Agent unless a Debate or active publish binds it.
 
     The final eligibility query and delete run under one ``BEGIN IMMEDIATE``
     transaction.  SQLite's writer lock therefore serializes this operation
@@ -765,14 +731,14 @@ def delete_agent(
             abandon_claim(db, record)
             raise conflict(
                 "agent_history_retained",
-                "This Agent has published or classroom history and must be retained.",
+                "This Agent is used by a Debate or is being published and cannot be deleted.",
             )
 
-        # AgentVersion -> AgentVersionDocument are Agent-owned draft state and
-        # are removed by the ORM cascade.  KnowledgeDocument, VoiceProfile,
-        # AuditLog, StoredFile and other group/Agent rows have no cascade from
-        # this delete and therefore remain intact.
-        db.delete(agent)
+        # Keep immutable versions/snapshots for owner-only chat history. The
+        # shared marker removes access from both student and teacher workspaces.
+        agent.deleted_at = _time()
+        agent.status = "archived"
+        agent.updated_at = agent.deleted_at
         db.flush()
         finish_idempotency(db, record, 204, {})
         saga_checkpoint("delete_agent.before_final_commit")
@@ -1131,6 +1097,8 @@ async def upload_agent_md(
         fields, filename, content = await parse_upload(request)
         expected_revision = integer_field(fields, "expected_revision", required=True)
         document = normalize_markdown(filename, content)
+        if document.char_count > 12_000:
+            raise MarkdownInputError("agent_md_too_large")
     except (ValueError, MarkdownInputError, UnicodeDecodeError) as exc:
         raise validation_failure(
             "The AGENT.md upload is not valid.", code="file_operation_failed"
@@ -1282,13 +1250,6 @@ def publish_agent_version(
             payload.expected_revision,
             record,
         )
-        persona_blocker = persona_publication_blocker(version)
-        if persona_blocker is not None:
-            raise validation_failure(
-                "The Persona must be compiled and confirmed before publication.",
-                {"publish_blockers": [persona_blocker]},
-                code=persona_blocker,
-            )
         if settings.embedding_provider == "mock":
             create_snapshot(
                 db,
@@ -1394,7 +1355,7 @@ def test_agent_draft(
             "All enabled documents must be indexed before test chat.",
             code="rag_index_pending",
         )
-    if sum(document.char_count for document in docs) > MAX_RAG_CHARS:
+    if any(document.char_count > MAX_RAG_CHARS for document in docs):
         raise rag_over_limit()
     return retrieval_response(db, scoped.version, payload.message)
 

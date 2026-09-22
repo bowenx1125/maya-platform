@@ -700,8 +700,9 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
         headers=_headers(csrf, **{"Idempotency-Key": "business-publish-001"}),
         json={"expected_revision": 0},
     )
-    publish_body = _assert_business_error(publish_error, "persona_compile_required")
-    assert publish_body["details"] == {"publish_blockers": ["persona_compile_required"]}
+    publish_body = _assert_business_error(publish_error, "agent_md_missing")
+    assert "agent_md_missing" in publish_body["details"]["publish_blockers"]
+    assert "rag_missing" in publish_body["details"]["publish_blockers"]
 
 
 def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(

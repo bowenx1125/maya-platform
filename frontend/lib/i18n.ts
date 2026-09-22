@@ -1,4 +1,4 @@
-import { PERSONA_OUTLINE_V2 } from "../components/persona/persona-template";
+import { buildAgentTemplate } from "../components/agent-template";
 
 export type Locale = "en" | "zh";
 
@@ -7,7 +7,7 @@ export type Locale = "en" | "zh";
  * Keep one frozen English value so changing the interface locale can never
  * write a translated outline into the Agent's authoritative prompt.
  */
-export const AGENT_OUTLINE = PERSONA_OUTLINE_V2;
+export const AGENT_OUTLINE = buildAgentTemplate("Agent", "en");
 
 /**
  * All platform-owned copy lives in one typed dictionary.  The language
@@ -42,7 +42,7 @@ const enMessages = {
   description: "Description",
   deleteAgent: "Delete",
   deleteAgentConfirm:
-    "Delete this Agent permanently? Draft state will be removed; shared group files stay.",
+    "Delete this Agent for teachers and students? Existing chats become read-only. Shared knowledge files stay.",
   readOnly: "Read-only published snapshot",
   noResults: "Nothing here yet",
   retryConflict: "The draft changed elsewhere. Your local text is still here.",
@@ -352,7 +352,7 @@ const enMessages = {
   blockAgentMdMissing: "Write an AGENT.md before publishing.",
   blockAgentMdLarge: "AGENT.md is over the 12,000 character limit.",
   blockRagMissing: "Enable at least one ready Markdown file.",
-  blockRagOverLimit: "The enabled Markdown set is over 100,000 characters.",
+  blockRagOverLimit: "A Markdown file is over 100,000 characters.",
   blockRagPending: "Wait for enabled files to finish indexing.",
   blockRagFailed: "Retry or remove failed enabled files.",
   blockAvatarMissing: "Choose an available 3D template before publishing.",
@@ -773,7 +773,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   description: "简介",
   deleteAgent: "删除",
   deleteAgentConfirm:
-    "确定永久删除这个智能体吗？只删除草稿状态，不删除小组共享文件。",
+    "从老师和学生端删除这个智能体？已有聊天保留只读，小组共享知识文件不变。",
   readOnly: "已发布快照（只读）",
   noResults: "这里还没有内容",
   retryConflict: "草稿已在其他地方更新，本地文字仍然保留。",
@@ -1061,7 +1061,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   blockAgentMdMissing: "发布前请填写 AGENT.md。",
   blockAgentMdLarge: "AGENT.md 超过 12,000 字符限制。",
   blockRagMissing: "请至少启用一个已完成索引的 Markdown 文件。",
-  blockRagOverLimit: "已启用 Markdown 总字符数超过 100,000。",
+  blockRagOverLimit: "单个 Markdown 文件超过 100,000 字符。",
   blockRagPending: "请等待已启用文件完成索引。",
   blockRagFailed: "请重试或移除索引失败的文件。",
   blockAvatarMissing: "发布前请选择可用的 3D 模板。",

@@ -429,7 +429,10 @@ def scan_segment_outbound_messages(
     if isinstance(round_value, Mapping) and set(round_value) != _SEGMENT_ROUND_KEYS:
         _reject(code="llm_outbound_field_forbidden")
     persona_value = decoded.get("persona")
-    if isinstance(persona_value, Mapping) and set(persona_value) != _SEGMENT_PERSONA_KEYS:
+    if isinstance(persona_value, Mapping) and set(persona_value) not in (
+        _SEGMENT_PERSONA_KEYS,
+        {"name", "markdown"},
+    ):
         _reject(code="llm_outbound_field_forbidden")
     if isinstance(persona_value, Mapping):
         identity = persona_value.get("identity")

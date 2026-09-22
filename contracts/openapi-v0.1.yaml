@@ -1136,7 +1136,7 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CsrfToken"
       responses:
-        "204": { description: Eligible Agent and its draft state deleted. }
+        "204": { description: Shared Agent removed; existing chats retained read-only. }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2682,6 +2682,10 @@ components:
     ChatAgent:
       additionalProperties: false
       properties:
+        available:
+          default: true
+          title: Available
+          type: boolean
         agent_id:
           format: uuid
           title: Agent Id

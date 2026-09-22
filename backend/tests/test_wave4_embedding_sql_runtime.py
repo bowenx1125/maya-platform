@@ -21,6 +21,7 @@ from app.core.models import (
     KnowledgeSnapshot,
     User,
 )
+from app.modules.agents.markdown import markdown_hash
 from app.modules.knowledge.providers import (
     MOCK_EMBEDDING_MODEL,
     InMemorySnapshotPublicationStore,
@@ -462,7 +463,7 @@ def test_sql_publisher_commits_real_vector_snapshot_and_operation_success_atomic
             agent_version_id=version.id,
             knowledge_snapshot_id=str(uuid4()),
             draft_revision=version.revision,
-            persona_spec_hash=version.persona_spec_hash,
+            persona_spec_hash=markdown_hash(version.agent_md),
             documents=tuple(
                 SnapshotBuildInputDocument.from_bytes(
                     document_id=document.id,

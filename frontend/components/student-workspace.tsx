@@ -144,6 +144,9 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [retryDelete, setRetryDelete] = useState<string | null>(null);
+  const mutations = useIdempotencyStore();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,7 +174,28 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   }, [load]);
 
   if (loading) return <LoadingCard />;
-  if (error || !group)
+  async function deleteAgent(agentId: string, retry = false) {
+    if (deleting || (!retry && !window.confirm(t("deleteAgentConfirm"))))
+      return;
+    const intent = `agent-delete:${agentId}`;
+    const handle = mutations.handleFor(intent);
+    setDeleting(agentId);
+    setError(null);
+    setRetryDelete(null);
+    try {
+      await api.deleteAgent(agentId, { idempotency: handle });
+      mutations.finish(intent, handle);
+      setAgents((current) => current.filter((agent) => agent.id !== agentId));
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) setRetryDelete(agentId);
+      else mutations.abandon(intent, handle);
+      setError(cause);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  if (!group)
     return (
       <ErrorNotice
         error={error ?? new Error(t("groupNotFound"))}
@@ -182,6 +206,14 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   return (
     <>
       <PageIntro title={t("groupWorkspace")} />
+      {error ? (
+        <ErrorNotice
+          error={error}
+          onRetry={
+            retryDelete ? () => void deleteAgent(retryDelete, true) : undefined
+          }
+        />
+      ) : null}
       <WorkspaceAction
         name="new"
         href={`/student/groups/${groupId}/agents/new`}
@@ -192,7 +224,12 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
         ) : (
           <div className="agent-list">
             {agents.map((agent) => (
-              <GroupAgentRow agent={agent} key={agent.id} />
+              <GroupAgentRow
+                agent={agent}
+                key={agent.id}
+                deleting={deleting !== null}
+                onDelete={() => void deleteAgent(agent.id)}
+              />
             ))}
           </div>
         )}
@@ -214,7 +251,16 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   );
 }
 
-function GroupAgentRow({ agent }: { agent: AgentSummary }) {
+function GroupAgentRow({
+  agent,
+  deleting,
+  onDelete,
+}: {
+  agent: AgentSummary;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  const t = useT();
   const state =
     agent.status === "archived"
       ? "archived"
@@ -222,14 +268,23 @@ function GroupAgentRow({ agent }: { agent: AgentSummary }) {
         ? "draft"
         : "published";
   return (
-    <Link
-      className="agent-row"
-      href={`/student/agents/${agent.id}`}
-      data-agent-row={agent.id}
-    >
-      <strong className="agent-row-name">{agent.name}</strong>
+    <div className="agent-row" data-agent-row={agent.id}>
+      <Link
+        className="agent-row-name text-link"
+        href={`/student/agents/${agent.id}`}
+      >
+        {agent.name}
+      </Link>
       <StatusBadge status={state} />
-    </Link>
+      <button
+        className="inline-button danger-button"
+        type="button"
+        disabled={deleting}
+        onClick={onDelete}
+      >
+        {t("deleteAgent")}
+      </button>
+    </div>
   );
 }
 

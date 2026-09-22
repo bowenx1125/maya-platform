@@ -4,12 +4,13 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
-import { buildPersonaTemplate } from "../components/persona";
+import { buildAgentTemplate } from "../components/agent-template";
 import { LanguageSwitcher, LocaleProvider } from "../components/locale";
 import { SessionProvider, useSession } from "../components/session-provider";
 import type {
@@ -262,7 +263,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       makeVersion({
         revision: 1,
         agent_md: "# Local Agent",
-        publish_blockers: ["persona_compile_required"],
+        publish_blockers: ["rag_index_pending"],
       }),
     );
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
@@ -276,37 +277,43 @@ describe("Wave 1C real workbench locale boundary", () => {
     );
     expect(api.updateDraft).toHaveBeenCalledTimes(1);
     expect(api.publish).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Compile" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).getByText("Knowledge"),
+    ).toBeTruthy();
     expect(screen.getByLabelText("AGENT.md editor")).toHaveProperty(
       "value",
       "# Local Agent",
     );
   });
 
-  it("compiles the saved revision instead of the stale server draft", async () => {
+  it("accepts free Markdown without a Persona or Test Chat step", async () => {
     const { api } = makeApi();
     api.updateDraft.mockResolvedValue(
       makeVersion({ revision: 1, agent_md: "# Local Agent" }),
     );
-    api.compilePersona.mockResolvedValue({
-      raw_agent_md_hash: "hash",
-      persona_spec: null,
-      persona_spec_hash: "spec",
-      diagnostics: [],
-    });
+    api.publish.mockResolvedValue(
+      makeVersion({ state: "published", revision: 2 }),
+    );
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
-    await screen.findByRole("button", { name: "Compile" });
+    await screen.findByRole("button", { name: "Done" });
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Local Agent" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Compile" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
-      expect(api.compilePersona).toHaveBeenCalledWith("version-id", 1),
+      expect(api.publish).toHaveBeenCalledWith(
+        "version-id",
+        1,
+        expect.anything(),
+      ),
     );
     expect(api.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(
-      api.compilePersona.mock.invocationCallOrder[0],
+      api.publish.mock.invocationCallOrder[0],
     );
-    expect(api.publish).not.toHaveBeenCalled();
+    expect(api.compilePersona).not.toHaveBeenCalled();
+    expect(screen.queryByRole("heading", { name: "Persona" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compile" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Test Chat" })).toBeNull();
   });
 
   it("keeps Back in the sidebar and asks before discarding local edits", async () => {
@@ -324,7 +331,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.updateDraft).not.toHaveBeenCalled();
   });
 
-  it("writes the frozen English outline even when the interface is Chinese", async () => {
+  it("inserts the free Markdown template in the selected language", async () => {
     const { api } = makeApi();
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
 
@@ -338,13 +345,13 @@ describe("Wave 1C real workbench locale boundary", () => {
 
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe(buildPersonaTemplate("Agent"));
+    ).toBe(buildAgentTemplate("Agent", "zh"));
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toContain("# Identity");
+    ).toContain("# 我是谁");
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).not.toContain("# 身份");
+    ).not.toContain("# Identity");
   });
 
   it("preserves API/session/CSRF, selected docs, pending File, conflict, and retry identity across locale switches", async () => {

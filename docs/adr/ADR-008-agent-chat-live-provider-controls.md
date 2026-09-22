@@ -33,17 +33,17 @@ fixture 验证，不执行候选仓库任意安装脚本。候选检索时未向
 
 ## 1. 单人对话：共用页面，两种身份入口
 
-老师、学生导航各增加 Chat。先选择已发布 Agent，再进入单人 3D + 消息列表 + 输入区。
+老师、学生导航各增加 Chats。先选择已发布 Agent，再进入单人 3D + 消息列表 + 输入区。
 首版可选择本课程全部当前已发布 Agent；跨课程、草稿和别人的私有声音不可用。
 
 - 会话绑定用户、课程、不可变 AgentVersion 和 KnowledgeSnapshot；发布新版不会
-  悄悄改变旧会话。换 Agent 开新会话，自己的历史可恢复，默认不让其他学生或老师
+  悄悄改变旧会话。换 Agent 恢复已有非空会话，New 才开新会话，默认不让其他学生或老师
   自动读取个人会话内容。
-- 复用 Persona、自己的知识检索、来源查看与平台 LLM 适配器；另建 chat session/
+- 直接使用已发布 Agent.md、自己的知识检索、来源查看与平台 LLM 适配器；另建 chat session/
   message 存储和请求额度，不伪装成 Debate，也不回写 Agent.md。
-- `/agent-versions/{version_id}/chat` 保留为草稿检索测试；新 Chat 使用独立的课程
-  Agent 投影和会话接口，不扩大原有老师列表接口的权限。
-- 实现复用了现有 React、ReportMarkdown、AvatarPreview、认证、Persona、不可变
+- 旧草稿检索测试 API 暂留合同兼容，产品 UI 已删除 Test Chat；Chats 不允许草稿聊天。
+  新 Chats 使用独立课程 Agent 投影和会话接口，不扩大老师列表接口权限。
+- 实现复用了现有 React、ReportMarkdown、AvatarPreview、认证、Agent.md、不可变
   Snapshot 检索和 Provider 账本。没有引入 assistant-ui：首版不需要其分叉、工具
   执行或云历史功能，薄界面更小。服务器是历史、引用和费用的权威；网络失败后
   显式再次发送沿用请求 ID，不自动重新调用模型。未知接收结果终止该会话。
@@ -154,10 +154,25 @@ Realtime 权限需单独检查，不能由文本请求成功推断。语音工�
 所有 Refresh 按钮及列表批量重试入口移除，状态读取和明确的授权/生成动作仍分开。
 New / Back / Done 统一在侧栏，与导航对齐；不可用时隐藏。各页注册原有动作，主内容区
 不重复放创建、返回或提交按钮；全屏 Immerse、文件选择和安全确认弹窗保留独立控制。
-Chat 只有 New / Send，不加 Back、Done、effort 或上传。Agent 直接展示当前版本；此处
+Chats 只有 New 和框内发送图标，不加 Back、Done。最新要求批准仅在 Chats 增加
+已配置 Key 支持的模型/effort 选择，独立于教师的全局默认；尚未实现。Agent 直接展示当前版本；此处
 New 创建下一版或打开已有草稿。学生编辑器 Done 表示发布，先保存最新修改，再检查
-服务器返回的阻塞项；Compile 也先保存，Persona 确认、知识、权限和费用门槛不变。
+服务器返回的阻塞项；不再需要 Persona 编译或确认，知识、权限和费用边界不变。
 Workspace 不再重复知识库；知识/声音表单按需展开，Back 关闭，Done 提交。
 登录/注册样式隔离，不换角色资产或用户业务内容。
 最新要求允许删解释性文案并缩短按钮；必要权限、费用、数据删除和错误信息保留。
 最少代码解决明确需求，不增加单次使用的抽象，具体规范归 AGENTS.md。
+
+## 自由 Markdown 与 Chats 扩展决策
+
+Agent.md 仅限整篇 12,000 字符，不强制章节；默认提供“我是谁 / 我的特征 / 我怎么思考”
+及四个思考问题，可完全改写，不自动运行 ToT/ReAct。RAG 正文不加格式、关键词、观点或
+安全内容审查，只限每文件 100,000 字符；权限、路径与不执行上传脚本是应用边界。
+删除 Agent 使用共享标记，Debate 引用一律阻止；师生不可再使用，已有私人聊天只读。
+
+最新候选复查仍以 [assistant-ui](https://github.com/assistant-ui/assistant-ui) 为优先，
+另看 [AI Elements](https://github.com/vercel/ai-elements) 的输入框/模型选择器，
+[Agno Agent UI](https://github.com/agno-agi/agent-ui) 的 AgentOS 会话流。此次仅复核
+官方仓库说明，未搬代码或安装依赖，不称完整审计。下一步固定源码版本，核对许可证、
+传递依赖及现有请求/历史适配成本；合适可保留完整聊天能力，但不替换课堂后端、
+上传私有历史到第三方托管或自动重试计费请求。
