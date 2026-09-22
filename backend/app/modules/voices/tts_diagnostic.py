@@ -16,7 +16,6 @@ written to logs or the database.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 from collections.abc import Iterator
@@ -36,6 +35,7 @@ from app.core.db import Database
 from app.core.models import StoredFile, VoicePreview, VoiceProfile, VoiceProviderOperation
 from app.modules.knowledge.files import contained_path, ensure_private_dir, write_atomic
 from app.modules.voices.crypto import VoiceEncryptionError, decrypt_external_voice_id
+from app.modules.voices.lease_lock import lock_exclusive, unlock
 from app.modules.voices.service import PREVIEW_TTL
 from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_technical_audio
 from app.providers.tts import TTSProvider, TTSProviderError, TTSProviderTimeout
@@ -107,13 +107,13 @@ def _tts_gate_lock(data_root: Path) -> Iterator[None]:
         raise TTSGateError("tts_outcome_unknown") from exc
     try:
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_exclusive(handle)
         except OSError as exc:
             raise TTSGateError("tts_outcome_unknown") from exc
         yield
     finally:
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            unlock(handle)
         except OSError:
             pass
         handle.close()

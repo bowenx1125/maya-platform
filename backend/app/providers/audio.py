@@ -16,6 +16,7 @@ import struct
 import subprocess
 import wave
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -169,8 +170,8 @@ def _terminate_process(process: subprocess.Popen[bytes], *, wait_seconds: float 
     if process.poll() is not None:
         return
     try:
-        if process.pid:
-            os.killpg(process.pid, signal.SIGTERM)
+        if process.pid and os.name != "nt":
+            import_module("os").killpg(process.pid, signal.SIGTERM)
         else:  # pragma: no cover - defensive for a custom process double
             process.terminate()
     except (ProcessLookupError, OSError):
@@ -182,8 +183,8 @@ def _terminate_process(process: subprocess.Popen[bytes], *, wait_seconds: float 
         process.wait(timeout=wait_seconds)
     except subprocess.TimeoutExpired:
         try:
-            if process.pid:
-                os.killpg(process.pid, signal.SIGKILL)
+            if process.pid and os.name != "nt":
+                import_module("os").killpg(process.pid, import_module("signal").SIGKILL)
             else:
                 process.kill()
         except (ProcessLookupError, OSError):

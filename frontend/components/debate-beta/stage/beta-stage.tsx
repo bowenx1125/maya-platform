@@ -38,6 +38,7 @@ import styles from "./beta-stage.module.css";
 import { QrCode } from "../../interaction/qr-code";
 import { BarrageLane, type BarrageBullet } from "../../stage3d/barrage-lane";
 import { ScholarScene } from "../../stage3d/scholar-scene";
+import { bubbleProgressFrom } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
 import stage3d from "../../stage3d/stage3d.module.css";
 import { defaultBetaStageLabels, type BetaStageLabels } from "./beta-labels";
@@ -689,11 +690,21 @@ export function BetaDebateStage({
     handle: IdempotencyHandle;
   } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [bubblePlayback, setBubblePlayback] = useState<{
+    turnId: string;
+    elapsed: number;
+    duration: number;
+    failed: boolean;
+  } | null>(null);
+  const [audioPlayingTurnId, setAudioPlayingTurnId] = useState<string | null>(
+    null,
+  );
   // Barrage and the join card are beta-only stage state. Both setters are
   // stable, so the socket handler below needs no extra dependency.
   const beta = betaLabels ?? defaultBetaStageLabels;
   const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
   const [barragePaused, setBarragePaused] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
   const onInteractionOpenedRef = useRef(onInteractionOpened);
   useEffect(() => {
     onInteractionOpenedRef.current = onInteractionOpened;
@@ -825,6 +836,8 @@ export function BetaDebateStage({
       playbackItemKeyRef.current = key;
       playbackGenerationRef.current += 1;
       setMediaRetryNeeded(false);
+      setBubblePlayback(null);
+      setAudioPlayingTurnId(null);
     },
     [],
   );
@@ -873,6 +886,7 @@ export function BetaDebateStage({
   const pauseAudio = useCallback((clearSource = false) => {
     mediaGenerationRef.current += 1;
     startedAckRef.current = false;
+    setAudioPlayingTurnId(null);
     const audio = audioRef.current;
     if (!audio) return;
     try {
@@ -1271,6 +1285,7 @@ export function BetaDebateStage({
         audioTurnRef.current ?? playbackRef.current.current_turn_id;
       const epoch = controllerEpochRef.current;
       if (!turnId || !epoch || readOnly) return;
+      setBubblePlayback({ turnId, elapsed: 0, duration: 0, failed: true });
       const action = audioActionRef.current;
       const phase = startedAckRef.current ? "post_ack" : "pre_ack";
       sendCommand({
@@ -1365,6 +1380,13 @@ export function BetaDebateStage({
           audioTurnRef.current = message.turn_id;
           audioActionRef.current = action;
           startedAckRef.current = false;
+          setBubblePlayback({
+            turnId: message.turn_id,
+            elapsed: Math.max(0, current.cursor_ms / 1000),
+            duration: Number.NaN,
+            failed: false,
+          });
+          setAudioPlayingTurnId(null);
           const audio = audioRef.current;
           if (!audio) return;
           audio.src = message.media_url;
@@ -2761,6 +2783,17 @@ export function BetaDebateStage({
   }, [connect, pauseAudio, settlePendingReplayAcquire]);
 
   const onAudioEnded = useCallback(() => {
+    setAudioPlayingTurnId(null);
+    const endedAudio = audioRef.current;
+    const endedTurnId = audioTurnRef.current;
+    if (endedAudio && endedTurnId) {
+      setBubblePlayback({
+        turnId: endedTurnId,
+        elapsed: endedAudio.duration,
+        duration: endedAudio.duration,
+        failed: !Number.isFinite(endedAudio.duration),
+      });
+    }
     if (readOnly || !startedAckRef.current || !audioRef.current?.ended) return;
     const turnId = audioTurnRef.current;
     if (turnId !== playbackRef.current.current_turn_id) return;
@@ -2781,14 +2814,55 @@ export function BetaDebateStage({
   const onAudioError = useCallback(() => {
     const audio = audioRef.current;
     if (!audio?.error || !audioTurnRef.current || readOnly) return;
+    setAudioPlayingTurnId(null);
+    setBubblePlayback({
+      turnId: audioTurnRef.current,
+      elapsed: 0,
+      duration: 0,
+      failed: true,
+    });
     sendPlayFailure(mediaErrorCode(audio));
   }, [readOnly, sendPlayFailure]);
+
+  const onAudioLoadedMetadata = useCallback(
+    (event: SyntheticEvent<HTMLAudioElement>) => {
+      const turnId = audioTurnRef.current;
+      if (!turnId || turnId !== playbackRef.current.current_turn_id) return;
+      const elapsed = event.currentTarget.currentTime;
+      const duration = event.currentTarget.duration;
+      setBubblePlayback((previous) =>
+        previous?.turnId === turnId && previous.failed
+          ? previous
+          : {
+              turnId,
+              elapsed,
+              duration,
+              failed: false,
+            },
+      );
+    },
+    [],
+  );
 
   const onAudioTimeUpdate = useCallback(
     (event: SyntheticEvent<HTMLAudioElement>) => {
       const currentTime = event.currentTarget.currentTime;
+      const duration = event.currentTarget.duration;
       if (Number.isFinite(currentTime) && currentTime >= 0) {
         cursorMsRef.current = Math.floor(currentTime * 1000);
+        const turnId = audioTurnRef.current;
+        if (turnId && turnId === playbackRef.current.current_turn_id) {
+          setBubblePlayback((previous) =>
+            previous?.turnId === turnId && previous.failed
+              ? previous
+              : {
+                  turnId,
+                  elapsed: currentTime,
+                  duration,
+                  failed: false,
+                },
+          );
+        }
       }
     },
     [],
@@ -3283,9 +3357,16 @@ export function BetaDebateStage({
   );
   const stageVisuals: Record<string, AvatarState> = {};
   for (const participant of detailState.participants) {
-    stageVisuals[participant.id] =
+    const motion =
       derivedAvatars.find((item) => item.participant_id === participant.id)
         ?.motion_state ?? "idle";
+    stageVisuals[participant.id] =
+      motion === "speaking" &&
+      (playback.status !== "playing" ||
+        mediaRetryNeeded ||
+        audioPlayingTurnId !== playback.current_turn_id)
+        ? "idle"
+        : motion;
   }
 
   const phase = deriveClassroomPhase(
@@ -3294,6 +3375,26 @@ export function BetaDebateStage({
     playback.mode,
     canAdvance,
   );
+  const bubbleText =
+    bubbleTurn && bubblePlayback?.turnId === bubbleTurn.id
+      ? bubblePlayback.failed
+        ? bubbleLineFrom(bubbleTurn.speech)
+        : playback.status === "playing" || playback.status === "paused"
+          ? bubbleProgressFrom(
+              bubbleTurn.speech,
+              bubblePlayback.elapsed,
+              bubblePlayback.duration,
+            )
+          : playback.status === "waiting_next" ||
+              playback.status === "completed"
+            ? bubbleLineFrom(bubbleTurn.speech)
+            : ""
+      : bubbleTurn &&
+          (phase === "failed" ||
+            playback.status === "waiting_next" ||
+            playback.status === "completed")
+        ? bubbleLineFrom(bubbleTurn.speech)
+        : "";
   const visibleStatus =
     phase === "ready"
       ? labels.phaseReady
@@ -3334,6 +3435,9 @@ export function BetaDebateStage({
   const currentTurnNumber = progressTurn
     ? Math.min(totalTurns, Math.max(0, progressTurn.turn_index + 1))
     : 0;
+  const transcriptRequired =
+    providerGate !== null || Boolean(controlError && blockedBy);
+  const transcriptOpen = showTranscript || transcriptRequired;
 
   return (
     <section
@@ -3370,8 +3474,12 @@ export function BetaDebateStage({
       ) : null}
 
       <ScholarScene
-        bubbleText={bubbleTurn ? bubbleLineFrom(bubbleTurn.speech) : ""}
+        bubbleText={bubbleText}
         characters={stageCharacters}
+        /* Full-bleed courtyard like /local-roundtable: the classroom layout
+           reserved a transcript band under the bench, which cropped the scene
+           behind the floating teacher panel. */
+        layout="preview"
         loadingLabel={beta.sceneLoading}
         overlay={
           <>
@@ -3413,7 +3521,10 @@ export function BetaDebateStage({
         visuals={stageVisuals}
       />
 
-      <div className={styles.stageColumns}>
+      <div
+        className={styles.stageColumns}
+        data-transcript-open={transcriptOpen}
+      >
         <div className={styles.avatarColumn}>
           {/* Controls and status sit in the blank space under the face
               instead of in bands of their own above the columns, so the
@@ -3461,18 +3572,40 @@ export function BetaDebateStage({
               replayButton
             )}
 
+            <button
+              aria-controls="beta-stage-transcript"
+              aria-expanded={transcriptOpen}
+              className={styles.transcriptToggle}
+              disabled={transcriptRequired}
+              onClick={() => setShowTranscript((current) => !current)}
+              type="button"
+            >
+              {transcriptOpen && !transcriptRequired
+                ? outputLanguage === "zh"
+                  ? "收起记录"
+                  : "Hide transcript"
+                : labels.transcript}
+            </button>
+
             <audio
               ref={audioRef}
               aria-label={labels.audioLabel}
               preload="auto"
               onEnded={onAudioEnded}
               onError={onAudioError}
+              onLoadedMetadata={onAudioLoadedMetadata}
+              onPlaying={() => setAudioPlayingTurnId(audioTurnRef.current)}
+              onPause={() => setAudioPlayingTurnId(null)}
               onTimeUpdate={onAudioTimeUpdate}
             />
           </div>
         </div>
 
-        <div className={styles.speechColumn}>
+        <div
+          className={styles.speechColumn}
+          hidden={!transcriptOpen}
+          id="beta-stage-transcript"
+        >
           {providerGate ? (
             <section
               className={styles.providerGateCard}
@@ -3560,6 +3693,24 @@ export function BetaDebateStage({
               thing twice and pushed the first speech down. */}
 
           <SpeechStream
+            activeReveal={
+              bubbleTurn
+                ? {
+                    turnId: bubbleTurn.id,
+                    progress:
+                      playback.status === "playing" ||
+                      playback.status === "paused"
+                        ? bubblePlayback?.turnId === bubbleTurn.id
+                          ? bubblePlayback.failed
+                            ? 1
+                            : bubblePlayback.duration > 0
+                              ? bubblePlayback.elapsed / bubblePlayback.duration
+                              : 0
+                          : 0
+                        : 1,
+                  }
+                : null
+            }
             showTurnCount={false}
             styles={styles}
             describe={(participantId) => {

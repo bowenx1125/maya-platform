@@ -17,7 +17,6 @@ pipeline as student enrollment and is never modified by this module.
 from __future__ import annotations
 
 import base64
-import fcntl
 import hashlib
 import shutil
 from collections.abc import Iterator
@@ -36,6 +35,7 @@ from app.core.db import Database
 from app.core.models import VoiceProfile, VoiceProviderOperation
 from app.modules.knowledge.files import contained_path, ensure_private_dir
 from app.modules.voices.crypto import VoiceEncryptionError, encrypt_external_voice_id
+from app.modules.voices.lease_lock import lock_exclusive, unlock
 from app.modules.voices.service import (
     PREVIEW_TEXT,
     TARGET_MODEL_KEY,
@@ -80,13 +80,13 @@ def _fallback_lock(data_root: Path) -> Iterator[None]:
         raise FallbackEnrollmentError("fallback lock unavailable") from exc
     try:
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_exclusive(handle)
         except OSError as exc:
             raise FallbackEnrollmentError("fallback enrollment is already running") from exc
         yield
     finally:
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            unlock(handle)
         except OSError:
             pass
         handle.close()
@@ -145,7 +145,7 @@ def _normalised_source(settings: Settings, source: Path) -> Iterator[tuple[bytes
     try:
         active_lease = marker.open("xb")
         marker.chmod(0o600)
-        fcntl.flock(active_lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_exclusive(active_lease)
         digest = hashlib.sha256()
         copied = 0
         with source.open("rb") as input_stream, source_copy.open("xb") as output_stream:
@@ -172,7 +172,7 @@ def _normalised_source(settings: Settings, source: Path) -> Iterator[tuple[bytes
     finally:
         if active_lease is not None and not active_lease.closed:
             try:
-                fcntl.flock(active_lease.fileno(), fcntl.LOCK_UN)
+                unlock(active_lease)
             finally:
                 active_lease.close()
         try:

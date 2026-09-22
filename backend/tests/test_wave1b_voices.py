@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import io
 import os
 import wave
@@ -32,6 +31,7 @@ from app.modules.voices.crypto import (
     encrypt_external_voice_id,
 )
 from app.modules.voices.fallback import FallbackEnrollmentError, enroll_system_fallback
+from app.modules.voices.lease_lock import lock_exclusive, unlock
 from app.modules.voices.uploads import (
     VoiceUploadDisconnected,
     VoiceUploadTooLarge,
@@ -353,6 +353,110 @@ def test_agent_draft_avatar_and_voice_binding_tri_state(
     current = client.get(f"/api/v1/agent-versions/{version['id']}")
     assert current.status_code == 200
     assert current.json()["revision"] == cleared.json()["revision"]
+
+
+def test_group_voice_is_owner_private_within_the_same_group(
+    voice_client: tuple[TestClient, Database, Settings],
+) -> None:
+    """A cloned voice is visible and actionable only by its uploading student."""
+
+    client, database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "owner-voice-enroll-001"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    preview = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+    )
+    assert preview.status_code == 200, preview.text
+    media_url = preview.json()["playback_url"]
+
+    # The second student in the same group cannot even see the voice.
+    kaikai_csrf = login(client, "kaikai")[1]
+    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() == []
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
+    denied_preview = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+    )
+    assert denied_preview.status_code == 404
+    # Preview media is private too: the URL leaks nothing to a same-group peer.
+    assert client.get(media_url).status_code == 404
+    denied_delete = client.delete(
+        f"/api/v1/voice-profiles/{profile_id}",
+        headers=_headers(kaikai_csrf, "owner-voice-delete-01"),
+    )
+    assert denied_delete.status_code == 404
+
+    # The uploading student retains full access after the denied probes.
+    # Relogin rotates the session and its CSRF token, so rebind the local
+    # token for the requests below.
+    csrf = login(client, "bowen")[1]
+    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() != []
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
+    assert client.get(media_url).status_code == 200
+    # Confirmation requires the live preview; bind needs the ready status.
+    confirmed = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/confirm",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    version = client.post(
+        f"/api/v1/groups/{GROUP_A}/agents",
+        headers=_headers(csrf, "owner-voice-agent-001"),
+        json={"name": "Owner voice agent", "description": ""},
+    )
+    assert version.status_code == 201, version.text
+    draft = version.json()["versions"][0]
+    kaikai_csrf = login(client, "kaikai")[1]
+    denied_bind = client.patch(
+        f"/api/v1/agent-versions/{draft['id']}",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+        json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
+    )
+    assert denied_bind.status_code == 422, denied_bind.text
+    assert denied_bind.json()["code"] == "voice_enrollment_failed"
+    csrf = login(client, "bowen")[1]
+    bound = client.patch(
+        f"/api/v1/agent-versions/{draft['id']}",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+        json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
+    )
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["voice_profile_id"] == profile_id
+    assert bound.json()["effective_voice_profile_id"] == profile_id
+    assert bound.json()["voice_fallback_active"] is False
+
+    # A legacy profile with a missing owner fails closed for every student.
+    orphan_id = str(uuid4())
+    with database.session() as session:
+        session.add(
+            VoiceProfile(
+                id=orphan_id,
+                scope="group",
+                group_id=GROUP_A,
+                display_name="orphan",
+                status="ready",
+                provider_key="mock",
+                target_model_key="mock-voice-v1",
+                external_id_encrypted=None,
+                recovery_name="orphan00000000",
+                provenance_json="{}",
+                consent_actor_user_id=None,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+    assert client.get(f"/api/v1/voice-profiles/{orphan_id}").status_code == 404
+    listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
+    assert orphan_id not in [item["id"] for item in listed]
+    assert profile_id in [item["id"] for item in listed]
 
 
 def test_voice_scope_and_upload_validation(
@@ -842,10 +946,11 @@ def test_voice_permissions_are_same_group_students_only(
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 200
 
-    # Another student in the same group shares the group-scoped profile.
+    # Another student in the same group does NOT share the cloned voice:
+    # the profile is private to the uploading student (bowen).
     login(client, "kaikai")
-    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 200
-    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
+    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() == []
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
 
     # The teacher is not a group member and receives the same not-found
     # response; the profile is not disclosed through list/detail/delete/media.
@@ -1811,15 +1916,15 @@ def test_startup_cleanup_never_removes_an_aged_but_locked_active_request(
     request.mkdir(parents=True)
     marker = request / ".active"
     marker.touch()
-    lease = marker.open("rb")
-    fcntl.flock(lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    lease = marker.open("r+b" if os.name == "nt" else "rb")
+    lock_exclusive(lease)
     try:
         os.utime(request, (1_000.0, 1_000.0))
         os.utime(marker, (1_000.0, 1_000.0))
         assert cleanup_voice_temp_dirs(data_root, age_seconds=900, now=10_000.0) == []
         assert request.exists()
     finally:
-        fcntl.flock(lease.fileno(), fcntl.LOCK_UN)
+        unlock(lease)
         lease.close()
     assert cleanup_voice_temp_dirs(data_root, age_seconds=900, now=10_000.0) == [request_id]
     assert not request.exists()

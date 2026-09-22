@@ -322,6 +322,57 @@ describe("Wave 2 teacher debate setup", () => {
     expect(router.replace).toHaveBeenCalledWith("/teacher/debates");
   });
 
+  it("requires two speakers and lets a teacher add or remove speakers up to five", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const create = vi.fn().mockResolvedValue(createdDebate());
+    render(
+      <TeacherDebateCreate
+        controller={{
+          loadRuleset: vi
+            .fn()
+            .mockResolvedValue({ zh: "# 中文", en: "# English" }),
+          loadCandidates: vi
+            .fn()
+            .mockResolvedValue(
+              ["A", "B", "C", "D", "E", "F"].map((name) =>
+                candidate(name, name),
+              ),
+            ),
+          create,
+        }}
+      />,
+    );
+    await screen.findByRole("button", { name: "A" });
+    fireEvent.change(screen.getByLabelText("Topic"), {
+      target: { value: "A classroom debate" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "A" }));
+    expect(screen.getByRole("status").textContent).toContain("1/5");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("at least two");
+
+    for (const name of ["B", "C", "D", "E"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+    }
+    expect(screen.getByRole("status").textContent).toContain("5/5");
+    fireEvent.click(screen.getByRole("button", { name: "F" }));
+    expect(screen.getByRole("status").textContent).toContain("5/5");
+    expect(screen.getByRole("alert").textContent).toContain("at most five");
+
+    for (const name of ["C", "D", "E"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+    }
+    expect(screen.getByRole("status").textContent).toContain("2/5");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(
+      create.mock.calls[0][1].participants.map(
+        (item: { agent_id: string }) => item.agent_id,
+      ),
+    ).toEqual(["A", "B"]);
+  });
+
   it("keeps row positions, numbers selection order, and preserves notes across deselection", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const create = vi.fn().mockResolvedValue(createdDebate());

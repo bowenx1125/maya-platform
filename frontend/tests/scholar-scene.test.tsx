@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarState, AvatarConfig } from "../components/avatar";
@@ -17,6 +17,12 @@ const stageMock = vi.hoisted(() => {
     rosters: unknown[][];
     visuals: { id: string; state: string }[];
     resting: boolean[];
+    cameraMoves: string[];
+    cameraInputs: { command: string; active: boolean }[];
+    cameraResets: number;
+    overviewToggles: number;
+    cameraClears: number;
+    scenePacks: string[];
     disposed: boolean;
   };
 
@@ -27,6 +33,12 @@ const stageMock = vi.hoisted(() => {
     readonly rosters: unknown[][] = [];
     readonly visuals: { id: string; state: string }[] = [];
     readonly resting: boolean[] = [];
+    readonly cameraMoves: string[] = [];
+    readonly cameraInputs: { command: string; active: boolean }[] = [];
+    cameraResets = 0;
+    overviewToggles = 0;
+    cameraClears = 0;
+    readonly scenePacks: string[] = [];
     disposed = false;
 
     constructor(options: StageOptions) {
@@ -46,6 +58,30 @@ const stageMock = vi.hoisted(() => {
       this.resting.push(value);
     }
 
+    moveStageCamera(command: string): void {
+      this.cameraMoves.push(command);
+    }
+
+    setStageCameraInput(command: string, active: boolean): void {
+      this.cameraInputs.push({ command, active });
+    }
+
+    clearStageCameraInput(): void {
+      this.cameraClears += 1;
+    }
+
+    resetStageCamera(): void {
+      this.cameraResets += 1;
+    }
+
+    toggleStageOverview(): void {
+      this.overviewToggles += 1;
+    }
+
+    setScenePack(id: string): void {
+      this.scenePacks.push(id);
+    }
+
     dispose(): void {
       this.disposed = true;
     }
@@ -62,6 +98,7 @@ afterEach(() => cleanup());
 
 beforeEach(() => {
   stageMock.instances.length = 0;
+  window.history.replaceState(null, "", "/");
 });
 
 const avatarConfig: AvatarConfig = {
@@ -172,5 +209,69 @@ describe("ScholarScene asynchronous initialization", () => {
     expect(stage.disposed).toBe(true);
     stage.options.onReady?.();
     expect(stage.rosters).toHaveLength(rosterCount);
+  });
+
+  it("marks the local preview layout without changing classroom defaults", () => {
+    const view = render(
+      <ScholarScene
+        characters={[]}
+        layout="preview"
+        loadingLabel="Loading"
+        resting
+        unavailableLabel="Unavailable"
+        visuals={{}}
+      />,
+    );
+    expect(
+      view.container.querySelector('[data-layout="preview"]'),
+    ).toBeTruthy();
+  });
+
+  it("wires fixed-world splat camera movement to buttons and keyboard", async () => {
+    window.history.replaceState(null, "", "/?splat=1");
+    const view = renderScene(
+      [character("participant-a", "A", "River Keeper")],
+      { "participant-a": "idle" },
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    const stage = stageMock.instances[0];
+    stage.options.onReady?.();
+
+    const forward = await view.findByRole("button", { name: "镜头向前移动" });
+    fireEvent.click(forward);
+    fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyUp(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "d" });
+    fireEvent.keyUp(window, { key: "d" });
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    fireEvent.keyUp(window, { key: "ArrowLeft" });
+    fireEvent.keyDown(window, { key: "q" });
+    fireEvent.keyUp(window, { key: "q" });
+    fireEvent.keyDown(window, { key: "e" });
+    fireEvent.keyUp(window, { key: "e" });
+    expect(stage.cameraMoves).toEqual(["forward"]);
+    expect(stage.cameraInputs).toEqual([
+      { command: "left", active: true },
+      { command: "left", active: false },
+      { command: "right", active: true },
+      { command: "right", active: false },
+      { command: "turn-left", active: true },
+      { command: "turn-left", active: false },
+      { command: "turn-left", active: true },
+      { command: "turn-left", active: false },
+      { command: "turn-right", active: true },
+      { command: "turn-right", active: false },
+    ]);
+
+    fireEvent.click(view.getByRole("button", { name: "切换鸟瞰" }));
+    fireEvent.keyDown(window, { key: "Home" });
+    expect(stage.overviewToggles).toBe(1);
+    expect(stage.cameraResets).toBe(1);
+
+    fireEvent.change(view.getByRole("combobox", { name: "切换院落场景" }), {
+      target: { value: "procedural" },
+    });
+    expect(stage.scenePacks).toEqual(["procedural"]);
+    expect(window.location.search).toContain("scene=procedural");
   });
 });

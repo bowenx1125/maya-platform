@@ -20,10 +20,14 @@ const labels = {
   noSources: "No matched knowledge sources.",
 };
 
-function renderStream(turns: StreamTurn[]) {
+function renderStream(
+  turns: StreamTurn[],
+  activeReveal?: { turnId: string; progress: number },
+) {
   return render(
     <LocaleProvider initialLocale="en">
       <SpeechStream
+        activeReveal={activeReveal}
         describe={() => ({ slot: "A", name: "River Keeper" })}
         emptyMessage="No published speech."
         labels={labels}
@@ -59,6 +63,40 @@ const segmentTurn: StreamTurn = {
 };
 
 describe("segments_v2 public debate presentation", () => {
+  it("reveals the active structured speech with audio progress and leaves history whole", () => {
+    const history = { ...segmentTurn, id: "history" };
+    const view = renderStream([history, segmentTurn], {
+      turnId: segmentTurn.id,
+      progress: 0.5,
+    });
+
+    const articles = view.container.querySelectorAll(
+      'article[class*="streamItem"]',
+    );
+    const historySpeech = articles[0]?.querySelector(
+      'div[class*="streamParagraphs"]',
+    );
+    const activeSpeech = articles[1]?.querySelector(
+      'div[class*="streamParagraphs"]',
+    );
+    expect(historySpeech?.textContent).toContain("Second paragraph.");
+    expect(activeSpeech?.textContent).not.toContain("Second paragraph.");
+
+    view.rerender(
+      <LocaleProvider initialLocale="en">
+        <SpeechStream
+          activeReveal={{ turnId: segmentTurn.id, progress: 1 }}
+          describe={() => ({ slot: "A", name: "River Keeper" })}
+          emptyMessage="No published speech."
+          labels={labels}
+          phaseOf={() => null}
+          turns={[history, segmentTurn]}
+        />
+      </LocaleProvider>,
+    );
+    expect(activeSpeech?.textContent).toContain("Second paragraph.");
+  });
+
   it("renders paragraphs and keeps source receipts collapsed until Check RAG opens", () => {
     renderStream([segmentTurn]);
 
@@ -100,6 +138,21 @@ describe("segments_v2 public debate presentation", () => {
     ).toBeTruthy();
     expect(screen.getByText(/Sources:/)).toBeTruthy();
     expect(screen.getByText("legacy.md")).toBeTruthy();
+  });
+
+  it("reveals an unstructured active speech by progress without changing the source", () => {
+    const turn: StreamTurn = {
+      id: "legacy-progress",
+      participant_id: "participant-a",
+      round_no: 1,
+      speech: "自由与责任相辅相成。",
+    };
+    const view = renderStream([turn], { turnId: turn.id, progress: 0.5 });
+    const speech = view.container.querySelector(
+      'article[class*="streamItem"] > p[class*="streamSpeech"]',
+    );
+    expect(speech?.textContent).toContain("自由与责任");
+    expect(speech?.textContent).not.toContain("相辅相成");
   });
 });
 

@@ -44,6 +44,7 @@ type SpeechStreamProps = {
   /** Replay the whole session, when the viewer may control playback. */
   onReplayAll?: () => void;
   replayAllDisabled?: boolean;
+  activeReveal?: { turnId: string; progress: number } | null;
 };
 
 /**
@@ -72,10 +73,8 @@ function prefersReducedMotion(): boolean {
 /**
  * Reveal a speech progressively, but only the first time it arrives.
  *
- * A speech already on screen when the page loads appears in full: making a
- * teacher watch history retype before they can read it would be theatre, not
- * information. The animation is a fixed-speed visual effect and is deliberately
- * not tied to the audio timeline, which pauses, seeks and replays.
+ * A speech already on screen when the page loads appears in full. This is the
+ * fallback for views without an audio timeline; the Beta stage supplies one.
  */
 function useTypedSpeech(speech: string, animate: boolean): string {
   // Decided once, at mount: a viewer who prefers reduced motion never sees a
@@ -112,6 +111,7 @@ function StreamItem({
   describe,
   phaseOf,
   animate,
+  revealProgress,
 }: {
   styles: Record<string, string>;
   turn: StreamTurn;
@@ -119,11 +119,31 @@ function StreamItem({
   describe: SpeechStreamProps["describe"];
   phaseOf: SpeechStreamProps["phaseOf"];
   animate: boolean;
+  revealProgress: number | null;
 }) {
   const segments = turn.segment_turn?.segments ?? [];
   const hasStructuredRag =
     segments.length > 0 || (turn.source_details?.length ?? 0) > 0;
-  const shown = useTypedSpeech(turn.speech, animate && !hasStructuredRag);
+  const shown = useTypedSpeech(
+    turn.speech,
+    animate && !hasStructuredRag && revealProgress === null,
+  );
+  const progress =
+    revealProgress === null || !Number.isFinite(revealProgress)
+      ? null
+      : Math.max(0, Math.min(1, revealProgress));
+  const speechPoints = Array.from(turn.speech);
+  const shownSpeech =
+    progress === null
+      ? shown
+      : speechPoints
+          .slice(0, Math.ceil(speechPoints.length * progress))
+          .join("");
+  const segmentLength = segments.reduce(
+    (total, segment) => total + Array.from(segment.text).length,
+    0,
+  );
+  const visibleSegmentChars = Math.ceil(segmentLength * (progress ?? 1));
   const who = describe(turn.participant_id);
   const phase = phaseOf(turn);
   const audioUrl = turn.playback_resource?.playback_url ?? null;
@@ -161,19 +181,28 @@ function StreamItem({
       </div>
       {segments.length > 0 ? (
         <div className={styles.streamParagraphs}>
-          {segments.map((segment, index) => (
-            <p
-              className={styles.streamSpeech}
-              key={`${turn.id}-segment-${index}`}
-            >
-              {segment.text}
-            </p>
-          ))}
+          {segments.map((segment, index) => {
+            const points = Array.from(segment.text);
+            const preceding = segments
+              .slice(0, index)
+              .reduce((total, item) => total + Array.from(item.text).length, 0);
+            const visible = points
+              .slice(0, Math.max(0, visibleSegmentChars - preceding))
+              .join("");
+            return visible ? (
+              <p
+                className={styles.streamSpeech}
+                key={`${turn.id}-segment-${index}`}
+              >
+                {visible}
+              </p>
+            ) : null;
+          })}
         </div>
       ) : (
         <p className={styles.streamSpeech}>
-          {shown}
-          {shown.length < turn.speech.length ? (
+          {shownSpeech}
+          {shownSpeech.length < turn.speech.length ? (
             <span aria-hidden="true" className={styles.caret} />
           ) : null}
         </p>
@@ -225,6 +254,7 @@ export function SpeechStream({
   headerAction,
   onReplayAll,
   replayAllDisabled,
+  activeReveal,
 }: SpeechStreamProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const seenRef = useRef<Set<string> | null>(null);
@@ -290,6 +320,9 @@ export function SpeechStream({
               key={turn.id}
               labels={labels}
               phaseOf={phaseOf}
+              revealProgress={
+                activeReveal?.turnId === turn.id ? activeReveal.progress : null
+              }
               turn={turn}
             />
           ))}

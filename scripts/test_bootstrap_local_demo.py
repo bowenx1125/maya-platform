@@ -26,7 +26,19 @@ def main() -> None:
         password = password_match.group(1).strip()
         env_path = root / ".env"
         accounts_path = root / "backend/config/demo-accounts/accounts.private.md"
-        if stat_mode(env_path) != 0o600 or stat_mode(accounts_path) != 0o600:
+        if os.name == "nt":
+            for path in (env_path, accounts_path):
+                acl_raw = subprocess.run(
+                    ["icacls", str(path)], capture_output=True, check=True
+                ).stdout
+                # icacls prints localized text in the ANSI code page; text=True
+                # fails outright under a UTF-8 mode interpreter.
+                acl = acl_raw.decode("mbcs", errors="replace").splitlines()[0]
+                if acl.count(":(F)") != 1 or "(I)" in acl:
+                    raise AssertionError(
+                        "bootstrap files must have one non-inherited full-access ACE"
+                    )
+        elif stat_mode(env_path) != 0o600 or stat_mode(accounts_path) != 0o600:
             raise AssertionError("bootstrap files must be mode 0600")
         env_values = dict(
             line.split("=", 1)
@@ -57,7 +69,7 @@ def main() -> None:
             raise AssertionError("bootstrap must refuse overwrite without --force")
     print(
         "bootstrap_local_demo safety probe passed: private account catalog, random secret, "
-        "mode 0600, blank supplier keys, and overwrite refusal"
+        "restricted permissions, blank supplier keys, and overwrite refusal"
     )
 
 

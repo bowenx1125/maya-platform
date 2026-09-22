@@ -34,7 +34,7 @@ describe("M08 voice library", () => {
       expect(api.voiceProfiles).toHaveBeenCalledWith("group-a"),
     );
     const button = screen.getByRole("button", {
-      name: /upload and create voice/i,
+      name: /^upload$/i,
     });
     expect((button as HTMLButtonElement).disabled).toBe(true);
 
@@ -77,7 +77,8 @@ describe("M08 voice library", () => {
     });
     render(<VoiceLibrary groupId="group-a" />);
     await waitFor(() => expect(screen.getByText("sample.wav")).toBeTruthy());
-    const confirm = screen.getByRole("button", { name: /confirm voice/i });
+    expect(screen.getByText("voice-1")).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: /^confirm$/i });
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
     await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());

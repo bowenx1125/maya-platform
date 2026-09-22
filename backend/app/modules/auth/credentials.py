@@ -13,11 +13,14 @@ present it is the only source consulted.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import hmac
+import io
 import os
 import re
 import stat
+import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -366,6 +369,54 @@ def parse_accounts_markdown(source: str) -> DesiredAccountGraph:
     return DesiredAccountGraph(tuple(rows))
 
 
+def _decode_console_output(raw: bytes | None) -> str:
+    """Decode localized console output using the system ANSI code page."""
+
+    if raw is None:
+        return ""
+    try:
+        return raw.decode("mbcs")
+    except (LookupError, UnicodeDecodeError):
+        return raw.decode("utf-8", errors="replace")
+
+
+def _private_file_permissions(path: Path, mode: int) -> bool:
+    if os.name != "nt":
+        return stat.S_IMODE(mode) == 0o600
+    try:
+        # whoami/icacls print localized text in the system's ANSI code page.
+        # Decoding with text=True fails whenever that is not UTF-8 (a UTF-8
+        # mode interpreter turns a decode error into a None stdout), so the
+        # raw bytes are decoded explicitly and leniently instead.
+        identity = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
+            capture_output=True,
+            check=True,
+        )
+        rows = list(
+            csv.reader(
+                io.StringIO(_decode_console_output(identity.stdout)),
+            )
+        )
+        if len(rows) != 1 or len(rows[0]) != 2:
+            return False
+        acl = subprocess.run(["icacls", str(path)], capture_output=True, check=True)
+        acl_first_line = _decode_console_output(acl.stdout).splitlines()[0]
+        grant = acl_first_line.removeprefix(str(path)).strip()
+        return grant.casefold() in {
+            f"{rows[0][0]}:(F)".casefold(),
+            f"{rows[0][1]}:(F)".casefold(),
+        }
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+        IndexError,
+        UnicodeDecodeError,
+    ):
+        # Any probe failure must fail closed, not propagate into startup.
+        return False
+
+
 def _read_secure_file(path: Path) -> bytes:
     """Read one private catalog file descriptor without following symlinks."""
 
@@ -378,7 +429,7 @@ def _read_secure_file(path: Path) -> bytes:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise CredentialFileError("demo account catalog permissions are unsafe")
-        if stat.S_IMODE(metadata.st_mode) != 0o600:
+        if path.is_symlink() or not _private_file_permissions(path, metadata.st_mode):
             raise CredentialFileError("demo account catalog permissions are unsafe")
         if metadata.st_size > CATALOG_MAX_BYTES:
             raise CredentialFileError("demo account catalog is too large")
@@ -410,7 +461,8 @@ def _read_secure_file(path: Path) -> bytes:
         if (
             after_signature != before_signature
             or not stat.S_ISREG(after.st_mode)
-            or stat.S_IMODE(after.st_mode) != 0o600
+            or path.is_symlink()
+            or not _private_file_permissions(path, after.st_mode)
         ):
             raise CredentialFileError("demo account catalog changed while reading")
         return b"".join(chunks)

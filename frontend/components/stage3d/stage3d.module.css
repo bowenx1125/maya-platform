@@ -2,13 +2,12 @@
    Everything here is scoped to Debates (beta); the classic stage imports none
    of it. */
 
-/* The scene is the page, not a panel on it: the ink-wash ground runs edge to
-   edge and every control floats above it. */
+/* The scene fills the display while the transcript stays below the bench. */
 .scene {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #ece8e0;
+  background: #fff;
   isolation: isolate;
 }
 
@@ -16,32 +15,19 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-position: center 58%;
-  background-size: cover;
-  opacity: 0.62;
-  filter: saturate(0.55);
+  background: #d2c3ad url("/stage/courtyard.png") center 80% / cover no-repeat;
 }
 
-/* A soft vignette so the figures sit in the paper rather than on top of it. */
-.backdrop::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 68% 58% at 44% 62%,
-    transparent 40%,
-    rgba(232, 226, 214, 0.55) 100%
-  );
-}
-
-/* The beta Public Debate panel floats above the right side of the bench. Keep
-   the renderer and its DOM anchors inside the remaining canvas so the camera
-   uses the same width and height that the teacher can actually see. */
+/* The discussion occupies the full upper stage; the transcript runs below it. */
 .canvasViewport {
   position: absolute;
-  inset: 0 480px 0 0;
+  inset: 0 0 236px;
   overflow: hidden;
   min-width: 0;
+}
+
+.scene[data-layout="preview"] .canvasViewport {
+  inset: 0;
 }
 
 .canvas {
@@ -51,6 +37,115 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.cameraControls {
+  position: absolute;
+  z-index: 7;
+  right: 20px;
+  bottom: 18px;
+  display: grid;
+  grid-template-areas:
+    ". . forward . ."
+    "turn-left left reset right turn-right"
+    ". . backward . .";
+  grid-template-columns: repeat(5, 36px);
+  grid-template-rows: repeat(3, 36px);
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.scenePackPicker {
+  position: absolute;
+  z-index: 7;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px 7px 11px;
+  border: 1px solid rgba(191, 144, 55, 0.58);
+  border-radius: 5px;
+  background: rgba(255, 253, 246, 0.9);
+  box-shadow: 0 3px 12px rgba(48, 36, 23, 0.16);
+  color: #5f4826;
+  font:
+    600 0.8rem/1.2 "Songti SC",
+    "Noto Serif CJK SC",
+    serif;
+  white-space: nowrap;
+  backdrop-filter: blur(7px);
+}
+
+.scenePackPicker select {
+  max-width: 132px;
+  border: 0;
+  background: transparent;
+  color: var(--indigo-dark, #303c66);
+  font:
+    700 0.84rem/1.2 system-ui,
+    sans-serif;
+  cursor: pointer;
+  outline: 0;
+}
+
+.cameraControls button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(191, 144, 55, 0.66);
+  border-radius: 5px;
+  background: rgba(255, 253, 246, 0.88);
+  box-shadow: 0 3px 10px rgba(48, 36, 23, 0.18);
+  color: var(--indigo-dark, #303c66);
+  font:
+    700 1.12rem/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+  backdrop-filter: blur(7px);
+}
+
+.cameraControls button:hover,
+.cameraControls button:focus-visible {
+  border-color: #b78631;
+  background: rgba(255, 249, 230, 0.98);
+  outline: 2px solid rgba(183, 134, 49, 0.24);
+  outline-offset: 1px;
+}
+
+.cameraControls button:active {
+  transform: translateY(1px);
+}
+
+.cameraOverview {
+  grid-area: reset;
+  color: #8b4f23 !important;
+}
+
+.cameraForward {
+  grid-area: forward;
+}
+
+.cameraBackward {
+  grid-area: backward;
+}
+
+.cameraLeft {
+  grid-area: left;
+}
+
+.cameraRight {
+  grid-area: right;
+}
+
+.cameraTurnLeft {
+  grid-area: turn-left;
+}
+
+.cameraTurnRight {
+  grid-area: turn-right;
 }
 
 .sceneNotice {
@@ -126,9 +221,11 @@
   gap: 6px;
   padding: 5px 14px 6px;
   transform: translate(-50%, -190%);
-  border-radius: 999px;
-  background: rgba(252, 250, 245, 0.86);
-  color: #2a251f;
+  border: 1px solid rgba(211, 167, 74, 0.52);
+  border-radius: 6px;
+  background: rgba(251, 250, 246, 0.94);
+  box-shadow: 0 4px 14px rgba(36, 28, 20, 0.16);
+  color: var(--ink);
   font-size: clamp(0.95rem, 1.2vw, 1.15rem);
   font-weight: 600;
   line-height: 1.4;
@@ -138,39 +235,49 @@
 }
 
 .namePlate[data-current="true"] {
-  background: #2b2620;
-  color: #f7f2e8;
+  background: var(--indigo-dark);
+  color: #fff;
 }
 
-/* The bubble hangs off the speaking head and flips side near the edges, so a
-   speaker in slot E does not push its own words off the stage. */
+/* Keep the short current utterance above its speaker; the transcript below
+   retains the full turn. */
 .bubble {
   position: absolute;
   z-index: 5;
-  max-width: min(320px, 42%);
-  padding: 12px 15px 13px;
-  transform: translate(14px, -104%);
-  border: 1px solid rgba(38, 31, 24, 0.1);
-  border-radius: 16px;
-  background: rgba(255, 253, 248, 0.96);
-  box-shadow: 0 12px 30px rgba(58, 46, 30, 0.14);
-  color: #221d18;
+  width: min(290px, 62%);
+  padding: 9px 12px 10px;
+  transform: translate(-50%, calc(-100% - 16px));
+  border: 1px solid rgba(211, 167, 74, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 254, 250, 0.98);
+  box-shadow: 0 10px 26px rgba(39, 31, 23, 0.2);
+  color: var(--ink);
   font-size: 0.95rem;
-  line-height: 1.68;
+  line-height: 1.5;
+  font-family:
+    "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
   pointer-events: none;
 }
 
-.bubble[data-side="left"] {
-  transform: translate(calc(-100% - 14px), -104%);
+.bubble::after {
+  position: absolute;
+  top: 100%;
+  left: calc(50% + var(--bubble-pointer-offset, 0px));
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid rgba(211, 167, 74, 0.55);
+  border-bottom: 1px solid rgba(211, 167, 74, 0.55);
+  background: rgba(255, 254, 250, 0.98);
+  content: "";
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .bubbleWho {
   display: block;
-  margin-bottom: 5px;
-  color: #8a7a5f;
+  margin-bottom: 3px;
+  color: var(--indigo-dark);
   font-size: 0.95rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
   text-transform: none;
 }
 
@@ -244,13 +351,14 @@
 .joinCard {
   position: absolute;
   z-index: 9;
-  top: 50%;
-  left: calc((100% - 480px) / 2);
-  transform: translate(-50%, -50%);
+  top: 20px;
+  right: 20px;
+  left: auto;
+  transform: none;
   display: grid;
   align-items: center;
   justify-items: center;
-  width: min(390px, calc(100% - 520px));
+  width: min(220px, calc(100% - 40px));
   gap: 11px;
   padding: 20px;
   border: 1px solid rgba(38, 31, 24, 0.12);
@@ -261,7 +369,7 @@
 
 .joinCard svg {
   display: block;
-  width: min(340px, 100%, calc(100dvh - 230px));
+  width: min(180px, 100%, calc(100dvh - 280px));
   height: auto;
   border-radius: 10px;
 }
@@ -296,7 +404,7 @@
   position: absolute;
   z-index: 9;
   left: 20px;
-  bottom: 20px;
+  bottom: 254px;
   padding: 6px 12px 7px;
   border: 1px solid rgba(38, 31, 24, 0.14);
   border-radius: 999px;
@@ -316,6 +424,26 @@
 }
 
 @media (max-width: 900px) {
+  .namePlate {
+    display: none;
+  }
+
+  .scene[data-layout="preview"] .namePlate {
+    display: flex;
+    padding: 4px 8px;
+    transform: translate(-50%, -160%);
+    font-size: 0.8rem;
+  }
+
+  .scene:not([data-layout="preview"]) .bubble {
+    top: auto !important;
+    bottom: 8px;
+    left: 50% !important;
+    width: min(300px, calc(100% - 24px));
+    max-width: none;
+    transform: translateX(-50%);
+  }
+
   /* On a narrow screen the Public Debate panel moves below the scene. The
      44dvh viewport leaves a small breathing gap above its 56dvh panel. */
   .canvasViewport {
@@ -327,11 +455,20 @@
     max-height: calc(100% - 24px);
   }
 
+  .scene[data-layout="preview"] .canvasViewport {
+    inset: 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
   .joinCard {
     top: 22dvh;
     left: 50%;
+    right: auto;
     width: min(310px, calc(100% - 32px));
     padding: 12px;
+    transform: translate(-50%, -50%);
   }
 
   .joinCard svg {
@@ -348,5 +485,16 @@
 
   .barrage {
     height: 112px;
+  }
+}
+
+@media (max-width: 600px) {
+  .scenePackPicker {
+    top: 64px;
+  }
+
+  .cameraControls {
+    right: 10px;
+    bottom: 10px;
   }
 }

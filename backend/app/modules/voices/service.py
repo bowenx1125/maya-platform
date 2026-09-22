@@ -110,10 +110,11 @@ def voice_profile_dto(profile: VoiceProfile) -> VoiceProfileResponse:
 
 
 def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
-    """A group's voices belong to the group, so membership is the whole test.
+    """A cloned voice belongs to the student who uploaded it, not the group.
 
-    A teacher who joined the group is a member like any other; one who has not
-    joined is outside it.  See ``scoped_group_role`` for the shared rule.
+    Membership is still required, but a group-scope profile is only visible to
+    the uploading student recorded in ``consent_actor_user_id``.  A profile
+    with a missing owner fails closed: nobody can read or act on it.
     """
 
     return (
@@ -127,6 +128,7 @@ def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
         .where(
             VoiceProfile.id == profile_id,
             VoiceProfile.scope == "group",
+            VoiceProfile.consent_actor_user_id == context.user.id,
             CourseMember.user_id == context.user.id,
         )
     )
@@ -156,7 +158,13 @@ def list_group_voices(
         raise not_found()
     profiles = db.scalars(
         select(VoiceProfile)
-        .where(VoiceProfile.scope == "group", VoiceProfile.group_id == group_id)
+        .where(
+            VoiceProfile.scope == "group",
+            VoiceProfile.group_id == group_id,
+            # The list only ever shows the caller's own cloned voices; a
+            # missing owner fails closed and is shown to nobody.
+            VoiceProfile.consent_actor_user_id == context.user.id,
+        )
         .order_by(VoiceProfile.created_at, VoiceProfile.id)
     ).all()
     return [voice_profile_dto(profile) for profile in profiles]
@@ -207,6 +215,9 @@ def validate_voice_binding(
             VoiceProfile.scope == "group",
             VoiceProfile.group_id == target_group,
             VoiceProfile.status == "ready",
+            # A draft can only bind the caller's own cloned voice; a missing
+            # owner fails closed.
+            VoiceProfile.consent_actor_user_id == context.user.id,
         )
     )
     if profile is None:

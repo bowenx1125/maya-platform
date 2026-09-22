@@ -20,6 +20,18 @@ class FileBoundaryError(ValueError):
     """Raised when a relative path escapes the configured data root."""
 
 
+def _fsync_directory(path: Path) -> None:
+    # Windows cannot open a directory through os.open; the file itself is
+    # fsynced before replacement, while POSIX also flushes the rename entry.
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 _DOWNLOAD_COMPONENT_RE = re.compile(r"[^\w.-]+", re.UNICODE)
 _DOWNLOAD_ASCII_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -124,11 +136,7 @@ def write_atomic(root: Path, relative_path: str, content: bytes) -> tuple[str, i
         os.replace(temp_path, target)
         target.chmod(0o600)
         # A directory fsync closes the rename durability boundary on POSIX.
-        directory_fd = os.open(target.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        _fsync_directory(target.parent)
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -160,11 +168,7 @@ def stage_atomic(root: Path, relative_path: str, content: bytes) -> tuple[str, i
         # to ``staged``.
         os.replace(temp_path, target)
         target.chmod(0o600)
-        directory_fd = os.open(target.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        _fsync_directory(target.parent)
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -193,11 +197,7 @@ def promote_atomic(root: Path, source_relative_path: str, target_relative_path: 
     os.replace(source, target)
     if target.is_file():
         target.chmod(0o600)
-    directory_fd = os.open(target.parent, os.O_RDONLY)
-    try:
-        os.fsync(directory_fd)
-    finally:
-        os.close(directory_fd)
+    _fsync_directory(target.parent)
 
 
 def verify_staged(
@@ -235,11 +235,7 @@ def remove_empty_directory(root: Path, relative_path: str) -> None:
         # A non-empty or concurrently removed directory is recovered from its
         # durable journal; never recursively infer a parent path here.
         return
-    parent_fd = os.open(target.parent, os.O_RDONLY)
-    try:
-        os.fsync(parent_fd)
-    finally:
-        os.close(parent_fd)
+    _fsync_directory(target.parent)
 
 
 def read_contained(root: Path, relative_path: str) -> bytes:

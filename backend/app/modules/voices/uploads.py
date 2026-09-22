@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
+import os
 import re
 import shutil
 from collections.abc import AsyncIterator
@@ -16,6 +16,7 @@ from fastapi import Request
 from starlette.requests import ClientDisconnect
 
 from app.modules.knowledge.files import contained_path, ensure_private_dir
+from app.modules.voices.lease_lock import lock_exclusive, unlock
 from app.providers.audio import MAX_UPLOAD_BYTES, safe_source_filename
 
 MAX_FIELD_BYTES = 16 * 1024
@@ -57,7 +58,7 @@ class StreamedVoiceUpload:
 
         if not self.active_lease.closed:
             try:
-                fcntl.flock(self.active_lease.fileno(), fcntl.LOCK_UN)
+                unlock(self.active_lease)
             finally:
                 self.active_lease.close()
         remove_voice_request_directory(self.request_directory.parent, self.request_id)
@@ -209,7 +210,7 @@ async def stream_voice_upload(request: Request, data_root: Path) -> StreamedVoic
     try:
         active_lease = active_marker.open("xb")
         active_marker.chmod(0o600)
-        fcntl.flock(active_lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_exclusive(active_lease)
         await fill(len(boundary) + 2)
         if not buffer.startswith(boundary):
             raise VoiceUploadError("audio_invalid")
@@ -321,7 +322,7 @@ async def stream_voice_upload(request: Request, data_root: Path) -> StreamedVoic
     except BaseException:
         if active_lease is not None and not active_lease.closed:
             try:
-                fcntl.flock(active_lease.fileno(), fcntl.LOCK_UN)
+                unlock(active_lease)
             finally:
                 active_lease.close()
         remove_voice_request_directory(temporary_root, request_id)
@@ -377,8 +378,8 @@ def cleanup_voice_temp_dirs(
         active_lease: BinaryIO | None = None
         if marker.exists():
             try:
-                active_lease = marker.open("rb")
-                fcntl.flock(active_lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                active_lease = marker.open("r+b" if os.name == "nt" else "rb")
+                lock_exclusive(active_lease)
             except (BlockingIOError, OSError):
                 if active_lease is not None:
                     active_lease.close()
@@ -391,17 +392,21 @@ def cleanup_voice_temp_dirs(
             continue
         if timestamp - newest < age_seconds:
             if active_lease is not None:
-                fcntl.flock(active_lease.fileno(), fcntl.LOCK_UN)
+                unlock(active_lease)
                 active_lease.close()
             continue
         try:
+            if os.name == "nt" and active_lease is not None:
+                unlock(active_lease)
+                active_lease.close()
+                active_lease = None
             remove_voice_request_directory(temporary_root, str(parsed))
             if not child.exists():
                 removed.append(str(parsed))
         finally:
             if active_lease is not None:
                 try:
-                    fcntl.flock(active_lease.fileno(), fcntl.LOCK_UN)
+                    unlock(active_lease)
                 finally:
                     active_lease.close()
     return removed

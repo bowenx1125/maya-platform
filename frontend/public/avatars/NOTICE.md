@@ -21,14 +21,12 @@ dependency version is pinned in the workspace lockfile.
 
 ## `laozi/sumie_bg.jpg`
 
-The ink-wash backdrop behind the Debates (beta) bench comes from the project
-owner's own Laozi digital-human prototype, supplied for this repository by the
-owner. **This inclusion is not a public asset licence clearance:** confirm its
-terms for classroom and any public use before Maya is deployed or shared
-outside the private demo.
+This retained, currently unused backdrop comes from the project owner's own
+Laozi digital-human prototype. **This inclusion is not a public asset licence
+clearance:** confirm its terms before any public use or redistribution.
 
-The animated character bodies that shipped alongside it were removed. They
-carried a skeleton and no blendshapes, so a speaking Agent could never open its
-mouth; the bench now uses `female_1.glb` above, whose full ARKit morph set is
-what lets a speech read as speech. Dropping them also took the stage assets
-from 11.9 MB to 3.8 MB and removed an unresolved licence question with them.
+The Debates (beta) stage now uses the owner's purchased `elder-scholar.glb`
+and `noble-scholar.glb`, converted from the supplied FBX model pack. These
+figures have rigged jaws for the initial speech animation and no lip-sync
+blendshapes. The owner's authorization covers this private classroom demo;
+do not redistribute the model files independently.

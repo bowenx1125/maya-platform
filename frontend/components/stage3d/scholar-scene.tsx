@@ -5,13 +5,18 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
 import type { AvatarState } from "../avatar";
-import { STAGE_BACKDROP_ASSET } from "./assets";
-import type { StageAnchor, StageCharacter } from "./scholar-stage";
+import type {
+  StageAnchor,
+  StageCameraCommand,
+  StageCharacter,
+} from "./scholar-stage";
 import styles from "./stage3d.module.css";
+import { requestedStageScenePack, STAGE_SCENE_PACKS } from "./scene-packs";
 
 export type ScholarSceneProps = {
   characters: StageCharacter[];
@@ -25,6 +30,7 @@ export type ScholarSceneProps = {
   bubbleText?: string;
   loadingLabel: string;
   unavailableLabel: string;
+  layout?: "classroom" | "preview";
   /** Barrage lanes, the join card and the teacher's pause control. */
   overlay?: ReactNode;
 };
@@ -46,6 +52,7 @@ export function ScholarScene({
   bubbleText,
   loadingLabel,
   unavailableLabel,
+  layout = "classroom",
   overlay,
 }: ScholarSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,6 +62,19 @@ export function ScholarScene({
   const latestRestingRef = useRef(resting);
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [scenePackId, setScenePackId] = useState(
+    () => requestedStageScenePack().id,
+  );
+  const [stageCameraControls] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const search = new URLSearchParams(window.location.search);
+    // Mirror stageBackdropMode's precedence: depth wins over splat, so a
+    // splat-render that will never happen must not show dead camera buttons.
+    // Kept inline because the stage class itself is imported dynamically.
+    if (search.get("depth") === "1") return false;
+    return search.get("splat") === "1";
+  });
 
   // This effect runs before the stage-import effect below. Keeping the latest
   // values outside the async callback prevents a roster change during GLB
@@ -67,6 +87,7 @@ export function ScholarScene({
 
   const handleAnchors = useCallback((next: StageAnchor[]) => {
     setAnchors(next);
+    setViewportWidth(canvasRef.current?.clientWidth ?? 0);
   }, []);
   const anchorsRef = useRef(handleAnchors);
   useEffect(() => {
@@ -154,6 +175,83 @@ export function ScholarScene({
     stageRef.current?.setResting(latestRestingRef.current);
   }, [resting]);
 
+  const moveStageCamera = useCallback((command: StageCameraCommand) => {
+    stageRef.current?.moveStageCamera(command);
+  }, []);
+
+  const resetStageCamera = useCallback(() => {
+    stageRef.current?.resetStageCamera();
+  }, []);
+
+  const toggleStageOverview = useCallback(() => {
+    stageRef.current?.toggleStageOverview();
+  }, []);
+
+  const changeScenePack = useCallback((id: string) => {
+    setScenePackId(id);
+    stageRef.current?.setScenePack(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("scene", id);
+    window.history.replaceState(null, "", url);
+  }, []);
+
+  useEffect(() => {
+    if (!stageCameraControls) return undefined;
+    const commands: Record<string, StageCameraCommand> = {
+      ArrowUp: "forward",
+      w: "forward",
+      W: "forward",
+      ArrowDown: "backward",
+      s: "backward",
+      S: "backward",
+      a: "left",
+      A: "left",
+      d: "right",
+      D: "right",
+      ArrowLeft: "turn-left",
+      q: "turn-left",
+      Q: "turn-left",
+      ArrowRight: "turn-right",
+      e: "turn-right",
+      E: "turn-right",
+    };
+    const editableTarget = (target: EventTarget | null) =>
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (editableTarget(target)) return;
+      if (["Home", "r", "R"].includes(event.key)) {
+        event.preventDefault();
+        resetStageCamera();
+        return;
+      }
+      const command = commands[event.key];
+      if (!command) return;
+      event.preventDefault();
+      stageRef.current?.setStageCameraInput(command, true);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (editableTarget(event.target)) return;
+      const command = commands[event.key];
+      if (!command) return;
+      event.preventDefault();
+      stageRef.current?.setStageCameraInput(command, false);
+    };
+    const handleBlur = () => stageRef.current?.clearStageCameraInput();
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      handleBlur();
+    };
+  }, [resetStageCamera, stageCameraControls]);
+
   const visualKey = characters
     .map((item) => `${item.id}:${visuals[item.id] ?? "idle"}`)
     .join("|");
@@ -166,17 +264,24 @@ export function ScholarScene({
   const anchorById = new Map(anchors.map((anchor) => [anchor.id, anchor]));
   const speaking = speakingId ? anchorById.get(speakingId) : undefined;
   const speakingCharacter = characters.find((item) => item.id === speakingId);
-  // A speaker standing in slot E would otherwise push its own bubble off the
-  // right edge, so the bubble changes side once the head passes mid-stage.
-  const bubbleSide = speaking && speaking.nx > 0.56 ? "left" : "right";
+  const bubbleWindow = Array.from(bubbleText ?? "")
+    .slice(-52)
+    .join("");
+  const bubbleHalfWidth = Math.min(145, viewportWidth * 0.31);
+  const bubbleX = speaking
+    ? Math.max(
+        bubbleHalfWidth + 8,
+        Math.min(viewportWidth - bubbleHalfWidth - 8, speaking.x),
+      )
+    : 0;
 
   return (
-    <div className={styles.scene} data-scene-status={status}>
-      <div
-        aria-hidden="true"
-        className={styles.backdrop}
-        style={{ backgroundImage: `url(${STAGE_BACKDROP_ASSET})` }}
-      />
+    <div
+      className={styles.scene}
+      data-layout={layout}
+      data-scene-status={status}
+    >
+      <div aria-hidden="true" className={styles.backdrop} />
       <div className={styles.canvasViewport}>
         <canvas
           className={styles.canvas}
@@ -209,6 +314,7 @@ export function ScholarScene({
           ? characters.map((character) => {
               const anchor = anchorById.get(character.id);
               if (!anchor?.visible) return null;
+              if (character.id === speakingId && bubbleWindow) return null;
               return (
                 <span
                   className={styles.namePlate}
@@ -222,16 +328,109 @@ export function ScholarScene({
             })
           : null}
 
-        {status === "ready" && speaking?.visible && bubbleText ? (
+        {status === "ready" && speaking?.visible && bubbleWindow ? (
           <div
             aria-live="polite"
             className={styles.bubble}
-            data-side={bubbleSide}
-            style={{ left: `${speaking.x}px`, top: `${speaking.y}px` }}
+            style={
+              {
+                left: `${bubbleX}px`,
+                top: `${speaking.y}px`,
+                "--bubble-pointer-offset": `${speaking.x - bubbleX}px`,
+              } as CSSProperties
+            }
           >
             <span className={styles.bubbleWho}>{speakingCharacter?.name}</span>
-            {bubbleText}
+            {bubbleWindow}
           </div>
+        ) : null}
+
+        {status === "ready" && stageCameraControls ? (
+          <>
+            <label className={styles.scenePackPicker}>
+              <span>院落</span>
+              <select
+                aria-label="切换院落场景"
+                onChange={(event) => changeScenePack(event.target.value)}
+                value={scenePackId}
+              >
+                {STAGE_SCENE_PACKS.map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div
+              aria-label="场景相机"
+              className={styles.cameraControls}
+              role="group"
+            >
+              <button
+                aria-label="镜头向前移动"
+                className={styles.cameraForward}
+                onClick={() => moveStageCamera("forward")}
+                title="向前移动"
+                type="button"
+              >
+                ↑
+              </button>
+              <button
+                aria-label="镜头向左转"
+                className={styles.cameraTurnLeft}
+                onClick={() => moveStageCamera("turn-left")}
+                title="向左转"
+                type="button"
+              >
+                ↶
+              </button>
+              <button
+                aria-label="镜头向左移动"
+                className={styles.cameraLeft}
+                onClick={() => moveStageCamera("left")}
+                title="向左移动"
+                type="button"
+              >
+                ←
+              </button>
+              <button
+                aria-label="切换鸟瞰"
+                className={styles.cameraOverview}
+                onClick={toggleStageOverview}
+                title="切换鸟瞰"
+                type="button"
+              >
+                ◎
+              </button>
+              <button
+                aria-label="镜头向右移动"
+                className={styles.cameraRight}
+                onClick={() => moveStageCamera("right")}
+                title="向右移动"
+                type="button"
+              >
+                →
+              </button>
+              <button
+                aria-label="镜头向右转"
+                className={styles.cameraTurnRight}
+                onClick={() => moveStageCamera("turn-right")}
+                title="向右转"
+                type="button"
+              >
+                ↷
+              </button>
+              <button
+                aria-label="镜头向后移动"
+                className={styles.cameraBackward}
+                onClick={() => moveStageCamera("backward")}
+                title="向后移动"
+                type="button"
+              >
+                ↓
+              </button>
+            </div>
+          </>
         ) : null}
       </div>
 

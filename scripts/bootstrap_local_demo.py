@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import getpass
 import ipaddress
+import io
 import os
+import re
 import secrets
 import socket
 import stat
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -63,14 +67,37 @@ def write_private(path: Path, content: str, force: bool) -> None:
     fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent, text=True)
     temporary = Path(temporary_name)
     try:
-        os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            if os.name == "nt":
+                _restrict_windows_acl(temporary)
+            else:
+                os.fchmod(handle.fileno(), stat.S_IRUSR | stat.S_IWUSR)
             handle.write(content)
         os.replace(temporary, path)
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        if os.name != "nt":
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def _restrict_windows_acl(path: Path) -> None:
+    identity = subprocess.run(
+        ["whoami", "/user", "/fo", "csv", "/nh"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    rows = list(csv.reader(io.StringIO(identity.stdout)))
+    sid = rows[0][1] if len(rows) == 1 and len(rows[0]) == 2 else ""
+    if not re.fullmatch(r"S-1-(?:\d+-)+\d+", sid):
+        raise RuntimeError("cannot identify the current Windows account")
+    subprocess.run(
+        ["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:F"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
 
 GATEWAY_PORT = 8080
