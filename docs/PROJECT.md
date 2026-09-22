@@ -76,10 +76,9 @@ hold safe codes/types, never response bodies.
 
 ## Verification boundary
 
-Previous partial real runs do not establish complete RAG/classroom acceptance;
-the owner authorizes main delivery and Docker updates, final classroom audit is
-manual, and no usage reset is authorized. The external owner-requested
-HANDOFF.md holds continuation instructions.
+Operational browser acceptance is recorded below; complete RAG/content quality
+still needs the owner's review. Main delivery and Docker updates are authorized;
+no usage reset is authorized.
 
 ## Established classroom behavior
 
@@ -305,11 +304,28 @@ local generated WAV directory. Cloned voices are uploader-owned. Optional
 Gaussian scene packs remain local experiments described by ADR-007, not a
 default runtime dependency.
 
-The frontend suite passes 364 tests with one explicitly skipped historical
-native-audio case. Two fully skipped obsolete backend test files and completed
-planning/blocker documents were removed; current assertions and the four-round
-manual checklist remain. A fresh Docker build started healthy backend,
-frontend and gateway containers; `/`, frontend `/health` and backend
-`/health/ready` returned HTTP 200. The owner is performing the classroom audit.
-No paid Provider request was sent; Mac performance, cloud TTS and formal
-classroom acceptance remain open.
+Two fully skipped obsolete backend tests and completed plans were removed;
+current assertions and the four-round manual checklist remain.
+
+## Operation panel and browser acceptance — September 22, 2026
+
+Controls fill the panel: four equal 119x90px desktop targets, 166x44px at 390px,
+no horizontal overflow and visible keyboard focus. The oversized collapsed
+panel stays absent. Frontend: 364 passed, one skipped; types passed; lint has
+four existing warnings. Frontend Docker rebuild passed; app/frontend/backend
+health returned 200. No backend code changed.
+
+The owner approved ending the previous lesson, retaining its content. One Ready
+three-Agent debate completed Start, Next, Interact/Hide, Check RAG, four rounds/
+12 turns, Conclude and Version 1 Report. Replay and reload preserved the result.
+Nine Preview speeches were reused. Seven new charged calls succeeded with exact
+confirmations: three Embedding queries, three final LLM turns and one Report;
+replay/reopening Report added none. TTS/Voice remain Mock; no student messages/
+votes were sent. Real speech and classroom-scale acceptance remain unverified.
+
+Retained Preview turns 5/6 and 8/9 have identical speech ignoring whitespace;
+list text says “2 Rounds” despite the four-round snapshot. Neither was rewritten.
+Performance and full RAG teaching quality remain open.
+[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) proposes GitHub reuse
+boundaries for text/voice/3D chat, five Provider controls and student Live;
+those new features are not implemented or accepted yet.

@@ -12,3 +12,5 @@ ADRs record durable decisions, not execution history. Status is one of `PROPOSED
   duplicate-free request assembly.
 - [ADR-007](ADR-007-courtyard-splat.md): one world camera for the optional navigable
   courtyard experiment.
+- [ADR-008](ADR-008-agent-chat-live-provider-controls.md): proposed reuse boundaries
+  for single-Agent text/voice/3D chat, Provider controls and student Live.
