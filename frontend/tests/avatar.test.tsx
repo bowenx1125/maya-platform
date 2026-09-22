@@ -234,7 +234,11 @@ describe("M07 avatar editor boundary", () => {
     render(
       <AvatarEditor templates={templates} value={config} onChange={vi.fn()} />,
     );
-    expect(screen.getByText(/share one compatible head asset/i)).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", { name: "Avatar template" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Scholar" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Observer" })).toBeTruthy();
     expect(
       screen.getByRole("img", { name: /Avatar avatar preview/i }),
     ).toBeTruthy();

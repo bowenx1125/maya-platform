@@ -98,9 +98,8 @@ describe("Wave 4 structured Persona student preview", () => {
   it("keeps an uncompiled draft explicit and never invents a default Persona", () => {
     render(<PersonaPreview rawAgentMd="# River Keeper" />);
     expect(screen.getByText("Pending")).toBeTruthy();
-    expect(
-      screen.getByText(/no default Persona or legacy fallback/),
-    ).toBeTruthy();
+    expect(screen.queryByText("Ready")).toBeNull();
+    expect(screen.queryByText("Confirmed")).toBeNull();
     expect(screen.getByText("Source")).toBeTruthy();
   });
 });

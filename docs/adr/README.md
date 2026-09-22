@@ -10,3 +10,5 @@ ADRs record durable decisions, not execution history. Status is one of `PROPOSED
 - [ADR-005](ADR-005-claim-evidence-trace.md): claim-level evidence provenance.
 - [ADR-006](ADR-006-complete-history-prompt.md): complete predecessor transcript and
   duplicate-free request assembly.
+- [ADR-007](ADR-007-courtyard-splat.md): one world camera for the optional navigable
+  courtyard experiment.

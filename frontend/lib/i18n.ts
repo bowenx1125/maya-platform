@@ -1469,6 +1469,7 @@ export const messages = {
  * technical names rather than translatable prose. */
 export const ALLOWED_IDENTICAL_TERMS = [
   "Refresh",
+  "Homeward",
   "Mayaform",
   "AGENT.md",
   "evidence.md",

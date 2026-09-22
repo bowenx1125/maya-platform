@@ -191,7 +191,7 @@ describe("teacher account management", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Reset" }));
     expect(await screen.findByText("swift-otter-42")).toBeTruthy();
-    expect(screen.getByText(/shown once/i)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("swift-otter-42");
   });
 
   it("opens a group's workspace from its own row", async () => {

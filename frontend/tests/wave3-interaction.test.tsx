@@ -228,17 +228,16 @@ describe("M13 anonymous audience form", () => {
     fireEvent.change(screen.getByLabelText("Nickname"), {
       target: { value: "Learner" },
     });
-    fireEvent.change(
-      screen.getByPlaceholderText("Share a thought or question"),
-      { target: { value: "How does the source support this?" } },
-    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Barrage" }), {
+      target: { value: "How does the source support this?" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("Round 2");
     expect(
       (
-        screen.getByPlaceholderText(
-          "Share a thought or question",
-        ) as HTMLTextAreaElement
+        screen.getByRole("textbox", {
+          name: "Barrage",
+        }) as HTMLTextAreaElement
       ).value,
     ).toBe("How does the source support this?");
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -265,17 +264,16 @@ describe("M13 anonymous audience form", () => {
       target: { value: "Learner" },
     });
     for (const message of ["First question", "Another question"]) {
-      fireEvent.change(
-        screen.getByPlaceholderText("Share a thought or question"),
-        { target: { value: message } },
-      );
+      fireEvent.change(screen.getByRole("textbox", { name: "Barrage" }), {
+        target: { value: message },
+      });
       fireEvent.click(screen.getByRole("button", { name: "Send" }));
       await waitFor(() =>
         expect(
           (
-            screen.getByPlaceholderText(
-              "Share a thought or question",
-            ) as HTMLTextAreaElement
+            screen.getByRole("textbox", {
+              name: "Barrage",
+            }) as HTMLTextAreaElement
           ).value,
         ).toBe(""),
       );
@@ -324,9 +322,7 @@ describe("M13 anonymous audience form", () => {
 
     expect(screen.queryByText("Vote")).toBeNull();
     expect(screen.queryByText("Barrage")).toBeNull();
-    expect(
-      screen.getByText(/Enter a nickname to unlock both areas/),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Nickname")).toBeTruthy();
   });
 
   it("renders audience controls in the active locale without bilingual labels", async () => {
@@ -344,7 +340,7 @@ describe("M13 anonymous audience form", () => {
       target: { value: "同学" },
     });
     expect(screen.getByLabelText("昵称")).toBeTruthy();
-    expect(screen.getByText("投票")).toBeTruthy();
+    expect(screen.getAllByText("投票")).toHaveLength(2);
     expect(screen.getByText("弹幕")).toBeTruthy();
     expect(screen.getByRole("button", { name: "投票" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
@@ -373,12 +369,9 @@ describe("M13 anonymous audience form", () => {
     expect((barrageButton as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Submitted")).toBeTruthy();
 
-    fireEvent.change(
-      screen.getByPlaceholderText("Share a thought or question"),
-      {
-        target: { value: "A useful question" },
-      },
-    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Barrage" }), {
+      target: { value: "A useful question" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /^Send$/ }));
     await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(1));
     expect(api.submitBarrage).toHaveBeenCalledWith(

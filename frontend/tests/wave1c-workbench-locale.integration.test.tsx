@@ -232,11 +232,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       name: "Publish",
     });
     expect((publishButton as HTMLButtonElement).disabled).toBe(true);
-    expect(
-      screen.getByText(
-        /Save your local AGENT\.md, avatar, or voice changes before publishing\./,
-      ),
-    ).toBeTruthy();
+    expect(screen.getAllByText("Unsaved local changes")).toHaveLength(2);
     fireEvent.click(publishButton);
     expect(publish).not.toHaveBeenCalled();
   });
@@ -302,7 +298,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Local while uploading" },
     });
-    const uploadInput = screen.getByLabelText("Upload");
+    const uploadInput = screen.getAllByLabelText("Upload")[1];
     fireEvent.change(uploadInput, { target: { files: [firstUploadFile] } });
     await waitFor(() =>
       expect(screen.getByText("connection reset")).toBeTruthy(),

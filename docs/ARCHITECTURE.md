@@ -25,8 +25,8 @@ backend.
 - `agents`: stable Agent identity, mutable draft, immutable published versions.
 - `knowledge`: group Markdown, draft associations, chunking/indexing and immutable
   KnowledgeSnapshots.
-- `avatars` and `voices`: constrained visual configuration and provider-isolated voice
-  lifecycle.
+- `avatars` and `voices`: constrained visual configuration, uploader-owned cloned
+  voices and a provider-isolated voice lifecycle.
 - `debates/setup`: participant/version/snapshot freeze and deterministic rule plan.
 - `debates/generation`: typed retrieval, closed structured turn generation, validation
   and generation fences.
@@ -94,3 +94,11 @@ cost ceiling and stop condition before a real request.
 - Raw barrage nicknames remain in teacher history but never enter Maya insight/report.
 - Demo quick login is private-demo-only and must be disabled before formal classroom or
   public deployment.
+
+## Classroom rendering
+
+The default classroom serves committed scholar GLBs and a static courtyard through the
+Next.js frontend. Audio remains authoritative for active-speaker motion and progressive
+speech display; saved text remains readable when media fails. Optional Gaussian scene
+packs are local experiments outside version control and are not a runtime dependency of
+the default classroom.

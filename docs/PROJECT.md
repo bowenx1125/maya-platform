@@ -177,9 +177,8 @@ governance stay outside this local Demo scope.
 [ARCHITECTURE.md](ARCHITECTURE.md), [contracts](../contracts/) and [ADRs](adr/)
 hold stable design references; preview and Stage Check RAG count unique
 evidence sources; Waiting/Finish-blocked prose, generic 3D error text and
-audio replacement dialogs are gone; older
-broad Wave2 playback tests keep two unresolved native-ended/hidden-index
-assertions; targeted Beta checks are not a full-suite pass.
+audio replacement dialogs are gone. Current automated checks do not replace
+the owner's classroom content and visual audit.
 
 ## Topic and Background
 
@@ -284,8 +283,8 @@ CSRF, course and provider consent/cost rules remain; this supersedes the
 previous teacher deletion prohibition; existing real LLM four-round
 generation, Embedding and Report configuration is preserved; TTS/Voice stay as
 configured; real Provider acceptance is manual; account integration had
-partial frontend 334/1 and backend 1339/24 results; contracts, lint, types,
-Docker health and classroom audit passed or stayed open.
+partial backend 1339/24 results; contracts, lint and types passed. Classroom
+behavior remains a manual acceptance boundary.
 
 ## Accounts and student workspace design
 
@@ -298,30 +297,18 @@ passed and desktop/390px UI was inspected; classroom audit stays open.
 
 ## Classroom display — September 18, 2026
 
-Bubble follows audio; text survives errors; two licensed FBXs became textured
-GLBs; 2-5 figures stand with lowered hands and moving jaws in Chrome/Edge.
-The supplied courtyard replaced chairs/seating; a stray elder accessory is
-hidden in stage clones; ZIPs untracked, no push. Student clone IDs stay
-owner-only; two speakers stand opposite and 3-5 form a ring; beta transcript
-follows audio and falls back to full text on failure; full-stage
-`/local-roundtable` imports a generated WAV directory; Chromium played two
-Qwen3-TTS turns in sequence with 3D speaker motion and audio-paced text;
-desktop/mobile rendered; Mac untested; local Qwen samples are not Maya
-Provider integration; full suites keep known failures; cloud TTS, classroom
-acceptance and voice cloning stay open; no paid Provider request was sent.
-Sep 20: `?splat=1` renders `courtyard-360.spz` through Spark 2.2 with the same
-live camera as the fixed table and figure slots; a same-source far panorama
-fills monocular holes and the displaced depth shell remains only as the
-SPZ-failure fallback; the table is about 2.1 metres wide and splat-mode adults
-normalize to about 1.68 metres; Chromium verified the render, camera controls,
-collision and overview, and targeted tests and typecheck pass; Mac FPS,
-sharpness and teacher acceptance stay open (see ADR-007 for camera path,
-collision bounds and pack rules); Sep 21 restored the earlier
-`courtyard-normalized.sog` as the historical `early-courtyard` comparison
-pack, not a replacement of `courtyard-360.spz`; the external capture workspace
-plans 128 views across four packs of eight positions and four headings,
-validated in pure Python plus a four-view Blender/OptiX smoke render; the
-preview geometry is intentionally primitive, not a production splat; the
-supplied 3DMax and UE5 projects have no FBX/OBJ/GLB export and no matching
-editor is installed; their assets stay an editor-export route, not a browser
-background.
+PR 29 merged at `ed22231`. Two to five licensed scholar figures stand around
+the courtyard table; jaw motion, bubble and Transcript follow audio, while
+saved text remains readable on media failure. `/local-roundtable` accepts a
+local generated WAV directory. Cloned voices are uploader-owned. Optional
+Gaussian scene packs remain local experiments described by ADR-007, not a
+default runtime dependency.
+
+The frontend suite passes 364 tests with one explicitly skipped historical
+native-audio case. Two fully skipped obsolete backend test files and completed
+planning/blocker documents were removed; current assertions and the four-round
+manual checklist remain. A fresh Docker build started healthy backend,
+frontend and gateway containers; `/`, frontend `/health` and backend
+`/health/ready` returned HTTP 200. The owner is performing the classroom audit.
+No paid Provider request was sent; Mac performance, cloud TTS and formal
+classroom acceptance remain open.

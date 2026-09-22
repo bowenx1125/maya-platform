@@ -213,7 +213,7 @@ describe("KnowledgeLibrary integration", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /添加到资料库/ })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: /^添加$/ })).toBeTruthy(),
     );
     expect(screen.queryByRole("button", { name: /^Add$/ })).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
@@ -222,7 +222,7 @@ describe("KnowledgeLibrary integration", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Markdown 内容" }), {
       target: { value: "# Error" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /添加到资料库/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByRole("alert").textContent).toContain("network failure");
   });

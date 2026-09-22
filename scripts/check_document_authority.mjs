@@ -19,8 +19,8 @@ function exactCasePathExists(absolute) {
 
 // docs/PROJECT.md is the single product and progress authority; AGENTS.md is
 // the single working agreement and CLAUDE.md only points at it. The separate
-// status document, worklog and pre-Wave-4 monolith were removed so progress
-// cannot drift across several files again. The repository root deliberately
+// status documents, worklogs, completed plans and task-packet templates stay
+// removed so progress cannot drift across several files again. The repository root deliberately
 // holds only README.md, AGENTS.md and CLAUDE.md; every other document is
 // under docs/.
 const required = [
@@ -31,7 +31,7 @@ const required = [
   "docs/ARCHITECTURE.md",
   "docs/contracts/README.md",
   "docs/adr/README.md",
-  "docs/requirements/original.md",
+  "docs/requirements/README.md",
 ];
 
 const failures = [];
@@ -65,9 +65,6 @@ if (exactCasePathExists(resolve(root, "PROJECT.md"))) {
 if (exactCasePathExists(resolve(root, "docs/ADR/README.md"))) {
   failures.push("case-variant nested path negative self-test failed");
 }
-if (exactCasePathExists(resolve(root, "docs/requirements/Original.md"))) {
-  failures.push("case-variant requirements path negative self-test failed");
-}
 
 const limits = new Map([["docs/PROJECT.md", 20_000]]);
 for (const [relative, maximum] of limits) {
@@ -89,7 +86,6 @@ const activeMarkdown = [
   "AGENTS.md",
   "CLAUDE.md",
   "README.md",
-  "docs/TASK_PACKET_TEMPLATE.md",
   "docs/RELEASE_POLICY.md",
   "docs/contracts/README.md",
   "docs/adr/README.md",

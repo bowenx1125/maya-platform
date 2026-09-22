@@ -46,7 +46,7 @@ describe("Wave 1C presentation locale", () => {
     expect(screen.getByTestId("locale").textContent).toBe("zh");
     expect(document.documentElement.lang).toBe("zh-CN");
     expect(document.cookie).toContain("maya_ui_locale=zh");
-    expect(screen.getByText("学生首页")).toBeTruthy();
+    expect(screen.getByText("首页")).toBeTruthy();
     expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe(
       "unsaved draft",
     );
@@ -55,7 +55,7 @@ describe("Wave 1C presentation locale", () => {
     expect(screen.getByTestId("locale").textContent).toBe("en");
     expect(document.documentElement.lang).toBe("en-US");
     expect(document.cookie).toContain("maya_ui_locale=en");
-    expect(screen.getByText("Student home")).toBeTruthy();
+    expect(screen.getByText("Home")).toBeTruthy();
     expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe(
       "unsaved draft",
     );
@@ -104,10 +104,10 @@ describe("Wave 1C presentation locale", () => {
 
   it("uses the exact civic observer template label in both locales", () => {
     expect(avatarTemplateLabel("maya-civic-observer", "fallback", "en")).toBe(
-      "Maya Civic Observer",
+      "Observer",
     );
     expect(avatarTemplateLabel("maya-civic-observer", "fallback", "zh")).toBe(
-      "Maya 公民观察员",
+      "观察者",
     );
   });
 });

@@ -342,8 +342,10 @@ describe("Wave 1A UI idempotency wiring", () => {
     useSessionMock.mockReturnValue({ api });
 
     render(<AgentWorkbench versionId="version-id" />);
-    await waitFor(() => expect(screen.getByLabelText("Upload")).toBeTruthy());
-    const fileInput = screen.getByLabelText("Upload");
+    await waitFor(() =>
+      expect(screen.getAllByLabelText("Upload")).toHaveLength(2),
+    );
+    const fileInput = screen.getAllByLabelText("Upload")[1];
     fireEvent.change(fileInput, {
       target: { files: [new File(["# one"], "one.md")] },
     });

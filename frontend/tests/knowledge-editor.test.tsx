@@ -35,9 +35,7 @@ describe("MarkdownEditor", () => {
     expect(file.name).toBe("lesson.md");
     expect(file.type).toBe("text/markdown");
     expect(await file.text()).toContain("Shared evidence.");
-    expect(
-      screen.getByText(/not enabled on any Agent draft automatically/),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
   });
 
   it("passes old document CAS values to the copy-on-write callback", async () => {
