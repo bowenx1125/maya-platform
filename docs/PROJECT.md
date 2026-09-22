@@ -303,17 +303,20 @@ Persona UI/tests and duplicate full Prompts removed; provider quality remains un
 
 ## Next atomic task
 
-Next: Chats-only model/effort selection using configured credentials, independent
-of teacher defaults. Catalog, supported-effort mapping, routing, per-model policy/
-pricing and UI are not implemented. Keys stay server-side; introduce public model
-labels/opaque IDs, never imply all models are enabled or silently map unsupported
-effort. Prefer assistant-ui, AI Elements or Agno Agent UI after pinned-code/license/
-dependency review (ADR-008); no new dependency/copy yet. Preserve owner history,
-RAG and deduplication, no third-party cloud history; compatible extras may stay.
+September 23 priority, NOT IMPLEMENTED: remove Chats' 32,000-byte gate, 20-attempt
+stop and similar daily/message limits. Store/send full history, no summary,
+truncation or RAG shortening. Audit embedding/LLM ledger limits together; supplier
+capacity, authentication, ownership and deduplication remain. SiyaH failed because
+retrieved RAG exceeded the byte gate, not because the conversation reached 20 turns.
 
-User requests stopping at the nearest tested atomic boundary when Codex remaining
-usage reaches 3%, with docs, GitHub sync, Docker restart and a continuation prompt;
-no reset credit is authorized. This checkpoint reached 3%; resume with routing work.
+Expose a Chats-only .env model setting; current adapter/price-card identity is
+fixed, so LLM_MODEL alone does nothing. Then implement model/effort UI independent
+of teacher defaults, with provider capabilities/pricing and server-side keys.
+Prefer audited assistant-ui/AI Elements/Agno reuse (ADR-008), no cloud history.
+
+Stop at 3% Codex remaining usage, update docs, sync GitHub, restart and hand off.
+September 23: 0% remaining, requirements only; no functional/.env changes or calls.
+No reset credit is authorized.
 Later real-time face-to-face voice uses Bailian Beijing, after text/UI manual audit.
 TTS configuration stays untouched. Full RAG teaching quality, real speech,
 classroom-scale load and public deployment remain unverified.
