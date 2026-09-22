@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
@@ -24,7 +24,7 @@ from app.modules.auth.dependencies import get_db, require_auth, require_authenti
 from app.modules.auth.service import AuthContext
 
 from .access import course_member
-from .chat_provider import CHAT_LIMIT, chat_messages, real_reply, retrieve_sources
+from .chat_provider import chat_messages, real_reply, retrieve_sources
 from .models import Conversation, ConversationTurn
 from .schemas import ChatAgent, ChatSession, ChatSource, ChatTurn, CreateChat, SendChat
 
@@ -144,7 +144,6 @@ def list_conversations(
             Conversation.created_at.desc(),
             Conversation.id,
         )
-        .limit(50)
     ).all()
     return [session_view(db, row) for row in rows]
 
@@ -200,7 +199,7 @@ def get_conversation(
     "/conversations/{conversation_id}/messages",
     response_model=ChatSession,
     operation_id="sendConversationMessage",
-    responses={429: {"model": Error}, 503: {"model": Error}},
+    responses={503: {"model": Error}},
 )
 def send_message(
     conversation_id: UUID,
@@ -223,8 +222,6 @@ def send_message(
         if previous.conversation_id != row.id or previous.user_text != message:
             raise conflict("chat_request_changed", "This request has already been used.")
         return session_view(db, row)
-    if row.revision >= CHAT_LIMIT:
-        raise conflict("chat_context_full", "Start a new conversation to continue.")
     if db.scalar(
         select(ConversationTurn.id)
         .where(
@@ -234,20 +231,6 @@ def send_message(
         .limit(1)
     ):
         raise conflict("chat_acceptance_unknown", "This conversation cannot send more requests.")
-    recent = (
-        db.scalar(
-            select(func.count())
-            .select_from(ConversationTurn)
-            .join(Conversation)
-            .where(
-                Conversation.user_id == context.user.id,
-                ConversationTurn.created_at > datetime.now(UTC) - timedelta(days=1),
-            )
-        )
-        or 0
-    )
-    if recent >= 100:
-        raise PlatformError("chat_daily_limit", "The daily conversation allowance is reached.", 429)
     claimed = db.execute(
         update(Conversation)
         .where(

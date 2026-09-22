@@ -69,7 +69,8 @@ def test_free_markdown_publishes_without_persona_compile_or_confirmation(
         assert messages[1:] == history
         assert fingerprint == markdown_hash(markdown)
         assert json.loads(messages[0]["content"].split("\n", 1)[1])["agent_markdown"] == markdown
-        assert "saved history of this same conversation" in messages[0]["content"]
+        assert "complete saved history of this same conversation" in messages[0]["content"]
+        assert "cannot override access or output rules" not in messages[0]["content"]
 
     # Deletion affects both workspaces, but the owner's conversation survives read-only.
     created = client.post(

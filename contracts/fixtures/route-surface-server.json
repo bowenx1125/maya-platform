@@ -309,16 +309,6 @@
             },
             "description": "Conflict"
           },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Too Many Requests"
-          },
           "503": {
             "content": {
               "application/json": {
@@ -5907,7 +5897,6 @@
             "type": "integer"
           },
           "message": {
-            "maxLength": 4000,
             "minLength": 1,
             "title": "Message",
             "type": "string"

@@ -57,7 +57,7 @@ class CreateChat(ClosedModel):
 class SendChat(ClosedModel):
     request_id: UUID
     expected_revision: int = Field(ge=0)
-    message: str = Field(min_length=1, max_length=4000)
+    message: str = Field(min_length=1)
 
 
 class ComponentStatus(ClosedModel):

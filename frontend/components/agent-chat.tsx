@@ -264,7 +264,6 @@ export function AgentChat() {
                 id="chat-message"
                 aria-label="Message"
                 value={draft}
-                maxLength={4000}
                 rows={3}
                 disabled={busy || character?.available === false}
                 onChange={(event) => setDraft(event.target.value)}

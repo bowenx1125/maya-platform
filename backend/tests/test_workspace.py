@@ -10,6 +10,7 @@ import pytest
 from app.core.models import CourseMember, ProviderOperation
 from app.modules.debates.models import Debate, PlaybackState
 from app.modules.demo_baseline.service import BASELINE_VERSION_ID, ensure_demo_baseline
+from app.modules.workspace.chat_provider import chat_messages
 from app.modules.workspace.models import (
     Conversation,
     ConversationTurn,
@@ -160,6 +161,66 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
         )
         assert len(operations) == 3
         assert all(operation.state == "succeeded" for operation in operations)
+
+
+def test_real_chat_allows_educational_authorization_word(workspace: Any, monkeypatch: Any) -> None:
+    """SiyaH Agent.md contains 'Authorization'; chat must not treat that as a secret leak."""
+    app, database, client = workspace
+    adapter = _adapter(None)
+    policy = replace(_valid_policy(), endpoint=adapter.config.resolved_endpoint)
+    ProviderRepository(database).save_policy_snapshot(policy)
+    app.state.settings = app.state.settings.model_copy(
+        update={
+            "llm_provider": "dashscope",
+            "llm_provider_policy_hash": policy.policy_hash,
+            "demo_auto_confirm_provider": True,
+        }
+    )
+    monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
+    monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", lambda *a, **kw: [])
+
+    def messages_with_authorization(version: Any, history: Any, sources: Any) -> Any:
+        packed, fingerprint = chat_messages(version, history, sources)
+        packed[0]["content"] = packed[0]["content"] + "\nAuthorization is a lesson topic."
+        return packed, fingerprint
+
+    monkeypatch.setattr("app.modules.workspace.chat.chat_messages", messages_with_authorization)
+    monkeypatch.setattr(LLMPriceCardV1, "reservation_cost", lambda self: Decimal("0.076080"))
+    transport = Mock(
+        return_value=Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": '{"reply":"Authorization is discussed in class."}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 10},
+            },
+        )
+    )
+    monkeypatch.setattr("app.modules.workspace.chat_provider.HttpxLLMTransport.post", transport)
+    _, csrf = login(client)
+    headers = {"X-CSRF-Token": csrf}
+    created = client.post(
+        "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
+    ).json()
+    result = client.post(
+        f"/api/v1/conversations/{created['id']}/messages",
+        headers=headers,
+        json={
+            "request_id": str(uuid4()),
+            "expected_revision": 0,
+            "message": "Explain Authorization",
+        },
+    )
+    assert result.status_code == 200
+    turn = result.json()["turns"][0]
+    assert turn["state"] == "ready"
+    assert turn["safe_error_code"] is None
+    assert transport.call_count == 1
+    assert "Authorization" in transport.call_args.kwargs["json"]["messages"][0]["content"]
 
 
 def test_chat_rejects_stale_revision_csrf_revoked_membership_and_unknown_outcome(
