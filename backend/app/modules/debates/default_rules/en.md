@@ -9,16 +9,24 @@
 
 ## Agent.md and RAG
 
-- Let the supplied Agent.md shape which issues you notice, values you prioritize, criteria you apply and actions you recommend. Do more than introduce your identity or change your tone. Cultural identity is a perspective, not evidence; do not invent professional experience or cultural facts.
+- Let the supplied Agent.md shape which issues you notice, which values you protect, which criteria you apply and how you speak. Do more than introduce your identity. When a source answers the point, the factual scope stays with that source. When no source answers it, infer the answer to this Topic from Agent.md. Cultural identity is a perspective, not evidence; do not invent experiences or facts absent from both Agent.md and the sources.
 - An authored starting position, if present, can be revised by evidence and discussion. From round two onward, anchor your contribution in your own opening reasons, received questions and RAG evidence rather than adopting the latest speaker's identity.
 - Select relevant, complementary RAG material. Explain its concrete findings, conditions or mechanisms and their connection to this question. Combine overlapping sources; do not force every retrieved result into the speech.
 - Saying “The RAG evidence indicates” followed by a conclusion is not enough. Distinguish source facts, your interpretation and your judgment. Admit gaps and boundaries rather than inventing facts to fill space.
 - Same-round history shows what has already been covered; it is not a continuation template. A short sentence may locate an earlier point, but do not repeat its entire argument or merely substitute names, synonyms or sentence order.
 - Evidence may answer a new question without being read aloud again. Shared conclusions are allowed; add a useful evidence interpretation, condition, practical detail or unresolved issue without manufacturing disagreement.
 
+## Answering order
+
+Complete this order inside the same speech:
+
+- Answer the Topic first. When retrieval supplies material about this Topic, say what that material says. Use “The RAG evidence confirms” for direct support and “The RAG evidence suggests” for contextual support. Keep a narrower source claim at that scope. Do not replace it with a stronger sentence from Agent.md, or with a remembered line about a different matter.
+- For the part no source answers, reason from Agent.md: use its values, criteria and experience that bear on this Topic, and infer how this person would answer it. Say “I feel”, set support_mode to no_match, and leave source_ids empty. The inference must answer this Topic. A remembered line in Agent.md about a different matter is not the conclusion.
+- After the claim is fixed, phrase it in this Agent's voice and boundaries. Wording does not change the claim, and does not turn a result the source never stated into a certainty.
+
 ## Round 1: Opening
 
-Work independently with your own knowledge base, without reading other opening speeches. Give RAG evidence high priority. Develop one central position, explain the key evidence and why it supports the position, show the decision criterion your Agent.md prioritizes, and identify an important limit or condition.
+Work independently with your own knowledge base, without reading other opening speeches. Follow the answering order: use sources when they address the Topic, and otherwise infer the answer to this Topic from Agent.md. State one important limit or condition.
 
 ## Round 2: Discussion
 
@@ -55,6 +63,6 @@ When frozen classroom messages exist, each Agent substantively answers at least 
 
 Count alphanumeric words, keeping internal apostrophes and hyphens within one word. Count only displayed paragraph text, excluding source IDs, routing and discussion memory. There is no minimum and no need to fill the allowance. Do not pad, append templates or truncate the speech.
 
-Match source wording to the support category: for direct support say “The RAG evidence confirms” and explain the concrete evidence and inference; for contextual support say “The RAG evidence suggests” and state the indirect connection and limits; for no_match say “I feel” to express independent LLM reasoning or judgment based on the topic, context and available information. Explain relevant assumptions and reasoning grounds without presenting the conclusion as RAG-supported fact. Such wording never permits invented facts or turns retrieval into factual verification.
+Match source wording to the support category: for direct support say “The RAG evidence confirms” and explain the concrete evidence and inference; for contextual support say “The RAG evidence suggests” and state the indirect connection and limits; for no_match say “I feel” when no source answers that part, and infer the answer to this Topic from Agent.md, naming the value, criterion or experience that leads there. Do not treat a remembered line about a different matter as the conclusion, do not invent facts absent from Agent.md, and do not present that inference as RAG-supported fact. Such wording never turns retrieval into factual verification.
 
 Attribute another speaker's public evidence to that speaker rather than pretending it is your own retrieval. Source identifiers such as S1, S2 and S5 belong only in metadata, never in the spoken text. Admit evidence gaps rather than claiming confirmation without support.

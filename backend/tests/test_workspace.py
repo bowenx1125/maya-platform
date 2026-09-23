@@ -1,7 +1,6 @@
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from typing import Any
 from unittest.mock import Mock
 from uuid import UUID, uuid4
@@ -19,7 +18,6 @@ from app.modules.workspace.models import (
 )
 from app.modules.workspace.providers import preferences_settings
 from app.providers.control_repository import ProviderRepository
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -76,6 +74,23 @@ def test_chat_is_private_idempotent_and_preserves_multiturn_history(workspace: A
     assert len(second.json()["turns"]) == 2
     assert client.get(url).json() == second.json()
     assert len(client.get("/api/v1/conversations").json()) == 1
+    assert client.delete(url, headers=headers).status_code == 204
+    assert client.get(url).status_code == 404
+    assert client.get("/api/v1/conversations").json() == []
+    created = client.post(
+        "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
+    ).json()
+    url = f"/api/v1/conversations/{created['id']}"
+    first = client.post(
+        f"{url}/messages",
+        headers=headers,
+        json={
+            "request_id": str(uuid4()),
+            "expected_revision": 0,
+            "message": "What is justice?",
+        },
+    )
+    assert first.status_code == 200
     _, teacher_csrf = login(client)
     assert client.get(url).status_code == 404
     assert client.get("/api/v1/conversations").json() == []
@@ -105,7 +120,6 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
     )
     monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
     monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", lambda *a, **kw: [])
-    monkeypatch.setattr(LLMPriceCardV1, "reservation_cost", lambda self: Decimal("0.076080"))
     transport = Mock(
         return_value=Response(
             200,
@@ -155,6 +169,10 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
         message["content"] for message in transport.call_args.kwargs["json"]["messages"][1:]
     ] == ["Question 0", "A considered reply", "Question 1", "A considered reply", "Question 2"]
     assert "agent_markdown" in transport.call_args.kwargs["json"]["messages"][0]["content"]
+    response_format = transport.call_args.kwargs["json"]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    assert response_format["json_schema"]["schema"]["required"] == ["reply"]
     with database.session() as db:
         operations = list(
             db.scalars(select(ProviderOperation).where(ProviderOperation.scope_id == created["id"]))
@@ -185,7 +203,6 @@ def test_real_chat_allows_educational_authorization_word(workspace: Any, monkeyp
         return packed, fingerprint
 
     monkeypatch.setattr("app.modules.workspace.chat.chat_messages", messages_with_authorization)
-    monkeypatch.setattr(LLMPriceCardV1, "reservation_cost", lambda self: Decimal("0.076080"))
     transport = Mock(
         return_value=Response(
             200,

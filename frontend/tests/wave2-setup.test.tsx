@@ -581,7 +581,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 仅本场中文修改" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(create).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "English" }));

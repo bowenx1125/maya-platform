@@ -22,7 +22,6 @@ from app.modules.reports.real_schema import (
 )
 from app.modules.reports.schemas import ReportSectionOutput as ServiceReportSectionOutput
 from app.providers.llm_adapter import DashScopeLLMConfig
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer, PinnedLLMTokenizer
 from app.providers.llm_transport import (
     LLMAcceptanceUnknown,
@@ -169,18 +168,6 @@ def _tokenizer() -> PinnedLLMTokenizer:
     )
 
 
-def _price_card(**changes: str) -> LLMPriceCardV1:
-    values: dict[str, str] = {
-        "input_price_per_million": "0.5",
-        "cached_input_price_per_million": "0.1",
-        "output_price_per_million": "1.0",
-        "retrieved_at": "2026-08-31T00:00:00Z",
-        "source_content_sha256": "b" * 64,
-    }
-    values.update(changes)
-    return LLMPriceCardV1(**values)
-
-
 def _provider(transport: object) -> RealReportProvider:
     return RealReportProvider(
         config=DashScopeLLMConfig(
@@ -190,7 +177,6 @@ def _provider(transport: object) -> RealReportProvider:
         ),
         transport=cast(Any, transport),
         tokenizer=_tokenizer(),
-        price_card=_price_card(),
     )
 
 
@@ -265,27 +251,21 @@ def test_request_hash_does_not_change_with_authorization_secret() -> None:
         ),
         transport=FakeTransport(_response()),
         tokenizer=_tokenizer(),
-        price_card=_price_card(),
     )
     second = second_provider.build_request(_request())
     assert first.request_hash == second.request_hash
 
 
 @pytest.mark.parametrize(
-    ("tokenizer", "price_card", "expected"),
+    ("tokenizer", "expected"),
     (
-        (None, _price_card(), "report_tokenizer_required"),
-        # Demo V1 removed the supplier-tokenizer authorization gate, so the
-        # conservative counter is accepted.  An exact ID and a well-formed
-        # asset hash stay mandatory because both are persisted with the
-        # request; a tokenizer that cannot name itself is still refused.
+        (None, "report_tokenizer_required"),
         (
             SimpleNamespace(
                 tokenizer_id="   ",
                 asset_hash="b" * 64,
                 count_tokens=lambda value: len(value.split()),
             ),
-            _price_card(),
             "report_tokenizer_invalid",
         ),
         (
@@ -294,16 +274,12 @@ def test_request_hash_does_not_change_with_authorization_secret() -> None:
                 asset_hash="not-a-sha256",
                 count_tokens=lambda value: len(value.split()),
             ),
-            _price_card(),
             "report_tokenizer_invalid",
         ),
-        (_tokenizer(), None, "report_price_card_required"),
-        (_tokenizer(), LLMPriceCardV1(), "llm_price_card_unreviewed"),
     ),
 )
-def test_reviewed_tokenizer_and_price_card_are_required_before_transport(
+def test_named_tokenizer_is_required_before_transport(
     tokenizer: object | None,
-    price_card: LLMPriceCardV1 | None,
     expected: str,
 ) -> None:
     transport = FakeTransport(_response())
@@ -311,26 +287,8 @@ def test_reviewed_tokenizer_and_price_card_are_required_before_transport(
         config=DashScopeLLMConfig(workspace_id="workspace123"),
         transport=transport,
         tokenizer=tokenizer,
-        price_card=price_card,
     )
     with pytest.raises(ReportProviderError, match=expected):
-        provider.execute(_request())
-    assert transport.calls == 0
-
-
-def test_reviewed_price_card_cost_ceiling_is_zero_call() -> None:
-    transport = FakeTransport(_response())
-    provider = RealReportProvider(
-        config=DashScopeLLMConfig(workspace_id="workspace123"),
-        transport=transport,
-        tokenizer=_tokenizer(),
-        price_card=_price_card(
-            input_price_per_million="100",
-            cached_input_price_per_million="100",
-            output_price_per_million="100",
-        ),
-    )
-    with pytest.raises(ReportProviderError, match="llm_request_cost_exceeded"):
         provider.execute(_request())
     assert transport.calls == 0
 
@@ -494,7 +452,6 @@ def test_conservative_tokenizer_backs_a_real_report_request() -> None:
         config=DashScopeLLMConfig(workspace_id="workspace123"),
         transport=FakeTransport(_response()),
         tokenizer=tokenizer,
-        price_card=_price_card(),
     )
     prepared = provider.build_request(_request())
     assert prepared.tokenizer_id == tokenizer.tokenizer_id

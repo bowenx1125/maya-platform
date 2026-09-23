@@ -276,12 +276,9 @@ def plan_embedding_batches(
         )
         for chunk in build.chunks
     )
+    # Snapshot-wide token, request and CNY ceilings were removed. Batch shape
+    # below still keeps each provider call within the supplier's item count.
     total_tokens = sum(item.token_count for item in items)
-    if total_tokens > MAX_TOTAL_TOKENS:
-        raise EmbeddingPlanError(
-            "embedding plan exceeds 120,000 counted tokens",
-            code="embedding_total_tokens_exceeded",
-        )
 
     batches: list[EmbeddingBatchV1] = []
     current: list[EmbeddingItemV1] = []
@@ -325,17 +322,9 @@ def plan_embedding_batches(
             )
         )
 
-    if len(batches) > MAX_REQUESTS:
-        raise EmbeddingPlanError(
-            "embedding plan exceeds 20 requests", code="embedding_request_count_exceeded"
-        )
     price = _decimal(price_cny_per_million, field="embedding price")
-    cap = _decimal(cost_cap_cny, field="embedding cost cap")
+    _decimal(cost_cap_cny, field="embedding cost cap")
     estimated = (Decimal(total_tokens) * price) / Decimal(1_000_000)
-    if estimated > cap:
-        raise EmbeddingPlanError(
-            "embedding plan exceeds its CNY cap", code="embedding_cost_cap_exceeded"
-        )
     return EmbeddingPlanV1(
         build_id=build.build_id,
         build_manifest_hash=build.manifest_hash,

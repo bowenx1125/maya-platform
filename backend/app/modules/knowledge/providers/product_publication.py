@@ -917,7 +917,7 @@ def run_confirmed_real_embedding_publication(
     config: DashScopeEmbeddingConfig | None = None,
     transport: EmbeddingTransport | None = None,
     expected_revision: int | None = None,
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = 120.0,
     price_cny_per_million: Decimal | float | int | str = DEFAULT_EMBEDDING_PRICE_CNY_PER_MILLION,
     cost_cap_cny: Decimal | float | int | str = DEFAULT_EMBEDDING_COST_CAP_CNY,
     idempotency_record_id: str | None = None,

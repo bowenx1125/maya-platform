@@ -28,7 +28,6 @@ from app.modules.knowledge.providers.adapters import (
 from app.providers.control import ProviderPolicySnapshotV1
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMAdapter, DashScopeLLMConfig
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.providers.llm_transport import LLMTransportResponse
 
@@ -174,14 +173,6 @@ json_module = json
 def _llm_adapter(
     policy: ProviderPolicySnapshotV1, transport: _FakeLLMTransport
 ) -> DashScopeLLMAdapter:
-    price_card = LLMPriceCardV1(
-        version="reviewed-test-v1",
-        input_price_per_million="1",
-        cached_input_price_per_million="1",
-        output_price_per_million="1",
-        retrieved_at="2026-09-07T00:00:00+00:00",
-        source_content_sha256="b" * 64,
-    )
     return DashScopeLLMAdapter(
         DashScopeLLMConfig(
             api_key="fixture-key",
@@ -191,7 +182,6 @@ def _llm_adapter(
         ),
         transport,
         tokenizer=ConservativeLLMTokenizer(),
-        price_card=price_card,
     )
 
 

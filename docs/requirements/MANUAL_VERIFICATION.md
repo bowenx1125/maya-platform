@@ -89,7 +89,7 @@ real-provider acceptance.
 - Confirm **Rebirth** preserves the first three rounds and removes only the final
   round, classroom interaction and report results.
 - Confirm **Devocalize / Revocalize** preserve speech and evidence.
-- Confirm **Destroy** removes only the selected Debate and leaves independent Agents
+- Confirm **Delete** removes only the selected Debate and leaves independent Agents
   and knowledge documents intact.
 
 ## Record the boundary

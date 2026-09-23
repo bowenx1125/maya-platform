@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-from app.core.config import Settings
+from app.core.config import DEFAULT_LLM_MODEL, Settings
+from app.providers.factory import llm_provider
+from app.providers.llm_adapter import DashScopeLLMAdapter
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REAL_PROVIDER_POLICY_VARIABLES = (
@@ -50,12 +52,7 @@ def test_compose_forwards_real_core_policy_hashes_to_backend_without_logging(
         REAL_PROVIDER_POLICY_VARIABLES[0]: "a" * 64,
         REAL_PROVIDER_POLICY_VARIABLES[1]: "b" * 64,
         REAL_PROVIDER_POLICY_VARIABLES[2]: "d" * 64,
-        "LLM_PRICE_CARD_VERSION": "fixture-price-card-v1",
-        "LLM_INPUT_PRICE_CNY_PER_MILLION": "1",
-        "LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION": "0.5",
-        "LLM_OUTPUT_PRICE_CNY_PER_MILLION": "2",
-        "LLM_PRICE_CARD_RETRIEVED_AT": "2026-08-31T00:00:00Z",
-        "LLM_PRICE_CARD_SOURCE_CONTENT_SHA256": "c" * 64,
+        "LLM_MODEL": "qwen-future-model",
     }
     for name, value in expected_variables.items():
         expression = environment[name]
@@ -70,6 +67,7 @@ def test_compose_forwards_real_core_policy_hashes_to_backend_without_logging(
     assert settings.provider_policy_hash_for("embedding") == "a" * 64
     assert settings.provider_policy_hash_for("llm") == "b" * 64
     assert settings.provider_policy_hash_for("report") == "d" * 64
+    assert settings.llm_model == "qwen-future-model"
 
 
 def test_env_example_declares_every_compose_provider_variable() -> None:
@@ -90,3 +88,45 @@ def test_env_example_declares_every_compose_provider_variable() -> None:
 def test_compose_policy_hash_slots_are_explicit_empty_defaults(name: str) -> None:
     expression = _backend_environment()[name]
     assert re.fullmatch(rf"\$\{{{name}:-\}}", expression)
+
+
+def test_compose_and_env_example_expose_llm_model() -> None:
+    environment = _backend_environment()
+    assert environment["LLM_MODEL"] == "${LLM_MODEL:-}"
+    names = {
+        line.split("=", 1)[0].strip()
+        for line in (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#") and "=" in line
+    }
+    assert "LLM_MODEL" in names
+
+
+def test_environment_model_reaches_settings_and_factory_without_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    values = {
+        "LLM_PROVIDER": "dashscope",
+        "EMBEDDING_PROVIDER": "mock",
+        "TTS_PROVIDER": "mock",
+        "VOICE_PROVIDER": "mock",
+        "DASHSCOPE_API_KEY": "fixture-key",
+        "DASHSCOPE_WORKSPACE_ID": "fixture-workspace",
+        "DASHSCOPE_REGION": "cn-beijing",
+        "LLM_PROVIDER_POLICY_HASH": "a" * 64,
+        "LLM_MODEL": "qwen-future-model",
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    settings = Settings(maya_env="test")
+    settings.validate_provider_configuration()
+    selected = llm_provider(settings)
+    assert isinstance(selected, DashScopeLLMAdapter)
+    assert settings.llm_model == "qwen-future-model"
+    assert selected.config.model_key == "qwen-future-model"
+
+
+def test_blank_llm_model_uses_the_dated_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODEL", "")
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    settings = Settings(maya_env="test")
+    assert settings.llm_model == DEFAULT_LLM_MODEL

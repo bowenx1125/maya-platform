@@ -360,28 +360,9 @@ def preflight_prompt_budget(
     # is roughly four bytes per token, so a request within the byte allowance is
     # comfortably within the token allowance, and speech is English by rule.
     # A pinned supplier tokenizer reports real tokens and is checked as such.
-    counting_bytes = (
-        budget.tokenizer_id == CONSERVATIVE_TOKENIZER_ID
-        and budget.tokenizer_asset_hash == CONSERVATIVE_TOKENIZER_ASSET_HASH
-    )
-    effective_input_limit = (
-        max(input_token_limit, request_bytes_limit) if counting_bytes else input_token_limit
-    )
-    if input_tokens > effective_input_limit:
-        raise PromptBudgetError(
-            "Prompt input exceeds the pre-send token budget.",
-            code="prompt_input_tokens_exceeded",
-        )
-    if request_bytes > request_bytes_limit:
-        raise PromptBudgetError(
-            "Prompt request exceeds the pre-send byte budget.",
-            code="prompt_request_bytes_exceeded",
-        )
-    if requested_output_tokens > output_token_limit:
-        raise PromptBudgetError(
-            "Requested output exceeds the pre-send token budget.",
-            code="prompt_output_tokens_exceeded",
-        )
+    # Size ceilings used to reject here. The owner removed token, byte and
+    # output quotas: the counted size stays on the budget for the ledger, and
+    # it no longer stops a turn.
     return budget
 
 

@@ -497,7 +497,7 @@ class SnapshotEmbeddingRuntime:
         ),
         cost_cap_cny: Decimal | float | int | str = DEFAULT_EMBEDDING_COST_CAP_CNY,
         provider_operation: str = "embedding_snapshot",
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 120.0,
     ) -> SnapshotEmbeddingRuntime:
         """Build a runtime with the fixed DashScope adapter over injected HTTP."""
 
@@ -1597,7 +1597,7 @@ def run_dashscope_snapshot_embedding(
     current_persona_spec_hash: str | None = None,
     current_build_verifier: Callable[[SnapshotBuildV1], object] | None = None,
     existing_snapshot_ids: Sequence[str] = (),
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = 120.0,
 ) -> SnapshotEmbeddingRunV1:
     """Run with the fixed Beijing DashScope adapter and injected transport."""
 

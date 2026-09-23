@@ -23,7 +23,7 @@ from sqlalchemy import delete, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import configured_llm_model, get_settings
 from app.core.errors import (
     PlatformError,
     conflict,
@@ -89,7 +89,7 @@ from .policy import (
     validate_insight_partition,
 )
 from .real_prompt import ReportWireRequest
-from .real_provider import REAL_REPORT_MODEL, ReportProviderError
+from .real_provider import ReportProviderError
 from .real_schema import (
     ReportBarrage,
     ReportInsight,
@@ -2285,12 +2285,12 @@ def _report_manifest(
         max_cost = float(estimated_cost)
     except (TypeError, ValueError):
         raise ReportProviderError("report_budget_invalid") from None
-    if max_cost <= 0:
+    if max_cost < 0:
         raise ReportProviderError("report_budget_invalid")
     return ExportManifestV1(
         scope_id=context.debate.id,
         provider_operation="llm_maya_report",
-        model_key=REAL_REPORT_MODEL,
+        model_key=configured_llm_model(),
         policy_hash=policy_hash,
         build_manifest_hash=context.manifest.input_hash(),
         persona_spec_hash=_sha256(
@@ -2412,7 +2412,7 @@ def prepare_real_report_operation(
         max_cost_cny=manifest.max_cost_cny,
         policy_hash=manifest.policy_hash,
         export_manifest_hash=manifest.manifest_hash,
-        model_key=REAL_REPORT_MODEL,
+        model_key=configured_llm_model(),
         budget_bucket=LLM_MAYA_REPORT_BUCKET,
     )
     try:
@@ -2681,7 +2681,7 @@ def _process_real_report_revision(
             max_cost_cny=float(operation.max_cost_cny),
             policy_hash=str(operation.policy_hash),
             export_manifest_hash=manifest_hash,
-            model_key=REAL_REPORT_MODEL,
+            model_key=configured_llm_model(),
             budget_bucket=LLM_MAYA_REPORT_BUCKET,
         )
         runtime.repository.assert_hashes_current(request)

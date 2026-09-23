@@ -1,7 +1,7 @@
 {
   "reviewed": true,
   "provider": "dashscope",
-  "model": "qwen3.7-plus-2026-05-26",
+  "model": "qwen3.8-max-2026-09-02",
   "contract_version": "provider_data_call_v1",
   "policy_hash": "REPLACE_WITH_COMPUTED_HASH",
 

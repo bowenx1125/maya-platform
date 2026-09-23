@@ -510,6 +510,35 @@ export class PlatformApi {
     return payload as T;
   }
 
+  private async deleteJson(path: string): Promise<void> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+      },
+    );
+    if (!response.ok) {
+      const raw = await response.text();
+      let payload: unknown;
+      try {
+        payload = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        payload = undefined;
+      }
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+  }
+
   async login(username: string, password: string): Promise<AuthSession> {
     const result = await this.client.POST("/auth/login", {
       body: { username, password },
@@ -596,6 +625,10 @@ export class PlatformApi {
 
   conversation(id: string): Promise<ChatSession> {
     return this.getJson(`conversations/${id}`);
+  }
+
+  deleteConversation(id: string): Promise<void> {
+    return this.deleteJson(`conversations/${id}`);
   }
 
   sendConversation(

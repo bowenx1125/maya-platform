@@ -83,6 +83,7 @@ beforeEach(() => {
     createConversation: vi.fn().mockResolvedValue(conversation),
     sendConversation: vi.fn().mockResolvedValue(completedConversation),
     conversation: vi.fn().mockResolvedValue(conversation),
+    deleteConversation: vi.fn().mockResolvedValue(undefined),
     providerSettings: vi.fn().mockResolvedValue(settings),
     updateProviderSettings: vi
       .fn()

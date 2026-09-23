@@ -46,6 +46,7 @@ class PrewarmScheduler:
         self._owner: str | None = None
         self._task: asyncio.Task[None] | None = None
         self._ended: set[str] = set()
+        self._stalled: set[str] = set()
         self._closed = False
         self._resume_queue: list[str] = []
 
@@ -105,6 +106,16 @@ class PrewarmScheduler:
 
     def _focus(self, debate_id: str | None) -> None:
         self._resume_queue = [item for item in self._resume_queue if item != debate_id]
+        # A debate whose turn already failed does not take the warmer away
+        # from another debate. It waits until that one yields.
+        if (
+            debate_id is not None
+            and debate_id in self._stalled
+            and self._owner not in {None, debate_id}
+        ):
+            if debate_id not in self._resume_queue:
+                self._resume_queue.append(debate_id)
+            return
         if self._owner == debate_id and self._task is not None and not self._task.done():
             return
         self._owner = debate_id
@@ -146,8 +157,14 @@ class PrewarmScheduler:
                     turn_id == target and not ready
                     for turn_id, ready in await asyncio.to_thread(self._plan, owner)
                 ):
+                    # This draft cannot advance. Leave the warmer for whichever
+                    # debate was opened after it, instead of holding the slot.
+                    self._stalled.add(owner)
+                    if self._owner == owner:
+                        self._owner = None
                     LOGGER.info("Pre-warm stopped for %s: turn %s did not advance", owner, target)
                     return
+                self._stalled.discard(owner)
                 # Ownership is re-read here, at the turn boundary, so a debate
                 # the teacher has since opened takes over without this one
                 # losing the turn it just produced.
@@ -167,7 +184,15 @@ class PrewarmScheduler:
             if not self._closed and self._owner is not None and self._owner != debate_id:
                 self._focus(self._owner)
             elif not self._closed and self._resume_queue:
-                self._focus(self._resume_queue.pop(0))
+                nxt = next(
+                    (item for item in self._resume_queue if item not in self._stalled),
+                    None,
+                )
+                if nxt is None:
+                    nxt = self._resume_queue.pop(0)
+                else:
+                    self._resume_queue.remove(nxt)
+                self._focus(nxt)
 
     async def close(self) -> None:
         self._closed = True

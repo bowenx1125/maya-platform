@@ -37,9 +37,11 @@ from .snapshot_build import (
 )
 
 EMBEDDING_PROVIDER_OPERATION = "embedding"
-EMBEDDING_MAX_REQUESTS = 20
-EMBEDDING_MAX_TOTAL_TOKENS = 120_000
-EMBEDDING_MAX_COST_CNY = 0.10
+# Snapshot scope ceilings no longer reject a plan. These sentinels match the
+# chat ledger: each call still records its own token and cost reservation.
+EMBEDDING_MAX_REQUESTS = 2_147_483_647
+EMBEDDING_MAX_TOTAL_TOKENS = 9_223_372_036_854_775_807
+EMBEDDING_MAX_COST_CNY = 1.0e18
 
 
 def _batch_index(logical_item_id: str) -> int:

@@ -43,6 +43,12 @@ const enMessages = {
   deleteAgent: "Delete",
   deleteAgentConfirm:
     "Delete this Agent for teachers and students? Existing chats become read-only. Shared knowledge files stay.",
+  deleteChat: "Delete chat",
+  deleteChatConfirm: "Delete this entire conversation? This cannot be undone.",
+  delete: "Delete",
+  deleteFileConfirm:
+    "Delete {filename} from the Knowledge library? Published Agent snapshots keep the RAG they already captured.",
+  filesHeading: "Files",
   readOnly: "Read-only published snapshot",
   noResults: "Nothing here yet",
   retryConflict: "The draft changed elsewhere. Your local text is still here.",
@@ -389,7 +395,7 @@ const enMessages = {
   teacherCourse: "Course",
   teacherCourseLede:
     "Inspect published Agents, create debates, control classroom playback, and review history. Student drafts cannot be viewed or edited here.",
-  publishedWork: "Published",
+  publishedWork: "Agents",
   currentAgents: "Agents",
   noPublishedAgents: "No published Agents are visible in this course yet.",
   platformVoiceFallback: "Platform voice fallback",
@@ -429,7 +435,7 @@ const enMessages = {
   knowledgePage: "Knowledge",
   knowledgePageTitle: "Knowledge",
   knowledgePageLede:
-    "Files are immutable source records. Hide removes a file from the workspace only; published snapshots are never rewritten.",
+    "Files are immutable source records. Delete removes a file from the library; published snapshots keep the RAG they already captured.",
   knowledgeCreateTitle: "New",
   knowledgeCreateLede:
     "Create a reusable library source. It is not enabled on any Agent draft automatically.",
@@ -465,6 +471,22 @@ const enMessages = {
   hidden: "hidden",
   hideConfirm:
     "Hide {filename} from the group workspace? Published snapshots remain available.",
+  homeWelcomeTitle: "Welcome {name}",
+  homeWelcomeCourse: "You are in {course}.",
+  homeSurfaceChats:
+    "Chats — private one-to-one talks with a published Agent.",
+  homeSurfaceWorkspace:
+    "Workspace — build and publish Agents for your group.",
+  homeSurfaceKnowledge:
+    "Knowledge — the shared Markdown library used when drafting Agents.",
+  homeSurfaceVoice:
+    "Voice — custom voices your group can attach to Agents.",
+  homeSurfaceLive:
+    "Live — join the classroom debate when the teacher opens it.",
+  homePrivacyNote:
+    "A published Agent is visible to the group and the teacher. Chats are visible only to yourself. Voice is visible to the group and the teacher.",
+  homeMembersIntro:
+    "People who share this group workspace.",
   draftSavedNotice: "Draft saved. Revision advanced safely.",
   agentMdUploadedNotice:
     "AGENT.md uploaded and saved as the next draft revision.",
@@ -774,6 +796,12 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   deleteAgent: "删除",
   deleteAgentConfirm:
     "从老师和学生端删除这个智能体？已有聊天保留只读，小组共享知识文件不变。",
+  deleteChat: "删除对话",
+  deleteChatConfirm: "删除整段对话？此操作无法撤销。",
+  delete: "删除",
+  deleteFileConfirm:
+    "从知识库删除 {filename}？已发布智能体快照仍保留当时捕获的 RAG。",
+  filesHeading: "文件",
   readOnly: "已发布快照（只读）",
   noResults: "这里还没有内容",
   retryConflict: "草稿已在其他地方更新，本地文字仍然保留。",
@@ -1096,8 +1124,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teacherCourse: "教师课程",
   teacherCourseLede:
     "查看已发布 Agent，创建辩论、控制课堂播放并查看历史。教师视图不能查看或编辑学生草稿。",
-  publishedWork: "已发布成果",
-  currentAgents: "个当前智能体",
+  publishedWork: "智能体",
+  currentAgents: "智能体",
   noPublishedAgents: "这个课程还没有可见的已发布智能体。",
   platformVoiceFallback: "平台兜底音色",
   customVoiceReady: "自定义音色就绪",
@@ -1130,7 +1158,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   knowledgePage: "知识库",
   knowledgePageTitle: "知识库",
   knowledgePageLede:
-    "文件是不可变来源记录。隐藏只会移出工作区，不会改写已发布快照。",
+    "文件是不可变来源记录。删除会从知识库移出文件；已发布快照仍保留当时捕获的 RAG。",
   knowledgeCreateTitle: "新建",
   knowledgeCreateLede: "创建可复用资料，不会自动启用到任何智能体草稿。",
   knowledgeEditTitle: "编辑",
@@ -1158,6 +1186,16 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   active: "活跃",
   hidden: "已隐藏",
   hideConfirm: "从小组工作区隐藏 {filename}？已发布快照仍然可用。",
+  homeWelcomeTitle: "欢迎，{name}",
+  homeWelcomeCourse: "你在 {course}。",
+  homeSurfaceChats: "Chats — 与已发布智能体的一对一私密对话。",
+  homeSurfaceWorkspace: "Workspace — 为小组创建并发布智能体。",
+  homeSurfaceKnowledge: "Knowledge — 起草智能体时共用的 Markdown 资料库。",
+  homeSurfaceVoice: "Voice — 小组可挂到智能体上的自定义音色。",
+  homeSurfaceLive: "Live — 教师开启课堂辩论时加入旁听。",
+  homePrivacyNote:
+    "已发布的智能体对小组和教师可见。Chats 仅自己可见。Voice 对小组和教师可见。",
+  homeMembersIntro: "共享此小组工作区的成员。",
   draftSavedNotice: "草稿已保存，版本号已安全递增。",
   agentMdUploadedNotice: "AGENT.md 已上传并保存为下一个草稿版本。",
   evidenceUpdatedNotice: "已更新启用的证据集。",

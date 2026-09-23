@@ -192,7 +192,12 @@ export function AppShell({
               ] as const
             ).map(([name, label]) => {
               const action = actions[name];
-              if (!action || action.disabled) return null;
+              // New stays in the sidebar once a page registers it, faded when
+              // it cannot run. Back and Done only appear when that screen
+              // needs them and they are usable.
+              if (!action) return null;
+              if (name !== "new" && action.disabled) return null;
+              const faded = Boolean(action.disabled);
               const content = (
                 <>
                   <WorkspaceIcon name={name} />
@@ -202,18 +207,21 @@ export function AppShell({
               return action.href ? (
                 <Link
                   key={name}
-                  className={styles.link}
+                  className={`${styles.link}${faded ? ` ${styles.disabled}` : ""}`}
                   href={action.href}
                   onClick={action.onClick}
+                  aria-disabled={faded || undefined}
+                  tabIndex={faded ? -1 : undefined}
                 >
                   {content}
                 </Link>
               ) : (
                 <button
                   key={name}
-                  className={`${styles.link} ${styles.action}`}
+                  className={`${styles.link} ${styles.action}${faded ? ` ${styles.disabled}` : ""}`}
                   type={action.form ? "submit" : "button"}
                   form={action.form}
+                  disabled={faded}
                   onClick={action.onClick}
                 >
                   {content}

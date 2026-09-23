@@ -271,7 +271,7 @@ def can_transition_operation(current: OperationState, target: OperationState) ->
         "succeeded": frozenset(),
         "not_sent": frozenset({"prepared"}),
         "acceptance_unknown": frozenset({"accepted", "not_sent", "abandoned", "failed"}),
-        "failed": frozenset({"prepared", "abandoned"}),
+        "failed": frozenset({"prepared", "accepted", "abandoned"}),
         "abandoned": frozenset(),
     }
     return target in allowed[current]
@@ -466,6 +466,10 @@ class InMemoryEmbeddingLedger(ProviderOperationStore, ReservationStore):
     ) -> EmbeddingOperationV1:
         with self._lock:
             current = self.operation(operation_id)
+            if current.state == "failed" and (
+                not response_hash or response_hash != current.staged_response_hash
+            ):
+                raise OperationStateError("failed accept restore requires the stored stage hash")
             result = self.transition(operation_id, expected=current.state, state="accepted")
             self._set_reservation(operation_id, "accepted")
             if response_hash is not None:

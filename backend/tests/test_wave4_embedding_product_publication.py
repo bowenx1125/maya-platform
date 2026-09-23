@@ -44,7 +44,6 @@ from app.modules.knowledge.providers.outbound_guard import (
 )
 from app.modules.knowledge.providers.packing import (
     EmbeddingBatchV1,
-    EmbeddingPlanError,
     plan_embedding_batches,
 )
 from app.modules.knowledge.providers.product_publication import (
@@ -710,7 +709,7 @@ def test_bound_snapshot_multibatch_fails_before_operation_or_provider(
     fixture.database.dispose()
 
 
-def test_endpoint_and_budget_preflight_fail_without_provider_call(tmp_path: Path) -> None:
+def test_endpoint_preflight_fails_and_zero_cost_cap_still_publishes(tmp_path: Path) -> None:
     fixture = _make_fixture(tmp_path)
     build = _build(fixture)
     unsafe_policy = _policy(endpoint="https://evil.example")
@@ -735,21 +734,21 @@ def test_endpoint_and_budget_preflight_fail_without_provider_call(tmp_path: Path
 
     valid_policy = _policy(policy_id="provider-policy-v2")
     valid_manifest, valid_confirmation = _confirm(fixture, build, valid_policy)
-    with pytest.raises(EmbeddingPlanError):
-        run_confirmed_real_embedding_publication(
-            fixture.database,
-            data_root=fixture.data_root,
-            course_id=fixture.course_id,
-            group_id=fixture.group_id,
-            agent_version_id=fixture.agent_version_id,
-            policy=valid_policy,
-            manifest=valid_manifest,
-            confirmation=valid_confirmation,
-            build=build,
-            provider=provider,
-            cost_cap_cny=0,
-        )
-    assert provider.call_count == 0
+    result = run_confirmed_real_embedding_publication(
+        fixture.database,
+        data_root=fixture.data_root,
+        course_id=fixture.course_id,
+        group_id=fixture.group_id,
+        agent_version_id=fixture.agent_version_id,
+        policy=valid_policy,
+        manifest=valid_manifest,
+        confirmation=valid_confirmation,
+        build=build,
+        provider=provider,
+        cost_cap_cny=0,
+    )
+    assert result.status == "succeeded"
+    assert provider.call_count == len(result.plan.batches)
     fixture.database.dispose()
 
 

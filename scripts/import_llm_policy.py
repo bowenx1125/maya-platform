@@ -20,7 +20,6 @@ from typing import Any, Final
 from urllib.parse import urlsplit
 
 REAL_PROVIDER: Final = "dashscope"
-REAL_LLM_MODEL: Final = "qwen3.7-plus-2026-05-26"
 REAL_REGION: Final = "cn-beijing"
 PROVIDER_DATA_CALL_VERSION: Final = "ProviderDataCallV1"
 REAL_SUPPLIER: Final = "Alibaba Cloud Model Studio"
@@ -184,8 +183,13 @@ def _checked_document(document: Mapping[str, object]) -> dict[str, object]:
         raise _fail("policy document fields are incomplete or unsupported")
     if document["reviewed"] is not True:
         raise _fail("policy requires reviewed=true")
-    if document["provider"] != REAL_PROVIDER or document["model"] != REAL_LLM_MODEL:
-        raise _fail("policy resource identity is not the fixed LLM resource")
+    model = document["model"]
+    if (
+        document["provider"] != REAL_PROVIDER
+        or not isinstance(model, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model) is None
+    ):
+        raise _fail("policy resource identity is not a DashScope LLM resource")
     if document["region"] != REAL_REGION:
         raise _fail("policy resource region is not fixed")
     if document["contract_version"] != PROVIDER_DATA_CALL_VERSION:

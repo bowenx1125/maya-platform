@@ -88,7 +88,6 @@ from app.modules.workspace.providers import router as provider_settings_router
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import tts_provider
 from app.providers.llm_adapter import DashScopeLLMConfig
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_recovery import recover_llm_startup
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.providers.policy_store import ensure_reviewed_policies
@@ -103,32 +102,16 @@ def build_report_runtime(
     report_runtime: RealReportRuntime | None = None
     if runtime_settings.report_provider == "dashscope":
         report_policy_hash = runtime_settings.report_policy_hash or ""
-        try:
-            report_price_card = LLMPriceCardV1(
-                version=runtime_settings.llm_price_card_version or "",
-                input_price_per_million=runtime_settings.llm_input_price_cny_per_million or "0",
-                cached_input_price_per_million=(
-                    runtime_settings.llm_cached_input_price_cny_per_million or "0"
-                ),
-                output_price_per_million=runtime_settings.llm_output_price_cny_per_million or "0",
-                retrieved_at=runtime_settings.llm_price_card_retrieved_at or "",
-                source_content_sha256=runtime_settings.llm_price_card_source_content_sha256
-                or "0" * 64,
-            )
-        except Exception:
-            # Runtime validation reports the safe configuration error during
-            # lifespan; keep composition construction side-effect free.
-            report_price_card = LLMPriceCardV1()
         report_runtime = RealReportRuntime(
             provider=RealReportProvider(
                 config=DashScopeLLMConfig(
                     api_key=runtime_settings.dashscope_api_key or "",
                     workspace_id=runtime_settings.dashscope_workspace_id or "unconfigured",
                     region=runtime_settings.dashscope_region or "cn-beijing",
+                    model_key=runtime_settings.llm_model,
                     policy_hash=report_policy_hash,
                 ),
                 tokenizer=ConservativeLLMTokenizer(),
-                price_card=report_price_card,
                 policy_hash=report_policy_hash,
             ),
             repository=ProviderRepository(runtime_database, require_export_confirmation=False),

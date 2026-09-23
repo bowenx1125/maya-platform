@@ -14,8 +14,7 @@
   --green: #2d8a68;
   --red: #b74f5a;
   --shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
-  /* Display face for the sign-in plate only. The product UI stays on the
-     compact Inter scale; see tests/wave1-locale-style.ts for the boundary. */
+  /* Display face for the sign-in plate and workspace section headings. */
   --display-serif:
     "Iowan Old Style", "Songti SC", "Source Han Serif SC", ui-serif, serif;
 }
@@ -772,7 +771,7 @@ details > summary {
   padding: var(--workspace-inset);
   border: 1px solid var(--line);
   border-radius: 22px;
-  background: var(--panel);
+  background: #fdfaf3;
   box-shadow: 0 14px 38px rgba(72, 61, 105, 0.05);
 }
 
@@ -792,7 +791,10 @@ details > summary {
 
 .section-card-header h2 {
   margin: 0 0 7px;
-  font-size: 1.24rem;
+  font-family: var(--display-serif);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .section-card-header p {
@@ -842,6 +844,307 @@ details > summary {
 .snapshot-files {
   display: grid;
   gap: 8px;
+}
+
+.knowledge-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.agent-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.knowledge-tile,
+.agent-tile {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #ebe5df;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.66);
+  justify-items: center;
+  text-align: center;
+}
+
+.agent-tile {
+  align-content: center;
+  min-height: 88px;
+  gap: 10px;
+  padding: 14px 12px;
+}
+
+.agent-tile .agent-pill {
+  justify-self: center;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}
+
+.agent-pill-action {
+  position: relative;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  transition: opacity 160ms ease;
+}
+
+.agent-pill-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agent-pill-action .agent-pill-x {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-pill-action:hover .agent-pill-label,
+.agent-pill-action:focus-visible .agent-pill-label {
+  display: none;
+}
+
+.agent-pill-action:hover .agent-pill-x,
+.agent-pill-action:focus-visible .agent-pill-x {
+  display: inline-flex;
+}
+
+.agent-tile-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  font-size: 1.08rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.knowledge-tile {
+  justify-items: stretch;
+  text-align: left;
+  gap: 6px;
+}
+
+.knowledge-tile .document-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.knowledge-tile .document-main strong {
+  font-size: 0.84rem;
+}
+
+.knowledge-tile .document-main small {
+  font-size: 0.7rem;
+}
+
+.knowledge-tile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.knowledge-tile-foot .status-badge {
+  padding: 3px 8px;
+  font-size: 0.68rem;
+}
+
+.icon-action-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.icon-action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.icon-action:hover:not(:disabled),
+.icon-action:focus-visible {
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.icon-action:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.icon-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-action-danger {
+  color: var(--red);
+}
+
+.icon-action-danger:hover:not(:disabled),
+.icon-action-danger:focus-visible {
+  color: var(--red);
+  background: rgba(183, 79, 90, 0.08);
+}
+
+.mayaform-home {
+  display: grid;
+  gap: 48px;
+  max-width: 560px;
+  padding: 28px 8px 40px;
+}
+
+.mayaform-home-welcome {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 8px 0 0;
+  text-align: center;
+}
+
+.mayaform-home-eyebrow {
+  margin: 0;
+  color: #8a7350;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mayaform-home-welcome h1 {
+  margin: 0;
+  color: #3d3220;
+  font-family: var(--display-serif);
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+}
+
+.mayaform-home-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(220px, 70%);
+  margin: 2px 0 4px;
+}
+
+.mayaform-home-rule span {
+  flex: 1;
+  height: 1px;
+  background: rgba(201, 162, 39, 0.45);
+}
+
+.mayaform-home-rule i {
+  width: 6px;
+  height: 6px;
+  background: rgba(201, 162, 39, 0.7);
+  transform: rotate(45deg);
+}
+
+.mayaform-home-lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.mayaform-home-surfaces {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-width: 34rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.mayaform-home-privacy {
+  margin: 10px 0 0;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.mayaform-home-members {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.mayaform-home-members header {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.mayaform-home-members h2 {
+  margin: 0;
+  color: #3d3220;
+  font-family: var(--display-serif);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.mayaform-home-members header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .agent-tile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .knowledge-tile-grid,
+  .agent-tile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mayaform-home {
+    gap: 36px;
+    padding-inline: 0;
+  }
 }
 
 .list-row,
@@ -2564,3 +2867,4 @@ dd {
     display: none;
   }
 }
+

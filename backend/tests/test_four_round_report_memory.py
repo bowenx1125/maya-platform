@@ -14,7 +14,7 @@ from app.modules.reports.schemas import ReportDiscussionMemory
 from app.modules.reports.service import build_real_report_request
 from app.providers.llm_adapter import DashScopeLLMConfig
 
-from tests.test_next_wave_report_support import _context, _price_card, _Tokenizer
+from tests.test_next_wave_report_support import _context, _Tokenizer
 
 
 def _memory() -> ReportDiscussionMemory:
@@ -40,7 +40,6 @@ def test_discussion_memory_reaches_report_prompt_without_changing_public_speech(
         request,
         config=DashScopeLLMConfig(api_key="fixture", workspace_id="fixture-workspace"),
         tokenizer=_Tokenizer(),
-        price_card=_price_card(),
     )
     assert "not as independent factual evidence" in wire.system_message.content
     assert "A local record cannot establish a universal rule." in wire.user_message.content
@@ -118,6 +117,5 @@ def test_report_keeps_long_rag_evidence_intact_in_actual_provider_input():
         request,
         config=DashScopeLLMConfig(api_key="offline-test", workspace_id="offline-workspace"),
         tokenizer=_Tokenizer(),
-        price_card=_price_card(),
     )
     assert long_evidence in wire.user_message.content

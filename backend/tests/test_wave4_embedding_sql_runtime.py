@@ -38,6 +38,11 @@ from app.modules.knowledge.providers import (
     reservation_request_for_batch,
 )
 from app.modules.knowledge.providers.snapshot_build import SnapshotBuildInputDocument
+from app.modules.knowledge.providers.sql_runtime import (
+    EMBEDDING_MAX_COST_CNY,
+    EMBEDDING_MAX_REQUESTS,
+    EMBEDDING_MAX_TOTAL_TOKENS,
+)
 from app.modules.knowledge.services import document_file_content, renew_idempotency_lease
 from app.providers.control import (
     ExportFieldV1,
@@ -163,9 +168,9 @@ def test_sql_control_adapter_runs_confirmed_fake_embedding_with_durable_budget(
     assert operations and all(operation.state == "succeeded" for operation in operations)
     budget = repository.get_scope_budget(build.build_id)
     assert budget is not None
-    assert budget.max_requests == 20
-    assert budget.max_total_tokens == 120_000
-    assert budget.max_cost_cny == pytest.approx(0.10)
+    assert budget.max_requests == EMBEDDING_MAX_REQUESTS
+    assert budget.max_total_tokens == EMBEDDING_MAX_TOTAL_TOKENS
+    assert budget.max_cost_cny == pytest.approx(EMBEDDING_MAX_COST_CNY)
     database.dispose()
 
 

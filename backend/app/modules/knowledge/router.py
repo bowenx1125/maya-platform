@@ -27,7 +27,9 @@ from app.core.models import (
     AgentVersionDocument,
     FileReference,
     Job,
+    KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeDocumentChunk,
     SnapshotDocument,
     StoredFile,
 )
@@ -774,7 +776,13 @@ def reindex_knowledge_document(
     response_model=KnowledgeDocumentDTO,
     operation_id="hideKnowledgeDocument",
     responses={
-        200: {"model": KnowledgeDocumentDTO, "description": "Workspace state changed to hidden."},
+        200: {
+            "model": KnowledgeDocumentDTO,
+            "description": (
+                "Removed from the group Knowledge library; "
+                "published snapshots stay intact."
+            ),
+        },
         404: {"model": Error, "description": "Document not found."},
         409: {"model": Error, "description": "Document is still enabled by a draft."},
     },
@@ -786,6 +794,15 @@ def hide_knowledge_document(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> KnowledgeDocumentDTO:
+    """Remove a source from the working Knowledge library.
+
+    Published Agent snapshots keep their own frozen RAG copy.  When a snapshot
+    still points at this document id for lineage, the row stays for the FK and
+    only leaves the library (workspace_state=hidden).  When nothing published
+    depends on the row, it is deleted outright.  Either path must never rewrite
+    snapshot bytes or snapshot document rows.
+    """
+
     reject_baseline_document_mutation(str(document_id))
     scoped = visible_student_document(db, context, str(document_id))
     body_hash = parse_json_payload_hash("hideKnowledgeDocument", context, [str(document_id)], {})
@@ -806,10 +823,90 @@ def hide_knowledge_document(
     )
     if enabled is not None:
         abandon_claim(db, record)
-        raise invalid_state("An enabled draft document cannot be hidden.")
-    scoped.document.workspace_state = "hidden"
-    scoped.document.updated_at = _now()
-    result = _document_dto(scoped.document)
+        raise invalid_state("An enabled draft document cannot be deleted.")
+    # Drop draft-only disabled links so a deleted library file cannot linger in
+    # draft selections.  Published and superseded version links stay untouched.
+    draft_ids = list(
+        db.scalars(
+            select(AgentVersion.id).where(
+                AgentVersion.state == "draft",
+                AgentVersion.id.in_(
+                    select(AgentVersionDocument.agent_version_id).where(
+                        AgentVersionDocument.document_id == scoped.document.id
+                    )
+                ),
+            )
+        ).all()
+    )
+    if draft_ids:
+        db.execute(
+            delete(AgentVersionDocument).where(
+                AgentVersionDocument.document_id == scoped.document.id,
+                AgentVersionDocument.agent_version_id.in_(draft_ids),
+            )
+        )
+    snapshot_bound = (
+        db.scalar(
+            select(SnapshotDocument.id)
+            .where(SnapshotDocument.document_id == scoped.document.id)
+            .limit(1)
+        )
+        is not None
+        or db.scalar(
+            select(KnowledgeChunk.id)
+            .where(KnowledgeChunk.document_id == scoped.document.id)
+            .limit(1)
+        )
+        is not None
+        or db.scalar(
+            select(AgentVersionDocument.agent_version_id)
+            .join(AgentVersion, AgentVersion.id == AgentVersionDocument.agent_version_id)
+            .where(
+                AgentVersionDocument.document_id == scoped.document.id,
+                AgentVersion.state.in_(("published", "superseded")),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    if snapshot_bound:
+        # Library removal only.  Snapshot rows keep their lineage FK and their
+        # own frozen file bytes; neither is rewritten here.
+        scoped.document.workspace_state = "hidden"
+        scoped.document.updated_at = _now()
+        result = _document_dto(scoped.document)
+    else:
+        result = _document_dto(scoped.document)
+        result = result.model_copy(update={"workspace_state": "hidden"})
+        stored_file_id = scoped.document.stored_file_id
+        db.execute(
+            delete(KnowledgeDocumentChunk).where(
+                KnowledgeDocumentChunk.document_id == scoped.document.id
+            )
+        )
+        db.execute(
+            delete(AgentVersionDocument).where(
+                AgentVersionDocument.document_id == scoped.document.id
+            )
+        )
+        db.delete(scoped.document)
+        remaining = db.scalar(
+            select(KnowledgeDocument.id)
+            .where(KnowledgeDocument.stored_file_id == stored_file_id)
+            .limit(1)
+        )
+        snapshot_file = db.scalar(
+            select(SnapshotDocument.id)
+            .where(SnapshotDocument.stored_file_id == stored_file_id)
+            .limit(1)
+        )
+        if remaining is None and snapshot_file is None:
+            stored = db.get(StoredFile, stored_file_id)
+            if stored is not None:
+                db.execute(
+                    delete(FileReference).where(FileReference.stored_file_id == stored_file_id)
+                )
+                db.delete(stored)
     finish_idempotency(db, record, 200, result.model_dump(mode="json"))
     saga_checkpoint("hide_knowledge_document.before_final_commit")
     db.commit()

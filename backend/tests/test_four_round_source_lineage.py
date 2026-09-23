@@ -65,11 +65,8 @@ def evidence_origin():
         yield db, current, receipt
 
 
-def test_foreign_evidence_requires_exact_completed_visible_origin(evidence_origin):
+def test_another_agents_knowledge_is_not_readable(evidence_origin):
     db, turn, receipt = evidence_origin
-    assert receipt_scope_is_valid(db, turn, receipt)
-    assert not receipt_scope_is_valid(db, turn, {**receipt, "query_hash": "b" * 64})
-    turn.predecessor_turn_ids_json = "[]"
     assert not receipt_scope_is_valid(db, turn, receipt)
 
 

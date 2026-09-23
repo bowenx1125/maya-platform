@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, cast
 
 import httpx
 import pytest
+from app.core.config import configured_llm_model
 from app.modules.agents.persona import compile_persona_or_raise, persona_spec_hash
 from app.modules.debates.generation import (
     GenerationContext,
@@ -32,11 +32,6 @@ from app.providers.llm_adapter import (
     DashScopeLLMConfig,
     LLMAcceptedCandidateV1,
     LLMAdapterError,
-)
-from app.providers.llm_price_card import (
-    LLMPriceCardV1,
-    actual_cost,
-    reservation_cost,
 )
 from app.providers.llm_privacy import (
     LLMOutboundManifestV1,
@@ -231,7 +226,7 @@ def _response(
 ) -> dict[str, object]:
     return {
         "object": "chat.completion",
-        "model": "qwen3.7-plus-2026-05-26",
+        "model": configured_llm_model(),
         "choices": [
             {
                 "index": 0,
@@ -251,13 +246,6 @@ def _adapter(transport: object, *, identity_tokens: tuple[str, ...] = ()) -> Das
         DashScopeLLMConfig(api_key="fixture-secret", workspace_id="workspace123"),
         transport,  # type: ignore[arg-type]
         tokenizer=PinnedLLMTokenizer("supplier-tokenizer-v1", "a" * 64, lambda value: len(value)),
-        price_card=LLMPriceCardV1(
-            input_price_per_million="0.5",
-            cached_input_price_per_million="0.1",
-            output_price_per_million="1.0",
-            retrieved_at="2026-08-31T00:00:00Z",
-            source_content_sha256="b" * 64,
-        ),
         identity_tokens=identity_tokens,
         outbound_manifest=LLMOutboundManifestV1(),
     )
@@ -282,7 +270,7 @@ def test_adapter_captures_exact_beijing_wire_and_hash_excludes_authorization() -
         "n",
         "response_format",
     }
-    assert body["model"] == "qwen3.7-plus-2026-05-26"
+    assert body["model"] == configured_llm_model()
     assert body["enable_thinking"] is False
     assert body["stream"] is False
     assert body["temperature"] == 0.2
@@ -456,7 +444,7 @@ def test_outbound_boundary_rejects_unknown_fields_without_scanning_prose() -> No
     )
 
 
-def test_unreviewed_tokenizer_manifest_or_price_card_is_zero_call() -> None:
+def test_unnamed_tokenizer_or_missing_manifest_is_zero_call() -> None:
     class Fake:
         calls = 0
 
@@ -478,13 +466,6 @@ def test_unreviewed_tokenizer_manifest_or_price_card_is_zero_call() -> None:
                 "count_tokens": lambda self, value: len(value),
             },
         )(),
-        price_card=LLMPriceCardV1(
-            input_price_per_million="0.5",
-            cached_input_price_per_million="0.1",
-            output_price_per_million="1",
-            retrieved_at="2026-08-31T00:00:00Z",
-            source_content_sha256="b" * 64,
-        ),
         outbound_manifest=LLMOutboundManifestV1(),
     )
     with pytest.raises(LLMAdapterError):
@@ -496,27 +477,9 @@ def test_unreviewed_tokenizer_manifest_or_price_card_is_zero_call() -> None:
         DashScopeLLMConfig(workspace_id="workspace123"),
         fake,
         tokenizer=PinnedLLMTokenizer("fake", "c" * 64, lambda value: len(value)),
-        price_card=LLMPriceCardV1(
-            input_price_per_million="0.5",
-            cached_input_price_per_million="0.1",
-            output_price_per_million="1",
-            retrieved_at="2026-08-31T00:00:00Z",
-            source_content_sha256="b" * 64,
-        ),
     )
     with pytest.raises(LLMAdapterError):
         adapter.execute(_prompt(), outbound_manifest=None)
-    assert fake.calls == 0
-
-    fake = Fake()
-    adapter = DashScopeLLMAdapter(
-        DashScopeLLMConfig(workspace_id="workspace123"),
-        fake,
-        tokenizer=PinnedLLMTokenizer("fake", "c" * 64, lambda value: len(value)),
-        outbound_manifest=LLMOutboundManifestV1(),
-    )
-    with pytest.raises(LLMAdapterError):
-        adapter.execute(_prompt())
     assert fake.calls == 0
 
 
@@ -575,33 +538,6 @@ def test_valid_staged_candidate_can_be_validated_without_network() -> None:
     mapped = adapter.validate_accepted(candidate)
     assert mapped.result.speech == "A transparent policy protects agency."
     assert len(fake.calls) == before
-
-
-def test_price_card_rounds_up_and_reserves_supplier_tolerance() -> None:
-    card = LLMPriceCardV1(
-        input_price_per_million="0.5",
-        cached_input_price_per_million="0.1",
-        output_price_per_million="1.0",
-    )
-    assert card.reservation_cost() == Decimal("0.017510")
-    assert card.actual_cost(
-        prompt_tokens=100, cached_input_tokens=20, completion_tokens=10
-    ) == Decimal("0.000052")
-    assert reservation_cost(
-        input_cap=32_000,
-        output_cap=1_510,
-        input_rate="0.5",
-        cached_input_rate="0.1",
-        output_rate="1",
-    ) == Decimal("0.017510")
-    assert actual_cost(
-        prompt_tokens=100,
-        cached_input_tokens=20,
-        completion_tokens=10,
-        input_rate="0.5",
-        cached_input_rate="0.1",
-        output_rate="1",
-    ) == Decimal("0.000052")
 
 
 def test_http_transport_disables_redirect_and_classifies_connect_vs_read() -> None:

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.core.config import configured_llm_model
 from app.core.db import Database
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
@@ -92,7 +93,7 @@ def _request(
         policy_hash=_hash("policy"),
         export_manifest_hash=_hash("manifest"),
         build_manifest_hash=_hash("build"),
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
     )
 
 
@@ -410,7 +411,7 @@ def test_recovery_input_allows_confirmed_persona_identity_in_canonical_request()
     assert rebuilt.input_hash != recovery_input.input_hash
 
 
-def test_recovery_input_size_limit_counts_utf8_bytes() -> None:
+def test_recovery_input_over_the_old_byte_ceiling_is_kept() -> None:
     _repository, request, stage, recovery_input = _prepare_in_memory()
     document = _recovery_document(recovery_input)
     nested_input = document["input"]
@@ -419,9 +420,11 @@ def test_recovery_input_size_limit_counts_utf8_bytes() -> None:
     encoded = canonical_json_bytes(document).decode("utf-8")
     assert len(encoded.encode("utf-8")) > LLM_RECOVERY_INPUT_BYTES_LIMIT
 
-    with pytest.raises(ProviderControlError) as raised:
-        _recovery_with_document(recovery_input, document)
-    assert raised.value.code == "llm_recovery_input_size_exceeded"
+    rebuilt = _recovery_with_document(recovery_input, document)
+
+    assert len(rebuilt.input_json.encode("utf-8")) > LLM_RECOVERY_INPUT_BYTES_LIMIT
+    assert rebuilt.turn_id == recovery_input.turn_id
+    del request, stage
 
 
 def test_sql_stage_with_recovery_is_atomic_and_loads_exact_bundle(tmp_path: Path) -> None:
@@ -550,31 +553,35 @@ def test_sql_orphan_recovery_input_is_a_partial_bundle_error(tmp_path: Path) -> 
         database.dispose()
 
 
-def test_sqlite_recovery_input_size_check_counts_utf8_bytes(tmp_path: Path) -> None:
+def test_sqlite_recovery_input_over_the_old_byte_ceiling_is_stored(tmp_path: Path) -> None:
     database, _repository, _request_value, stage, recovery_input = _prepare_sql(tmp_path)
     try:
         oversized = "界" * (LLM_RECOVERY_INPUT_BYTES_LIMIT // 3 + 128)
         assert len(oversized.encode("utf-8")) > LLM_RECOVERY_INPUT_BYTES_LIMIT
-        with pytest.raises(IntegrityError):
-            with database.engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO llm_recovery_inputs "
-                        "(operation_id,turn_id,attempt_no,input_version,input_json,input_hash,"
-                        "created_at) "
-                        "VALUES (:operation_id,:turn_id,:attempt_no,:input_version,:input_json,"
-                        ":input_hash,:created_at)"
-                    ),
-                    {
-                        "operation_id": stage.operation_id,
-                        "turn_id": recovery_input.turn_id,
-                        "attempt_no": recovery_input.attempt_no,
-                        "input_version": LLM_RECOVERY_INPUT_VERSION,
-                        "input_json": oversized,
-                        "input_hash": _hash("oversized"),
-                        "created_at": datetime.now(UTC),
-                    },
-                )
+        with database.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO llm_recovery_inputs "
+                    "(operation_id,turn_id,attempt_no,input_version,input_json,input_hash,"
+                    "created_at) "
+                    "VALUES (:operation_id,:turn_id,:attempt_no,:input_version,:input_json,"
+                    ":input_hash,:created_at)"
+                ),
+                {
+                    "operation_id": stage.operation_id,
+                    "turn_id": recovery_input.turn_id,
+                    "attempt_no": recovery_input.attempt_no,
+                    "input_version": LLM_RECOVERY_INPUT_VERSION,
+                    "input_json": oversized,
+                    "input_hash": _hash("oversized"),
+                    "created_at": datetime.now(UTC),
+                },
+            )
+        with database.engine.connect() as connection:
+            stored = connection.execute(
+                text("SELECT length(CAST(input_json AS BLOB)) FROM llm_recovery_inputs")
+            ).scalar_one()
+        assert stored > LLM_RECOVERY_INPUT_BYTES_LIMIT
     finally:
         database.dispose()
 

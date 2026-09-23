@@ -9,6 +9,7 @@ import {
   type UpdateCourseMemberRequest,
 } from "../lib/api";
 import { useT } from "./locale";
+import { IconArrowRight } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { WorkspaceAction } from "./workspace-actions";
 import {
@@ -322,12 +323,14 @@ export function RosterWorkspace() {
                   </span>
                   <div className="button-row">
                     <button
-                      className="inline-button"
+                      className="icon-action"
                       type="button"
                       disabled={busy === group.id}
+                      aria-label={t("enter")}
+                      title={t("enter")}
                       onClick={() => void enterGroup(group, joined)}
                     >
-                      {t("enter")}
+                      <IconArrowRight />
                     </button>
                   </div>
                 </div>

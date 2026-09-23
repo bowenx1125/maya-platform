@@ -598,6 +598,7 @@ export function BetaDebateStage({
     id: string;
     topic: string;
   } | null>(null);
+  const [endRunningBusy, setEndRunningBusy] = useState(false);
   const [providerGate, setProviderGate] = useState<ProviderGateState | null>(
     null,
   );
@@ -734,9 +735,16 @@ export function BetaDebateStage({
     const publish = () => {
       if (stopped || pending) return;
       const state = playbackRef.current;
+      const debateStatus = detailRef.current.status;
       const active =
-        !["stopped", "completed"].includes(state.status) &&
-        (detailRef.current.status === "draft" || controllerReadyRef.current);
+        state.status !== "stopped" &&
+        debateStatus !== "stopped" &&
+        debateStatus !== "failed" &&
+        (debateStatus === "draft" ||
+          state.status === "completed" ||
+          debateStatus === "completed" ||
+          debateStatus === "debate_finished" ||
+          controllerReadyRef.current);
       pending = update(debateId, {
         lease_id,
         active,
@@ -3294,6 +3302,35 @@ export function BetaDebateStage({
     ],
   );
 
+  const endRunningDebate = useCallback(async () => {
+    if (!blockedBy || endRunningBusy) return;
+    if (typeof api.debate !== "function" || typeof api.finishDebate !== "function")
+      return;
+    setEndRunningBusy(true);
+    try {
+      const running = await api.debate(blockedBy.id);
+      await api.finishDebate(
+        blockedBy.id,
+        {
+          expected_control_version: running.playback.control_version,
+          expected_current_turn_id: running.playback.current_turn_id,
+        },
+        { idempotency: createIdempotencyHandle() },
+      );
+      setBlockedBy(null);
+      setControlError(null);
+    } catch (cause) {
+      setControlError(
+        errorText(
+          cause,
+          labels.connectionError ?? "The classroom connection needs attention.",
+        ),
+      );
+    } finally {
+      setEndRunningBusy(false);
+    }
+  }, [api, blockedBy, endRunningBusy, labels.connectionError]);
+
   const participantById = useMemo(
     () =>
       new Map(
@@ -3374,7 +3411,7 @@ export function BetaDebateStage({
     finalBoundary && !detailState.final_input_frozen
       ? "Final"
       : finalBoundary && !playback.next_turn_ready
-        ? "Preparing final…"
+        ? "Preparing"
         : labels.next;
   const canAdvance =
     (playback.status === "playing" ||
@@ -3613,6 +3650,7 @@ export function BetaDebateStage({
         />
       </div>
       <div className={styles.notices}>
+        <h1 className={styles.stageTopic}>{detailState.topic}</h1>
         {providerGate ? (
           <section
             className={styles.providerGateCard}
@@ -3668,16 +3706,52 @@ export function BetaDebateStage({
           </section>
         ) : null}
 
-        {controlError && blockedBy ? (
-          <div className={styles.failureCard}>
-            {blockedBy ? (
-              <>
-                <span className={styles.blockingTopic}>{blockedBy.topic}</span>
-              </>
-            ) : null}
-          </div>
-        ) : null}
       </div>
+      {blockedBy ? (
+        <div
+          className={styles.endPrompt}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="end-running-debate"
+        >
+          <p id="end-running-debate">
+            {outputLanguage === "zh"
+              ? `「${blockedBy.topic}」正在进行。要结束那场辩论吗？`
+              : `“${blockedBy.topic}” is running. End that debate?`}
+          </p>
+          <div className={styles.endPromptActions}>
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={endRunningBusy}
+              onClick={() => {
+                setBlockedBy(null);
+                setControlError(null);
+              }}
+            >
+              {outputLanguage === "zh" ? "取消" : "Cancel"}
+            </button>
+            <button
+              className="primary-action"
+              type="button"
+              disabled={
+                endRunningBusy ||
+                typeof api.finishDebate !== "function" ||
+                typeof api.debate !== "function"
+              }
+              onClick={() => void endRunningDebate()}
+            >
+              {endRunningBusy
+                ? outputLanguage === "zh"
+                  ? "正在结束…"
+                  : "Ending…"
+                : outputLanguage === "zh"
+                  ? "结束"
+                  : "End"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <aside
         ref={transcriptRef}
         id="debate-transcript"

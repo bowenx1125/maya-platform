@@ -20,8 +20,8 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal, Protocol, cast
 
+from app.core.config import configured_llm_model
 from app.providers.control import (
-    FIXED_MODELS,
     REPAIR_FEEDBACK_POLICY_HASH,
     ExportFieldV1,
     ExportManifestV1,
@@ -50,7 +50,6 @@ from app.providers.llm_price_card import (
     LLM_REQUEST_COST_CAP,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
     LLMBudgetCapV1,
-    LLMPriceCardV1,
     debate_budget_cap,
 )
 from app.providers.llm_privacy import LLMOutboundManifestV1, scan_llm_outbound_messages
@@ -80,7 +79,7 @@ from .validator import final_ready_turn
 LLM_DEBATE_OPERATION = "llm_debate_turn"
 LLM_DEBATE_BUCKET = "llm_debate_turn"
 LLM_MAX_ATTEMPTS = 2
-LLM_MODEL_KEY = "qwen3.7-plus-2026-05-26"
+LLM_MODEL_KEY = "qwen3.8-max-2026-09-02"
 LLM_REGION = "cn-beijing"
 LOGGER = logging.getLogger(__name__)
 LLM_CONNECT_TIMEOUT_SECONDS = 15.0
@@ -566,7 +565,7 @@ class LLMTurnRuntime:
             result = ExportManifestV1(
                 scope_id=debate_id,
                 provider_operation=LLM_DEBATE_OPERATION,
-                model_key=FIXED_MODELS[LLM_DEBATE_OPERATION],
+                model_key=configured_llm_model(),
                 policy_hash=policy_hash,
                 build_manifest_hash=build_manifest_hash,
                 persona_spec_hash=prompt.request.persona_spec_hash,
@@ -764,24 +763,6 @@ class LLMTurnRuntime:
         tokenizer = self.tokenizer or getattr(self.adapter, "tokenizer", None)
         if tokenizer is None:
             raise LLMRuntimeError(code="llm_tokenizer_unauthorized")
-        card = cast(
-            LLMPriceCardV1 | None,
-            self.price_card or getattr(self.adapter, "price_card", None),
-        )
-        if card is None:
-            raise LLMRuntimeError(code="llm_price_card_missing")
-        try:
-            rates = (
-                card.input_rate,
-                card.cached_input_rate,
-                card.output_rate,
-            )
-            if any(value <= 0 for value in rates):
-                raise LLMRuntimeError(code="llm_price_card_invalid")
-        except LLMRuntimeError:
-            raise
-        except Exception as exc:
-            raise LLMRuntimeError(code="llm_price_card_invalid") from exc
         if manifest is None and getattr(self.adapter, "outbound_manifest", None) is None:
             raise LLMRuntimeError(code="llm_manifest_missing")
 
@@ -968,7 +949,7 @@ class LLMTurnRuntime:
             "export_manifest_hash": manifest_hash,
             "build_manifest_hash": build_manifest_hash
             or _result_value(request, "build_manifest_hash", default=prompt.request.receipt_hash),
-            "model_key": LLM_MODEL_KEY,
+            "model_key": configured_llm_model(),
             "max_tokens": max_tokens,
             "max_cost_cny": max_cost,
             "budget_bucket": LLM_DEBATE_BUCKET,
@@ -1225,7 +1206,7 @@ class LLMTurnRuntime:
                 "build_manifest_hash",
                 default=prepared.build_manifest_hash or prepared.prompt.request.receipt_hash,
             ),
-            "model_key": _result_value(request, "model_key", default=LLM_MODEL_KEY),
+            "model_key": _result_value(request, "model_key", default=configured_llm_model()),
             "output_json": output_json,
             "output_hash": output_hash,
             "prompt_tokens": _as_int(

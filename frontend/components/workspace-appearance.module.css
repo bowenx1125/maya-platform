@@ -8,8 +8,8 @@
   --ink: #282722;
   --muted: #6b685f;
   --paper: #f6f5f2;
-  --panel: #fff;
-  --surface: #fff;
+  --panel: #fdfaf3;
+  --surface: #fdfaf3;
   --surface-subtle: #f7f6f3;
   --surface-hover: #eeece6;
   --line: #e4e1d9;
@@ -57,7 +57,7 @@
   padding: var(--workspace-inset);
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: var(--surface);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 
@@ -70,9 +70,10 @@
 }
 
 .appearance :global(.section-card-header) h2 {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-family: var(--display-serif);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .appearance
@@ -196,12 +197,23 @@
     :global(.demo-mode-mock),
     :global(.role-pill),
     :global(.current-label),
-    :global(.dirty-label),
-    :global(.agent-pill)
+    :global(.dirty-label)
   ) {
   color: var(--muted);
   background: var(--surface-hover);
   font-weight: 500;
+}
+
+.appearance :global(.agent-pill) {
+  color: var(--green);
+  background: rgba(45, 138, 104, 0.14);
+  font-weight: 640;
+}
+
+.appearance :global(.agent-pill[data-pending="true"]) {
+  color: #8a6a1f;
+  background: var(--gold-soft);
+  font-weight: 640;
 }
 
 .appearance :global(.demo-mode-real),
@@ -333,3 +345,4 @@
     backdrop-filter: none;
   }
 }
+

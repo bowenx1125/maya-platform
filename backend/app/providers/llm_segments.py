@@ -35,10 +35,9 @@ from app.modules.debates.generation.segments import (
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
+    LLM_MODEL_KEY,
     LLM_REQUEST_BYTES_CAP,
     LLM_REQUESTED_OUTPUT_TOKEN_CAP,
-    LLMPriceCardError,
-    LLMPriceCardV1,
 )
 from app.providers.llm_privacy import (
     LLM_ANONYMOUS_BARRAGE_FIELD_CLASS,
@@ -528,8 +527,6 @@ class SegmentRecoveryInputV2:
         ):
             raise LLMAdapterError(code="llm_recovery_input_invalid")
         encoded = self.input_json.encode("utf-8")
-        if len(encoded) > SEGMENT_RECOVERY_INPUT_BYTES_LIMIT:
-            raise LLMAdapterError(code="llm_recovery_input_size_exceeded")
         if hashlib.sha256(encoded).hexdigest() != self.input_hash:
             raise LLMAdapterError(code="llm_recovery_input_hash_mismatch")
         try:
@@ -671,14 +668,12 @@ class SegmentLLMAdapter:
         transport: LLMTransport | None = None,
         *,
         tokenizer: LLMTokenizerPort | object | None = None,
-        price_card: LLMPriceCardV1 | None = None,
         identity_tokens: Sequence[str] = (),
         outbound_manifest: LLMOutboundManifestV1 | None = None,
     ) -> None:
         self.config = config
         self.transport = transport or HttpxLLMTransport()
         self.tokenizer = tokenizer or ConservativeLLMTokenizer()
-        self.price_card = price_card or LLMPriceCardV1()
         self.identity_tokens = tuple(identity_tokens)
         self.outbound_manifest = outbound_manifest
 
@@ -698,11 +693,6 @@ class SegmentLLMAdapter:
             or not tokenizer_asset_hash_valid(asset_hash)
         ):
             raise LLMAdapterError(code="llm_tokenizer_invalid")
-        try:
-            self.price_card.assert_reviewed()
-            self.price_card.reservation_cost()
-        except LLMPriceCardError as exc:
-            raise LLMAdapterError(code=exc.code) from exc
 
     def build_request(
         self,
@@ -790,7 +780,7 @@ class SegmentLLMAdapter:
             properties.pop("discussion_memory", None)
         schema = _wire_schema(schema_value)
         body: dict[str, object] = {
-            "model": getattr(self.config, "model", "qwen3.7-plus-2026-05-26"),
+            "model": getattr(self.config, "model", LLM_MODEL_KEY),
             "messages": [{"role": item.role, "content": item.content} for item in messages],
             "enable_thinking": False,
             "stream": False,
@@ -924,7 +914,7 @@ class SegmentLLMAdapter:
             provider_output=output,
             safe_error_code=code,
             json_pointers=tuple(dict.fromkeys(str(item) for item in pointers))[:12],
-            estimated_cost_cny=self.price_card.reservation_cost(),
+            estimated_cost_cny=Decimal("0"),
             actual_cost_cny=actual_cost,
         )
 

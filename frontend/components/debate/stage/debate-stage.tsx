@@ -3134,7 +3134,7 @@ export function DebateStage({
     finalBoundary && !detailState.final_input_frozen
       ? "Final"
       : finalBoundary && !playback.next_turn_ready
-        ? "Preparing final…"
+        ? "Preparing"
         : labels.next;
   const canAdvance =
     (playback.status === "playing" ||

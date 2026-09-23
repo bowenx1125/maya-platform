@@ -33,18 +33,28 @@
 .history {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 4px;
   max-height: 280px;
   overflow: auto;
 }
-.history button {
+.historyRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border-radius: 10px;
+}
+.historyRow:hover,
+.historyRow:focus-within {
+  background: var(--surface-hover);
+}
+.historySelect {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   min-width: 0;
   min-height: 44px;
-  padding: 12px;
+  padding: 10px 8px 10px 12px;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -53,23 +63,71 @@
   cursor: pointer;
   font-size: 14px;
 }
-.history button span {
+.historySelect span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.history button:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-.history button[aria-current="page"] {
+.historySelect[aria-current="page"] {
   color: var(--accent);
-  background: var(--accent-soft);
 }
-.history small {
-  flex: 0 0 auto;
+.historyMeta {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+.historyDate {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  transition: opacity 160ms ease;
+}
+.historyDelete {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--red);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+.historyRow:hover .historyDate,
+.historyRow:focus-within .historyDate {
+  opacity: 0;
+}
+.historyRow:hover .historyDelete,
+.historyRow:focus-within .historyDelete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.historyDelete:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  opacity: 1;
+  pointer-events: auto;
+}
+.historyDelete:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+@media (hover: none) {
+  .historyDate {
+    display: none;
+  }
+  .historyDelete {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .conversation {
   display: grid;

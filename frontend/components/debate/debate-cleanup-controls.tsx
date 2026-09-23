@@ -66,6 +66,7 @@ export function DebateCleanupControls({
   const active = useRef(false);
   const snapshotVersion = useRef(0);
   const [busy, setBusy] = useState(false);
+  const [removal, setRemoval] = useState<"voice" | "all" | null>(null);
   const [revoice, setRevoice] = useState(
     () => audioRestoreNeeded ?? missingAudioIds(detail).length > 0,
   );
@@ -150,6 +151,7 @@ export function DebateCleanupControls({
     active.current = true;
     snapshotVersion.current += 1;
     setBusy(true);
+    setRemoval(mode);
     try {
       if (!request) {
         const snapshot =
@@ -199,6 +201,7 @@ export function DebateCleanupControls({
     } finally {
       active.current = false;
       setBusy(false);
+      setRemoval(null);
     }
   }
 
@@ -210,11 +213,13 @@ export function DebateCleanupControls({
         disabled={busy}
         onClick={() => void (revoice ? generateAudio() : remove("voice"))}
       >
-        {generatingAudio
-          ? "Revocalize..."
-          : revoice
-            ? "Revocalize"
-            : "Devocalize"}
+        {removal === "voice"
+          ? "Devocalizing"
+          : generatingAudio
+            ? "Revocalize..."
+            : revoice
+              ? "Revocalize"
+              : "Devocalize"}
       </button>
       <button
         className="secondary-action"
@@ -222,9 +227,8 @@ export function DebateCleanupControls({
         disabled={busy}
         onClick={() => void remove("all")}
       >
-        Destroy
+        {removal === "all" ? "Deleting" : "Delete"}
       </button>
-      {busy && !generatingAudio ? <span role="status">Deleting…</span> : null}
     </div>
   );
 }

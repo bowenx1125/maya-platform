@@ -90,7 +90,7 @@ export function TeacherDashboard() {
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
         <SectionCard
-          title={`${t("publishedWork")} ${published.length} ${t("currentAgents")}`}
+          title={`${t("agents")} · ${published.length}`}
           className="published-section"
         >
           <div className="published-grid">
@@ -315,7 +315,12 @@ export function TeacherAgentDetail({
                 }
                 href={`/teacher/agents/${version.agent_id}?snapshot=${version.knowledge_snapshot_id ?? ""}`}
               >
-                <span className="agent-pill">{version.version_label}</span>
+                <span
+                  className="agent-pill"
+                  data-pending={version.state === "draft" ? "true" : "false"}
+                >
+                  {version.version_label}
+                </span>
                 <span>
                   {version.state === "published" ? "Published" : "Previous"}
                 </span>
@@ -335,7 +340,12 @@ function TeacherAgentMarkdown({ version }: { version?: AgentVersion }) {
       className={`${detailStyles.card} ${detailStyles.personaCard}`}
       action={
         version ? (
-          <span className="agent-pill">{version.version_label}</span>
+          <span
+            className="agent-pill"
+            data-pending={version.state === "draft" ? "true" : "false"}
+          >
+            {version.version_label}
+          </span>
         ) : null
       }
     >

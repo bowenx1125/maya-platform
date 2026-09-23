@@ -405,9 +405,9 @@ describe("Wave 1A UI idempotency wiring", () => {
 
     render(<KnowledgeLibrary groupId="group-id" />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Hide" })).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Hide" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "connection reset",

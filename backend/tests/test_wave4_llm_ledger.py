@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.core.config import configured_llm_model
 from app.core.db import Database
 from app.providers.control import (
     EMBEDDING_QUERY_BUCKET,
@@ -64,7 +65,7 @@ def _valid_stage(*, operation_id: str = "missing-operation") -> LLMAcceptedStage
         policy_hash=_hash("policy"),
         export_manifest_hash=_hash("manifest"),
         build_manifest_hash=_hash("build"),
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
         output_json=json.dumps({"ok": True}),
         output_hash=_output_hash({"ok": True}),
         prompt_tokens=4,
@@ -90,7 +91,7 @@ def _request(*, scope_id: str, operation: str, item: str) -> ProviderReservation
         policy_hash=_hash("policy"),
         export_manifest_hash=_hash("manifest"),
         build_manifest_hash=_hash("build"),
-        model_key="qwen3.7-plus-2026-05-26" if operation == "llm_debate_turn" else "",
+        model_key=configured_llm_model() if operation == "llm_debate_turn" else "",
     )
 
 
@@ -122,7 +123,7 @@ def test_legacy_llm_alias_is_read_only_for_new_operation_and_manifest_paths(
     legacy_manifest = ExportManifestV1(
         scope_id="debate",
         provider_operation="llm_debate",
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
         policy_hash=policy.policy_hash,
         build_manifest_hash=_hash("build"),
         persona_spec_hash=_hash("persona"),
@@ -197,7 +198,7 @@ def test_llm_stage_is_immutable_and_required_for_success() -> None:
         policy_hash=request.policy_hash,
         export_manifest_hash=request.export_manifest_hash,
         build_manifest_hash=_hash("build"),
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
         output_json=json.dumps({"ok": True}),
         output_hash=_output_hash({"ok": True}),
         prompt_tokens=4,

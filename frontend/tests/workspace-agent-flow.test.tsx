@@ -217,10 +217,14 @@ describe("Workspace Agent flow", () => {
     link.focus();
     expect(document.activeElement).toBe(link);
     expect(link.getAttribute("href")).toBe("/student/agents/agent-id");
+    expect(screen.getByText("Agents · 1")).toBeTruthy();
+    expect(screen.getByText("V1.0")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Members" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(api.knowledge).not.toHaveBeenCalled();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
+    expect(api.versions).toHaveBeenCalledWith("agent-id");
   });
 
   it("keeps teacher inspection read-only without the removed description", async () => {

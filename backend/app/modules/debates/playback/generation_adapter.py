@@ -20,7 +20,7 @@ from uuid import UUID
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings
+from app.core.config import Settings, configured_llm_model
 from app.core.errors import PlatformError, conflict
 from app.core.models import (
     Agent,
@@ -102,9 +102,7 @@ from app.modules.knowledge.providers.query_manifest import (
 from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
 from app.modules.knowledge.providers.sql_query import (
     REAL_CORE_DEMO_QUERY_MAX_REQUESTS,
-    SQL_QUERY_MAX_COST_CNY,
     SQL_QUERY_MAX_REQUESTS,
-    SQL_QUERY_MAX_TOTAL_TOKENS,
     SqlAlchemyQueryControlAdapter,
     SqlQueryError,
     controlled_query_provider,
@@ -130,11 +128,9 @@ from app.providers.llm import LLMProvider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
-    LLM_MODEL_KEY,
     LLM_REQUEST_COST_CAP,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
-    debate_budget_cap,
-    real_core_demo_budget_cap,
+    LLMBudgetCapV1,
 )
 from app.providers.llm_privacy import LLMOutboundManifestV1
 from app.providers.llm_segments import (
@@ -494,32 +490,14 @@ class SqlTurnPreparer:
                 503,
             )
         try:
-            dual_real = _dual_real(self.settings)
-            # The Debate row has no round_count column: the count lives in the
-            # frozen rule snapshot. Reading the attribute silently fell back to
-            # two, so a four-round debate was budgeted for two and ran out.
-            debate_rounds = _debate_round_count(debate)
-            cap = (
-                real_core_demo_budget_cap(len(participants), round_count=debate_rounds)
-                if dual_real
-                else debate_budget_cap(len(participants), round_count=debate_rounds)
-            )
-            # Only explicit actions extend the cap; previous costs stay allocated.
-            extra_turns = _authorized_extra_turns(db, str(debate.id), len(participants))
-            original_turns = debate_rounds * len(participants)
-            extra_requests = extra_turns * (cap.max_requests // original_turns)
-            ensure_budget = (
-                repository.raise_scope_budget if extra_turns else repository.ensure_scope_budget
-            )
-            ensure_budget(
+            # Request, token and CNY ceilings no longer stop a debate. The
+            # row still exists so each call can record its own reservation.
+            repository.raise_scope_budget(
                 str(debate.id),
                 ProviderScopeBudgetV1(
-                    max_requests=cap.max_requests + extra_requests,
-                    max_total_tokens=cap.max_total_tokens
-                    + extra_turns * (cap.max_total_tokens // original_turns),
-                    max_cost_cny=float(
-                        Decimal(cap.max_cost_cny) * (original_turns + extra_turns) / original_turns
-                    ),
+                    max_requests=2_147_483_647,
+                    max_total_tokens=9_223_372_036_854_775_807,
+                    max_cost_cny=1.0e18,
                     budget_bucket=LLM_DEBATE_TURN_BUCKET,
                 ),
             )
@@ -553,9 +531,9 @@ class SqlTurnPreparer:
             stage_store=publication,
             manifest_store=repository,
             agent_count=len(participants),
-            round_count=debate_rounds,
+            round_count=_debate_round_count(debate),
             defer_publication=True,
-            budget_cap=cap,
+            budget_cap=LLMBudgetCapV1(2_147_483_647, Decimal("1e18")),
         )
         version = db.get(AgentVersion, str(participant_row.agent_version_id))
         agent = db.get(Agent, version.agent_id) if version is not None else None
@@ -611,7 +589,6 @@ class SqlTurnPreparer:
                 self.llm.config,
                 self.llm.transport,
                 tokenizer=self.llm.tokenizer,
-                price_card=self.llm.price_card,
                 identity_tokens=tuple(static_options["identity_tokens"]),  # type: ignore[arg-type]
                 outbound_manifest=outbound_manifest,
             )
@@ -672,7 +649,7 @@ class SqlTurnPreparer:
                     "persona_spec_hash": str(getattr(version, "persona_spec_hash", "")),
                 }
                 build_manifest_hash = digest(logical_build)
-                model_key = str(getattr(segment_adapter.config, "model", LLM_MODEL_KEY))
+                model_key = str(getattr(segment_adapter.config, "model", configured_llm_model()))
                 persona_spec_hash = str(getattr(version, "persona_spec_hash", ""))
                 if len(persona_spec_hash) != 64:
                     persona_spec_hash = digest(persona_payload)
@@ -1036,7 +1013,7 @@ class SqlTurnPreparer:
                 or str(operation_row["policy_hash"]) != frozen_request.policy_hash
                 or str(operation_row["export_manifest_hash"]) != frozen_request.export_manifest_hash
                 or str(operation_row["build_manifest_hash"]) != frozen_request.build_manifest_hash
-                or str(operation_row["model_key"]) != LLM_MODEL_KEY
+                or str(operation_row["model_key"]) != configured_llm_model()
                 or str(operation_row["state"]) not in {"accepted", "succeeded"}
                 or str(operation_row["staged_response_hash"] or "")
                 != str(getattr(stage, "output_hash", ""))
@@ -1610,8 +1587,11 @@ class SqlTurnPreparer:
                 503,
             )
         version = db.get(AgentVersion, str(participant_row.agent_version_id))
-        if version is None or not isinstance(version.persona_spec_hash, str):
-            raise ValueError("the frozen query Persona is unavailable")
+        if version is None or not str(version.agent_md or "").strip():
+            raise ValueError("the frozen query Agent markdown is unavailable")
+        # The outbound identity is the published AGENT.md. A compiled Persona
+        # hash is not required and is not what this query discloses.
+        agent_md_hash = markdown_hash(version.agent_md)
         agent = db.get(Agent, version.agent_id)
         group = db.get(Group, agent.group_id) if agent is not None else None
         if agent is None or group is None:
@@ -1629,7 +1609,7 @@ class SqlTurnPreparer:
                 snapshot_id=snapshot.id,
                 identity=identity,
                 transcript_hash=transcript_hash,
-                persona_spec_hash=version.persona_spec_hash,
+                persona_spec_hash=agent_md_hash,
                 subqueries=tuple((item.query_kind, item.text) for item in subqueries),
                 policy=policy,
             )
@@ -1662,7 +1642,7 @@ class SqlTurnPreparer:
         attempt_no = 1
         if prior_attempts:
             latest = max(prior_attempts, key=lambda operation: operation.attempt_no)
-            if _dual_real(self.settings) and latest.state != "succeeded":
+            if _dual_real(self.settings) and latest.state not in {"succeeded", "not_sent"}:
                 raise PlatformError(
                     "provider_retry_forbidden",
                     "The Real-Core query attempt is terminal; no retry is authorized.",
@@ -1674,25 +1654,15 @@ class SqlTurnPreparer:
                 attempt_no = latest.attempt_no
         try:
             total_tokens = sum(count_tokens(text) for text in query_plan.query_texts)
-            query_request_cap = _query_request_cap(
-                self.settings,
-                debate,
-                participant_count=len(participants),
+            repository.raise_scope_budget(
+                str(debate.id),
+                ProviderScopeBudgetV1(
+                    max_requests=2_147_483_647,
+                    max_total_tokens=9_223_372_036_854_775_807,
+                    max_cost_cny=1.0e18,
+                    budget_bucket=EMBEDDING_QUERY_BUCKET,
+                ),
             )
-            extra_turns = _authorized_extra_turns(db, str(debate.id), len(participants))
-            query_request_cap += extra_turns
-            if extra_turns:
-                # Rebirth/Remake authorize new turns, not retries of charged queries.
-                # Keep the existing token and money caps while adding one batch per turn.
-                repository.raise_scope_budget(
-                    str(debate.id),
-                    ProviderScopeBudgetV1(
-                        max_requests=query_request_cap,
-                        max_total_tokens=SQL_QUERY_MAX_TOTAL_TOKENS,
-                        max_cost_cny=SQL_QUERY_MAX_COST_CNY,
-                        budget_bucket=EMBEDDING_QUERY_BUCKET,
-                    ),
-                )
             pending_control = SqlAlchemyQueryControlAdapter(
                 db,
                 scope_id=str(debate.id),
@@ -1704,7 +1674,9 @@ class SqlTurnPreparer:
                 query_hashes=query_plan.query_hashes,
                 attempt_no=attempt_no,
                 logical_item_id=logical_item_id,
-                max_requests=query_request_cap,
+                max_requests=2_147_483_647,
+                max_total_tokens=9_223_372_036_854_775_807,
+                max_cost_cny=1.0e18,
                 repository=ProviderRepository(db, require_export_confirmation=False),
             )
             pending_control.prepare_disclosure_operation(
@@ -1816,7 +1788,9 @@ class SqlTurnPreparer:
             attempt_no=attempt_no,
             logical_item_id=logical_item_id,
             confirmation_revision=confirmation.confirmation_revision,
-            max_requests=query_request_cap,
+            max_requests=2_147_483_647,
+            max_total_tokens=9_223_372_036_854_775_807,
+            max_cost_cny=1.0e18,
         )
         stage_store = SqlAlchemyEmbeddingStageStore(db)
         controlled_provider = controlled_query_provider(

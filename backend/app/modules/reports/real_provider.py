@@ -31,10 +31,8 @@ from app.modules.reports.schemas import ReportSectionOutput
 from app.providers.llm_adapter import DashScopeLLMConfig
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,
-    LLM_REQUEST_COST_CAP,
+    LLM_MODEL_KEY,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
-    LLMPriceCardError,
-    LLMPriceCardV1,
 )
 from app.providers.llm_transport import (
     HttpxLLMTransport,
@@ -44,7 +42,7 @@ from app.providers.llm_transport import (
     LLMTransportNotSent,
 )
 
-REAL_REPORT_MODEL: Final = "qwen3.7-plus-2026-05-26"
+REAL_REPORT_MODEL: Final = LLM_MODEL_KEY
 REAL_REPORT_REGION: Final = "cn-beijing"
 REAL_REPORT_SCHEMA_NAME: Final = "maya_real_report_sections_v1"
 REAL_REPORT_OUTPUT_TOKEN_CAP: Final = LLM_RESERVED_OUTPUT_TOKEN_CAP
@@ -101,7 +99,9 @@ def _provider_schema_body(prepared: ReportWireRequest) -> dict[str, object]:
         or schema_wrapper.get("schema") != REPORT_SECTION_SCHEMA
     ):
         raise ReportProviderError("report_schema_invalid")
-    if body.get("model") != REAL_REPORT_MODEL or body.get("enable_thinking") is not False:
+    model = body.get("model")
+    thinking = body.get("enable_thinking")
+    if not isinstance(model, str) or not model or thinking is not False:
         raise ReportProviderError("report_resource_invalid")
     return body
 
@@ -111,19 +111,15 @@ def _prepare_provider_request(
     *,
     config: DashScopeLLMConfig,
     tokenizer: object | None,
-    price_card: LLMPriceCardV1 | None,
     policy_hash: str | None,
 ) -> ReportWireRequest:
     if tokenizer is None:
         raise ReportProviderError("report_tokenizer_required")
-    if price_card is None:
-        raise ReportProviderError("report_price_card_required")
     try:
         prepared = build_report_request(
             value,
             config=config,
             tokenizer=tokenizer,
-            price_card=price_card,
             policy_hash=policy_hash,
         )
     except ReportBoundaryError as exc:
@@ -187,7 +183,6 @@ def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
 def _response_sections(
     payload: object,
     *,
-    price_card: LLMPriceCardV1,
     prepared: ReportWireRequest,
 ) -> ReportSectionOutput:
     # Require the fields this parser reads, not an envelope that carries
@@ -199,7 +194,9 @@ def _response_sections(
     # identity, single choice, finish reason and usage caps below are.
     if not isinstance(payload, Mapping) or _EXPECTED_ENVELOPE_FIELDS - set(payload):
         raise ReportProviderError("report_response_shape")
-    if payload.get("object") != "chat.completion" or payload.get("model") != REAL_REPORT_MODEL:
+    if payload.get("object") != "chat.completion" or payload.get("model") != prepared.body.get(
+        "model"
+    ):
         raise ReportProviderError("report_response_resource")
     choices = payload.get("choices")
     if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], Mapping):
@@ -223,17 +220,7 @@ def _response_sections(
     usage_payload = payload.get("usage")
     if not isinstance(usage_payload, Mapping):
         raise ReportProviderError("report_usage_shape")
-    prompt_tokens, cached_tokens, completion_tokens, _total_tokens = _usage(usage_payload)
-    try:
-        actual_cost = price_card.actual_cost(
-            prompt_tokens=prompt_tokens,
-            cached_input_tokens=cached_tokens,
-            completion_tokens=completion_tokens,
-        )
-        if actual_cost > prepared.estimated_cost_cny or actual_cost > LLM_REQUEST_COST_CAP:
-            raise ReportProviderError("report_cost_overrun")
-    except LLMPriceCardError:
-        raise ReportProviderError("report_usage_invalid") from None
+    _usage(usage_payload)
     try:
         value = json.loads(
             content,
@@ -255,7 +242,6 @@ class RealReportProvider:
     config: DashScopeLLMConfig
     transport: LLMTransport | None = None
     tokenizer: object | None = None
-    price_card: LLMPriceCardV1 | None = None
     policy_hash: str | None = None
 
     def __post_init__(self) -> None:
@@ -273,7 +259,6 @@ class RealReportProvider:
             value,
             config=self.config,
             tokenizer=self.tokenizer,
-            price_card=self.price_card,
             policy_hash=self.policy_hash,
         )
 
@@ -309,9 +294,7 @@ class RealReportProvider:
         status, payload = _response_parts(response)
         if status != 200:
             raise ReportProviderError("report_http_rejected")
-        if self.price_card is None:  # pragma: no cover - build_request rejects first
-            raise ReportProviderError("report_price_card_required")
-        return _response_sections(payload, price_card=self.price_card, prepared=prepared)
+        return _response_sections(payload, prepared=prepared)
 
     def execute(
         self, value: ReportRequest | ReportRequestV2 | Mapping[str, object]
@@ -334,7 +317,6 @@ def generate_report_sections(
     config: DashScopeLLMConfig,
     transport: LLMTransport | None = None,
     tokenizer: object | None = None,
-    price_card: LLMPriceCardV1 | None = None,
     policy_hash: str | None = None,
 ) -> ReportSectionOutput:
     """Functional façade for the one-shot provider boundary."""
@@ -343,7 +325,6 @@ def generate_report_sections(
         config=config,
         transport=transport,
         tokenizer=tokenizer,
-        price_card=price_card,
         policy_hash=policy_hash,
     ).execute(value)
 

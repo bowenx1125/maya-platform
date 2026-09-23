@@ -49,6 +49,16 @@ CONTROL_UNBOUNDED_REQUESTS = 2_147_483_647
 CONTROL_UNBOUNDED_TOKENS = 9_223_372_036_854_775_807
 CONTROL_UNBOUNDED_COST_CNY = 1.0e18
 CHAT_PER_CALL_MAX_TOKENS = LLM_INPUT_TOKEN_CAP + LLM_RESERVED_OUTPUT_TOKEN_CAP
+# json_object only requires any JSON value. qwen3.7-plus then sometimes returns
+# a bare array such as [2026] with finish_reason stop, which fails the reply
+# object check and surfaces as chat_response_invalid. A strict schema keeps the
+# same one-field reply rule the prompt already states.
+CHAT_REPLY_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {"reply": {"type": "string"}},
+    "required": ["reply"],
+    "additionalProperties": False,
+}
 
 
 def digest(value: object) -> str:
@@ -221,9 +231,16 @@ def real_reply(
         "messages": messages,
         "stream": False,
         "enable_thinking": False,
-        "response_format": {"type": "json_object"},
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "chat_reply",
+                "strict": True,
+                "schema": CHAT_REPLY_SCHEMA,
+            },
+        },
     }
-    cost = float(selected.price_card.reservation_cost())
+    cost = 0.0
     request_hash = digest(body)
     manifest = ExportManifestV1(
         scope_id=scope_id,
@@ -336,12 +353,6 @@ def real_reply(
             or type(output_tokens) is not int
             or input_tokens < 0
             or output_tokens < 0
-            or float(
-                selected.price_card.actual_cost(
-                    prompt_tokens=input_tokens, completion_tokens=output_tokens
-                )
-            )
-            > cost
         ):
             raise ValueError()
     except (AttributeError, KeyError, IndexError, TypeError, ValueError):

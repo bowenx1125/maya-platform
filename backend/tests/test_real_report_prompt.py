@@ -8,6 +8,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from app.core.config import configured_llm_model
 from app.modules.reports.real_prompt import (
     REPORT_PROMPT_CONTRACT_VERSION,
     REPORT_SYSTEM_PROMPT,
@@ -24,7 +25,6 @@ from app.modules.reports.real_schema import (
 )
 from app.modules.reports.schemas import ReportSectionOutput
 from app.providers.llm_adapter import DashScopeLLMConfig
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_tokenizer import PinnedLLMTokenizer
 from pydantic import ValidationError
 
@@ -106,16 +106,6 @@ def _tokenizer() -> PinnedLLMTokenizer:
     )
 
 
-def _price_card() -> LLMPriceCardV1:
-    return LLMPriceCardV1(
-        input_price_per_million="0.5",
-        cached_input_price_per_million="0.1",
-        output_price_per_million="1.0",
-        retrieved_at="2026-08-31T00:00:00Z",
-        source_content_sha256="b" * 64,
-    )
-
-
 def _config() -> DashScopeLLMConfig:
     return DashScopeLLMConfig(
         api_key="fixture-secret",
@@ -136,7 +126,6 @@ def test_request_is_exact_two_message_canonical_and_hash_excludes_secret() -> No
         _request(),
         config=_config(),
         tokenizer=_tokenizer(),
-        price_card=_price_card(),
     )
     assert request.method == "POST"
     assert request.endpoint.endswith("/compatible-mode/v1/chat/completions")
@@ -161,7 +150,7 @@ def test_request_is_exact_two_message_canonical_and_hash_excludes_secret() -> No
         "n",
         "response_format",
     }
-    assert body["model"] == "qwen3.7-plus-2026-05-26"
+    assert body["model"] == configured_llm_model()
     assert body["enable_thinking"] is False
     assert body["stream"] is False
     assert body["n"] == 1
@@ -172,19 +161,23 @@ def test_request_is_exact_two_message_canonical_and_hash_excludes_secret() -> No
     required = cast(dict[str, object], schema["schema"])["required"]
     assert set(cast(list[str], required)) == set(REPORT_SECTION_FIELDS)
     assert request.budget.input_tokens > 0
-    assert request.estimated_cost_cny == Decimal("0.017510")
+    assert request.estimated_cost_cny == Decimal("0")
 
 
 def test_request_hash_is_stable_when_allowlisted_arrays_are_reordered() -> None:
     first = build_report_request(
-        _request(), config=_config(), tokenizer=_tokenizer(), price_card=_price_card()
+        _request(),
+        config=_config(),
+        tokenizer=_tokenizer(),
     )
     value = _raw_request()
     for field in ("participants", "speeches", "sources", "votes", "insights"):
         items = cast(list[object], value[field])
         items.reverse()
     second = build_report_request(
-        value, config=_config(), tokenizer=_tokenizer(), price_card=_price_card()
+        value,
+        config=_config(),
+        tokenizer=_tokenizer(),
     )
     assert second.request_hash == first.request_hash
     assert second.user_message.content == first.user_message.content

@@ -21,9 +21,6 @@ from app.providers.llm_price_card import (
     LLM_REQUEST_BYTES_CAP,
     LLM_REQUEST_COST_CAP,
     LLM_REQUESTED_OUTPUT_TOKEN_CAP,
-    LLM_RESERVED_OUTPUT_TOKEN_CAP,
-    LLMPriceCardError,
-    LLMPriceCardV1,
 )
 from app.providers.llm_tokenizer import (
     LLMTokenizerError,
@@ -144,7 +141,6 @@ def build_report_request(
     *,
     config: DashScopeLLMConfig,
     tokenizer: object,
-    price_card: LLMPriceCardV1,
     policy_hash: str | None = None,
 ) -> ReportWireRequest:
     """Build the exact report request without performing network I/O."""
@@ -161,20 +157,10 @@ def build_report_request(
         endpoint = config.resolved_endpoint
     except LLMAdapterError:
         raise ReportBoundaryError("report_endpoint_invalid") from None
-    if config.model_key != "qwen3.7-plus-2026-05-26" or config.region != "cn-beijing":
+    if config.region != "cn-beijing" or not config.model_key:
         raise ReportBoundaryError("report_resource_invalid")
     tokenizer_id, tokenizer_asset_hash = _tokenizer_identity(tokenizer)
-    if not isinstance(price_card, LLMPriceCardV1):
-        raise ReportBoundaryError("report_price_card_invalid")
-    try:
-        price_card.assert_reviewed()
-        estimated_cost = price_card.reservation_cost(
-            input_cap=LLM_INPUT_TOKEN_CAP,
-            output_cap=LLM_RESERVED_OUTPUT_TOKEN_CAP,
-            request_cap=REPORT_REQUEST_COST_LIMIT,
-        )
-    except LLMPriceCardError as exc:
-        raise ReportBoundaryError(getattr(exc, "code", "report_price_card_invalid")) from None
+    estimated_cost = Decimal("0")
     resolved_policy_hash = _safe_policy_hash(policy_hash, config)
     user = report.canonical_json()
     system = (
@@ -221,7 +207,7 @@ def build_report_request(
 
     schema = json.loads(_canonical(REPORT_SECTION_SCHEMA))
     body: dict[str, object] = {
-        "model": "qwen3.7-plus-2026-05-26",
+        "model": config.model_key,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -251,7 +237,6 @@ def build_report_request(
         "tokenizer_id": tokenizer_id,
         "tokenizer_asset_hash": tokenizer_asset_hash,
         "policy_hash": resolved_policy_hash,
-        "price_card": price_card.canonical_dict(),
     }
     request_hash = hashlib.sha256(_canonical(hash_input).encode("utf-8")).hexdigest()
     messages = (

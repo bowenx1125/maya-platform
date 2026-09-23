@@ -148,9 +148,9 @@ def test_context_is_independent_then_sequential_with_linked_sources():
     )
     snapshot = build_segment_input(discussion, persona=discussion.participant.persona)
     assert [item.text for item in snapshot.history][-1] == current.speech
-    assert snapshot.history[0].source_ids == ("S1",)
-    assert snapshot.history[1].source_ids == ("S2",)
-    assert snapshot.receipts == (own, other)
+    assert snapshot.history[0].source_ids == ()
+    assert snapshot.history[1].source_ids == ()
+    assert snapshot.receipts == ()
     queries = build_turn_subqueries(discussion)
     assert len(queries) == 1
     assert "First opening" in queries[0].text

@@ -55,12 +55,14 @@ def heartbeat(
         )
         return None
     state = service._state(db, debate)
-    if debate.status != "draft":
+    if debate.status in {"stopped", "failed"} or state.status == "stopped":
+        raise conflict("live_not_active", "This classroom is not broadcasting.")
+    # A finished lesson stays watchable while this page is open. It has no
+    # playback controller, so the epoch check would hide Live.
+    if debate.status != "draft" and state.status != "completed":
         service._check_epoch(
             state, epoch=str(payload.controller_epoch), session_hash=context.session.id_hash
         )
-    if state.status in {"stopped", "completed"}:
-        raise conflict("live_not_active", "This classroom is not broadcasting.")
     now = datetime.now(UTC)
     current = db.get(LivePresence, debate.course_id)
     if current and current.lease_id != lease_id and current.expires_at.replace(tzinfo=UTC) > now:
@@ -102,7 +104,7 @@ def live_status(
     debate = db.get(Debate, presence.debate_id)
     if debate is None or debate.status in {"stopped", "failed"}:
         return None
-    if service._state(db, debate).status in {"stopped", "completed"}:
+    if service._state(db, debate).status == "stopped":
         return None
     return LiveSummary(course_id=course_id, debate_id=UUID(debate.id), topic=debate.topic)
 
@@ -121,7 +123,7 @@ def live_snapshot(
         presence
         and presence.debate_id == debate_id
         and presence.expires_at.replace(tzinfo=UTC) > now
-        and state.status not in {"stopped", "completed"}
+        and state.status != "stopped"
     )
     participants = (
         db.scalars(

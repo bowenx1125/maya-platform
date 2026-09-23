@@ -50,7 +50,7 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 | --------------------------- | --------------------------------------------------------------------------- |
 | **Rebirth**                 | 已完成课堂保留前三轮，清理第四轮及该次课堂/报告结果，回到可继续准备的状态。 |
 | **Devocalize / Revocalize** | 移除或恢复该场音频，保留正文和来源。                                        |
-| **Destroy**                 | 删除目标辩论及相关课堂记录，不删除独立编写的 Agent 和知识库。               |
+| **Delete**                  | 删除目标辩论及相关课堂记录，不删除独立编写的 Agent 和知识库。               |
 
 使用真实服务时，明确恢复、重新生成或重开课堂可能产生新的费用；界面上的授权与费用检查仍有效。
 
@@ -88,7 +88,7 @@ EMBEDDING_PROVIDER=dashscope
 MAYA_REPORT_PROVIDER=dashscope
 ```
 
-首次启用还需要配置本地凭据、区域、价格卡和已审核的 Provider policy，并完成教师披露确认；详见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。仅修改上述选择项或填写 API Key 不足以完成配置。
+首次启用还需要配置本地凭据、区域、`LLM_MODEL` 和已审核的 Provider policy，并完成教师披露确认；详见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。仅修改上述选择项或填写 API Key 不足以完成配置。聊天、辩论和报告共用 `LLM_MODEL`，改这一项即可换模型。
 
 教师首页的 Components 可切换 LLM、Embedding、Report 的 Real/Mock；缺 Key 时弹窗填写，服务器加密保存，不回传 Key。右上角仅一个 **Check**，只检查尚未 Ready 或已更改的能力；真实检测先确认本批最多请求数，失败即停止。改模式仅使该项检查失效，改 Key 使全部检查失效。活跃生成期间禁止切换，网页配置重启后保留。Mock 与真实 Embedding 快照不混用。
 

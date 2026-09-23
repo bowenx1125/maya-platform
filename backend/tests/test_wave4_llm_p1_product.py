@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from app.core.config import configured_llm_model
 from app.core.db import Database
 from app.core.models import Job, StoredFile
 from app.modules.debates.generation import (
@@ -42,7 +43,6 @@ from app.providers.llm_adapter import (
     LLMUsageV1,
     _stage_candidate,
 )
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_privacy import LLMOutboundManifestV1
 from app.providers.llm_tokenizer import PinnedLLMTokenizer
 from app.providers.tts import MockTTSProvider, TTSProviderTimeout
@@ -76,13 +76,6 @@ class _FakeDashScopeAdapter(DashScopeLLMAdapter):
             asset_hash=_hash("pinned-product-test-tokenizer"),
             counter=lambda value: max(1, len(value.split())),
         )
-        price_card = LLMPriceCardV1(
-            input_price_per_million=Decimal("1"),
-            cached_input_price_per_million=Decimal("1"),
-            output_price_per_million=Decimal("1"),
-            retrieved_at="2026-08-31T00:00:00Z",
-            source_content_sha256=_hash("product-price-card"),
-        )
         super().__init__(
             DashScopeLLMConfig(
                 api_key="fake-product-key",
@@ -90,7 +83,6 @@ class _FakeDashScopeAdapter(DashScopeLLMAdapter):
                 policy_hash=_hash("product-policy"),
             ),
             tokenizer=tokenizer,
-            price_card=price_card,
             outbound_manifest=LLMOutboundManifestV1(),
         )
         self._mock = MockLLMProvider()
@@ -147,7 +139,6 @@ class _FakeDashScopeAdapter(DashScopeLLMAdapter):
             http_status=200,
             finish_reason="stop",
             usage=LLMUsageV1(1, 0, 1, 2),
-            price_card=self.price_card,
             provider_output=provider_output,
             actual_cost_cny=Decimal("0"),
         )
@@ -726,7 +717,7 @@ def _atomic_fixture(database: Database) -> tuple[SimpleNamespace, SimpleNamespac
         "build_manifest_hash": build_manifest_hash,
         "repair_policy_hash": None,
         "generation_fence": fence_hash,
-        "model_key": "qwen3.7-plus-2026-05-26",
+        "model_key": configured_llm_model(),
         "debate_id": debate_id,
         "turn_id": turn_id,
         "attempt_no": 1,
@@ -762,7 +753,7 @@ def _atomic_fixture(database: Database) -> tuple[SimpleNamespace, SimpleNamespac
         build_manifest_hash=build_manifest_hash,
         repair_policy_hash=None,
         generation_fence=fence_hash,
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
         output_hash="o" * 64,
         output_json='{"speech":"ok"}',
         repair_policy_version=None,
@@ -820,10 +811,11 @@ def _atomic_fixture(database: Database) -> tuple[SimpleNamespace, SimpleNamespac
         )
         connection.execute(
             text(
-                "INSERT INTO provider_export_manifests VALUES (:manifest,:scope,'llm_debate_turn','qwen3.7-plus-2026-05-26',:policy,:build,:debate,:turn,2,100000,'5',NULL,NULL)"  # noqa: E501
+                "INSERT INTO provider_export_manifests VALUES (:manifest,:scope,'llm_debate_turn',:model,:policy,:build,:debate,:turn,2,100000,'5',NULL,NULL)"  # noqa: E501
             ),
             {
                 "manifest": manifest_hash,
+                "model": configured_llm_model(),
                 "scope": debate_id,
                 "policy": policy_hash,
                 "build": build_manifest_hash,
@@ -938,7 +930,7 @@ def test_recovery_projection_is_closed_and_hash_bound(output_language: str) -> N
             schema_hash="s" * 64,
             tokenizer_id="tokenizer",
             tokenizer_asset_hash="k" * 64,
-            model_key="qwen3.7-plus-2026-05-26",
+            model_key=configured_llm_model(),
         ),
         policy_hash=_hash("policy"),
         manifest_hash=_hash("manifest"),
@@ -975,7 +967,7 @@ def test_recovery_projection_is_closed_and_hash_bound(output_language: str) -> N
         build_manifest_hash=prepared.build_manifest_hash,
         repair_policy_hash=None,
         generation_fence=fence_hash,
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
     )
     recovery = build_llm_recovery_input(prepared, context, stage=stage)
     payload = json.loads(recovery.input_json)

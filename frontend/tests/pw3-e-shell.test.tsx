@@ -137,10 +137,13 @@ describe("PW3-E teacher information architecture", () => {
     ).toBeNull();
     view.rerender(
       <AppShell role="teacher">
+        <WorkspaceAction name="new" onClick={run} disabled />
         <p>Read only</p>
       </AppShell>,
     );
-    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    const fadedNew = nav.getByRole("button", { name: "New" }) as HTMLButtonElement;
+    expect(fadedNew.disabled).toBe(true);
+    expect(fadedNew.className).toContain("disabled");
     expect(nav.queryByRole("link", { name: "Back" })).toBeNull();
   });
 

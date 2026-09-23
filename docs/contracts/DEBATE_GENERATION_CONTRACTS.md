@@ -49,7 +49,8 @@ Status: `FROZEN / REAL EMBEDDING 1024 DELTA`
     before confirming the exact export manifest.
 12. **Are student names, nicknames, audio or identity sent?** No. Voice enrollment is
     a separate TTS Gate using one approved sample and is not an LLM/Embedding input.
-13. **Fixed model versions?** `qwen3.7-plus-2026-05-26`, `text-embedding-v4` at 1024
+13. **Model versions?** Chat, debate and report use `LLM_MODEL`
+    (default `qwen3.8-max-2026-09-02`). Embedding stays `text-embedding-v4` at 1024
     dimensions and `qwen3-tts-vc-2026-01-22`; no `latest` fallback.
 14. **Maximum charge?** CNY 0.15/request and CNY 3.00 per full Debate LLM run; other
     operation caps are the table in ProviderDataCallV1. Embedding additionally limits
@@ -757,7 +758,7 @@ The intended local Demo supplier is Alibaba Cloud Model Studio in the existing
 
 | Operation        | Fixed resource                                        | Mode                                                                    |
 | ---------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
-| Debate LLM       | `qwen3.7-plus-2026-05-26`                             | exact Chat/JSON-Schema wire in `LLM_A_RUNTIME_V1.md`                    |
+| Debate LLM       | `LLM_MODEL`, default `qwen3.8-max-2026-09-02`         | exact Chat/JSON-Schema wire in `LLM_A_RUNTIME_V1.md`                    |
 | Text embedding   | `text-embedding-v4`, dimension `1024`                 | synchronous; max 10 inputs, 8,000 tokens/item and 30,000 tokens/request |
 | Voice-clone TTS  | `qwen3-tts-vc-2026-01-22`                             | HTTP, language `English`                                                |
 | Voice enrollment | `qwen-voice-enrollment` targeting the fixed TTS model | separate TTS Gate only                                                  |
@@ -777,11 +778,9 @@ Official references checked 2026-08-30:
 The checked documentation reports structured output for the fixed Qwen generation
 family, selectable dimensions including 1024 and a ten-input batch limit for
 `text-embedding-v4`,
-and English support for the fixed voice-clone TTS snapshot. Price values are a
-preflight card, not UI content: embedding CNY 0.5/million input tokens and TTS CNY
-0.8/10,000 billed characters were the Beijing list prices at review time. The LLM Gate
-must refresh its price card from the official account/region before the first request;
-if that refresh makes a frozen cap impossible, it stops.
+and English support for the fixed voice-clone TTS snapshot. Embedding and TTS
+list prices are not a call gate. The LLM model is `LLM_MODEL`, not a supplier
+price card.
 
 The exact W4-LLM-A endpoint, body, strict provider-output schema, durable runner,
 teacher confirmation, budget buckets, privacy scanner and atomic publication contract
@@ -885,13 +884,12 @@ exact manifest hash. A changed draft/Persona/source cannot reuse the confirmatio
 publish the build.
 
 Before the first request, chunks are packed deterministically by document order then
-chunk index using a stable greedy algorithm. Each item must be at most 8,000 counted
-tokens; each batch must contain at most 10 items and 30,000 counted tokens. The complete
-plan must fit at most 20 requests and 120,000 total counted tokens. Count, request and
-price-card allowances for the whole plan are reserved atomically; any single or total
-overflow fails with zero network calls. Every planned request, including `not_sent` or
-`acceptance_unknown` attempts, is accounted against the frozen request/cost rules as
-specified below.
+chunk index using a stable greedy algorithm. Each batch contains at most 10 items and
+is packed toward 30,000 counted tokens. On September 23, 2026 the owner removed the
+snapshot ceilings of 20 requests, 120,000 total counted tokens and CNY 0.10. Those
+totals no longer reject a plan or the `embedding_snapshot` scope reservation. Each
+planned request, including `not_sent` or `acceptance_unknown` attempts, is still
+recorded on the ledger.
 
 The durable operation state machine is:
 
@@ -899,12 +897,14 @@ The durable operation state machine is:
 
 with terminal/recovery states `not_sent`, `acceptance_unknown`, `failed`, `abandoned`.
 Every batch binds the build hash, batch index, chunk hashes, attempt, allowance and
-usage record. `not_sent` may retry the same frozen batch within the cap.
-`acceptance_unknown` consumes its request/cost allowance, never retries automatically,
-and retains the non-public build until an operator reconciles a retrievable supplier
-result or marks it `abandoned`. Abandonment creates no AgentVersion/KnowledgeSnapshot;
-future work needs a new build and confirmation. Staged bytes are deleted only after a
-terminal outcome and the existing file-recovery journal has recorded cleanup.
+usage record. `not_sent` may retry the same frozen batch within the cap. An
+`acceptance_unknown` batch that still has a matching staged response is restored and
+is not resent. An `acceptance_unknown` batch with no staged response may be sent
+again on the next attempt, up to three attempts for that build; that retry can charge
+the batch again. Accepted batches are not resent. Abandonment creates no
+AgentVersion/KnowledgeSnapshot; future work needs a new build and confirmation.
+Staged bytes are deleted only after a terminal outcome and the existing file-recovery
+journal has recorded cleanup.
 
 On success, the server verifies response count/order, dimension 1024, finite numeric
 values, fixed model key and every batch/build hash. One local transaction then creates
@@ -929,7 +929,7 @@ scoring.
 
 | Gate operation                |           Request cap | Input/output cap               | Estimated charge cap |
 | ----------------------------- | --------------------: | ------------------------------ | -------------------: |
-| one new real snapshot         | 20 embedding requests | 120,000 input tokens total     |             CNY 0.10 |
+| one new real snapshot         |                 none | 10 items / 30,000 tokens per batch |                 none |
 | W4-LLM-A 2-Agent × 2-round G3 |           8 LLM calls | PromptBudgetV1 per call        |             CNY 1.20 |
 | 5-Agent × 2-round debate      |          20 LLM calls | PromptBudgetV1 per call        |             CNY 3.00 |
 | one real TTS technical Gate   |     2 synthesis calls | 2,400 billed characters total  |             CNY 0.20 |
@@ -977,16 +977,16 @@ reservation and count against the cap unless reconciliation proves `not_sent`.
 
 Startup recovery maps a stranded `reserved` attempt to `not_sent`, because the
 network-permitted `sending` transition never committed. A stranded `sending` attempt
-or an incomplete accepted response becomes `acceptance_unknown`; it is never retried
-automatically. A complete staged accepted response resumes validation/local commit
-without another Provider request. Recovery is idempotent under the unique key and
-generation/build hashes.
+or an incomplete accepted response becomes `acceptance_unknown`. A complete staged
+accepted response resumes validation/local commit without another Provider request.
+Recovery is idempotent under the unique key and generation/build hashes.
 
 Timeouts and broken connections are classified as `not_sent`, `accepted`, or
-`acceptance_unknown`. Only `not_sent` may use the one frozen retry allowed by the
-operation contract. `acceptance_unknown` consumes the call/cost ceiling, stores no
-generated product result and requires reconciliation; it is never automatically
-retried. Supplier error bodies are redacted to stable safe codes.
+`acceptance_unknown`. Debate, chat and report `acceptance_unknown` consumes the
+call/cost ceiling, stores no generated product result and is not automatically
+retried. Snapshot embedding is the exception in the SnapshotBuild section above:
+an unknown batch with no staged response may be sent again, up to three attempts.
+Supplier error bodies are redacted to stable safe codes.
 
 Standing user authorization covers later local/private GitHub implementation and
 bounded billed evidence under these Gates. It does not permit exceeding a cap, changing
@@ -1008,7 +1008,7 @@ The only W4-LLM-A resource is:
 
 - method: `POST`;
 - endpoint: `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`;
-- model: `qwen3.7-plus-2026-05-26`;
+- model: `LLM_MODEL`, default `qwen3.8-max-2026-09-02`;
 - region: `cn-beijing`;
 - response mode: one non-streaming OpenAI-compatible Chat Completion;
 - transport: one injected no-redirect HTTP attempt, connect timeout 5 seconds, total/read
@@ -1020,7 +1020,7 @@ The exact Provider-visible JSON object contains only:
 
 ```json
 {
-  "model": "qwen3.7-plus-2026-05-26",
+  "model": "<LLM_MODEL>",
   "messages": [
     { "role": "system", "content": "<frozen system contract>" },
     { "role": "user", "content": "<canonical PromptRequestV1 JSON>" }
@@ -1239,18 +1239,10 @@ worst-case token buckets are 268,080 for the 8-attempt fixture and 670,200 for t
 20-attempt fixture. A response over 1,510 output tokens is `provider_usage_overrun`,
 never publishes and is not retried.
 
-The immutable price card contains version, model, region, currency `CNY`, input,
-cached-input and output prices per million tokens, retrieval time and official-source
-content hash. All values are non-negative `Decimal` strings. Reservation cost is:
-
-`ceil_6((input_cap * max(input_rate, cached_input_rate) + 1510 * output_rate) / 1_000_000)`
-
-where `ceil_6` rounds toward positive infinity to CNY 0.000001. If the result exceeds
-CNY 0.15, preparation stops at zero calls. Accepted actual cost is
-`ceil_6(((prompt-cached)*input_rate + cached*cached_input_rate + completion*output_rate)/1_000_000)`.
-Missing cached usage means cached=0. Missing/malformed usage, a cost above the reservation
-or any count above the frozen tolerance retains the full reservation and blocks product
-publication.
+Supplier price cards are not loaded and do not block a request. Historical ledger
+columns for price-card version and cost stay in the database and are written as
+zero. Missing or malformed usage, or a count above the frozen token tolerance,
+still blocks product publication.
 
 An accepted/unknown attempt never releases unused worst-case allocation; its actual cost
 is an audit value only. A proven not-sent attempt releases atomically before another

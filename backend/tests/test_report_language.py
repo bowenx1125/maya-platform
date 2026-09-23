@@ -9,7 +9,7 @@ from app.modules.reports.service import (
 )
 from app.providers.llm_adapter import DashScopeLLMConfig
 
-from tests.test_next_wave_report_support import _context, _price_card, _Tokenizer
+from tests.test_next_wave_report_support import _context, _Tokenizer
 
 
 def test_chinese_report_language_is_frozen_in_prompt_and_rendered_headings():
@@ -21,7 +21,6 @@ def test_chinese_report_language_is_frozen_in_prompt_and_rendered_headings():
         request,
         config=DashScopeLLMConfig(api_key="fixture", workspace_id="fixture-workspace"),
         tokenizer=_Tokenizer(),
-        price_card=_price_card(),
     )
     assert "六个JSON字段的正文全部使用中文" in wire.system_message.content
     assert "English prose only" not in wire.system_message.content

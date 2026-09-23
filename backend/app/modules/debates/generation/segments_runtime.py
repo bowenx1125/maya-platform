@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
+from app.core.config import configured_llm_model
 from app.providers.control import LLMAcceptedStageV1, ProviderReservationRequestV1
 from app.providers.llm_adapter import LLMAdapterError
 from app.providers.llm_price_card import (
@@ -300,7 +301,7 @@ class SegmentLLMRuntime:
             policy_hash=policy_hash,
             export_manifest_hash=manifest_hash,
             build_manifest_hash=build_manifest_hash,
-            model_key="qwen3.7-plus-2026-05-26",
+            model_key=configured_llm_model(),
             operation_id=_operation_key(debate_id, turn_id, attempt_no),
         )
         operation: object | None = None
@@ -311,13 +312,47 @@ class SegmentLLMRuntime:
             except Exception as exc:
                 getter = _method(self.ledger, "get")
                 existing = _invoke(getter, reservation.operation_id) if getter is not None else None
-                if (
+                if existing is not None and _operation_state(existing) in {"not_sent", "failed"}:
+                    mover = _method(self.ledger, "transition")
+                    if mover is None or (
+                        _operation_state(existing) == "failed" and attempt_no < self.max_attempts
+                    ):
+                        if (
+                            existing is not None
+                            and _operation_state(existing) == "failed"
+                            and attempt_no < self.max_attempts
+                        ):
+                            return self.prepare(
+                                snapshot,
+                                debate_id=debate_id,
+                                turn_id=turn_id,
+                                policy_hash=policy_hash,
+                                manifest_hash=manifest_hash,
+                                build_manifest_hash=build_manifest_hash,
+                                confirmation_revision=confirmation_revision,
+                                generation_fence=generation_fence,
+                                repair_policy_hash=repair_policy_hash,
+                                identity_tokens=identity_tokens,
+                                outbound_manifest=outbound_manifest,
+                                attempt_no=attempt_no + 1,
+                                retrieval_reused=retrieval_reused,
+                                repair_feedback=repair_feedback,
+                                queries=queries,
+                            )
+                    operation = _invoke(
+                        mover,
+                        reservation.operation_id,
+                        expected=_operation_state(existing),
+                        state="prepared",
+                    )
+                elif (
                     existing is None
                     or _operation_state(existing) != "prepared"
                     or _read(existing, "request_hash") != request.request_hash
                 ):
                     raise SegmentRuntimeError(code="segment_preparation_failed") from exc
-                operation = existing
+                else:
+                    operation = existing
         return SegmentPreparedAttempt(
             snapshot=snapshot,
             request=request,
@@ -462,7 +497,7 @@ class SegmentLLMRuntime:
             policy_hash=prepared.policy_hash,
             export_manifest_hash=prepared.manifest_hash,
             build_manifest_hash=prepared.build_manifest_hash,
-            model_key="qwen3.7-plus-2026-05-26",
+            model_key=configured_llm_model(),
             output_json=output_json,
             output_hash=output_hash,
             prompt_tokens=candidate.usage.prompt_tokens if candidate.usage else 0,

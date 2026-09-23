@@ -1,5 +1,5 @@
 .card.card {
-  background: #fff;
+  background: #fdfaf3;
   border-color: var(--line);
 }
 
@@ -54,6 +54,14 @@
     transform 160ms ease,
     background 160ms ease,
     color 160ms ease;
+}
+.iconAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
 }
 .action:hover:not(:disabled) {
   background: var(--accent-soft, #f6ecd3);

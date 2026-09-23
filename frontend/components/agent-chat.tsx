@@ -3,8 +3,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { ChatAgent, ChatSession } from "../lib/api";
+import {
+  abandonChatRequest,
+  beginChatRequest,
+  clearSettledChatSession,
+  getChatRequest,
+  getSettledChatSession,
+  subscribeChatRequest,
+} from "../lib/chat-request-store";
 import { AvatarPreview } from "./avatar";
 import { useT } from "./locale";
+import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
@@ -20,17 +29,21 @@ export function AgentChat() {
   const [selected, setSelected] = useState<ChatSession | null>(null);
   const [versionId, setVersionId] = useState("");
   const [draft, setDraft] = useState("");
-  const [pendingMessage, setPendingMessage] = useState("");
+  const [pendingMessage, setPendingMessage] = useState(
+    () => getChatRequest()?.message ?? "",
+  );
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(() => getChatRequest() !== null);
   const [error, setError] = useState<unknown>(null);
-  const request = useRef<{
-    id: string;
-    message: string;
-    sessionId: string;
-    revision: number;
-  } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  function remember(value: ChatSession) {
+    setSelected(value);
+    setSessions((current) => [
+      value,
+      ...current.filter((item) => item.id !== value.id),
+    ]);
+  }
 
   useEffect(() => {
     if (!courseId) return;
@@ -39,8 +52,28 @@ export function AgentChat() {
       .then(([catalog, history]) => {
         if (!active) return;
         setAgents(catalog);
-        setSessions(history);
-        const recent = history.find((session) => session.turns.length > 0);
+        const pending = getChatRequest();
+        const settled = getSettledChatSession();
+        let nextHistory = history;
+        if (settled) {
+          nextHistory = [
+            settled,
+            ...history.filter((item) => item.id !== settled.id),
+          ];
+          clearSettledChatSession();
+        }
+        setSessions(nextHistory);
+        if (pending) {
+          const match =
+            nextHistory.find((session) => session.id === pending.sessionId) ??
+            null;
+          setSelected(match);
+          setVersionId(pending.versionId);
+          setPendingMessage(pending.message);
+          setBusy(true);
+          return;
+        }
+        const recent = nextHistory.find((session) => session.turns.length > 0);
         setSelected(recent ?? null);
         setVersionId(recent?.agent.version_id ?? catalog[0]?.version_id ?? "");
       })
@@ -56,23 +89,64 @@ export function AgentChat() {
   }, [api, courseId]);
 
   useEffect(() => {
+    return subscribeChatRequest(() => {
+      const pending = getChatRequest();
+      const settled = getSettledChatSession();
+      if (settled) {
+        remember(settled);
+        clearSettledChatSession();
+        setPendingMessage("");
+        setBusy(false);
+        setVersionId(settled.agent.version_id);
+        return;
+      }
+      if (pending) {
+        setBusy(true);
+        setPendingMessage(pending.message);
+        setVersionId(pending.versionId);
+        if (pending.sessionId) {
+          setSelected((current) =>
+            current?.id === pending.sessionId
+              ? current
+              : (sessions.find((item) => item.id === pending.sessionId) ??
+                current),
+          );
+        }
+        return;
+      }
+      setBusy(false);
+      setPendingMessage("");
+    });
+  }, [sessions]);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "nearest" });
-  }, [selected?.id, selected?.turns.length, busy]);
+  }, [selected?.id, selected?.turns.length, busy, pendingMessage]);
 
-  function remember(value: ChatSession) {
-    setSelected(value);
-    setSessions((current) => [
-      value,
-      ...current.filter((item) => item.id !== value.id),
-    ]);
-  }
-
-  function start() {
-    if (!versionId || busy) return;
+  function start(nextVersionId = versionId) {
+    if (busy) return;
     setError(null);
     setSelected(null);
     setDraft("");
-    request.current = null;
+    abandonChatRequest();
+    if (nextVersionId) setVersionId(nextVersionId);
+  }
+
+  async function removeChat(session: ChatSession) {
+    if (busy) return;
+    if (!window.confirm(t("deleteChatConfirm"))) return;
+    setError(null);
+    try {
+      await api.deleteConversation(session.id);
+      setSessions((current) => current.filter((item) => item.id !== session.id));
+      if (selected?.id === session.id) {
+        setSelected(null);
+        setDraft("");
+        abandonChatRequest();
+      }
+    } catch (cause) {
+      setError(cause);
+    }
   }
 
   async function send(event?: FormEvent) {
@@ -86,43 +160,58 @@ export function AgentChat() {
     try {
       const session = selected ?? (await api.createConversation(versionId));
       if (!selected) remember(session);
-      if (
-        !request.current ||
-        request.current.message !== message ||
-        request.current.sessionId !== session.id
-      ) {
-        request.current = {
-          id: crypto.randomUUID(),
+      const pending = getChatRequest();
+      const reuse =
+        pending &&
+        pending.message === message &&
+        (pending.sessionId === session.id || pending.sessionId === null)
+          ? pending
+          : null;
+      const requestId = reuse?.requestId ?? crypto.randomUUID();
+      const revision = reuse?.revision ?? session.revision;
+      const promise =
+        reuse?.promise ??
+        api.sendConversation(session.id, {
+          request_id: requestId,
           message,
-          sessionId: session.id,
-          revision: session.revision,
-        };
-      }
-      const pending = request.current;
-      const result = await api.sendConversation(session.id, {
-        request_id: pending.id,
+          expected_revision: revision,
+        });
+      beginChatRequest({
+        sessionId: session.id,
+        versionId,
         message,
-        expected_revision: pending.revision,
+        requestId,
+        revision,
+        promise,
       });
+      const result = await promise;
       remember(result);
       if (
         !result.turns.some(
-          (turn) => turn.id === pending.id && turn.state === "pending",
+          (turn) => turn.id === requestId && turn.state === "pending",
         )
       ) {
-        request.current = null;
+        abandonChatRequest(requestId);
         setDraft("");
       }
     } catch (cause) {
       setError(cause);
       setDraft(message);
     } finally {
-      setPendingMessage("");
-      setBusy(false);
+      const pending = getChatRequest();
+      setPendingMessage(pending?.promise ? pending.message : "");
+      setBusy(pending?.promise != null);
     }
   }
 
-  if (loading) return <LoadingCard />;
+  if (loading) {
+    return (
+      <>
+        <WorkspaceAction name="new" disabled />
+        <LoadingCard />
+      </>
+    );
+  }
   const character =
     selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
   return (
@@ -135,7 +224,7 @@ export function AgentChat() {
           character?.available === false ||
           !agents.some((agent) => agent.version_id === versionId)
         }
-        onClick={start}
+        onClick={() => start()}
       />
       {error ? <ErrorNotice error={error} /> : null}
       {!agents.length && !selected ? (
@@ -149,16 +238,7 @@ export function AgentChat() {
               value={versionId}
               disabled={busy}
               onChange={(event) => {
-                setVersionId(event.target.value);
-                setSelected(
-                  sessions.find(
-                    (session) =>
-                      session.agent.version_id === event.target.value &&
-                      session.turns.length > 0,
-                  ) ?? null,
-                );
-                setDraft("");
-                request.current = null;
+                start(event.target.value);
               }}
             >
               {selected &&
@@ -188,26 +268,42 @@ export function AgentChat() {
               {sessions
                 .filter((session) => session.turns.length > 0)
                 .map((session) => (
-                  <button
-                    key={session.id}
-                    type="button"
-                    disabled={busy}
-                    aria-current={
-                      selected?.id === session.id ? "page" : undefined
-                    }
-                    title={session.agent.name}
-                    onClick={() => {
-                      setSelected(session);
-                      setVersionId(session.agent.version_id);
-                      setDraft("");
-                      request.current = null;
-                    }}
-                  >
-                    <span>{session.turns[0]?.user_text ?? "New"}</span>
-                    <small>
-                      {new Date(session.created_at).toLocaleDateString()}
-                    </small>
-                  </button>
+                  <div className={styles.historyRow} key={session.id}>
+                    <button
+                      type="button"
+                      className={styles.historySelect}
+                      disabled={busy}
+                      aria-current={
+                        selected?.id === session.id ? "page" : undefined
+                      }
+                      title={session.agent.name}
+                      onClick={() => {
+                        setSelected(session);
+                        setVersionId(session.agent.version_id);
+                        setDraft("");
+                        abandonChatRequest();
+                      }}
+                    >
+                      <span>{session.turns[0]?.user_text ?? "New"}</span>
+                    </button>
+                    <span className={styles.historyMeta}>
+                      <small className={styles.historyDate}>
+                        {new Date(session.created_at).toLocaleDateString()}
+                      </small>
+                      <button
+                        type="button"
+                        className={styles.historyDelete}
+                        disabled={busy}
+                        aria-label={t("deleteChat")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void removeChat(session);
+                        }}
+                      >
+                        <IconClose />
+                      </button>
+                    </span>
+                  </div>
                 ))}
             </div>
           </aside>
@@ -225,10 +321,15 @@ export function AgentChat() {
                     {turn.assistant_text ? (
                       <ReportMarkdown>{turn.assistant_text}</ReportMarkdown>
                     ) : (
-                      <span role="status">
-                        {turn.state === "pending"
-                          ? t("loading")
-                          : turn.safe_error_code}
+                      <span className={styles.pending} role="status">
+                        {turn.state === "pending" ? (
+                          <>
+                            <span className="spinner" aria-hidden="true" />
+                            {t("loading")}
+                          </>
+                        ) : (
+                          turn.safe_error_code
+                        )}
                       </span>
                     )}
                     {turn.sources.length ? (

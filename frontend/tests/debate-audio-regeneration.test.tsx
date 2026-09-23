@@ -12,7 +12,7 @@ import type { DebateDetail, PlatformApi } from "../lib/api";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(cleanup);
 
-it.each(["Devocalize", "Destroy"])("keeps %s failures quiet", async (label) => {
+it.each(["Devocalize", "Delete"])("keeps %s failures quiet", async (label) => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
   const fail = vi.fn().mockRejectedValue(new Error("internal failure details"));
   const detail = {
@@ -134,10 +134,73 @@ it("destroys a list row without depending on a potentially broken detail, even w
       onVoiceDeleted={vi.fn()}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Destroy" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
   await waitFor(() => expect(removed).toHaveBeenCalledTimes(1));
   expect(loadDetail).not.toHaveBeenCalled();
   expect(destroy).toHaveBeenCalledTimes(1);
+  vi.restoreAllMocks();
+});
+
+it("names the in-progress action on the button", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  let finishVoice: (value: unknown) => void = () => undefined;
+  let finishAll: (value: unknown) => void = () => undefined;
+  render(
+    <DebateCleanupControls
+      detail={
+        {
+          id: "debate",
+          revision: 1,
+          playback: { control_version: 1 },
+        } as unknown as DebateDetail
+      }
+      api={
+        {
+          deleteDebateVoice: vi.fn(
+            () =>
+              new Promise((resolve) => {
+                finishVoice = resolve;
+              }),
+          ),
+          deleteDebateAll: vi.fn(
+            () =>
+              new Promise((resolve) => {
+                finishAll = resolve;
+              }),
+          ),
+          regenerateDebateTurnAudio: vi.fn(),
+        } as unknown as Pick<
+          PlatformApi,
+          "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
+        >
+      }
+      onVoiceDeleted={vi.fn()}
+      onAllDeleted={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Devocalize" }));
+  expect(screen.getByRole("button", { name: "Devocalizing" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+  expect(screen.queryByRole("status")).toBeNull();
+  finishVoice({ cleanup_status: "completed" });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Revocalize" })).toBeTruthy(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  expect(screen.getByRole("button", { name: "Deleting" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+  expect(screen.queryByRole("status")).toBeNull();
+  finishAll({ cleanup_status: "completed" });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
   vi.restoreAllMocks();
 });
 

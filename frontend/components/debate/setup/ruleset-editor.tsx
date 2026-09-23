@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ReportMarkdown } from "../../report/report-markdown";
+import { IconCheck, IconEdit } from "../../quiet-icons";
 import { SectionCard } from "../../ui";
 import { WorkspaceAction } from "../../workspace-actions";
 import styles from "./ruleset-editor.module.css";
@@ -28,6 +29,19 @@ export function RulesetEditor({
   const [draft, setDraft] = useState(prompts);
   const editing = mode === "edit";
 
+  function save() {
+    if (disabled) return;
+    onSave({ ...prompts, [language]: draft[language] });
+    setMode("details");
+    onEditingChange(false);
+  }
+
+  function cancel() {
+    setDraft({ ...prompts });
+    setMode("details");
+    onEditingChange(false);
+  }
+
   return (
     <SectionCard
       title="Debate Ruleset"
@@ -51,44 +65,39 @@ export function RulesetEditor({
               </button>
             ))}
           </div>
-          {!editing ? (
+          {editing ? (
             <button
               type="button"
-              className={styles.action}
+              className={`${styles.action} ${styles.iconAction}`}
               disabled={disabled}
+              aria-label="Save"
+              title="Save"
+              onClick={save}
+            >
+              <IconCheck />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`${styles.action} ${styles.iconAction}`}
+              disabled={disabled}
+              aria-label="Edit"
+              title="Edit"
               onClick={() => {
                 setDraft({ ...prompts });
                 setMode("edit");
                 onEditingChange(true);
               }}
             >
-              Edit
+              <IconEdit />
             </button>
-          ) : null}
+          )}
         </div>
       }
     >
       <div id="ruleset-content" className={styles.content}>
         {editing ? (
-          <>
-            <WorkspaceAction
-              name="back"
-              disabled={disabled}
-              onClick={() => {
-                setMode("details");
-                onEditingChange(false);
-              }}
-            />
-            <WorkspaceAction
-              name="done"
-              disabled={disabled}
-              onClick={() => {
-                onSave({ ...prompts, [language]: draft[language] });
-                setMode("details");
-                onEditingChange(false);
-              }}
-            />
-          </>
+          <WorkspaceAction name="back" disabled={disabled} onClick={cancel} />
         ) : null}
         {editing ? (
           <textarea

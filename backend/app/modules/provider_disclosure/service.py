@@ -37,6 +37,7 @@ from app.providers.control import (
     ProviderControlError,
     ProviderPolicySnapshotV1,
     ProviderPreflightV1,
+    authorized_provider_model,
     confirm_export_manifest,
     validate_provider_preflight,
 )
@@ -867,7 +868,7 @@ class ProviderDisclosureService:
         if purpose is None:
             raise _blocked("provider_operation_invalid")
         model_operation = _MODEL_KEYS.get(manifest.provider_operation, manifest.provider_operation)
-        if manifest.model_key != FIXED_MODELS.get(model_operation):
+        if manifest.model_key != authorized_provider_model(model_operation):
             raise _blocked("provider_model_invalid")
         if policy.supplier != SUPPLIER_DISPLAY_NAME:
             raise _blocked("provider_supplier_invalid")

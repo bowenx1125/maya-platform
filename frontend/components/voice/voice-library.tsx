@@ -140,9 +140,21 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     }
   }
 
-  if (loading) return <LoadingCard />;
+  if (loading) {
+    return (
+      <>
+        <WorkspaceAction name="new" disabled />
+        <LoadingCard />
+      </>
+    );
+  }
   if (error && profiles.length === 0) {
-    return <ErrorNotice error={error} onRetry={() => void load()} />;
+    return (
+      <>
+        <WorkspaceAction name="new" disabled />
+        <ErrorNotice error={error} onRetry={() => void load()} />
+      </>
+    );
   }
 
   return (

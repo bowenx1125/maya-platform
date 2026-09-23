@@ -10,12 +10,15 @@ import type { FormEvent } from "react";
 import {
   isAmbiguousMutationFailure,
   type AgentSummary,
+  type AgentVersion,
+  type Course,
   type GroupDetail,
   type PlatformApi,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
+import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import {
   EmptyCard,
@@ -23,12 +26,15 @@ import {
   LoadingCard,
   PageIntro,
   SectionCard,
-  StatusBadge,
 } from "./ui";
 
 type GroupOverview = {
   group: GroupDetail;
-  agents: AgentSummary[];
+};
+
+type AgentListItem = {
+  agent: AgentSummary;
+  versions: AgentVersion[];
 };
 
 async function loadGroups(
@@ -36,24 +42,38 @@ async function loadGroups(
   groupIds: string[],
 ): Promise<GroupOverview[]> {
   return Promise.all(
-    groupIds.map(async (groupId) => {
-      const [group, agents] = await Promise.all([
-        api.group(groupId),
-        // Keep legacy archived rows discoverable so an old, never-published
-        // Agent still has an explicit hard-delete path after archive UI is
-        // removed.  Historical rows remain visibly inactive and are rejected
-        // by the server's history check.
-        api.agents(groupId, true),
-      ]);
-      return { group, agents };
-    }),
+    groupIds.map(async (groupId) => ({
+      group: await api.group(groupId),
+    })),
   );
+}
+
+function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
+  const published =
+    versions.find(
+      (version) => version.id === agent.current_published_version_id,
+    ) ?? versions.find((version) => version.state === "published");
+  const draft =
+    versions.find((version) => version.id === agent.current_draft_version_id) ??
+    versions.find((version) => version.state === "draft");
+  const hasUnpublishedWork =
+    Boolean(agent.current_draft_version_id) &&
+    agent.current_draft_version_id !== agent.current_published_version_id;
+  const onlyDraft = !agent.current_published_version_id && Boolean(draft);
+  const label =
+    published?.version_label ?? draft?.version_label ?? "V1.0";
+  return {
+    label,
+    pending: hasUnpublishedWork || onlyDraft || agent.status === "archived",
+  };
 }
 
 export function StudentDashboard() {
   const t = useT();
+  const { locale } = useLocale();
   const { api, user } = useSession();
   const [groups, setGroups] = useState<GroupOverview[]>([]);
+  const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,8 +83,15 @@ export function StudentDashboard() {
     setError(null);
     try {
       const groupIds = user.groups.map((membership) => membership.group_id);
-      const overviews = await loadGroups(api, groupIds);
+      const courseId = user.courses[0]?.course_id;
+      const [overviews, courses] = await Promise.all([
+        loadGroups(api, groupIds),
+        courseId ? api.courses() : Promise.resolve([]),
+      ]);
       setGroups(overviews);
+      setCourse(
+        courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
+      );
     } catch (cause) {
       setError(cause);
     } finally {
@@ -82,66 +109,63 @@ export function StudentDashboard() {
   if (loading) return <LoadingCard />;
   if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
 
+  const name = user?.display_name ?? "";
+  const courseName = course?.name ?? t("course");
+
   return (
-    <>
-      <PageIntro title={t("appName")} />
+    <div className="mayaform-home">
+      <section className="mayaform-home-welcome">
+        <p className="mayaform-home-eyebrow">{t("appName")}</p>
+        <h1>{t("homeWelcomeTitle", { name })}</h1>
+        <div className="mayaform-home-rule" aria-hidden="true">
+          <span />
+          <i />
+          <span />
+        </div>
+        <p className="mayaform-home-lede">
+          {t("homeWelcomeCourse", { course: courseName })}
+        </p>
+        <ul className="mayaform-home-surfaces">
+          <li>{t("homeSurfaceChats")}</li>
+          <li>{t("homeSurfaceWorkspace")}</li>
+          <li>{t("homeSurfaceKnowledge")}</li>
+          <li>{t("homeSurfaceVoice")}</li>
+          <li>{t("homeSurfaceLive")}</li>
+        </ul>
+        <p className="mayaform-home-privacy">{t("homePrivacyNote")}</p>
+      </section>
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
-        <div className="overview-grid">
-          {groups.map((overview) => (
-            <GroupOverviewCard key={overview.group.id} overview={overview} />
-          ))}
-        </div>
+        groups.map((overview) => (
+          <section className="mayaform-home-members" key={overview.group.id}>
+            <header>
+              <h2>{overview.group.name}</h2>
+              <p>{t("homeMembersIntro")}</p>
+            </header>
+            <div className="member-grid">
+              {(overview.group.members ?? []).map((member) => (
+                <div className="member-chip" key={member.user_id}>
+                  <span className="avatar-mini">
+                    {member.display_name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span>{member.display_name}</span>
+                  <small>{roleLabel(member.role, locale)}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
       )}
-    </>
-  );
-}
-
-function GroupOverviewCard({ overview }: { overview: GroupOverview }) {
-  const t = useT();
-  const { group, agents } = overview;
-  return (
-    <SectionCard
-      title={group.name}
-      action={
-        <Link className="text-link" href={`/student/groups/${group.id}`}>
-          {t("openWorkspace")}
-        </Link>
-      }
-    >
-      <div className="compact-list">
-        {agents.slice(0, 4).map((agent) => (
-          <Link
-            className="list-row"
-            href={`/student/agents/${agent.id}`}
-            key={agent.id}
-          >
-            <span>
-              <strong>{agent.name}</strong>
-            </span>
-            <StatusBadge
-              status={
-                agent.status === "archived"
-                  ? "archived"
-                  : agent.current_draft_version_id
-                    ? "draft"
-                    : "published"
-              }
-            />
-          </Link>
-        ))}
-      </div>
-    </SectionCard>
+    </div>
   );
 }
 
 export function GroupWorkspace({ groupId }: { groupId: string }) {
   const t = useT();
-  const { locale } = useLocale();
   const { api } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [items, setItems] = useState<AgentListItem[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -154,12 +178,18 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     try {
       const [nextGroup, nextAgents] = await Promise.all([
         api.group(groupId),
-        // Archived rows are legacy data only; they remain discoverable for
-        // explicit safe deletion and are not offered as archive actions.
         api.agents(groupId, true),
       ]);
+      const versions = await Promise.all(
+        nextAgents.map((agent) => api.versions(agent.id)),
+      );
       setGroup(nextGroup);
-      setAgents(nextAgents);
+      setItems(
+        nextAgents.map((agent, index) => ({
+          agent,
+          versions: versions[index] ?? [],
+        })),
+      );
     } catch (cause) {
       setError(cause);
     } finally {
@@ -173,7 +203,16 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading) return <LoadingCard />;
+  const createHref = `/student/groups/${groupId}/agents/new`;
+
+  if (loading) {
+    return (
+      <>
+        <WorkspaceAction name="new" href={createHref} disabled />
+        <LoadingCard />
+      </>
+    );
+  }
   async function deleteAgent(agentId: string, retry = false) {
     if (deleting || (!retry && !window.confirm(t("deleteAgentConfirm"))))
       return;
@@ -185,7 +224,9 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     try {
       await api.deleteAgent(agentId, { idempotency: handle });
       mutations.finish(intent, handle);
-      setAgents((current) => current.filter((agent) => agent.id !== agentId));
+      setItems((current) =>
+        current.filter((item) => item.agent.id !== agentId),
+      );
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) setRetryDelete(agentId);
       else mutations.abandon(intent, handle);
@@ -197,10 +238,13 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
 
   if (!group)
     return (
-      <ErrorNotice
-        error={error ?? new Error(t("groupNotFound"))}
-        onRetry={() => void load()}
-      />
+      <>
+        <WorkspaceAction name="new" href={createHref} disabled />
+        <ErrorNotice
+          error={error ?? new Error(t("groupNotFound"))}
+          onRetry={() => void load()}
+        />
+      </>
     );
 
   return (
@@ -214,19 +258,17 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           }
         />
       ) : null}
-      <WorkspaceAction
-        name="new"
-        href={`/student/groups/${groupId}/agents/new`}
-      />
-      <SectionCard title={t("agents")}>
-        {agents.length === 0 ? (
+      <WorkspaceAction name="new" href={createHref} />
+      <SectionCard title={`${t("agents")} · ${items.length}`}>
+        {items.length === 0 ? (
           <EmptyCard title={t("noAgents")} />
         ) : (
-          <div className="agent-list">
-            {agents.map((agent) => (
-              <GroupAgentRow
+          <div className="agent-tile-grid">
+            {items.map(({ agent, versions }) => (
+              <GroupAgentTile
                 agent={agent}
                 key={agent.id}
+                versions={versions}
                 deleting={deleting !== null}
                 onDelete={() => void deleteAgent(agent.id)}
               />
@@ -234,55 +276,44 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           </div>
         )}
       </SectionCard>
-      <SectionCard title={t("members")}>
-        <div className="member-grid">
-          {(group.members ?? []).map((member) => (
-            <div className="member-chip" key={member.user_id}>
-              <span className="avatar-mini">
-                {member.display_name.slice(0, 1).toUpperCase()}
-              </span>
-              <span>{member.display_name}</span>
-              <small>{roleLabel(member.role, locale)}</small>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
     </>
   );
 }
 
-function GroupAgentRow({
+function GroupAgentTile({
   agent,
+  versions,
   deleting,
   onDelete,
 }: {
   agent: AgentSummary;
+  versions: AgentVersion[];
   deleting: boolean;
   onDelete: () => void;
 }) {
   const t = useT();
-  const state =
-    agent.status === "archived"
-      ? "archived"
-      : agent.current_draft_version_id
-        ? "draft"
-        : "published";
+  const bubble = versionBubble(agent, versions);
   return (
-    <div className="agent-row" data-agent-row={agent.id}>
+    <div className="agent-tile" data-agent-row={agent.id}>
       <Link
-        className="agent-row-name text-link"
+        className="agent-tile-name text-link"
         href={`/student/agents/${agent.id}`}
       >
         {agent.name}
       </Link>
-      <StatusBadge status={state} />
       <button
-        className="inline-button danger-button"
         type="button"
+        className="agent-pill agent-pill-action"
+        data-pending={bubble.pending ? "true" : "false"}
         disabled={deleting}
+        aria-label={t("deleteAgent")}
+        title={bubble.label}
         onClick={onDelete}
       >
-        {t("deleteAgent")}
+        <span className="agent-pill-label">{bubble.label}</span>
+        <span className="agent-pill-x" aria-hidden="true">
+          <IconClose size={12} />
+        </span>
       </button>
     </div>
   );

@@ -4,8 +4,8 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select, update
+from fastapi import APIRouter, Depends, Header, Response
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
@@ -193,6 +193,25 @@ def get_conversation(
     db: Session = Depends(get_db),
 ) -> ChatSession:
     return session_view(db, owned_conversation(db, context, str(conversation_id)))
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=204,
+    operation_id="deleteConversation",
+    response_class=Response,
+)
+def delete_conversation(
+    conversation_id: UUID,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    row = owned_conversation(db, context, str(conversation_id))
+    db.execute(delete(ConversationTurn).where(ConversationTurn.conversation_id == row.id))
+    db.execute(delete(Conversation).where(Conversation.id == row.id))
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.post(

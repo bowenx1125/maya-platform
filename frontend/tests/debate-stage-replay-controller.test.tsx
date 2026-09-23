@@ -322,7 +322,7 @@ describe("terminal segments replay controller", () => {
       "disabled",
       false,
     );
-    expect(screen.queryByRole("heading", { name: initial.topic })).toBeNull();
+    expect(screen.getByRole("heading", { name: initial.topic })).toBeTruthy();
   });
 
   it("beta restores the current speech bubble when opened while waiting for Next", async () => {

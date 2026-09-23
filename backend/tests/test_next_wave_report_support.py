@@ -36,7 +36,6 @@ from app.modules.reports.service import (
     build_real_report_request,
 )
 from app.providers.llm_adapter import DashScopeLLMConfig
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_tokenizer import PinnedLLMTokenizer
 from app.providers.llm_transport import LLMTransportResponse
 
@@ -47,16 +46,6 @@ def _uid(number: int) -> UUID:
 
 def _hash(letter: str) -> str:
     return letter * 64
-
-
-def _price_card() -> LLMPriceCardV1:
-    return LLMPriceCardV1(
-        input_price_per_million="0.5",
-        cached_input_price_per_million="0.1",
-        output_price_per_million="1.0",
-        retrieved_at="2026-08-31T00:00:00Z",
-        source_content_sha256=_hash("a"),
-    )
 
 
 class _Tokenizer(PinnedLLMTokenizer):
@@ -263,7 +252,6 @@ def test_v2_report_provider_accepts_actual_envelope_once() -> None:
         ),
         transport=transport,
         tokenizer=_Tokenizer(),
-        price_card=_price_card(),
     )
     request = build_real_report_request(_context())
     prepared = provider.build_request(request)

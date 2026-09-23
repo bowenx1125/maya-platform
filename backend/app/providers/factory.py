@@ -24,8 +24,6 @@ from app.providers.llm import (
     DashScopeLLMAdapter,
     DashScopeLLMConfig,
     LLMOutboundManifestV1,
-    LLMPriceCardError,
-    LLMPriceCardV1,
     LLMProvider,
     LLMTokenizerPort,
     LLMTransport,
@@ -70,7 +68,6 @@ def llm_provider(
     *,
     transport: LLMTransport | None = None,
     tokenizer: LLMTokenizerPort | object | None = None,
-    price_card: LLMPriceCardV1 | None = None,
     outbound_manifest: LLMOutboundManifestV1 | None = None,
 ) -> LLMProvider:
     """Compose Mock or the inert fixed LLM adapter without making a call."""
@@ -90,41 +87,16 @@ def llm_provider(
         raise RuntimeError(
             "LLM_PROVIDER_POLICY_HASH is required for the selected real LLM resource"
         )
-    try:
-        configured_price_card = price_card or LLMPriceCardV1(
-            version=settings.llm_price_card_version or "",
-            input_price_per_million=(
-                settings.llm_input_price_cny_per_million
-                if settings.llm_input_price_cny_per_million is not None
-                else ""
-            ),
-            cached_input_price_per_million=(
-                settings.llm_cached_input_price_cny_per_million
-                if settings.llm_cached_input_price_cny_per_million is not None
-                else ""
-            ),
-            output_price_per_million=(
-                settings.llm_output_price_cny_per_million
-                if settings.llm_output_price_cny_per_million is not None
-                else ""
-            ),
-            retrieved_at=settings.llm_price_card_retrieved_at or "",
-            source_content_sha256=settings.llm_price_card_source_content_sha256 or "",
-        )
-        configured_price_card.assert_reviewed()
-        configured_price_card.reservation_cost()
-    except LLMPriceCardError as exc:
-        raise RuntimeError(f"LLM price card is invalid: {exc}") from exc
     return DashScopeLLMAdapter(
         DashScopeLLMConfig(
             api_key=settings.dashscope_api_key,
             workspace_id=settings.dashscope_workspace_id,
             region=settings.dashscope_region,
+            model_key=settings.llm_model,
             policy_hash=policy_hash,
         ),
         transport,
         tokenizer=tokenizer,
-        price_card=configured_price_card,
         outbound_manifest=outbound_manifest,
     )
 

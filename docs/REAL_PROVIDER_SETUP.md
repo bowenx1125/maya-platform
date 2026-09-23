@@ -112,7 +112,7 @@ corresponding environment selectors and survive restarts; TTS/Voice stay deferre
 
 Selecting Real without a credential opens the API Key dialog; an authentication
 failure during Check also opens it. The server encrypts the credential and never
-returns its value. This does not replace reviewed policies, region or price cards.
+returns its value. This does not replace reviewed policies, region or `LLM_MODEL`.
 The single **Check** reads current settings, skips Ready/deferred components and
 asks for the exact maximum paid calls before checking the rest, one call per
 component, stopping on failure. Mode changes invalidate only that component;

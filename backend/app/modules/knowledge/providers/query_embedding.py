@@ -29,7 +29,6 @@ from .adapters import EmbeddingProviderError
 from .embedding import ValidatedEmbeddingBatchV1
 from .packing import (
     MAX_BATCH_ITEMS,
-    MAX_BATCH_TOKENS,
     EmbeddingBatchV1,
     EmbeddingItemV1,
 )
@@ -348,10 +347,6 @@ def _query_batch(
             ) from exc
         token_counts.append(count)
     total_tokens = sum(token_counts)
-    if total_tokens > MAX_BATCH_TOKENS:
-        raise QueryEmbeddingError(
-            "query batch exceeds the fixed token limit", code="query_embedding_batch_too_large"
-        )
     query_hashes = tuple(key for _, key in queries)
     resolved_build_manifest_hash = build_manifest_hash or _canonical_hash(
         {

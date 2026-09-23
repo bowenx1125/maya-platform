@@ -55,8 +55,6 @@ from .llm_price_card import (
     LLM_REQUEST_BYTES_CAP,
     LLM_REQUESTED_OUTPUT_TOKEN_CAP,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
-    LLMPriceCardError,
-    LLMPriceCardV1,
 )
 from .llm_privacy import (
     LLM_REPAIR_FEEDBACK_FIELD_CLASS,
@@ -140,7 +138,7 @@ class DashScopeLLMConfig:
     api_key: str = field(default="", repr=False)
     workspace_id: str = ""
     region: str = LLM_REGION
-    model_key: str = LLM_MODEL_KEY
+    model_key: str = ""
     endpoint: str | None = None
     policy_hash: str = ""
     repair_policy_hash: str = LLM_REPAIR_FEEDBACK_SCHEMA_HASH
@@ -148,7 +146,14 @@ class DashScopeLLMConfig:
     def __post_init__(self) -> None:
         if self.region != LLM_REGION:
             raise LLMAdapterError(code="llm_region_invalid")
-        if self.model_key != LLM_MODEL_KEY:
+        if not self.model_key:
+            from app.core.config import configured_llm_model
+
+            object.__setattr__(self, "model_key", configured_llm_model())
+        model_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+        if not isinstance(self.model_key, str) or any(
+            char not in model_chars for char in self.model_key
+        ):
             raise LLMAdapterError(code="llm_model_invalid")
         if (
             not isinstance(self.workspace_id, str)
@@ -237,7 +242,8 @@ class LLMRequestV1:
 
     @property
     def model_key(self) -> str:
-        return LLM_MODEL_KEY
+        model = self.body.get("model")
+        return model if isinstance(model, str) and model else LLM_MODEL_KEY
 
     @property
     def prompt_hash(self) -> str:
@@ -564,7 +570,6 @@ class LLMValidatedResultV1:
 
         request = self.request
         usage = self.usage
-        card = self._price_card
         return {
             "provider_operation": LLM_PROVIDER_OPERATION,
             "model_key": request.model_key,
@@ -595,10 +600,10 @@ class LLMValidatedResultV1:
             "cached_input_tokens": usage.cached_input_tokens if usage else None,
             "completion_tokens": usage.completion_tokens if usage else None,
             "total_tokens": usage.total_tokens if usage else None,
-            "price_card_version": card.version,
-            "input_price_per_million": format(card.input_rate, "f"),
-            "cached_input_price_per_million": format(card.cached_input_rate, "f"),
-            "output_price_per_million": format(card.output_rate, "f"),
+            "price_card_version": "unused",
+            "input_price_per_million": "0",
+            "cached_input_price_per_million": "0",
+            "output_price_per_million": "0",
             "estimated_cost_cny": format(self.estimated_cost_cny, "f"),
             "actual_cost_cny": (
                 format(self.actual_cost_cny, "f") if self.actual_cost_cny is not None else None
@@ -607,15 +612,6 @@ class LLMValidatedResultV1:
             "acceptance": self.acceptance,
             "finish_reason": self.finish_reason,
         }
-
-    # ``_price_card`` is attached at construction through a private field
-    # replacement to keep the public dataclass shape stable.  The property is
-    # replaced by the adapter when it creates a result.
-    _price_card: LLMPriceCardV1 = field(
-        default_factory=LLMPriceCardV1,
-        repr=False,
-        compare=False,
-    )
 
 
 def _canonical(value: object) -> str:
@@ -723,7 +719,6 @@ def _make_result(
     mapped: MappedLLMTurnV1 | None = None,
     accepted_candidate: LLMAcceptedCandidateV1 | None = None,
     json_pointers: Sequence[str] = (),
-    price_card: LLMPriceCardV1,
     actual_cost_cny: Decimal | None = None,
 ) -> LLMValidatedResultV1:
     return LLMValidatedResultV1(
@@ -738,9 +733,7 @@ def _make_result(
         mapped=mapped,
         accepted_candidate=accepted_candidate,
         json_pointers=tuple(json_pointers),
-        estimated_cost_cny=price_card.reservation_cost(),
         actual_cost_cny=actual_cost_cny,
-        _price_card=price_card,
     )
 
 
@@ -808,7 +801,6 @@ def _stage_candidate(
     http_status: int,
     finish_reason: str | None,
     usage: LLMUsageV1 | None,
-    price_card: LLMPriceCardV1,
     content_hash: str | None = None,
     provider_output: Mapping[str, object] | None = None,
     safe_error_code: str | None = None,
@@ -826,7 +818,7 @@ def _stage_candidate(
                 format(actual_cost_cny, "f") if actual_cost_cny is not None else None
             ),
             "content_hash": content_hash,
-            "estimated_cost_cny": format(price_card.reservation_cost(), "f"),
+            "estimated_cost_cny": "0",
             "finish_reason": finish_reason,
             "http_status": http_status,
             "provider_output": json.loads(output_json),
@@ -850,11 +842,11 @@ def _stage_candidate(
             provider_output_json=output_json,
             provider_output_hash=hashlib.sha256(output_json.encode("utf-8")).hexdigest(),
             actual_cost_cny=actual_cost_cny,
-            estimated_cost_cny=price_card.reservation_cost(),
+            estimated_cost_cny=Decimal("0"),
         )
     stage_record = {
         "content_hash": content_hash,
-        "estimated_cost_cny": format(price_card.reservation_cost(), "f"),
+        "estimated_cost_cny": "0",
         "finish_reason": finish_reason,
         "http_status": http_status,
         "json_pointers": list(pointers),
@@ -875,7 +867,7 @@ def _stage_candidate(
         safe_error_code=safe_error_code or "provider_response_invalid",
         json_pointers=pointers,
         actual_cost_cny=actual_cost_cny,
-        estimated_cost_cny=price_card.reservation_cost(),
+        estimated_cost_cny=Decimal("0"),
     )
 
 
@@ -892,14 +884,12 @@ class DashScopeLLMAdapter:
         transport: LLMTransport | None = None,
         *,
         tokenizer: LLMTokenizerPort | object | None = None,
-        price_card: LLMPriceCardV1 | None = None,
         identity_tokens: Sequence[str] = (),
         outbound_manifest: LLMOutboundManifestV1 | None = None,
     ) -> None:
         self.config = config
         self.transport = transport or HttpxLLMTransport()
         self.tokenizer = tokenizer if tokenizer is not None else ConservativeLLMTokenizer()
-        self.price_card = price_card or LLMPriceCardV1()
         self.identity_tokens = tuple(identity_tokens)
         self.outbound_manifest = outbound_manifest
 
@@ -918,12 +908,6 @@ class DashScopeLLMAdapter:
             raise LLMAdapterError(code="llm_tokenizer_invalid")
         if not tokenizer_asset_hash_valid(asset_hash):
             raise LLMAdapterError(code="llm_tokenizer_invalid")
-
-    def _validate_price_card(self) -> None:
-        try:
-            self.price_card.assert_reviewed()
-        except LLMPriceCardError as exc:
-            raise LLMAdapterError(code=exc.code) from exc
 
     def _tokenizer_identity(self) -> tuple[str, str]:
         tokenizer_id = getattr(self.tokenizer, "tokenizer_id", None)
@@ -970,11 +954,6 @@ class DashScopeLLMAdapter:
             repair_policy_hash=resolved_repair_hash,
         )
         self._validate_tokenizer()
-        self._validate_price_card()
-        try:
-            self.price_card.reservation_cost()
-        except LLMPriceCardError as exc:
-            raise LLMAdapterError(code=exc.code) from exc
         # Attempt two is also the proven-not-sent transport retry.  In that
         # case the caller deliberately supplies the unchanged base request;
         # structure repair supplies the optional closed feedback field.
@@ -1019,7 +998,7 @@ class DashScopeLLMAdapter:
             policy_hash if policy_hash is not None else self.config.policy_hash
         )
         body: dict[str, object] = {
-            "model": LLM_MODEL_KEY,
+            "model": self.config.model_key,
             "messages": [
                 {"role": message.role, "content": message.content} for message in messages
             ],
@@ -1154,7 +1133,6 @@ class DashScopeLLMAdapter:
                 http_status=0,
                 finish_reason=None,
                 usage=None,
-                price_card=self.price_card,
                 safe_error_code="provider_response_invalid",
             )
         return self._stage_response(request, status_code, payload)
@@ -1173,7 +1151,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=None,
                 usage=_usage(payload.get("usage")) if isinstance(payload, Mapping) else None,
-                price_card=self.price_card,
                 safe_error_code="llm_http_rejected",
             )
         if not isinstance(payload, Mapping):
@@ -1182,7 +1159,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=None,
                 usage=None,
-                price_card=self.price_card,
                 safe_error_code="provider_response_invalid",
             )
         if payload.get("object") != "chat.completion":
@@ -1191,16 +1167,14 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=None,
                 usage=None,
-                price_card=self.price_card,
                 safe_error_code="provider_envelope_invalid",
             )
-        if payload.get("model") != LLM_MODEL_KEY:
+        if payload.get("model") != request.model_key:
             return _stage_candidate(
                 request,
                 http_status=status_code,
                 finish_reason=None,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 safe_error_code="provider_model_mismatch",
             )
         choices = payload.get("choices")
@@ -1214,7 +1188,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=None,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 safe_error_code="provider_choices_invalid",
             )
         choice = choices[0]
@@ -1227,7 +1200,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 safe_error_code="provider_choice_index_invalid",
             )
         if not isinstance(message, Mapping) or message.get("role") != "assistant":
@@ -1236,7 +1208,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 safe_error_code="provider_message_invalid",
             )
         content = message.get("content")
@@ -1247,7 +1218,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="provider_refusal",
             )
@@ -1257,7 +1227,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="provider_reasoning_content",
             )
@@ -1267,7 +1236,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="provider_tool_calls",
             )
@@ -1277,7 +1245,6 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=_usage(payload.get("usage")),
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="provider_function_call",
             )
@@ -1288,38 +1255,17 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=None,
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="provider_usage_unknown",
             )
-        if (
-            usage.completion_tokens > LLM_RESERVED_OUTPUT_TOKENS
-            or usage.prompt_tokens > LLM_INPUT_TOKEN_CAP
-        ):
+        if usage.completion_tokens > LLM_RESERVED_OUTPUT_TOKENS:
             return _stage_candidate(
                 request,
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=usage,
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="provider_usage_overrun",
-            )
-        actual_cost = self.price_card.actual_cost(
-            prompt_tokens=usage.prompt_tokens,
-            cached_input_tokens=usage.cached_input_tokens,
-            completion_tokens=usage.completion_tokens,
-        )
-        if actual_cost > self.price_card.reservation_cost():
-            return _stage_candidate(
-                request,
-                http_status=status_code,
-                finish_reason=finish_text,
-                usage=usage,
-                price_card=self.price_card,
-                content_hash=content_hash,
-                safe_error_code="provider_cost_overrun",
-                actual_cost_cny=actual_cost,
             )
         if finish_reason == "length":
             return _stage_candidate(
@@ -1327,10 +1273,8 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason="length",
                 usage=usage,
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code="output_truncated",
-                actual_cost_cny=actual_cost,
             )
         if finish_reason != "stop":
             safe_code = {
@@ -1344,10 +1288,8 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason=finish_text,
                 usage=usage,
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code=safe_code,
-                actual_cost_cny=actual_cost,
             )
         if not isinstance(content, str) or not content:
             return _stage_candidate(
@@ -1355,9 +1297,7 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason="stop",
                 usage=usage,
-                price_card=self.price_card,
                 safe_error_code="provider_content_invalid",
-                actual_cost_cny=actual_cost,
             )
         try:
             parsed = parse_llm_output_json(content)
@@ -1367,21 +1307,17 @@ class DashScopeLLMAdapter:
                 http_status=status_code,
                 finish_reason="stop",
                 usage=usage,
-                price_card=self.price_card,
                 content_hash=content_hash,
                 safe_error_code=exc.code,
                 json_pointers=exc.json_pointers,
-                actual_cost_cny=actual_cost,
             )
         return _stage_candidate(
             request,
             http_status=status_code,
             finish_reason="stop",
             usage=usage,
-            price_card=self.price_card,
             content_hash=content_hash,
             provider_output=parsed,
-            actual_cost_cny=actual_cost,
         )
 
     def validate_accepted(
@@ -1446,7 +1382,6 @@ class DashScopeLLMAdapter:
                     acceptance="not_sent",
                     failure_kind="transport_not_sent",
                     safe_error_code="llm_transport_not_sent",
-                    price_card=self.price_card,
                 )
             except LLMAcceptanceUnknown:
                 return _make_result(
@@ -1455,7 +1390,6 @@ class DashScopeLLMAdapter:
                     acceptance="acceptance_unknown",
                     failure_kind="transport_unknown",
                     safe_error_code="llm_acceptance_unknown",
-                    price_card=self.price_card,
                 )
             if stage_callback is not None:
                 stage_callback(candidate)
@@ -1482,7 +1416,6 @@ class DashScopeLLMAdapter:
                     usage=candidate.usage,
                     accepted_candidate=candidate,
                     json_pointers=candidate.json_pointers,
-                    price_card=self.price_card,
                     actual_cost_cny=candidate.actual_cost_cny,
                 )
             try:
@@ -1502,7 +1435,6 @@ class DashScopeLLMAdapter:
                     usage=candidate.usage,
                     accepted_candidate=candidate,
                     json_pointers=exc.json_pointers,
-                    price_card=self.price_card,
                     actual_cost_cny=candidate.actual_cost_cny,
                 )
             return _make_result(
@@ -1516,7 +1448,6 @@ class DashScopeLLMAdapter:
                 usage=candidate.usage,
                 mapped=mapped,
                 accepted_candidate=candidate,
-                price_card=self.price_card,
                 actual_cost_cny=candidate.actual_cost_cny,
             )
         finally:
@@ -1550,16 +1481,6 @@ class DashScopeLLMAdapter:
             http_status=status_code,
             finish_reason=finish_reason,
             usage=usage,
-            price_card=self.price_card,
-            actual_cost_cny=(
-                self.price_card.actual_cost(
-                    prompt_tokens=usage.prompt_tokens,
-                    cached_input_tokens=usage.cached_input_tokens,
-                    completion_tokens=usage.completion_tokens,
-                )
-                if usage is not None
-                else None
-            ),
         )
         return result
 
@@ -1581,16 +1502,6 @@ class DashScopeLLMAdapter:
             http_status=status_code,
             finish_reason=finish_reason,
             usage=usage,
-            price_card=self.price_card,
-            actual_cost_cny=(
-                self.price_card.actual_cost(
-                    prompt_tokens=usage.prompt_tokens,
-                    cached_input_tokens=usage.cached_input_tokens,
-                    completion_tokens=usage.completion_tokens,
-                )
-                if usage is not None
-                else None
-            ),
         )
 
     def generate_turn(
@@ -1645,7 +1556,6 @@ class DashScopeLLMAdapter:
             self.config,
             self.transport,
             tokenizer=self.tokenizer,
-            price_card=self.price_card,
             identity_tokens=self.identity_tokens,
             outbound_manifest=self.outbound_manifest,
         )

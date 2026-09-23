@@ -137,7 +137,7 @@ A real provider request costs money and is never automatically retried. Before
 the first request of a run:
 
 - confirm the run is new and its charged-request count is zero;
-- confirm the provider, model, region, dimension, policy hash and price card
+- confirm the provider, `LLM_MODEL`, region, dimension and policy hash
   are the reviewed ones;
 - confirm the teacher disclosure was confirmed for that exact manifest.
 

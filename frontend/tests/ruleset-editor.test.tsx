@@ -71,7 +71,8 @@ describe("per-debate Markdown rules editor", () => {
       target: { value: "# 本场新规则\n\n给一个例子。" },
     });
     expect(saved).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(editing).toHaveBeenLastCalledWith(false);
     expect(saved).toHaveBeenCalledWith({
       zh: "# 本场新规则\n\n给一个例子。",

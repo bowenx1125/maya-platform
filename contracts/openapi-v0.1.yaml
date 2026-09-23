@@ -158,6 +158,43 @@ paths:
       summary: Get Conversation
       tags:
       - Chat
+    delete:
+      operationId: deleteConversation
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Conversation deleted.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+      security:
+      - sessionCookie: []
+      summary: Delete Conversation
+      tags:
+      - Chat
   /conversations/{conversation_id}/messages:
     post:
       operationId: sendConversationMessage

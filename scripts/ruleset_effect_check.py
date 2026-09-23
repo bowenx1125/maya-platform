@@ -72,7 +72,6 @@ def run(output: Path, *, execute: bool) -> None:
         provider.config,
         provider.transport,
         tokenizer=provider.tokenizer,
-        price_card=provider.price_card,
         outbound_manifest=disclosure,
     )
     receipt = SnapshotRetrievalReceipt(
@@ -130,7 +129,7 @@ def run(output: Path, *, execute: bool) -> None:
         "synthetic_inputs_only": True,
         "maximum_calls": 2,
         "automatic_retries": 0,
-        "maximum_reserved_cost_cny": str(provider.price_card.reservation_cost() * 2),
+        "maximum_reserved_cost_cny": "0",
         "user_input_sha256": hashlib.sha256(common.to_user_json().encode()).hexdigest(),
         "custom_markdown": CUSTOM,
         "cases": [],

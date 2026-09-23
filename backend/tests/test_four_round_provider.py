@@ -12,7 +12,6 @@ from app.modules.debates.generation.segments import SegmentInputSnapshot
 from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.providers.control import InMemoryProviderOperationRepository, ProviderScopeBudgetV1
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
-from app.providers.llm_price_card import LLMPriceCardV1
 from app.providers.llm_privacy import (
     LLM_SESSION_DISCUSSION_MEMORY_FIELD_CLASS,
     LLMOutboundManifestV1,
@@ -67,17 +66,6 @@ def adapter() -> SegmentLLMAdapter:
     return SegmentLLMAdapter(
         SimpleNamespace(resolved_endpoint="https://offline.invalid/segments"),
         outbound_manifest=manifest(),
-        price_card=price_card(),
-    )
-
-
-def price_card() -> LLMPriceCardV1:
-    return LLMPriceCardV1(
-        input_price_per_million="1",
-        cached_input_price_per_million="1",
-        output_price_per_million="1",
-        retrieved_at="2026-09-08T00:00:00Z",
-        source_content_sha256="d" * 64,
     )
 
 
@@ -170,7 +158,6 @@ class OfflineAdapter(SegmentLLMAdapter):
         super().__init__(
             SimpleNamespace(resolved_endpoint="https://offline.invalid/segments"),
             outbound_manifest=manifest(),
-            price_card=price_card(),
         )
         self.outputs = outputs
         self.requests: list[SegmentLLMRequestV2] = []

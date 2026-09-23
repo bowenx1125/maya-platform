@@ -17,7 +17,6 @@ from app.modules.debates.generation import (
     ParticipantContext,
     PromptAcceptanceState,
     PromptAttemptPolicy,
-    PromptBudgetError,
     PromptFailureKind,
     PromptRequestError,
     SnapshotRetrievalReceipt,
@@ -225,22 +224,16 @@ def test_canonical_prompt_is_stable_and_evidence_queries_are_deduplicated() -> N
     assert "another-private-source.md" not in first_prompt.user_message.content
 
 
-def test_conservative_preflight_rejects_before_any_provider_boundary() -> None:
-    with pytest.raises(PromptBudgetError) as error:
-        from app.modules.debates.generation import preflight_prompt_budget
+def test_preflight_records_size_without_rejecting_it() -> None:
+    from app.modules.debates.generation import preflight_prompt_budget
 
-        # The conservative counter reports UTF-8 bytes, so its ceiling is the
-        # contract's byte allowance. Comparing that byte count to the 32,000
-        # model-token limit was a unit error that cut the real ceiling to a
-        # quarter and stopped a four-round debate reaching its last round.
-        preflight_prompt_budget(("x" * (96 * 1024 + 1),), request_bytes=1)
-    assert error.value.code == "prompt_input_tokens_exceeded"
-    with pytest.raises(PromptBudgetError) as error:
-        preflight_prompt_budget(("ok",), request_bytes=96 * 1024 + 1)
-    assert error.value.code == "prompt_request_bytes_exceeded"
-    with pytest.raises(PromptBudgetError) as error:
-        preflight_prompt_budget(("ok",), requested_output_tokens=1_501)
-    assert error.value.code == "prompt_output_tokens_exceeded"
+    # Token, byte and output quotas no longer stop a turn. The counted size
+    # is still recorded for the ledger.
+    budget = preflight_prompt_budget(("x" * (96 * 1024 + 1),), request_bytes=96 * 1024 + 1)
+    assert budget.input_tokens > 96 * 1024
+    assert budget.request_bytes == 96 * 1024 + 1
+    output = preflight_prompt_budget(("ok",), requested_output_tokens=1_501)
+    assert output.requested_output_tokens == 1_501
 
 
 def test_attempt_policy_allows_only_frozen_structure_or_proven_not_sent_retry() -> None:

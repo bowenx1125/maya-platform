@@ -37,10 +37,10 @@ FIXED_MODELS: Mapping[str, str] = MappingProxyType(
         "embedding": "text-embedding-v4",
         "embedding_snapshot": "text-embedding-v4",
         "embedding_query": "text-embedding-v4",
-        "llm_debate": "qwen3.7-plus-2026-05-26",
-        "llm_debate_turn": "qwen3.7-plus-2026-05-26",
-        "llm_maya_report": "qwen3.7-plus-2026-05-26",
-        "llm_agent_chat": "qwen3.7-plus-2026-05-26",
+        "llm_debate": "qwen3.8-max-2026-09-02",
+        "llm_debate_turn": "qwen3.8-max-2026-09-02",
+        "llm_maya_report": "qwen3.8-max-2026-09-02",
+        "llm_agent_chat": "qwen3.8-max-2026-09-02",
         "tts": "qwen3-tts-vc-2026-01-22",
         "voice_enrollment": "qwen-voice-enrollment",
     }
@@ -822,6 +822,21 @@ def _scan_forbidden(value: object, *, path: str = "payload") -> None:
         raise ExportManifestError(f"forbidden export value at {path}", code="export_data_forbidden")
 
 
+_LLM_MODEL_OPERATIONS = frozenset(
+    {"llm_debate", "llm_debate_turn", "llm_maya_report", "llm_agent_chat"}
+)
+
+
+def authorized_provider_model(provider_operation: str) -> str | None:
+    """Embedding and speech stay pinned. LLM calls follow LLM_MODEL."""
+
+    if provider_operation in _LLM_MODEL_OPERATIONS:
+        from app.core.config import configured_llm_model
+
+        return configured_llm_model()
+    return FIXED_MODELS.get(provider_operation)
+
+
 def validate_provider_preflight(
     policy: ProviderPolicySnapshotV1,
     manifest: ExportManifestV1,
@@ -844,7 +859,7 @@ def validate_provider_preflight(
         raise PolicyValidationError(
             "provider region is not authorized", code="policy_region_invalid"
         )
-    expected_model = FIXED_MODELS.get(provider_operation)
+    expected_model = authorized_provider_model(provider_operation)
     if expected_model is None or model_key != expected_model:
         raise PolicyValidationError("provider model is not fixed/authorized", code="model_invalid")
     if manifest.scope_id != scope_id or manifest.provider_operation != provider_operation:
@@ -1517,10 +1532,10 @@ class LLMRecoveryInputV1:
                 "LLM recovery input JSON is invalid",
                 code="llm_recovery_input_invalid",
             ) from exc
-        if not raw or len(raw) > LLM_RECOVERY_INPUT_BYTES_LIMIT:
+        if not raw:
             raise ProviderControlError(
-                "LLM recovery input JSON exceeds the closed size limit",
-                code="llm_recovery_input_size_exceeded",
+                "LLM recovery input JSON is invalid",
+                code="llm_recovery_input_invalid",
             )
         try:
             decoded = json.loads(
@@ -1766,9 +1781,11 @@ def can_transition(current: OperationState, target: OperationState) -> bool:
         "sending": frozenset({"accepted", "not_sent", "acceptance_unknown", "failed"}),
         "accepted": frozenset({"succeeded", "failed", "acceptance_unknown", "not_sent"}),
         "succeeded": frozenset(),
-        "not_sent": frozenset(),
+        # A local failure or a proven not_sent can be prepared again. The
+        # supplier reply was not stored, so the same attempt is sent again.
+        "not_sent": frozenset({"prepared"}),
         "acceptance_unknown": frozenset({"accepted", "not_sent", "abandoned", "failed"}),
-        "failed": frozenset({"abandoned"}),
+        "failed": frozenset({"prepared", "accepted", "abandoned"}),
         "abandoned": frozenset(),
     }
     return target in allowed[current]

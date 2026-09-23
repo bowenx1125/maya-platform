@@ -26,7 +26,7 @@ from typing import Protocol, cast
 
 from app.core.db import Database
 from app.modules.knowledge.providers.embedding import ValidatedEmbeddingBatchV1
-from app.modules.knowledge.providers.packing import MAX_BATCH_TOKENS, EmbeddingBatchV1
+from app.modules.knowledge.providers.packing import EmbeddingBatchV1
 from app.modules.knowledge.providers.query_embedding import (
     QUERY_PROVIDER_OPERATION,
     QueryEmbeddingBatchProvider,
@@ -321,6 +321,8 @@ class SqlAlchemyQueryControlAdapter(
         confirmation_revision: int | None = None,
         repository: ProviderRepository | None = None,
         max_requests: int = SQL_QUERY_MAX_REQUESTS,
+        max_total_tokens: int = SQL_QUERY_MAX_TOTAL_TOKENS,
+        max_cost_cny: float = SQL_QUERY_MAX_COST_CNY,
     ) -> None:
         try:
             request = SqlQueryRequestV1(
@@ -341,7 +343,18 @@ class SqlAlchemyQueryControlAdapter(
         self.repository = repository or ProviderRepository(database)  # type: ignore[arg-type]
         if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 1:
             raise SqlQueryPreflightError("query request cap is invalid")
+        if (
+            isinstance(max_total_tokens, bool)
+            or not isinstance(max_total_tokens, int)
+            or max_total_tokens < 1
+            or isinstance(max_cost_cny, bool)
+            or not isinstance(max_cost_cny, (int, float))
+            or max_cost_cny < 0
+        ):
+            raise SqlQueryPreflightError("query request cap is invalid")
         self.max_requests = max_requests
+        self.max_total_tokens = max_total_tokens
+        self.max_cost_cny = float(max_cost_cny)
         self._lock = RLock()
         self._active_operation: ProviderOperationV1 | None = None
 
@@ -453,12 +466,14 @@ class SqlAlchemyQueryControlAdapter(
 
     def _ensure_budget(self) -> None:
         try:
-            self.repository.save_scope_budget(
+            # Widen rather than freeze the first cap. An earlier debate row
+            # may still hold the old request, token or CNY ceiling.
+            self.repository.raise_scope_budget(
                 self.request.scope_id,
                 ProviderScopeBudgetV1(
                     max_requests=self.max_requests,
-                    max_total_tokens=SQL_QUERY_MAX_TOTAL_TOKENS,
-                    max_cost_cny=SQL_QUERY_MAX_COST_CNY,
+                    max_total_tokens=self.max_total_tokens,
+                    max_cost_cny=self.max_cost_cny,
                     budget_bucket=EMBEDDING_QUERY_BUCKET,
                 ),
             )
@@ -510,13 +525,9 @@ class SqlAlchemyQueryControlAdapter(
 
     @staticmethod
     def _validate_total_tokens(total_tokens: int) -> None:
-        if (
-            isinstance(total_tokens, bool)
-            or not isinstance(total_tokens, int)
-            or total_tokens < 1
-            or total_tokens > MAX_BATCH_TOKENS
-            or total_tokens > SQL_QUERY_MAX_TOTAL_TOKENS
-        ):
+        # Query text is no longer rejected for length. A non-count still
+        # fails closed so a broken caller cannot reserve an empty batch.
+        if isinstance(total_tokens, bool) or not isinstance(total_tokens, int) or total_tokens < 1:
             raise SqlQueryBudgetError("query token allowance is invalid")
 
     @staticmethod

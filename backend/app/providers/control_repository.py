@@ -1188,21 +1188,37 @@ class ProviderRepository:
             )
             if budget_changed.rowcount != 1:
                 raise ScopeBudgetMissing("scope budget changed during reservation")
-            connection.execute(
-                reservation_table.insert().values(
-                    id=reservation_id,
-                    operation_id=operation_id,
-                    scope_id=operation_row["scope_id"],
-                    provider_operation=operation_row["provider_operation"],
-                    logical_item_id=operation_row["logical_item_id"],
-                    attempt_no=operation_row["attempt_no"],
-                    max_tokens=operation_row["max_tokens"],
-                    max_cost_cny=operation_row["max_cost_cny"],
-                    state="reserved",
-                    created_at=now,
-                    updated_at=now,
+            existing_reservation = (
+                connection.execute(
+                    select(reservation_table.c.id).where(
+                        reservation_table.c.operation_id == operation_id
+                    )
                 )
+                .mappings()
+                .first()
             )
+            if existing_reservation is None:
+                connection.execute(
+                    reservation_table.insert().values(
+                        id=reservation_id,
+                        operation_id=operation_id,
+                        scope_id=operation_row["scope_id"],
+                        provider_operation=operation_row["provider_operation"],
+                        logical_item_id=operation_row["logical_item_id"],
+                        attempt_no=operation_row["attempt_no"],
+                        max_tokens=operation_row["max_tokens"],
+                        max_cost_cny=operation_row["max_cost_cny"],
+                        state="reserved",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            else:
+                connection.execute(
+                    update(reservation_table)
+                    .where(reservation_table.c.operation_id == operation_id)
+                    .values(state="reserved", updated_at=now)
+                )
             connection.execute(
                 update(operation_table)
                 .where(operation_table.c.id == operation_id)
@@ -1244,6 +1260,12 @@ class ProviderRepository:
                 raise OperationStateError(
                     f"invalid provider operation transition: {expected}->{state}"
                 )
+            if (
+                expected == "failed"
+                and state == "accepted"
+                and (response_hash is None or response_hash != row["staged_response_hash"])
+            ):
+                raise OperationStateError("failed accept restore requires the stored stage hash")
             if state == "accepted" and response_hash is None:
                 raise ProviderRepositoryError("accepted operation needs staged response hash")
             if response_hash is not None and not _SHA256_RE.fullmatch(response_hash):

@@ -135,6 +135,7 @@ from app.providers.control import (  # noqa: E402
     sha256_hex,
 )
 from app.providers.control_repository import ProviderRepository  # noqa: E402
+from app.core.config import configured_llm_model  # noqa: E402
 from app.providers.factory import embedding_provider, llm_provider  # noqa: E402
 from app.providers.llm_adapter import DashScopeLLMAdapter  # noqa: E402
 from app.providers.llm_price_card import (  # noqa: E402
@@ -361,12 +362,7 @@ def _real_settings(
         "llm_provider_policy_hash": llm_policy.policy_hash,
         # The explicit per-slice values avoid the ambiguous legacy slot.
         "provider_policy_hash": None,
-        "llm_price_card_version": _env("LLM_PRICE_CARD_VERSION"),
-        "llm_input_price_cny_per_million": _env("LLM_INPUT_PRICE_CNY_PER_MILLION"),
-        "llm_cached_input_price_cny_per_million": _env("LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION"),
-        "llm_output_price_cny_per_million": _env("LLM_OUTPUT_PRICE_CNY_PER_MILLION"),
-        "llm_price_card_retrieved_at": _env("LLM_PRICE_CARD_RETRIEVED_AT"),
-        "llm_price_card_source_content_sha256": _env("LLM_PRICE_CARD_SOURCE_CONTENT_SHA256"),
+        "llm_model": _env("LLM_MODEL") or None,
     }
     try:
         settings = Settings(**values)
@@ -1048,7 +1044,7 @@ def _llm_manifest(
     manifest = ExportManifestV1(
         scope_id=debate_id,
         provider_operation="llm_debate_turn",
-        model_key="qwen3.7-plus-2026-05-26",
+        model_key=configured_llm_model(),
         policy_hash=policy.policy_hash,
         build_manifest_hash=build_hash,
         persona_spec_hash=persona_hash,
@@ -1264,7 +1260,6 @@ def _execute_enabled_case(
         llm_adapter.config,
         llm_adapter.transport,
         tokenizer=llm_adapter.tokenizer,
-        price_card=llm_adapter.price_card,
         outbound_manifest=LLMOutboundManifestV1(),
     )
     runtime = SegmentLLMRuntime(
@@ -1505,7 +1500,6 @@ def _disabled_context_case(
         llm_adapter.config,
         llm_adapter.transport,
         tokenizer=llm_adapter.tokenizer,
-        price_card=llm_adapter.price_card,
         outbound_manifest=LLMOutboundManifestV1(),
     )
     runtime = SegmentLLMRuntime(

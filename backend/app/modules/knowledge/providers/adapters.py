@@ -27,7 +27,6 @@ from .embedding import (
 )
 from .packing import (
     MAX_BATCH_ITEMS,
-    MAX_BATCH_TOKENS,
     EmbeddingBatchV1,
     EmbeddingPlanError,
 )
@@ -398,11 +397,6 @@ def _validate_batch_before_send(
         raise EmbeddingPlanError(
             "embedding batch exceeds ten items", code="embedding_batch_items_exceeded"
         )
-    if batch.total_tokens > MAX_BATCH_TOKENS:
-        raise EmbeddingPlanError(
-            "embedding batch exceeds 30,000 counted tokens",
-            code="embedding_batch_tokens_exceeded",
-        )
     if batch.total_tokens != sum(item.token_count for item in batch.items):
         raise EmbeddingPlanError(
             "embedding batch token count is inconsistent",
@@ -469,7 +463,7 @@ class OpenAICompatibleEmbeddingAdapter:
         model_key: str = REAL_EMBEDDING_MODEL,
         dimension: int = REAL_EMBEDDING_DIMENSION,
         policy_version: str = REAL_EMBEDDING_POLICY_VERSION,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 120.0,
     ) -> None:
         _validate_https_endpoint(endpoint)
         if not model_key or dimension < 1 or timeout_seconds <= 0:
@@ -642,7 +636,7 @@ class DashScopeEmbeddingAdapter(OpenAICompatibleEmbeddingAdapter):
         config: DashScopeEmbeddingConfig,
         transport: EmbeddingTransport,
         *,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 120.0,
     ) -> None:
         endpoint = _validate_dashscope_resource(config)
         super().__init__(

@@ -22,7 +22,7 @@
 }
 
 .surface :global(.section-card) {
-  background: #fff;
+  background: #fdfaf3;
   padding: var(--workspace-inset);
 }
 
@@ -37,9 +37,11 @@
 
 .surface :global(.section-card-header) h2 {
   margin: 0;
-  font-size: 20px;
-  line-height: 1.4;
-  letter-spacing: -0.025em;
+  font-family: var(--display-serif);
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
 }
 
 .surface :global(.section-card-header) p {

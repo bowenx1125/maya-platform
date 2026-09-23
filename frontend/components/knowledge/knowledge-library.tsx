@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  apiErrorMessage,
   isAmbiguousMutationFailure,
   isConflict,
   type KnowledgeDocument,
@@ -11,6 +10,7 @@ import {
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
+import { IconClose, IconDownload, IconEdit, IconRefresh } from "../quiet-icons";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import {
@@ -202,7 +202,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
   async function hide(document: KnowledgeDocument, retry = false) {
     if (
       !retry &&
-      !window.confirm(t("hideConfirm", { filename: document.source_filename }))
+      !window.confirm(t("deleteFileConfirm", { filename: document.source_filename }))
     ) {
       return;
     }
@@ -212,12 +212,12 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
     setBusyId(document.id);
     clearMutationState();
     try {
-      const next = await api.hideKnowledge(document.id, {
+      await api.hideKnowledge(document.id, {
         idempotency: handle,
       });
       mutationStore.finish(intent, handle);
       setDocuments((current) =>
-        current.map((item) => (item.id === next.id ? next : item)),
+        current.filter((item) => item.id !== document.id),
       );
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) {
@@ -248,10 +248,26 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
     }
   }
 
-  if (loading) return <LoadingCard />;
-  if (error && documents.length === 0 && !creating && !editing) {
-    return <ErrorNotice error={error} onRetry={retry} />;
+  if (loading) {
+    return (
+      <>
+        <WorkspaceAction name="new" disabled />
+        <LoadingCard />
+      </>
+    );
   }
+  if (error && documents.length === 0 && !creating && !editing) {
+    return (
+      <>
+        <WorkspaceAction name="new" disabled />
+        <ErrorNotice error={error} onRetry={retry} />
+      </>
+    );
+  }
+
+  const visible = documents.filter(
+    (document) => document.workspace_state === "active",
+  );
 
   return (
     <>
@@ -311,66 +327,72 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
         </SectionCard>
       ) : null}
       {!creating && !editing ? (
-        <SectionCard title={`${documents.length} ${t("fileCount")}`}>
-          {documents.length === 0 ? (
+        <SectionCard title={`${t("filesHeading")} · ${visible.length}`}>
+          {visible.length === 0 ? (
             <EmptyCard title={t("knowledgeNoFiles")} />
           ) : (
-            <div className="document-list">
-              {documents.map((document) => (
-                <div className="document-row library-row" key={document.id}>
+            <div className="knowledge-tile-grid">
+              {visible.map((document) => (
+                <div className="knowledge-tile" key={document.id}>
                   <span className="document-main">
-                    <strong>{document.source_filename}</strong>
+                    <strong title={document.source_filename}>
+                      {document.source_filename}
+                    </strong>
                     <small>
                       {document.char_count.toLocaleString()} {t("characters")}
                     </small>
                   </span>
-                  <StatusBadge
-                    status={document.index_status}
-                    tone={
-                      document.index_status === "ready"
-                        ? "good"
-                        : document.index_status === "failed"
-                          ? "bad"
-                          : "warn"
-                    }
-                  />
-                  <div className="row-actions">
-                    <button
-                      className="inline-button"
-                      type="button"
-                      disabled={busyId !== null}
-                      onClick={() => void beginEdit(document)}
-                    >
-                      {t("edit")}
-                    </button>
-                    <button
-                      className="inline-button"
-                      type="button"
-                      disabled={busyId !== null}
-                      onClick={() => void download(document)}
-                    >
-                      {t("download")}
-                    </button>
-                    {document.index_status === "failed" ? (
+                  <div className="knowledge-tile-foot">
+                    <StatusBadge
+                      status={document.index_status}
+                      tone={
+                        document.index_status === "ready"
+                          ? "good"
+                          : document.index_status === "failed"
+                            ? "bad"
+                            : "warn"
+                      }
+                    />
+                    <div className="icon-action-row">
                       <button
-                        className="inline-button"
+                        className="icon-action"
                         type="button"
                         disabled={busyId !== null}
-                        onClick={() => void reindex(document)}
+                        aria-label={t("edit")}
+                        onClick={() => void beginEdit(document)}
                       >
-                        {t("reindex")}
+                        <IconEdit />
                       </button>
-                    ) : null}
-                    {document.workspace_state === "active" ? (
                       <button
-                        className="inline-button danger-button"
+                        className="icon-action"
                         type="button"
                         disabled={busyId !== null}
+                        aria-label={t("download")}
+                        onClick={() => void download(document)}
+                      >
+                        <IconDownload />
+                      </button>
+                      {document.index_status === "failed" ? (
+                        <button
+                          className="icon-action"
+                          type="button"
+                          disabled={busyId !== null}
+                          aria-label={t("reindex")}
+                          onClick={() => void reindex(document)}
+                        >
+                          <IconRefresh />
+                        </button>
+                      ) : null}
+                      <button
+                        className="icon-action icon-action-danger"
+                        type="button"
+                        disabled={busyId !== null}
+                        aria-label={t("delete")}
                         onClick={() => void hide(document)}
                       >
-                        {t("hide")}
+                        <IconClose />
                       </button>
-                    ) : null}
+                    </div>
                   </div>
                 </div>
               ))}

@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import re
 import secrets
-from decimal import Decimal
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 from pathlib import Path
@@ -20,6 +19,10 @@ from uuid import UUID
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Dated snapshot, not the floating qwen3.8-max alias. LLM_MODEL overrides it.
+DEFAULT_LLM_MODEL = "qwen3.8-max-2026-09-02"
+_LLM_MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 class Settings(BaseSettings):
@@ -68,6 +71,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="EMBEDDING_PROVIDER_POLICY_HASH",
     )
+    llm_model: str = Field(default=DEFAULT_LLM_MODEL, validation_alias="LLM_MODEL")
     llm_provider_policy_hash: str | None = Field(
         default=None,
         validation_alias="LLM_PROVIDER_POLICY_HASH",
@@ -75,33 +79,6 @@ class Settings(BaseSettings):
     report_provider_policy_hash: str | None = Field(
         default=None,
         validation_alias="REPORT_PROVIDER_POLICY_HASH",
-    )
-    # The reviewed LLM price card is server-only accounting input.  Keep the
-    # values explicit in the environment so a real request cannot silently
-    # fall back to the adapter's unreviewed zero-value default.
-    llm_price_card_version: str | None = Field(
-        default=None,
-        validation_alias="LLM_PRICE_CARD_VERSION",
-    )
-    llm_input_price_cny_per_million: Decimal | None = Field(
-        default=None,
-        validation_alias="LLM_INPUT_PRICE_CNY_PER_MILLION",
-    )
-    llm_cached_input_price_cny_per_million: Decimal | None = Field(
-        default=None,
-        validation_alias="LLM_CACHED_INPUT_PRICE_CNY_PER_MILLION",
-    )
-    llm_output_price_cny_per_million: Decimal | None = Field(
-        default=None,
-        validation_alias="LLM_OUTPUT_PRICE_CNY_PER_MILLION",
-    )
-    llm_price_card_retrieved_at: str | None = Field(
-        default=None,
-        validation_alias="LLM_PRICE_CARD_RETRIEVED_AT",
-    )
-    llm_price_card_source_content_sha256: str | None = Field(
-        default=None,
-        validation_alias="LLM_PRICE_CARD_SOURCE_CONTENT_SHA256",
     )
     deepl_api_key: str | None = Field(default=None, validation_alias="DEEPL_API_KEY")
     # Provider selectors intentionally default to local mocks.  They are
@@ -249,6 +226,15 @@ class Settings(BaseSettings):
             raise ValueError("PROVIDER_POLICY_HASH must be a lowercase SHA-256 value")
         return value.strip()
 
+    @field_validator("llm_model", mode="before")
+    @classmethod
+    def llm_model_is_an_explicit_id(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return DEFAULT_LLM_MODEL
+        if not isinstance(value, str) or _LLM_MODEL_RE.fullmatch(value.strip()) is None:
+            raise ValueError("LLM_MODEL must be a model id")
+        return value.strip()
+
     @field_validator(
         "embedding_provider_policy_hash",
         "llm_provider_policy_hash",
@@ -262,21 +248,6 @@ class Settings(BaseSettings):
         if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value.strip()) is None:
             raise ValueError("provider slice policy hash must be a lowercase SHA-256 value")
         return value.strip()
-
-    @field_validator(
-        "llm_price_card_version",
-        "llm_input_price_cny_per_million",
-        "llm_cached_input_price_cny_per_million",
-        "llm_output_price_cny_per_million",
-        "llm_price_card_retrieved_at",
-        "llm_price_card_source_content_sha256",
-        mode="before",
-    )
-    @classmethod
-    def empty_llm_price_card_value_is_missing(cls, value: object) -> object:
-        # Compose forwards empty defaults for an all-Mock runtime. Treat them
-        # as absent so optional fields stay inert until the LLM is real.
-        return None if value is None or (isinstance(value, str) and not value.strip()) else value
 
     @property
     def is_test(self) -> bool:
@@ -409,39 +380,6 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "REPORT_PROVIDER_POLICY_HASH is required for real Maya Report publication"
             )
-        if self.llm_provider == "dashscope" or self.report_provider == "dashscope":
-            self._validate_llm_price_card()
-
-    def _validate_llm_price_card(self) -> None:
-        """Validate the configured reviewed card through the existing model."""
-
-        from app.providers.llm_price_card import LLMPriceCardError, LLMPriceCardV1
-
-        try:
-            card = LLMPriceCardV1(
-                version=self.llm_price_card_version or "",
-                input_price_per_million=(
-                    self.llm_input_price_cny_per_million
-                    if self.llm_input_price_cny_per_million is not None
-                    else ""
-                ),
-                cached_input_price_per_million=(
-                    self.llm_cached_input_price_cny_per_million
-                    if self.llm_cached_input_price_cny_per_million is not None
-                    else ""
-                ),
-                output_price_per_million=(
-                    self.llm_output_price_cny_per_million
-                    if self.llm_output_price_cny_per_million is not None
-                    else ""
-                ),
-                retrieved_at=self.llm_price_card_retrieved_at or "",
-                source_content_sha256=self.llm_price_card_source_content_sha256 or "",
-            )
-            card.assert_reviewed()
-            card.reservation_cost()
-        except LLMPriceCardError as exc:
-            raise RuntimeError(f"LLM price card is invalid: {exc}") from exc
 
     @property
     def embedding_policy_hash(self) -> str | None:
@@ -600,3 +538,9 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+def configured_llm_model() -> str:
+    """Chat, debate and report model. One env value, not a per-surface id."""
+
+    return get_settings().llm_model

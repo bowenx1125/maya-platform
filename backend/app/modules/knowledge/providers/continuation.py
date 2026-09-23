@@ -1,10 +1,13 @@
 """Bounded restart continuation for multi-batch SnapshotBuild embedding.
 
 This module is deliberately separate from the first-run runtime.  Recovery is
-not another full ``run``: accepted stages are validated and reused, while only
-the latest ``not_sent`` operation for each missing batch may claim the single
-next attempt.  All durable identity checks happen before a new reservation or
-provider call.
+not another full ``run``: a staged accept is validated and reused, including
+one that was later marked ``acceptance_unknown`` while its stage still matches.
+A proven ``not_sent`` batch, a batch the supplier explicitly rejected with
+HTTP, or an ``acceptance_unknown`` batch that has no staged response may claim
+the next attempt, up to three.  Accepted batches are not resent.  Retrying an
+unknown batch can charge it again.  All durable identity checks happen before
+a new reservation or provider call.
 """
 
 from __future__ import annotations
@@ -40,10 +43,14 @@ if TYPE_CHECKING:
         SnapshotPublicationPort,
     )
 
-# The W4-EMBED contract authorizes one frozen retry for a batch that is proven
-# ``not_sent``.  This is intentionally local to continuation, so repeated
-# process startups cannot turn it into an unbounded retry loop.
-MAX_EMBEDDING_ATTEMPTS = 2
+# One frozen retry.  ``not_sent`` is the contract case.  ``provider_http_rejected``
+# is an explicit supplier rejection, so a later publish may resend that batch
+# once.  Repeated startups cannot turn either case into an unbounded loop.
+# The first send, one explicit HTTP or not_sent retry, and one more send when
+# a read timeout left acceptance_unknown with no staged response.  The owner
+# required that stuck snapshot publish to continue.
+MAX_EMBEDDING_ATTEMPTS = 3
+EXPLICIT_HTTP_REJECTION = "provider_http_rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +89,7 @@ def continue_from_stages(
     current_build_verifier: Callable[[SnapshotBuildV1], object] | None = None,
     existing_snapshot_ids: Sequence[str] = (),
 ) -> SnapshotEmbeddingRunV1:
-    """Continue a frozen build, sending only missing ``not_sent`` batches.
+    """Continue a frozen build, sending only batches that have no staged accept.
 
     ``runtime.py`` delegates here lazily after its legacy run/resume classes
     are loaded, keeping this recovery state machine out of the first-run path.
@@ -501,16 +508,32 @@ def _validate_state(
             "failed",
             "abandoned",
         }
-        if any(operation.state in bad_states for operation in history):
-            state = next(operation.state for operation in history if operation.state in bad_states)
+        blocking = next(
+            (
+                operation
+                for operation in history
+                if operation.state in bad_states and _blocks_continuation(operation, stages)
+            ),
+            None,
+        )
+        if blocking is not None:
             raise SnapshotEmbeddingRuntimeError(
                 "embedding continuation contains a non-recoverable operation",
                 code="acceptance_unknown"
-                if state == "acceptance_unknown"
+                if blocking.state == "acceptance_unknown"
                 else "embedding_operation_not_recoverable",
             )
-        complete = [item for item in history if item.state in {"accepted", "succeeded"}]
+        complete = [
+            item
+            for item in history
+            if item.state in {"accepted", "succeeded"} or _staged_accept_remains(item, stages)
+        ]
         not_sent = [item for item in history if item.state == "not_sent"]
+        rejected = [
+            item
+            for item in history
+            if item.state == "failed" and item.safe_error_code == EXPLICIT_HTTP_REJECTION
+        ]
         if len(complete) > 1:
             raise SnapshotEmbeddingRuntimeError(
                 "embedding continuation has duplicate accepted attempts",
@@ -558,6 +581,15 @@ def _validate_state(
             complete_stage_ids.add(operation.id)
             accepted.append((operation, value, stage))
         elif not_sent and latest.state == "not_sent":
+            missing.append((batch, latest))
+        elif (
+            rejected
+            and not complete
+            and latest.state == "failed"
+            and latest.safe_error_code == EXPLICIT_HTTP_REJECTION
+        ):
+            missing.append((batch, latest))
+        elif latest.state == "acceptance_unknown" and not _staged_accept_remains(latest, stages):
             missing.append((batch, latest))
         else:
             raise SnapshotEmbeddingRuntimeError(
@@ -683,6 +715,7 @@ def _continue_missing(
     stage_accepted_atomic = _stage_accepted_atomic
     batch_index_from_operation = _batch_index_from_operation
     resolved_existing = _known_snapshot_ids(publisher, existing_snapshot_ids)
+    validation = _restore_staged_accepts(control, validation)
     latest_by_index = {
         _batch_index(operation, batch_index_from_operation): operation
         for operation in validation.latest_operations
@@ -1123,6 +1156,71 @@ def _failure(
     )
 
 
+def _staged_accept_remains(
+    operation: EmbeddingOperationV1,
+    stages: Mapping[str, AcceptedEmbeddingStageV1],
+) -> bool:
+    """True when this operation still has the stage that proved supplier acceptance."""
+
+    stage = stages.get(operation.id)
+    response_hash = getattr(stage, "response_hash", None)
+    return bool(operation.staged_response_hash) and response_hash == operation.staged_response_hash
+
+
+def _blocks_continuation(
+    operation: EmbeddingOperationV1,
+    stages: Mapping[str, AcceptedEmbeddingStageV1],
+) -> bool:
+    """Return whether this history row must stop continuation before any send."""
+
+    if operation.state == "failed" and operation.safe_error_code == EXPLICIT_HTTP_REJECTION:
+        return False
+    if operation.state == "failed" and _staged_accept_remains(operation, stages):
+        # The supplier result is already staged.  The failure was the local
+        # snapshot commit, so the next publish reuses the stage.
+        return False
+    if operation.state == "acceptance_unknown":
+        # A matching stage is restored without a send.  An unknown with no
+        # stage takes the next attempt below; stopping here is what left the
+        # timed-out snapshot publish unable to finish.
+        return False
+    return True
+
+
+def _restore_staged_accepts(
+    control: EmbeddingControlPort,
+    validation: _ContinuationValidationV1,
+) -> _ContinuationValidationV1:
+    """Put a demoted staged accept back to ``accepted`` before success is committed.
+
+    ``acceptance_unknown -> accepted`` and ``failed -> accepted`` are legal when
+    the stored stage still matches.  The supplier request is not repeated; the
+    stored stage is the proof.
+    """
+
+    healed: list[
+        tuple[EmbeddingOperationV1, ValidatedEmbeddingBatchV1, AcceptedEmbeddingStageV1]
+    ] = []
+    changed = False
+    for operation, value, stage in validation.accepted:
+        current = control.get(operation.id) or operation
+        if current.state in {"acceptance_unknown", "failed"}:
+            current = control.mark_accepted(operation.id, response_hash=stage.response_hash)
+            changed = True
+        healed.append((current, value, stage))
+    if not changed:
+        return validation
+    healed_by_id = {operation.id: operation for operation, _, _ in healed}
+    return _ContinuationValidationV1(
+        accepted=tuple(healed),
+        missing=validation.missing,
+        latest_operations=tuple(
+            healed_by_id.get(operation.id, operation) for operation in validation.latest_operations
+        ),
+        stages=validation.stages,
+    )
+
+
 def _fail_closed(
     control: EmbeddingControlPort,
     *,
@@ -1136,7 +1234,15 @@ def _fail_closed(
 
     updated = list(operations)
     for index, operation in enumerate(updated):
-        if isinstance(operation, EmbeddingOperationV1) and operation.state == "accepted":
+        # A sibling batch failure used to rewrite a staged accept as
+        # acceptance_unknown, which discarded vectors the supplier had already
+        # returned.  Keep that stage.  Only an accept with no matching stage
+        # is fail-closed.
+        if (
+            isinstance(operation, EmbeddingOperationV1)
+            and operation.state == "accepted"
+            and not _staged_accept_remains(operation, stages)
+        ):
             try:
                 updated[index] = control.mark_acceptance_unknown(
                     operation.id, safe_error_code=safe_error_code

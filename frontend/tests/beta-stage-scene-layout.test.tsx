@@ -160,6 +160,9 @@ describe("BetaDebateStage scene layout", () => {
     const scene = screen.getByTestId("scholar-scene");
     expect(scene.getAttribute("data-layout")).toBe("preview");
     expect(scholarSceneProps[0].layout).toBe("preview");
+    expect(
+      screen.getByRole("heading", { name: "Should the bench fill the screen?" }),
+    ).toBeTruthy();
   });
 
   it("separates fixed controls from the toggleable transcript and retains its heading", () => {
