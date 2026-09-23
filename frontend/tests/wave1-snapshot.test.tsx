@@ -127,7 +127,7 @@ describe("student and teacher snapshot selection", () => {
     mockedUseSession.mockReturnValue({ api } as never);
     const view = render(<TeacherAgentDetail agentId="agent-id" />);
     await screen.findByRole("heading", { name: "version-one" });
-    expect(screen.queryByRole("button", { name: "Download RAG" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Download RAG" })).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
     await screen.findByRole("heading", { name: `${first} one` });
     expect(screen.queryByRole("heading", { name: `${first} two` })).toBeNull();

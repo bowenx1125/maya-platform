@@ -154,10 +154,7 @@ export function TeacherDebateList({
             <div className={styles.list}>
               {debates.map((debate) => (
                 <div className={styles.debateRow} key={debate.id}>
-                  <Link
-                    className={styles.debateCard}
-                    href={`/teacher/debates/${debate.id}/control`}
-                  >
+                  <div className={styles.debateCard}>
                     <div>
                       <h2>{debate.topic}</h2>
                       <div className={styles.metaRow}>
@@ -174,7 +171,7 @@ export function TeacherDebateList({
                       debate can stall too: the lesson that stopped generating
                       mid-round used to read Running with nothing to act on. */}
                     <DebateStatus debate={debate} />
-                  </Link>
+                  </div>
                   <div className={styles.debateActions}>
                     {["completed", "debate_finished"].includes(
                       debate.status,

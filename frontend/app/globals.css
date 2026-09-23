@@ -855,9 +855,9 @@ details > summary {
 
 .agent-tile-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .knowledge-tile,
@@ -868,16 +868,17 @@ details > summary {
   padding: 8px 10px;
   border: 1px solid #ebe5df;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.66);
+  background: #fdfaf3;
   justify-items: center;
   text-align: center;
 }
 
 .agent-tile {
   align-content: center;
-  min-height: 88px;
-  gap: 10px;
-  padding: 14px 12px;
+  justify-items: center;
+  min-height: 0;
+  gap: 6px;
+  padding: 10px 8px;
 }
 
 .agent-tile .agent-pill {
@@ -924,10 +925,21 @@ details > summary {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
-  font-size: 1.08rem;
+  font-size: 0.98rem;
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.01em;
+}
+
+.agent-tile-group {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
 }
 
 .knowledge-tile {
@@ -1129,16 +1141,22 @@ details > summary {
   line-height: 1.5;
 }
 
+@media (max-width: 1100px) {
+  .agent-tile-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .agent-tile-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
   .knowledge-tile-grid,
   .agent-tile-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .mayaform-home {
@@ -1712,22 +1730,37 @@ details > summary {
 
 .snapshot-summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 16px;
 }
 
 .snapshot-summary > div {
+  display: grid;
+  gap: 4px;
+  align-content: start;
   min-width: 0;
   padding: 11px;
   border-radius: 12px;
   background: #f8f5f0;
 }
 
+.snapshot-summary .section-label {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .snapshot-summary strong {
   display: block;
   overflow: hidden;
   font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

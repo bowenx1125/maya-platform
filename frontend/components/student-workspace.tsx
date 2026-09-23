@@ -267,6 +267,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
             {items.map(({ agent, versions }) => (
               <GroupAgentTile
                 agent={agent}
+                groupName={group.name}
                 key={agent.id}
                 versions={versions}
                 deleting={deleting !== null}
@@ -282,11 +283,13 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
 
 function GroupAgentTile({
   agent,
+  groupName,
   versions,
   deleting,
   onDelete,
 }: {
   agent: AgentSummary;
+  groupName: string;
   versions: AgentVersion[];
   deleting: boolean;
   onDelete: () => void;
@@ -301,6 +304,7 @@ function GroupAgentTile({
       >
         {agent.name}
       </Link>
+      <span className="agent-tile-group">{groupName}</span>
       <button
         type="button"
         className="agent-pill agent-pill-action"

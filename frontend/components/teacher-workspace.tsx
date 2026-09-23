@@ -15,6 +15,7 @@ import {
   type PublishedAgentSummary,
 } from "../lib/api";
 import { useT } from "./locale";
+import { IconClose, IconDownload } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
@@ -36,6 +37,7 @@ export function TeacherDashboard() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -72,8 +74,25 @@ export function TeacherDashboard() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  async function deleteAgent(agentId: string) {
+    if (deleting || !window.confirm(t("deleteAgentConfirm"))) return;
+    setDeleting(agentId);
+    setError(null);
+    try {
+      await api.deleteAgent(agentId);
+      setPublished((current) =>
+        current.filter((item) => item.agent.id !== agentId),
+      );
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   if (loading) return <LoadingCard />;
-  if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
+  if (error && published.length === 0)
+    return <ErrorNotice error={error} onRetry={() => void load()} />;
   return (
     <div className="teacher-home-layout">
       <PageIntro
@@ -83,9 +102,8 @@ export function TeacherDashboard() {
             : (course?.name ?? t("appName"))
         }
       />
-      {/* What is real and what is Mock, under the course it describes rather
-          than above the title, so the page opens on its own heading. */}
       <DemoCompositionBadge />
+      {error ? <ErrorNotice error={error} /> : null}
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
@@ -93,15 +111,17 @@ export function TeacherDashboard() {
           title={`${t("agents")} · ${published.length}`}
           className="published-section"
         >
-          <div className="published-grid">
+          <div className="agent-tile-grid">
             {published.map((item) => (
-              <PublishedAgentCard
+              <PublishedAgentTile
                 groupName={
                   groups.find((group) => group.id === item.agent.group_id)
-                    ?.name ?? null
+                    ?.name ?? ""
                 }
                 item={item}
                 key={item.agent.id}
+                deleting={deleting !== null}
+                onDelete={() => void deleteAgent(item.agent.id)}
               />
             ))}
           </div>
@@ -111,38 +131,49 @@ export function TeacherDashboard() {
   );
 }
 
-function PublishedAgentCard({
+function PublishedAgentTile({
   item,
   groupName,
+  deleting,
+  onDelete,
 }: {
   item: PublishedAgentSummary;
-  groupName: string | null;
+  groupName: string;
+  deleting: boolean;
+  onDelete: () => void;
 }) {
+  const t = useT();
   const version = item.current_version;
-  // A newer draft that has not been published yet. Derived from the Agent's
-  // own pointers rather than a status word, so it stays true for any version
-  // label and any number of releases.
   const hasUnpublishedWork =
     Boolean(item.agent.current_draft_version_id) &&
     item.agent.current_draft_version_id !==
       item.agent.current_published_version_id;
   return (
-    <Link className="published-card" href={`/teacher/agents/${item.agent.id}`}>
-      <div className="published-card-top">
-        <h2>{item.agent.name}</h2>
-        <span className="published-card-group" title={groupName ?? undefined}>
-          {groupName}
+    <div className="agent-tile" data-agent-row={item.agent.id}>
+      <Link
+        className="agent-tile-name text-link"
+        href={`/teacher/agents/${item.agent.id}`}
+      >
+        {item.agent.name}
+      </Link>
+      {groupName ? (
+        <span className="agent-tile-group">{groupName}</span>
+      ) : null}
+      <button
+        type="button"
+        className="agent-pill agent-pill-action"
+        data-pending={hasUnpublishedWork ? "true" : "false"}
+        disabled={deleting}
+        aria-label={t("deleteAgent")}
+        title={version.version_label}
+        onClick={onDelete}
+      >
+        <span className="agent-pill-label">{version.version_label}</span>
+        <span className="agent-pill-x" aria-hidden="true">
+          <IconClose size={12} />
         </span>
-      </div>
-      <div className="published-card-meta">
-        <span
-          className="agent-pill"
-          data-pending={hasUnpublishedWork ? "true" : "false"}
-        >
-          {version.version_label}
-        </span>
-      </div>
-    </Link>
+      </button>
+    </div>
   );
 }
 
@@ -287,7 +318,33 @@ export function TeacherAgentDetail({
           </div>
         </SectionCard>
       </div>
-      <SectionCard title="RAG" className={detailStyles.card}>
+      <SectionCard
+        title="RAG"
+        className={detailStyles.card}
+        action={
+          snapshot?.documents.length ? (
+            <button
+              className="icon-action"
+              type="button"
+              aria-label={`${t("download")} RAG`}
+              title={t("download")}
+              onClick={() => {
+                void (async () => {
+                  for (const document of snapshot.documents) {
+                    const result = await api.downloadSnapshotDocument(
+                      snapshot.id,
+                      document.id,
+                    );
+                    downloadText(result.content, result.filename);
+                  }
+                })();
+              }}
+            >
+              <IconDownload />
+            </button>
+          ) : null
+        }
+      >
         {snapshot?.documents.length ? (
           <div className={detailStyles.files}>
             {snapshot.documents.map((document) => (
@@ -334,18 +391,43 @@ export function TeacherAgentDetail({
 }
 
 function TeacherAgentMarkdown({ version }: { version?: AgentVersion }) {
+  const t = useT();
+  const { api } = useSession();
+  const [busy, setBusy] = useState(false);
   return (
     <SectionCard
       title="AGENT.md"
       className={`${detailStyles.card} ${detailStyles.personaCard}`}
       action={
         version ? (
-          <span
-            className="agent-pill"
-            data-pending={version.state === "draft" ? "true" : "false"}
-          >
-            {version.version_label}
-          </span>
+          <div className={detailStyles.actions}>
+            <span
+              className="agent-pill"
+              data-pending={version.state === "draft" ? "true" : "false"}
+            >
+              {version.version_label}
+            </span>
+            <button
+              className="icon-action"
+              type="button"
+              disabled={busy}
+              aria-label={`${t("download")} AGENT.md`}
+              title={t("download")}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    const downloaded = await api.downloadAgentMd(version.id);
+                    downloadText(downloaded.content, downloaded.filename);
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              <IconDownload />
+            </button>
+          </div>
         ) : null
       }
     >
@@ -367,6 +449,7 @@ function RagFile({
   snapshotId: string;
   document: KnowledgeSnapshot["documents"][number];
 }) {
+  const t = useT();
   const { api } = useSession();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState<string | null>(null);
@@ -403,7 +486,9 @@ function RagFile({
           <strong title={document.source_filename}>
             {document.source_filename}
           </strong>
-          <small>{document.char_count.toLocaleString()} characters</small>
+          <small>
+            {document.char_count.toLocaleString()} {t("characters")}
+          </small>
         </div>
         <div className={detailStyles.fileActions}>
           <button
@@ -417,12 +502,14 @@ function RagFile({
             Check
           </button>
           <button
-            className={detailStyles.action}
+            className="icon-action"
             type="button"
             disabled={busy}
+            aria-label={t("download")}
+            title={t("download")}
             onClick={() => void read(true)}
           >
-            Download
+            <IconDownload />
           </button>
         </div>
       </div>

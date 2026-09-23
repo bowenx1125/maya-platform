@@ -365,13 +365,13 @@ export function AgentChat() {
                 id="chat-message"
                 aria-label="Message"
                 value={draft}
-                rows={3}
+                rows={1}
                 disabled={busy || character?.available === false}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (
                     event.key === "Enter" &&
-                    (event.metaKey || event.ctrlKey) &&
+                    !event.shiftKey &&
                     !event.nativeEvent.isComposing
                   ) {
                     event.preventDefault();

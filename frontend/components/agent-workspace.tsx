@@ -25,6 +25,7 @@ import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
+import { IconDownload } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import {
@@ -828,28 +829,76 @@ function ReadOnlyVersion({
     }
   }
 
+  async function downloadEvidence() {
+    const documents = version.enabled_documents ?? [];
+    if (documents.length === 0) return;
+    setAgentMdBusy(true);
+    setAgentMdError(null);
+    try {
+      for (const document of documents) {
+        const downloaded = await api.downloadKnowledge(
+          document.id,
+          document.source_filename,
+        );
+        downloadText(downloaded.content, downloaded.filename);
+      }
+    } catch (cause) {
+      setAgentMdError(cause);
+    } finally {
+      setAgentMdBusy(false);
+    }
+  }
+
+  const downloadAction = (
+    <button
+      className="icon-action"
+      type="button"
+      disabled={agentMdBusy}
+      aria-label={`${t("download")} AGENT.md`}
+      title={t("download")}
+      onClick={() => void downloadAgentMd()}
+    >
+      <IconDownload />
+    </button>
+  );
+
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
       <WorkspaceAction name="back" href={`/student/groups/${agent.group_id}`} />
       <div className="workbench-grid">
         <div className="workbench-main">
-          <SectionCard title={t("agentMd")} action={actions}>
+          <SectionCard
+            title={t("agentMd")}
+            action={
+              <>
+                {actions}
+                {downloadAction}
+              </>
+            }
+          >
             <ReportMarkdown className="read-only-markdown rendered-persona">
               {version.agent_md || t("noPrompt")}
             </ReportMarkdown>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={agentMdBusy}
-              aria-label={`${t("download")} AGENT.md`}
-              onClick={() => void downloadAgentMd()}
-            >
-              {t("download")}
-            </button>
             {agentMdError ? <ErrorNotice error={agentMdError} /> : null}
           </SectionCard>
-          <SectionCard title={t("enabledEvidence")}>
+          <SectionCard
+            title={t("enabledEvidence")}
+            action={
+              (version.enabled_documents ?? []).length > 0 ? (
+                <button
+                  className="icon-action"
+                  type="button"
+                  disabled={agentMdBusy}
+                  aria-label={t("download")}
+                  title={t("download")}
+                  onClick={() => void downloadEvidence()}
+                >
+                  <IconDownload />
+                </button>
+              ) : null
+            }
+          >
             <div className="document-list">
               {(version.enabled_documents ?? []).map((document) => (
                 <div className="document-row" key={document.id}>
@@ -999,7 +1048,23 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
       </SectionCard>
     );
   return (
-    <SectionCard title={t("knowledgeSnapshot")}>
+    <SectionCard
+      title={t("knowledgeSnapshot")}
+      action={
+        snapshot ? (
+          <button
+            className="icon-action"
+            type="button"
+            disabled={busy}
+            aria-label={`${t("download")} RAG`}
+            title={t("download")}
+            onClick={() => void downloadSnapshot()}
+          >
+            <IconDownload />
+          </button>
+        ) : null
+      }
+    >
       {snapshot ? (
         <>
           <div className="snapshot-summary">
@@ -1018,32 +1083,24 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
               <strong>{snapshot.documents.length}</strong>
             </div>
           </div>
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={busy}
-            aria-label={`${t("download")} RAG`}
-            onClick={() => void downloadSnapshot()}
-          >
-            {t("downloadRag")}
-          </button>
           <div className="snapshot-files">
             {snapshot.documents.map((document) => (
               <div className="snapshot-file" key={document.id}>
                 <span>
                   <strong>{document.source_filename}</strong>
                   <small>
-                    {t("order")} {document.order_index + 1} ·{" "}
                     {document.char_count.toLocaleString()} {t("characters")}
                   </small>
                 </span>
                 <button
-                  className="inline-button"
+                  className="icon-action"
                   type="button"
                   disabled={busy}
+                  aria-label={t("download")}
+                  title={t("download")}
                   onClick={() => void downloadDocument(document.id)}
                 >
-                  {t("download")}
+                  <IconDownload />
                 </button>
               </div>
             ))}

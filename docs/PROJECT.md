@@ -341,14 +341,17 @@ authentication, ownership and deduplication remain.
 Mayaform home shows Welcome then Members; the old Workspace Members card is gone.
 Student Knowledge lists `Files · N` in a two-column tile grid; library Delete is the
 quiet X and soft-hides or removes the library row without rewriting published
-knowledge snapshots. Workspace Agents use a three-column tile grid with larger
-names; green/brown version bubbles show `V1.0` (or last published while a draft is
-pending); hover/focus on the bubble replaces the version with X to delete — no
-Published/Draft words and no separate Delete label. Teacher Agent inspection uses
-`Agents · N` copy. Ruleset save is the checkmark beside language; sidebar Done does
-not save an unsaved Edit. Symbol actions: Knowledge Edit/Download/Delete icons,
-Accounts Enter as →, ruleset pencil/check. New stays visible and fades when
-disabled; Back/Done remain contextual.
+knowledge snapshots. Workspace and teacher Agents use a six-column tile grid with
+name, group, and version bubble vertically centered on warm paper; green/brown
+bubbles show the version label; hover/focus swaps the label for X to delete.
+Teacher Debates list no longer opens Preview from the row — Immerse remains the
+entry. AGENT.md, Evidence, and Knowledge snapshot cards use a top-right download
+icon; Evidence downloads every RAG file in the block; snapshot file rows keep
+filename and character count without `order N`. Snapshot SNAPSHOT/CONTENT/FILES
+are three vertical stacks (label above value) at the existing number size. Chats
+composer is a single-line bar at the bottom of the pane. Ruleset save is the
+checkmark beside language; sidebar Done does not save an unsaved Edit. Symbol
+actions and faded New / contextual Back/Done remain as before.
 
 ## Snapshot publish quota — September 23, 2026
 

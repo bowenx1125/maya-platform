@@ -146,7 +146,7 @@ describe("Wave 2 teacher debate setup", () => {
     );
   });
 
-  it("renders teacher debate summaries and links to the control surface", async () => {
+  it("renders teacher debate summaries without a Preview list entry", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const rows = [
       {
@@ -165,10 +165,9 @@ describe("Wave 2 teacher debate setup", () => {
       />,
     );
 
-    const link = await screen.findByRole("link", { name: /TikTok/ });
-    expect(link.getAttribute("href")).toBe(
-      "/teacher/debates/debate-one/control",
-    );
+    const link = await screen.findByRole("heading", { name: /TikTok/ });
+    expect(link).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /TikTok/ })).toBeNull();
     expect(screen.getByText("2 Rounds")).toBeTruthy();
   });
 
@@ -200,7 +199,7 @@ describe("Wave 2 teacher debate setup", () => {
           }}
         />,
       );
-      await screen.findByRole("link", { name: /Stage entry/ });
+      await screen.findByRole("heading", { name: /Stage entry/ });
       if (enabled) {
         const entry = screen.getByRole("link", { name: "Immerse" });
         expect(entry.getAttribute("href")).toBe(
@@ -628,9 +627,8 @@ it("updates debate progress in place without opening the debate", async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
     expect(load).toHaveBeenCalledTimes(2);
-    expect(
-      screen.getByRole("link", { name: /A live preview/ }).textContent,
-    ).toContain("4 / 6");
+    expect(screen.getByRole("heading", { name: /A live preview/ })).toBeTruthy();
+    expect(screen.getByText(/4 \/ 6/)).toBeTruthy();
   } finally {
     cleanup();
     vi.useRealTimers();
