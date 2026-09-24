@@ -158,3 +158,21 @@ export function avatarDefaultConfigForTemplate(
 
 export const AVATAR_ASSET_URL = "/avatars/female_1.glb";
 export const AVATAR_DECODER_PATH = "/avatars/draco/";
+
+/**
+ * Mirrors the server catalog asset registry. The public template DTO does not
+ * carry a path, so full-body previews resolve the same GLB the catalog
+ * registered for that template id.
+ */
+export const AVATAR_TEMPLATE_ASSETS = {
+  "wave1-default-head": "/avatars/female_1.glb",
+  "maya-warm-scholar": "/avatars/elder-scholar.glb",
+  "maya-civic-observer": "/avatars/noble-scholar.glb",
+} as const satisfies Readonly<Record<string, string>>;
+
+export function avatarAssetUrlForTemplate(templateId: string): string {
+  const registered = (
+    AVATAR_TEMPLATE_ASSETS as Readonly<Record<string, string>>
+  )[templateId];
+  return registered ?? AVATAR_ASSET_URL;
+}
