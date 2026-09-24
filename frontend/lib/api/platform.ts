@@ -146,6 +146,13 @@ export type ChatStreamResult = {
   audioUrl: string | null;
   voiceProfileId: string | null;
   contentType: string | null;
+  /** Set when TTS fails after text_done. The assistant text stays. */
+  ttsErrorCode: string | null;
+};
+
+export type ChatStreamHooks = {
+  /** Fired when text_done is parsed, before later TTS events are read. */
+  onTextDone?: (session: ChatSession) => void;
 };
 export type ChatTurn = components["schemas"]["ChatTurn"];
 export type ProviderSettings = components["schemas"]["ProviderSettings"];
@@ -274,9 +281,17 @@ function readErrorPayload(error: unknown): Partial<ErrorPayload> | undefined {
   return typeof candidate.message === "string" ? candidate : undefined;
 }
 
-function parseSseBlock(
-  block: string,
-): { event: string; [key: string]: unknown } | null {
+export class SseBlockError extends Error {
+  constructor() {
+    super("chat_stream_invalid");
+    this.name = "SseBlockError";
+  }
+}
+
+export type SseEvent = { event: string; [key: string]: unknown };
+
+/** Parse one SSE block. Empty blocks are skipped. Invalid JSON throws. */
+export function parseSseBlock(block: string): SseEvent | null {
   let event = "message";
   const data: string[] = [];
   for (const line of block.split("\n")) {
@@ -284,44 +299,65 @@ function parseSseBlock(
     else if (line.startsWith("data:")) data.push(line.slice(5).trim());
   }
   if (!data.length) return null;
-  const payload = JSON.parse(data.join("\n")) as Record<string, unknown>;
-  return { event, ...payload };
+  let payload: unknown;
+  try {
+    payload = JSON.parse(data.join("\n"));
+  } catch {
+    throw new SseBlockError();
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new SseBlockError();
+  }
+  return { event, ...(payload as Record<string, unknown>) };
 }
 
-async function readSseEvents(
+export async function readSseEvents(
   response: Response,
-): Promise<Array<{ event: string; [key: string]: unknown }>> {
-  if (!response.body) return [];
+  onEvent: (event: SseEvent) => void | Promise<void>,
+): Promise<void> {
+  if (!response.body) return;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const events: Array<{ event: string; [key: string]: unknown }> = [];
-  const consume = (final: boolean) => {
+  const release = () => {
+    try {
+      reader.releaseLock();
+    } catch {
+      // cancel() already released the lock.
+    }
+  };
+  const emit = async (final: boolean) => {
     let splitAt = buffer.indexOf("\n\n");
     while (splitAt >= 0) {
       const block = buffer.slice(0, splitAt);
       buffer = buffer.slice(splitAt + 2);
       const parsed = parseSseBlock(block);
-      if (parsed) events.push(parsed);
+      if (parsed) await onEvent(parsed);
       splitAt = buffer.indexOf("\n\n");
     }
     if (final && buffer.trim()) {
       const parsed = parseSseBlock(buffer);
-      if (parsed) events.push(parsed);
+      if (parsed) await onEvent(parsed);
       buffer = "";
     }
   };
-  for (;;) {
-    const chunk = await reader.read();
-    if (chunk.done) {
-      buffer += decoder.decode();
-      consume(true);
-      break;
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        buffer += decoder.decode();
+        await emit(true);
+        break;
+      }
+      buffer += decoder.decode(chunk.value, { stream: true });
+      await emit(false);
     }
-    buffer += decoder.decode(chunk.value, { stream: true });
-    consume(false);
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    release();
   }
-  return events;
 }
 
 async function unwrap<T>(result: ClientResult<T>): Promise<T> {
@@ -707,6 +743,7 @@ export class PlatformApi {
       message: string;
       lang: "zh-CN" | "en";
     },
+    hooks?: ChatStreamHooks,
   ): Promise<ChatStreamResult> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     const response = await fetch(
@@ -737,41 +774,64 @@ export class PlatformApi {
         errorPayload,
       );
     }
-    const events = await readSseEvents(response);
     let sawText = false;
+    let session: ChatSession | null = null;
     let audioUrl: string | null = null;
     let voiceProfileId: string | null = null;
     let contentType: string | null = null;
-    for (const event of events) {
-      if (event.event === "error" && !sawText) {
-        const code =
-          typeof event.safe_error_code === "string"
-            ? event.safe_error_code
-            : "chat_failed";
-        throw new PlatformApiError(502, code, { code, message: code });
+    let ttsErrorCode: string | null = null;
+    try {
+      await readSseEvents(response, async (event) => {
+        if (event.event === "error") {
+          const code =
+            typeof event.safe_error_code === "string"
+              ? event.safe_error_code
+              : "chat_failed";
+          if (!sawText) {
+            throw new PlatformApiError(502, code, { code, message: code });
+          }
+          ttsErrorCode = code;
+          return;
+        }
+        if (event.event === "text_done") {
+          sawText = true;
+          session = await this.conversation(id);
+          hooks?.onTextDone?.(session);
+        }
+        if (
+          event.event === "tts_ready" &&
+          typeof event.audio_url === "string"
+        ) {
+          audioUrl = event.audio_url;
+          voiceProfileId =
+            typeof event.voice_profile_id === "string"
+              ? event.voice_profile_id
+              : null;
+          contentType =
+            typeof event.content_type === "string" ? event.content_type : null;
+        }
+      });
+    } catch (error) {
+      if (error instanceof SseBlockError) {
+        throw new PlatformApiError(502, "chat_stream_invalid", {
+          code: "chat_stream_invalid",
+          message: "chat_stream_invalid",
+        });
       }
-      if (event.event === "text_done") sawText = true;
-      if (event.event === "tts_ready" && typeof event.audio_url === "string") {
-        audioUrl = event.audio_url;
-        voiceProfileId =
-          typeof event.voice_profile_id === "string"
-            ? event.voice_profile_id
-            : null;
-        contentType =
-          typeof event.content_type === "string" ? event.content_type : null;
-      }
+      throw error;
     }
-    if (!sawText) {
+    if (!sawText || session === null) {
       throw new PlatformApiError(502, "chat_failed", {
         code: "chat_failed",
         message: "chat_failed",
       });
     }
     return {
-      session: await this.conversation(id),
+      session,
       audioUrl,
       voiceProfileId,
       contentType,
+      ttsErrorCode,
     };
   }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { ChatAgent, ChatSession } from "../lib/api";
+import { PlatformApiError, type ChatAgent, type ChatSession } from "../lib/api";
 import {
   abandonChatRequest,
   beginChatRequest,
@@ -204,13 +204,32 @@ export function AgentChat() {
       const promise =
         reuse?.promise ??
         api
-          .streamConversation(session.id, {
-            request_id: requestId,
-            message,
-            expected_revision: revision,
-            lang: chatLang,
-          })
+          .streamConversation(
+            session.id,
+            {
+              request_id: requestId,
+              message,
+              expected_revision: revision,
+              lang: chatLang,
+            },
+            {
+              onTextDone: (refreshed) => {
+                remember(refreshed);
+                abandonChatRequest(requestId);
+                setPendingMessage("");
+                setBusy(false);
+              },
+            },
+          )
           .then((result) => {
+            if (result.ttsErrorCode) {
+              setError(
+                new PlatformApiError(502, result.ttsErrorCode, {
+                  code: result.ttsErrorCode,
+                  message: result.ttsErrorCode,
+                }),
+              );
+            }
             if (result.audioUrl) startTtsPlayback(result.audioUrl);
             else setTtsPhase("idle");
             return result.session;
@@ -352,6 +371,7 @@ export function AgentChat() {
               hidden
               onTimeUpdate={syncTtsPlayback}
               onEnded={syncTtsPlayback}
+              onError={() => setTtsPhase("incomplete")}
             />
             <div
               className={styles.messages}

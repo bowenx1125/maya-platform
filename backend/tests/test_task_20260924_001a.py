@@ -15,7 +15,7 @@ from app.modules.voices.crypto import decrypt_external_voice_id
 from app.modules.voices.schemas import VoiceProfile as VoiceProfileDTO
 from app.modules.workspace.chat import store_assistant_text
 from app.modules.workspace.chat_stream import sse
-from app.modules.workspace.models import ConversationTurn
+from app.modules.workspace.models import Conversation, ConversationTurn
 from app.modules.workspace.schemas import ChatSession, ProviderSettings
 from app.providers.dashscope import DEFAULT_TARGET_MODEL_KEY
 from app.providers.factory import llm_provider, tts_provider, voice_provider
@@ -373,3 +373,132 @@ def test_rejects_non_zh_cn_en_with_chat_language_unsupported(
     )
     assert kept.status_code == 200, kept.text
     assert kept.json()["turns"][0]["state"] == "ready"
+
+
+def test_send_message_stores_assistant_text_once(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    conversation_id = created.json()["id"]
+    calls: list[str] = []
+    original = store_assistant_text
+
+    def wrapped(db, request_id, reply, sources, operation_id):  # type: ignore[no-untyped-def]
+        calls.append(request_id)
+        return original(db, request_id, reply, sources, operation_id)
+
+    monkeypatch.setattr("app.modules.workspace.chat.store_assistant_text", wrapped)
+    request_id = str(uuid4())
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"request_id": request_id, "expected_revision": 0, "message": "Once"},
+    )
+    assert response.status_code == 200, response.text
+    assert calls == [request_id]
+    assert response.json()["turns"][0]["assistant_text"].endswith("Once")
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        assert turn is not None
+        assert turn.state == "ready"
+        assert turn.assistant_text == response.json()["turns"][0]["assistant_text"]
+
+
+def test_tts_releases_chat_lock_before_synthesize(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    profile_id = _ready_profile(client, csrf, "task-001a-lock-enroll001")
+    with database.session() as session:
+        version = session.get(AgentVersion, BASELINE_VERSION_ID)
+        assert version is not None
+        version.voice_profile_id = profile_id
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    conversation_id = created.json()["id"]
+    seen: list[str | None] = []
+
+    class _LockProbe:
+        def synthesize(self, text: str, external_voice_id: str, language: str = "zh") -> TTSResult:
+            del text, external_voice_id, language
+            with database.session() as session:
+                row = session.get(Conversation, conversation_id)
+                assert row is not None
+                seen.append(row.active_request_id)
+            return TTSResult(audio_bytes=_wav(1), content_type="audio/wav", request_id="tts-lock")
+
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_stream.tts_provider",
+        lambda _settings: _LockProbe(),
+    )
+    response = _stream(client, csrf, conversation_id, lang="en", message="Speak", revision=0)
+    assert response.status_code == 200, response.text
+    names = [name for name, _payload in _parse_sse(response.text)]
+    assert names.index("text_done") < names.index("tts_ready")
+    assert seen == [None]
+
+
+def test_replay_sources_json_failure_yields_sse_error(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    conversation_id = created.json()["id"]
+    request_id = str(uuid4())
+    first = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages:stream",
+        headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
+        json={
+            "request_id": request_id,
+            "expected_revision": 0,
+            "message": "Remember this",
+            "lang": "en",
+        },
+    )
+    assert first.status_code == 200, first.text
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        assert turn is not None
+        kept = turn.assistant_text
+        turn.sources_json = "{"
+    replay = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages:stream",
+        headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
+        json={
+            "request_id": request_id,
+            "expected_revision": 1,
+            "message": "Remember this",
+            "lang": "en",
+        },
+    )
+    assert replay.status_code == 200, replay.text
+    events = _parse_sse(replay.text)
+    assert events == [
+        ("error", {"request_id": request_id, "safe_error_code": "chat_sources_invalid"})
+    ]
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        assert turn is not None
+        assert turn.assistant_text == kept
+        assert turn.state == "ready"

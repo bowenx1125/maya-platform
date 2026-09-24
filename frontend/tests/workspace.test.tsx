@@ -207,6 +207,12 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByTestId("avatar");
+    fireEvent.error(document.querySelector("audio") as HTMLAudioElement);
+    expect(
+      document
+        .querySelector("[data-tts-playback]")
+        ?.getAttribute("data-tts-playback"),
+    ).toBe("incomplete");
     expect(screen.getByRole("heading", { name: "Chats" }).className).toBe(
       "sr-only",
     );
@@ -223,6 +229,7 @@ describe("private Agent chat", () => {
         expected_revision: 0,
         lang: "en",
       }),
+      expect.objectContaining({ onTextDone: expect.any(Function) }),
     );
     expect(
       (screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement)

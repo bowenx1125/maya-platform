@@ -93,7 +93,11 @@ policy fails before it reaches the database.
 
 ## Then
 
-1. Set the three selectors to `dashscope` in `.env`.
+1. Set the three selectors to `dashscope` in `.env`. Optionally set
+   `TTS_PROVIDER=dashscope` and `VOICE_PROVIDER=dashscope` as well; they use the
+   same `DASHSCOPE_API_KEY` and there is no separate speech key. Leave them
+   `mock` when speech is not needed. The teacher Components switch still leaves
+   TTS and Voice deferred.
 2. `docker compose up -d` and confirm the composition strip reports `REAL` for
    Embedding, Debate LLM and Maya Report.
 3. Publish a new Agent version with a real knowledge snapshot, then create a

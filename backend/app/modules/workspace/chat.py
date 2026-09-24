@@ -12,6 +12,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.db import Database
 from app.core.errors import Error, PlatformError, conflict, not_found
 from app.core.models import (
     Agent,
@@ -22,7 +23,12 @@ from app.core.models import (
     ProviderReservation,
 )
 from app.modules.agents.schemas import AvatarConfig
-from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
+from app.modules.auth.dependencies import (
+    get_database,
+    get_db,
+    require_auth,
+    require_authenticated_mutation,
+)
 from app.modules.auth.service import AuthContext
 
 from .access import course_member
@@ -450,26 +456,7 @@ def send_message(
         return session_view(db, row)
     try:
         reply, sources, operation_id = generate_reply(db, settings, row, request_id, message)
-        db.expire_all()
-        stored = db.get(ConversationTurn, request_id)
-        if stored is None:
-            raise not_found()
-        stored.assistant_text = reply
-        stored.sources_json = json.dumps(
-            [item.model_dump(mode="json") for item in sources], ensure_ascii=False
-        )
-        stored.state = "ready"
-        if operation_id:
-            db.execute(
-                update(ProviderOperation)
-                .where(ProviderOperation.id == operation_id, ProviderOperation.state == "accepted")
-                .values(state="succeeded")
-            )
-            db.execute(
-                update(ProviderReservation)
-                .where(ProviderReservation.operation_id == operation_id)
-                .values(state="succeeded")
-            )
+        store_assistant_text(db, request_id, reply, sources, operation_id)
     except Exception as exc:
         record_chat_failure(db, row.id, request_id, exc)
     release_chat_request(db, row.id, request_id)
@@ -497,6 +484,7 @@ def stream_message(
     accept: str = Header(..., alias="Accept"),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    database: Database = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
     row = owned_conversation(db, context, str(conversation_id))
@@ -516,7 +504,7 @@ def stream_message(
     message = payload.message.strip()
     if not message:
         raise PlatformError("chat_message_empty", "Enter a message.", 400)
-    turn, created = claim_chat_send(
+    _turn, created = claim_chat_send(
         db,
         row,
         request_id=request_id,
@@ -524,12 +512,15 @@ def stream_message(
         message=message,
         settings=settings,
     )
+    owned_id = row.id
+    # Claim is committed.  Drop the request connection before the stream so
+    # it is not held across the LLM call or TTS.
+    db.close()
     return StreamingResponse(
         stream_events(
-            db,
+            database,
             settings,
-            row,
-            turn,
+            conversation_id=owned_id,
             created=created,
             message=message,
             lang=payload.lang,

@@ -417,11 +417,13 @@ teaching quality, real speech, classroom-scale load and public deployment remain
 unverified.
 
 Chat streaming is `POST /api/v1/conversations/{conversation_id}/messages:stream`.
-The JSON `POST .../messages` route remains. A turn's full assistant text is
-committed once, immediately before `text_done`; a later TTS failure does not
-remove it. TTS runs once after that and the `tts_ready` event carries an
-`audio_url`, not audio bytes. `lang` is `zh-CN` or `en`. Student enrollment
-still stores the external voice id encrypted and a draft can bind
-`voice_profile_id`. TTS and voice clone may be `dashscope` beside the existing
-real slices only through `DASHSCOPE_API_KEY`. Defaults stay mock. This change
-made no charged provider call.
+The JSON `POST .../messages` route remains and stores assistant text through the
+same commit as the stream. A turn's full assistant text is committed once,
+immediately before `text_done`; a later TTS failure does not remove it. The
+conversation lock is released immediately after `text_done`, and the request
+database session is not held across the LLM call or TTS. TTS runs once after
+that and the `tts_ready` event carries an `audio_url`, not audio bytes. `lang`
+is `zh-CN` or `en`. Student enrollment still stores the external voice id
+encrypted and a draft can bind `voice_profile_id`. TTS and voice clone may be
+`dashscope` beside the existing real slices only through `DASHSCOPE_API_KEY`.
+Defaults stay mock. This change made no charged provider call.
