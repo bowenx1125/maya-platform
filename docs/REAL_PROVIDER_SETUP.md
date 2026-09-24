@@ -1,9 +1,10 @@
 # Turning on the real providers
 
-The Demo ships in Mock mode. Three selectors can run against DashScope:
-`LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
-`EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
-Demo.
+The Demo ships in Mock mode. `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
+`EMBEDDING_PROVIDER` can run against DashScope. `TTS_PROVIDER` and
+`VOICE_PROVIDER` stay `mock` unless set to `dashscope`, and then they use the
+same `DASHSCOPE_API_KEY` as those slices. There is no separate speech key.
+The teacher Components switch still leaves TTS and Voice deferred.
 
 ## A reviewed policy snapshot is required first
 

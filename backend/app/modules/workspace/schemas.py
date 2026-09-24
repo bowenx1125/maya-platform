@@ -60,6 +60,16 @@ class SendChat(ClosedModel):
     message: str = Field(min_length=1)
 
 
+class StreamChat(ClosedModel):
+    # ``lang`` stays a plain string so an unsupported value can return the
+    # chat language code.  A Literal would collapse that into a generic
+    # malformed-request validation error.
+    request_id: UUID
+    expected_revision: int = Field(ge=0)
+    message: str = Field(min_length=1)
+    lang: str = Field(min_length=1)
+
+
 class ComponentStatus(ClosedModel):
     key: ComponentKey
     mode: ComponentMode

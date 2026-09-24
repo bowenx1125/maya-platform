@@ -1,0 +1,375 @@
+"""TASK-20260924-001A: shared DashScope key, voice binding, and chat SSE."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable, Iterator
+from uuid import uuid4
+
+import pytest
+from app.core.config import Settings
+from app.core.db import Database
+from app.core.models import AgentVersion, VoiceProfile
+from app.modules.demo_baseline.service import BASELINE_VERSION_ID, ensure_demo_baseline
+from app.modules.voices.crypto import decrypt_external_voice_id
+from app.modules.voices.schemas import VoiceProfile as VoiceProfileDTO
+from app.modules.workspace.chat import store_assistant_text
+from app.modules.workspace.chat_stream import sse
+from app.modules.workspace.models import ConversationTurn
+from app.modules.workspace.schemas import ChatSession, ProviderSettings
+from app.providers.dashscope import DEFAULT_TARGET_MODEL_KEY
+from app.providers.factory import llm_provider, tts_provider, voice_provider
+from app.providers.tts import TTSResult
+from app.seed import COURSE_ID
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from tests.conftest import login
+from tests.test_wave1b_voices import GROUP_A, _headers, _wav
+
+
+def _parse_sse(body: str) -> list[tuple[str, dict[str, object]]]:
+    events: list[tuple[str, dict[str, object]]] = []
+    for block in body.split("\n\n"):
+        if not block.strip():
+            continue
+        name = "message"
+        data = ""
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data = line.split(":", 1)[1].strip()
+        payload = json.loads(data)
+        assert isinstance(payload, dict)
+        events.append((name, payload))
+    return events
+
+
+@pytest.fixture
+def voice_app(
+    app_factory: Callable[..., tuple[FastAPI, Database, Settings]],
+) -> Iterator[tuple[TestClient, Database, Settings]]:
+    app, database, settings = app_factory()
+    with TestClient(app) as client:
+        client.headers["Origin"] = "http://testserver"
+        yield client, database, settings
+
+
+def _ready_profile(client: TestClient, csrf: str, key: str) -> str:
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, key),
+        data={"consent_accepted": "true", "consent_copy_version": "voice-consent-v1"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    preview = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert preview.status_code == 200, preview.text
+    confirmed = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/confirm",
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["status"] == "ready"
+    return str(profile_id)
+
+
+def test_dashscope_key_not_in_public_dto(
+    tmp_path, voice_app: tuple[TestClient, Database, Settings]
+) -> None:
+    secret = "fixture-shared-key"
+    settings = Settings(
+        maya_env="test",
+        session_secret="s" * 32,
+        database_url=f"sqlite:///{tmp_path / 'unused.sqlite3'}",
+        data_root=tmp_path,
+        llm_provider="dashscope",
+        embedding_provider="dashscope",
+        report_provider="dashscope",
+        tts_provider="dashscope",
+        voice_provider="dashscope",
+        dashscope_api_key=secret,
+        dashscope_workspace_id="workspace123",
+        dashscope_region="cn-beijing",
+        llm_provider_policy_hash="b" * 64,
+        embedding_provider_policy_hash="a" * 64,
+        report_provider_policy_hash="c" * 64,
+    )
+    settings.validate_provider_configuration()
+    voice = voice_provider(settings)
+    speech = tts_provider(settings)
+    model = llm_provider(settings)
+    assert voice.config.api_key == speech.config.api_key == model.config.api_key == secret
+    assert voice.target_model_key == DEFAULT_TARGET_MODEL_KEY
+    assert speech.target_model_key == DEFAULT_TARGET_MODEL_KEY
+    assert not hasattr(settings, "dashscope_tts_api_key")
+    schemas = json.dumps(
+        {
+            "provider": ProviderSettings.model_json_schema(),
+            "chat": ChatSession.model_json_schema(),
+            "voice": VoiceProfileDTO.model_json_schema(),
+        }
+    )
+    assert "api_key" not in schemas
+    assert secret not in schemas
+
+    client, _database, _settings = voice_app
+    client.app.state.settings = client.app.state.settings.model_copy(
+        update={"dashscope_api_key": secret}
+    )
+    _user, csrf = login(client)
+    settings_response = client.get(f"/api/v1/courses/{COURSE_ID}/provider-settings")
+    assert settings_response.status_code == 200
+    assert secret not in settings_response.text
+    assert "api_key" not in settings_response.json()
+    saved = client.post(
+        f"/api/v1/courses/{COURSE_ID}/provider-settings",
+        headers={"X-CSRF-Token": csrf},
+        json={"expected_revision": settings_response.json()["revision"], "api_key": secret},
+    )
+    assert saved.status_code == 200, saved.text
+    assert secret not in saved.text
+
+
+def test_enroll_ready_encrypts_external_id(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    client, database, settings = voice_app
+    _user, csrf = login(client, "bowen")
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "task-001a-enroll-0001"),
+        data={"consent_accepted": "true", "consent_copy_version": "voice-consent-v1"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    assert (
+        client.post(
+            f"/api/v1/voice-profiles/{profile_id}/preview",
+            headers={"X-CSRF-Token": csrf},
+        ).status_code
+        == 200
+    )
+    confirmed = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/confirm",
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["status"] == "ready"
+    with database.session() as session:
+        row = session.get(VoiceProfile, profile_id)
+        assert row is not None
+        assert row.status == "ready"
+        assert row.external_id_encrypted
+        plain = decrypt_external_voice_id(
+            row.external_id_encrypted,
+            settings.secret_bytes,
+            profile_id=row.id,
+            scope=row.scope,
+            group_id=row.group_id,
+            provider_key=row.provider_key,
+            target_model_key=row.target_model_key,
+        )
+    assert plain
+    assert plain.encode() not in (row.external_id_encrypted or b"")
+    assert plain not in confirmed.text
+    assert plain not in enrolled.text
+
+
+def test_bind_voice_profile_id_on_agent_version(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    client, database, _settings = voice_app
+    _user, csrf = login(client, "bowen")
+    created = client.post(
+        f"/api/v1/groups/{GROUP_A}/agents",
+        headers=_headers(csrf, "task-001a-agent-0001"),
+        json={"name": "Stream voice Agent", "description": ""},
+    )
+    assert created.status_code == 201, created.text
+    version = created.json()["versions"][0]
+    profile_id = _ready_profile(client, csrf, "task-001a-bind-enroll01")
+    bound = client.patch(
+        f"/api/v1/agent-versions/{version['id']}",
+        headers={"X-CSRF-Token": csrf},
+        json={"expected_revision": version["revision"], "voice_profile_id": profile_id},
+    )
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["voice_profile_id"] == profile_id
+    with database.session() as session:
+        row = session.get(AgentVersion, version["id"])
+        assert row is not None
+        assert row.voice_profile_id == profile_id
+
+
+class _RecordingTTS:
+    key = "mock"
+    target_model_key = "mock-tts-v1"
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+
+    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
+        self.calls.append((text, external_voice_id, language))
+        return TTSResult(audio_bytes=_wav(1), content_type="audio/wav", request_id="tts-once")
+
+
+def _stream(
+    client: TestClient, csrf: str, conversation_id: str, *, lang: str, message: str, revision: int
+):
+    return client.post(
+        f"/api/v1/conversations/{conversation_id}/messages:stream",
+        headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
+        json={
+            "request_id": str(uuid4()),
+            "expected_revision": revision,
+            "message": message,
+            "lang": lang,
+        },
+    )
+
+
+def test_sse_delta_then_text_done_persists_full_text(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, database, _settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, _settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    assert created.status_code == 200, created.text
+    conversation_id = created.json()["id"]
+    order: list[str] = []
+    original_store = store_assistant_text
+    original_sse = sse
+
+    def wrapped_store(*args, **kwargs):
+        result = original_store(*args, **kwargs)
+        order.append("stored")
+        return result
+
+    def wrapped_sse(event: str, payload: dict[str, object]) -> bytes:
+        order.append(event)
+        return original_sse(event, payload)
+
+    monkeypatch.setattr("app.modules.workspace.chat.store_assistant_text", wrapped_store)
+    monkeypatch.setattr("app.modules.workspace.chat_stream.sse", wrapped_sse)
+    response = _stream(
+        client, csrf, conversation_id, lang="en", message="What is justice?", revision=0
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse(response.text)
+    names = [name for name, _payload in events]
+    assert names[0] == "delta"
+    assert "text_done" in names
+    assert names.index("delta") < names.index("text_done")
+    deltas = [payload["text"] for name, payload in events if name == "delta"]
+    done = next(payload for name, payload in events if name == "text_done")
+    full = "".join(str(part) for part in deltas)
+    assert full == done["assistant_text"]
+    assert done["revision"] == 1
+    assert isinstance(done["sources"], list)
+    stored_at = order.index("stored")
+    assert order[:stored_at] == ["delta"] * stored_at
+    assert order[stored_at + 1] == "text_done"
+    with database.session() as session:
+        turn = session.scalar(
+            select(ConversationTurn).where(ConversationTurn.conversation_id == conversation_id)
+        )
+        assert turn is not None
+        assert turn.assistant_text == full
+        assert turn.state == "ready"
+
+
+def test_tts_ready_is_url_not_bytes(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    profile_id = _ready_profile(client, csrf, "task-001a-tts-enroll001")
+    with database.session() as session:
+        version = session.get(AgentVersion, BASELINE_VERSION_ID)
+        assert version is not None
+        version.voice_profile_id = profile_id
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None and profile.external_id_encrypted
+        external = decrypt_external_voice_id(
+            profile.external_id_encrypted,
+            settings.secret_bytes,
+            profile_id=profile.id,
+            scope=profile.scope,
+            group_id=profile.group_id,
+            provider_key=profile.provider_key,
+            target_model_key=profile.target_model_key,
+        )
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    assert created.status_code == 200, created.text
+    conversation_id = created.json()["id"]
+    recorder = _RecordingTTS()
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_stream.tts_provider", lambda _settings: recorder
+    )
+    response = _stream(client, csrf, conversation_id, lang="zh-CN", message="你好", revision=0)
+    assert response.status_code == 200, response.text
+    assert b"RIFF" not in response.content
+    events = _parse_sse(response.text)
+    ready = next(payload for name, payload in events if name == "tts_ready")
+    audio_url = ready["audio_url"]
+    assert isinstance(audio_url, str)
+    assert audio_url.startswith("/api/v1/conversations/")
+    assert ready["voice_profile_id"] == profile_id
+    assert ready["content_type"] == "audio/wav"
+    assert "audio_bytes" not in ready
+    assert len(recorder.calls) == 1
+    assert recorder.calls[0][1] == external
+    assert recorder.calls[0][2] == "zh"
+    media = client.get(audio_url)
+    assert media.status_code == 200
+    assert media.headers["content-type"].startswith("audio/wav")
+    assert media.content.startswith(b"RIFF")
+    names = [name for name, _payload in events]
+    assert names.index("text_done") < names.index("tts_ready")
+
+
+def test_rejects_non_zh_cn_en_with_chat_language_unsupported(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    conversation_id = created.json()["id"]
+    for lang in ("fr", "zh", "en-US", "zh-cn"):
+        response = _stream(client, csrf, conversation_id, lang=lang, message="Hello", revision=0)
+        assert response.status_code == 400, response.text
+        assert response.json()["code"] == "chat_language_unsupported"
+    kept = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Still here"},
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["turns"][0]["state"] == "ready"

@@ -412,5 +412,16 @@ capabilities and server-side keys. Prefer audited assistant-ui/AI Elements/Agno
 reuse (ADR-008), no cloud history.
 
 Later real-time face-to-face voice uses Bailian Beijing, after text/UI manual audit.
-TTS configuration stays untouched. Full RAG teaching quality, real speech,
-classroom-scale load and public deployment remain unverified.
+The teacher Components switch still leaves TTS and Voice deferred. Full RAG
+teaching quality, real speech, classroom-scale load and public deployment remain
+unverified.
+
+Chat streaming is `POST /api/v1/conversations/{conversation_id}/messages:stream`.
+The JSON `POST .../messages` route remains. A turn's full assistant text is
+committed once, immediately before `text_done`; a later TTS failure does not
+remove it. TTS runs once after that and the `tts_ready` event carries an
+`audio_url`, not audio bytes. `lang` is `zh-CN` or `en`. Student enrollment
+still stores the external voice id encrypted and a draft can bind
+`voice_profile_id`. TTS and voice clone may be `dashscope` beside the existing
+real slices only through `DASHSCOPE_API_KEY`. Defaults stay mock. This change
+made no charged provider call.

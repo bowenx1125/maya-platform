@@ -276,13 +276,14 @@ class Settings(BaseSettings):
             prepare_catalog(self)
 
     def validate_provider_configuration(self) -> None:
-        """Allow Mock, one real slice, or the frozen dual Real-Core pair.
+        """Allow Mock, reviewed text slices, and speech on one DashScope key.
 
-        The only multi-real composition admitted by the Demo is DashScope
-        Embedding plus DashScope LLM with Mock/disabled companions.  Each
-        endpoint-bound slice has its own policy hash.  The LLM adapter still
-        requires its own runtime confirmation/operation gate before any
-        request; selector construction alone performs no network I/O.
+        LLM, Embedding and Report keep their composition and policy-hash
+        rules.  TTS and Voice may be ``dashscope`` beside any allowed core,
+        including on their own, only through the same ``DASHSCOPE_API_KEY``.
+        There is no second speech key.  Selector construction performs no
+        network I/O.  The LLM adapter still requires its own runtime
+        confirmation before any request.
         """
 
         selectors = (
@@ -295,41 +296,41 @@ class Settings(BaseSettings):
         if any(value not in {"mock", "dashscope"} for value in selectors):
             raise RuntimeError("provider selector is not supported")
 
-        non_mock = [
-            name for name, value in (("VOICE_PROVIDER", self.voice_provider),) if value != "mock"
-        ]
-        if non_mock:
-            raise RuntimeError(
-                "runtime provider gate permits only one reviewed DashScope slice with "
-                "Mock companions: " + ", ".join(non_mock)
-            )
-        real_slice_names = tuple(
+        # Speech is excluded from this tuple on purpose: adding it must not
+        # change the dual-hash rule, which keys off a core of length two.
+        core_names = tuple(
             name
             for name, value in (
                 ("LLM_PROVIDER", self.llm_provider),
                 ("REPORT_PROVIDER", self.report_provider),
                 ("EMBEDDING_PROVIDER", self.embedding_provider),
-                ("TTS_PROVIDER", self.tts_provider),
             )
             if value == "dashscope"
         )
-        allowed_real_compositions = {
+        speech_names = tuple(
+            name
+            for name, value in (
+                ("TTS_PROVIDER", self.tts_provider),
+                ("VOICE_PROVIDER", self.voice_provider),
+            )
+            if value == "dashscope"
+        )
+        allowed_cores = {
             (),
             ("EMBEDDING_PROVIDER",),
             ("LLM_PROVIDER",),
-            ("TTS_PROVIDER",),
             ("LLM_PROVIDER", "EMBEDDING_PROVIDER"),
             ("REPORT_PROVIDER",),
             ("LLM_PROVIDER", "REPORT_PROVIDER"),
             ("REPORT_PROVIDER", "EMBEDDING_PROVIDER"),
             ("LLM_PROVIDER", "REPORT_PROVIDER", "EMBEDDING_PROVIDER"),
         }
-        if real_slice_names not in allowed_real_compositions:
+        if core_names not in allowed_cores:
             raise RuntimeError(
                 "runtime provider gate permits only the Real Embedding + Real LLM pair "
                 "or one reviewed DashScope slice with Mock companions"
             )
-        if real_slice_names:
+        if core_names or speech_names:
             if not self.dashscope_api_key or not self.dashscope_api_key.strip():
                 raise RuntimeError(
                     "DASHSCOPE_API_KEY is required for real Provider work; "
@@ -348,10 +349,7 @@ class Settings(BaseSettings):
         # A legacy PROVIDER_POLICY_HASH is endpoint-ambiguous when both real
         # slices are selected.  Require the two explicit fields in that case;
         # a single-real configuration may still use the old field.
-        if len(real_slice_names) == 2 and set(real_slice_names) == {
-            "LLM_PROVIDER",
-            "EMBEDDING_PROVIDER",
-        }:
+        if set(core_names) == {"LLM_PROVIDER", "EMBEDDING_PROVIDER"}:
             if self.provider_policy_hash is not None and not (
                 self.embedding_provider_policy_hash is not None
                 and self.llm_provider_policy_hash is not None
