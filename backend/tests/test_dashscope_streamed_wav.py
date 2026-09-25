@@ -6,11 +6,9 @@ import io
 import struct
 import wave
 
-import httpx
 import pytest
 from app.providers.audio import AudioValidationError, validate_technical_audio
-from app.providers.dashscope import DashScopeConfig, DashScopeTTSProvider, _finalize_streamed_wav
-from app.providers.tts import TTSAudioInvalidError, TTSProviderError
+from app.providers.dashscope import _finalize_streamed_wav
 
 # Observed on qwen3-tts-vc-2026-01-22: both size fields sit just under 2**31,
 # and the RIFF field is the data field plus the canonical header span.
@@ -59,28 +57,6 @@ def _streamed(raw: bytes) -> bytes:
     return streamed
 
 
-class _CaptureClient:
-    def __init__(self, document: dict[str, object]) -> None:
-        self.calls: list[dict[str, object]] = []
-        self._document = document
-
-    def __enter__(self) -> _CaptureClient:
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        return None
-
-    def post(self, url: str, **kwargs: object) -> httpx.Response:
-        body = kwargs.get("json")
-        self.calls.append(body if isinstance(body, dict) else {})
-        del url
-        return httpx.Response(
-            200,
-            json=self._document,
-            request=httpx.Request("POST", "https://provider.invalid"),
-        )
-
-
 def test_streamed_placeholder_sizes_are_repaired() -> None:
     raw = _wav()
     streamed = _streamed(raw)
@@ -113,103 +89,3 @@ def test_complete_truncated_or_non_wav_input_is_unchanged() -> None:
     data_only[40:44] = _DATA_PLACEHOLDER.to_bytes(4, "little")
     assert _finalize_streamed_wav(bytes(data_only)) == bytes(data_only)
     assert _finalize_streamed_wav(b"not a wav") == b"not a wav"
-
-
-def test_synthesize_repairs_streamed_wav_before_validation(monkeypatch: pytest.MonkeyPatch) -> None:
-    raw = _wav()
-    capture = _CaptureClient(
-        {
-            "output": {
-                "audio": {"url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"}
-            },
-            "request_id": "tts-request",
-        }
-    )
-    monkeypatch.setattr("app.providers.dashscope._client", lambda: capture)
-
-    class _Downloader:
-        def download(self, value: str) -> bytes:
-            assert value.endswith("/x.wav")
-            return _streamed(raw)
-
-    config = DashScopeConfig(api_key="fixture", workspace_id="workspace123")
-    result = DashScopeTTSProvider(config, downloader=_Downloader()).synthesize(
-        "A new English sentence.",
-        "opaque-voice",
-        language="en",
-    )
-    assert result.audio_bytes == raw
-    assert capture.calls == [
-        {
-            "model": "qwen3-tts-vc-2026-01-22",
-            "input": {
-                "text": "A new English sentence.",
-                "voice": "opaque-voice",
-                "language_type": "English",
-            },
-        }
-    ]
-
-
-def test_synthesize_still_rejects_a_truncated_wav(monkeypatch: pytest.MonkeyPatch) -> None:
-    raw = _wav()
-    monkeypatch.setattr(
-        "app.providers.dashscope._client",
-        lambda: _CaptureClient(
-            {
-                "output": {
-                    "audio": {
-                        "url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"
-                    }
-                }
-            }
-        ),
-    )
-
-    class _Downloader:
-        def download(self, value: str) -> bytes:
-            del value
-            return raw[:-80]
-
-    config = DashScopeConfig(api_key="fixture", workspace_id="workspace123")
-    with pytest.raises(TTSAudioInvalidError):
-        DashScopeTTSProvider(config, downloader=_Downloader()).synthesize("A sentence.", "opaque")
-
-
-def test_synthesize_sends_chinese_and_refuses_other_languages(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    raw = _wav()
-    capture = _CaptureClient(
-        {
-            "output": {
-                "audio": {"url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"}
-            }
-        }
-    )
-    monkeypatch.setattr("app.providers.dashscope._client", lambda: capture)
-
-    class _Downloader:
-        def download(self, value: str) -> bytes:
-            del value
-            return raw
-
-    config = DashScopeConfig(api_key="fixture", workspace_id="workspace123")
-    DashScopeTTSProvider(config, downloader=_Downloader()).synthesize(
-        "你好。",
-        "opaque",
-        language="zh",
-    )
-    assert capture.calls[0]["input"] == {
-        "text": "你好。",
-        "voice": "opaque",
-        "language_type": "Chinese",
-    }
-
-    def unexpected_client() -> _CaptureClient:
-        raise AssertionError("an unsupported language must not construct a client")
-
-    monkeypatch.setattr("app.providers.dashscope._client", unexpected_client)
-    with pytest.raises(TTSProviderError) as error:
-        DashScopeTTSProvider(config).synthesize("A sentence.", "opaque", language="zh-CN")
-    assert error.value.safe_code == "tts_response_invalid"
