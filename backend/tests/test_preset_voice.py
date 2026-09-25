@@ -150,7 +150,7 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
 
     audio = {
         "output": {
-            "audio": {"url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/preview.wav"}
+            "audio": {"url": "https://example.test/preview.wav"}
         },
         "request_id": "tts-request",
     }
