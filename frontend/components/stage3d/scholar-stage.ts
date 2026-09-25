@@ -5,6 +5,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import {
+  applyRelaxedStandingPose,
   avatarMotionFrame,
   expressionForAvatarState,
   type AvatarConfig,
@@ -361,76 +362,6 @@ function displaceSplatShell(
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
-}
-
-function aimBone(
-  root: THREE.Object3D,
-  bone: THREE.Object3D,
-  endpoint: THREE.Object3D,
-  target: THREE.Vector3,
-): void {
-  root.updateMatrixWorld(true);
-  const origin = bone.getWorldPosition(new THREE.Vector3());
-  const direction = endpoint.getWorldPosition(new THREE.Vector3()).sub(origin);
-  const desired = target.clone().sub(origin);
-  if (direction.lengthSq() < 0.0001 || desired.lengthSq() < 0.0001) return;
-  const worldDelta = new THREE.Quaternion().setFromUnitVectors(
-    direction.normalize(),
-    desired.normalize(),
-  );
-  const parentRotation = bone.parent?.getWorldQuaternion(
-    new THREE.Quaternion(),
-  );
-  if (!parentRotation) return;
-  bone.quaternion.premultiply(
-    parentRotation
-      .clone()
-      .invert()
-      .multiply(worldDelta)
-      .multiply(parentRotation),
-  );
-  root.updateMatrixWorld(true);
-}
-
-function poseArms(root: THREE.Object3D): void {
-  // Local targets keep the same resting pose when figures turn around the table.
-  for (const suffix of ["l", "r"]) {
-    const shoulder = findBone(root, [
-      `upperarm_${suffix}`,
-      `shoulder_${suffix}`,
-    ]);
-    const elbow = findBone(root, [`lowerarm_${suffix}`, `elbow_${suffix}`]);
-    const wrist = findBone(root, [`hand_${suffix}`, `wrist_${suffix}`]);
-    if (!shoulder || !elbow || !wrist) continue;
-    root.updateMatrixWorld(true);
-    const upper = root.worldToLocal(
-      shoulder.getWorldPosition(new THREE.Vector3()),
-    );
-    const side = Math.sign(upper.x);
-    aimBone(
-      root,
-      shoulder,
-      elbow,
-      root.localToWorld(
-        new THREE.Vector3(
-          upper.x + side * 0.01,
-          upper.y - 0.45,
-          upper.z + 0.05,
-        ),
-      ),
-    );
-    const lower = root.worldToLocal(
-      elbow.getWorldPosition(new THREE.Vector3()),
-    );
-    aimBone(
-      root,
-      elbow,
-      wrist,
-      root.localToWorld(
-        new THREE.Vector3(lower.x + side * 0.06, lower.y - 0.4, lower.z + 0.12),
-      ),
-    );
-  }
 }
 
 function disposeObject(root: THREE.Object3D, disposeGeometry = true): void {
@@ -1343,7 +1274,8 @@ export class ScholarStage {
       const standingZ = this.stageCenterZ + offset.z;
       root.position.set(standingX, 0, standingZ);
       root.rotation.y = offset.yaw;
-      poseArms(root);
+      // Root-local hang directions keep the same rest pose after the seat yaw.
+      applyRelaxedStandingPose(root);
       const meshes: MorphMesh[] = [];
       this.styleFigure(root, spec.config, meshes);
       const groundY = this.groundCharacter(root);

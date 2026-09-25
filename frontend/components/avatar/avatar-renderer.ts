@@ -10,6 +10,13 @@ import {
   type AvatarState,
 } from "./types";
 import { avatarMotionFrame, expressionForAvatarState } from "./avatar-motion";
+import {
+  applyIdleBreath,
+  applyRelaxedStandingPose,
+  findLimbBones,
+  selectIdleClip,
+  type AvatarRestPose,
+} from "./avatar-pose";
 
 export type AvatarRendererOptions = {
   canvas: HTMLCanvasElement;
@@ -233,6 +240,9 @@ export class AvatarRenderer {
   private config: AvatarConfig | null = null;
   private state: AvatarState = "idle";
   private animationFrame: number | null = null;
+  private mixer: THREE.AnimationMixer | null = null;
+  private restPose: AvatarRestPose | null = null;
+  private lastFrameAt = 0;
   private startedAt = performance.now();
   private stateStartedAt = this.startedAt;
   private disposed = false;
@@ -299,6 +309,9 @@ export class AvatarRenderer {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
+    this.mixer?.stopAllAction();
+    this.mixer = null;
+    this.restPose = null;
     window.removeEventListener("resize", this.resizeHandler);
     if (this.root) {
       this.scene.remove(this.root);
@@ -319,6 +332,8 @@ export class AvatarRenderer {
           disposeObject(gltf.scene);
           return;
         }
+        this.hideDetachedFragments(gltf.scene);
+        this.installPose(gltf.scene, gltf.animations);
         this.root =
           this.framing === "full-body"
             ? this.prepareFullBody(gltf.scene)
@@ -338,6 +353,44 @@ export class AvatarRenderer {
           cause instanceof Error ? cause : new Error("avatar_asset_failed");
         this.onError?.(error);
       },
+    );
+  }
+
+  private installPose(
+    root: THREE.Object3D,
+    clips: THREE.AnimationClip[],
+  ): void {
+    const idle = selectIdleClip(clips);
+    if (idle) {
+      const limbs = findLimbBones(root);
+      this.logPose(idle.name, clips, limbs.left, limbs.right);
+      this.mixer = new THREE.AnimationMixer(root);
+      const action = this.mixer.clipAction(idle);
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.play();
+      this.mixer.update(0);
+      return;
+    }
+    this.restPose = applyRelaxedStandingPose(root);
+    this.logPose(null, clips, this.restPose.left, this.restPose.right);
+  }
+
+  private logPose(
+    idleClip: string | null,
+    clips: THREE.AnimationClip[],
+    left: AvatarRestPose["left"],
+    right: AvatarRestPose["right"],
+  ): void {
+    // Bone names are the diagnosis for which rig the hang matched. The clip
+    // list is names only; the GLB bytes stay out of the log.
+    console.info(
+      "avatar_pose",
+      JSON.stringify({
+        idleClip,
+        clips: clips.map((clip) => clip.name),
+        left,
+        right,
+      }),
     );
   }
 
@@ -447,6 +500,15 @@ export class AvatarRenderer {
   private animate(elapsed: number): void {
     if (!this.root) return;
     const activeRoot = this.root;
+    const now = performance.now();
+    if (this.mixer) {
+      const delta =
+        this.lastFrameAt === 0
+          ? 0
+          : Math.min((now - this.lastFrameAt) / 1000, 0.05);
+      this.mixer.update(delta);
+    }
+    this.lastFrameAt = now;
     const frame = avatarMotionFrame(
       this.state,
       elapsed,
@@ -456,6 +518,9 @@ export class AvatarRenderer {
     activeRoot.rotation.x = frame.rotationX;
     activeRoot.rotation.y = frame.rotationY;
     activeRoot.rotation.z = frame.rotationZ;
+    if (!this.mixer && this.restPose) {
+      applyIdleBreath(this.restPose, activeRoot, elapsed);
+    }
     this.animateMorphTargets(activeRoot, frame);
   }
 
