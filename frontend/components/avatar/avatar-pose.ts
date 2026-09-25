@@ -13,9 +13,6 @@ export type AvatarLimbSet = Record<AvatarPoseSide, AvatarLimbMatch>;
 export type AvatarRestPose = {
   left: AvatarLimbMatch;
   right: AvatarLimbMatch;
-  breathBoneName: string | null;
-  breathBone: THREE.Object3D | null;
-  breathRest: THREE.Quaternion | null;
 };
 
 /**
@@ -104,10 +101,6 @@ export const AVATAR_ROBE_HANG: AvatarHangProfile = makeHangProfile({
 
 const PALM_BACK = 0.22;
 
-/** One breath cycle is slow enough to read as breathing, not a nod. */
-export const AVATAR_IDLE_BREATH_SPEED = 1.4;
-export const AVATAR_IDLE_BREATH_RADIANS = 0.012;
-
 const UPPER_ARM: Record<AvatarPoseSide, readonly string[]> = {
   left: [
     "leftarm",
@@ -176,23 +169,6 @@ const HAND: Record<AvatarPoseSide, readonly string[]> = {
     "rwrist",
   ],
 };
-
-const BREATH_BONES = [
-  "chestm",
-  "chest",
-  "spine2",
-  "spine02",
-  "spine1",
-  "spine01",
-  "spine",
-] as const;
-
-// Separators count as boundaries so `idle_01` matches and `Interest` does not.
-const IDLE_CLIP =
-  /(?:^|[^A-Za-z0-9])(?:idle|standing|stand|rest|breathing|breath|relaxed|relax)(?![A-Za-z0-9])/i;
-const IDLE_NAME = /(?:^|[^A-Za-z0-9])idle(?![A-Za-z0-9])/i;
-const BIND_CLIP =
-  /(?:^|[^A-Za-z0-9])(?:t[-_ ]?pose|a[-_ ]?pose|bind)(?![A-Za-z0-9])/i;
 
 /**
  * Strip Mixamo prefixes and separators so `mixamorig:LeftArm`, `LeftUpperArm`
@@ -523,19 +499,9 @@ function poseSide(
   }
 }
 
-function findBreathBone(
-  bones: Map<string, THREE.Object3D>,
-): THREE.Object3D | null {
-  for (const name of BREATH_BONES) {
-    const found = bones.get(name);
-    if (found) return found;
-  }
-  return null;
-}
-
 /**
  * Hang both arms from the bind pose. Feet, head, jaw and face bones are left
- * alone. Returns the spine bone a later breath can pitch without accumulating.
+ * alone.
  */
 export function applyRelaxedStandingPose(
   root: THREE.Object3D,
@@ -546,50 +512,8 @@ export function applyRelaxedStandingPose(
   const right = matchLimb(bones, "right");
   poseSide(root, "left", left.upper, left.forearm, left.hand, profile);
   poseSide(root, "right", right.upper, right.forearm, right.hand, profile);
-  const breathBone = findBreathBone(bones);
   return {
     left: left.match,
     right: right.match,
-    breathBoneName: breathBone?.name ?? null,
-    breathBone,
-    breathRest: breathBone ? breathBone.quaternion.clone() : null,
   };
-}
-
-export function idleBreathAngle(elapsedSeconds: number): number {
-  return (
-    Math.sin(elapsedSeconds * AVATAR_IDLE_BREATH_SPEED) *
-    AVATAR_IDLE_BREATH_RADIANS
-  );
-}
-
-/** Pitch one spine bone around the figure's local X, always from its rest. */
-export function applyIdleBreath(
-  pose: AvatarRestPose,
-  root: THREE.Object3D,
-  elapsedSeconds: number,
-): void {
-  if (!pose.breathBone || !pose.breathRest) return;
-  pose.breathBone.quaternion.copy(pose.breathRest);
-  const angle = idleBreathAngle(elapsedSeconds);
-  if (angle === 0) return;
-  const axis = new THREE.Vector3(1, 0, 0).transformDirection(root.matrixWorld);
-  applyWorldDelta(
-    pose.breathBone,
-    new THREE.Quaternion().setFromAxisAngle(axis, angle),
-  );
-}
-
-/**
- * An idle clip wins over the procedural hang. Bind, T-pose and A-pose clips
- * are not idle motion even when they are the only clip in the file.
- */
-export function selectIdleClip<T extends { name: string }>(
-  clips: readonly T[],
-): T | null {
-  const usable = clips.filter(
-    (clip) => IDLE_CLIP.test(clip.name) && !BIND_CLIP.test(clip.name),
-  );
-  if (usable.length === 0) return null;
-  return usable.find((clip) => IDLE_NAME.test(clip.name)) ?? usable[0];
 }

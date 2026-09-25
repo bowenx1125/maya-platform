@@ -2,16 +2,13 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 
 import {
-  applyIdleBreath,
   applyRelaxedStandingPose,
   AVATAR_FITTED_HANG,
   AVATAR_ROBE_HANG,
   boneSide,
   findLimbBones,
   hangProfileForAsset,
-  idleBreathAngle,
   normalizeBoneName,
-  selectIdleClip,
 } from "../components/avatar/avatar-pose";
 
 function bone(
@@ -149,28 +146,6 @@ describe("applyRelaxedStandingPose", () => {
     expect(world(sleeve).y).toBeLessThan(world(twist).y - 0.15);
     expect(world(sleeve).x).toBeGreaterThan(0);
   });
-
-  it("breathes from the spine rest pose without drifting", () => {
-    const root = new THREE.Group();
-    const spine = bone(root, "Spine2", 0, 1.3, 0);
-    bone(spine, "Neck", 0, 0.2, 0);
-    const pose = applyRelaxedStandingPose(root);
-    expect(pose.breathBoneName).toBe("Spine2");
-    const rest = spine.quaternion.clone();
-
-    applyIdleBreath(pose, root, 0);
-    expect(spine.quaternion.angleTo(rest)).toBeLessThan(1e-6);
-
-    const peak = Math.PI / (2 * 1.4);
-    expect(Math.abs(idleBreathAngle(peak))).toBeGreaterThan(0.01);
-    applyIdleBreath(pose, root, peak);
-    const bent = spine.quaternion.angleTo(rest);
-    expect(bent).toBeGreaterThan(0.005);
-    expect(bent).toBeLessThan(0.03);
-
-    applyIdleBreath(pose, root, 0);
-    expect(spine.quaternion.angleTo(rest)).toBeLessThan(1e-6);
-  });
 });
 
 describe("boneSide", () => {
@@ -224,22 +199,5 @@ describe("robe hang", () => {
     const after = world(sleeve);
     expect(after.x).toBeCloseTo(before.x, 4);
     expect(after.y).toBeCloseTo(before.y, 4);
-  });
-});
-
-describe("selectIdleClip", () => {
-  it("plays a named idle clip and refuses bind poses", () => {
-    expect(selectIdleClip([{ name: "Walk" }, { name: "Idle" }])?.name).toBe(
-      "Idle",
-    );
-    expect(selectIdleClip([{ name: "breathing_stand" }])?.name).toBe(
-      "breathing_stand",
-    );
-    expect(selectIdleClip([{ name: "idle_01" }])?.name).toBe("idle_01");
-    expect(selectIdleClip([{ name: "rest" }])?.name).toBe("rest");
-    expect(selectIdleClip([{ name: "TPose" }])).toBeNull();
-    expect(selectIdleClip([{ name: "A-Pose" }, { name: "Bind" }])).toBeNull();
-    expect(selectIdleClip([{ name: "Interest" }])).toBeNull();
-    expect(selectIdleClip([])).toBeNull();
   });
 });

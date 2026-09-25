@@ -7,15 +7,12 @@ export type { AvatarRendererOptions } from "./avatar-renderer";
 export { avatarMotionFrame, expressionForAvatarState } from "./avatar-motion";
 export type { AvatarMotionFrame } from "./avatar-motion";
 export {
-  applyIdleBreath,
   applyRelaxedStandingPose,
   boneSide,
   findLimbBones,
   hangProfileForAsset,
-  idleBreathAngle,
   makeHangProfile,
   normalizeBoneName,
-  selectIdleClip,
   AVATAR_FITTED_HANG,
   AVATAR_ROBE_HANG,
 } from "./avatar-pose";

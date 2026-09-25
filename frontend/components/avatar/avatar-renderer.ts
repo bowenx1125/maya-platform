@@ -11,11 +11,8 @@ import {
 } from "./types";
 import { avatarMotionFrame, expressionForAvatarState } from "./avatar-motion";
 import {
-  applyIdleBreath,
   applyRelaxedStandingPose,
-  findLimbBones,
   hangProfileForAsset,
-  selectIdleClip,
   type AvatarRestPose,
 } from "./avatar-pose";
 
@@ -256,9 +253,7 @@ export class AvatarRenderer {
   private config: AvatarConfig | null = null;
   private state: AvatarState = "idle";
   private animationFrame: number | null = null;
-  private mixer: THREE.AnimationMixer | null = null;
   private restPose: AvatarRestPose | null = null;
-  private lastFrameAt = 0;
   private startedAt = performance.now();
   private stateStartedAt = this.startedAt;
   private disposed = false;
@@ -326,8 +321,6 @@ export class AvatarRenderer {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
-    this.mixer?.stopAllAction();
-    this.mixer = null;
     this.restPose = null;
     window.removeEventListener("resize", this.resizeHandler);
     if (this.root) {
@@ -376,26 +369,14 @@ export class AvatarRenderer {
     root: THREE.Object3D,
     clips: THREE.AnimationClip[],
   ): void {
-    const idle = selectIdleClip(clips);
-    if (idle) {
-      const limbs = findLimbBones(root);
-      this.logPose(idle.name, clips, limbs.left, limbs.right);
-      this.mixer = new THREE.AnimationMixer(root);
-      const action = this.mixer.clipAction(idle);
-      action.setLoop(THREE.LoopRepeat, Infinity);
-      action.play();
-      this.mixer.update(0);
-      return;
-    }
     this.restPose = applyRelaxedStandingPose(
       root,
       hangProfileForAsset(this.assetUrl),
     );
-    this.logPose(null, clips, this.restPose.left, this.restPose.right);
+    this.logPose(clips, this.restPose.left, this.restPose.right);
   }
 
   private logPose(
-    idleClip: string | null,
     clips: THREE.AnimationClip[],
     left: AvatarRestPose["left"],
     right: AvatarRestPose["right"],
@@ -407,7 +388,6 @@ export class AvatarRenderer {
     console.info(
       "avatar_pose",
       JSON.stringify({
-        idleClip,
         clips: clips.map((clip) => clip.name),
         left,
         right,
@@ -519,15 +499,6 @@ export class AvatarRenderer {
   private animate(elapsed: number): void {
     if (!this.root) return;
     const activeRoot = this.root;
-    const now = performance.now();
-    if (this.mixer) {
-      const delta =
-        this.lastFrameAt === 0
-          ? 0
-          : Math.min((now - this.lastFrameAt) / 1000, 0.05);
-      this.mixer.update(delta);
-    }
-    this.lastFrameAt = now;
     const frame = avatarMotionFrame(
       this.state,
       elapsed,
@@ -537,9 +508,6 @@ export class AvatarRenderer {
     activeRoot.rotation.x = frame.rotationX;
     activeRoot.rotation.y = frame.rotationY;
     activeRoot.rotation.z = frame.rotationZ;
-    if (!this.mixer && this.restPose) {
-      applyIdleBreath(this.restPose, activeRoot, elapsed);
-    }
     this.animateMorphTargets(activeRoot, frame);
   }
 
