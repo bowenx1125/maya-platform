@@ -491,9 +491,24 @@ def store_assistant_text(
     if turn.assistant_text is not None:
         raise RuntimeError("assistant text is already stored")
     stored_sources = [item.model_dump(mode="json") for item in sources]
-    turn.assistant_text = reply
-    turn.sources_json = json.dumps(stored_sources, ensure_ascii=False)
-    turn.state = "ready"
+    result = db.execute(
+        update(ConversationTurn)
+        .where(
+            ConversationTurn.id == request_id,
+            ConversationTurn.state == "pending",
+            ConversationTurn.assistant_text.is_(None),
+        )
+        .values(
+            assistant_text=reply,
+            sources_json=json.dumps(stored_sources, ensure_ascii=False),
+            state="ready",
+        )
+    )
+    if not isinstance(result, CursorResult) or result.rowcount != 1:
+        # A closed turn is already terminal (cancelled, repaired or failed);
+        # writing over it would flip a recorded outcome the user has seen.
+        db.rollback()
+        raise conflict("chat_turn_closed", "This reply was already closed.")
     if operation_id:
         db.execute(
             update(ProviderOperation)
@@ -533,11 +548,24 @@ def record_chat_failure(db: Session, conversation_id: str, request_id: str, exc:
             .limit(1)
         )
     )
-    turn.state = "acceptance_unknown" if uncertain else "failed"
-    turn.safe_error_code = code
-    logger.warning(
-        "Chat failed conversation_id=%s turn_id=%s code=%s", conversation_id, request_id, code
+    result = db.execute(
+        update(ConversationTurn)
+        .where(ConversationTurn.id == request_id, ConversationTurn.state == "pending")
+        .values(state="acceptance_unknown" if uncertain else "failed", safe_error_code=code)
     )
+    closed_state = turn.state
+    db.expire(turn)
+    if isinstance(result, CursorResult) and result.rowcount == 1:
+        logger.warning(
+            "Chat failed conversation_id=%s turn_id=%s code=%s", conversation_id, request_id, code
+        )
+    else:
+        logger.warning(
+            "Chat turn already closed, leaving it conversation_id=%s turn_id=%s state=%s",
+            conversation_id,
+            request_id,
+            closed_state,
+        )
     return code
 
 
