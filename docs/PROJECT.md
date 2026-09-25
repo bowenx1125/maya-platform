@@ -436,7 +436,7 @@ voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
 profile for an immutable baseline character, and an omitted name uses
 `FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.
 
-Chat TTS strips `[S1]`, `[S1, S2]`, `[S1、S2]`, `[S1-S3]`, `【S1】`, `(S1)`, and `[s1]` from speech only. Displayed text keeps them. Markers-only replies emit `tts_speech_empty`. Debate uses the same strip. Chinese TTS applies when Han characters are at least as many as Latin letters; otherwise the requested language is used. Stored turns expose `audio_url` and WAV-header `audio_duration_ms`. Deleting a chat deletes its audio directory. Voice bars play one at a time; the newest autoplays once. Leaving or switching aborts the stream. TTS errors are translated.
+Chat TTS strips bracketed markers such as `[S1]` from speech only and keeps prose like `Section (S2)`. Displayed text keeps markers. Markers-only replies emit `tts_speech_empty`. Debate uses the same strip. Han at least equal to Latin letters selects Chinese TTS. Stored turns expose `audio_url` and header `audio_duration_ms`. Deleting a chat deletes its audio directory. Voice bars play one at a time; the newest autoplays once. An aborted stream closes that turn and its provider call; a stale pending turn does not block sending. TTS errors are translated.
 
 The interface locale is `en` or `zh`. The root layout reads the `maya_ui_locale`
 cookie when it is exactly one of those values, and otherwise the first matching

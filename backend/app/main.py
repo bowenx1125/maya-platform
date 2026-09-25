@@ -27,7 +27,7 @@ from app.core.errors import (
     request_validation_handler,
 )
 from app.core.logging import configure_application_logging
-from app.core.models import Course, ProviderOperation
+from app.core.models import Course
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.dependencies import get_db
 from app.modules.auth.router import router as auth_router
@@ -80,9 +80,10 @@ from app.modules.reports.service import (
 from app.modules.reports.task_manager import ReportTaskManager
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
+from app.modules.workspace.chat import repair_abandoned_chats
 from app.modules.workspace.chat import router as chat_router
 from app.modules.workspace.live import router as live_router
-from app.modules.workspace.models import Conversation, ConversationTurn, ProviderPreferences
+from app.modules.workspace.models import ProviderPreferences
 from app.modules.workspace.providers import preferences_settings
 from app.modules.workspace.providers import router as provider_settings_router
 from app.providers.control_repository import ProviderRepository
@@ -257,27 +258,9 @@ def create_app(
                 if preferences is not None:
                     next_settings = preferences_settings(app.state.base_settings, preferences)
                     app.state.prepare_provider_settings(next_settings)()
-                for conversation in session.scalars(
-                    select(Conversation).where(Conversation.active_request_id.is_not(None))
-                ):
-                    turn = session.get(ConversationTurn, conversation.active_request_id)
-                    if turn is not None and turn.state == "pending":
-                        turn.state = "acceptance_unknown" if turn.mode == "real" else "failed"
-                        turn.safe_error_code = "chat_interrupted"
-                    conversation.active_request_id = None
-            with runtime_database.session() as session:
-                stranded = list(
-                    session.scalars(
-                        select(ProviderOperation.id).where(
-                            ProviderOperation.provider_operation == "llm_agent_chat",
-                            ProviderOperation.state.in_(("reserved", "sending", "accepted")),
-                        )
-                    )
-                )
-            for operation_id in stranded:
-                ProviderRepository(runtime_database).recover_one(
-                    operation_id, staged_response_complete=False
-                )
+            # No chat stream is alive in this process. Pending turns must not
+            # become acceptance_unknown: that state refuses every later message.
+            repair_abandoned_chats(runtime_database, only_stale=False)
             if runtime_settings.demo_mode:
                 # Parse first, then seed a fresh organization and apply the
                 # complete private-account desired graph in one BEGIN

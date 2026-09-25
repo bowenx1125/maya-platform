@@ -590,6 +590,8 @@ const enMessages = {
   errorTtsResultDnsFailed: "The voice service result could not be reached.",
   errorTtsResultDownloadFailed:
     "The voice service result could not be downloaded.",
+  errorTtsOutcomeUnknown: "The voice reply finished without a known result.",
+  errorTtsProviderError: "The voice service could not complete the reply.",
   wave3Title: "Interaction",
   wave3BackToPlayback: "Back",
   interactionTitleClosed: "Classroom interaction",
@@ -1303,6 +1305,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorTtsResultUrlRejected: "无法接受语音服务的结果地址。",
   errorTtsResultDnsFailed: "无法解析语音服务的结果地址。",
   errorTtsResultDownloadFailed: "无法下载语音服务的结果。",
+  errorTtsOutcomeUnknown: "语音回复结束时没有得到明确结果。",
+  errorTtsProviderError: "语音服务无法完成这条回复。",
   wave3Title: "课堂互动",
   wave3BackToPlayback: "返回",
   interactionTitleClosed: "课堂互动",
@@ -1707,6 +1711,8 @@ const errorCodeKeys: Record<string, MessageKey> = {
   tts_result_url_rejected: "errorTtsResultUrlRejected",
   tts_result_dns_failed: "errorTtsResultDnsFailed",
   tts_result_download_failed: "errorTtsResultDownloadFailed",
+  tts_outcome_unknown: "errorTtsOutcomeUnknown",
+  tts_provider_error: "errorTtsProviderError",
 };
 
 /**

@@ -26,7 +26,12 @@ def test_spoken_text_removes_citation_markers_and_tidies_punctuation() -> None:
     assert spoken_text("见【S1】。") == "见。"
     assert spoken_text("See [S1、S2].") == "See."
     assert spoken_text("Range [S1-S3] holds.") == "Range holds."
-    assert spoken_text("Note (S1).") == "Note."
+    assert spoken_text("Note (S1).") == "Note (S1)."
+    assert spoken_text("Section (S2)") == "Section (S2)"
+    assert spoken_text("See (S1, S2).") == "See."
+    assert spoken_text("Range (S1-S3) holds.") == "Range holds."
+    assert spoken_text("(S1) starts.") == "starts."
+    assert spoken_text("word(S1).") == "word."
     assert spoken_text("lower [s1].") == "lower."
     assert spoken_text("（S1）结束") == "结束"
 

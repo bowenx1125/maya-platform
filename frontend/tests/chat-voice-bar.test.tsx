@@ -349,6 +349,8 @@ describe("TTS error copy", () => {
       ["tts_result_url_rejected", "errorTtsResultUrlRejected"],
       ["tts_result_dns_failed", "errorTtsResultDnsFailed"],
       ["tts_result_download_failed", "errorTtsResultDownloadFailed"],
+      ["tts_outcome_unknown", "errorTtsOutcomeUnknown"],
+      ["tts_provider_error", "errorTtsProviderError"],
     ] as const) {
       expect(localizeError({ code, status: 502 }, "en")).toBe(messages.en[key]);
       expect(localizeError({ code, status: 502 }, "zh")).toBe(messages.zh[key]);

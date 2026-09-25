@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import io
 import json
+import threading
 import wave
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from concurrent import futures
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -190,6 +193,57 @@ def _segment(database: Database, settings: Settings) -> Iterator[Session]:
         db.close()
 
 
+def _call_with_context(
+    context: contextvars.Context, function: Callable[..., object], args: tuple[object, ...]
+) -> object:
+    return context.run(function, *args)
+
+
+# Independent of the request task. Cancelling the SSE task must not drop the
+# worker result: the provider row is settled only after this future finishes.
+_CHAT_POOL = futures.ThreadPoolExecutor(thread_name_prefix="maya-chat")
+
+
+def _submit(function: Callable[..., object], *args: object) -> futures.Future[object]:
+    """Run in a worker thread whose future stays live if this request is cancelled.
+
+    ``asyncio.to_thread`` is tied to the request task. Cancelling that task
+    drops the result while the thread can still mark the provider call
+    accepted. This future completes only when the thread returns, so the
+    operation is settled after that write and not before it.
+    """
+
+    context = contextvars.copy_context()
+    return _CHAT_POOL.submit(_call_with_context, context, function, args)
+
+
+def _when_workers_done(workers: list[futures.Future[object]], callback: Callable[[], None]) -> None:
+    pending = [worker for worker in workers if not worker.done()]
+    if not pending:
+        callback()
+        return
+    remaining = {"count": len(pending)}
+    gate = threading.Lock()
+
+    def _finished(worker: futures.Future[object]) -> None:
+        try:
+            worker.exception()
+        except Exception:
+            logger.warning("Chat worker failed before cancel settle code=chat_cancelled")
+        with gate:
+            remaining["count"] -= 1
+            last = remaining["count"] == 0
+        if not last:
+            return
+        try:
+            callback()
+        except Exception:
+            logger.warning("Chat cancel settle failed code=chat_cancelled")
+
+    for worker in pending:
+        worker.add_done_callback(_finished)
+
+
 async def stream_events(
     database: Database,
     settings: Settings,
@@ -205,9 +259,13 @@ async def stream_events(
     The request session is not used here.  Each database segment closes
     before the LLM or TTS call, and the conversation lock is released
     immediately after text_done so speech does not keep the chat busy.
+    A client disconnect fails a still-pending turn and closes its provider
+    operation once the in-flight worker returns.
     """
 
     released = False
+    outcome = "open"
+    workers: list[futures.Future[object]] = []
 
     def release() -> None:
         nonlocal released
@@ -219,37 +277,77 @@ async def stream_events(
             release_chat_request(db, conversation_id, request_id)
         released = True
 
-    try:
-        if not created:
-            yield _replay_event(database, settings, conversation_id, request_id)
-            return
+    def abandon() -> None:
+        from .chat import mark_abandoned_turn, settle_abandoned_operations
+
         try:
-            reply, sources, operation_id = await asyncio.to_thread(
-                _reply_segment,
+            mark_abandoned_turn(
                 database,
-                settings,
+                conversation_id=conversation_id,
+                request_id=request_id,
+                code="chat_cancelled",
+            )
+        except Exception:
+            logger.warning(
+                "Chat cancel close failed conversation_id=%s turn_id=%s code=chat_cancelled",
                 conversation_id,
                 request_id,
-                message,
-                lang,
+            )
+
+        def _settle() -> None:
+            settle_abandoned_operations(
+                database,
+                conversation_id=conversation_id,
+                request_id=request_id,
+                code="chat_cancelled",
+            )
+
+        _when_workers_done(workers, _settle)
+
+    try:
+        if not created:
+            outcome = "replay"
+            yield _replay_event(database, settings, conversation_id, request_id)
+            return
+        reply_worker = _submit(
+            _reply_segment,
+            database,
+            settings,
+            conversation_id,
+            request_id,
+            message,
+            lang,
+        )
+        workers.append(reply_worker)
+        try:
+            reply, sources, operation_id = cast(
+                tuple[str, list[ChatSource], str | None],
+                await asyncio.wrap_future(reply_worker),
             )
         except Exception as exc:
+            outcome = "failed"
             code = _failure_code(database, settings, conversation_id, request_id, exc)
             yield sse("error", {"request_id": request_id, "safe_error_code": code})
             return
         for seq, text in enumerate(text_deltas(reply), start=1):
             yield sse("delta", {"request_id": request_id, "seq": seq, "text": text})
+        store_worker = _submit(
+            _store_segment,
+            database,
+            settings,
+            request_id,
+            reply,
+            sources,
+            operation_id,
+        )
+        workers.append(store_worker)
         try:
-            revision, stored_sources = await asyncio.to_thread(
-                _store_segment,
-                database,
-                settings,
-                request_id,
-                reply,
-                sources,
-                operation_id,
+            revision, stored_sources = cast(
+                tuple[int, list[dict[str, Any]]],
+                await asyncio.wrap_future(store_worker),
             )
         except Exception as exc:
+            outcome = "failed"
             code = _failure_code(database, settings, conversation_id, request_id, exc)
             yield sse("error", {"request_id": request_id, "safe_error_code": code})
             return
@@ -267,7 +365,10 @@ async def stream_events(
             database, settings, conversation_id, request_id, reply, lang
         ):
             yield event
+        outcome = "done"
     finally:
+        if created and outcome == "open":
+            abandon()
         release()
 
 

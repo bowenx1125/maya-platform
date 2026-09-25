@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -30,6 +30,7 @@ from app.modules.auth.dependencies import (
     require_authenticated_mutation,
 )
 from app.modules.auth.service import AuthContext
+from app.providers.control_repository import ProviderRepository
 
 from .access import course_member
 from .chat_provider import chat_messages, real_reply, retrieve_sources
@@ -54,6 +55,268 @@ router = APIRouter(
     },
 )
 logger = logging.getLogger("maya.workspace")
+
+# A live send holds the conversation lock. Past this age the request is gone
+# or stuck, and keeping the turn pending would stop every later message.
+CHAT_PENDING_TTL = timedelta(minutes=3)
+_CHAT_OPERATION = "llm_agent_chat"
+_OPEN_OPERATION_STATES = ("prepared", "reserved", "sending", "accepted")
+_TERMINAL_OPERATION_STATES = frozenset(
+    {"succeeded", "failed", "not_sent", "acceptance_unknown", "abandoned"}
+)
+
+
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _turn_is_live(turn: ConversationTurn, active_request_id: str | None, now: datetime) -> bool:
+    return (
+        turn.state == "pending"
+        and active_request_id == turn.id
+        and now - _aware(turn.created_at) <= CHAT_PENDING_TTL
+    )
+
+
+def _fail_open_turn(turn: ConversationTurn, code: str) -> None:
+    """Move an unfinished turn to failed. A ready turn is left ready."""
+
+    if turn.state == "pending":
+        turn.state = "failed"
+        turn.safe_error_code = code
+        return
+    # Startup used to label an interrupted real turn acceptance_unknown, which
+    # claim_chat_send treats as a permanent block. That label is not a
+    # provider outcome, so it becomes an ordinary failure.
+    if turn.state == "acceptance_unknown" and turn.safe_error_code == "chat_interrupted":
+        turn.state = "failed"
+        turn.safe_error_code = "chat_interrupted"
+
+
+def settle_chat_operation(
+    database: Database, operation_id: str, *, turn_ready: bool, code: str
+) -> None:
+    """Close one chat operation without leaving it accepted.
+
+    A supplier that never accepted the call is not_sent, which releases the
+    reservation. An accepted call whose text was not stored stays charged and
+    becomes failed. A call still marked sending keeps the charge as
+    acceptance_unknown. A ready turn promotes accepted to succeeded.
+    """
+
+    repository = ProviderRepository(database)
+    try:
+        state = repository.operation(operation_id).state
+    except Exception:
+        logger.warning(
+            "Chat operation missing operation_id=%s code=%s",
+            operation_id,
+            code,
+        )
+        return
+    if state in _TERMINAL_OPERATION_STATES:
+        return
+    try:
+        if turn_ready and state == "accepted":
+            repository.mark_succeeded(operation_id)
+        elif state in {"prepared", "reserved"}:
+            repository.mark_not_sent(operation_id, safe_error_code=code)
+        elif state == "sending":
+            repository.mark_acceptance_unknown(operation_id, safe_error_code="acceptance_unknown")
+        elif state == "accepted":
+            repository.mark_failed(operation_id, safe_error_code=code)
+        else:
+            logger.warning(
+                "Chat operation left open operation_id=%s state=%s code=%s",
+                operation_id,
+                state,
+                code,
+            )
+    except Exception:
+        logger.warning(
+            "Chat operation settle failed operation_id=%s code=%s",
+            operation_id,
+            code,
+        )
+
+
+def _load_open_chat_operations(
+    db: Session, *, conversation_id: str, request_id: str
+) -> list[tuple[str, bool]]:
+    turn = db.get(ConversationTurn, request_id)
+    turn_ready = (
+        turn is not None and turn.state == "ready" and turn.conversation_id == conversation_id
+    )
+    return [
+        (operation_id, turn_ready)
+        for operation_id in db.scalars(
+            select(ProviderOperation.id).where(
+                ProviderOperation.scope_id == conversation_id,
+                ProviderOperation.provider_operation == _CHAT_OPERATION,
+                ProviderOperation.logical_item_id == request_id,
+                ProviderOperation.state.in_(_OPEN_OPERATION_STATES),
+            )
+        )
+    ]
+
+
+def mark_abandoned_turn(
+    database: Database,
+    *,
+    conversation_id: str,
+    request_id: str,
+    code: str,
+) -> None:
+    """Fail one still-pending turn and drop its lock. Operations settle separately."""
+
+    with database.session() as db:
+        turn = db.get(ConversationTurn, request_id)
+        changed = False
+        if turn is not None and turn.conversation_id == conversation_id and turn.state != "ready":
+            before = (turn.state, turn.safe_error_code)
+            _fail_open_turn(turn, code)
+            changed = (turn.state, turn.safe_error_code) != before
+        release_chat_request(db, conversation_id, request_id)
+    if changed:
+        logger.warning(
+            "Chat request closed conversation_id=%s turn_id=%s code=%s",
+            conversation_id,
+            request_id,
+            code,
+        )
+
+
+def settle_abandoned_operations(
+    database: Database,
+    *,
+    conversation_id: str,
+    request_id: str,
+    code: str,
+) -> None:
+    """Close this request's chat operation after its worker has finished."""
+
+    with database.session() as db:
+        pending_ops = _load_open_chat_operations(
+            db, conversation_id=conversation_id, request_id=request_id
+        )
+    for operation_id, turn_ready in pending_ops:
+        settle_chat_operation(database, operation_id, turn_ready=turn_ready, code=code)
+
+
+def close_abandoned_chat(
+    database: Database,
+    *,
+    conversation_id: str,
+    request_id: str,
+    code: str,
+) -> None:
+    """Fail one abandoned turn, drop its lock, and close its chat operation."""
+
+    mark_abandoned_turn(database, conversation_id=conversation_id, request_id=request_id, code=code)
+    settle_abandoned_operations(
+        database, conversation_id=conversation_id, request_id=request_id, code=code
+    )
+
+
+def repair_abandoned_chats(
+    database: Database, *, conversation_id: str | None = None, only_stale: bool = True
+) -> None:
+    """Fail turns no live request can still finish, then close their operations.
+
+    Claim-time repair (`only_stale`) leaves a young locked pending turn alone.
+    Startup repair does not: the new process has no in-flight stream.
+    """
+
+    now = datetime.now(UTC)
+    pending_ops: list[tuple[str, str, str]] = []
+    with database.session() as db:
+        turn_query = select(ConversationTurn).where(
+            ConversationTurn.state.in_(("pending", "acceptance_unknown"))
+        )
+        if conversation_id is not None:
+            turn_query = turn_query.where(ConversationTurn.conversation_id == conversation_id)
+        turns = list(db.scalars(turn_query))
+        conversations = {
+            row.id: row
+            for row in db.scalars(
+                select(Conversation).where(
+                    Conversation.id.in_({turn.conversation_id for turn in turns} or {""})
+                )
+            )
+        }
+        if conversation_id is not None and conversation_id not in conversations:
+            row = db.get(Conversation, conversation_id)
+            if row is not None:
+                conversations[row.id] = row
+        request_ids: list[tuple[str, str]] = []
+        for turn in turns:
+            row = conversations.get(turn.conversation_id)
+            active = row.active_request_id if row is not None else None
+            if turn.state == "acceptance_unknown":
+                if turn.safe_error_code != "chat_interrupted":
+                    continue
+            elif only_stale and _turn_is_live(turn, active, now):
+                continue
+            elif turn.state != "pending":
+                continue
+            _fail_open_turn(turn, "chat_interrupted")
+            request_ids.append((turn.conversation_id, turn.id))
+        for row in conversations.values():
+            if row.active_request_id is None:
+                continue
+            if only_stale and any(
+                turn.id == row.active_request_id and _turn_is_live(turn, row.active_request_id, now)
+                for turn in turns
+                if turn.conversation_id == row.id
+            ):
+                continue
+            row.active_request_id = None
+        if not only_stale:
+            for row in db.scalars(
+                select(Conversation).where(Conversation.active_request_id.is_not(None))
+            ):
+                row.active_request_id = None
+        for scope_id, request_id in request_ids:
+            for operation_id, _turn_ready in _load_open_chat_operations(
+                db, conversation_id=scope_id, request_id=request_id
+            ):
+                pending_ops.append((operation_id, scope_id, request_id))
+        # Operations left open with no pending turn (the turn was already
+        # failed, or the text was stored) still must leave accepted/sending.
+        op_query = select(ProviderOperation).where(
+            ProviderOperation.provider_operation == _CHAT_OPERATION,
+            ProviderOperation.state.in_(_OPEN_OPERATION_STATES),
+        )
+        if conversation_id is not None:
+            op_query = op_query.where(ProviderOperation.scope_id == conversation_id)
+        known = {operation_id for operation_id, _scope, _request in pending_ops}
+        live_ids = {
+            turn.id
+            for turn in turns
+            if turn.state == "pending"
+            and _turn_is_live(
+                turn,
+                conversations[turn.conversation_id].active_request_id
+                if turn.conversation_id in conversations
+                else None,
+                now,
+            )
+        }
+        for operation in db.scalars(op_query):
+            if operation.id in known or operation.logical_item_id in live_ids:
+                continue
+            pending_ops.append((operation.id, operation.scope_id, operation.logical_item_id))
+    for operation_id, scope_id, request_id in pending_ops:
+        with database.session() as db:
+            saved = db.get(ConversationTurn, request_id)
+            turn_ready = (
+                saved is not None and saved.state == "ready" and saved.conversation_id == scope_id
+            )
+        settle_chat_operation(
+            database, operation_id, turn_ready=turn_ready, code="chat_interrupted"
+        )
 
 
 def agent_view(version: AgentVersion, agent: Agent, course_id: str) -> ChatAgent:
@@ -80,6 +343,7 @@ def claim_chat_send(
     db: Session,
     row: Conversation,
     *,
+    database: Database,
     request_id: str,
     expected_revision: int,
     message: str,
@@ -88,9 +352,18 @@ def claim_chat_send(
     """Claim one send the same way the JSON and SSE routes do.
 
     An existing turn is returned without a second claim.  A new turn is
-    committed as pending before any provider call.
+    committed as pending before any provider call.  A pending turn whose
+    request is already gone is failed here so it cannot block this send.
     """
 
+    conversation_id = row.id
+    db.commit()
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    db.expire_all()
+    fresh = db.get(Conversation, conversation_id)
+    if fresh is None:
+        raise not_found()
+    row = fresh
     previous = db.get(ConversationTurn, request_id)
     if previous:
         if previous.conversation_id != row.id or previous.user_text != message:
@@ -254,6 +527,7 @@ def record_chat_failure(db: Session, conversation_id: str, request_id: str, exc:
             select(ProviderOperation.id)
             .where(
                 ProviderOperation.scope_id == conversation_id,
+                ProviderOperation.logical_item_id.in_((request_id, f"chat:{request_id}")),
                 ProviderOperation.state.in_(("sending", "accepted", "acceptance_unknown")),
             )
             .limit(1)
@@ -452,6 +726,7 @@ def send_message(
     payload: SendChat,
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    database: Database = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> ChatSession:
     row = owned_conversation(db, context, str(conversation_id))
@@ -466,6 +741,7 @@ def send_message(
     _turn, created = claim_chat_send(
         db,
         row,
+        database=database,
         request_id=request_id,
         expected_revision=payload.expected_revision,
         message=message,
@@ -526,6 +802,7 @@ def stream_message(
     _turn, created = claim_chat_send(
         db,
         row,
+        database=database,
         request_id=request_id,
         expected_revision=payload.expected_revision,
         message=message,
