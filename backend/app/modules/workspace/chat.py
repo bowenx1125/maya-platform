@@ -7,9 +7,9 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Response
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import ColumnElement, delete, exists, func, select, update
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings, get_settings
 from app.core.db import Database
@@ -80,16 +80,46 @@ def _turn_is_live(turn: ConversationTurn, active_request_id: str | None, now: da
     )
 
 
-def _fail_open_turn(db: Session, turn_id: str, code: str) -> bool:
+def _live_turn_exists(turn_id_expr: Any, cutoff: datetime) -> ColumnElement[bool]:
+    """SQL predicate: that turn id is a pending, locked, in-TTL request.
+
+    The database evaluates liveness inside the same UPDATE that fails a
+    turn or clears a lock, so a claim committed after repair's SELECTs
+    still counts as live even though repair never loaded its row.  The
+    cutoff is a datetime so it binds in the same form claim_chat_send
+    writes created_at, which keeps the SQLite string comparison exact.
+    """
+
+    turn = aliased(ConversationTurn)
+    conversation = aliased(Conversation)
+    return exists().where(
+        turn.id == turn_id_expr,
+        turn.state == "pending",
+        turn.created_at > cutoff,
+        exists().where(
+            conversation.id == turn.conversation_id,
+            conversation.active_request_id == turn.id,
+        ),
+    )
+
+
+def _fail_open_turn(
+    db: Session, turn_id: str, code: str, *, live_cutoff: datetime | None = None
+) -> bool:
     """Fail one unfinished turn. A ready turn is left ready.
 
     The conditional update re-reads the state, so a turn that became ready
-    after the caller loaded it is never rewritten.
+    after the caller loaded it is never rewritten.  Repair also passes a
+    live cutoff so a pending turn the database still considers live is
+    never failed, even if this session never loaded its row.
     """
 
+    pending_conditions = [ConversationTurn.id == turn_id, ConversationTurn.state == "pending"]
+    if live_cutoff is not None:
+        pending_conditions.append(~_live_turn_exists(ConversationTurn.id, live_cutoff))
     failed = db.execute(
         update(ConversationTurn)
-        .where(ConversationTurn.id == turn_id, ConversationTurn.state == "pending")
+        .where(*pending_conditions)
         .values(state="failed", safe_error_code=code)
     )
     if isinstance(failed, CursorResult) and failed.rowcount == 1:
@@ -234,21 +264,27 @@ def close_abandoned_chat(
     )
 
 
-def _load_repair_rows(
-    db: Session, conversation_id: str | None, only_stale: bool
-) -> tuple[list[ConversationTurn], dict[str, str]]:
-    """Load unfinished turns and snapshot the locks observed right now.
-
-    Startup repair also snapshots every other locked conversation, because it
-    is allowed to clear locks its turns never mentioned.
-    """
-
+def _load_repair_turns(db: Session, conversation_id: str | None) -> list[ConversationTurn]:
     turn_query = select(ConversationTurn).where(
         ConversationTurn.state.in_(("pending", "acceptance_unknown"))
     )
     if conversation_id is not None:
         turn_query = turn_query.where(ConversationTurn.conversation_id == conversation_id)
-    turns = list(db.scalars(turn_query))
+    return list(db.scalars(turn_query))
+
+
+def _load_repair_locks(
+    db: Session,
+    conversation_id: str | None,
+    only_stale: bool,
+    turns: list[ConversationTurn],
+) -> dict[str, str]:
+    """Snapshot the locks observed right now.
+
+    Startup repair also snapshots every other locked conversation, because it
+    is allowed to clear locks its turns never mentioned.
+    """
+
     conversations = {
         row.id: row
         for row in db.scalars(
@@ -272,7 +308,16 @@ def _load_repair_rows(
             lock_query = lock_query.where(Conversation.id == conversation_id)
         for lock_row in db.execute(lock_query):
             observed_locks[lock_row.id] = lock_row.active_request_id
-    return turns, observed_locks
+    return observed_locks
+
+
+def _load_repair_rows(
+    db: Session, conversation_id: str | None, only_stale: bool
+) -> tuple[list[ConversationTurn], dict[str, str]]:
+    """Load unfinished turns, then snapshot the locks observed right now."""
+
+    turns = _load_repair_turns(db, conversation_id)
+    return turns, _load_repair_locks(db, conversation_id, only_stale, turns)
 
 
 def _live_turn_ids(
@@ -287,7 +332,12 @@ def _live_turn_ids(
 
 
 def _fail_dead_turns(
-    db: Session, turns: list[ConversationTurn], live_ids: set[str], *, only_stale: bool
+    db: Session,
+    turns: list[ConversationTurn],
+    live_ids: set[str],
+    *,
+    only_stale: bool,
+    cutoff: datetime,
 ) -> list[tuple[str, str]]:
     """Fail every loaded turn no live request can still finish."""
     request_ids: list[tuple[str, str]] = []
@@ -299,29 +349,46 @@ def _fail_dead_turns(
             continue
         elif turn.state != "pending":
             continue
-        if _fail_open_turn(db, turn.id, "chat_interrupted"):
+        # The SQL guard inside the UPDATE is what makes the decision safe:
+        # a claim committed after this session's SELECTs still counts as
+        # live even though its row is missing from `turns`.
+        if _fail_open_turn(
+            db, turn.id, "chat_interrupted", live_cutoff=cutoff if only_stale else None
+        ):
             request_ids.append((turn.conversation_id, turn.id))
     return request_ids
 
 
-def _clear_lock(db: Session, conversation_id: str, observed: str) -> bool:
-    """Clear one lock only if it still holds the value repair observed."""
+def _clear_lock(
+    db: Session, conversation_id: str, observed: str, *, cutoff: datetime | None = None
+) -> bool:
+    """Clear one lock only if it still holds the value repair observed.
 
-    result = db.execute(
-        update(Conversation)
-        .where(Conversation.id == conversation_id, Conversation.active_request_id == observed)
-        .values(active_request_id=None)
-    )
+    Claim-time repair also re-checks liveness in the same UPDATE, so a
+    lock claimed after repair's SELECTs is never cleared: the CAS alone
+    matches the new value but the NOT-live guard rejects it.
+    """
+
+    conditions = [Conversation.id == conversation_id, Conversation.active_request_id == observed]
+    if cutoff is not None:
+        conditions.append(~_live_turn_exists(Conversation.active_request_id, cutoff))
+    result = db.execute(update(Conversation).where(*conditions).values(active_request_id=None))
     return isinstance(result, CursorResult) and result.rowcount == 1
 
 
 def _release_dead_locks(
-    db: Session, observed_locks: dict[str, str], live_ids: set[str], *, only_stale: bool
+    db: Session,
+    observed_locks: dict[str, str],
+    live_ids: set[str],
+    *,
+    only_stale: bool,
+    cutoff: datetime,
 ) -> None:
     for conversation_id, observed in observed_locks.items():
         if only_stale and observed in live_ids:
             continue
-        _clear_lock(db, conversation_id, observed)
+        # Startup repair passes no cutoff: nothing is live after a restart.
+        _clear_lock(db, conversation_id, observed, cutoff=cutoff if only_stale else None)
 
 
 def _open_operations_to_settle(
@@ -330,6 +397,7 @@ def _open_operations_to_settle(
     conversation_id: str | None,
     request_ids: list[tuple[str, str]],
     live_ids: set[str],
+    cutoff: datetime | None = None,
 ) -> list[tuple[str, str, str]]:
     """Collect open chat operations that repair must settle."""
     pending_ops = [
@@ -341,12 +409,18 @@ def _open_operations_to_settle(
     ]
     # Operations left open with no pending turn (the turn was already
     # failed, or the text was stored) still must leave accepted/sending.
-    op_query = select(ProviderOperation).where(
+    # A live request's operation is excluded in SQL, so a claim committed
+    # after this session's SELECTs is not settled even though its row was
+    # never loaded.
+    op_conditions = [
         ProviderOperation.provider_operation == _CHAT_OPERATION,
         ProviderOperation.state.in_(_OPEN_OPERATION_STATES),
-    )
+    ]
     if conversation_id is not None:
-        op_query = op_query.where(ProviderOperation.scope_id == conversation_id)
+        op_conditions.append(ProviderOperation.scope_id == conversation_id)
+    if cutoff is not None:
+        op_conditions.append(~_live_turn_exists(ProviderOperation.logical_item_id, cutoff))
+    op_query = select(ProviderOperation).where(*op_conditions)
     known = {operation_id for operation_id, _scope, _request in pending_ops}
     for operation in db.scalars(op_query):
         if operation.id in known or operation.logical_item_id in live_ids:
@@ -360,25 +434,31 @@ def repair_abandoned_chats(
 ) -> None:
     """Fail turns no live request can still finish, then close their operations.
 
-    Claim-time repair (`only_stale`) leaves a young locked pending turn alone.
-    Startup repair does not: the new process has no in-flight stream.
+    Claim-time repair (`only_stale`) leaves a young locked pending turn
+    alone.  Startup repair does not: the new process has no in-flight
+    stream.
 
-    Locks are cleared from the snapshot taken before any turn was failed, so
-    a request that claims a conversation mid-repair keeps its lock.
+    Liveness is checked inside each conditional UPDATE (`_live_turn_exists`
+    with a cutoff), not only in the pre-filter, so a claim committed after
+    this function's SELECTs keeps its lock, its pending turn and its open
+    operation.  Locks are still cleared from the snapshot taken before any
+    turn was failed.
     """
 
     now = datetime.now(UTC)
+    cutoff = now - CHAT_PENDING_TTL
     with database.session() as db:
         turns, observed_locks = _load_repair_rows(db, conversation_id, only_stale)
         # Startup repair has no in-flight stream, so nothing counts as live.
         live_ids = _live_turn_ids(turns, observed_locks, now) if only_stale else set()
-        request_ids = _fail_dead_turns(db, turns, live_ids, only_stale=only_stale)
-        _release_dead_locks(db, observed_locks, live_ids, only_stale=only_stale)
+        request_ids = _fail_dead_turns(db, turns, live_ids, only_stale=only_stale, cutoff=cutoff)
+        _release_dead_locks(db, observed_locks, live_ids, only_stale=only_stale, cutoff=cutoff)
         pending_ops = _open_operations_to_settle(
             db,
             conversation_id=conversation_id,
             request_ids=request_ids,
             live_ids=live_ids,
+            cutoff=cutoff if only_stale else None,
         )
     for operation_id, scope_id, request_id in pending_ops:
         with database.session() as db:

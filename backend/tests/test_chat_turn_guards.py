@@ -11,11 +11,13 @@ import pytest
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
+from app.core.models import ProviderOperation
 from app.modules.workspace import chat as chat_module
 from app.modules.workspace.chat import (
     _fail_open_turn,
     mark_abandoned_turn,
     record_chat_failure,
+    release_chat_request,
     repair_abandoned_chats,
     store_assistant_text,
 )
@@ -300,8 +302,8 @@ def _steal_lock_after_fail(
 ) -> Callable[..., bool]:
     """Wrap _fail_open_turn so a rival request takes the lock mid-repair."""
 
-    def wrapper(db: Session, turn_id: str, code: str) -> bool:
-        changed = original(db, turn_id, code)
+    def wrapper(db: Session, turn_id: str, code: str, **kwargs: object) -> bool:
+        changed = original(db, turn_id, code, **kwargs)
         if changed:
             # An outside writer does not touch this session's identity map.
             db.execute(
@@ -359,3 +361,169 @@ def test_repair_abandoned_chats_is_at_most_80_lines() -> None:
     lines, _start = inspect.getsourcelines(chat_module.repair_abandoned_chats)
     body = lines[1:]
     assert len(body) <= 80
+
+
+def _steal_moment_claim(
+    original: Callable[..., dict[str, str]],
+    database: Database,
+    settings: Settings,
+    conversation_id: str,
+) -> Callable[..., dict[str, str]]:
+    """Wrap _load_repair_locks so a rival send claims between the SELECTs.
+
+    The claim runs through _claim in its own session/connection and
+    commits there; the fired-once guard also stops the recursion through
+    claim_chat_send's own repair call.
+    """
+
+    fired = {"once": False}
+
+    def wrapper(
+        db: Session, conversation_id_arg: str | None, only_stale: bool, turns: list
+    ) -> dict:
+        # Fire between the two SELECTs of the outer repair: the turn read
+        # has already happened, the lock read has not.  The fired-once
+        # guard stops the recursion through claim_chat_send's own repair
+        # call.
+        if not fired["once"] and conversation_id_arg == conversation_id:
+            fired["once"] = True
+            _claim(database, settings, conversation_id, "Sent during repair")
+        return original(db, conversation_id_arg, only_stale, turns)
+
+    return wrapper
+
+
+def test_repair_keeps_a_lock_claimed_between_its_reads(
+    voice_app: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, database, settings = voice_app
+    csrf, conversation_id = _conversation(client, database, settings)
+    monkeypatch.setattr(
+        chat_module,
+        "_load_repair_locks",
+        _steal_moment_claim(chat_module._load_repair_locks, database, settings, conversation_id),
+    )
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        row = session.get(Conversation, conversation_id)
+        assert row is not None
+        new_lock = row.active_request_id
+        assert new_lock is not None
+        turn = session.get(ConversationTurn, new_lock)
+        assert turn is not None
+        assert turn.state == "pending"
+    with database.session() as session:
+        store_assistant_text(session, new_lock, "done", [], None)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, new_lock)
+        assert turn is not None
+        assert turn.state == "ready"
+        assert turn.assistant_text == "done"
+    with database.session() as session:
+        release_chat_request(session, conversation_id, new_lock)
+    with database.session() as session:
+        row = session.get(Conversation, conversation_id)
+        assert row is not None
+        assert row.active_request_id is None
+
+
+def test_repair_does_not_fail_a_young_live_pending_turn(
+    voice_app: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    request_id = _claim(database, settings, conversation_id, "Still running")
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "pending"
+        assert row.active_request_id == request_id
+    # Bypass the Python pre-filter: the SQL guard must hold on its own.
+    monkeypatch.setattr(chat_module, "_live_turn_ids", lambda turns, locks, now: set())
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "pending"
+        assert row.active_request_id == request_id
+
+
+def _plant_turn_with_age(database: Database, conversation_id: str, age: timedelta) -> str:
+    turn_id = str(uuid4())
+    with database.session() as session:
+        row = session.get(Conversation, conversation_id)
+        assert row is not None
+        row.active_request_id = turn_id
+        session.add(
+            ConversationTurn(
+                id=turn_id,
+                conversation_id=conversation_id,
+                position=0,
+                user_text=f"aged {age}",
+                assistant_text=None,
+                sources_json="[]",
+                mode="mock",
+                state="pending",
+                created_at=datetime.now(UTC) - age,
+            )
+        )
+    return turn_id
+
+
+def test_repair_live_guard_respects_ttl_boundary(
+    voice_app: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    # Bypass the Python pre-filter so only the SQL guard decides liveness.
+    monkeypatch.setattr(chat_module, "_live_turn_ids", lambda turns, locks, now: set())
+    young_id = _plant_turn_with_age(database, conversation_id, timedelta(minutes=2))
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, young_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "pending"
+        assert row.active_request_id == young_id
+    old_id = _plant_turn_with_age(database, conversation_id, timedelta(minutes=10))
+    # The first turn now holds the lock; move it out of the way so the old
+    # turn's lock is the one under observation.
+    with database.session() as session:
+        young = session.get(ConversationTurn, young_id)
+        assert young is not None
+        young.state = "ready"
+        row = session.get(Conversation, conversation_id)
+        assert row is not None
+        row.active_request_id = old_id
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, old_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "failed"
+        assert turn.safe_error_code == "chat_interrupted"
+        assert row.active_request_id is None
+
+
+def test_repair_does_not_settle_a_live_requests_operation(
+    voice_app: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    request_id = _claim(database, settings, conversation_id, "Live with an open call")
+    operation_id = _plant(
+        database, scope_id=conversation_id, request_id=request_id, state="accepted"
+    )
+    monkeypatch.setattr(chat_module, "_live_turn_ids", lambda turns, locks, now: set())
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        operation = session.get(ProviderOperation, operation_id)
+        assert operation is not None
+        assert operation.state == "accepted"
