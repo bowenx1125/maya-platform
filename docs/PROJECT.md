@@ -430,5 +430,8 @@ Defaults stay mock. Qwen voice-clone WAVs may keep RIFF and data sizes near
 2**31; only that placeholder shape is rewritten before the same technical audio
 check. TTS sends `language_type` English or Chinese for en and zh. The debate
 contract's "language English" line is the previously checked mode. Enrollment
-still sends language en because the upload names no sample language. This
-change made no charged provider call.
+sends supplier language `zh` or `en` from sample language `zh-CN` or `en`.
+`DASHSCOPE_API_KEY` is rotated by editing the environment and restarting;
+voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
+profile for an immutable baseline character, and an omitted name uses
+`FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.

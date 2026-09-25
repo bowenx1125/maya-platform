@@ -95,6 +95,13 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FALLBACK_VOICE_PROFILE_ID",
     )
+    # Operator mapping for immutable baseline characters. Empty means each
+    # character uses FALLBACK_VOICE_PROFILE_ID. The value is never a voice id
+    # baked into code: ``socrates=<uuid>,laozi=<uuid>``.
+    baseline_default_voices: str | None = Field(
+        default=None,
+        validation_alias="BASELINE_DEFAULT_VOICES",
+    )
     # Debates (beta) shows a join code on the stage and flies classroom
     # messages across it while the Agents are still speaking, which the
     # after-the-debate gate forbids.  Off by default: with the switch off the
@@ -267,6 +274,9 @@ class Settings(BaseSettings):
             if not self.is_test:
                 raise RuntimeError("SESSION_SECRET must contain at least 32 bytes")
         self.validate_provider_configuration()
+        # A bad baseline-voice map must stop startup rather than bind the
+        # wrong character at the first chat.
+        self.parsed_baseline_default_voices()
         # Parse the complete private graph before the application lifespan
         # yields. A malformed catalog therefore prevents readiness rather
         # than partially applying identities.
@@ -274,6 +284,33 @@ class Settings(BaseSettings):
             from app.modules.auth.credentials import prepare_catalog
 
             prepare_catalog(self)
+
+    def parsed_baseline_default_voices(self) -> dict[str, str]:
+        """Return ``character -> voice profile id`` or raise on a bad map."""
+
+        raw = self.baseline_default_voices
+        if raw is None or not str(raw).strip():
+            return {}
+        found: dict[str, str] = {}
+        allowed = {"socrates", "plato", "laozi"}
+        for part in str(raw).split(","):
+            item = part.strip()
+            if not item or "=" not in item:
+                raise RuntimeError("BASELINE_DEFAULT_VOICES entries are name=voice_profile_id")
+            name, profile_id = (piece.strip() for piece in item.split("=", 1))
+            name = name.lower()
+            if name not in allowed or name in found or not profile_id:
+                raise RuntimeError(
+                    "BASELINE_DEFAULT_VOICES has an unknown, empty, or repeated character"
+                )
+            try:
+                parsed = UUID(profile_id)
+            except ValueError as exc:
+                raise RuntimeError(
+                    "BASELINE_DEFAULT_VOICES voice profile id must be a UUID"
+                ) from exc
+            found[name] = str(parsed)
+        return found
 
     def validate_provider_configuration(self) -> None:
         """Allow Mock, reviewed text slices, and speech on one DashScope key.

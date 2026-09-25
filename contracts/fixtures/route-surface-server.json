@@ -2903,6 +2903,13 @@
                   },
                   "consent_copy_version": {
                     "type": "string"
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "zh-CN"
+                    ]
                   }
                 }
               }

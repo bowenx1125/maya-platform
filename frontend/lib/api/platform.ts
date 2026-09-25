@@ -1456,12 +1456,13 @@ export class PlatformApi {
     groupId: string,
     file: File,
     consentCopyVersion?: string,
-    options: IdempotentMutationOptions = {},
+    options: IdempotentMutationOptions & { language?: "en" | "zh-CN" } = {},
   ): Promise<VoiceProfile> {
     return commitMutation(options.idempotency, async (key) => {
       const form = new FormData();
       form.append("file", file);
       form.append("consent_accepted", "true");
+      form.append("language", options.language ?? "en");
       if (consentCopyVersion)
         form.append("consent_copy_version", consentCopyVersion);
       const result = await this.client.POST(

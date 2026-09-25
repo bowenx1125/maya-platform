@@ -4976,6 +4976,8 @@ export interface operations {
                     /** @constant */
                     consent_accepted: true;
                     consent_copy_version?: string;
+                    /** @enum {string} */
+                    language?: "en" | "zh-CN";
                 };
             };
         };

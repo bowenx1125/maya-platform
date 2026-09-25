@@ -679,7 +679,10 @@ const enMessages = {
   voiceProfilesEyebrow: "Voice profiles",
   voiceProfilesTitle: "Voices",
   voiceProfilesLede:
-    "Upload one clear 10–20 second English recording. The sample is processed temporarily and deleted after the enrollment request.",
+    "Upload one clear 10–20 second recording in the language you select. The sample is processed temporarily and deleted after the enrollment request.",
+  voiceSampleLanguage: "Sample language",
+  voiceLanguageEn: "English",
+  voiceLanguageZh: "Chinese",
   voiceCreateTitle: "New",
   voiceCreateLede:
     "WAV 16-bit, MP3, or M4A up to 10 MB. A custom voice is optional; unavailable voices use the platform fallback.",
@@ -691,7 +694,7 @@ const enMessages = {
   voiceUploadCreate: "Upload",
   voiceProfileCreatedNotice: "Created",
   voiceGroupTitle: "Voices",
-  voiceGroupLede: "Only profiles owned by this group are shown.",
+  voiceGroupLede: "Only voices you enrolled are shown.",
   voiceNoCustom: "Empty",
   voiceCustom: "Custom voice",
   voiceProfileIdLabel: "Voice ID",
@@ -1373,7 +1376,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voiceProfilesEyebrow: "音色档案",
   voiceProfilesTitle: "音色",
   voiceProfilesLede:
-    "上传一段清晰的 10–20 秒英文录音。样本只会临时处理，并在注册请求结束后删除。",
+    "上传一段清晰的 10–20 秒录音，并选择样本语言。样本只会临时处理，并在注册请求结束后删除。",
+  voiceSampleLanguage: "样本语言",
+  voiceLanguageEn: "英文",
+  voiceLanguageZh: "中文",
   voiceCreateTitle: "新建",
   voiceCreateLede:
     "WAV 16 位、MP3 或 M4A，最大 10 MB。自定义音色是可选项；不可用时使用平台兜底音色。",
@@ -1384,7 +1390,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voiceUploadCreate: "上传",
   voiceProfileCreatedNotice: "已创建",
   voiceGroupTitle: "音色",
-  voiceGroupLede: "这里只显示属于本小组的音色档案。",
+  voiceGroupLede: "这里只显示你自己注册的音色。",
   voiceNoCustom: "暂无",
   voiceCustom: "自定义音色",
   voiceProfileIdLabel: "音色 ID",

@@ -44,6 +44,7 @@ _VOICE_ENROLL_BODY = {
                     "file": {"type": "string", "format": "binary"},
                     "consent_accepted": {"type": "boolean", "const": True},
                     "consent_copy_version": {"type": "string"},
+                    "language": {"type": "string", "enum": ["en", "zh-CN"]},
                 },
             }
         }
@@ -120,6 +121,7 @@ async def enroll_voice_route(
                 group_id=str(group_id),
                 consent_accepted=True,
                 consent_copy_version=fields.get("consent_copy_version"),
+                language=fields.get("language"),
                 idempotency_key=idempotency_key,
             )
         except PlatformError:

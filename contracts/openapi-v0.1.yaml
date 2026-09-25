@@ -1535,6 +1535,7 @@ paths:
                 file: { type: string, format: binary }
                 consent_accepted: { type: boolean, const: true }
                 consent_copy_version: { type: string }
+                language: { type: string, enum: [en, zh-CN] }
       responses:
         "202":
           description: Enrollment job accepted; temporary samples will be deleted.

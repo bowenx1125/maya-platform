@@ -395,16 +395,28 @@ def _resolve_agent_version(
             "The current Agent has no usable Avatar configuration.", code="avatar_missing"
         ) from exc
 
-    requested_voice_id = version.voice_profile_id
+    from app.modules.voices.service import baseline_configured_voice_id
+
+    own_voice_id = version.voice_profile_id
+    requested_voice_id = own_voice_id or baseline_configured_voice_id(settings, agent.id)
     effective_voice_id: str | None = None
     effective_voice_kind = "mock_sentinel"
     fallback_active = True
     if requested_voice_id:
         custom = db.get(VoiceProfile, requested_voice_id)
-        if custom is not None and custom.group_id == group.id and custom.status == "ready":
+        # A baseline character has no row to edit. An operator may point it at
+        # a ready system profile; a student's own binding stays group-scoped.
+        same_group = custom is not None and custom.group_id == group.id
+        operator_system = (
+            custom is not None
+            and own_voice_id is None
+            and custom.scope == "system"
+            and custom.group_id is None
+        )
+        if custom is not None and custom.status == "ready" and (same_group or operator_system):
             effective_voice_id = custom.id
             effective_voice_kind = "platform_profile"
-            fallback_active = False
+            fallback_active = custom.scope == "system"
     if effective_voice_id is None and settings.fallback_voice_profile_id:
         configured_fallback = db.get(VoiceProfile, settings.fallback_voice_profile_id)
         if (

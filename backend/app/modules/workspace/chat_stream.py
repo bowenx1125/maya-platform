@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError, not_found
-from app.core.models import AgentVersion
+from app.core.models import Agent, AgentVersion, VoiceProfile
 from app.modules.knowledge.files import FileBoundaryError, contained_path, write_atomic
-from app.modules.voices.service import ready_chat_voice
+from app.modules.voices.service import baseline_configured_voice_id, ready_chat_voice
 from app.providers.factory import tts_provider
 from app.providers.tts import TTSProviderError
 
@@ -320,10 +320,44 @@ def _voice_segment(
         if row is None:
             return None
         version = db.get(AgentVersion, row.agent_version_id)
-        profile_id = version.voice_profile_id if version is not None else None
-        if not profile_id:
+        if version is None:
             return None
-        return profile_id, ready_chat_voice(db, profile_id, settings)
+        # A voice saved on the agent wins. Baseline characters cannot be
+        # edited, so an operator map is the next choice, then the system
+        # fallback. A bound voice that is not ready stays an error.
+        if version.voice_profile_id:
+            return (
+                version.voice_profile_id,
+                ready_chat_voice(db, version.voice_profile_id, settings),
+            )
+        agent = db.get(Agent, version.agent_id)
+        group_id = agent.group_id if agent is not None else None
+        configured = baseline_configured_voice_id(settings, version.agent_id)
+        fallback_id = settings.fallback_voice_profile_id
+        ordered: list[tuple[str, str]] = []
+        if configured:
+            ordered.append(("configured", configured))
+        if fallback_id and fallback_id != configured:
+            ordered.append(("fallback", fallback_id))
+        for kind, profile_id in ordered:
+            profile = db.get(VoiceProfile, profile_id)
+            if profile is None or profile.status != "ready":
+                continue
+            # A configured id may be a ready voice in the character's group
+            # or a system profile. The platform fallback is system-only, the
+            # same rule debate setup already uses.
+            if kind == "configured":
+                allowed = (profile.scope == "group" and profile.group_id == group_id) or (
+                    profile.scope == "system" and profile.group_id is None
+                )
+            else:
+                allowed = profile.scope == "system" and profile.group_id is None
+            if not allowed:
+                continue
+            external_id = ready_chat_voice(db, profile_id, settings)
+            if external_id:
+                return profile_id, external_id
+        return None
 
 
 def _synthesize_segment(

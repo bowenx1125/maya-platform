@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from app.core.config import Settings
 from app.core.db import Database
-from app.core.models import AgentVersion, VoiceProfile
-from app.modules.demo_baseline.service import BASELINE_VERSION_ID, ensure_demo_baseline
-from app.modules.voices.crypto import decrypt_external_voice_id
+from app.core.models import AgentVersion, Group, VoiceProfile
+from app.modules.debates.setup.service import _resolve_agent_version
+from app.modules.demo_baseline.service import (
+    BASELINE_LAOZI,
+    BASELINE_PLATO,
+    BASELINE_SOCRATES,
+    BASELINE_VERSION_ID,
+    ensure_demo_baseline,
+)
+from app.modules.voices.crypto import decrypt_external_voice_id, encrypt_external_voice_id
 from app.modules.voices.schemas import VoiceProfile as VoiceProfileDTO
 from app.modules.workspace.chat import store_assistant_text
 from app.modules.workspace.chat_stream import sse
@@ -20,6 +28,7 @@ from app.modules.workspace.schemas import ChatSession, ProviderSettings
 from app.providers.dashscope import DEFAULT_TARGET_MODEL_KEY
 from app.providers.factory import llm_provider, tts_provider, voice_provider
 from app.providers.tts import TTSResult
+from app.providers.voice import MockVoiceCloneProvider
 from app.seed import COURSE_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -502,3 +511,297 @@ def test_replay_sources_json_failure_yields_sse_error(
         assert turn is not None
         assert turn.assistant_text == kept
         assert turn.state == "ready"
+
+
+def test_baseline_default_voices_reject_a_bad_map(tmp_path) -> None:
+    base = {
+        "maya_env": "test",
+        "session_secret": "s" * 32,
+        "database_url": f"sqlite:///{tmp_path / 'unused.sqlite3'}",
+        "data_root": tmp_path,
+    }
+    assert Settings(**base, baseline_default_voices="  ").parsed_baseline_default_voices() == {}
+    voice_id = str(uuid4())
+    parsed = Settings(
+        **base, baseline_default_voices=f"Socrates={voice_id}"
+    ).parsed_baseline_default_voices()
+    assert parsed == {"socrates": voice_id}
+    bad_uuid = Settings(**base, baseline_default_voices="laozi=not-a-uuid")
+    with pytest.raises(RuntimeError, match="UUID"):
+        bad_uuid.validate_runtime()
+    with pytest.raises(RuntimeError, match="BASELINE_DEFAULT_VOICES"):
+        Settings(
+            **base, baseline_default_voices=f"hermes={voice_id}"
+        ).parsed_baseline_default_voices()
+    with pytest.raises(RuntimeError, match="BASELINE_DEFAULT_VOICES"):
+        Settings(
+            **base, baseline_default_voices=f"plato={voice_id},plato={uuid4()}"
+        ).parsed_baseline_default_voices()
+
+
+def _system_profile(database: Database, settings: Settings, external_id: str) -> str:
+    profile_id = str(uuid4())
+    now = datetime.now(UTC)
+    envelope = encrypt_external_voice_id(
+        external_id,
+        settings.secret_bytes,
+        profile_id=profile_id,
+        scope="system",
+        group_id=None,
+        provider_key="mock",
+        target_model_key="mock-voice-v1",
+    )
+    with database.session() as session:
+        session.add(
+            VoiceProfile(
+                id=profile_id,
+                scope="system",
+                group_id=None,
+                display_name="System fallback",
+                status="ready",
+                provider_key="mock",
+                target_model_key="mock-voice-v1",
+                external_id_encrypted=envelope,
+                recovery_name=f"fallback-{profile_id}",
+                provenance_json="{}",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    return profile_id
+
+
+def _foreign_profile(database: Database, settings: Settings, external_id: str) -> str:
+    profile_id = str(uuid4())
+    group_id = str(uuid4())
+    now = datetime.now(UTC)
+    envelope = encrypt_external_voice_id(
+        external_id,
+        settings.secret_bytes,
+        profile_id=profile_id,
+        scope="group",
+        group_id=group_id,
+        provider_key="mock",
+        target_model_key="mock-voice-v1",
+    )
+    with database.session() as session:
+        session.add(
+            Group(
+                id=group_id,
+                course_id=COURSE_ID,
+                name=f"Other {group_id[:8]}",
+                created_at=now,
+            )
+        )
+        session.add(
+            VoiceProfile(
+                id=profile_id,
+                scope="group",
+                group_id=group_id,
+                display_name="Other group voice",
+                status="ready",
+                provider_key="mock",
+                target_model_key="mock-voice-v1",
+                external_id_encrypted=envelope,
+                recovery_name=f"foreign-{profile_id}",
+                provenance_json="{}",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    return profile_id
+
+
+def _external(database: Database, settings: Settings, profile_id: str) -> str:
+    with database.session() as session:
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None and profile.external_id_encrypted
+        return decrypt_external_voice_id(
+            profile.external_id_encrypted,
+            settings.secret_bytes,
+            profile_id=profile.id,
+            scope=profile.scope,
+            group_id=profile.group_id,
+            provider_key=profile.provider_key,
+            target_model_key=profile.target_model_key,
+        )
+
+
+def test_baseline_default_voice_is_used_without_writing_the_row(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    socrates_voice = _ready_profile(client, csrf, "task-001a-base-socrates1")
+    laozi_pending = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "task-001a-base-laozi001"),
+        data={"consent_accepted": "true", "consent_copy_version": "voice-consent-v1"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert laozi_pending.status_code == 202, laozi_pending.text
+    laozi_voice = laozi_pending.json()["id"]
+    fallback_voice = _system_profile(database, settings, "system-fallback-voice")
+    foreign_voice = _foreign_profile(database, settings, "foreign-group-voice")
+    socrates_external = _external(database, settings, socrates_voice)
+    client.app.state.settings = settings.model_copy(
+        update={
+            "baseline_default_voices": (f"socrates={socrates_voice},laozi={laozi_voice}"),
+            "fallback_voice_profile_id": fallback_voice,
+        }
+    )
+    active = client.app.state.settings
+    with database.session() as session:
+        socrates = _resolve_agent_version(
+            session,
+            course_id=COURSE_ID,
+            agent_id=BASELINE_SOCRATES.agent_id,
+            settings=active,
+        )
+        plato = _resolve_agent_version(
+            session, course_id=COURSE_ID, agent_id=BASELINE_PLATO.agent_id, settings=active
+        )
+        laozi = _resolve_agent_version(
+            session, course_id=COURSE_ID, agent_id=BASELINE_LAOZI.agent_id, settings=active
+        )
+    assert socrates[5] == socrates_voice
+    assert socrates[6] == socrates_voice
+    assert socrates[8] is False
+    assert plato[5] is None
+    assert plato[6] == fallback_voice
+    assert plato[8] is True
+    assert laozi[5] == laozi_voice
+    assert laozi[6] == fallback_voice
+
+    recorder = _RecordingTTS()
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_stream.tts_provider", lambda _settings: recorder
+    )
+
+    def speak(version_id: str) -> str:
+        created = client.post(
+            "/api/v1/conversations",
+            headers={"X-CSRF-Token": csrf},
+            json={"version_id": version_id},
+        )
+        assert created.status_code == 200, created.text
+        response = _stream(
+            client, csrf, created.json()["id"], lang="en", message="Speak", revision=0
+        )
+        assert response.status_code == 200, response.text
+        ready = next(payload for name, payload in _parse_sse(response.text) if name == "tts_ready")
+        assert isinstance(ready["voice_profile_id"], str)
+        return str(ready["voice_profile_id"])
+
+    assert speak(BASELINE_VERSION_ID) == socrates_voice
+    assert speak(BASELINE_PLATO.version_id) == fallback_voice
+    assert speak(BASELINE_LAOZI.version_id) == fallback_voice
+    assert [call[1] for call in recorder.calls] == [
+        socrates_external,
+        "system-fallback-voice",
+        "system-fallback-voice",
+    ]
+
+    client.app.state.settings = active.model_copy(
+        update={"baseline_default_voices": f"socrates={foreign_voice}"}
+    )
+    assert speak(BASELINE_VERSION_ID) == fallback_voice
+    assert recorder.calls[-1][1] == "system-fallback-voice"
+
+    with database.session() as session:
+        for version_id in (
+            BASELINE_VERSION_ID,
+            BASELINE_PLATO.version_id,
+            BASELINE_LAOZI.version_id,
+        ):
+            version = session.get(AgentVersion, version_id)
+            assert version is not None
+            assert version.voice_profile_id is None
+        ensure_demo_baseline(session, settings.resolved_data_root)
+        again = session.get(AgentVersion, BASELINE_VERSION_ID)
+        assert again is not None
+        assert again.voice_profile_id is None
+
+
+def test_enrolled_voice_row_does_not_store_the_api_key(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    client, database, _settings = voice_app
+    sentinel = "sentinel-dashscope-key-not-real"
+    client.app.state.settings = client.app.state.settings.model_copy(
+        update={"dashscope_api_key": sentinel}
+    )
+    _user, csrf = login(client, "bowen")
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "task-001a-key-absent01"),
+        data={"consent_accepted": "true", "consent_copy_version": "voice-consent-v1"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    assert sentinel not in enrolled.text
+    profile_id = enrolled.json()["id"]
+    with database.session() as session:
+        row = session.get(VoiceProfile, profile_id)
+        assert row is not None
+        stored = " ".join(
+            str(value or "")
+            for value in (
+                row.provenance_json,
+                row.source_filename,
+                row.recovery_name,
+                row.provider_key,
+                row.target_model_key,
+                row.display_name,
+                row.consent_copy_version,
+            )
+        )
+        assert sentinel not in stored
+        assert sentinel.encode() not in (row.external_id_encrypted or b"")
+        assert row.provider_key == "mock"
+
+
+def test_enrollment_language_follows_the_sample(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _database, _settings = voice_app
+    provider = MockVoiceCloneProvider()
+    monkeypatch.setattr("app.modules.voices.service.voice_provider", lambda _settings: provider)
+    _user, csrf = login(client, "bowen")
+    rejected = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "task-001a-lang-reject01"),
+        data={
+            "consent_accepted": "true",
+            "consent_copy_version": "voice-consent-v1",
+            "language": "fr",
+        },
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json()["code"] == "voice_enrollment_failed"
+    assert provider.enroll_calls == 0
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "task-001a-lang-zhcn0001"),
+        data={
+            "consent_accepted": "true",
+            "consent_copy_version": "voice-consent-v1",
+            "language": "zh-CN",
+        },
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    assert enrolled.json()["id"]
+    assert provider.last_language == "zh"
+    omitted = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "task-001a-lang-omit0001"),
+        data={"consent_accepted": "true", "consent_copy_version": "voice-consent-v1"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert omitted.status_code == 202, omitted.text
+    assert provider.last_language == "en"
+    assert provider.enroll_calls == 2
