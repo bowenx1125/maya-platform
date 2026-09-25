@@ -1242,6 +1242,7 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
         "input": {
             "text": "A new English sentence.",
             "voice": "maya123456789012-generated",
+            "language_type": "English",
         },
     }
 

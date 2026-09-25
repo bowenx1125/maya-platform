@@ -426,4 +426,9 @@ that and the `tts_ready` event carries an `audio_url`, not audio bytes. `lang`
 is `zh-CN` or `en`. Student enrollment still stores the external voice id
 encrypted and a draft can bind `voice_profile_id`. TTS and voice clone may be
 `dashscope` beside the existing real slices only through `DASHSCOPE_API_KEY`.
-Defaults stay mock. This change made no charged provider call.
+Defaults stay mock. Qwen voice-clone WAVs may keep RIFF and data sizes near
+2**31; only that placeholder shape is rewritten before the same technical audio
+check. TTS sends `language_type` English or Chinese for en and zh. The debate
+contract's "language English" line is the previously checked mode. Enrollment
+still sends language en because the upload names no sample language. This
+change made no charged provider call.
