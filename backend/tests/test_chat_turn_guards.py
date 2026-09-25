@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -9,6 +11,7 @@ import pytest
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
+from app.modules.workspace import chat as chat_module
 from app.modules.workspace.chat import (
     _fail_open_turn,
     mark_abandoned_turn,
@@ -18,7 +21,8 @@ from app.modules.workspace.chat import (
 )
 from app.modules.workspace.models import Conversation, ConversationTurn
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from tests import test_chat_cancel
 from tests.test_chat_cancel import _claim, _conversation, _plant, _send  # noqa: F401
@@ -264,3 +268,94 @@ def test_repair_skips_ready_and_cancelled_turns(
         assert [turn.state for turn in turns] == ["ready", "failed"]
         assert turns[0].assistant_text == "kept reply"
         assert turns[1].safe_error_code == "chat_cancelled"
+
+
+def _plant_stale_locked_turn(database: Database, conversation_id: str) -> tuple[str, str]:
+    """Insert a stale pending turn holding its conversation's lock."""
+
+    turn_id = str(uuid4())
+    new_lock_id = str(uuid4())
+    with database.session() as session:
+        row = session.get(Conversation, conversation_id)
+        assert row is not None
+        row.active_request_id = turn_id
+        session.add(
+            ConversationTurn(
+                id=turn_id,
+                conversation_id=conversation_id,
+                position=0,
+                user_text="stale lock",
+                assistant_text=None,
+                sources_json="[]",
+                mode="real",
+                state="pending",
+                created_at=datetime.now(UTC) - timedelta(minutes=10),
+            )
+        )
+    return turn_id, new_lock_id
+
+
+def _steal_lock_after_fail(
+    original: Callable[..., bool], conversation_id: str, new_lock_id: str
+) -> Callable[..., bool]:
+    """Wrap _fail_open_turn so a rival request takes the lock mid-repair."""
+
+    def wrapper(db: Session, turn_id: str, code: str) -> bool:
+        changed = original(db, turn_id, code)
+        if changed:
+            # An outside writer does not touch this session's identity map.
+            db.execute(
+                update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(active_request_id=new_lock_id)
+                .execution_options(synchronize_session=False)
+            )
+        return changed
+
+    return wrapper
+
+
+@pytest.mark.parametrize("only_stale", [True, False])
+def test_repair_does_not_clear_a_lock_taken_during_repair(
+    voice_app: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+    only_stale: bool,
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    turn_id, new_lock_id = _plant_stale_locked_turn(database, conversation_id)
+    monkeypatch.setattr(
+        chat_module,
+        "_fail_open_turn",
+        _steal_lock_after_fail(chat_module._fail_open_turn, conversation_id, new_lock_id),
+    )
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=only_stale)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, turn_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "failed"
+        assert turn.safe_error_code == "chat_interrupted"
+        assert row.active_request_id == new_lock_id
+
+
+def test_repair_clears_the_observed_stale_lock(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    turn_id, _new_lock_id = _plant_stale_locked_turn(database, conversation_id)
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=True)
+    with database.session() as session:
+        turn = session.get(ConversationTurn, turn_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "failed"
+        assert turn.safe_error_code == "chat_interrupted"
+        assert row.active_request_id is None
+
+
+def test_repair_abandoned_chats_is_at_most_80_lines() -> None:
+    lines, _start = inspect.getsourcelines(chat_module.repair_abandoned_chats)
+    body = lines[1:]
+    assert len(body) <= 80

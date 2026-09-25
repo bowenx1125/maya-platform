@@ -234,6 +234,127 @@ def close_abandoned_chat(
     )
 
 
+def _load_repair_rows(
+    db: Session, conversation_id: str | None, only_stale: bool
+) -> tuple[list[ConversationTurn], dict[str, str]]:
+    """Load unfinished turns and snapshot the locks observed right now.
+
+    Startup repair also snapshots every other locked conversation, because it
+    is allowed to clear locks its turns never mentioned.
+    """
+
+    turn_query = select(ConversationTurn).where(
+        ConversationTurn.state.in_(("pending", "acceptance_unknown"))
+    )
+    if conversation_id is not None:
+        turn_query = turn_query.where(ConversationTurn.conversation_id == conversation_id)
+    turns = list(db.scalars(turn_query))
+    conversations = {
+        row.id: row
+        for row in db.scalars(
+            select(Conversation).where(
+                Conversation.id.in_({turn.conversation_id for turn in turns} or {""})
+            )
+        )
+    }
+    if conversation_id is not None and conversation_id not in conversations:
+        row = db.get(Conversation, conversation_id)
+        if row is not None:
+            conversations[row.id] = row
+    observed_locks = {
+        row.id: row.active_request_id for row in conversations.values() if row.active_request_id
+    }
+    if not only_stale:
+        lock_query = select(Conversation.id, Conversation.active_request_id).where(
+            Conversation.active_request_id.is_not(None)
+        )
+        if conversation_id is not None:
+            lock_query = lock_query.where(Conversation.id == conversation_id)
+        for lock_row in db.execute(lock_query):
+            observed_locks[lock_row.id] = lock_row.active_request_id
+    return turns, observed_locks
+
+
+def _live_turn_ids(
+    turns: list[ConversationTurn], observed_locks: dict[str, str], now: datetime
+) -> set[str]:
+    return {
+        turn.id
+        for turn in turns
+        if turn.state == "pending"
+        and _turn_is_live(turn, observed_locks.get(turn.conversation_id), now)
+    }
+
+
+def _fail_dead_turns(
+    db: Session, turns: list[ConversationTurn], live_ids: set[str], *, only_stale: bool
+) -> list[tuple[str, str]]:
+    """Fail every loaded turn no live request can still finish."""
+    request_ids: list[tuple[str, str]] = []
+    for turn in turns:
+        if turn.state == "acceptance_unknown":
+            if turn.safe_error_code != "chat_interrupted":
+                continue
+        elif only_stale and turn.id in live_ids:
+            continue
+        elif turn.state != "pending":
+            continue
+        if _fail_open_turn(db, turn.id, "chat_interrupted"):
+            request_ids.append((turn.conversation_id, turn.id))
+    return request_ids
+
+
+def _clear_lock(db: Session, conversation_id: str, observed: str) -> bool:
+    """Clear one lock only if it still holds the value repair observed."""
+
+    result = db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id, Conversation.active_request_id == observed)
+        .values(active_request_id=None)
+    )
+    return isinstance(result, CursorResult) and result.rowcount == 1
+
+
+def _release_dead_locks(
+    db: Session, observed_locks: dict[str, str], live_ids: set[str], *, only_stale: bool
+) -> None:
+    for conversation_id, observed in observed_locks.items():
+        if only_stale and observed in live_ids:
+            continue
+        _clear_lock(db, conversation_id, observed)
+
+
+def _open_operations_to_settle(
+    db: Session,
+    *,
+    conversation_id: str | None,
+    request_ids: list[tuple[str, str]],
+    live_ids: set[str],
+) -> list[tuple[str, str, str]]:
+    """Collect open chat operations that repair must settle."""
+    pending_ops = [
+        (operation_id, scope_id, request_id)
+        for scope_id, request_id in request_ids
+        for operation_id, _turn_ready in _load_open_chat_operations(
+            db, conversation_id=scope_id, request_id=request_id
+        )
+    ]
+    # Operations left open with no pending turn (the turn was already
+    # failed, or the text was stored) still must leave accepted/sending.
+    op_query = select(ProviderOperation).where(
+        ProviderOperation.provider_operation == _CHAT_OPERATION,
+        ProviderOperation.state.in_(_OPEN_OPERATION_STATES),
+    )
+    if conversation_id is not None:
+        op_query = op_query.where(ProviderOperation.scope_id == conversation_id)
+    known = {operation_id for operation_id, _scope, _request in pending_ops}
+    for operation in db.scalars(op_query):
+        if operation.id in known or operation.logical_item_id in live_ids:
+            continue
+        pending_ops.append((operation.id, operation.scope_id, operation.logical_item_id))
+    return pending_ops
+
+
 def repair_abandoned_chats(
     database: Database, *, conversation_id: str | None = None, only_stale: bool = True
 ) -> None:
@@ -241,88 +362,24 @@ def repair_abandoned_chats(
 
     Claim-time repair (`only_stale`) leaves a young locked pending turn alone.
     Startup repair does not: the new process has no in-flight stream.
+
+    Locks are cleared from the snapshot taken before any turn was failed, so
+    a request that claims a conversation mid-repair keeps its lock.
     """
 
     now = datetime.now(UTC)
-    pending_ops: list[tuple[str, str, str]] = []
     with database.session() as db:
-        turn_query = select(ConversationTurn).where(
-            ConversationTurn.state.in_(("pending", "acceptance_unknown"))
+        turns, observed_locks = _load_repair_rows(db, conversation_id, only_stale)
+        # Startup repair has no in-flight stream, so nothing counts as live.
+        live_ids = _live_turn_ids(turns, observed_locks, now) if only_stale else set()
+        request_ids = _fail_dead_turns(db, turns, live_ids, only_stale=only_stale)
+        _release_dead_locks(db, observed_locks, live_ids, only_stale=only_stale)
+        pending_ops = _open_operations_to_settle(
+            db,
+            conversation_id=conversation_id,
+            request_ids=request_ids,
+            live_ids=live_ids,
         )
-        if conversation_id is not None:
-            turn_query = turn_query.where(ConversationTurn.conversation_id == conversation_id)
-        turns = list(db.scalars(turn_query))
-        conversations = {
-            row.id: row
-            for row in db.scalars(
-                select(Conversation).where(
-                    Conversation.id.in_({turn.conversation_id for turn in turns} or {""})
-                )
-            )
-        }
-        if conversation_id is not None and conversation_id not in conversations:
-            row = db.get(Conversation, conversation_id)
-            if row is not None:
-                conversations[row.id] = row
-        request_ids: list[tuple[str, str]] = []
-        for turn in turns:
-            row = conversations.get(turn.conversation_id)
-            active = row.active_request_id if row is not None else None
-            if turn.state == "acceptance_unknown":
-                if turn.safe_error_code != "chat_interrupted":
-                    continue
-            elif only_stale and _turn_is_live(turn, active, now):
-                continue
-            elif turn.state != "pending":
-                continue
-            changed = _fail_open_turn(db, turn.id, "chat_interrupted")
-            if changed:
-                request_ids.append((turn.conversation_id, turn.id))
-        for row in conversations.values():
-            if row.active_request_id is None:
-                continue
-            if only_stale and any(
-                turn.id == row.active_request_id and _turn_is_live(turn, row.active_request_id, now)
-                for turn in turns
-                if turn.conversation_id == row.id
-            ):
-                continue
-            row.active_request_id = None
-        if not only_stale:
-            for row in db.scalars(
-                select(Conversation).where(Conversation.active_request_id.is_not(None))
-            ):
-                row.active_request_id = None
-        for scope_id, request_id in request_ids:
-            for operation_id, _turn_ready in _load_open_chat_operations(
-                db, conversation_id=scope_id, request_id=request_id
-            ):
-                pending_ops.append((operation_id, scope_id, request_id))
-        # Operations left open with no pending turn (the turn was already
-        # failed, or the text was stored) still must leave accepted/sending.
-        op_query = select(ProviderOperation).where(
-            ProviderOperation.provider_operation == _CHAT_OPERATION,
-            ProviderOperation.state.in_(_OPEN_OPERATION_STATES),
-        )
-        if conversation_id is not None:
-            op_query = op_query.where(ProviderOperation.scope_id == conversation_id)
-        known = {operation_id for operation_id, _scope, _request in pending_ops}
-        live_ids = {
-            turn.id
-            for turn in turns
-            if turn.state == "pending"
-            and _turn_is_live(
-                turn,
-                conversations[turn.conversation_id].active_request_id
-                if turn.conversation_id in conversations
-                else None,
-                now,
-            )
-        }
-        for operation in db.scalars(op_query):
-            if operation.id in known or operation.logical_item_id in live_ids:
-                continue
-            pending_ops.append((operation.id, operation.scope_id, operation.logical_item_id))
     for operation_id, scope_id, request_id in pending_ops:
         with database.session() as db:
             saved = db.get(ConversationTurn, request_id)
