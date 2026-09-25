@@ -38,15 +38,6 @@ const SKIN_COLORS: Record<AvatarConfig["material_theme"], string> = {
   civic_olive: "#a49a75",
 };
 
-// Clothing uses the same theme key. Color multiplies with an albedo map, so
-// a textured outfit changes theme without a second clothing mesh.
-const OUTFIT_COLORS: Record<AvatarConfig["material_theme"], string> = {
-  demo: "#2f4c7a",
-  warm_sand: "#a15a32",
-  cool_slate: "#5d7388",
-  civic_olive: "#6d7a3e",
-};
-
 const EYE_COLORS: Record<
   Exclude<NonNullable<AvatarConfig["eye_color"]>, "default"> | "default",
   string
@@ -128,39 +119,21 @@ function disposeObject(root: THREE.Object3D): void {
   });
 }
 
-function meshRole(meshName: string): "eye" | "skin" | "outfit" | "other" {
-  if (meshName.includes("eye")) return "eye";
-  if (
-    meshName.includes("outfit") ||
-    meshName.includes("footwear") ||
-    meshName.includes("cloth")
-  ) {
-    return "outfit";
-  }
-  if (meshName.includes("head") || meshName.includes("neck")) return "skin";
-  return "other";
-}
-
 function styledMaterialForMesh(
   source: THREE.Material,
   meshName: string,
   skinColor: THREE.Color,
   eyeColor: THREE.Color,
-  outfitColor: THREE.Color,
 ): THREE.Material {
   const candidate = source as RenderableMaterial;
   const material = candidate.userData.mayaAvatarMaterial
     ? candidate
     : (source.clone() as RenderableMaterial);
   material.userData.mayaAvatarMaterial = true;
-  const role = meshRole(meshName);
-  if (role === "eye") {
+  if (meshName.includes("eye")) {
     material.color?.copy(eyeColor);
     if (material.roughness !== undefined) material.roughness = 0.25;
-  } else if (role === "outfit") {
-    material.color?.copy(outfitColor);
-    if (material.roughness !== undefined) material.roughness = 0.7;
-  } else if (role === "skin") {
+  } else if (meshName.includes("head") || meshName.includes("neck")) {
     material.color?.copy(skinColor);
     if (material.roughness !== undefined) material.roughness = 0.62;
   }
@@ -183,9 +156,6 @@ export function applyAvatarConfigMaterials(
   const skinColor = new THREE.Color(
     SKIN_COLORS[config.material_theme] ?? SKIN_COLORS.demo,
   );
-  const outfitColor = new THREE.Color(
-    OUTFIT_COLORS[config.material_theme] ?? OUTFIT_COLORS.demo,
-  );
   const eyeColor = new THREE.Color(
     EYE_COLORS[config.eye_color ?? "default"] ?? EYE_COLORS.default,
   );
@@ -194,13 +164,7 @@ export function applyAvatarConfigMaterials(
     const meshName = object.name.toLowerCase();
     if (Array.isArray(object.material)) {
       object.material = object.material.map((source) =>
-        styledMaterialForMesh(
-          source,
-          meshName,
-          skinColor,
-          eyeColor,
-          outfitColor,
-        ),
+        styledMaterialForMesh(source, meshName, skinColor, eyeColor),
       );
       return;
     }
@@ -209,7 +173,6 @@ export function applyAvatarConfigMaterials(
       meshName,
       skinColor,
       eyeColor,
-      outfitColor,
     );
   });
 }
@@ -341,32 +304,8 @@ export class AvatarRenderer {
     );
   }
 
-  private hideDetachedFragments(scene: THREE.Object3D): void {
-    scene.traverse((object) => {
-      // elder-scholar.glb ships a wide decorative plane that is not the figure.
-      if (object.name === "aa") object.visible = false;
-    });
-  }
-
-  private sceneHasNamedHead(scene: THREE.Object3D): boolean {
-    let found = false;
-    scene.traverse((object) => {
-      if (object.name.toLowerCase().includes("head")) found = true;
-    });
-    return found;
-  }
-
-  private visibleBounds(scene: THREE.Object3D): THREE.Box3 {
-    const bounds = new THREE.Box3();
-    scene.traverse((object) => {
-      if (isMesh(object) && object.visible) bounds.expandByObject(object);
-    });
-    return bounds;
-  }
-
   private prepareFullBody(scene: THREE.Object3D): THREE.Object3D {
-    this.hideDetachedFragments(scene);
-    const bounds = this.visibleBounds(scene);
+    const bounds = new THREE.Box3().setFromObject(scene);
     if (bounds.isEmpty()) return scene;
     scene.position.sub(bounds.getCenter(new THREE.Vector3()));
     this.bodySize = bounds.getSize(new THREE.Vector3());
@@ -388,17 +327,16 @@ export class AvatarRenderer {
   }
 
   private prepareHeadCrop(scene: THREE.Object3D): THREE.Object3D {
-    this.hideDetachedFragments(scene);
-    // Scholar GLBs have no mesh named "head". Cropping those leaves only
-    // stray eye or hair parts, so show the whole registered figure instead.
-    if (!this.sceneHasNamedHead(scene)) return this.prepareFullBody(scene);
     scene.traverse((object) => {
       if (object === scene) return;
       if (object.children.length === 0 && !shouldKeepForHeadCrop(object)) {
         object.visible = false;
       }
     });
-    const bounds = this.visibleBounds(scene);
+    const bounds = new THREE.Box3();
+    scene.traverse((object) => {
+      if (isMesh(object) && object.visible) bounds.expandByObject(object);
+    });
     if (bounds.isEmpty()) return scene;
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());

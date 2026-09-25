@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../locale";
 import type { AvatarConfig, AvatarState } from "./types";
-import { avatarAssetUrlForTemplate } from "./types";
+import { AVATAR_ASSET_URL } from "./types";
 import styles from "./avatar.module.css";
 
 export type AvatarCanvasProps = {
@@ -32,7 +32,7 @@ function initials(label: string): string {
 export function AvatarCanvas({
   config,
   state = "idle",
-  assetUrl,
+  assetUrl = AVATAR_ASSET_URL,
   fallbackLabel,
   framing = "head",
   className,
@@ -41,12 +41,6 @@ export function AvatarCanvas({
 }: AvatarCanvasProps) {
   const t = useT();
   const fallback = fallbackLabel ?? t("avatar");
-  // A missing config is not a guessable character. Leave the mesh unloaded
-  // so the static initials stay up until a real AvatarConfig arrives.
-  const templateId =
-    config && typeof config.template_id === "string" ? config.template_id : "";
-  const resolvedAssetUrl =
-    assetUrl ?? (templateId ? avatarAssetUrlForTemplate(templateId) : "");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<import("./avatar-renderer").AvatarRenderer | null>(
     null,
@@ -79,7 +73,6 @@ export function AvatarCanvas({
   useEffect(() => {
     let active = true;
     const canvas = canvasRef.current;
-    if (!resolvedAssetUrl) return undefined;
     if (!canvas) return undefined;
     setStatus("loading");
     setFailure(null);
@@ -89,7 +82,7 @@ export function AvatarCanvas({
         try {
           const renderer = new AvatarRenderer({
             canvas,
-            assetUrl: resolvedAssetUrl,
+            assetUrl,
             framing,
             onReady: () => {
               if (!active) return;
@@ -103,12 +96,7 @@ export function AvatarCanvas({
               onErrorRef.current?.(error);
             },
           });
-          if (
-            configRef.current &&
-            typeof configRef.current.template_id === "string"
-          ) {
-            renderer.setConfig(configRef.current);
-          }
+          renderer.setConfig(configRef.current);
           renderer.setState(stateRef.current);
           rendererRef.current = renderer;
         } catch (cause) {
@@ -137,10 +125,9 @@ export function AvatarCanvas({
       rendererRef.current?.dispose();
       rendererRef.current = null;
     };
-  }, [resolvedAssetUrl, framing]);
+  }, [assetUrl, framing]);
 
   useEffect(() => {
-    if (!config || typeof config.template_id !== "string") return;
     rendererRef.current?.setConfig(config);
   }, [config]);
 
@@ -153,31 +140,25 @@ export function AvatarCanvas({
       className={`${styles.canvasFrame}${className ? ` ${className}` : ""}`}
       role="img"
       aria-label={`${fallback} ${t("avatarPreview")}`}
-      data-avatar-status={resolvedAssetUrl ? status : "failed"}
+      data-avatar-status={status}
       data-avatar-state={state}
-      data-avatar-template={templateId}
-      data-avatar-material={config?.material_theme ?? ""}
-      data-avatar-eye={config?.eye_color ?? ""}
-      data-avatar-expression={config?.default_expression ?? ""}
-      data-avatar-strength={config?.expression_strength ?? ""}
-      data-avatar-motion={config?.motion_style ?? ""}
     >
       <canvas
         ref={canvasRef}
         className={styles.canvas}
-        hidden={!resolvedAssetUrl || status === "failed"}
+        hidden={status === "failed"}
       />
-      {resolvedAssetUrl && status === "loading" ? (
+      {status === "loading" ? (
         <span className={styles.loading}>{t("avatarPreviewLoading")}</span>
       ) : null}
       <div
         className={styles.fallback}
-        hidden={Boolean(resolvedAssetUrl) && status !== "failed"}
+        hidden={status !== "failed"}
         aria-hidden="true"
       >
         {initials(fallback)}
       </div>
-      {!resolvedAssetUrl || (status === "failed" && failure) ? (
+      {status === "failed" && failure ? (
         <span className={styles.previewLabel}>
           {fallback} · {t("avatarStaticPreview")}
         </span>

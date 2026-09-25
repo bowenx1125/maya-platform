@@ -4,13 +4,11 @@
 
 This local demo asset is provided by the audited `lhupyn/motion-engine` demo
 asset and is retained only for the private Maya demo. The accompanying MIT
-license is in `LICENSE-motion-engine.txt`. The avatar catalog registers this
-file together with `elder-scholar.glb` and `noble-scholar.glb`. A template id
-selects one of those meshes. Clothing and skin colors come from
-`material_theme`, and eyes from `eye_color`. This round does not deliver
-skeletal clips or lip-sync. The upstream demo credits Ready Player Me as the
-avatar creator; this local inclusion is not a public asset licence clearance.
-Recheck the asset terms before sharing or deploying Maya.
+license is in `LICENSE-motion-engine.txt`. The asset is a shared compatible
+mesh used by all three Maya avatar presets; presets are parameter choices, not
+three independently modeled characters. The upstream demo credits Ready
+Player Me as the avatar creator; this local inclusion is not a public asset
+licence clearance. Recheck the asset terms before sharing or deploying Maya.
 
 ## Draco decoder
 

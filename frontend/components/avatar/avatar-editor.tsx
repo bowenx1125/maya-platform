@@ -81,7 +81,6 @@ export function AvatarEditor({
       <AvatarCanvas
         config={value}
         state={localState}
-        framing="full-body"
         fallbackLabel={displayFallbackLabel}
       />
       <div className={styles.controlGrid}>
