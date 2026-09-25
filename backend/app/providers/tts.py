@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import math
+import re
 import struct
 import wave
 from dataclasses import dataclass
@@ -63,6 +64,36 @@ class TTSAudioInvalidError(TTSProviderError):
     """The downloaded provider bytes failed technical audio validation."""
 
     safe_code = "tts_audio_invalid"
+
+
+# Chat replies cite evidence as [S1] or [S1, S2]. Fullwidth brackets are the
+# same marker. Debate speech is not supposed to contain these; a speech
+# without them is returned unchanged so its audio stays tied to the exact text.
+_CITATION_MARKER = re.compile(r"[\[［]\s*S\d+(?:\s*,\s*S\d+)*\s*[\]］]")
+_SPACE_BEFORE_PUNCT = re.compile(r"[ \t]+([,.;:!?，。、；：！？])")
+_DANGLING_COMMA = re.compile(r"[,，、]+(?=[.。!！?？;；:：])")
+_MULTI_SPACE = re.compile(r"[ \t]{2,}")
+_MULTI_BREAK = re.compile(r"\n{3,}")
+_HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def spoken_text(value: str) -> str:
+    """Text for synthesis. Displayed replies keep citation markers."""
+
+    if not _CITATION_MARKER.search(value):
+        return value
+    without = _CITATION_MARKER.sub("", value)
+    without = _SPACE_BEFORE_PUNCT.sub(r"\1", without)
+    without = _DANGLING_COMMA.sub("", without)
+    without = _MULTI_SPACE.sub(" ", without)
+    lines = [line.strip() for line in without.split("\n")]
+    return _MULTI_BREAK.sub("\n\n", "\n".join(lines)).strip()
+
+
+def reply_uses_chinese(value: str) -> bool:
+    """True when the spoken reply contains Han characters."""
+
+    return _HAN.search(value) is not None
 
 
 @dataclass(frozen=True)

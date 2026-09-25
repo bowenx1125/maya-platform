@@ -251,6 +251,47 @@ describe("private Agent chat", () => {
     expect(screen.queryByRole("button", { name: "Voice" })).toBeNull();
   });
 
+  it("sends zh-CN when the message or the interface is Chinese", async () => {
+    const englishUi = render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    await screen.findByTestId("avatar");
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+      target: { value: "陶罐在哪里？" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("A considered reply");
+    expect(state.api.streamConversation).toHaveBeenCalledWith(
+      "conversation",
+      expect.objectContaining({
+        message: "陶罐在哪里？",
+        lang: "zh-CN",
+      }),
+      expect.any(Object),
+    );
+    englishUi.unmount();
+
+    state.api.streamConversation.mockClear();
+    render(
+      <LocaleProvider initialLocale="zh">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    await screen.findByTestId("avatar");
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+      target: { value: "Hello" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("A considered reply");
+    expect(state.api.streamConversation).toHaveBeenCalledWith(
+      "conversation",
+      expect.objectContaining({ message: "Hello", lang: "zh-CN" }),
+      expect.any(Object),
+    );
+  });
+
   it("reuses an uncertain request ID instead of creating a second paid request", async () => {
     state.api.conversations.mockResolvedValue([completedConversation]);
     state.api.streamConversation.mockClear();

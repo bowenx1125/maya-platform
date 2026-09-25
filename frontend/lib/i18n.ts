@@ -473,20 +473,16 @@ const enMessages = {
     "Hide {filename} from the group workspace? Published snapshots remain available.",
   homeWelcomeTitle: "Welcome {name}",
   homeWelcomeCourse: "You are in {course}.",
-  homeSurfaceChats:
-    "Chats — private one-to-one talks with a published Agent.",
-  homeSurfaceWorkspace:
-    "Workspace — build and publish Agents for your group.",
+  homeSurfaceChats: "Chats — private one-to-one talks with a published Agent.",
+  homeSurfaceWorkspace: "Workspace — build and publish Agents for your group.",
   homeSurfaceKnowledge:
     "Knowledge — the shared Markdown library used when drafting Agents.",
-  homeSurfaceVoice:
-    "Voice — custom voices your group can attach to Agents.",
+  homeSurfaceVoice: "Voice — custom voices your group can attach to Agents.",
   homeSurfaceLive:
     "Live — join the classroom debate when the teacher opens it.",
   homePrivacyNote:
     "A published Agent is visible to the group and the teacher. Chats are visible only to yourself. Voice is visible to the group and the teacher.",
-  homeMembersIntro:
-    "People who share this group workspace.",
+  homeMembersIntro: "People who share this group workspace.",
   draftSavedNotice: "Draft saved. Revision advanced safely.",
   agentMdUploadedNotice:
     "AGENT.md uploaded and saved as the next draft revision.",
@@ -1571,6 +1567,67 @@ export function localeToHtmlLang(locale: Locale): "en-US" | "zh-CN" {
 }
 
 export const LOCALE_COOKIE = "maya_ui_locale";
+
+function scriptCount(value: string, source: string): number {
+  return value.match(new RegExp(source, "g"))?.length ?? 0;
+}
+
+/**
+ * Presentation locale for the first paint. An explicit en/zh cookie wins.
+ * Anything else, including a missing cookie, follows Accept-Language.
+ * Supported interface values stay en and zh.
+ */
+export function resolveInitialLocale(
+  cookieValue: string | null | undefined,
+  acceptLanguage: string | null | undefined,
+): Locale {
+  if (cookieValue === "zh" || cookieValue === "en") return cookieValue;
+  return localeFromAcceptLanguage(acceptLanguage);
+}
+
+export function localeFromAcceptLanguage(
+  header: string | null | undefined,
+): Locale {
+  if (!header) return "en";
+  const ranked: { tag: string; quality: number }[] = [];
+  for (const part of header.split(",")) {
+    const [rawTag, ...params] = part.trim().split(";");
+    const tag = rawTag.trim().toLowerCase();
+    if (!tag) continue;
+    let quality = 1;
+    for (const param of params) {
+      const [key, raw] = param.trim().split("=");
+      if (key?.trim() !== "q") continue;
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) quality = parsed;
+    }
+    if (quality > 0) ranked.push({ tag, quality });
+  }
+  ranked.sort((left, right) => right.quality - left.quality);
+  for (const { tag } of ranked) {
+    if (tag === "zh" || tag.startsWith("zh-")) return "zh";
+    if (tag === "en" || tag.startsWith("en-")) return "en";
+  }
+  return "en";
+}
+
+/**
+ * Chat stream `lang`. Han script in the user message is zh-CN even when the
+ * interface locale is still English. Otherwise the interface locale decides.
+ * The only values the stream accepts are zh-CN and en.
+ */
+export function chatStreamLanguage(
+  locale: Locale,
+  message: string,
+): "zh-CN" | "en" {
+  const han = scriptCount(
+    message,
+    "[\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff]",
+  );
+  const latin = scriptCount(message, "[A-Za-z]");
+  if (han > 0 && han >= latin) return "zh-CN";
+  return locale === "zh" ? "zh-CN" : "en";
+}
 
 const errorCodeKeys: Record<string, MessageKey> = {
   unauthenticated: "errorUnauthenticated",
