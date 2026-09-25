@@ -435,3 +435,19 @@ sends supplier language `zh` or `en` from sample language `zh-CN` or `en`.
 voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
 profile for an immutable baseline character, and an omitted name uses
 `FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.
+
+Chat speech drops citation markers such as `[S1]`, `[S1, S2]`, and fullwidth
+`［S2］` only on the text sent to TTS. The stored reply, stream deltas, and
+`text_done` keep them. Whitespace left by a removed marker is collapsed, and a
+space before punctuation is removed. A reply that is only markers is not
+synthesized. Debate TTS uses the same spoken-text step; a speech with no marker
+is passed through unchanged. Voice preview and the TTS diagnostic are not model
+replies and are unchanged. A spoken reply that contains Han characters uses
+Chinese TTS even when the request `lang` is `en`.
+
+The interface locale is `en` or `zh`. The root layout reads the `maya_ui_locale`
+cookie when it is exactly one of those values, and otherwise the first matching
+`Accept-Language` tag (`zh` or `zh-*` is Chinese). Chat `lang` stays `zh-CN` or
+`en`. A user message whose Han characters are at least as many as its Latin
+letters sends `zh-CN` even if the interface locale is English; other messages
+follow the interface locale. No charged provider call.

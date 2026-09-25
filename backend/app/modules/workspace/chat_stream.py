@@ -20,7 +20,7 @@ from app.core.models import Agent, AgentVersion, VoiceProfile
 from app.modules.knowledge.files import FileBoundaryError, contained_path, write_atomic
 from app.modules.voices.service import baseline_configured_voice_id, ready_chat_voice
 from app.providers.factory import tts_provider
-from app.providers.tts import TTSProviderError
+from app.providers.tts import TTSProviderError, reply_uses_chinese, spoken_text
 
 from .models import Conversation, ConversationTurn
 from .schemas import ChatSource
@@ -41,6 +41,20 @@ def tts_language(lang: str) -> str:
     if lang == "en":
         return "en"
     raise ValueError("unsupported chat language")
+
+
+def synthesis_language(lang: str, spoken: str) -> str:
+    """DashScope language for one spoken reply.
+
+    A reply that contains Han characters is spoken as Chinese. English
+    language_type reads those characters aloud poorly, including when the
+    chat request still says en.
+    """
+
+    requested = tts_language(lang)
+    if requested == "en" and reply_uses_chinese(spoken):
+        return "zh"
+    return requested
 
 
 def accepts_event_stream(value: str | None) -> bool:
@@ -277,13 +291,16 @@ async def _tts_events(
     if not external_id:
         yield sse("error", {"request_id": request_id, "safe_error_code": "tts_voice_unavailable"})
         return
+    spoken = spoken_text(reply)
+    if not spoken.strip():
+        return
     try:
         await asyncio.to_thread(
             _synthesize_segment,
             settings,
             conversation_id,
             request_id,
-            reply,
+            spoken,
             external_id,
             lang,
         )
@@ -368,10 +385,13 @@ def _synthesize_segment(
     external_id: str,
     lang: str,
 ) -> None:
+    spoken = spoken_text(reply)
+    if not spoken.strip():
+        raise TTSProviderError("speech is empty", safe_code="tts_speech_empty")
     result = tts_provider(settings).synthesize(
-        reply,
+        spoken,
         external_id,
-        language=tts_language(lang),
+        language=synthesis_language(lang, spoken),
     )
     if result.content_type != "audio/wav" or not result.audio_bytes:
         raise TTSProviderError("provider audio invalid", safe_code="tts_audio_invalid")

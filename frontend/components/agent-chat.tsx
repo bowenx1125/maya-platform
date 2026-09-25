@@ -12,6 +12,7 @@ import {
   subscribeChatRequest,
 } from "../lib/chat-request-store";
 import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
+import { chatStreamLanguage } from "../lib/i18n";
 import { AvatarPreview } from "./avatar";
 import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
@@ -25,7 +26,6 @@ export function AgentChat() {
   const { api, user } = useSession();
   const t = useT();
   const { locale } = useLocale();
-  const chatLang = locale === "zh" ? "zh-CN" : "en";
   const courseId = user?.courses[0]?.course_id;
   const [agents, setAgents] = useState<ChatAgent[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -210,7 +210,7 @@ export function AgentChat() {
               request_id: requestId,
               message,
               expected_revision: revision,
-              lang: chatLang,
+              lang: chatStreamLanguage(locale, message),
             },
             {
               onTextDone: (refreshed) => {

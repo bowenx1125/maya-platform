@@ -805,3 +805,72 @@ def test_enrollment_language_follows_the_sample(
     assert omitted.status_code == 202, omitted.text
     assert provider.last_language == "en"
     assert provider.enroll_calls == 2
+
+
+def test_chat_tts_omits_citation_markers_and_speaks_chinese_replies(
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, database, settings = voice_app
+    with database.session() as session:
+        ensure_demo_baseline(session, settings.resolved_data_root)
+    _user, csrf = login(client, "bowen")
+    profile_id = _ready_profile(client, csrf, "task-001a-cite-enroll01")
+    with database.session() as session:
+        version = session.get(AgentVersion, BASELINE_VERSION_ID)
+        assert version is not None
+        version.voice_profile_id = profile_id
+    replies = {
+        "cited": "东边的陶罐还在 [S1]。另见［S2］。",
+        "markers-only": "[S1] [S2]",
+    }
+
+    def fake_reply(*args: object, **kwargs: object) -> tuple[str, list[object], None]:
+        message = kwargs.get("message", args[4] if len(args) > 4 else None)
+        assert isinstance(message, str)
+        return replies[message], [], None
+
+    recorder = _RecordingTTS()
+    monkeypatch.setattr("app.modules.workspace.chat.generate_reply", fake_reply)
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_stream.tts_provider", lambda _settings: recorder
+    )
+
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    assert created.status_code == 200, created.text
+    cited = _stream(client, csrf, created.json()["id"], lang="en", message="cited", revision=0)
+    assert cited.status_code == 200, cited.text
+    events = _parse_sse(cited.text)
+    done = next(payload for name, payload in events if name == "text_done")
+    assert done["assistant_text"] == replies["cited"]
+    assert "[S1]" in str(done["assistant_text"])
+    deltas = "".join(str(payload["text"]) for name, payload in events if name == "delta")
+    assert deltas == replies["cited"]
+    assert recorder.calls == [("东边的陶罐还在。另见。", recorder.calls[0][1], "zh")]
+    assert "[S1]" not in recorder.calls[0][0]
+    assert "［S2］" not in recorder.calls[0][0]
+    with database.session() as session:
+        turn = session.scalar(
+            select(ConversationTurn).where(ConversationTurn.conversation_id == created.json()["id"])
+        )
+        assert turn is not None
+        assert turn.assistant_text == replies["cited"]
+
+    markers = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    )
+    assert markers.status_code == 200, markers.text
+    only = _stream(
+        client, csrf, markers.json()["id"], lang="en", message="markers-only", revision=0
+    )
+    assert only.status_code == 200, only.text
+    names = [name for name, _payload in _parse_sse(only.text)]
+    assert "text_done" in names
+    assert "tts_ready" not in names
+    assert "error" not in names
+    assert len(recorder.calls) == 1
