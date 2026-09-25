@@ -80,19 +80,33 @@ def _turn_is_live(turn: ConversationTurn, active_request_id: str | None, now: da
     )
 
 
-def _fail_open_turn(turn: ConversationTurn, code: str) -> None:
-    """Move an unfinished turn to failed. A ready turn is left ready."""
+def _fail_open_turn(db: Session, turn_id: str, code: str) -> bool:
+    """Fail one unfinished turn. A ready turn is left ready.
 
-    if turn.state == "pending":
-        turn.state = "failed"
-        turn.safe_error_code = code
-        return
+    The conditional update re-reads the state, so a turn that became ready
+    after the caller loaded it is never rewritten.
+    """
+
+    failed = db.execute(
+        update(ConversationTurn)
+        .where(ConversationTurn.id == turn_id, ConversationTurn.state == "pending")
+        .values(state="failed", safe_error_code=code)
+    )
+    if isinstance(failed, CursorResult) and failed.rowcount == 1:
+        return True
     # Startup used to label an interrupted real turn acceptance_unknown, which
     # claim_chat_send treats as a permanent block. That label is not a
     # provider outcome, so it becomes an ordinary failure.
-    if turn.state == "acceptance_unknown" and turn.safe_error_code == "chat_interrupted":
-        turn.state = "failed"
-        turn.safe_error_code = "chat_interrupted"
+    interrupted = db.execute(
+        update(ConversationTurn)
+        .where(
+            ConversationTurn.id == turn_id,
+            ConversationTurn.state == "acceptance_unknown",
+            ConversationTurn.safe_error_code == "chat_interrupted",
+        )
+        .values(state="failed", safe_error_code="chat_interrupted")
+    )
+    return isinstance(interrupted, CursorResult) and interrupted.rowcount == 1
 
 
 def settle_chat_operation(
@@ -173,11 +187,11 @@ def mark_abandoned_turn(
 
     with database.session() as db:
         turn = db.get(ConversationTurn, request_id)
-        changed = False
-        if turn is not None and turn.conversation_id == conversation_id and turn.state != "ready":
-            before = (turn.state, turn.safe_error_code)
-            _fail_open_turn(turn, code)
-            changed = (turn.state, turn.safe_error_code) != before
+        changed = (
+            turn is not None
+            and turn.conversation_id == conversation_id
+            and _fail_open_turn(db, request_id, code)
+        )
         release_chat_request(db, conversation_id, request_id)
     if changed:
         logger.warning(
@@ -261,8 +275,9 @@ def repair_abandoned_chats(
                 continue
             elif turn.state != "pending":
                 continue
-            _fail_open_turn(turn, "chat_interrupted")
-            request_ids.append((turn.conversation_id, turn.id))
+            changed = _fail_open_turn(db, turn.id, "chat_interrupted")
+            if changed:
+                request_ids.append((turn.conversation_id, turn.id))
         for row in conversations.values():
             if row.active_request_id is None:
                 continue

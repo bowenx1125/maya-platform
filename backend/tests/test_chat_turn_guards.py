@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
 from app.modules.workspace.chat import (
+    _fail_open_turn,
     mark_abandoned_turn,
     record_chat_failure,
     repair_abandoned_chats,
@@ -16,6 +18,7 @@ from app.modules.workspace.chat import (
 )
 from app.modules.workspace.models import Conversation, ConversationTurn
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from tests import test_chat_cancel
 from tests.test_chat_cancel import _claim, _conversation, _plant, _send  # noqa: F401
@@ -104,3 +107,160 @@ def test_store_text_on_pending_turn_marks_ready(
         assert turn.state == "ready"
         assert turn.assistant_text == "full reply"
         assert turn.sources_json == "[]"
+
+
+def _insert_turn(
+    session: object,
+    conversation_id: str,
+    position: int,
+    state: str,
+    safe_error_code: str | None = None,
+) -> str:
+    turn_id = str(uuid4())
+    session.add(  # type: ignore[attr-defined]
+        ConversationTurn(
+            id=turn_id,
+            conversation_id=conversation_id,
+            position=position,
+            user_text=f"turn {position}",
+            assistant_text=None,
+            sources_json="[]",
+            mode="mock",
+            state=state,
+            safe_error_code=safe_error_code,
+            created_at=datetime.now(UTC),
+        )
+    )
+    return turn_id
+
+
+def test_mark_abandoned_turn_leaves_ready_turn(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    request_id = _claim(database, settings, conversation_id, "Finished in time")
+    with database.session() as session:
+        store_assistant_text(session, request_id, "full reply", [], None)
+    mark_abandoned_turn(
+        database, conversation_id=conversation_id, request_id=request_id, code="chat_cancelled"
+    )
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        row = session.get(Conversation, conversation_id)
+        assert turn is not None and row is not None
+        assert turn.state == "ready"
+        assert turn.safe_error_code is None
+        assert turn.assistant_text == "full reply"
+        assert row.active_request_id is None
+
+
+def test_mark_abandoned_turn_leaves_cancelled_turn(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    request_id = _claim(database, settings, conversation_id, "Cancelled first")
+    mark_abandoned_turn(
+        database, conversation_id=conversation_id, request_id=request_id, code="chat_cancelled"
+    )
+    mark_abandoned_turn(
+        database, conversation_id=conversation_id, request_id=request_id, code="chat_interrupted"
+    )
+    with database.session() as session:
+        turn = session.get(ConversationTurn, request_id)
+        assert turn is not None
+        assert turn.state == "failed"
+        assert turn.safe_error_code == "chat_cancelled"
+
+
+def test_fail_open_turn_only_rewrites_pending(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    with database.session() as session:
+        ready_id = _insert_turn(session, conversation_id, 0, "ready")
+        cancelled_id = _insert_turn(
+            session, conversation_id, 1, "failed", safe_error_code="chat_cancelled"
+        )
+        pending_id = _insert_turn(session, conversation_id, 2, "pending")
+        legacy_id = _insert_turn(
+            session, conversation_id, 3, "acceptance_unknown", safe_error_code="chat_interrupted"
+        )
+        unknown_id = _insert_turn(
+            session, conversation_id, 4, "acceptance_unknown", safe_error_code="acceptance_unknown"
+        )
+        # autoflush is off: the rows must exist in the database before the
+        # conditional updates can match them.
+        session.flush()
+        results = [
+            _fail_open_turn(session, ready_id, "chat_interrupted"),
+            _fail_open_turn(session, cancelled_id, "chat_interrupted"),
+            _fail_open_turn(session, pending_id, "chat_interrupted"),
+            _fail_open_turn(session, legacy_id, "chat_interrupted"),
+            _fail_open_turn(session, unknown_id, "chat_interrupted"),
+        ]
+    assert results == [False, False, True, True, False]
+    with database.session() as session:
+        ready = session.get(ConversationTurn, ready_id)
+        cancelled = session.get(ConversationTurn, cancelled_id)
+        pending = session.get(ConversationTurn, pending_id)
+        legacy = session.get(ConversationTurn, legacy_id)
+        unknown = session.get(ConversationTurn, unknown_id)
+        assert ready is not None and ready.state == "ready"
+        assert cancelled is not None and cancelled.state == "failed"
+        assert cancelled.safe_error_code == "chat_cancelled"
+        assert pending is not None and pending.state == "failed"
+        assert pending.safe_error_code == "chat_interrupted"
+        assert legacy is not None and legacy.state == "failed"
+        assert legacy.safe_error_code == "chat_interrupted"
+        assert unknown is not None and unknown.state == "acceptance_unknown"
+        assert unknown.safe_error_code == "acceptance_unknown"
+
+
+def test_repair_skips_ready_and_cancelled_turns(
+    voice_app: tuple[TestClient, Database, Settings],
+) -> None:
+    _client, database, settings = voice_app
+    _csrf, conversation_id = _conversation(_client, database, settings)
+    with database.session() as session:
+        session.add(
+            ConversationTurn(
+                id=str(uuid4()),
+                conversation_id=conversation_id,
+                position=0,
+                user_text="old ready",
+                assistant_text="kept reply",
+                sources_json="[]",
+                mode="mock",
+                state="ready",
+                created_at=datetime.now(UTC) - timedelta(minutes=10),
+            )
+        )
+        session.add(
+            ConversationTurn(
+                id=str(uuid4()),
+                conversation_id=conversation_id,
+                position=1,
+                user_text="old cancelled",
+                assistant_text=None,
+                sources_json="[]",
+                mode="mock",
+                state="failed",
+                safe_error_code="chat_cancelled",
+                created_at=datetime.now(UTC) - timedelta(minutes=10),
+            )
+        )
+    repair_abandoned_chats(database, conversation_id=conversation_id, only_stale=False)
+    with database.session() as session:
+        turns = list(
+            session.scalars(
+                select(ConversationTurn)
+                .where(ConversationTurn.conversation_id == conversation_id)
+                .order_by(ConversationTurn.position)
+            )
+        )
+        assert [turn.state for turn in turns] == ["ready", "failed"]
+        assert turns[0].assistant_text == "kept reply"
+        assert turns[1].safe_error_code == "chat_cancelled"
