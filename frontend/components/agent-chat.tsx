@@ -123,6 +123,8 @@ export function AgentChat() {
   useEffect(() => {
     return () => {
       streamAbortRef.current?.abort();
+      // The element is mounted after loading, so pause whichever node is current.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       audioRef.current?.pause();
       abandonChatRequest();
     };
