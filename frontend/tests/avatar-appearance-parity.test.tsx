@@ -1,0 +1,165 @@
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { AgentChat } from "../components/agent-chat";
+import type { AvatarConfig } from "../components/avatar";
+import { LocaleProvider } from "../components/locale";
+import { TeacherAgentDetail } from "../components/teacher-workspace";
+
+const publishedAvatar: AvatarConfig = {
+  template_id: "maya-warm-scholar",
+  material_theme: "warm_sand",
+  eye_color: "hazel",
+  default_expression: "attentive",
+  expression_strength: "low",
+  motion_style: "calm",
+};
+
+const state = vi.hoisted(() => ({
+  role: "student" as "student" | "teacher",
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => `/${state.role}/chat`,
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}));
+
+vi.mock("../components/session-provider", () => ({
+  useSession: () => ({
+    api: {
+      chatAgents: vi.fn(async () => [
+        {
+          agent_id: "agent",
+          version_id: "version",
+          course_id: "course",
+          name: "Socrates",
+          version_label: "V1.2",
+          avatar_config: publishedAvatar,
+          available: true,
+        },
+      ]),
+      conversations: vi.fn(async () => []),
+      agent: vi.fn(async () => ({
+        id: "agent",
+        group_id: "group",
+        name: "Socrates",
+        description: "",
+        status: "active",
+        current_published_version_id: "version",
+        current_draft_version_id: null,
+        versions: [],
+      })),
+      versions: vi.fn(async () => [
+        {
+          id: "version",
+          agent_id: "agent",
+          version_label: "V1.2",
+          state: "published",
+          revision: 4,
+          agent_md: "# Published",
+          avatar_config: publishedAvatar,
+          voice_fallback_active: true,
+          enabled_documents: [],
+          publish_blockers: [],
+        },
+      ]),
+    },
+    user: {
+      courses: [{ course_id: "course", role: state.role }],
+      groups: [],
+    },
+    logout: vi.fn(),
+  }),
+}));
+
+vi.mock("../components/avatar/avatar-renderer", () => ({
+  AvatarRenderer: class {
+    constructor(options: { onReady?: () => void }) {
+      queueMicrotask(() => options.onReady?.());
+    }
+
+    setConfig(): void {
+      return;
+    }
+
+    setState(): void {
+      return;
+    }
+
+    dispose(): void {
+      return;
+    }
+  },
+}));
+
+const APPEARANCE_FIELDS = [
+  ["template_id", "data-avatar-template"],
+  ["material_theme", "data-avatar-material"],
+  ["eye_color", "data-avatar-eye"],
+  ["default_expression", "data-avatar-expression"],
+  ["expression_strength", "data-avatar-strength"],
+  ["motion_style", "data-avatar-motion"],
+] as const;
+
+function readAvatarFields() {
+  const node = screen.getByRole("img", { name: /Socrates avatar preview/i });
+  return Object.fromEntries(
+    APPEARANCE_FIELDS.map(([field, attribute]) => [
+      field,
+      node.getAttribute(attribute),
+    ]),
+  );
+}
+
+function expectedFields() {
+  return {
+    template_id: publishedAvatar.template_id,
+    material_theme: publishedAvatar.material_theme,
+    eye_color: publishedAvatar.eye_color,
+    default_expression: publishedAvatar.default_expression,
+    expression_strength: publishedAvatar.expression_strength,
+    motion_style: publishedAvatar.motion_style,
+  };
+}
+
+describe("published avatar field parity", () => {
+  afterEach(() => {
+    cleanup();
+    state.role = "student";
+  });
+
+  it("shows the same avatar_config fields in student chat, teacher chat, and teacher preview", async () => {
+    state.role = "student";
+    const student = render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    expect(await screen.findByRole("img", { name: /Socrates/i })).toBeTruthy();
+    const studentFields = readAvatarFields();
+    student.unmount();
+
+    state.role = "teacher";
+    const teacherChat = render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    expect(await screen.findByRole("img", { name: /Socrates/i })).toBeTruthy();
+    const teacherChatFields = readAvatarFields();
+    teacherChat.unmount();
+
+    const teacherPreview = render(
+      <LocaleProvider initialLocale="en">
+        <TeacherAgentDetail agentId="agent" />
+      </LocaleProvider>,
+    );
+    expect(await screen.findByRole("img", { name: /Socrates/i })).toBeTruthy();
+    const teacherPreviewFields = readAvatarFields();
+    teacherPreview.unmount();
+
+    expect(studentFields).toEqual(expectedFields());
+    expect(teacherChatFields).toEqual(studentFields);
+    expect(teacherPreviewFields).toEqual(studentFields);
+  });
+});

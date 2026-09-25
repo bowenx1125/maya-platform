@@ -67,4 +67,38 @@ describe("avatar material shape", () => {
       mesh.material.every((material) => material.userData.mayaAvatarMaterial),
     ).toBe(true);
   });
+
+  it("gives two material themes different clothing and eye colors", () => {
+    function painted(
+      meshName: string,
+      theme: AvatarConfig["material_theme"],
+      eye: AvatarConfig["eye_color"],
+    ): string {
+      const mesh = new THREE.Mesh(
+        triangleGeometry(),
+        new THREE.MeshStandardMaterial({ color: 0xffffff }),
+      );
+      mesh.name = meshName;
+      const root = new THREE.Group();
+      root.add(mesh);
+      applyAvatarConfigMaterials(root, {
+        ...config,
+        material_theme: theme,
+        eye_color: eye,
+      });
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      expect(Array.isArray(mesh.material)).toBe(false);
+      return material.color.getHexString();
+    }
+
+    const demoOutfit = painted("Wolf3D_Outfit_Top", "demo", null);
+    const warmOutfit = painted("Wolf3D_Outfit_Top", "warm_sand", null);
+    expect(demoOutfit).not.toBe(warmOutfit);
+    expect(demoOutfit).not.toBe("ffffff");
+    expect(warmOutfit).not.toBe("ffffff");
+
+    const brownEye = painted("EyeLeft", "demo", "brown");
+    const blueEye = painted("EyeLeft", "demo", "blue");
+    expect(brownEye).not.toBe(blueEye);
+  });
 });

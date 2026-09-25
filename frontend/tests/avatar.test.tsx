@@ -16,6 +16,7 @@ import type {
 import {
   AvatarCanvas,
   AvatarEditor,
+  avatarAssetUrlForTemplate,
   avatarDefaultConfigForTemplate,
 } from "../components/avatar";
 
@@ -89,6 +90,27 @@ const templates: AvatarTemplate[] = [
 afterEach(() => {
   cleanup();
   rendererInstances.length = 0;
+});
+
+describe("registered avatar assets", () => {
+  it("maps each catalog template to a distinct local GLB", () => {
+    expect(avatarAssetUrlForTemplate("wave1-default-head")).toBe(
+      "/avatars/female_1.glb",
+    );
+    expect(avatarAssetUrlForTemplate("maya-warm-scholar")).toBe(
+      "/avatars/elder-scholar.glb",
+    );
+    expect(avatarAssetUrlForTemplate("maya-civic-observer")).toBe(
+      "/avatars/noble-scholar.glb",
+    );
+    expect(
+      new Set([
+        avatarAssetUrlForTemplate("wave1-default-head"),
+        avatarAssetUrlForTemplate("maya-warm-scholar"),
+        avatarAssetUrlForTemplate("maya-civic-observer"),
+      ]).size,
+    ).toBe(3);
+  });
 });
 
 describe("M07 avatar editor boundary", () => {

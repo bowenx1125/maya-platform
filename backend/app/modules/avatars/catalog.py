@@ -1,9 +1,10 @@
 """The immutable M07 avatar catalog and pure configuration validation.
 
-The product exposes one compatible local head asset through three deliberate
-parameter presets.  Keeping the catalog here gives draft validation, publish
-blocker checks and the browser editor one source of truth without adding
-provider or asset details to the frozen public ``AvatarConfig`` shape.
+Each available template is one local Draco GLB.  Appearance stays on the
+frozen ``AvatarConfig`` fields: ``material_theme`` recolors compatible
+materials, ``eye_color`` recolors eyes, and ``template_id`` selects the mesh.
+The public template DTO stays capability-only; asset paths live here so draft
+validation and the browser can share one registry without a contract change.
 """
 
 from __future__ import annotations
@@ -74,6 +75,7 @@ class _CatalogEntry:
     id: str
     name: str
     available: bool
+    asset_url: str
     defaults: AvatarConfig
 
 
@@ -95,23 +97,29 @@ def _config(
     )
 
 
+# Paths are site-rooted and must stay inside frontend/public/avatars.
+# female_1 is the Ready Player Me mesh with named outfit materials.
+# The two scholar files are the purchased Draco figures already on disk.
 _CATALOG: Final[tuple[_CatalogEntry, ...]] = (
     _CatalogEntry(
         id="wave1-default-head",
         name="Wave 1 Default Head",
         available=True,
+        asset_url="/avatars/female_1.glb",
         defaults=_config("wave1-default-head", "demo", None, "neutral", "medium", "calm"),
     ),
     _CatalogEntry(
         id="maya-warm-scholar",
         name="Maya Warm Scholar",
         available=True,
+        asset_url="/avatars/elder-scholar.glb",
         defaults=_config("maya-warm-scholar", "warm_sand", "brown", "attentive", "medium", "calm"),
     ),
     _CatalogEntry(
         id="maya-civic-observer",
         name="Maya Civic Observer",
         available=True,
+        asset_url="/avatars/noble-scholar.glb",
         defaults=_config(
             "maya-civic-observer",
             "civic_olive",
@@ -125,7 +133,6 @@ _CATALOG: Final[tuple[_CatalogEntry, ...]] = (
 _BY_ID: Final[dict[str, _CatalogEntry]] = {entry.id: entry for entry in _CATALOG}
 
 DEFAULT_AVATAR_CONFIG: Final[AvatarConfig] = _CATALOG[0].defaults
-DISTINCT_COMPATIBLE_ASSET_COUNT: Final[int] = 1
 
 
 class AvatarConfigValidationError(ValueError):
@@ -160,10 +167,28 @@ def is_supported_template(template_id: str) -> bool:
     return entry is not None and entry.available
 
 
-def compatible_asset_count() -> int:
-    """Return the honest count of distinct compatible meshes in this demo."""
+def avatar_asset_url(template_id: str) -> str:
+    """Return the registered GLB path for an available template."""
 
-    return DISTINCT_COMPATIBLE_ASSET_COUNT
+    entry = _BY_ID.get(template_id)
+    if entry is None or not entry.available:
+        raise AvatarConfigValidationError(
+            "Choose an available avatar template before loading its asset.",
+            field="template_id",
+        )
+    return entry.asset_url
+
+
+def registered_avatar_assets() -> tuple[str, ...]:
+    """Return the catalog's GLB paths in template order."""
+
+    return tuple(entry.asset_url for entry in _CATALOG if entry.available)
+
+
+def compatible_asset_count() -> int:
+    """Return the count of distinct registered GLB meshes."""
+
+    return len(set(registered_avatar_assets()))
 
 
 def _coerce_config(value: AvatarConfig | Mapping[str, object]) -> AvatarConfig:
