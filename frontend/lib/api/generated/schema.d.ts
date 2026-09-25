@@ -3258,7 +3258,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent event stream: delta events {request_id, seq, text} with incremental reply text, then text_done {request_id, assistant_text, revision, sources} with the committed reply, then at most one of tts_ready {request_id, audio_url, voice_profile_id, content_type, audio_duration_ms} with the synthesized WAV audio or tts_speech_empty {request_id} when the reply had nothing to speak. An error {request_id, safe_error_code} event can end the stream at any point instead. */
             200: {
                 headers: {
                     [name: string]: unknown;
