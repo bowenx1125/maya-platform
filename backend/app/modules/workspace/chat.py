@@ -33,7 +33,14 @@ from app.modules.auth.service import AuthContext
 
 from .access import course_member
 from .chat_provider import chat_messages, real_reply, retrieve_sources
-from .chat_stream import accepts_event_stream, chat_audio_path, language_supported, stream_events
+from .chat_stream import (
+    accepts_event_stream,
+    chat_audio_path,
+    language_supported,
+    remove_chat_audio,
+    stream_events,
+    turn_audio,
+)
 from .models import Conversation, ConversationTurn
 from .schemas import ChatAgent, ChatSession, ChatSource, ChatTurn, CreateChat, SendChat, StreamChat
 
@@ -273,6 +280,15 @@ def session_view(db: Session, conversation: Conversation) -> ChatSession:
     agent = db.get(Agent, version.agent_id) if version else None
     if version is None or agent is None:
         raise not_found()
+    raw_settings = db.info.get("maya_settings")
+    settings = raw_settings if isinstance(raw_settings, Settings) else None
+
+    def audio_fields(turn_id: str) -> dict[str, str | int | None]:
+        if settings is None:
+            return {"audio_url": None, "audio_duration_ms": None}
+        audio_url, audio_duration_ms = turn_audio(settings, conversation.id, turn_id)
+        return {"audio_url": audio_url, "audio_duration_ms": audio_duration_ms}
+
     turns = db.scalars(
         select(ConversationTurn)
         .where(
@@ -295,6 +311,7 @@ def session_view(db: Session, conversation: Conversation) -> ChatSession:
                     "state": turn.state,
                     "sources": json.loads(turn.sources_json),
                     "safe_error_code": turn.safe_error_code,
+                    **audio_fields(turn.id),
                 }
             )
             for turn in turns
@@ -414,11 +431,13 @@ def delete_conversation(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
     row = owned_conversation(db, context, str(conversation_id))
     db.execute(delete(ConversationTurn).where(ConversationTurn.conversation_id == row.id))
     db.execute(delete(Conversation).where(Conversation.id == row.id))
     db.commit()
+    remove_chat_audio(settings, row.id)
     return Response(status_code=204)
 
 

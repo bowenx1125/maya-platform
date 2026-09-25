@@ -1644,6 +1644,10 @@ export interface components {
         ChatTurn: {
             /** Assistant Text */
             assistant_text: string | null;
+            /** Audio Duration Ms */
+            audio_duration_ms: number | null;
+            /** Audio Url */
+            audio_url: string | null;
             /**
              * Id
              * Format: uuid

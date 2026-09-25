@@ -23,18 +23,28 @@ def test_spoken_text_removes_citation_markers_and_tidies_punctuation() -> None:
     assert spoken_text("word[S1].") == "word."
     assert spoken_text("[S1, S2]") == ""
     assert spoken_text("[ S1 ]") == ""
+    assert spoken_text("见【S1】。") == "见。"
+    assert spoken_text("See [S1、S2].") == "See."
+    assert spoken_text("Range [S1-S3] holds.") == "Range holds."
+    assert spoken_text("Note (S1).") == "Note."
+    assert spoken_text("lower [s1].") == "lower."
+    assert spoken_text("（S1）结束") == "结束"
 
 
 def test_spoken_text_leaves_speech_without_markers_unchanged() -> None:
     plain = "Keep  the double space.\n\nAnd this paragraph."
     assert spoken_text(plain) == plain
     assert spoken_text("A source named S1 is not a marker.") == "A source named S1 is not a marker."
+    assert spoken_text("See (Socrates) on S1.") == "See (Socrates) on S1."
 
 
-def test_synthesis_language_uses_chinese_for_han_replies() -> None:
+def test_synthesis_language_uses_han_to_latin_ratio() -> None:
     assert synthesis_language("en", "The jars stay on the east terrace.") == "en"
+    assert synthesis_language("en", "The Tao (道)") == "en"
     assert synthesis_language("en", "东边的陶罐还在。") == "zh"
+    assert synthesis_language("en", "你好 Hi") == "zh"
     assert synthesis_language("zh-CN", "Hello.") == "zh"
+    assert synthesis_language("zh-CN", "The Tao (道)") == "zh"
     assert synthesis_language("zh-CN", "你好。") == "zh"
     with pytest.raises(ValueError, match="unsupported chat language"):
         synthesis_language("fr", "Hello.")

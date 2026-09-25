@@ -191,6 +191,39 @@
   color: var(--muted);
   font-size: 14px;
 }
+.voiceBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 4.5rem;
+  margin-top: 10px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.voiceBar[data-playing="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.voiceGlyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.voiceBar[data-playing="true"] .voiceGlyph {
+  animation: voicePulse 1s ease-in-out infinite;
+}
+@keyframes voicePulse {
+  50% {
+    opacity: 0.25;
+  }
+}
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;

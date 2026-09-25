@@ -66,15 +66,21 @@ class TTSAudioInvalidError(TTSProviderError):
     safe_code = "tts_audio_invalid"
 
 
-# Chat replies cite evidence as [S1] or [S1, S2]. Fullwidth brackets are the
-# same marker. Debate speech is not supposed to contain these; a speech
-# without them is returned unchanged so its audio stays tied to the exact text.
-_CITATION_MARKER = re.compile(r"[\[［]\s*S\d+(?:\s*,\s*S\d+)*\s*[\]］]")
+# Chat replies cite evidence as [S1], [S1, S2], [S1、S2], [S1-S3], 【S1】,
+# (S1), or [s1]. Fullwidth brackets are the same marker. Debate speech is
+# not supposed to contain these; a speech without them is returned unchanged
+# so its audio stays tied to the exact text.
+_CITATION_MARKER = re.compile(
+    r"(?:[\[［【]|[(（])\s*[Ss]\d+"
+    r"(?:\s*(?:[,，、]|-|–|—)\s*[Ss]\d+)*"
+    r"\s*(?:[\]］】]|[)）])"
+)
 _SPACE_BEFORE_PUNCT = re.compile(r"[ \t]+([,.;:!?，。、；：！？])")
 _DANGLING_COMMA = re.compile(r"[,，、]+(?=[.。!！?？;；:：])")
 _MULTI_SPACE = re.compile(r"[ \t]{2,}")
 _MULTI_BREAK = re.compile(r"\n{3,}")
 _HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_LATIN = re.compile(r"[A-Za-z]")
 
 
 def spoken_text(value: str) -> str:
@@ -90,10 +96,17 @@ def spoken_text(value: str) -> str:
     return _MULTI_BREAK.sub("\n\n", "\n".join(lines)).strip()
 
 
-def reply_uses_chinese(value: str) -> bool:
-    """True when the spoken reply contains Han characters."""
+def han_at_least_latin(value: str) -> bool:
+    """True when Han characters are present and at least as many as A–Z letters.
 
-    return _HAN.search(value) is not None
+    One Han character inside a Latin sentence does not qualify. The caller
+    uses the requested language when this is false.
+    """
+
+    han = len(_HAN.findall(value))
+    if han == 0:
+        return False
+    return han >= len(_LATIN.findall(value))
 
 
 @dataclass(frozen=True)

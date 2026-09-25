@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { PlatformApiError, type ChatAgent, type ChatSession } from "../lib/api";
+import {
+  isAbortError,
+  type ChatAgent,
+  type ChatSession,
+  type ChatTurn,
+} from "../lib/api";
 import {
   abandonChatRequest,
   beginChatRequest,
@@ -21,6 +26,21 @@ import { useSession } from "./session-provider";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
+
+function voiceSeconds(durationMs: number): string {
+  return String(Math.max(1, Math.round(durationMs / 1000)));
+}
+
+function voiceTurn(
+  turn: ChatTurn,
+): turn is ChatTurn & { audio_url: string; audio_duration_ms: number } {
+  return (
+    typeof turn.audio_url === "string" &&
+    turn.audio_url.length > 0 &&
+    typeof turn.audio_duration_ms === "number" &&
+    turn.audio_duration_ms >= 0
+  );
+}
 
 export function AgentChat() {
   const { api, user } = useSession();
@@ -41,8 +61,10 @@ export function AgentChat() {
   const [ttsPhase, setTtsPhase] = useState<
     "idle" | "playing" | "complete" | "incomplete"
   >("idle");
+  const [playingTurnId, setPlayingTurnId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   function syncTtsPlayback() {
     const audio = audioRef.current;
@@ -58,13 +80,53 @@ export function AgentChat() {
     }
   }
 
-  function startTtsPlayback(url: string) {
+  function stopPlayback() {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setPlayingTurnId(null);
+    setTtsPhase("idle");
+  }
+
+  function stopAndAbort() {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    abandonChatRequest();
+    stopPlayback();
+    setPendingMessage("");
+    setBusy(false);
+  }
+
+  function playVoice(turnId: string, url: string) {
     const audio = audioRef.current;
     if (!audio) return;
+    audio.pause();
+    setPlayingTurnId(turnId);
     setTtsPhase("playing");
     audio.src = url;
-    void audio.play().catch(() => setTtsPhase("incomplete"));
+    void audio.play().catch(() => {
+      setPlayingTurnId((current) => (current === turnId ? null : current));
+      setTtsPhase("incomplete");
+    });
   }
+
+  function toggleVoice(turnId: string, url: string) {
+    if (playingTurnId === turnId) {
+      stopPlayback();
+      return;
+    }
+    playVoice(turnId, url);
+  }
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+      audioRef.current?.pause();
+      abandonChatRequest();
+    };
+  }, []);
 
   function remember(value: ChatSession) {
     setSelected(value);
@@ -154,6 +216,7 @@ export function AgentChat() {
 
   function start(nextVersionId = versionId) {
     if (busy) return;
+    stopPlayback();
     setError(null);
     setSelected(null);
     setDraft("");
@@ -184,8 +247,12 @@ export function AgentChat() {
     event?.preventDefault();
     const message = draft.trim();
     if (!message || busy) return;
+    const controller = new AbortController();
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = controller;
     setBusy(true);
     setTtsPhase("idle");
+    setPlayingTurnId(null);
     setPendingMessage(message);
     setDraft("");
     setError(null);
@@ -213,7 +280,9 @@ export function AgentChat() {
               lang: chatStreamLanguage(locale, message),
             },
             {
+              signal: controller.signal,
               onTextDone: (refreshed) => {
+                if (controller.signal.aborted) return;
                 remember(refreshed);
                 abandonChatRequest(requestId);
                 setPendingMessage("");
@@ -222,15 +291,13 @@ export function AgentChat() {
             },
           )
           .then((result) => {
-            if (result.ttsErrorCode) {
-              setError(
-                new PlatformApiError(502, result.ttsErrorCode, {
-                  code: result.ttsErrorCode,
-                  message: result.ttsErrorCode,
-                }),
-              );
-            }
-            if (result.audioUrl) startTtsPlayback(result.audioUrl);
+            if (controller.signal.aborted) return result.session;
+            if (result.ttsErrorCode) setError({ code: result.ttsErrorCode });
+            const spoken = result.session.turns.find(
+              (turn) => turn.id === requestId && turn.audio_url,
+            );
+            if (spoken?.audio_url) playVoice(spoken.id, spoken.audio_url);
+            else if (result.audioUrl) playVoice(requestId, result.audioUrl);
             else setTtsPhase("idle");
             return result.session;
           });
@@ -243,6 +310,7 @@ export function AgentChat() {
         promise,
       });
       const result = await promise;
+      if (controller.signal.aborted) return;
       remember(result);
       if (
         !result.turns.some(
@@ -253,9 +321,11 @@ export function AgentChat() {
         setDraft("");
       }
     } catch (cause) {
+      if (isAbortError(cause) || controller.signal.aborted) return;
       setError(cause);
       setDraft(message);
     } finally {
+      if (controller.signal.aborted) return;
       const pending = getChatRequest();
       setPendingMessage(pending?.promise ? pending.message : "");
       setBusy(pending?.promise != null);
@@ -330,16 +400,17 @@ export function AgentChat() {
                     <button
                       type="button"
                       className={styles.historySelect}
-                      disabled={busy}
                       aria-current={
                         selected?.id === session.id ? "page" : undefined
                       }
                       title={session.agent.name}
                       onClick={() => {
+                        if (selected?.id === session.id) return;
+                        stopAndAbort();
+                        setError(null);
                         setSelected(session);
                         setVersionId(session.agent.version_id);
                         setDraft("");
-                        abandonChatRequest();
                       }}
                     >
                       <span>{session.turns[0]?.user_text ?? "New"}</span>
@@ -370,8 +441,14 @@ export function AgentChat() {
               ref={audioRef}
               hidden
               onTimeUpdate={syncTtsPlayback}
-              onEnded={syncTtsPlayback}
-              onError={() => setTtsPhase("incomplete")}
+              onEnded={() => {
+                syncTtsPlayback();
+                setPlayingTurnId(null);
+              }}
+              onError={() => {
+                setPlayingTurnId(null);
+                setTtsPhase("incomplete");
+              }}
             />
             <div
               className={styles.messages}
@@ -397,6 +474,32 @@ export function AgentChat() {
                         )}
                       </span>
                     )}
+                    {voiceTurn(turn) ? (
+                      <button
+                        type="button"
+                        className={styles.voiceBar}
+                        data-playing={
+                          playingTurnId === turn.id ? "true" : "false"
+                        }
+                        aria-pressed={playingTurnId === turn.id}
+                        aria-label={t(
+                          playingTurnId === turn.id
+                            ? "stopVoiceMessage"
+                            : "playVoiceMessage",
+                          { seconds: voiceSeconds(turn.audio_duration_ms) },
+                        )}
+                        onClick={() => {
+                          if (turn.audio_url)
+                            toggleVoice(turn.id, turn.audio_url);
+                        }}
+                      >
+                        <span
+                          className={styles.voiceGlyph}
+                          aria-hidden="true"
+                        />
+                        <span>{voiceSeconds(turn.audio_duration_ms)}″</span>
+                      </button>
+                    ) : null}
                     {turn.sources.length ? (
                       <details>
                         <summary>Check RAG · {turn.sources.length}</summary>

@@ -2874,6 +2874,16 @@ components:
           type:
           - string
           - 'null'
+        audio_duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Duration Ms
+        audio_url:
+          title: Audio Url
+          type:
+          - string
+          - 'null'
         id:
           format: uuid
           title: Id
@@ -2913,6 +2923,8 @@ components:
       - state
       - sources
       - safe_error_code
+      - audio_url
+      - audio_duration_ms
       title: ChatTurn
       type: object
     CheckProvider:

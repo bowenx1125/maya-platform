@@ -1,8 +1,8 @@
 import type { ChatSession } from "./api";
 
 /**
- * Survives AgentChat unmount so a reply in flight keeps its spinner and
- * lands in the thread when the user navigates back without a manual refresh.
+ * Holds the in-flight chat send while AgentChat is mounted. Leaving the page
+ * or switching conversations aborts that send; this store does not continue it.
  */
 export type ChatRequestState = {
   sessionId: string | null;

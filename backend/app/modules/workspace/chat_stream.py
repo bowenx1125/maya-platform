@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
+import wave
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from logging import getLogger
@@ -20,7 +22,7 @@ from app.core.models import Agent, AgentVersion, VoiceProfile
 from app.modules.knowledge.files import FileBoundaryError, contained_path, write_atomic
 from app.modules.voices.service import baseline_configured_voice_id, ready_chat_voice
 from app.providers.factory import tts_provider
-from app.providers.tts import TTSProviderError, reply_uses_chinese, spoken_text
+from app.providers.tts import TTSProviderError, han_at_least_latin, spoken_text
 
 from .models import Conversation, ConversationTurn
 from .schemas import ChatSource
@@ -46,13 +48,13 @@ def tts_language(lang: str) -> str:
 def synthesis_language(lang: str, spoken: str) -> str:
     """DashScope language for one spoken reply.
 
-    A reply that contains Han characters is spoken as Chinese. English
-    language_type reads those characters aloud poorly, including when the
-    chat request still says en.
+    Han characters at least as numerous as Latin letters select Chinese.
+    Otherwise the requested chat language is used, so one Han character in
+    an English sentence stays English when the request says en.
     """
 
     requested = tts_language(lang)
-    if requested == "en" and reply_uses_chinese(spoken):
+    if han_at_least_latin(spoken):
         return "zh"
     return requested
 
@@ -84,6 +86,92 @@ def chat_audio_relative(conversation_id: str, request_id: str) -> str:
 
 def chat_audio_url(conversation_id: str, request_id: str) -> str:
     return f"/api/v1/conversations/{conversation_id}/audio/{request_id}"
+
+
+def wav_duration_ms(source: bytes | Path) -> int | None:
+    """Duration from the WAV header. Invalid audio returns None."""
+
+    try:
+        if isinstance(source, Path):
+            with wave.open(str(source), "rb") as stream:
+                rate = stream.getframerate()
+                frames = stream.getnframes()
+        else:
+            with wave.open(io.BytesIO(source), "rb") as stream:
+                rate = stream.getframerate()
+                frames = stream.getnframes()
+    except (OSError, EOFError, wave.Error):
+        return None
+    if rate <= 0 or frames < 0:
+        return None
+    return int(round(frames * 1000 / rate))
+
+
+def _lexical_chat_path(settings: Settings, relative: str) -> Path | None:
+    """A path inside the data root that is not itself a symlink.
+
+    ``contained_path`` resolves links, so the symlink check has to happen on
+    the lexical path first. A link is not a playable file and is not deleted.
+    """
+
+    lexical = settings.resolved_data_root / relative
+    if lexical.is_symlink():
+        return None
+    try:
+        path = contained_path(settings.resolved_data_root, relative)
+    except FileBoundaryError:
+        logger.warning("Chat audio path rejected code=file_operation_failed")
+        return None
+    return path
+
+
+def turn_audio(
+    settings: Settings, conversation_id: str, turn_id: str
+) -> tuple[str | None, int | None]:
+    """Owned playback URL and header duration, or nulls when no playable WAV."""
+
+    path = _lexical_chat_path(settings, chat_audio_relative(conversation_id, turn_id))
+    if path is None or not path.is_file():
+        return None, None
+    duration = wav_duration_ms(path)
+    if duration is None:
+        logger.warning(
+            "Chat audio duration unreadable conversation_id=%s turn_id=%s code=tts_audio_invalid",
+            conversation_id,
+            turn_id,
+        )
+        return None, None
+    return chat_audio_url(conversation_id, turn_id), duration
+
+
+def remove_chat_audio(settings: Settings, conversation_id: str) -> None:
+    """Delete one conversation's WAV directory after the row is gone.
+
+    Symlinks are left in place so cleanup cannot follow a link out of this
+    directory. Only regular .wav files are unlinked, then the directory is
+    removed when nothing remains.
+    """
+
+    directory = _lexical_chat_path(settings, f"chat-audio/{conversation_id}")
+    if directory is None or not directory.is_dir():
+        return
+    try:
+        for child in directory.iterdir():
+            if child.is_symlink() or not child.is_file() or child.suffix.lower() != ".wav":
+                continue
+            child.unlink()
+        if any(directory.iterdir()):
+            logger.warning(
+                "Chat audio cleanup left files conversation_id=%s code=file_operation_failed",
+                conversation_id,
+            )
+            return
+        directory.rmdir()
+    except OSError:
+        logger.warning(
+            "Chat audio cleanup failed conversation_id=%s code=file_operation_failed",
+            conversation_id,
+        )
 
 
 @contextmanager
@@ -284,6 +372,10 @@ async def _tts_events(
 ) -> AsyncIterator[bytes]:
     """Synthesize once after the text commit.  A failure leaves that text stored."""
 
+    spoken = spoken_text(reply)
+    if not spoken.strip():
+        yield sse("tts_speech_empty", {"request_id": request_id})
+        return
     voice = await asyncio.to_thread(_voice_segment, database, settings, conversation_id)
     if voice is None:
         return
@@ -291,11 +383,8 @@ async def _tts_events(
     if not external_id:
         yield sse("error", {"request_id": request_id, "safe_error_code": "tts_voice_unavailable"})
         return
-    spoken = spoken_text(reply)
-    if not spoken.strip():
-        return
     try:
-        await asyncio.to_thread(
+        duration_ms = await asyncio.to_thread(
             _synthesize_segment,
             settings,
             conversation_id,
@@ -323,6 +412,7 @@ async def _tts_events(
             "audio_url": chat_audio_url(conversation_id, request_id),
             "voice_profile_id": profile_id,
             "content_type": "audio/wav",
+            "audio_duration_ms": duration_ms,
         },
     )
 
@@ -384,7 +474,7 @@ def _synthesize_segment(
     reply: str,
     external_id: str,
     lang: str,
-) -> None:
+) -> int:
     spoken = spoken_text(reply)
     if not spoken.strip():
         raise TTSProviderError("speech is empty", safe_code="tts_speech_empty")
@@ -395,21 +485,26 @@ def _synthesize_segment(
     )
     if result.content_type != "audio/wav" or not result.audio_bytes:
         raise TTSProviderError("provider audio invalid", safe_code="tts_audio_invalid")
+    duration_ms = wav_duration_ms(result.audio_bytes)
+    if duration_ms is None:
+        raise TTSProviderError("provider audio invalid", safe_code="tts_audio_invalid")
     write_atomic(
         settings.resolved_data_root,
         chat_audio_relative(conversation_id, request_id),
         result.audio_bytes,
     )
+    return duration_ms
 
 
 def chat_audio_path(settings: Settings, conversation_id: UUID, request_id: UUID) -> Path:
-    try:
-        path = contained_path(
-            settings.resolved_data_root,
-            chat_audio_relative(str(conversation_id), str(request_id)),
+    path = _lexical_chat_path(settings, chat_audio_relative(str(conversation_id), str(request_id)))
+    if path is None or not path.is_file():
+        raise not_found()
+    if wav_duration_ms(path) is None:
+        logger.warning(
+            "Chat audio unreadable conversation_id=%s turn_id=%s code=tts_audio_invalid",
+            conversation_id,
+            request_id,
         )
-    except FileBoundaryError:
-        raise not_found() from None
-    if path.is_symlink() or not path.is_file():
         raise not_found()
     return path

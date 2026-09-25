@@ -105,4 +105,118 @@ describe("chat SSE parsing", () => {
     expect(result.ttsErrorCode).toBe("tts_failed");
     expect(result.audioUrl).toBeNull();
   });
+
+  it("treats tts_speech_empty as no audio and no error", async () => {
+    const textDone = `event: text_done\ndata: ${JSON.stringify({
+      request_id: "req-1",
+      assistant_text: "[S1]",
+    })}\n\n`;
+    const empty = `event: tts_speech_empty\ndata: ${JSON.stringify({
+      request_id: "req-1",
+    })}\n\n`;
+    const session = {
+      id: "conversation",
+      revision: 1,
+      turns: [
+        {
+          id: "req-1",
+          assistant_text: "[S1]",
+          audio_url: null,
+          audio_duration_ms: null,
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/messages:stream"))
+          return sseResponse([textDone, empty]);
+        return new Response(JSON.stringify(session), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    const api = new PlatformApi({
+      baseUrl: "http://maya.test/api/v1",
+      csrfToken: "csrf-token-csrf-token-csrf-token",
+    });
+    const result = await api.streamConversation("conversation", {
+      request_id: "req-1",
+      expected_revision: 0,
+      message: "markers",
+      lang: "en",
+    });
+    expect(result.ttsErrorCode).toBeNull();
+    expect(result.audioUrl).toBeNull();
+    expect(result.session.turns[0]?.audio_url ?? null).toBeNull();
+  });
+
+  it("forwards an abort signal and attaches turn audio from tts_ready", async () => {
+    const controller = new AbortController();
+    const textDone = `event: text_done\ndata: ${JSON.stringify({
+      request_id: "req-1",
+    })}\n\n`;
+    const ready = `event: tts_ready\ndata: ${JSON.stringify({
+      request_id: "req-1",
+      audio_url: "/api/v1/conversations/conversation/audio/req-1",
+      voice_profile_id: "voice",
+      content_type: "audio/wav",
+      audio_duration_ms: 12000,
+    })}\n\n`;
+    const session = {
+      id: "conversation",
+      revision: 1,
+      turns: [{ id: "req-1", assistant_text: "Done", audio_url: null }],
+    };
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/messages:stream")) {
+          expect(init?.signal).toBe(controller.signal);
+          return sseResponse([textDone, ready]);
+        }
+        return new Response(JSON.stringify(session), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new PlatformApi({
+      baseUrl: "http://maya.test/api/v1",
+      csrfToken: "csrf-token-csrf-token-csrf-token",
+    });
+    const result = await api.streamConversation(
+      "conversation",
+      {
+        request_id: "req-1",
+        expected_revision: 0,
+        message: "Hello",
+        lang: "en",
+      },
+      { signal: controller.signal },
+    );
+    expect(result.audioUrl).toBe(
+      "/api/v1/conversations/conversation/audio/req-1",
+    );
+    expect(result.session.turns[0]).toMatchObject({
+      audio_url: "/api/v1/conversations/conversation/audio/req-1",
+      audio_duration_ms: 12000,
+    });
+    controller.abort();
+    await expect(
+      api.streamConversation(
+        "conversation",
+        {
+          request_id: "req-2",
+          expected_revision: 1,
+          message: "Next",
+          lang: "en",
+        },
+        { signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
 });

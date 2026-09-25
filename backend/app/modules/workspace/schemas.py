@@ -40,6 +40,8 @@ class ChatTurn(ClosedModel):
     state: Literal["pending", "ready", "failed", "acceptance_unknown"]
     sources: list[ChatSource]
     safe_error_code: str | None
+    audio_url: str | None
+    audio_duration_ms: int | None
 
 
 class ChatSession(ClosedModel):

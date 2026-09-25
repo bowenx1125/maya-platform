@@ -346,6 +346,7 @@ def test_tts_ready_is_url_not_bytes(
     assert audio_url.startswith("/api/v1/conversations/")
     assert ready["voice_profile_id"] == profile_id
     assert ready["content_type"] == "audio/wav"
+    assert ready["audio_duration_ms"] == 1000
     assert "audio_bytes" not in ready
     assert len(recorder.calls) == 1
     assert recorder.calls[0][1] == external
@@ -869,8 +870,12 @@ def test_chat_tts_omits_citation_markers_and_speaks_chinese_replies(
         client, csrf, markers.json()["id"], lang="en", message="markers-only", revision=0
     )
     assert only.status_code == 200, only.text
-    names = [name for name, _payload in _parse_sse(only.text)]
+    parsed = _parse_sse(only.text)
+    names = [name for name, _payload in parsed]
     assert "text_done" in names
     assert "tts_ready" not in names
     assert "error" not in names
+    empty = [payload for name, payload in parsed if name == "tts_speech_empty"]
+    assert len(empty) == 1
+    assert empty[0]["request_id"]
     assert len(recorder.calls) == 1

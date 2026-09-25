@@ -153,7 +153,33 @@ export type ChatStreamResult = {
 export type ChatStreamHooks = {
   /** Fired when text_done is parsed, before later TTS events are read. */
   onTextDone?: (session: ChatSession) => void;
+  /** Aborts the stream fetch when the chat is left or switched. */
+  signal?: AbortSignal;
 };
+
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function attachTurnAudio(
+  session: ChatSession,
+  requestId: string,
+  audioUrl: string,
+  audioDurationMs: number | null,
+): ChatSession {
+  return {
+    ...session,
+    turns: session.turns.map((turn) =>
+      turn.id === requestId && !turn.audio_url
+        ? {
+            ...turn,
+            audio_url: audioUrl,
+            audio_duration_ms: audioDurationMs,
+          }
+        : turn,
+    ),
+  };
+}
 export type ChatTurn = components["schemas"]["ChatTurn"];
 export type ProviderSettings = components["schemas"]["ProviderSettings"];
 export type LiveSummary = components["schemas"]["LiveSummary"];
@@ -757,6 +783,7 @@ export class PlatformApi {
           "X-CSRF-Token": this.csrfToken ?? "",
         },
         body: JSON.stringify(body),
+        signal: hooks?.signal,
       },
     );
     if (!response.ok) {
@@ -780,8 +807,10 @@ export class PlatformApi {
     let voiceProfileId: string | null = null;
     let contentType: string | null = null;
     let ttsErrorCode: string | null = null;
+    let audioDurationMs: number | null = null;
     try {
       await readSseEvents(response, async (event) => {
+        if (event.event === "tts_speech_empty") return;
         if (event.event === "error") {
           const code =
             typeof event.safe_error_code === "string"
@@ -809,9 +838,17 @@ export class PlatformApi {
               : null;
           contentType =
             typeof event.content_type === "string" ? event.content_type : null;
+          audioDurationMs =
+            typeof event.audio_duration_ms === "number"
+              ? event.audio_duration_ms
+              : null;
+          if (!hooks?.signal?.aborted) {
+            session = await this.conversation(id);
+          }
         }
       });
     } catch (error) {
+      if (isAbortError(error)) throw error;
       if (error instanceof SseBlockError) {
         throw new PlatformApiError(502, "chat_stream_invalid", {
           code: "chat_stream_invalid",
@@ -820,11 +857,22 @@ export class PlatformApi {
       }
       throw error;
     }
+    if (hooks?.signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     if (!sawText || session === null) {
       throw new PlatformApiError(502, "chat_failed", {
         code: "chat_failed",
         message: "chat_failed",
       });
+    }
+    if (audioUrl) {
+      session = attachTurnAudio(
+        session,
+        body.request_id,
+        audioUrl,
+        audioDurationMs,
+      );
     }
     return {
       session,
