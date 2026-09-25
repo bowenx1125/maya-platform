@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
-
 import pytest
-from app.modules.debates.playback.audio import AudioStore
 from app.modules.workspace.chat_stream import synthesis_language
-from app.providers.tts import MockTTSProvider, TTSProviderError, spoken_text
+from app.providers.tts import spoken_text
 
 
 def test_spoken_text_removes_citation_markers_and_tidies_punctuation() -> None:
@@ -53,35 +50,3 @@ def test_synthesis_language_uses_han_to_latin_ratio() -> None:
     assert synthesis_language("zh-CN", "你好。") == "zh"
     with pytest.raises(ValueError, match="unsupported chat language"):
         synthesis_language("fr", "Hello.")
-
-
-def test_debate_tts_drops_markers_and_keeps_plain_speech(tmp_path) -> None:
-    provider = MockTTSProvider()
-    store = AudioStore(tmp_path, tts_provider=provider)
-    plain = "The jars stay on the east terrace."
-    store.synthesize_and_store(
-        course_id=str(uuid4()),
-        debate_id=str(uuid4()),
-        turn_id=str(uuid4()),
-        speech=plain,
-        voice_token="voice",
-        language="zh",
-    )
-    assert provider.last_text == plain
-    store.stage_synthesis(
-        course_id=str(uuid4()),
-        debate_id=str(uuid4()),
-        turn_id=str(uuid4()),
-        speech="The jars stay on the east terrace [S1].",
-        voice_token="voice",
-        language="en",
-    )
-    assert provider.last_text == plain
-    with pytest.raises(TTSProviderError, match="speech is empty"):
-        store.synthesize_and_store(
-            course_id=str(uuid4()),
-            debate_id=str(uuid4()),
-            turn_id=str(uuid4()),
-            speech="[S1] [S2]",
-            voice_token="voice",
-        )

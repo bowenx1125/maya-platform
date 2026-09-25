@@ -1604,45 +1604,6 @@ function scriptCount(value: string, source: string): number {
 }
 
 /**
- * Presentation locale for the first paint. An explicit en/zh cookie wins.
- * Anything else, including a missing cookie, follows Accept-Language.
- * Supported interface values stay en and zh.
- */
-export function resolveInitialLocale(
-  cookieValue: string | null | undefined,
-  acceptLanguage: string | null | undefined,
-): Locale {
-  if (cookieValue === "zh" || cookieValue === "en") return cookieValue;
-  return localeFromAcceptLanguage(acceptLanguage);
-}
-
-export function localeFromAcceptLanguage(
-  header: string | null | undefined,
-): Locale {
-  if (!header) return "en";
-  const ranked: { tag: string; quality: number }[] = [];
-  for (const part of header.split(",")) {
-    const [rawTag, ...params] = part.trim().split(";");
-    const tag = rawTag.trim().toLowerCase();
-    if (!tag) continue;
-    let quality = 1;
-    for (const param of params) {
-      const [key, raw] = param.trim().split("=");
-      if (key?.trim() !== "q") continue;
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) quality = parsed;
-    }
-    if (quality > 0) ranked.push({ tag, quality });
-  }
-  ranked.sort((left, right) => right.quality - left.quality);
-  for (const { tag } of ranked) {
-    if (tag === "zh" || tag.startsWith("zh-")) return "zh";
-    if (tag === "en" || tag.startsWith("en-")) return "en";
-  }
-  return "en";
-}
-
-/**
  * Chat stream `lang`. Han script in the user message is zh-CN even when the
  * interface locale is still English. Otherwise the interface locale decides.
  * The only values the stream accepts are zh-CN and en.

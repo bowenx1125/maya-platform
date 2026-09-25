@@ -22,7 +22,7 @@ from app.modules.knowledge.files import (
     verify_staged,
     write_atomic,
 )
-from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError, spoken_text
+from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError
 
 MEDIA_TICKET_TTL = timedelta(minutes=5)
 MEDIA_TICKET_GRACE = timedelta(seconds=60)
@@ -322,12 +322,11 @@ class AudioStore:
     ) -> AudioMetadata:
         """Use the injected (Mock by default) TTS provider and atomically store WAV."""
 
-        spoken = spoken_text(speech)
-        if not spoken.strip():
+        if not speech.strip():
             raise TTSProviderError("speech is empty")
         # The caller supplies a server-side kind/profile token; it never leaves
         # the store or appears in a public DTO.
-        result = self.tts_provider.synthesize(spoken, voice_token, language=language)
+        result = self.tts_provider.synthesize(speech, voice_token, language=language)
         raw = result.audio_bytes
         relative = self.relative_path(course_id, debate_id, turn_id)
         digest, size = write_atomic(self.data_root, relative, raw)
@@ -364,8 +363,7 @@ class AudioStore:
         revision and Job claim fences.
         """
 
-        spoken = spoken_text(speech)
-        if not spoken.strip():
+        if not speech.strip():
             raise TTSProviderError("speech is empty")
         operation = _uuid_part(operation_id or uuid4())
         relative = audio_staging_relative_path(course_id, debate_id, turn_id, operation)
@@ -373,7 +371,7 @@ class AudioStore:
         path = self._non_symlink_path(relative)
         if path is None or path.exists() or path.is_symlink():
             raise TTSProviderError("audio staging path is unavailable")
-        result = self.tts_provider.synthesize(spoken, voice_token, language=language)
+        result = self.tts_provider.synthesize(speech, voice_token, language=language)
         raw = result.audio_bytes
         if not isinstance(raw, bytes) or not raw:
             raise TTSProviderError("audio output is empty")

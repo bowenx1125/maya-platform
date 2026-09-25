@@ -69,9 +69,8 @@ class TTSAudioInvalidError(TTSProviderError):
 # Chat replies cite evidence as [S1], [S1, S2], [S1、S2], [S1-S3], 【S1】,
 # or [s1]. A parenthetical list such as (S1, S2) is the same marker.
 # A single (S2) after a word, as in "Section (S2)", is prose and stays.
-# Fullwidth brackets are the same marker. Debate speech is not supposed to
-# contain these; a speech without them is returned unchanged so its audio
-# stays tied to the exact text.
+# Fullwidth brackets are the same marker. Speech without any marker is
+# returned unchanged so its audio stays tied to the exact text.
 _CITATION_ID = r"[Ss]\d+"
 _CITATION_MORE = rf"(?:\s*(?:[,，、]|-|–|—)\s*{_CITATION_ID})*"
 _CITATION_MARKER = re.compile(

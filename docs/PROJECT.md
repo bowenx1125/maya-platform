@@ -439,11 +439,9 @@ voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
 profile for an immutable baseline character, and an omitted name uses
 `FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.
 
-Chat TTS strips bracketed markers such as `[S1]` from speech only and keeps prose like `Section (S2)`. Displayed text keeps markers. Markers-only replies emit `tts_speech_empty`. Debate uses the same strip. Han at least equal to Latin letters selects Chinese TTS. Deleting a chat deletes its audio directory. Voice bars play one at a time; the newest autoplays once. An aborted stream closes that turn and its provider call; a stale pending turn does not block sending. TTS errors are translated.
+Chat TTS strips bracketed markers such as `[S1]` from speech only and keeps prose like `Section (S2)`. Displayed text keeps markers. Markers-only replies emit `tts_speech_empty`. Han at least equal to Latin letters selects Chinese TTS. Deleting a chat deletes its audio directory. Voice bars play one at a time; the newest autoplays once. An aborted stream closes that turn and its provider call; a stale pending turn does not block sending. TTS errors are translated.
 
-The interface locale is `en` or `zh`. The root layout reads the `maya_ui_locale`
-cookie when it is exactly one of those values, and otherwise the first matching
-`Accept-Language` tag (`zh` or `zh-*` is Chinese). Chat `lang` stays `zh-CN` or
-`en`. A user message whose Han characters are at least as many as its Latin
-letters sends `zh-CN` even if the interface locale is English; other messages
-follow the interface locale. No charged provider call.
+Chat `lang` stays `zh-CN` or `en`. A user message whose Han characters are at
+least as many as its Latin letters sends `zh-CN` even if the interface locale
+is English; other messages follow the interface locale. No charged provider
+call.
