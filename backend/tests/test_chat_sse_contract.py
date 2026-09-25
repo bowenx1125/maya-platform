@@ -43,3 +43,22 @@ def test_project_doc_mentions_events_and_audio_fields() -> None:
     doc = (Path(__file__).resolve().parents[2] / "docs" / "PROJECT.md").read_text(encoding="utf-8")
     for token in ("tts_speech_empty", "audio_url", "audio_duration_ms"):
         assert token in doc
+
+
+def test_stream_description_registers_chat_turn_closed() -> None:
+    frozen = _frozen_spec()["paths"][STREAM_PATH]["post"]["responses"]["200"]["description"]
+    generated = app.openapi()["paths"][STREAM_PATH]["post"]["responses"]["200"]["description"]
+    assert "chat_turn_closed" in frozen
+    assert "chat_turn_closed" in generated
+
+
+def test_project_doc_documents_tts_ready_fields_and_chat_turn_closed() -> None:
+    doc = (Path(__file__).resolve().parents[2] / "docs" / "PROJECT.md").read_text(encoding="utf-8")
+    for token in ("voice_profile_id", "content_type", "audio/wav", "chat_turn_closed"):
+        assert token in doc
+
+
+def test_chat_turn_closed_matches_code_constant() -> None:
+    import app.modules.workspace.chat as chat
+
+    assert '"chat_turn_closed"' in Path(chat.__file__).read_text(encoding="utf-8")

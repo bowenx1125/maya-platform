@@ -6,6 +6,7 @@ import {
   readSseEvents,
   SseBlockError,
 } from "../lib/api/platform";
+import { localizeError } from "../lib/i18n";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -218,5 +219,16 @@ describe("chat SSE parsing", () => {
         { signal: controller.signal },
       ),
     ).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("chat error code translation", () => {
+  it("translates chat_turn_closed in en and zh", () => {
+    expect(localizeError({ code: "chat_turn_closed" }, "en")).toBe(
+      "This reply was interrupted before it finished.",
+    );
+    expect(localizeError({ code: "chat_turn_closed" }, "zh")).toBe(
+      "这条回复在完成前被中断。",
+    );
   });
 });

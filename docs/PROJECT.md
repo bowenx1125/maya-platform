@@ -424,8 +424,11 @@ conversation lock is released immediately after `text_done`, and the request
 database session is not held across the LLM call or TTS. TTS runs once after
 that and the `tts_ready` event carries an `audio_url`, not audio bytes. Events
 arrive as `delta`, then `text_done`, then at most one of `tts_ready` (with
-`audio_url` and `audio_duration_ms`) or `tts_speech_empty`; an `error` event can
-end the stream at any point. Stored turns (ChatTurn) expose `audio_url` and
+`request_id`, `audio_url`, `voice_profile_id`, `content_type` (`audio/wav`),
+`audio_duration_ms`) or `tts_speech_empty`; an `error` event can end the stream
+at any point. An `error` with `chat_turn_closed` means the turn was already
+cancelled or repaired before its text was stored (shown as the
+interrupted-reply message). Stored turns (ChatTurn) expose `audio_url` and
 `audio_duration_ms` (null without audio). `lang` is `zh-CN` or `en`. Student enrollment still stores the external voice id
 encrypted and a draft can bind `voice_profile_id`. TTS and voice clone may be
 `dashscope` beside the existing real slices only through `DASHSCOPE_API_KEY`.

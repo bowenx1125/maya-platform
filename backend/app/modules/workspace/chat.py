@@ -955,7 +955,8 @@ def send_message(
                 "audio_duration_ms} with the synthesized WAV audio or "
                 "tts_speech_empty {request_id} when the reply had nothing to speak. "
                 "An error {request_id, safe_error_code} event can end the stream at "
-                "any point instead."
+                "any point instead. safe_error_code chat_turn_closed means the turn "
+                "was already cancelled or repaired before its text could be stored."
             ),
         },
         400: {"model": Error},

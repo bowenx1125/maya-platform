@@ -1680,6 +1680,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   tts_provider_error: "errorTtsProviderError",
   chat_cancelled: "errorChatCancelled",
   chat_interrupted: "errorChatInterrupted",
+  chat_turn_closed: "errorChatInterrupted",
 };
 
 /**
