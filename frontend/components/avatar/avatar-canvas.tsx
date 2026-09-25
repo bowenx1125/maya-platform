@@ -163,6 +163,7 @@ export function AvatarCanvas({
       data-avatar-motion={config?.motion_style ?? ""}
     >
       <canvas
+        key={`${resolvedAssetUrl}\0${framing}`}
         ref={canvasRef}
         className={styles.canvas}
         hidden={!resolvedAssetUrl || status === "failed"}

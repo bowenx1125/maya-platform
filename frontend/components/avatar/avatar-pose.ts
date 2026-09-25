@@ -19,18 +19,90 @@ export type AvatarRestPose = {
 };
 
 /**
- * Registered figures face root-local +Z with +Y up. These are hang directions
- * in that frame: mostly down, a little out, and a forearm that sits forward of
- * the upper arm so the elbow is slightly bent.
+ * Root-local hang weights. Registered figures face +Z and +Y is up.
+ * `lateral` is outward, `down` is toward the feet, `forward` is toward +Z.
+ * A fitted body can hang near the sides. Loose robe cloth is skinned to the
+ * same arm bones, and a full drop pulls those sleeves into an X across the
+ * waist, so robe profiles stay nearer a relaxed A-pose.
  */
-const HANG = {
-  upperArm: { lateral: 0.18, down: 0.97, forward: 0.16 },
-  forearm: { lateral: 0.05, down: 0.84, forward: 0.52 },
-  hand: { lateral: 0.03, down: 0.93, forward: 0.28 },
-} as const;
+export type AvatarHangWeights = {
+  lateral: number;
+  down: number;
+  forward: number;
+};
 
-const PALM_BACK = 0.35;
-const MAX_PALM_TWIST = THREE.MathUtils.degToRad(50);
+export type AvatarHangProfile = {
+  upperArm: AvatarHangWeights;
+  forearm: AvatarHangWeights;
+  /**
+   * 1 rotates twist and sleeve helpers with the limb. 0 leaves them in the
+   * bind pose. Values in between are a counter-rotation back toward the bind.
+   */
+  twistFollow: number;
+};
+
+function hangWeights(
+  dropDegrees: number,
+  forward: number,
+  lateralScale = 1,
+): AvatarHangWeights {
+  const drop = THREE.MathUtils.degToRad(dropDegrees);
+  return {
+    lateral: Math.cos(drop) * lateralScale,
+    down: Math.sin(drop),
+    forward,
+  };
+}
+
+export function makeHangProfile(options: {
+  upperDropDegrees: number;
+  forearmDropDegrees: number;
+  upperForward?: number;
+  forearmForward?: number;
+  forearmLateralScale?: number;
+  twistFollow?: number;
+}): AvatarHangProfile {
+  return {
+    upperArm: hangWeights(
+      options.upperDropDegrees,
+      options.upperForward ?? 0.1,
+    ),
+    forearm: hangWeights(
+      options.forearmDropDegrees,
+      options.forearmForward ?? 0.22,
+      options.forearmLateralScale ?? 0.82,
+    ),
+    twistFollow: options.twistFollow ?? 1,
+  };
+}
+
+/** Close to the sides. Used for the fitted Ready Player Me body. */
+export const AVATAR_FITTED_HANG: AvatarHangProfile = makeHangProfile({
+  upperDropDegrees: 74,
+  forearmDropDegrees: 68,
+  upperForward: 0.12,
+  forearmForward: 0.38,
+  forearmLateralScale: 0.7,
+  twistFollow: 1,
+});
+
+/**
+ * Loose robe cloth is skinned to the arm. A full drop pulls the wide sleeves
+ * into an X across the belt. 55° down from a T-pose, with the elbow bent a
+ * little further and the hand slightly forward, is the lowest hang that stays
+ * clear of that cross on both scholar robes. Twist and sleeve helpers follow
+ * the limb; leaving them in the bind pose holds the sleeve up in the air.
+ */
+export const AVATAR_ROBE_HANG: AvatarHangProfile = makeHangProfile({
+  upperDropDegrees: 55,
+  forearmDropDegrees: 67,
+  upperForward: 0.08,
+  forearmForward: 0.22,
+  forearmLateralScale: 0.88,
+  twistFollow: 1,
+});
+
+const PALM_BACK = 0.22;
 
 /** One breath cycle is slow enough to read as breathing, not a nod. */
 export const AVATAR_IDLE_BREATH_SPEED = 1.4;
@@ -115,8 +187,12 @@ const BREATH_BONES = [
   "spine",
 ] as const;
 
-const IDLE_CLIP = /idle|stand(?:ing)?|rest|breath|relax/i;
-const BIND_CLIP = /t[-_ ]?pose|a[-_ ]?pose|\bbind\b/i;
+// Separators count as boundaries so `idle_01` matches and `Interest` does not.
+const IDLE_CLIP =
+  /(?:^|[^A-Za-z0-9])(?:idle|standing|stand|rest|breathing|breath|relaxed|relax)(?![A-Za-z0-9])/i;
+const IDLE_NAME = /(?:^|[^A-Za-z0-9])idle(?![A-Za-z0-9])/i;
+const BIND_CLIP =
+  /(?:^|[^A-Za-z0-9])(?:t[-_ ]?pose|a[-_ ]?pose|bind)(?![A-Za-z0-9])/i;
 
 /**
  * Strip Mixamo prefixes and separators so `mixamorig:LeftArm`, `LeftUpperArm`
@@ -186,11 +262,32 @@ export function findLimbBones(root: THREE.Object3D): AvatarLimbSet {
   };
 }
 
-function boneSide(name: string): AvatarPoseSide | null {
-  const normalized = normalizeBoneName(name);
-  if (normalized.includes("left") || normalized.endsWith("l")) return "left";
-  if (normalized.includes("right") || normalized.endsWith("r")) return "right";
+function boneNameTokens(name: string): string[] {
+  return name
+    .replace(/^mixamorig(?::|_|-)*/i, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * Side is a whole token (`left`, `l`), not a trailing letter. `Roll` stays
+ * unsided; `upperarm_l` and `LeftArm` do not.
+ */
+export function boneSide(name: string): AvatarPoseSide | null {
+  const tokens = boneNameTokens(name);
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index];
+    if (token === "l" || token === "left") return "left";
+    if (token === "r" || token === "right") return "right";
+  }
   return null;
+}
+
+export function hangProfileForAsset(assetUrl: string): AvatarHangProfile {
+  if (/elder-scholar|noble-scholar/i.test(assetUrl)) return AVATAR_ROBE_HANG;
+  return AVATAR_FITTED_HANG;
 }
 
 function isDescendantOf(
@@ -312,21 +409,47 @@ function proximalThumb(hand: THREE.Object3D): THREE.Object3D | null {
   return best;
 }
 
-function relaxPalm(
+function partialDelta(
+  worldDelta: THREE.Quaternion,
+  amount: number,
+): THREE.Quaternion | null {
+  if (amount <= 0) return null;
+  if (amount >= 1) return worldDelta;
+  return new THREE.Quaternion().slerp(worldDelta, amount);
+}
+
+/**
+ * Roll the forearm around its own axis so the palm faces the thigh.
+ * The hand stays in its bind orientation relative to the forearm, which keeps
+ * jacket cuffs from flaring at the wrist.
+ */
+function rollPalmInward(
   root: THREE.Object3D,
+  forearm: THREE.Object3D,
   hand: THREE.Object3D,
-  digit: THREE.Object3D,
   lateral: number,
+  twistFollow: number,
+  side: AvatarPoseSide,
 ): void {
+  const digit = primaryDigit(hand);
   const thumb = proximalThumb(hand);
-  if (!thumb) return;
+  if (!digit || !thumb) return;
   const origin = hand.getWorldPosition(new THREE.Vector3());
   const toDigit = digit.getWorldPosition(new THREE.Vector3()).sub(origin);
   const toThumb = thumb.getWorldPosition(new THREE.Vector3()).sub(origin);
-  if (toDigit.lengthSq() < 1e-8 || toThumb.lengthSq() < 1e-8) return;
-  const axis = toDigit.clone().normalize();
+  const axis = hand
+    .getWorldPosition(new THREE.Vector3())
+    .sub(forearm.getWorldPosition(new THREE.Vector3()));
+  if (
+    toDigit.lengthSq() < 1e-8 ||
+    toThumb.lengthSq() < 1e-8 ||
+    axis.lengthSq() < 1e-8
+  ) {
+    return;
+  }
+  axis.normalize();
   // Mirrored right-hand rigs flip the cross product, so the same order points
-  // out of the back of the hand. Negate that side before twisting the palm in.
+  // out of the back of the hand. Negate that side before rolling the palm in.
   const palm = new THREE.Vector3().crossVectors(toDigit, toThumb).normalize();
   if (lateral < 0) palm.negate();
   const desired = new THREE.Vector3(-lateral, 0, -PALM_BACK)
@@ -335,14 +458,31 @@ function relaxPalm(
   const currentFlat = palm.clone().projectOnPlane(axis);
   const desiredFlat = desired.clone().projectOnPlane(axis);
   if (currentFlat.lengthSq() < 1e-8 || desiredFlat.lengthSq() < 1e-8) return;
-  currentFlat.normalize();
-  desiredFlat.normalize();
-  if (currentFlat.angleTo(desiredFlat) > MAX_PALM_TWIST) return;
   const worldDelta = new THREE.Quaternion().setFromUnitVectors(
-    currentFlat,
-    desiredFlat,
+    currentFlat.normalize(),
+    desiredFlat.normalize(),
   );
-  applyWorldDelta(hand, worldDelta);
+  applyWorldDelta(forearm, worldDelta);
+  const twistDelta = partialDelta(worldDelta, twistFollow);
+  if (!twistDelta) return;
+  for (const twist of twistCompanions(root, forearm, "fore", side)) {
+    applyWorldDelta(twist, twistDelta);
+  }
+}
+
+function applyTwistDelta(
+  root: THREE.Object3D,
+  primary: THREE.Object3D,
+  segment: "upper" | "fore",
+  side: AvatarPoseSide,
+  worldDelta: THREE.Quaternion,
+  twistFollow: number,
+): void {
+  const delta = partialDelta(worldDelta, twistFollow);
+  if (!delta) return;
+  for (const twist of twistCompanions(root, primary, segment, side)) {
+    applyWorldDelta(twist, delta);
+  }
 }
 
 function poseSide(
@@ -351,6 +491,7 @@ function poseSide(
   upper: THREE.Object3D | null,
   forearm: THREE.Object3D | null,
   hand: THREE.Object3D | null,
+  profile: AvatarHangProfile,
 ): void {
   if (!upper) return;
   root.updateMatrixWorld(true);
@@ -361,12 +502,10 @@ function poseSide(
     const delta = swingChildToward(
       upper,
       upperEnd,
-      hangDirection(root, lateral, HANG.upperArm),
+      hangDirection(root, lateral, profile.upperArm),
     );
     if (delta) {
-      for (const twist of twistCompanions(root, upper, "upper", side)) {
-        applyWorldDelta(twist, delta);
-      }
+      applyTwistDelta(root, upper, "upper", side, delta, profile.twistFollow);
     }
   }
   root.updateMatrixWorld(true);
@@ -374,21 +513,13 @@ function poseSide(
     const delta = swingChildToward(
       forearm,
       hand,
-      hangDirection(root, lateral, HANG.forearm),
+      hangDirection(root, lateral, profile.forearm),
     );
     if (delta) {
-      for (const twist of twistCompanions(root, forearm, "fore", side)) {
-        applyWorldDelta(twist, delta);
-      }
+      applyTwistDelta(root, forearm, "fore", side, delta, profile.twistFollow);
     }
-  }
-  root.updateMatrixWorld(true);
-  if (!hand) return;
-  const digit = primaryDigit(hand);
-  if (digit) {
-    swingChildToward(hand, digit, hangDirection(root, lateral, HANG.hand));
     root.updateMatrixWorld(true);
-    relaxPalm(root, hand, digit, lateral);
+    rollPalmInward(root, forearm, hand, lateral, profile.twistFollow, side);
   }
 }
 
@@ -406,12 +537,15 @@ function findBreathBone(
  * Hang both arms from the bind pose. Feet, head, jaw and face bones are left
  * alone. Returns the spine bone a later breath can pitch without accumulating.
  */
-export function applyRelaxedStandingPose(root: THREE.Object3D): AvatarRestPose {
+export function applyRelaxedStandingPose(
+  root: THREE.Object3D,
+  profile: AvatarHangProfile = AVATAR_FITTED_HANG,
+): AvatarRestPose {
   const bones = indexBones(root);
   const left = matchLimb(bones, "left");
   const right = matchLimb(bones, "right");
-  poseSide(root, "left", left.upper, left.forearm, left.hand);
-  poseSide(root, "right", right.upper, right.forearm, right.hand);
+  poseSide(root, "left", left.upper, left.forearm, left.hand, profile);
+  poseSide(root, "right", right.upper, right.forearm, right.hand, profile);
   const breathBone = findBreathBone(bones);
   return {
     left: left.match,
@@ -457,5 +591,5 @@ export function selectIdleClip<T extends { name: string }>(
     (clip) => IDLE_CLIP.test(clip.name) && !BIND_CLIP.test(clip.name),
   );
   if (usable.length === 0) return null;
-  return usable.find((clip) => /idle/i.test(clip.name)) ?? usable[0];
+  return usable.find((clip) => IDLE_NAME.test(clip.name)) ?? usable[0];
 }

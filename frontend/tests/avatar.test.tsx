@@ -21,18 +21,22 @@ import {
 } from "../components/avatar";
 
 const rendererInstances: Array<{
+  canvas: HTMLCanvasElement;
   dispose: ReturnType<typeof vi.fn>;
 }> = [];
 
 vi.mock("../components/avatar/avatar-renderer", () => ({
   AvatarRenderer: class MockAvatarRenderer {
+    readonly canvas: HTMLCanvasElement;
     readonly dispose = vi.fn();
 
     constructor(options: {
+      canvas: HTMLCanvasElement;
       assetUrl?: string;
       onReady?: () => void;
       onError?: (error: Error) => void;
     }) {
+      this.canvas = options.canvas;
       rendererInstances.push(this);
       if (options.assetUrl === "/avatars/missing.glb") {
         queueMicrotask(() =>
@@ -290,5 +294,32 @@ describe("M07 avatar canvas failure and cleanup boundary", () => {
     const instance = rendererInstances[0];
     view.unmount();
     expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the next agent a fresh canvas after the previous viewer is torn down", async () => {
+    const view = render(
+      <AvatarCanvas
+        config={config}
+        assetUrl="/avatars/female_1.glb"
+        fallbackLabel="Bowen"
+      />,
+    );
+    await waitFor(() => expect(rendererInstances.length).toBe(1));
+    const first = rendererInstances[0];
+    expect(first.canvas.isConnected).toBe(true);
+
+    view.rerender(
+      <AvatarCanvas
+        config={{ ...config, template_id: "maya-warm-scholar" }}
+        assetUrl="/avatars/elder-scholar.glb"
+        fallbackLabel="Elder"
+      />,
+    );
+    await waitFor(() => expect(rendererInstances.length).toBe(2));
+    const second = rendererInstances[1];
+    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(first.canvas.isConnected).toBe(false);
+    expect(second.canvas).not.toBe(first.canvas);
+    expect(second.canvas.isConnected).toBe(true);
   });
 });

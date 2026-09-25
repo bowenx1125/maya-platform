@@ -14,6 +14,7 @@ import {
   applyIdleBreath,
   applyRelaxedStandingPose,
   findLimbBones,
+  hangProfileForAsset,
   selectIdleClip,
   type AvatarRestPose,
 } from "./avatar-pose";
@@ -117,6 +118,20 @@ function disposeMaterial(material: RenderableMaterial): void {
     if (texture instanceof THREE.Texture) texture.dispose();
   }
   material.dispose();
+}
+
+/**
+ * `dispose` frees GPU buffers. `forceContextLoss` kills the canvas context,
+ * and a lost context stays lost on that element, so the next viewer built on
+ * the same canvas only gets the dead context and falls back to the static
+ * preview. Lose the context only after the canvas has left the document.
+ */
+export function releaseAvatarWebGL(
+  renderer: { dispose: () => void; forceContextLoss: () => void },
+  canvas: { isConnected: boolean },
+): void {
+  renderer.dispose();
+  if (!canvas.isConnected) renderer.forceContextLoss();
 }
 
 function disposeObject(root: THREE.Object3D): void {
@@ -227,6 +242,7 @@ export function applyAvatarConfigMaterials(
  */
 export class AvatarRenderer {
   private readonly framing: "head" | "full-body";
+  private readonly assetUrl: string;
   private bodySize: THREE.Vector3 | null = null;
   private readonly canvas: HTMLCanvasElement;
   private readonly scene: THREE.Scene;
@@ -253,6 +269,7 @@ export class AvatarRenderer {
   constructor(options: AvatarRendererOptions) {
     this.canvas = options.canvas;
     this.framing = options.framing ?? "head";
+    this.assetUrl = safeLocalAssetUrl(options.assetUrl);
     this.onReady = options.onReady;
     this.onError = options.onError;
     this.scene = new THREE.Scene();
@@ -284,7 +301,7 @@ export class AvatarRenderer {
     this.loader.setDRACOLoader(this.draco);
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.resize();
-    this.load(safeLocalAssetUrl(options.assetUrl));
+    this.load(this.assetUrl);
   }
 
   setConfig(config: AvatarConfig): void {
@@ -320,8 +337,7 @@ export class AvatarRenderer {
     }
     this.draco.dispose();
     this.renderer.setAnimationLoop(null);
-    this.renderer.dispose();
-    this.renderer.forceContextLoss();
+    releaseAvatarWebGL(this.renderer, this.canvas);
   }
 
   private load(assetUrl: string): void {
@@ -371,7 +387,10 @@ export class AvatarRenderer {
       this.mixer.update(0);
       return;
     }
-    this.restPose = applyRelaxedStandingPose(root);
+    this.restPose = applyRelaxedStandingPose(
+      root,
+      hangProfileForAsset(this.assetUrl),
+    );
     this.logPose(null, clips, this.restPose.left, this.restPose.right);
   }
 
@@ -382,7 +401,9 @@ export class AvatarRenderer {
     right: AvatarRestPose["right"],
   ): void {
     // Bone names are the diagnosis for which rig the hang matched. The clip
-    // list is names only; the GLB bytes stay out of the log.
+    // list is names only; the GLB bytes stay out of the log. Production
+    // consoles stay quiet.
+    if (process.env.NODE_ENV !== "development") return;
     console.info(
       "avatar_pose",
       JSON.stringify({
@@ -418,7 +439,6 @@ export class AvatarRenderer {
   }
 
   private prepareFullBody(scene: THREE.Object3D): THREE.Object3D {
-    this.hideDetachedFragments(scene);
     const bounds = this.visibleBounds(scene);
     if (bounds.isEmpty()) return scene;
     scene.position.sub(bounds.getCenter(new THREE.Vector3()));
@@ -441,7 +461,6 @@ export class AvatarRenderer {
   }
 
   private prepareHeadCrop(scene: THREE.Object3D): THREE.Object3D {
-    this.hideDetachedFragments(scene);
     // Scholar GLBs have no mesh named "head". Cropping those leaves only
     // stray eye or hair parts, so show the whole registered figure instead.
     if (!this.sceneHasNamedHead(scene)) return this.prepareFullBody(scene);

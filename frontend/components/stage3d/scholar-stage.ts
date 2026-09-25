@@ -8,6 +8,7 @@ import {
   applyRelaxedStandingPose,
   avatarMotionFrame,
   expressionForAvatarState,
+  hangProfileForAsset,
   type AvatarConfig,
   type AvatarExpression,
   type AvatarState,
@@ -1275,7 +1276,10 @@ export class ScholarStage {
       root.position.set(standingX, 0, standingZ);
       root.rotation.y = offset.yaw;
       // Root-local hang directions keep the same rest pose after the seat yaw.
-      applyRelaxedStandingPose(root);
+      applyRelaxedStandingPose(
+        root,
+        hangProfileForAsset(STAGE_CHARACTER_ASSETS[templateIndex] ?? ""),
+      );
       const meshes: MorphMesh[] = [];
       this.styleFigure(root, spec.config, meshes);
       const groundY = this.groundCharacter(root);

@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import {
   applyIdleBreath,
   applyRelaxedStandingPose,
+  AVATAR_FITTED_HANG,
+  AVATAR_ROBE_HANG,
+  boneSide,
   findLimbBones,
+  hangProfileForAsset,
   idleBreathAngle,
   normalizeBoneName,
   selectIdleClip,
@@ -169,6 +173,60 @@ describe("applyRelaxedStandingPose", () => {
   });
 });
 
+describe("boneSide", () => {
+  it("matches side tokens and leaves a trailing Roll unsided", () => {
+    expect(boneSide("LeftArm")).toBe("left");
+    expect(boneSide("upperarm_l")).toBe("left");
+    expect(boneSide("Hand_R")).toBe("right");
+    expect(boneSide("upperarm_twist_01_l")).toBe("left");
+    expect(boneSide("upperarm_twist_Roll")).toBeNull();
+    expect(boneSide("SomethingRoll")).toBeNull();
+  });
+});
+
+describe("robe hang", () => {
+  it("drops loose-robe arms less than a fitted body", () => {
+    function posed(profile: typeof AVATAR_FITTED_HANG) {
+      const root = new THREE.Group();
+      const upper = bone(root, "LeftArm", 0.12, 1.5, 0);
+      const forearm = bone(upper, "LeftForeArm", 0.45, 0, 0);
+      bone(forearm, "LeftHand", 0.3, 0, 0);
+      bone(forearm, "LeftHandMiddle1", 0.08, 0, 0);
+      applyRelaxedStandingPose(root, profile);
+      return world(upper).y - world(forearm).y;
+    }
+
+    const fittedDrop = posed(AVATAR_FITTED_HANG);
+    const robeDrop = posed(AVATAR_ROBE_HANG);
+    expect(robeDrop).toBeGreaterThan(0.05);
+    expect(robeDrop).toBeLessThan(fittedDrop);
+    expect(hangProfileForAsset("/avatars/elder-scholar.glb")).toBe(
+      AVATAR_ROBE_HANG,
+    );
+    expect(hangProfileForAsset("/avatars/noble-scholar.glb")).toBe(
+      AVATAR_ROBE_HANG,
+    );
+    expect(hangProfileForAsset("/avatars/female_1.glb")).toBe(
+      AVATAR_FITTED_HANG,
+    );
+  });
+
+  it("does not drag a Roll twist helper with the left arm", () => {
+    const root = new THREE.Group();
+    const upper = bone(root, "UpperArm_L", 0.2, 1.5, 0);
+    bone(upper, "lowerarm_l", 0.35, 0, 0);
+    const twist = bone(root, "upperarm_twist_Roll", 0.2, 1.5, 0);
+    const sleeve = bone(twist, "Sleeve", 0.3, 0, 0);
+    const before = world(sleeve);
+
+    applyRelaxedStandingPose(root);
+
+    const after = world(sleeve);
+    expect(after.x).toBeCloseTo(before.x, 4);
+    expect(after.y).toBeCloseTo(before.y, 4);
+  });
+});
+
 describe("selectIdleClip", () => {
   it("plays a named idle clip and refuses bind poses", () => {
     expect(selectIdleClip([{ name: "Walk" }, { name: "Idle" }])?.name).toBe(
@@ -177,8 +235,11 @@ describe("selectIdleClip", () => {
     expect(selectIdleClip([{ name: "breathing_stand" }])?.name).toBe(
       "breathing_stand",
     );
+    expect(selectIdleClip([{ name: "idle_01" }])?.name).toBe("idle_01");
+    expect(selectIdleClip([{ name: "rest" }])?.name).toBe("rest");
     expect(selectIdleClip([{ name: "TPose" }])).toBeNull();
     expect(selectIdleClip([{ name: "A-Pose" }, { name: "Bind" }])).toBeNull();
+    expect(selectIdleClip([{ name: "Interest" }])).toBeNull();
     expect(selectIdleClip([])).toBeNull();
   });
 });
