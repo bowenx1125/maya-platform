@@ -140,6 +140,20 @@ export type DemoComposition = {
 };
 export type ChatAgent = components["schemas"]["ChatAgent"];
 export type ChatSession = components["schemas"]["ChatSession"];
+
+export type ChatStreamResult = {
+  session: ChatSession;
+  audioUrl: string | null;
+  voiceProfileId: string | null;
+  contentType: string | null;
+  /** Set when TTS fails after text_done. The assistant text stays. */
+  ttsErrorCode: string | null;
+};
+
+export type ChatStreamHooks = {
+  /** Fired when text_done is parsed, before later TTS events are read. */
+  onTextDone?: (session: ChatSession) => void;
+};
 export type ChatTurn = components["schemas"]["ChatTurn"];
 export type ProviderSettings = components["schemas"]["ProviderSettings"];
 export type LiveSummary = components["schemas"]["LiveSummary"];
@@ -265,6 +279,85 @@ function readErrorPayload(error: unknown): Partial<ErrorPayload> | undefined {
   if (!error || typeof error !== "object") return undefined;
   const candidate = error as Partial<ErrorPayload>;
   return typeof candidate.message === "string" ? candidate : undefined;
+}
+
+export class SseBlockError extends Error {
+  constructor() {
+    super("chat_stream_invalid");
+    this.name = "SseBlockError";
+  }
+}
+
+export type SseEvent = { event: string; [key: string]: unknown };
+
+/** Parse one SSE block. Empty blocks are skipped. Invalid JSON throws. */
+export function parseSseBlock(block: string): SseEvent | null {
+  let event = "message";
+  const data: string[] = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) data.push(line.slice(5).trim());
+  }
+  if (!data.length) return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(data.join("\n"));
+  } catch {
+    throw new SseBlockError();
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new SseBlockError();
+  }
+  return { event, ...(payload as Record<string, unknown>) };
+}
+
+export async function readSseEvents(
+  response: Response,
+  onEvent: (event: SseEvent) => void | Promise<void>,
+): Promise<void> {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const release = () => {
+    try {
+      reader.releaseLock();
+    } catch {
+      // cancel() already released the lock.
+    }
+  };
+  const emit = async (final: boolean) => {
+    let splitAt = buffer.indexOf("\n\n");
+    while (splitAt >= 0) {
+      const block = buffer.slice(0, splitAt);
+      buffer = buffer.slice(splitAt + 2);
+      const parsed = parseSseBlock(block);
+      if (parsed) await onEvent(parsed);
+      splitAt = buffer.indexOf("\n\n");
+    }
+    if (final && buffer.trim()) {
+      const parsed = parseSseBlock(buffer);
+      if (parsed) await onEvent(parsed);
+      buffer = "";
+    }
+  };
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        buffer += decoder.decode();
+        await emit(true);
+        break;
+      }
+      buffer += decoder.decode(chunk.value, { stream: true });
+      await emit(false);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    release();
+  }
 }
 
 async function unwrap<T>(result: ClientResult<T>): Promise<T> {
@@ -636,6 +729,110 @@ export class PlatformApi {
     body: components["schemas"]["SendChat"],
   ): Promise<ChatSession> {
     return this.postJson(`conversations/${id}/messages`, body);
+  }
+
+  /**
+   * Stream one chat turn. The JSON messages route stays available.
+   * Audio is a same-origin URL; the body never carries audio bytes.
+   */
+  async streamConversation(
+    id: string,
+    body: {
+      request_id: string;
+      expected_revision: number;
+      message: string;
+      lang: "zh-CN" | "en";
+    },
+    hooks?: ChatStreamHooks,
+  ): Promise<ChatStreamResult> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}conversations/${id}/messages:stream`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "text/event-stream",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) {
+      const raw = await response.text();
+      let payload: unknown;
+      try {
+        payload = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        payload = undefined;
+      }
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    let sawText = false;
+    let session: ChatSession | null = null;
+    let audioUrl: string | null = null;
+    let voiceProfileId: string | null = null;
+    let contentType: string | null = null;
+    let ttsErrorCode: string | null = null;
+    try {
+      await readSseEvents(response, async (event) => {
+        if (event.event === "error") {
+          const code =
+            typeof event.safe_error_code === "string"
+              ? event.safe_error_code
+              : "chat_failed";
+          if (!sawText) {
+            throw new PlatformApiError(502, code, { code, message: code });
+          }
+          ttsErrorCode = code;
+          return;
+        }
+        if (event.event === "text_done") {
+          sawText = true;
+          session = await this.conversation(id);
+          hooks?.onTextDone?.(session);
+        }
+        if (
+          event.event === "tts_ready" &&
+          typeof event.audio_url === "string"
+        ) {
+          audioUrl = event.audio_url;
+          voiceProfileId =
+            typeof event.voice_profile_id === "string"
+              ? event.voice_profile_id
+              : null;
+          contentType =
+            typeof event.content_type === "string" ? event.content_type : null;
+        }
+      });
+    } catch (error) {
+      if (error instanceof SseBlockError) {
+        throw new PlatformApiError(502, "chat_stream_invalid", {
+          code: "chat_stream_invalid",
+          message: "chat_stream_invalid",
+        });
+      }
+      throw error;
+    }
+    if (!sawText || session === null) {
+      throw new PlatformApiError(502, "chat_failed", {
+        code: "chat_failed",
+        message: "chat_failed",
+      });
+    }
+    return {
+      session,
+      audioUrl,
+      voiceProfileId,
+      contentType,
+      ttsErrorCode,
+    };
   }
 
   providerSettings(courseId: string): Promise<ProviderSettings> {
@@ -1259,12 +1456,13 @@ export class PlatformApi {
     groupId: string,
     file: File,
     consentCopyVersion?: string,
-    options: IdempotentMutationOptions = {},
+    options: IdempotentMutationOptions & { language?: "en" | "zh-CN" } = {},
   ): Promise<VoiceProfile> {
     return commitMutation(options.idempotency, async (key) => {
       const form = new FormData();
       form.append("file", file);
       form.append("consent_accepted", "true");
+      form.append("language", options.language ?? "en");
       if (consentCopyVersion)
         form.append("consent_copy_version", consentCopyVersion);
       const result = await this.client.POST(

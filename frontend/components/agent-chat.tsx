@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { ChatAgent, ChatSession } from "../lib/api";
+import { PlatformApiError, type ChatAgent, type ChatSession } from "../lib/api";
 import {
   abandonChatRequest,
   beginChatRequest,
@@ -11,8 +11,9 @@ import {
   getSettledChatSession,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
+import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
 import { AvatarPreview } from "./avatar";
-import { useT } from "./locale";
+import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -23,6 +24,8 @@ import styles from "./agent-chat.module.css";
 export function AgentChat() {
   const { api, user } = useSession();
   const t = useT();
+  const { locale } = useLocale();
+  const chatLang = locale === "zh" ? "zh-CN" : "en";
   const courseId = user?.courses[0]?.course_id;
   const [agents, setAgents] = useState<ChatAgent[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -35,7 +38,33 @@ export function AgentChat() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(() => getChatRequest() !== null);
   const [error, setError] = useState<unknown>(null);
+  const [ttsPhase, setTtsPhase] = useState<
+    "idle" | "playing" | "complete" | "incomplete"
+  >("idle");
   const endRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  function syncTtsPlayback() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (
+      ttsPlaybackPhase({
+        ended: audio.ended,
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+      }) === "complete"
+    ) {
+      setTtsPhase("complete");
+    }
+  }
+
+  function startTtsPlayback(url: string) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    setTtsPhase("playing");
+    audio.src = url;
+    void audio.play().catch(() => setTtsPhase("incomplete"));
+  }
 
   function remember(value: ChatSession) {
     setSelected(value);
@@ -138,7 +167,9 @@ export function AgentChat() {
     setError(null);
     try {
       await api.deleteConversation(session.id);
-      setSessions((current) => current.filter((item) => item.id !== session.id));
+      setSessions((current) =>
+        current.filter((item) => item.id !== session.id),
+      );
       if (selected?.id === session.id) {
         setSelected(null);
         setDraft("");
@@ -154,6 +185,7 @@ export function AgentChat() {
     const message = draft.trim();
     if (!message || busy) return;
     setBusy(true);
+    setTtsPhase("idle");
     setPendingMessage(message);
     setDraft("");
     setError(null);
@@ -171,11 +203,37 @@ export function AgentChat() {
       const revision = reuse?.revision ?? session.revision;
       const promise =
         reuse?.promise ??
-        api.sendConversation(session.id, {
-          request_id: requestId,
-          message,
-          expected_revision: revision,
-        });
+        api
+          .streamConversation(
+            session.id,
+            {
+              request_id: requestId,
+              message,
+              expected_revision: revision,
+              lang: chatLang,
+            },
+            {
+              onTextDone: (refreshed) => {
+                remember(refreshed);
+                abandonChatRequest(requestId);
+                setPendingMessage("");
+                setBusy(false);
+              },
+            },
+          )
+          .then((result) => {
+            if (result.ttsErrorCode) {
+              setError(
+                new PlatformApiError(502, result.ttsErrorCode, {
+                  code: result.ttsErrorCode,
+                  message: result.ttsErrorCode,
+                }),
+              );
+            }
+            if (result.audioUrl) startTtsPlayback(result.audioUrl);
+            else setTtsPhase("idle");
+            return result.session;
+          });
       beginChatRequest({
         sessionId: session.id,
         versionId,
@@ -307,7 +365,14 @@ export function AgentChat() {
                 ))}
             </div>
           </aside>
-          <section className={styles.conversation}>
+          <section className={styles.conversation} data-tts-playback={ttsPhase}>
+            <audio
+              ref={audioRef}
+              hidden
+              onTimeUpdate={syncTtsPlayback}
+              onEnded={syncTtsPlayback}
+              onError={() => setTtsPhase("incomplete")}
+            />
             <div
               className={styles.messages}
               role="log"

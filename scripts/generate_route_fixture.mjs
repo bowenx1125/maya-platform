@@ -94,6 +94,7 @@ const implemented = new Set([
   "createConversation",
   "getConversation",
   "sendConversationMessage",
+  "streamConversationMessage",
   "getProviderSettings",
   "updateProviderSettings",
   "checkProvider",

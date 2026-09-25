@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
-import { useT } from "../locale";
+import { useLocale, useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import {
@@ -27,9 +27,13 @@ type PreviewState = {
 
 export function VoiceLibrary({ groupId }: { groupId: string }) {
   const t = useT();
+  const { locale } = useLocale();
   const { api } = useSession();
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [sampleLanguage, setSampleLanguage] = useState<"en" | "zh-CN">(
+    locale === "zh" ? "zh-CN" : "en",
+  );
   const [creating, setCreating] = useState(false);
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -64,6 +68,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     try {
       await api.enrollVoice(groupId, file, CONSENT_COPY_VERSION, {
         idempotency: idempotency.handleFor("voice-enroll"),
+        language: sampleLanguage,
       });
       idempotency.finish("voice-enroll");
       setFile(null);
@@ -198,6 +203,21 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
               aria-label={t("voiceSampleFile")}
             />
             {file ? <p className={styles.hint}>{file.name}</p> : null}
+            <label>
+              <span>{t("voiceSampleLanguage")}</span>
+              <select
+                aria-label={t("voiceSampleLanguage")}
+                value={sampleLanguage}
+                onChange={(event) =>
+                  setSampleLanguage(
+                    event.target.value === "zh-CN" ? "zh-CN" : "en",
+                  )
+                }
+              >
+                <option value="en">{t("voiceLanguageEn")}</option>
+                <option value="zh-CN">{t("voiceLanguageZh")}</option>
+              </select>
+            </label>
             <label className={styles.consent} title={t("voiceConsent")}>
               <input
                 type="checkbox"

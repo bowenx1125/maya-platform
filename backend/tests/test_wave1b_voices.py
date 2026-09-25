@@ -1242,6 +1242,7 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
         "input": {
             "text": "A new English sentence.",
             "voice": "maya123456789012-generated",
+            "language_type": "English",
         },
     }
 
@@ -1339,6 +1340,132 @@ def test_dashscope_tts_uses_frozen_safe_failure_classifications(
             "A sentence.", "opaque-voice"
         )
     assert download_error.value.safe_code == "tts_result_download_failed"
+
+
+def test_dashscope_tts_repairs_streamed_placeholder_wav(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = _wav(2)
+    streamed = bytearray(raw)
+    assert streamed[36:40] == b"data"
+    streamed[4:8] = (0x7FFFFFBF).to_bytes(4, "little")
+    streamed[40:44] = (0x7FFFFF9B).to_bytes(4, "little")
+    capture = _CaptureDashScopeClient(
+        [
+            _provider_response(
+                {
+                    "output": {
+                        "audio": {
+                            "url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"
+                        }
+                    },
+                    "request_id": "tts-request",
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(dashscope, "_client", lambda: capture)
+
+    class _PlaceholderDownloader:
+        def download(self, value: str) -> bytes:
+            assert value.endswith("/x.wav")
+            return bytes(streamed)
+
+    config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
+    result = dashscope.DashScopeTTSProvider(config, downloader=_PlaceholderDownloader()).synthesize(
+        "A new English sentence.",
+        "opaque-voice",
+        language="en",
+    )
+    assert result.audio_bytes == raw
+    assert capture.calls[0][1]["json"] == {
+        "model": "qwen3-tts-vc-2026-01-22",
+        "input": {
+            "text": "A new English sentence.",
+            "voice": "opaque-voice",
+            "language_type": "English",
+        },
+    }
+
+
+def test_dashscope_tts_still_rejects_a_truncated_wav(monkeypatch: pytest.MonkeyPatch) -> None:
+    raw = _wav(2)
+    monkeypatch.setattr(
+        dashscope,
+        "_client",
+        lambda: _CaptureDashScopeClient(
+            [
+                _provider_response(
+                    {
+                        "output": {
+                            "audio": {
+                                "url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"
+                            }
+                        }
+                    }
+                )
+            ]
+        ),
+    )
+
+    class _TruncatedDownloader:
+        def download(self, value: str) -> bytes:
+            del value
+            return raw[:-80]
+
+    config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
+    with pytest.raises(TTSAudioInvalidError):
+        dashscope.DashScopeTTSProvider(config, downloader=_TruncatedDownloader()).synthesize(
+            "A sentence.", "opaque-voice"
+        )
+
+
+def test_dashscope_tts_sends_chinese_and_refuses_other_languages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture = _CaptureDashScopeClient(
+        [
+            _provider_response(
+                {
+                    "output": {
+                        "audio": {
+                            "url": "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav"
+                        }
+                    }
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(dashscope, "_client", lambda: capture)
+
+    class _WavDownloader:
+        def download(self, value: str) -> bytes:
+            del value
+            return _wav(2)
+
+    config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
+    dashscope.DashScopeTTSProvider(config, downloader=_WavDownloader()).synthesize(
+        "你好。",
+        "opaque-voice",
+        language="zh",
+    )
+    body = capture.calls[0][1]["json"]
+    assert isinstance(body, dict)
+    assert body["input"] == {
+        "text": "你好。",
+        "voice": "opaque-voice",
+        "language_type": "Chinese",
+    }
+
+    def unexpected_client() -> _CaptureDashScopeClient:
+        raise AssertionError("an unsupported language must not construct a client")
+
+    monkeypatch.setattr(dashscope, "_client", unexpected_client)
+    with pytest.raises(TTSProviderError) as error:
+        dashscope.DashScopeTTSProvider(config).synthesize(
+            "A sentence.", "opaque-voice", language="zh-CN"
+        )
+    assert error.value.safe_code == "tts_response_invalid"
 
 
 def test_dashscope_exists_requires_a_complete_paginated_scan(

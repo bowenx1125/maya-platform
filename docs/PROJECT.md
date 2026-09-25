@@ -412,5 +412,26 @@ capabilities and server-side keys. Prefer audited assistant-ui/AI Elements/Agno
 reuse (ADR-008), no cloud history.
 
 Later real-time face-to-face voice uses Bailian Beijing, after text/UI manual audit.
-TTS configuration stays untouched. Full RAG teaching quality, real speech,
-classroom-scale load and public deployment remain unverified.
+The teacher Components switch still leaves TTS and Voice deferred. Full RAG
+teaching quality, real speech, classroom-scale load and public deployment remain
+unverified.
+
+Chat streaming is `POST /api/v1/conversations/{conversation_id}/messages:stream`.
+The JSON `POST .../messages` route remains and stores assistant text through the
+same commit as the stream. A turn's full assistant text is committed once,
+immediately before `text_done`; a later TTS failure does not remove it. The
+conversation lock is released immediately after `text_done`, and the request
+database session is not held across the LLM call or TTS. TTS runs once after
+that and the `tts_ready` event carries an `audio_url`, not audio bytes. `lang`
+is `zh-CN` or `en`. Student enrollment still stores the external voice id
+encrypted and a draft can bind `voice_profile_id`. TTS and voice clone may be
+`dashscope` beside the existing real slices only through `DASHSCOPE_API_KEY`.
+Defaults stay mock. Qwen voice-clone WAVs may keep RIFF and data sizes near
+2**31; only that placeholder shape is rewritten before the same technical audio
+check. TTS sends `language_type` English or Chinese for en and zh. The debate
+contract's "language English" line is the previously checked mode. Enrollment
+sends supplier language `zh` or `en` from sample language `zh-CN` or `en`.
+`DASHSCOPE_API_KEY` is rotated by editing the environment and restarting;
+voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
+profile for an immutable baseline character, and an omitted name uses
+`FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.
