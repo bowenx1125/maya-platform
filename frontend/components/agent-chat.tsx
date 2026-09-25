@@ -17,7 +17,7 @@ import {
   subscribeChatRequest,
 } from "../lib/chat-request-store";
 import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
-import { chatStreamLanguage } from "../lib/i18n";
+import { chatStreamLanguage, localizeError } from "../lib/i18n";
 import { AvatarPreview } from "./avatar";
 import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
@@ -65,6 +65,9 @@ export function AgentChat() {
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const selectedRef = useRef<ChatSession | null>(null);
+  const openSeq = useRef(0);
+  const openingRef = useRef<Promise<void> | null>(null);
 
   function syncTtsPlayback() {
     const audio = audioRef.current;
@@ -131,11 +134,38 @@ export function AgentChat() {
   }, []);
 
   function remember(value: ChatSession) {
+    selectedRef.current = value;
     setSelected(value);
     setSessions((current) => [
       value,
       ...current.filter((item) => item.id !== value.id),
     ]);
+  }
+
+  function replaceSession(value: ChatSession) {
+    selectedRef.current = value;
+    setSelected(value);
+    setSessions((current) =>
+      current.map((item) => (item.id === value.id ? value : item)),
+    );
+  }
+
+  async function openConversation(session: ChatSession) {
+    const seq = ++openSeq.current;
+    replaceSession(session);
+    setVersionId(session.agent.version_id);
+    const task = (async () => {
+      try {
+        const fresh = await api.conversation(session.id);
+        if (seq !== openSeq.current) return;
+        replaceSession(fresh);
+        setVersionId(fresh.agent.version_id);
+      } catch (cause) {
+        if (seq === openSeq.current) setError(cause);
+      }
+    })();
+    openingRef.current = task;
+    await task;
   }
 
   useEffect(() => {
@@ -220,6 +250,8 @@ export function AgentChat() {
     if (busy) return;
     stopPlayback();
     setError(null);
+    openSeq.current += 1;
+    selectedRef.current = null;
     setSelected(null);
     setDraft("");
     abandonChatRequest();
@@ -236,6 +268,8 @@ export function AgentChat() {
         current.filter((item) => item.id !== session.id),
       );
       if (selected?.id === session.id) {
+        openSeq.current += 1;
+        selectedRef.current = null;
         setSelected(null);
         setDraft("");
         abandonChatRequest();
@@ -259,7 +293,13 @@ export function AgentChat() {
     setDraft("");
     setError(null);
     try {
-      const session = selected ?? (await api.createConversation(versionId));
+      await openingRef.current;
+      openSeq.current += 1;
+      const pinned = selectedRef.current;
+      const session =
+        pinned && (selected === null || pinned.id === selected.id)
+          ? pinned
+          : (selected ?? (await api.createConversation(versionId)));
       if (!selected) remember(session);
       const pending = getChatRequest();
       const reuse =
@@ -410,9 +450,8 @@ export function AgentChat() {
                         if (selected?.id === session.id) return;
                         stopAndAbort();
                         setError(null);
-                        setSelected(session);
-                        setVersionId(session.agent.version_id);
                         setDraft("");
+                        void openConversation(session);
                       }}
                     >
                       <span>{session.turns[0]?.user_text ?? "New"}</span>
@@ -471,8 +510,10 @@ export function AgentChat() {
                             <span className="spinner" aria-hidden="true" />
                             {t("loading")}
                           </>
+                        ) : turn.safe_error_code ? (
+                          localizeError({ code: turn.safe_error_code }, locale)
                         ) : (
-                          turn.safe_error_code
+                          t("errorRequestFallback")
                         )}
                       </span>
                     )}

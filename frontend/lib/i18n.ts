@@ -592,6 +592,8 @@ const enMessages = {
     "The voice service result could not be downloaded.",
   errorTtsOutcomeUnknown: "The voice reply finished without a known result.",
   errorTtsProviderError: "The voice service could not complete the reply.",
+  errorChatCancelled: "This reply was stopped.",
+  errorChatInterrupted: "This reply was interrupted before it finished.",
   wave3Title: "Interaction",
   wave3BackToPlayback: "Back",
   interactionTitleClosed: "Classroom interaction",
@@ -1307,6 +1309,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorTtsResultDownloadFailed: "无法下载语音服务的结果。",
   errorTtsOutcomeUnknown: "语音回复结束时没有得到明确结果。",
   errorTtsProviderError: "语音服务无法完成这条回复。",
+  errorChatCancelled: "这条回复已停止。",
+  errorChatInterrupted: "这条回复在完成前被中断。",
   wave3Title: "课堂互动",
   wave3BackToPlayback: "返回",
   interactionTitleClosed: "课堂互动",
@@ -1713,6 +1717,8 @@ const errorCodeKeys: Record<string, MessageKey> = {
   tts_result_download_failed: "errorTtsResultDownloadFailed",
   tts_outcome_unknown: "errorTtsOutcomeUnknown",
   tts_provider_error: "errorTtsProviderError",
+  chat_cancelled: "errorChatCancelled",
+  chat_interrupted: "errorChatInterrupted",
 };
 
 /**

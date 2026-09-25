@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -103,6 +104,12 @@ beforeEach(() => {
       voiceProfileId: null,
       contentType: null,
       ttsErrorCode: null,
+    }),
+    conversation: vi.fn(async (id: string) => {
+      const history = await state.api.conversations();
+      const match = history.find((item: { id: string }) => item.id === id);
+      if (!match) throw new Error("missing conversation");
+      return match;
     }),
   };
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(
@@ -285,6 +292,109 @@ describe("chat voice bars", () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it("refetches a conversation after switching back and sends the current revision", async () => {
+    let signal: AbortSignal | undefined;
+    state.api.streamConversation.mockImplementation(
+      (_id: string, _body: unknown, hooks: { signal?: AbortSignal }) => {
+        signal = hooks.signal;
+        return new Promise(() => undefined);
+      },
+    );
+    const stopped = {
+      ...older,
+      revision: 2,
+      turns: [
+        ...older.turns,
+        {
+          id: "mid-reply",
+          user_text: "Mid reply",
+          assistant_text: null,
+          mode: "mock",
+          state: "failed",
+          sources: [],
+          safe_error_code: "chat_cancelled",
+          audio_url: null,
+          audio_duration_ms: null,
+        },
+      ],
+    };
+    state.api.conversation.mockImplementation(async (id: string) =>
+      id === older.id ? stopped : newer,
+    );
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    fireEvent.change(await screen.findByRole("textbox", { name: "Message" }), {
+      target: { value: "Mid reply" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Mid reply");
+    expect(state.api.streamConversation).toHaveBeenCalledWith(
+      older.id,
+      expect.objectContaining({
+        message: "Mid reply",
+        expected_revision: 1,
+      }),
+      expect.anything(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Newer question" }));
+    expect(signal?.aborted).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Older question" }));
+    expect(
+      await screen.findByText(messages.en.errorChatCancelled),
+    ).toBeTruthy();
+    expect(screen.queryByText("chat_cancelled")).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+      target: { value: "After return" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(state.api.streamConversation).toHaveBeenLastCalledWith(
+        older.id,
+        expect.objectContaining({
+          message: "After return",
+          expected_revision: 2,
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("shows a translated interruption instead of the raw code", async () => {
+    state.api.conversations.mockResolvedValue([
+      {
+        id: "stopped",
+        agent,
+        revision: 2,
+        created_at: "2026-09-22T00:00:00Z",
+        turns: [
+          {
+            id: "stopped-turn",
+            user_text: "Stopped question",
+            assistant_text: null,
+            mode: "mock",
+            state: "failed",
+            sources: [],
+            safe_error_code: "chat_interrupted",
+            audio_url: null,
+            audio_duration_ms: null,
+          },
+        ],
+      },
+    ]);
+    render(
+      <LocaleProvider initialLocale="zh">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    expect(
+      await screen.findByText(messages.zh.errorChatInterrupted),
+    ).toBeTruthy();
+    expect(screen.queryByText("chat_interrupted")).toBeNull();
+  });
+
   it("shows a translated TTS failure instead of the raw code", async () => {
     state.api.conversations.mockResolvedValue([]);
     state.api.createConversation.mockResolvedValue({
@@ -351,6 +461,8 @@ describe("TTS error copy", () => {
       ["tts_result_download_failed", "errorTtsResultDownloadFailed"],
       ["tts_outcome_unknown", "errorTtsOutcomeUnknown"],
       ["tts_provider_error", "errorTtsProviderError"],
+      ["chat_cancelled", "errorChatCancelled"],
+      ["chat_interrupted", "errorChatInterrupted"],
     ] as const) {
       expect(localizeError({ code, status: 502 }, "en")).toBe(messages.en[key]);
       expect(localizeError({ code, status: 502 }, "zh")).toBe(messages.zh[key]);
