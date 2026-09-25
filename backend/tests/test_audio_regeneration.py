@@ -38,9 +38,21 @@ class _LanguageMock(MockTTSProvider):
         super().__init__()
         self.languages: list[str] = []
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en"):
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ):
         self.languages.append(language)
-        return super().synthesize(text, external_voice_id, language=language)
+        return super().synthesize(
+            text,
+            external_voice_id,
+            language=language,
+            target_model_key=target_model_key,
+        )
 
 
 @pytest.fixture

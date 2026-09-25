@@ -225,8 +225,15 @@ class _RecordingTTS:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str]] = []
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
-        self.calls.append((text, external_voice_id, language))
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        self.calls.append((text, external_voice_id, language, target_model_key))
         return TTSResult(audio_bytes=_wav(1), content_type="audio/wav", request_id="tts-once")
 
 
@@ -442,8 +449,15 @@ def test_tts_releases_chat_lock_before_synthesize(
     seen: list[str | None] = []
 
     class _LockProbe:
-        def synthesize(self, text: str, external_voice_id: str, language: str = "zh") -> TTSResult:
-            del text, external_voice_id, language
+        def synthesize(
+            self,
+            text: str,
+            external_voice_id: str,
+            language: str = "zh",
+            *,
+            target_model_key: str | None = None,
+        ) -> TTSResult:
+            del text, external_voice_id, language, target_model_key
             with database.session() as session:
                 row = session.get(Conversation, conversation_id)
                 assert row is not None

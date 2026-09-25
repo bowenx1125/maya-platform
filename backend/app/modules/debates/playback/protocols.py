@@ -47,6 +47,7 @@ class ResolvedTurnVoice:
     kind: str
     profile_id: str | None
     voice_token: str
+    target_model_key: str | None = None
 
 
 @dataclass(frozen=True)

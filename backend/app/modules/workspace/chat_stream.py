@@ -273,7 +273,7 @@ async def _tts_events(
     voice = await asyncio.to_thread(_voice_segment, database, settings, conversation_id)
     if voice is None:
         return
-    profile_id, external_id = voice
+    profile_id, external_id, target_model_key = voice
     if not external_id:
         yield sse("error", {"request_id": request_id, "safe_error_code": "tts_voice_unavailable"})
         return
@@ -286,6 +286,7 @@ async def _tts_events(
             reply,
             external_id,
             lang,
+            target_model_key,
         )
     except Exception as exc:
         code = exc.safe_code if isinstance(exc, TTSProviderError) else "tts_failed"
@@ -314,7 +315,7 @@ def _voice_segment(
     database: Database,
     settings: Settings,
     conversation_id: str,
-) -> tuple[str, str | None] | None:
+) -> tuple[str, str | None, str | None] | None:
     with _segment(database, settings) as db:
         row = db.get(Conversation, conversation_id)
         if row is None:
@@ -326,10 +327,8 @@ def _voice_segment(
         # edited, so an operator map is the next choice, then the system
         # fallback. A bound voice that is not ready stays an error.
         if version.voice_profile_id:
-            return (
-                version.voice_profile_id,
-                ready_chat_voice(db, version.voice_profile_id, settings),
-            )
+            external_id, target_model_key = _ready_voice(db, version.voice_profile_id, settings)
+            return version.voice_profile_id, external_id, target_model_key
         agent = db.get(Agent, version.agent_id)
         group_id = agent.group_id if agent is not None else None
         configured = baseline_configured_voice_id(settings, version.agent_id)
@@ -354,10 +353,25 @@ def _voice_segment(
                 allowed = profile.scope == "system" and profile.group_id is None
             if not allowed:
                 continue
-            external_id = ready_chat_voice(db, profile_id, settings)
+            external_id, target_model_key = _ready_voice(db, profile_id, settings)
             if external_id:
-                return profile_id, external_id
+                return profile_id, external_id, target_model_key
         return None
+
+
+def _ready_voice(db: Session, profile_id: str, settings: Settings) -> tuple[str | None, str | None]:
+    """Decrypt one ready profile and return its supplier model.
+
+    The model is the profile's own ``target_model_key``. Clone rows keep the
+    voice-clone model; a preset row names the flash snapshot that accepts
+    that published voice. A missing or undecryptable profile returns nothing.
+    """
+
+    profile = db.get(VoiceProfile, profile_id)
+    external_id = ready_chat_voice(db, profile_id, settings)
+    if profile is None or not external_id:
+        return None, None
+    return external_id, profile.target_model_key
 
 
 def _synthesize_segment(
@@ -367,11 +381,13 @@ def _synthesize_segment(
     reply: str,
     external_id: str,
     lang: str,
+    target_model_key: str | None,
 ) -> None:
     result = tts_provider(settings).synthesize(
         reply,
         external_id,
         language=tts_language(lang),
+        target_model_key=target_model_key,
     )
     if result.content_type != "audio/wav" or not result.audio_bytes:
         raise TTSProviderError("provider audio invalid", safe_code="tts_audio_invalid")

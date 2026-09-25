@@ -135,7 +135,7 @@ Socrates, Plato and Laozi are immutable (`demo_baseline_immutable` on any
 edit). Give a character a voice without writing its row:
 
 ```dotenv
-BASELINE_DEFAULT_VOICES=socrates=<voice-profile-uuid>,laozi=<voice-profile-uuid>
+BASELINE_DEFAULT_VOICES=socrates=<voice-profile-uuid>,laozi=<voice-profile-uuid>,plato=<preset-profile-uuid>
 FALLBACK_VOICE_PROFILE_ID=<system-fallback-uuid>
 ```
 
@@ -143,10 +143,38 @@ Each value is a ready voice profile id. A group profile must belong to the
 character's group. A system profile is accepted when it has no group. Omit a
 name, or point it at a profile that is missing, not ready, or in another
 group, and that character uses `FALLBACK_VOICE_PROFILE_ID`. That fallback has
-to be a ready system profile. Plato is omitted above so it speaks with that
-system voice. The ids stay in the environment; they are not compiled into the
-application. The baseline integrity check still compares the frozen Agent text
-and does not read this map.
+to be a ready system profile. The ids stay in the environment; they are not
+compiled into the application. The baseline integrity check still compares the
+frozen Agent text and does not read this map.
+
+### Plato preset voice
+
+Speech uses the voice profile's `target_model_key`. A cloned voice stays on
+`qwen3-tts-vc-2026-01-22`. That clone model rejects a published preset name,
+so a preset profile uses `qwen3-tts-flash-2025-11-27`. Those two models are
+the only ones TTS will send.
+
+Eldric Sage (沧明子, a steady wise elder, Mandarin and English) is a shared
+system profile: no group, status `ready`, provider `dashscope`, no consent
+fields. The supplier voice id is stored in the same encrypted envelope as a
+cloned id. It is not a clone. Students cannot delete it, and clone existence
+or delete calls are not made for it.
+
+Seed it once. The command is idempotent and does not call a provider:
+
+```bash
+uv run --directory backend python ../scripts/seed_preset_voice.py
+```
+
+It prints profile id `1591eac5-25cf-5eaf-9c79-d639f69d2263`. Bind Plato with
+that id, beside any clone ids already in the map:
+
+```dotenv
+BASELINE_DEFAULT_VOICES=plato=1591eac5-25cf-5eaf-9c79-d639f69d2263
+```
+
+Restart the backend after editing the environment. `SESSION_SECRET` must be
+the same secret the seed used, or the envelope cannot be decrypted.
 
 ## Local web controls
 

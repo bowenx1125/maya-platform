@@ -82,6 +82,7 @@ class TTSProvider(Protocol):
         external_voice_id: str,
         *,
         language: str = "en",
+        target_model_key: str | None = None,
     ) -> TTSResult:
         """Synthesize audio for an already-authorized internal voice mapping."""
 
@@ -126,8 +127,9 @@ class MockTTSProvider:
         external_voice_id: str,
         *,
         language: str = "en",
+        target_model_key: str | None = None,
     ) -> TTSResult:
-        del language
+        del language, target_model_key
         if self.next_error is not None:
             failure = self.next_error
             self.next_error = None

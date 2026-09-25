@@ -281,12 +281,14 @@ class PlaybackPreparationMixin(PlaybackCore):
             if isinstance(value, ResolvedTurnVoice):
                 return value
             if isinstance(value, Mapping):
+                raw_model = value.get("target_model_key")
                 return ResolvedTurnVoice(
                     kind=str(value.get("kind", "mock_sentinel")),
                     profile_id=(
                         str(value["profile_id"]) if value.get("profile_id") is not None else None
                     ),
                     voice_token=str(value.get("voice_token", "mock")),
+                    target_model_key=str(raw_model) if raw_model else None,
                 )
         return ResolvedTurnVoice(
             kind="mock_sentinel",
@@ -730,6 +732,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                         speech=prepared.speech,
                         voice_token=voice_token,
                         language=debate_output_language(debate),
+                        target_model_key=voice.target_model_key,
                     )
                 )
                 try:
@@ -750,6 +753,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                     speech=prepared.speech,
                     voice_token=voice_token,
                     language=debate_output_language(debate),
+                    target_model_key=voice.target_model_key,
                 )
                 audio = await asyncio.to_thread(synthesize)
             async with self._lock:

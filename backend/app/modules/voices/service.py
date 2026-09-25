@@ -539,6 +539,10 @@ def _reconcile_enrollment(
 ) -> bool:
     """Reconcile an ambiguous create before permitting any second charged call."""
 
+    from app.modules.voices.preset import is_preset_profile
+
+    if is_preset_profile(profile):
+        raise not_found()
     _record_reconciliation_request(db, operation)
     try:
         result = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)

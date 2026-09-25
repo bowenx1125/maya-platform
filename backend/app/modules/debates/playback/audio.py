@@ -319,14 +319,21 @@ class AudioStore:
         speech: str,
         voice_token: str,
         language: str = "en",
+        target_model_key: str | None = None,
     ) -> AudioMetadata:
         """Use the injected (Mock by default) TTS provider and atomically store WAV."""
 
         if not speech.strip():
             raise TTSProviderError("speech is empty")
         # The caller supplies a server-side kind/profile token; it never leaves
-        # the store or appears in a public DTO.
-        result = self.tts_provider.synthesize(speech, voice_token, language=language)
+        # the store or appears in a public DTO. The model is the profile's
+        # own target, so a preset is not sent to the clone model.
+        result = self.tts_provider.synthesize(
+            speech,
+            voice_token,
+            language=language,
+            target_model_key=target_model_key,
+        )
         raw = result.audio_bytes
         relative = self.relative_path(course_id, debate_id, turn_id)
         digest, size = write_atomic(self.data_root, relative, raw)
@@ -355,6 +362,7 @@ class AudioStore:
         voice_token: str,
         language: str = "en",
         operation_id: str | UUID | None = None,
+        target_model_key: str | None = None,
     ) -> StagedAudio:
         """Synthesize one WAV into a unique journal-owned staging file.
 
@@ -371,7 +379,12 @@ class AudioStore:
         path = self._non_symlink_path(relative)
         if path is None or path.exists() or path.is_symlink():
             raise TTSProviderError("audio staging path is unavailable")
-        result = self.tts_provider.synthesize(speech, voice_token, language=language)
+        result = self.tts_provider.synthesize(
+            speech,
+            voice_token,
+            language=language,
+            target_model_key=target_model_key,
+        )
         raw = result.audio_bytes
         if not isinstance(raw, bytes) or not raw:
             raise TTSProviderError("audio output is empty")

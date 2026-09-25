@@ -1069,6 +1069,7 @@ class AudioRegenerationService:
                 voice_token=voice.voice_token,
                 language=cached.output_language,
                 operation_id=claim.file_operation_id,
+                target_model_key=voice.target_model_key,
             )
             if not self.repository.mark_staged(self.db, claim, staged):
                 raise AudioRegenerationError(

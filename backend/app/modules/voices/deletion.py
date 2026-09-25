@@ -27,6 +27,7 @@ from app.modules.knowledge.services import (
     finish_idempotency,
     request_hash,
 )
+from app.modules.voices.preset import is_preset_profile
 from app.modules.voices.preview import expire_profile_previews
 from app.modules.voices.service import (
     _claim_provider_operation,
@@ -57,6 +58,8 @@ def _reconcile_delete(
 ) -> bool:
     """Reconcile an ambiguous delete before permitting its one retry."""
 
+    if is_preset_profile(profile):
+        raise not_found()
     _record_reconciliation_request(db, operation)
     try:
         result = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
@@ -118,7 +121,9 @@ def delete_voice_profile(
 
     scoped = visible_student_voice(db, context, profile_id)
     profile = scoped.profile
-    if profile.scope != "group":
+    # A preset is a published supplier name, not an enrolled clone. Students
+    # cannot delete it, and this path must not ask the clone API about it.
+    if is_preset_profile(profile) or profile.scope != "group":
         raise not_found()
     body_hash = _delete_operation_hash(context, profile_id)
     try:

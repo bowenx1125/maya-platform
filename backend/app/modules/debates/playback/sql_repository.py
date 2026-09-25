@@ -260,27 +260,35 @@ class SqlPlaybackRepository(PlaybackRepository):
     ) -> ResolvedTurnVoice:
         """Revalidate the frozen custom voice, then system fallback, then Mock."""
 
-        def ready_profile(profile_id: str | None, *, system_only: bool = False) -> bool:
+        def ready_profile(profile_id: str | None, *, system_only: bool = False) -> str | None:
             if not profile_id:
-                return False
+                return None
             scope_guard = " AND scope='system'" if system_only else ""
             row = db.execute(
                 text(
-                    "SELECT 1 FROM voice_profiles WHERE id=:profile_id AND status='ready'"
-                    + scope_guard
+                    "SELECT target_model_key FROM voice_profiles "
+                    "WHERE id=:profile_id AND status='ready'" + scope_guard
                 ),
                 {"profile_id": profile_id},
             ).first()
-            return row is not None
+            if row is None:
+                return None
+            model = row[0]
+            if not isinstance(model, str) or not model:
+                return None
+            return model
 
         frozen_id = getattr(participant, "effective_voice_profile_id", None)
-        if getattr(
-            participant, "effective_voice_kind", None
-        ) == "platform_profile" and ready_profile(frozen_id):
-            return ResolvedTurnVoice("platform_profile", str(frozen_id), str(frozen_id))
+        if getattr(participant, "effective_voice_kind", None) == "platform_profile":
+            model = ready_profile(frozen_id)
+            if model is not None:
+                return ResolvedTurnVoice("platform_profile", str(frozen_id), str(frozen_id), model)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
-        if ready_profile(fallback_id, system_only=True):
-            return ResolvedTurnVoice("platform_profile", str(fallback_id), str(fallback_id))
+        fallback_model = ready_profile(fallback_id, system_only=True)
+        if fallback_model is not None:
+            return ResolvedTurnVoice(
+                "platform_profile", str(fallback_id), str(fallback_id), fallback_model
+            )
         voice_selectors = (
             getattr(settings, "tts_provider", "mock"),
             getattr(settings, "voice_provider", "mock"),

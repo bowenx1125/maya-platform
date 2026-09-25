@@ -434,4 +434,9 @@ sends supplier language `zh` or `en` from sample language `zh-CN` or `en`.
 `DASHSCOPE_API_KEY` is rotated by editing the environment and restarting;
 voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
 profile for an immutable baseline character, and an omitted name uses
-`FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.
+`FALLBACK_VOICE_PROFILE_ID`. Speech uses that profile's allowlisted
+`target_model_key`: clones stay on `qwen3-tts-vc-2026-01-22`, and the Eldric
+Sage preset uses `qwen3-tts-flash-2025-11-27`. Seed
+`1591eac5-25cf-5eaf-9c79-d639f69d2263` with `scripts/seed_preset_voice.py` and
+set `plato=` to that id. Preset rows are not clones. This change made no
+charged provider call.

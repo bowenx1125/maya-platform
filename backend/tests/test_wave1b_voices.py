@@ -1856,8 +1856,15 @@ class _FlakyFallbackTTS:
     def __init__(self) -> None:
         self.calls = 0
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
-        del text, external_voice_id, language
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        del text, external_voice_id, language, target_model_key
         self.calls += 1
         if self.calls == 1:
             raise TTSProviderTimeout("transient preview timeout")
