@@ -106,8 +106,11 @@ beforeEach(() => {
       ttsErrorCode: null,
     }),
     conversation: vi.fn(async (id: string) => {
-      const history = await state.api.conversations();
-      const match = history.find((item: { id: string }) => item.id === id);
+      const load = state.api.conversations as unknown as () => Promise<
+        Array<{ id: string }>
+      >;
+      const history = await load();
+      const match = history.find((item) => item.id === id);
       if (!match) throw new Error("missing conversation");
       return match;
     }),
