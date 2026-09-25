@@ -170,39 +170,6 @@ def list_group_voices(
     return [voice_profile_dto(profile) for profile in profiles]
 
 
-def baseline_configured_voice_id(settings: Settings, agent_id: str) -> str | None:
-    """The operator's voice for one immutable baseline character, if configured."""
-
-    try:
-        mapping = settings.parsed_baseline_default_voices()
-    except RuntimeError:
-        return None
-    if not mapping:
-        return None
-    from app.modules.demo_baseline.service import BASELINE_SPECS
-
-    key = next((spec.key for spec in BASELINE_SPECS if spec.agent_id == str(agent_id)), None)
-    if key is None:
-        return None
-    return mapping.get(key)
-
-
-def ready_chat_voice(db: Session, profile_id: str, settings: Settings) -> str | None:
-    """Return the decrypted external id for one ready profile.
-
-    A missing, unfinished or undecryptable profile returns None.  The caller
-    turns that into a safe TTS error and does not guess an id.
-    """
-
-    profile = db.get(VoiceProfile, profile_id)
-    if profile is None or profile.status != "ready":
-        return None
-    try:
-        return _profile_external_id(profile, settings)
-    except VoiceEncryptionError:
-        return None
-
-
 def _profile_external_id(profile: VoiceProfile, settings: Settings) -> str:
     if not profile.external_id_encrypted:
         raise VoiceEncryptionError("voice mapping unavailable")
@@ -267,31 +234,12 @@ def validate_voice_binding(
         ) from exc
 
 
-def _sample_language(value: str | None) -> tuple[str, str]:
-    """Map the upload's sample language to the DashScope enrollment code.
-
-    Omitted stays ``en`` so existing clients keep their previous request.
-    ``zh-CN`` is the chat language; the supplier field is ``zh``.
-    """
-
-    token = (value or "").strip() or "en"
-    if token == "en":
-        return "en", "en"
-    if token == "zh-CN":
-        return "zh-CN", "zh"
-    raise validation_failure(
-        "The sample language is not supported.",
-        code="voice_enrollment_failed",
-    )
-
-
 def _voice_request_hash(
     context: AuthContext,
     group_id: str,
     source_filename: str,
     source_sha256: str,
     consent_copy_version: str,
-    sample_language: str,
 ) -> str:
     return request_hash(
         "enrollVoice",
@@ -302,7 +250,6 @@ def _voice_request_hash(
             "source_sha256": source_sha256,
             "consent_accepted": True,
             "consent_copy_version": consent_copy_version,
-            "language": sample_language,
         },
     )
 
@@ -598,7 +545,6 @@ def enroll_voice(
     consent_accepted: bool,
     consent_copy_version: str | None,
     idempotency_key: str,
-    language: str | None = None,
     provider: VoiceCloneProvider | None = None,
 ) -> VoiceProfileResponse | Any:
     """Validate, normalize and enroll one temporary upload."""
@@ -609,11 +555,6 @@ def enroll_voice(
             "Voice enrollment requires consent.", code="voice_enrollment_failed"
         )
     copy_version = (consent_copy_version or CONSENT_COPY_VERSION).strip() or CONSENT_COPY_VERSION
-    try:
-        sample_language, provider_language = _sample_language(language)
-    except PlatformError:
-        upload.cleanup()
-        raise
     try:
         provider_instance = provider or voice_provider(settings)
     except BaseException:
@@ -637,7 +578,6 @@ def enroll_voice(
         upload.source_filename,
         upload.sha256,
         copy_version,
-        sample_language,
     )
     try:
         record, replay = claim_idempotency(
@@ -766,7 +706,7 @@ def enroll_voice(
                 data_uri,
                 recovery_name=profile.recovery_name,
                 target_model_key=profile.target_model_key,
-                language=provider_language,
+                language="en",
             )
         except VoiceProviderTimeout as exc:
             profile.status = "outcome_unknown"

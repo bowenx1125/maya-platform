@@ -86,7 +86,6 @@ class MockVoiceCloneProvider:
         self.enroll_calls = 0
         self.exists_calls = 0
         self.delete_calls = 0
-        self.last_language = "en"
         self.next_enroll_error: VoiceProviderError | None = None
         self.next_exists_error: VoiceProviderError | None = None
         self.next_delete_error: VoiceProviderError | None = None
@@ -100,8 +99,7 @@ class MockVoiceCloneProvider:
         language: str = "en",
         transcript: str | None = None,
     ) -> VoiceEnrollmentResult:
-        self.last_language = language
-        del transcript
+        del language, transcript
         with self._lock:
             self.enroll_calls += 1
             failure = self.next_enroll_error

@@ -561,12 +561,6 @@ def create_app(
                         # business-validation 422 keep that response in the
                         # generated server contract.
                         operation_id = operation.get("operationId")
-                        if operation_id == "streamConversationMessage":
-                            content = (
-                                operation.get("responses", {}).get("200", {}).get("content", {})
-                            )
-                            if isinstance(content, dict):
-                                content.pop("application/json", None)
                         if operation_id == "streamRetainedTurnAudio":
                             for parameter in operation.get("parameters", []):
                                 if not isinstance(parameter, dict):

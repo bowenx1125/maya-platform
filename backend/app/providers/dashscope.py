@@ -512,52 +512,6 @@ class SupplierAudioDownloader:
         raise last_error or TTSResultDownloadError("supplier audio unavailable")
 
 
-# Qwen VC writes a finished WAV whose RIFF and data sizes stay near 2**31.
-# A real download is capped at 20 MiB, so a declared size of at least 1 GiB
-# cannot be a length — it is that placeholder. A merely truncated file keeps
-# a small declared size and must still fail the strict check.
-_STREAMED_WAV_PLACEHOLDER = 1 << 30
-# Maya speaks en/zh. DashScope names those language_type values; any other
-# code is refused so the request is not sent as the supplier's Auto default.
-_TTS_LANGUAGE_TYPES = {"en": "English", "zh": "Chinese"}
-
-
-def _finalize_streamed_wav(raw: bytes) -> bytes:
-    """Fill in RIFF/data sizes the supplier leaves as streaming placeholders.
-
-    Only a RIFF/WAVE whose earlier chunks fit, whose last chunk is ``data``,
-    and whose RIFF and data sizes are both streaming placeholders is rewritten.
-    The strict technical audio check still runs on the result.
-    """
-
-    if len(raw) < 12 or raw[:4] != b"RIFF" or raw[8:12] != b"WAVE":
-        return raw
-    riff_size = int.from_bytes(raw[4:8], "little")
-    if riff_size < _STREAMED_WAV_PLACEHOLDER:
-        return raw
-    offset = 12
-    while len(raw) - offset >= 8:
-        chunk_id = raw[offset : offset + 4]
-        chunk_size = int.from_bytes(raw[offset + 4 : offset + 8], "little")
-        body = offset + 8
-        if chunk_id == b"data":
-            remaining = len(raw) - body
-            if chunk_size < _STREAMED_WAV_PLACEHOLDER or chunk_size <= remaining:
-                return raw
-            remaining -= remaining % 2
-            if remaining <= 0:
-                return raw
-            fixed = bytearray(raw[: body + remaining])
-            fixed[offset + 4 : offset + 8] = remaining.to_bytes(4, "little")
-            fixed[4:8] = (len(fixed) - 8).to_bytes(4, "little")
-            return bytes(fixed)
-        padded = body + chunk_size + (chunk_size % 2)
-        if chunk_size >= _STREAMED_WAV_PLACEHOLDER or padded > len(raw):
-            return raw
-        offset = padded
-    return raw
-
-
 class DashScopeTTSProvider:
     """DashScope non-streaming TTS adapter with bounded result download."""
 
@@ -577,17 +531,11 @@ class DashScopeTTSProvider:
         *,
         language: str = "en",
     ) -> TTSResult:
-        language_type = _TTS_LANGUAGE_TYPES.get(language)
-        if language_type is None:
-            raise TTSProviderError("unsupported language")
         payload = {
             "model": self.target_model_key,
-            "input": {
-                "text": text,
-                "voice": external_voice_id,
-                "language_type": language_type,
-            },
+            "input": {"text": text, "voice": external_voice_id},
         }
+        del language
         # Validate region/workspace before constructing a client or crossing
         # the provider boundary.  The reviewed contract selects the Beijing
         # workspace endpoint rather than relying on a shared host/header.
@@ -609,7 +557,7 @@ class DashScopeTTSProvider:
         audio_url = audio.get("url") if isinstance(audio, dict) else None
         if not isinstance(audio_url, str) or not audio_url:
             raise TTSResponseInvalidError("provider response invalid")
-        raw = _finalize_streamed_wav(self.downloader.download(audio_url))
+        raw = self.downloader.download(audio_url)
         try:
             validate_technical_audio(raw)
         except AudioValidationError as exc:

@@ -50,10 +50,7 @@ describe("M08 voice library", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(
-      (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 
     const input = screen.getByLabelText(
       "Voice sample file",
@@ -70,63 +67,6 @@ describe("M08 voice library", () => {
     expect(screen.queryByLabelText("Voice sample file")).toBeNull();
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
     expect(api.enrollVoice).not.toHaveBeenCalled();
-  });
-
-  it("enrolls with the selected sample language and shows the voice id", async () => {
-    const created = {
-      id: "voice-new",
-      scope: "group",
-      group_id: "group-a",
-      status: "enrolling",
-      source_filename: "sample.wav",
-      safe_error_code: null,
-      created_at: "2026-01-01T00:00:00Z",
-    };
-    let enrolled = false;
-    api.voiceProfiles.mockImplementation(async () =>
-      enrolled ? [created] : [],
-    );
-    api.enrollVoice.mockImplementation(async () => {
-      enrolled = true;
-      return created;
-    });
-    render(
-      <AppShell role="student">
-        <VoiceLibrary groupId="group-a" />
-      </AppShell>,
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const input = screen.getByLabelText(
-      "Voice sample file",
-    ) as HTMLInputElement;
-    fireEvent.change(input, {
-      target: {
-        files: [
-          new File([new Uint8Array([1, 2, 3])], "sample.wav", {
-            type: "audio/wav",
-          }),
-        ],
-      },
-    });
-    fireEvent.change(screen.getByLabelText("Sample language"), {
-      target: { value: "zh-CN" },
-    });
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(api.enrollVoice).toHaveBeenCalledWith(
-        "group-a",
-        expect.any(File),
-        "voice-consent-v1",
-        expect.objectContaining({ language: "zh-CN" }),
-      ),
-    );
-    expect(await screen.findByText("voice-new")).toBeTruthy();
   });
 
   it("shows a platform preview URL and only confirms after preview", async () => {

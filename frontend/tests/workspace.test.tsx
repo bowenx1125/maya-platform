@@ -82,12 +82,6 @@ beforeEach(() => {
     conversations: vi.fn().mockResolvedValue([]),
     createConversation: vi.fn().mockResolvedValue(conversation),
     sendConversation: vi.fn().mockResolvedValue(completedConversation),
-    streamConversation: vi.fn().mockResolvedValue({
-      session: completedConversation,
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
-    }),
     conversation: vi.fn().mockResolvedValue(conversation),
     deleteConversation: vi.fn().mockResolvedValue(undefined),
     providerSettings: vi.fn().mockResolvedValue(settings),
@@ -166,25 +160,19 @@ describe("private Agent chat", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
-    const first = (await state.api.streamConversation.mock.results[0].value)
-      .session;
-    state.api.streamConversation.mockResolvedValue({
-      session: {
-        ...first,
-        revision: 2,
-        turns: [
-          ...first.turns,
-          {
-            ...first.turns[0],
-            id: "second",
-            user_text: "Why?",
-            assistant_text: "Following the earlier reply",
-          },
-        ],
-      },
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
+    const first = await state.api.sendConversation.mock.results[0].value;
+    state.api.sendConversation.mockResolvedValue({
+      ...first,
+      revision: 2,
+      turns: [
+        ...first.turns,
+        {
+          ...first.turns[0],
+          id: "second",
+          user_text: "Why?",
+          assistant_text: "Following the earlier reply",
+        },
+      ],
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Why?" },
@@ -193,7 +181,7 @@ describe("private Agent chat", () => {
     await screen.findByText("Following the earlier reply");
     expect(screen.getByText("A considered reply")).toBeTruthy();
     expect(
-      state.api.streamConversation.mock.calls.map(
+      state.api.sendConversation.mock.calls.map(
         (call) => call[1].expected_revision,
       ),
     ).toEqual([0, 1]);
@@ -207,12 +195,6 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByTestId("avatar");
-    fireEvent.error(document.querySelector("audio") as HTMLAudioElement);
-    expect(
-      document
-        .querySelector("[data-tts-playback]")
-        ?.getAttribute("data-tts-playback"),
-    ).toBe("incomplete");
     expect(screen.getByRole("heading", { name: "Chats" }).className).toBe(
       "sr-only",
     );
@@ -222,22 +204,16 @@ describe("private Agent chat", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
     expect(state.api.createConversation).toHaveBeenCalledWith("version");
-    expect(state.api.streamConversation).toHaveBeenCalledWith(
+    expect(state.api.sendConversation).toHaveBeenCalledWith(
       "conversation",
-      expect.objectContaining({
-        message: "Hello",
-        expected_revision: 0,
-        lang: "en",
-      }),
-      expect.objectContaining({ onTextDone: expect.any(Function) }),
+      expect.objectContaining({ message: "Hello", expected_revision: 0 }),
     );
     expect(
       (screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement)
         .value,
     ).toBe("");
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
-    const saved = (await state.api.streamConversation.mock.results[0].value)
-      .session;
+    const saved = await state.api.sendConversation.mock.results[0].value;
     state.api.conversations.mockResolvedValue([saved]);
     view.unmount();
     render(
@@ -246,15 +222,15 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByText("A considered reply");
-    expect(state.api.streamConversation).toHaveBeenCalledTimes(1);
+    expect(state.api.sendConversation).toHaveBeenCalledTimes(1);
     expect(state.api.conversations).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("button", { name: "Voice" })).toBeNull();
   });
 
   it("reuses an uncertain request ID instead of creating a second paid request", async () => {
     state.api.conversations.mockResolvedValue([completedConversation]);
-    state.api.streamConversation.mockClear();
-    state.api.streamConversation.mockRejectedValueOnce(
+    state.api.sendConversation.mockClear();
+    state.api.sendConversation.mockRejectedValueOnce(
       new Error("Network unavailable"),
     );
     render(
@@ -270,8 +246,8 @@ describe("private Agent chat", () => {
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
-    expect(state.api.streamConversation.mock.calls[0][1]).toEqual(
-      state.api.streamConversation.mock.calls[1][1],
+    expect(state.api.sendConversation.mock.calls[0][1]).toEqual(
+      state.api.sendConversation.mock.calls[1][1],
     );
     expect(state.api.createConversation).not.toHaveBeenCalled();
   });
@@ -279,7 +255,7 @@ describe("private Agent chat", () => {
   it("moves the draft into the transcript immediately and keeps the icon inside the composer", async () => {
     let resolve!: (value: unknown) => void;
     const saved = completedConversation;
-    state.api.streamConversation.mockReturnValue(
+    state.api.sendConversation.mockReturnValue(
       new Promise((done) => {
         resolve = done;
       }),
@@ -300,14 +276,7 @@ describe("private Agent chat", () => {
     expect(input).toHaveProperty("value", "");
     expect(within(screen.getByRole("log")).getByText("Hello")).toBeTruthy();
     expect(button).toHaveProperty("disabled", true);
-    await act(async () =>
-      resolve({
-        session: saved,
-        audioUrl: null,
-        voiceProfileId: null,
-        contentType: null,
-      }),
-    );
+    await act(async () => resolve(saved));
     expect(within(screen.getByRole("log")).getAllByText("Hello")).toHaveLength(
       1,
     );
@@ -320,7 +289,7 @@ describe("private Agent chat", () => {
       { ...saved, agent: { ...agent, available: false } },
     ]);
     state.api.chatAgents.mockResolvedValue([]);
-    state.api.streamConversation.mockClear();
+    state.api.sendConversation.mockClear();
     render(
       <LocaleProvider initialLocale="en">
         <AgentChat />
@@ -335,7 +304,7 @@ describe("private Agent chat", () => {
       "disabled",
       true,
     );
-    expect(state.api.streamConversation).not.toHaveBeenCalled();
+    expect(state.api.sendConversation).not.toHaveBeenCalled();
   });
 });
 

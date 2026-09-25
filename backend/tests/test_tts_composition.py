@@ -145,35 +145,28 @@ def test_tts_dashscope_requires_beijing_credentials(
         settings.validate_provider_configuration()
 
 
-def test_tts_and_voice_share_the_configured_dashscope_key(tmp_path: Path) -> None:
-    """Voice clone is allowed beside TTS when both read the one server key."""
-
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("llm_provider", "dashscope"),
+        ("voice_provider", "dashscope"),
+    ],
+)
+def test_other_non_mock_selectors_remain_fail_closed(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
     settings = _settings(
         tmp_path,
         tts_provider="dashscope",
-        voice_provider="dashscope",
         dashscope_api_key="fixture-key",
         dashscope_workspace_id="workspace123",
         dashscope_region="cn-beijing",
     )
-    settings.validate_provider_configuration()
-
-
-def test_llm_beside_tts_still_requires_its_policy_hash(tmp_path: Path) -> None:
-    settings = _settings(
-        tmp_path,
-        tts_provider="dashscope",
-        llm_provider="dashscope",
-        dashscope_api_key="fixture-key",
-        dashscope_workspace_id="workspace123",
-        dashscope_region="cn-beijing",
-    )
-    settings.validate_provider_configuration()
-    cleared = settings.model_copy(
-        update={"provider_policy_hash": None, "llm_provider_policy_hash": None}
-    )
-    with pytest.raises(RuntimeError, match="LLM_PROVIDER_POLICY_HASH"):
-        cleared.validate_provider_configuration()
+    object.__setattr__(settings, field, value)
+    with pytest.raises(RuntimeError):
+        settings.validate_provider_configuration()
 
 
 def test_main_calls_factory_once_and_injects_same_identity(

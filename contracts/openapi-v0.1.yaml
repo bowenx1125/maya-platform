@@ -254,77 +254,6 @@ paths:
       summary: Send Message
       tags:
       - Chat
-  /conversations/{conversation_id}/messages:stream:
-    post:
-      operationId: streamConversationMessage
-      parameters:
-      - in: path
-        name: conversation_id
-        required: true
-        schema:
-          format: uuid
-          title: Conversation Id
-          type: string
-      - in: header
-        name: Accept
-        required: true
-        schema:
-          title: Accept
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StreamChat'
-        required: true
-      responses:
-        '200':
-          content:
-            text/event-stream:
-              schema:
-                type: string
-          description: Successful Response
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Bad Request
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Not Found
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Conflict
-        '503':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Service Unavailable
-      security:
-      - sessionCookie: []
-      summary: Stream Message
-      tags:
-      - Chat
   /courses/{course_id}/chat-agents:
     get:
       operationId: listChatAgents
@@ -1535,7 +1464,6 @@ paths:
                 file: { type: string, format: binary }
                 consent_accepted: { type: boolean, const: true }
                 consent_copy_version: { type: string }
-                language: { type: string, enum: [en, zh-CN] }
       responses:
         "202":
           description: Enrollment job accepted; temporary samples will be deleted.
@@ -3218,32 +3146,6 @@ components:
       - expected_revision
       - message
       title: SendChat
-      type: object
-    StreamChat:
-      additionalProperties: false
-      properties:
-        expected_revision:
-          minimum: 0.0
-          title: Expected Revision
-          type: integer
-        lang:
-          minLength: 1
-          title: Lang
-          type: string
-        message:
-          minLength: 1
-          title: Message
-          type: string
-        request_id:
-          format: uuid
-          title: Request Id
-          type: string
-      required:
-      - request_id
-      - expected_revision
-      - message
-      - lang
-      title: StreamChat
       type: object
     UpdateProviderSettings:
       additionalProperties: false

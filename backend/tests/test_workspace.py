@@ -347,31 +347,6 @@ def test_provider_controls_are_teacher_only_and_key_is_encrypted(workspace: Any)
     )
 
 
-def test_environment_dashscope_key_wins_over_saved_dialog_key(workspace: Any) -> None:
-    app, database, client = workspace
-    _, csrf = login(client)
-    url = f"/api/v1/courses/{COURSE_ID}/provider-settings"
-    saved_key = "saved-dialog-key-not-real"
-    saved = client.post(
-        url, headers={"X-CSRF-Token": csrf}, json={"expected_revision": 0, "api_key": saved_key}
-    )
-    assert saved.status_code == 200, saved.text
-    rotated = "rotated-env-key-not-real"
-    app.state.base_settings = app.state.base_settings.model_copy(
-        update={"dashscope_api_key": rotated}
-    )
-    with database.session() as db:
-        row = db.get(ProviderPreferences, 1)
-        assert row is not None
-        effective = preferences_settings(app.state.base_settings, row)
-        stored = row.encrypted_key or ""
-    assert effective.dashscope_api_key == rotated
-    assert saved_key not in stored
-    assert rotated not in stored
-    assert saved_key not in saved.text
-    assert rotated not in saved.text
-
-
 def test_provider_refresh_and_mock_check_never_make_a_paid_call(workspace: Any) -> None:
     _, database, client = workspace
     _, csrf = login(client)

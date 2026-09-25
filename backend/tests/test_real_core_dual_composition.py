@@ -123,23 +123,17 @@ def test_legacy_hash_is_rejected_when_two_real_slices_are_selected(tmp_path: Pat
         settings.validate_provider_configuration()
 
 
-def test_dual_pair_shares_one_dashscope_key_with_tts_and_voice(tmp_path: Path) -> None:
-    """TASK-20260924-001A: TTS and voice clone use the LLM key, not a second secret.
-
-    The previous gate rejected those companions.  The approved scheme admits
-    them beside the dual pair when DASHSCOPE_API_KEY is the only credential.
-    """
-
-    settings = _dual(tmp_path, tts_provider="dashscope", voice_provider="dashscope")
-    settings.validate_provider_configuration()
-    missing = _dual(
-        tmp_path,
-        tts_provider="dashscope",
-        voice_provider="dashscope",
-        **{"dashscope_" + "api_key": "  "},
-    )
-    with pytest.raises(RuntimeError, match="DASHSCOPE_API_KEY"):
-        missing.validate_provider_configuration()
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("tts_provider", "dashscope"),
+        ("voice_provider", "dashscope"),
+    ),
+)
+def test_dual_pair_rejects_real_companions(tmp_path: Path, field: str, value: str) -> None:
+    settings = _dual(tmp_path, **{field: value})
+    with pytest.raises(RuntimeError, match="provider gate"):
+        settings.validate_provider_configuration()
 
 
 def test_dual_demo_caps_llm_and_query_requests(tmp_path: Path) -> None:

@@ -1,10 +1,9 @@
 # Turning on the real providers
 
-The Demo ships in Mock mode. `LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
-`EMBEDDING_PROVIDER` can run against DashScope. `TTS_PROVIDER` and
-`VOICE_PROVIDER` stay `mock` unless set to `dashscope`, and then they use the
-same `DASHSCOPE_API_KEY` as those slices. There is no separate speech key.
-The teacher Components switch still leaves TTS and Voice deferred.
+The Demo ships in Mock mode. Three selectors can run against DashScope:
+`LLM_PROVIDER`, `MAYA_REPORT_PROVIDER` and
+`EMBEDDING_PROVIDER`. `TTS_PROVIDER` and `VOICE_PROVIDER` stay `mock` for the
+Demo.
 
 ## A reviewed policy snapshot is required first
 
@@ -93,11 +92,7 @@ policy fails before it reaches the database.
 
 ## Then
 
-1. Set the three selectors to `dashscope` in `.env`. Optionally set
-   `TTS_PROVIDER=dashscope` and `VOICE_PROVIDER=dashscope` as well; they use the
-   same `DASHSCOPE_API_KEY` and there is no separate speech key. Leave them
-   `mock` when speech is not needed. The teacher Components switch still leaves
-   TTS and Voice deferred.
+1. Set the three selectors to `dashscope` in `.env`.
 2. `docker compose up -d` and confirm the composition strip reports `REAL` for
    Embedding, Debate LLM and Maya Report.
 3. Publish a new Agent version with a real knowledge snapshot, then create a
@@ -107,46 +102,6 @@ policy fails before it reaches the database.
 
 Seeded Agents keep Mock embedding identity by design. A real Snapshot embedding
 belongs to an Agent a student publishes, never to a seeded one.
-
-## Rotating `DASHSCOPE_API_KEY`
-
-LLM, Embedding, Report, TTS and voice clone share one server-side key. A cloned
-voice belongs to the Alibaba Cloud workspace (`DASHSCOPE_WORKSPACE_ID` in
-`cn-beijing`), not to the key. The voice row stores an encrypted supplier
-voice id. The encryption key is derived from `SESSION_SECRET`. The API key is
-not stored on the profile, not hashed into it, and is not returned by the API.
-
-To rotate:
-
-1. Put the new key in `DASHSCOPE_API_KEY`. Leave `DASHSCOPE_WORKSPACE_ID`,
-   `DASHSCOPE_REGION` and `SESSION_SECRET` unchanged. Changing the secret makes
-   existing voice envelopes undecryptable. Changing the workspace strands the
-   cloned voices.
-2. Restart the backend. The process reads the key from the environment at
-   startup. There is no migration.
-3. When `DASHSCOPE_API_KEY` is set, it wins over a key previously saved in the
-   teacher Components dialog. That saved key is used only while the environment
-   variable is empty. The dialog still encrypts what it stores and never
-   returns the value. Logs must not contain the key.
-
-## Baseline character voices
-
-Socrates, Plato and Laozi are immutable (`demo_baseline_immutable` on any
-edit). Give a character a voice without writing its row:
-
-```dotenv
-BASELINE_DEFAULT_VOICES=socrates=<voice-profile-uuid>,laozi=<voice-profile-uuid>
-FALLBACK_VOICE_PROFILE_ID=<system-fallback-uuid>
-```
-
-Each value is a ready voice profile id. A group profile must belong to the
-character's group. A system profile is accepted when it has no group. Omit a
-name, or point it at a profile that is missing, not ready, or in another
-group, and that character uses `FALLBACK_VOICE_PROFILE_ID`. That fallback has
-to be a ready system profile. Plato is omitted above so it speaks with that
-system voice. The ids stay in the environment; they are not compiled into the
-application. The baseline integrity check still compares the frozen Agent text
-and does not read this map.
 
 ## Local web controls
 
