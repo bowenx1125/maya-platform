@@ -46,6 +46,7 @@ export function RulesetEditor({
     <SectionCard
       title="Debate Ruleset"
       className={`${styles.card} ${sectionStyles.section}`}
+      guide="debate.ruleset"
       action={
         <div className={styles.actions}>
           <div
@@ -71,7 +72,7 @@ export function RulesetEditor({
               className={`${styles.action} ${styles.iconAction}`}
               disabled={disabled}
               aria-label="Save"
-              title="Save"
+              data-ui-guide="debate.rulesetSave"
               onClick={save}
             >
               <IconCheck />
@@ -82,7 +83,7 @@ export function RulesetEditor({
               className={`${styles.action} ${styles.iconAction}`}
               disabled={disabled}
               aria-label="Edit"
-              title="Edit"
+              data-ui-guide="debate.rulesetEdit"
               onClick={() => {
                 setDraft({ ...prompts });
                 setMode("edit");

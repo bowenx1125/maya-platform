@@ -444,3 +444,9 @@ sends supplier language `zh` or `en` from sample language `zh-CN` or `en`.
 voice rows do not store the key. `BASELINE_DEFAULT_VOICES` selects a ready
 profile for an immutable baseline character, and an omitted name uses
 `FALLBACK_VOICE_PROFILE_ID`. This change made no charged provider call.
+
+## Workspace UI/import — September 27, 2026
+
+Bilingual cursor/focus/touch help covers workspace and Debate actions; unit tests
+pass. PDF/Word import is deferred: Markdown-only uploads remain, and bounded
+extraction/OCR is not implemented.

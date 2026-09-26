@@ -523,6 +523,7 @@ export function TeacherDebateCreate({
           <SectionCard
             title={copy(t, "debateTopic")}
             className={`${styles.topicCard} ${sectionStyles.section}`}
+            guide="debate.topic"
           >
             <div>
               <textarea
@@ -556,6 +557,7 @@ export function TeacherDebateCreate({
           <SectionCard
             title="Background"
             className={`${styles.topicCard} ${sectionStyles.section}`}
+            guide="debate.background"
           >
             <textarea
               ref={backgroundInputRef}
@@ -570,7 +572,11 @@ export function TeacherDebateCreate({
           </SectionCard>
         </div>
 
-        <SectionCard className={sectionStyles.section} title="Agents Order">
+        <SectionCard
+          className={sectionStyles.section}
+          title="Agents Order"
+          guide="debate.agentOrder"
+        >
           <p className={styles.listMeta} role="status">
             {copy(t, "debateSelectCount").replace(
               "{count}",

@@ -218,7 +218,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
                 <option value="zh-CN">{t("voiceLanguageZh")}</option>
               </select>
             </label>
-            <label className={styles.consent} title={t("voiceConsent")}>
+            <label className={styles.consent} data-ui-guide="voice.consent">
               <input
                 type="checkbox"
                 aria-label={t("voiceConsent")}

@@ -210,6 +210,7 @@ export function AppShell({
                   className={`${styles.link}${faded ? ` ${styles.disabled}` : ""}`}
                   href={action.href}
                   onClick={action.onClick}
+                  data-ui-guide={`workspace.${name}`}
                   aria-disabled={faded || undefined}
                   tabIndex={faded ? -1 : undefined}
                 >
@@ -223,6 +224,7 @@ export function AppShell({
                   form={action.form}
                   disabled={faded}
                   onClick={action.onClick}
+                  data-ui-guide={`workspace.${name}`}
                 >
                   {content}
                 </button>
@@ -234,6 +236,7 @@ export function AppShell({
               className={styles.logout}
               type="button"
               disabled={busy}
+              data-ui-guide="workspace.logout"
               onClick={() => void signOut()}
             >
               <WorkspaceIcon name="logout" />

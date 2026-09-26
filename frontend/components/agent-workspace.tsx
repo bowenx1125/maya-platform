@@ -581,6 +581,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         <div className="workbench-main">
           <SectionCard
             title={t("agentMd")}
+            guide="agent.markdown"
             action={
               <div className="button-row">
                 <button
@@ -642,6 +643,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           ) : null}
           <SectionCard
             title={t("voiceBinding")}
+            guide="agent.voice"
             action={
               <Link
                 className="text-link"
@@ -675,6 +677,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           </SectionCard>
           <SectionCard
             title={t("evidenceSet")}
+            guide="agent.evidence"
             action={
               <label className="secondary-action file-button">
                 {t("uploadMarkdown")}
@@ -735,7 +738,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           </SectionCard>
         </div>
         <aside className="workbench-side">
-          <SectionCard title={t("publishChecklist")}>
+          <SectionCard title={t("publishChecklist")} guide="agent.publish">
             <div className="checklist">
               {blockers.length === 0 ? (
                 <div className="check-item check-good">
@@ -759,7 +762,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               )}
             </div>
           </SectionCard>
-          <SectionCard title={t("ragPreview")}>
+          <SectionCard title={t("ragPreview")} guide="agent.ragPreview">
             {preview ? (
               <>
                 <div className="rag-metrics">
@@ -855,7 +858,7 @@ function ReadOnlyVersion({
       type="button"
       disabled={agentMdBusy}
       aria-label={`${t("download")} AGENT.md`}
-      title={t("download")}
+      data-ui-guide="agent.download"
       onClick={() => void downloadAgentMd()}
     >
       <IconDownload />
@@ -870,6 +873,7 @@ function ReadOnlyVersion({
         <div className="workbench-main">
           <SectionCard
             title={t("agentMd")}
+            guide="agent.markdown"
             action={
               <>
                 {actions}
@@ -884,6 +888,7 @@ function ReadOnlyVersion({
           </SectionCard>
           <SectionCard
             title={t("enabledEvidence")}
+            guide="agent.evidence"
             action={
               (version.enabled_documents ?? []).length > 0 ? (
                 <button
@@ -891,7 +896,7 @@ function ReadOnlyVersion({
                   type="button"
                   disabled={agentMdBusy}
                   aria-label={t("download")}
-                  title={t("download")}
+                  data-ui-guide="agent.download"
                   onClick={() => void downloadEvidence()}
                 >
                   <IconDownload />
@@ -1043,13 +1048,14 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
 
   if (error)
     return (
-      <SectionCard title={t("knowledgeSnapshot")}>
+      <SectionCard title={t("knowledgeSnapshot")} guide="agent.snapshot">
         <ErrorNotice error={error} />
       </SectionCard>
     );
   return (
     <SectionCard
       title={t("knowledgeSnapshot")}
+      guide="agent.snapshot"
       action={
         snapshot ? (
           <button
@@ -1057,7 +1063,7 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
             type="button"
             disabled={busy}
             aria-label={`${t("download")} RAG`}
-            title={t("download")}
+            data-ui-guide="agent.download"
             onClick={() => void downloadSnapshot()}
           >
             <IconDownload />
@@ -1097,7 +1103,7 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
                   type="button"
                   disabled={busy}
                   aria-label={t("download")}
-                  title={t("download")}
+                  data-ui-guide="agent.download"
                   onClick={() => void downloadDocument(document.id)}
                 >
                   <IconDownload />

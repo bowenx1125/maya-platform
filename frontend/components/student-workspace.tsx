@@ -60,8 +60,7 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
     Boolean(agent.current_draft_version_id) &&
     agent.current_draft_version_id !== agent.current_published_version_id;
   const onlyDraft = !agent.current_published_version_id && Boolean(draft);
-  const label =
-    published?.version_label ?? draft?.version_label ?? "V1.0";
+  const label = published?.version_label ?? draft?.version_label ?? "V1.0";
   return {
     label,
     pending: hasUnpublishedWork || onlyDraft || agent.status === "archived",
@@ -311,7 +310,7 @@ function GroupAgentTile({
         data-pending={bubble.pending ? "true" : "false"}
         disabled={deleting}
         aria-label={t("deleteAgent")}
-        title={bubble.label}
+        data-ui-guide="roster.deleteAgent"
         onClick={onDelete}
       >
         <span className="agent-pill-label">{bubble.label}</span>

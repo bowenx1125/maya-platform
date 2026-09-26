@@ -172,6 +172,11 @@ describe("KnowledgeLibrary integration", () => {
       knowledge: vi.fn().mockResolvedValue([documentFixture()]),
       createLibraryKnowledge,
     });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
     fireEvent.click(await screen.findByRole("button", { name: "New" }));
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     const editor = screen.getByRole("textbox", { name: "Markdown content" });

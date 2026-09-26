@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { LocaleProvider } from "../components/locale";
 import { SessionProvider } from "../components/session-provider";
+import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 import { localeToHtmlLang } from "../lib/i18n";
 
 import "./globals.css";
@@ -23,6 +24,7 @@ export default async function RootLayout({
         <SessionProvider>
           <LocaleProvider initialLocale={initialLocale}>
             {children}
+            <UiGuideTooltip />
           </LocaleProvider>
         </SessionProvider>
       </body>

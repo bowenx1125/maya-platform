@@ -438,6 +438,7 @@ export function AgentChat() {
                         className={styles.historyDelete}
                         disabled={busy}
                         aria-label={t("deleteChat")}
+                        data-ui-guide="chat.delete"
                         onClick={(event) => {
                           event.stopPropagation();
                           void removeChat(session);
@@ -535,7 +536,10 @@ export function AgentChat() {
                 aria-label={
                   character?.available === false ? "Read-only" : "Send"
                 }
-                title={character?.available === false ? "Read-only" : "Send"}
+                data-ui-guide={
+                  character?.available === false ? "chat.readOnly" : "chat.send"
+                }
+                title={character?.available === false ? "Read-only" : undefined}
                 disabled={
                   busy ||
                   character?.available === false ||

@@ -327,7 +327,7 @@ export function RosterWorkspace() {
                       type="button"
                       disabled={busy === group.id}
                       aria-label={t("enter")}
-                      title={t("enter")}
+                      data-ui-guide="roster.openGroup"
                       onClick={() => void enterGroup(group, joined)}
                     >
                       <IconArrowRight />
