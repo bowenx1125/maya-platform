@@ -263,9 +263,12 @@ Non-login UI follows ui-ux-pro-max Minimalism and the login mood: display-serif
 section headings, warm paper cards (`#fdfaf3`), quiet type scale, original mark in
 the Mayaform navigation item. No separate brand wordmark, visible page titles or
 Refresh. Accounts keeps username/group/status; group Enter is an arrow with an
-accessible name. Logout matches sidebar link size. Components has one Check,
-skips Ready/deferred items, confirms the maximum paid calls and stops on failure.
-Mode/key changes invalidate the relevant checks. Live keeps speech history.
+accessible name. Logout matches sidebar link size. Components exposes an API Key
+entry beside Check; teachers can save the installation-wide key encrypted
+without switching provider modes or making a provider request. A server
+environment key takes priority. Check skips Ready/deferred items, confirms the
+maximum paid calls and stops on failure. Mode/key changes invalidate relevant
+checks. Live keeps speech history.
 
 Sidebar New stays registered on screens that own it and fades when disabled;
 Back and Done still appear only when that screen needs them. Chats has New,

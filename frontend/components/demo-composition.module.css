@@ -3,6 +3,11 @@
   padding-bottom: 0;
   border-bottom: 0;
 }
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
 .rows {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -45,6 +50,12 @@
 }
 .dialog h2 {
   margin: 0;
+}
+.keyHint {
+  margin: -8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 @media (max-width: 600px) {
   .rows {

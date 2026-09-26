@@ -408,7 +408,7 @@ describe("provider controls", () => {
     fireEvent.change(select, { target: { value: "real" } });
     const dialog = await screen.findByRole("dialog");
     expect(state.api.updateProviderSettings).not.toHaveBeenCalled();
-    fireEvent.change(within(dialog).getByLabelText("API Key"), {
+    fireEvent.change(within(dialog).getByLabelText("DashScope API Key"), {
       target: { value: "test-only-key" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -437,6 +437,31 @@ describe("provider controls", () => {
       (screen.getByRole("combobox", { name: "TTS mode" }) as HTMLSelectElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("saves a teacher DashScope key without switching modes or checking providers", async () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <DemoCompositionBadge />
+      </LocaleProvider>,
+    );
+    await screen.findByRole("combobox", { name: "Debate LLM mode" });
+    fireEvent.click(screen.getByRole("button", { name: "Set API Key" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("DashScope API Key"), {
+      target: { value: "teacher-owned-test-key" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(state.api.updateProviderSettings).toHaveBeenCalledWith("course", {
+        expected_revision: 0,
+        component: null,
+        mode: null,
+        api_key: "teacher-owned-test-key",
+      }),
+    );
+    expect(state.api.checkProvider).not.toHaveBeenCalled();
   });
 
   it("checks only unchecked or changed components and leaves Ready and deferred ones alone", async () => {
