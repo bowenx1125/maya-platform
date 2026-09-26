@@ -1177,7 +1177,7 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
             _provider_response({"output": {"voice": "maya123456789012-generated"}}),
         ]
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: capture)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: capture)
     config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
     voice = dashscope.DashScopeVoiceCloneProvider(config)
     enrolled = voice.enroll(
@@ -1228,11 +1228,18 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
             )
         ]
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: tts_capture)
+    tts_client_options: list[dict[str, float]] = []
+
+    def make_tts_client(**options: float) -> _CaptureDashScopeClient:
+        tts_client_options.append(options)
+        return tts_capture
+
+    monkeypatch.setattr(dashscope, "_client", make_tts_client)
     downloader = _CaptureDownloader()
     tts = dashscope.DashScopeTTSProvider(config, downloader=downloader)
     result = tts.synthesize("A new English sentence.", enrolled.external_voice_id)
     assert result.request_id == "tts-request"
+    assert tts_client_options == [{"read_timeout": dashscope.TTS_GENERATION_READ_TIMEOUT_SECONDS}]
     assert downloader.url and downloader.url.endswith("?Expires=1")
     assert tts_capture.calls[0][0] == (
         "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
@@ -1284,13 +1291,13 @@ def test_dashscope_tts_uses_frozen_safe_failure_classifications(
         json={"message": "provider details stay private"},
         request=httpx.Request("POST", "https://provider.invalid"),
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: rejected)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: rejected)
     with pytest.raises(TTSHTTPRejectedError) as rejected_error:
         dashscope.DashScopeTTSProvider(config).synthesize("A sentence.", "opaque-voice")
     assert rejected_error.value.safe_code == "tts_http_rejected"
 
     malformed = _CaptureDashScopeClient([_provider_response({"output": {}})])
-    monkeypatch.setattr(dashscope, "_client", lambda: malformed)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: malformed)
     with pytest.raises(TTSResponseInvalidError) as malformed_error:
         dashscope.DashScopeTTSProvider(config).synthesize("A sentence.", "opaque-voice")
     assert malformed_error.value.safe_code == "tts_response_invalid"
@@ -1310,7 +1317,7 @@ def test_dashscope_tts_uses_frozen_safe_failure_classifications(
             )
         ]
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: audio_capture)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: audio_capture)
     with pytest.raises(TTSAudioInvalidError) as audio_error:
         dashscope.DashScopeTTSProvider(config, downloader=invalid_audio).synthesize(
             "A sentence.", "opaque-voice"
@@ -1334,7 +1341,7 @@ def test_dashscope_tts_uses_frozen_safe_failure_classifications(
             )
         ]
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: download_capture)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: download_capture)
     with pytest.raises(TTSResultDownloadError) as download_error:
         dashscope.DashScopeTTSProvider(config, downloader=failed_download).synthesize(
             "A sentence.", "opaque-voice"
@@ -1364,7 +1371,7 @@ def test_dashscope_tts_repairs_streamed_placeholder_wav(
             )
         ]
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: capture)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: capture)
 
     class _PlaceholderDownloader:
         def download(self, value: str) -> bytes:
@@ -1393,7 +1400,7 @@ def test_dashscope_tts_still_rejects_a_truncated_wav(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         dashscope,
         "_client",
-        lambda: _CaptureDashScopeClient(
+        lambda **_options: _CaptureDashScopeClient(
             [
                 _provider_response(
                     {
@@ -1436,7 +1443,7 @@ def test_dashscope_tts_sends_chinese_and_refuses_other_languages(
             )
         ]
     )
-    monkeypatch.setattr(dashscope, "_client", lambda: capture)
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: capture)
 
     class _WavDownloader:
         def download(self, value: str) -> bytes:

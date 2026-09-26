@@ -51,6 +51,7 @@ APPROVED_RESULT_HOST_SUFFIXES = (
 OFFICIAL_HTTP_RESULT_HOSTS = frozenset({"dashscope-result-bj.oss-cn-beijing.aliyuncs.com"})
 VOICE_CUSTOMIZATION_PATH = "/api/v1/services/audio/tts/customization"
 TTS_GENERATION_PATH = "/api/v1/services/aigc/multimodal-generation/generation"
+TTS_GENERATION_READ_TIMEOUT_SECONDS = 120.0
 # Kept as a documented shared-endpoint reference for callers that need to
 # compare the provider's public API shape.  Actual TTS requests use the
 # workspace endpoint derived from ``_base_url`` below.
@@ -81,8 +82,8 @@ def _base_url(config: DashScopeConfig) -> str:
     return f"https://{workspace}.cn-beijing.maas.aliyuncs.com"
 
 
-def _client() -> httpx.Client:
-    timeout = httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0)
+def _client(*, read_timeout: float = 30.0) -> httpx.Client:
+    timeout = httpx.Timeout(connect=10.0, read=read_timeout, write=30.0, pool=10.0)
     return httpx.Client(timeout=timeout, follow_redirects=False)
 
 
@@ -593,7 +594,8 @@ class DashScopeTTSProvider:
         # workspace endpoint rather than relying on a shared host/header.
         endpoint = f"{_base_url(self.config)}{TTS_GENERATION_PATH}"
         try:
-            with _client() as client:
+            # Cloned synthesis can take longer than the generic provider read window.
+            with _client(read_timeout=TTS_GENERATION_READ_TIMEOUT_SECONDS) as client:
                 response = client.post(
                     endpoint,
                     headers={"Authorization": f"Bearer {self.config.api_key}"},

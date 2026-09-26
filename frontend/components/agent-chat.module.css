@@ -24,6 +24,15 @@
   min-height: 44px;
   font-size: 16px;
 }
+.avatarModel {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.avatarModel select {
+  color: var(--ink);
+}
 .avatar.avatar {
   min-height: 300px;
   border: 0;

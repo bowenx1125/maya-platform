@@ -22,24 +22,33 @@ import {
 
 const rendererInstances: Array<{
   dispose: ReturnType<typeof vi.fn>;
+  setAsset: ReturnType<typeof vi.fn>;
+  finishLoad: () => void;
+  failLoad: (error: Error) => void;
 }> = [];
 
 vi.mock("../components/avatar/avatar-renderer", () => ({
   AvatarRenderer: class MockAvatarRenderer {
     readonly dispose = vi.fn();
+    readonly setAsset = vi.fn();
 
     constructor(options: {
       assetUrl?: string;
       onReady?: () => void;
       onError?: (error: Error) => void;
     }) {
+      this.finishLoad = () => options.onReady?.();
+      this.failLoad = (error) => options.onError?.(error);
       rendererInstances.push(this);
       if (options.assetUrl === "/avatars/missing.glb") {
         queueMicrotask(() =>
-          options.onError?.(new Error("intentional test failure")),
+          this.failLoad(new Error("intentional test failure")),
         );
       }
     }
+
+    readonly finishLoad: () => void;
+    readonly failLoad: (error: Error) => void;
 
     setConfig(_config: AvatarConfig): void {
       return;
@@ -175,6 +184,60 @@ describe("M07 avatar editor boundary", () => {
     expect(screen.getByRole("img").getAttribute("data-avatar-state")).toBe(
       "speaking",
     );
+  });
+
+  it("switches the local asset without recreating the WebGL renderer", async () => {
+    const view = render(
+      <AvatarCanvas config={config} assetUrl="/avatars/female_1.glb" />,
+    );
+    await waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const renderer = rendererInstances[0];
+
+    view.rerender(
+      <AvatarCanvas config={config} assetUrl="/avatars/elder-scholar.glb" />,
+    );
+
+    await waitFor(() =>
+      expect(renderer.setAsset).toHaveBeenCalledWith(
+        "/avatars/elder-scholar.glb",
+      ),
+    );
+    expect(rendererInstances).toHaveLength(1);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it("shows the fallback when a replacement asset fails to load", async () => {
+    const view = render(
+      <AvatarCanvas
+        config={config}
+        assetUrl="/avatars/female_1.glb"
+        fallbackLabel="Kaikai"
+      />,
+    );
+    await waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const renderer = rendererInstances[0];
+    renderer.finishLoad();
+    const canvas = screen.getByRole("img", { name: /Kaikai/ });
+    await waitFor(() =>
+      expect(canvas.getAttribute("data-avatar-status")).toBe("ready"),
+    );
+
+    view.rerender(
+      <AvatarCanvas
+        config={config}
+        assetUrl="/avatars/missing.glb"
+        fallbackLabel="Kaikai"
+      />,
+    );
+    await waitFor(() =>
+      expect(renderer.setAsset).toHaveBeenCalledWith("/avatars/missing.glb"),
+    );
+    renderer.failLoad(new Error("replacement asset failed"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Kaikai · static preview")).toBeTruthy();
+      expect(canvas.getAttribute("data-avatar-status")).toBe("failed");
+    });
   });
 
   it("keeps preview state controlled when a parent owns it", () => {

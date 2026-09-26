@@ -230,6 +230,8 @@ export class AvatarRenderer {
   private readonly onReady?: () => void;
   private readonly onError?: (error: Error) => void;
   private root: THREE.Object3D | null = null;
+  private assetUrl: string | null = null;
+  private assetGeneration = 0;
   private config: AvatarConfig | null = null;
   private state: AvatarState = "idle";
   private animationFrame: number | null = null;
@@ -274,7 +276,7 @@ export class AvatarRenderer {
     this.loader.setDRACOLoader(this.draco);
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.resize();
-    this.load(safeLocalAssetUrl(options.assetUrl));
+    this.setAsset(options.assetUrl ?? AVATAR_ASSET_URL);
   }
 
   setConfig(config: AvatarConfig): void {
@@ -283,6 +285,47 @@ export class AvatarRenderer {
       this.applyConfig(this.root, config);
       this.applyExpression(this.root, this.expressionForState());
     }
+  }
+
+  setAsset(candidate: string): void {
+    const assetUrl = safeLocalAssetUrl(candidate);
+    if (this.disposed || assetUrl === this.assetUrl) return;
+    this.assetUrl = assetUrl;
+    const generation = ++this.assetGeneration;
+    this.loader.load(
+      assetUrl,
+      (gltf) => {
+        if (this.disposed || generation !== this.assetGeneration) {
+          disposeObject(gltf.scene);
+          return;
+        }
+        this.bodySize = null;
+        const nextRoot =
+          this.framing === "full-body"
+            ? this.prepareFullBody(gltf.scene)
+            : this.prepareHeadCrop(gltf.scene);
+        if (this.config) this.applyConfig(nextRoot, this.config);
+        this.applyExpression(nextRoot, this.expressionForState());
+        const previousRoot = this.root;
+        this.root = nextRoot;
+        this.scene.add(nextRoot);
+        if (previousRoot) {
+          this.scene.remove(previousRoot);
+          disposeObject(previousRoot);
+        }
+        this.startedAt = performance.now();
+        this.stateStartedAt = this.startedAt;
+        this.startLoop();
+        this.onReady?.();
+      },
+      undefined,
+      (cause) => {
+        if (this.disposed || generation !== this.assetGeneration) return;
+        const error =
+          cause instanceof Error ? cause : new Error("avatar_asset_failed");
+        this.onError?.(error);
+      },
+    );
   }
 
   setState(state: AvatarState): void {
@@ -295,6 +338,7 @@ export class AvatarRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.assetGeneration += 1;
     if (this.animationFrame !== null) {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
@@ -309,36 +353,6 @@ export class AvatarRenderer {
     this.renderer.setAnimationLoop(null);
     this.renderer.dispose();
     this.renderer.forceContextLoss();
-  }
-
-  private load(assetUrl: string): void {
-    this.loader.load(
-      assetUrl,
-      (gltf) => {
-        if (this.disposed) {
-          disposeObject(gltf.scene);
-          return;
-        }
-        this.root =
-          this.framing === "full-body"
-            ? this.prepareFullBody(gltf.scene)
-            : this.prepareHeadCrop(gltf.scene);
-        this.scene.add(this.root);
-        if (this.config) this.applyConfig(this.root, this.config);
-        this.applyExpression(this.root, this.expressionForState());
-        this.startedAt = performance.now();
-        this.stateStartedAt = this.startedAt;
-        this.startLoop();
-        this.onReady?.();
-      },
-      undefined,
-      (cause) => {
-        if (this.disposed) return;
-        const error =
-          cause instanceof Error ? cause : new Error("avatar_asset_failed");
-        this.onError?.(error);
-      },
-    );
   }
 
   private hideDetachedFragments(scene: THREE.Object3D): void {

@@ -56,6 +56,8 @@ export function AvatarCanvas({
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
   const tRef = useRef(t);
+  const assetUrlRef = useRef(resolvedAssetUrl);
+  const hasAsset = Boolean(resolvedAssetUrl);
   const [status, setStatus] = useState<CanvasStatus>("loading");
   const [failure, setFailure] = useState<Error | null>(null);
 
@@ -77,9 +79,13 @@ export function AvatarCanvas({
   }, [t]);
 
   useEffect(() => {
+    assetUrlRef.current = resolvedAssetUrl;
+  }, [resolvedAssetUrl]);
+
+  useEffect(() => {
     let active = true;
     const canvas = canvasRef.current;
-    if (!resolvedAssetUrl) return undefined;
+    if (!hasAsset || !assetUrlRef.current) return undefined;
     if (!canvas) return undefined;
     setStatus("loading");
     setFailure(null);
@@ -89,7 +95,7 @@ export function AvatarCanvas({
         try {
           const renderer = new AvatarRenderer({
             canvas,
-            assetUrl: resolvedAssetUrl,
+            assetUrl: assetUrlRef.current,
             framing,
             onReady: () => {
               if (!active) return;
@@ -137,7 +143,12 @@ export function AvatarCanvas({
       rendererRef.current?.dispose();
       rendererRef.current = null;
     };
-  }, [resolvedAssetUrl, framing]);
+  }, [framing, hasAsset]);
+
+  useEffect(() => {
+    if (!resolvedAssetUrl) return;
+    rendererRef.current?.setAsset(resolvedAssetUrl);
+  }, [resolvedAssetUrl]);
 
   useEffect(() => {
     if (!config || typeof config.template_id !== "string") return;

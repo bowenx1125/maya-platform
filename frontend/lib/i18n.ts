@@ -473,20 +473,16 @@ const enMessages = {
     "Hide {filename} from the group workspace? Published snapshots remain available.",
   homeWelcomeTitle: "Welcome {name}",
   homeWelcomeCourse: "You are in {course}.",
-  homeSurfaceChats:
-    "Chats — private one-to-one talks with a published Agent.",
-  homeSurfaceWorkspace:
-    "Workspace — build and publish Agents for your group.",
+  homeSurfaceChats: "Chats — private one-to-one talks with a published Agent.",
+  homeSurfaceWorkspace: "Workspace — build and publish Agents for your group.",
   homeSurfaceKnowledge:
     "Knowledge — the shared Markdown library used when drafting Agents.",
-  homeSurfaceVoice:
-    "Voice — custom voices your group can attach to Agents.",
+  homeSurfaceVoice: "Voice — custom voices your group can attach to Agents.",
   homeSurfaceLive:
     "Live — join the classroom debate when the teacher opens it.",
   homePrivacyNote:
     "A published Agent is visible to the group and the teacher. Chats are visible only to yourself. Voice is visible to the group and the teacher.",
-  homeMembersIntro:
-    "People who share this group workspace.",
+  homeMembersIntro: "People who share this group workspace.",
   draftSavedNotice: "Draft saved. Revision advanced safely.",
   agentMdUploadedNotice:
     "AGENT.md uploaded and saved as the next draft revision.",
@@ -645,6 +641,10 @@ const enMessages = {
   avatarHeadMotion: "Head motion",
   avatarPreviewState: "Preview state",
   avatarPreviewLoading: "Loading avatar preview…",
+  chatAvatarModel: "3D model",
+  chatAvatarModelClassic: "Classic",
+  chatAvatarModelElderScholar: "Elder scholar",
+  chatAvatarModelNobleScholar: "Noble scholar",
   avatarGuidance:
     "Presets share one compatible head asset; these controls change the look and motion.",
   avatarTemplateDefault: "Default",
@@ -1343,6 +1343,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   avatarHeadMotion: "头部动作",
   avatarPreviewState: "预览状态",
   avatarPreviewLoading: "正在加载形象预览…",
+  chatAvatarModel: "3D形象",
+  chatAvatarModelClassic: "经典形象",
+  chatAvatarModelElderScholar: "老学者",
+  chatAvatarModelNobleScholar: "贵族学者",
   avatarGuidance: "预设共享一个兼容的头脸资产；这些控制项会改变外观和动作。",
   avatarTemplateDefault: "默认",
   avatarTemplateWarmScholar: "学者",

@@ -253,6 +253,12 @@ conversation. Five components remain visible: LLM/Embedding/Report can switch;
 TTS/Voice stay Mock/Deferred. Student Live shares public content and retained audio,
 never controller messages or a new generation request per spectator.
 
+The checked-in Chat route can use TTS when a ready voice is configured.
+DashScope TTS reads up to 120s (generic timeout 30s); no real speech request was made. Chat's three bundled
+avatar choices persist per user and Agent. Baselines use Elder Scholar for
+Socrates/Laozi and Noble Scholar for Plato; startup updates only the exact old
+factory config. No browser acceptance was run.
+
 Non-login UI follows ui-ux-pro-max Minimalism and the login mood: display-serif
 section headings, warm paper cards (`#fdfaf3`), quiet type scale, original mark in
 the Mayaform navigation item. No separate brand wordmark, visible page titles or

@@ -12,11 +12,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   api: {} as Record<string, ReturnType<typeof vi.fn>>,
   role: "teacher",
+  userId: "test-user",
 }));
 vi.mock("../components/session-provider", () => ({
   useSession: () => ({
     api: state.api,
-    user: { courses: [{ course_id: "course", role: state.role }], groups: [] },
+    user: {
+      id: state.userId,
+      courses: [{ course_id: "course", role: state.role }],
+      groups: [],
+    },
   }),
 }));
 vi.mock("next/navigation", () => ({
@@ -24,7 +29,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));
 vi.mock("../components/avatar", () => ({
-  AvatarPreview: () => <div data-testid="avatar" />,
+  AvatarPreview: (props: { assetUrl?: string }) => (
+    <div data-testid="avatar" data-asset-url={props.assetUrl} />
+  ),
 }));
 vi.mock("../components/stage3d/scholar-scene", () => ({
   ScholarScene: () => <div data-testid="scene" />,
@@ -76,6 +83,7 @@ const settings = {
 };
 
 beforeEach(() => {
+  state.userId = `test-user-${Date.now()}-${Math.random()}`;
   state.role = "teacher";
   state.api = {
     chatAgents: vi.fn().mockResolvedValue([agent]),
@@ -249,6 +257,54 @@ describe("private Agent chat", () => {
     expect(state.api.streamConversation).toHaveBeenCalledTimes(1);
     expect(state.api.conversations).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("button", { name: "Voice" })).toBeNull();
+  });
+
+  it("selects and remembers a local model for the signed-in user and Agent", async () => {
+    const scholarAgent = {
+      ...agent,
+      avatar_config: {
+        template_id: "maya-warm-scholar",
+        material_theme: "warm_sand",
+        eye_color: "brown",
+        default_expression: "attentive",
+        expression_strength: "medium",
+        motion_style: "calm",
+      },
+    };
+    state.api.chatAgents.mockResolvedValue([scholarAgent]);
+    const userId = state.userId;
+    const view = render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+
+    await screen.findByTestId("avatar");
+    const picker = screen.getByRole("combobox", { name: "3D model" });
+    expect(screen.getByTestId("avatar").getAttribute("data-asset-url")).toBe(
+      "/avatars/elder-scholar.glb",
+    );
+    fireEvent.change(picker, { target: { value: "maya-civic-observer" } });
+    expect(screen.getByTestId("avatar").getAttribute("data-asset-url")).toBe(
+      "/avatars/noble-scholar.glb",
+    );
+    expect(
+      window.localStorage.getItem(`maya.chat-avatar.v1:${userId}:agent`),
+    ).toBe("maya-civic-observer");
+
+    view.unmount();
+    state.role = "student";
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "3D model" })).toHaveProperty(
+        "value",
+        "maya-civic-observer",
+      ),
+    );
   });
 
   it("reuses an uncertain request ID instead of creating a second paid request", async () => {
