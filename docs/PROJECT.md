@@ -306,3 +306,13 @@ during and after hover, keyboard tooltip/Escape/navigation cleanup, compact
 Knowledge actions without Ready, and Voices form with full existing consent text.
 Narrow-layout pages had no horizontal overflow. Cloud speech acceptance remains
 unverified; configuration/adapter construction is not proof of successful audio.
+
+Voices now matches Knowledge's SectionCard header/count, shared compact tile grid
+and top-right icon actions (preview/confirm/delete). Ready badges are hidden;
+processing/confirmation states, Voice IDs and preview audio remain. New replaces
+the list with the upload form; Back restores it. Empty lists omit decoration.
+Both libraries share the same card CSS. Frontend 402 passed/1 skipped, typecheck
+and lint passed (four existing warnings); no real voice request was made.
+Backed-up Docker rebuild passed readiness/schema/homepage checks. Browser verified
+the empty list and New/Back form at narrow width with no horizontal overflow;
+populated profile actions were covered by Mock tests, not real voice enrollment.

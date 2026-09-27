@@ -1,5 +1,22 @@
 /** Small outline icons for quiet workspace actions. */
 
+export function IconPlay({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m8 4 12 8-12 8Z" />
+    </svg>
+  );
+}
+
 export function IconEdit({ size = 16 }: { size?: number }) {
   return (
     <svg

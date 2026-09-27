@@ -8,7 +8,9 @@ import type { MessageKey } from "../../lib/i18n";
 import { useLocale, useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
-import { ErrorNotice, LoadingCard, StatusBadge } from "../ui";
+import { ErrorNotice, LoadingCard, SectionCard, StatusBadge } from "../ui";
+import { IconCheck, IconClose, IconPlay } from "../quiet-icons";
+import cards from "../library-cards.module.css";
 import styles from "./voice-library.module.css";
 
 const CONSENT_COPY_VERSION = "voice-consent-v1";
@@ -157,9 +159,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
 
   return (
     <div className={styles.voicePanel}>
-      <h1 className={styles.title}>
-        {t("voices")} <span className={styles.count}>· {profiles.length}</span>
-      </h1>
       <WorkspaceAction
         name="new"
         disabled={busy || creating}
@@ -174,7 +173,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
         </div>
       ) : null}
       {creating ? (
-        <section className={styles.uploadCard}>
+        <SectionCard className={styles.uploadCard}>
           <WorkspaceAction
             name="back"
             disabled={busy}
@@ -225,69 +224,78 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
             />
             <span>{t("voiceConsent")}</span>
           </label>
-        </section>
-      ) : null}
-      {profiles.length > 0 ? (
-        <section
-          className={styles.profileList}
-          aria-label={t("voiceGroupTitle")}
-        >
-          {profiles.map((profile) => (
-            <article className={styles.profile} key={profile.id}>
-              <div className={styles.profileHeader}>
-                <span className={styles.profileName}>
-                  {profile.source_filename ?? t("voiceCustom")}
+        </SectionCard>
+      ) : (
+        <SectionCard title={`${t("voices")} · ${profiles.length}`}>
+          <div className={`knowledge-tile-grid ${cards.grid}`}>
+            {profiles.map((profile) => (
+              <article
+                className={`knowledge-tile ${cards.tile}`}
+                key={profile.id}
+              >
+                <span className="document-main">
+                  <strong>{profile.source_filename ?? t("voiceCustom")}</strong>
+                  <small className={styles.profileId}>
+                    {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
+                  </small>
                 </span>
-                <StatusBadge status={profile.status} />
-              </div>
-              <p className={styles.profileId}>
-                {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
-              </p>
-              {preview[profile.id] ? (
-                <audio
-                  className={styles.audio}
-                  controls
-                  preload="none"
-                  src={preview[profile.id].url}
-                />
-              ) : null}
-              <div className={styles.actions}>
-                {profile.status === "preview_ready" ||
-                profile.status === "ready" ? (
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void makePreview(profile.id)}
-                  >
-                    {t("voicePreview")}
-                  </button>
+                <div className={`icon-action-row ${cards.actions}`}>
+                  {profile.status === "preview_ready" ||
+                  profile.status === "ready" ? (
+                    <button
+                      className="icon-action"
+                      aria-label={t("voicePreview")}
+                      data-ui-guide="voice.preview"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void makePreview(profile.id)}
+                    >
+                      <IconPlay />
+                    </button>
+                  ) : null}
+                  {profile.status === "preview_ready" ? (
+                    <button
+                      className="icon-action"
+                      aria-label={t("voiceConfirm")}
+                      data-ui-guide="voice.confirm"
+                      type="button"
+                      disabled={busy || !preview[profile.id]}
+                      onClick={() => void confirm(profile.id)}
+                    >
+                      <IconCheck />
+                    </button>
+                  ) : null}
+                  {profile.status !== "deleted" ? (
+                    <button
+                      className="icon-action icon-action-danger"
+                      aria-label={t("voiceDelete")}
+                      data-ui-guide="voice.delete"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void remove(profile.id)}
+                    >
+                      <IconClose />
+                    </button>
+                  ) : null}
+                </div>
+                {profile.status !== "ready" ? (
+                  <div className={cards.status}>
+                    <StatusBadge status={profile.status} />
+                  </div>
                 ) : null}
-                {profile.status === "preview_ready" ? (
-                  <button
-                    className="primary-action"
-                    type="button"
-                    disabled={busy || !preview[profile.id]}
-                    onClick={() => void confirm(profile.id)}
-                  >
-                    {t("voiceConfirm")}
-                  </button>
+                {preview[profile.id] ? (
+                  <audio
+                    className={styles.audio}
+                    controls
+                    preload="none"
+                    src={preview[profile.id].url}
+                  />
                 ) : null}
-                {profile.status !== "deleted" ? (
-                  <button
-                    className="text-link"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void remove(profile.id)}
-                  >
-                    {t("voiceDelete")}
-                  </button>
-                ) : null}
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
+              </article>
+            ))}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }

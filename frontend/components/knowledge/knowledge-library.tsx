@@ -26,7 +26,7 @@ import {
   type KnowledgeReplacementRequest,
 } from "./markdown-editor";
 
-import styles from "./knowledge-library.module.css";
+import styles from "../library-cards.module.css";
 
 type RetryAction =
   | { kind: "create"; file: File }
