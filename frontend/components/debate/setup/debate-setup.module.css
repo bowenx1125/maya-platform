@@ -191,6 +191,7 @@
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fdfaf3;
+  text-decoration: none;
 }
 
 .debateCard h2 {
@@ -335,6 +336,7 @@
   background: var(--surface-hover, #ededf0);
   color: var(--ink, #1d1d1f);
   box-shadow: none;
+  text-decoration: none;
 }
 
 .debateActions button:disabled {

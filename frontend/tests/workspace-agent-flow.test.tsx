@@ -144,7 +144,7 @@ describe("Workspace Agent flow", () => {
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
-  it("opens an initial draft for editing and requires confirmation to delete it", async () => {
+  it("uses sidebar New to edit an initial draft without inline Edit or Delete", async () => {
     api.agent.mockResolvedValue(
       agent({
         current_published_version_id: null,
@@ -154,26 +154,19 @@ describe("Workspace Agent flow", () => {
     api.versions.mockResolvedValue([
       version({ id: "draft-id", state: "draft" }),
     ]);
-    api.deleteAgent.mockResolvedValue(undefined);
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
+    const nav = within(screen.getByRole("navigation"));
     expect(
-      (await screen.findByRole("link", { name: "Edit" })).getAttribute("href"),
+      (await nav.findByRole("link", { name: "New" })).getAttribute("href"),
     ).toBe("/student/agent-versions/draft-id/edit");
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
     expect(api.deleteAgent).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(api.deleteAgent).toHaveBeenCalledTimes(1));
-    expect(confirm).toHaveBeenCalledTimes(2);
-    expect(router.replace).toHaveBeenCalledWith("/student/groups/group-id");
   });
 
   it("does not expose deletion for an Agent with a retained published snapshot", async () => {
@@ -196,7 +189,7 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByRole("link", { name: "Edit" });
+    await screen.findByRole("link", { name: "New" });
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 

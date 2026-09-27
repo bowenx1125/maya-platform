@@ -28,6 +28,12 @@ that existing code can reasonably replace. Keep single-use code in place;
 introduce an abstraction only for a concrete shared need. UI redesigns preserve
 existing wording unless a copy change is explicitly requested.
 
+Shared help must distinguish keyboard focus from mouse-click focus and clear on
+pointer leave, navigation, removed targets, scrolling and window blur. Keep
+keyboard dismissal and touch behavior when changing hover interactions. For
+history-row actions, date and Delete must be mutually exclusive; clicking a row
+must not pin Delete after the pointer leaves.
+
 **Match the surrounding code.** Comment density, naming, error handling and
 module layout are already consistent; follow what is next to your change
 rather than importing a different style.

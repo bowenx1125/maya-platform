@@ -128,20 +128,13 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     ) ?? versions.find((version) => version.state === "published");
   const visible = current ?? draft;
   const canDelete =
+    !visible &&
     !agent.current_published_version_id &&
     versions.every(
       (version) => version.state === "draft" && !version.knowledge_snapshot_id,
     );
   const actions = (
     <div className="button-row">
-      {draft && !current ? (
-        <Link
-          className="secondary-action"
-          href={"/student/agent-versions/" + draft.id + "/edit"}
-        >
-          {t("edit")}
-        </Link>
-      ) : null}
       {canDelete ? (
         <button
           className="text-link danger-button"
@@ -168,7 +161,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           }
         />
       ) : null}
-      {current ? (
+      {visible ? (
         <WorkspaceAction
           name="new"
           disabled={busy || agent.status === "archived"}
@@ -536,11 +529,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       />
       <div className="workbench-meta">
         <StatusBadge status="draft" />
-        {localDirty ? (
-          <span className="dirty-label" role="status">
-            {t("unsavedChanges")}
-          </span>
-        ) : null}
       </div>
       {conflict ? <DraftConflictNotice /> : null}
       {error && !conflict ? (

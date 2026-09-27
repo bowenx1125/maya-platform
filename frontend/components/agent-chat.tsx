@@ -4,10 +4,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { PlatformApiError, type ChatAgent, type ChatSession } from "../lib/api";
 import {
-  readChatAvatarPreference,
-  saveChatAvatarPreference,
-} from "../lib/chat-avatar-preferences";
-import {
   abandonChatRequest,
   beginChatRequest,
   clearSettledChatSession,
@@ -16,13 +12,6 @@ import {
   subscribeChatRequest,
 } from "../lib/chat-request-store";
 import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
-import { AvatarPreview } from "./avatar";
-import {
-  AVATAR_TEMPLATE_DEFAULT_CONFIGS,
-  CHAT_AVATAR_MODELS,
-  isChatAvatarModelId,
-  type ChatAvatarModelId,
-} from "./avatar/types";
 import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
@@ -51,9 +40,6 @@ export function AgentChat() {
   const [ttsPhase, setTtsPhase] = useState<
     "idle" | "playing" | "complete" | "incomplete"
   >("idle");
-  const [avatarModels, setAvatarModels] = useState<
-    Record<string, ChatAvatarModelId>
-  >({});
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -277,43 +263,6 @@ export function AgentChat() {
 
   const character =
     selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
-  const preferenceUserId = user?.id;
-  const avatarPreferenceKey =
-    preferenceUserId && character
-      ? `${preferenceUserId}:${character.agent_id}`
-      : null;
-  const serverModelId = character?.avatar_config.template_id;
-  const defaultModelId =
-    serverModelId && isChatAvatarModelId(serverModelId)
-      ? serverModelId
-      : "wave1-default-head";
-  const avatarModelId = avatarPreferenceKey
-    ? (avatarModels[avatarPreferenceKey] ?? defaultModelId)
-    : defaultModelId;
-  const avatarModel = CHAT_AVATAR_MODELS[avatarModelId];
-  const avatarConfig =
-    avatarModelId === serverModelId
-      ? character?.avatar_config
-      : AVATAR_TEMPLATE_DEFAULT_CONFIGS[avatarModelId];
-  const characterAgentId = character?.agent_id;
-
-  useEffect(() => {
-    if (!preferenceUserId || !characterAgentId) return;
-    const key = `${preferenceUserId}:${characterAgentId}`;
-    const saved = readChatAvatarPreference(preferenceUserId, characterAgentId);
-    if (!saved) return;
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      setAvatarModels((current) =>
-        current[key] === saved ? current : { ...current, [key]: saved },
-      );
-    });
-    return () => {
-      active = false;
-    };
-  }, [characterAgentId, preferenceUserId]);
-
   if (loading) {
     return (
       <>
@@ -364,49 +313,6 @@ export function AgentChat() {
                 </option>
               ))}
             </select>
-            {character ? (
-              <>
-                <label className={styles.avatarModel}>
-                  <span>{t("chatAvatarModel")}</span>
-                  <select
-                    aria-label={t("chatAvatarModel")}
-                    value={avatarModelId}
-                    onChange={(event) => {
-                      const modelId = event.target.value;
-                      if (!isChatAvatarModelId(modelId)) return;
-                      const key = avatarPreferenceKey;
-                      if (key && preferenceUserId) {
-                        setAvatarModels((current) => ({
-                          ...current,
-                          [key]: modelId,
-                        }));
-                        saveChatAvatarPreference(
-                          preferenceUserId,
-                          character.agent_id,
-                          modelId,
-                        );
-                      }
-                    }}
-                  >
-                    {Object.entries(CHAT_AVATAR_MODELS).map(
-                      ([modelId, model]) => (
-                        <option key={modelId} value={modelId}>
-                          {t(model.labelKey)}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </label>
-                <AvatarPreview
-                  className={styles.avatar}
-                  config={avatarConfig ?? character.avatar_config}
-                  assetUrl={avatarModel.assetUrl}
-                  framing="full-body"
-                  fallbackLabel={character.name}
-                  state={busy ? "thinking" : "idle"}
-                />
-              </>
-            ) : null}
             <div className={styles.history} aria-label="History">
               {sessions
                 .filter((session) => session.turns.length > 0)

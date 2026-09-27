@@ -48,7 +48,17 @@ describe("M08 voice library", () => {
         screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
       ).toBe(false),
     );
+    expect(screen.queryByText("Empty")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const consentCopy =
+      "I confirm this is my voice and authorize this course to create a reusable profile.";
+    expect(screen.getByText(consentCopy)).toBeTruthy();
+    expect(screen.queryByText("Consent")).toBeNull();
+    expect(
+      screen
+        .getByRole("checkbox", { name: consentCopy })
+        .closest("[data-ui-guide]"),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)

@@ -8,14 +8,7 @@ import type { MessageKey } from "../../lib/i18n";
 import { useLocale, useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
-import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-  SectionCard,
-  StatusBadge,
-} from "../ui";
+import { ErrorNotice, LoadingCard, StatusBadge } from "../ui";
 import styles from "./voice-library.module.css";
 
 const CONSENT_COPY_VERSION = "voice-consent-v1";
@@ -164,7 +157,9 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
 
   return (
     <div className={styles.voicePanel}>
-      <PageIntro title={t("voices")} />
+      <h1 className={styles.title}>
+        {t("voices")} <span className={styles.count}>· {profiles.length}</span>
+      </h1>
       <WorkspaceAction
         name="new"
         disabled={busy || creating}
@@ -179,7 +174,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
         </div>
       ) : null}
       {creating ? (
-        <SectionCard>
+        <section className={styles.uploadCard}>
           <WorkspaceAction
             name="back"
             disabled={busy}
@@ -194,16 +189,18 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
             disabled={!file || !consent || busy}
             onClick={() => void submitEnrollment()}
           />
-          <div className={styles.uploadCard}>
-            <input
-              className={styles.fileInput}
-              type="file"
-              accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              aria-label={t("voiceSampleFile")}
-            />
-            {file ? <p className={styles.hint}>{file.name}</p> : null}
-            <label>
+          <div className={styles.fields}>
+            <label className={styles.field}>
+              <span>{t("voiceSampleFile")}</span>
+              <input
+                className={styles.fileInput}
+                type="file"
+                accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                aria-label={t("voiceSampleFile")}
+              />
+            </label>
+            <label className={styles.field}>
               <span>{t("voiceSampleLanguage")}</span>
               <select
                 aria-label={t("voiceSampleLanguage")}
@@ -218,80 +215,79 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
                 <option value="zh-CN">{t("voiceLanguageZh")}</option>
               </select>
             </label>
-            <label className={styles.consent} data-ui-guide="voice.consent">
-              <input
-                type="checkbox"
-                aria-label={t("voiceConsent")}
-                checked={consent}
-                onChange={(event) => setConsent(event.target.checked)}
-              />
-              <span>{t("voiceConsentLabel")}</span>
-            </label>
           </div>
-        </SectionCard>
+          <label className={styles.consent}>
+            <input
+              type="checkbox"
+              aria-label={t("voiceConsent")}
+              checked={consent}
+              onChange={(event) => setConsent(event.target.checked)}
+            />
+            <span>{t("voiceConsent")}</span>
+          </label>
+        </section>
       ) : null}
-      <SectionCard title={t("voiceGroupTitle")}>
-        {profiles.length === 0 ? (
-          <EmptyCard title={t("voiceNoCustom")} />
-        ) : (
-          <div className={styles.profileList}>
-            {profiles.map((profile) => (
-              <article className={styles.profile} key={profile.id}>
-                <div className={styles.profileHeader}>
-                  <span className={styles.profileName}>
-                    {profile.source_filename ?? t("voiceCustom")}
-                  </span>
-                  <StatusBadge status={profile.status} />
-                </div>
-                <p className={styles.profileId}>
-                  {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
-                </p>
-                {preview[profile.id] ? (
-                  <audio
-                    className={styles.audio}
-                    controls
-                    preload="none"
-                    src={preview[profile.id].url}
-                  />
+      {profiles.length > 0 ? (
+        <section
+          className={styles.profileList}
+          aria-label={t("voiceGroupTitle")}
+        >
+          {profiles.map((profile) => (
+            <article className={styles.profile} key={profile.id}>
+              <div className={styles.profileHeader}>
+                <span className={styles.profileName}>
+                  {profile.source_filename ?? t("voiceCustom")}
+                </span>
+                <StatusBadge status={profile.status} />
+              </div>
+              <p className={styles.profileId}>
+                {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
+              </p>
+              {preview[profile.id] ? (
+                <audio
+                  className={styles.audio}
+                  controls
+                  preload="none"
+                  src={preview[profile.id].url}
+                />
+              ) : null}
+              <div className={styles.actions}>
+                {profile.status === "preview_ready" ||
+                profile.status === "ready" ? (
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void makePreview(profile.id)}
+                  >
+                    {t("voicePreview")}
+                  </button>
                 ) : null}
-                <div className={styles.actions}>
-                  {profile.status === "preview_ready" ||
-                  profile.status === "ready" ? (
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void makePreview(profile.id)}
-                    >
-                      {t("voicePreview")}
-                    </button>
-                  ) : null}
-                  {profile.status === "preview_ready" ? (
-                    <button
-                      className="primary-action"
-                      type="button"
-                      disabled={busy || !preview[profile.id]}
-                      onClick={() => void confirm(profile.id)}
-                    >
-                      {t("voiceConfirm")}
-                    </button>
-                  ) : null}
-                  {profile.status !== "deleted" ? (
-                    <button
-                      className="text-link"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void remove(profile.id)}
-                    >
-                      {t("voiceDelete")}
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+                {profile.status === "preview_ready" ? (
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={busy || !preview[profile.id]}
+                    onClick={() => void confirm(profile.id)}
+                  >
+                    {t("voiceConfirm")}
+                  </button>
+                ) : null}
+                {profile.status !== "deleted" ? (
+                  <button
+                    className="text-link"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void remove(profile.id)}
+                  >
+                    {t("voiceDelete")}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -26,6 +26,8 @@ import {
   type KnowledgeReplacementRequest,
 } from "./markdown-editor";
 
+import styles from "./knowledge-library.module.css";
+
 type RetryAction =
   | { kind: "create"; file: File }
   | { kind: "replace"; request: KnowledgeReplacementRequest }
@@ -336,9 +338,12 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
           {visible.length === 0 ? (
             <EmptyCard title={t("knowledgeNoFiles")} />
           ) : (
-            <div className="knowledge-tile-grid">
+            <div className={`knowledge-tile-grid ${styles.grid}`}>
               {visible.map((document) => (
-                <div className="knowledge-tile" key={document.id}>
+                <div
+                  className={`knowledge-tile ${styles.tile}`}
+                  key={document.id}
+                >
                   <span className="document-main">
                     <strong title={document.source_filename}>
                       {document.source_filename}
@@ -347,62 +352,60 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                       {document.char_count.toLocaleString()} {t("characters")}
                     </small>
                   </span>
-                  <div className="knowledge-tile-foot">
-                    <StatusBadge
-                      status={document.index_status}
-                      tone={
-                        document.index_status === "ready"
-                          ? "good"
-                          : document.index_status === "failed"
-                            ? "bad"
-                            : "warn"
-                      }
-                    />
-                    <div className="icon-action-row">
+                  <div className={`icon-action-row ${styles.actions}`}>
+                    <button
+                      className="icon-action"
+                      type="button"
+                      disabled={busyId !== null}
+                      aria-label={t("edit")}
+                      data-ui-guide="knowledge.edit"
+                      onClick={() => void beginEdit(document)}
+                    >
+                      <IconEdit />
+                    </button>
+                    <button
+                      className="icon-action"
+                      type="button"
+                      disabled={busyId !== null}
+                      aria-label={t("download")}
+                      data-ui-guide="knowledge.download"
+                      onClick={() => void download(document)}
+                    >
+                      <IconDownload />
+                    </button>
+                    {document.index_status === "failed" ? (
                       <button
                         className="icon-action"
                         type="button"
                         disabled={busyId !== null}
-                        aria-label={t("edit")}
-                        data-ui-guide="knowledge.edit"
-                        onClick={() => void beginEdit(document)}
+                        aria-label={t("reindex")}
+                        data-ui-guide="knowledge.reindex"
+                        onClick={() => void reindex(document)}
                       >
-                        <IconEdit />
+                        <IconRefresh />
                       </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        disabled={busyId !== null}
-                        aria-label={t("download")}
-                        data-ui-guide="knowledge.download"
-                        onClick={() => void download(document)}
-                      >
-                        <IconDownload />
-                      </button>
-                      {document.index_status === "failed" ? (
-                        <button
-                          className="icon-action"
-                          type="button"
-                          disabled={busyId !== null}
-                          aria-label={t("reindex")}
-                          data-ui-guide="knowledge.reindex"
-                          onClick={() => void reindex(document)}
-                        >
-                          <IconRefresh />
-                        </button>
-                      ) : null}
-                      <button
-                        className="icon-action icon-action-danger"
-                        type="button"
-                        disabled={busyId !== null}
-                        aria-label={t("delete")}
-                        data-ui-guide="knowledge.hide"
-                        onClick={() => void hide(document)}
-                      >
-                        <IconClose />
-                      </button>
-                    </div>
+                    ) : null}
+                    <button
+                      className="icon-action icon-action-danger"
+                      type="button"
+                      disabled={busyId !== null}
+                      aria-label={t("delete")}
+                      data-ui-guide="knowledge.hide"
+                      onClick={() => void hide(document)}
+                    >
+                      <IconClose />
+                    </button>
                   </div>
+                  {document.index_status !== "ready" ? (
+                    <div className={styles.status}>
+                      <StatusBadge
+                        status={document.index_status}
+                        tone={
+                          document.index_status === "failed" ? "bad" : "warn"
+                        }
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

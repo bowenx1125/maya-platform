@@ -16,7 +16,7 @@ from app.modules.workspace.models import (
     LivePresence,
     ProviderPreferences,
 )
-from app.modules.workspace.providers import preferences_settings
+from app.modules.workspace.providers import preferences_settings, settings_view
 from app.providers.control_repository import ProviderRepository
 from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
@@ -345,6 +345,22 @@ def test_provider_controls_are_teacher_only_and_key_is_encrypted(workspace: Any)
         ).json()["code"]
         == "provider_deferred"
     )
+
+
+@pytest.mark.parametrize("selector,status", [("mock", "deferred"), ("dashscope", "unchecked")])
+def test_speech_configuration_does_not_claim_live_acceptance(
+    workspace: Any, selector: str, status: str
+) -> None:
+    app, _, _ = workspace
+    settings = app.state.base_settings.model_copy(
+        update={"tts_provider": selector, "voice_provider": selector}
+    )
+    result = settings_view(settings, None)
+    speech = [item for item in result.components if item.key in {"tts", "voice"}]
+    assert len(speech) == 2
+    assert all(item.mode == ("real" if selector == "dashscope" else "mock") for item in speech)
+    assert all(item.status == status and not item.switchable for item in speech)
+    assert all(item.checked_at is None for item in speech)
 
 
 def test_environment_dashscope_key_wins_over_saved_dialog_key(workspace: Any) -> None:

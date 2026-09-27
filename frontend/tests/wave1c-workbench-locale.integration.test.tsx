@@ -234,7 +234,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     await screen.findByRole("button", { name: "Done" });
     const editor = screen.getByLabelText("AGENT.md editor");
     fireEvent.change(editor, { target: { value: "# Local Agent" } });
-    expect(screen.getAllByText("Unsaved local changes")).toHaveLength(1);
+    expect(screen.queryByText("Unsaved local changes")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
       expect(api.publish).toHaveBeenCalledWith(

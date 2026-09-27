@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { uiGuideText, type UiGuideKey } from "../lib/ui-guide-copy";
 import { useLocale } from "./locale";
@@ -16,6 +17,7 @@ type ActiveGuide = {
   y: number;
   anchor: "pointer" | "element";
   target: HTMLElement;
+  pathname: string | null;
 };
 
 function guideTarget(value: EventTarget | null): HTMLElement | null {
@@ -24,6 +26,7 @@ function guideTarget(value: EventTarget | null): HTMLElement | null {
 
 export function UiGuideTooltip() {
   const { locale } = useLocale();
+  const pathname = usePathname();
   const [active, setActive] = useState<ActiveGuide | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -35,6 +38,7 @@ export function UiGuideTooltip() {
     let hovered: HTMLElement | null = null;
     let focused: HTMLElement | null = null;
     let touchPinned = false;
+    let pointerInput = false;
 
     const restoreDescription = () => {
       if (!described) return;
@@ -51,6 +55,8 @@ export function UiGuideTooltip() {
       restoreDescription();
       currentKey = null;
       touchPinned = false;
+      hovered = null;
+      focused = null;
       setActive(null);
     };
 
@@ -59,7 +65,10 @@ export function UiGuideTooltip() {
       point: { x: number; y: number; anchor: ActiveGuide["anchor"] },
     ) => {
       const key = target.dataset.uiGuide;
-      if (!key || !uiGuideText(key, locale)) return;
+      if (!key || !uiGuideText(key, locale)) {
+        hide();
+        return;
+      }
       if (described !== target) {
         restoreDescription();
         previousDescription = target.getAttribute("aria-describedby");
@@ -71,7 +80,7 @@ export function UiGuideTooltip() {
         described = target;
       }
       currentKey = key as UiGuideKey;
-      setActive({ ...point, key: key as UiGuideKey, target });
+      setActive({ ...point, key: key as UiGuideKey, target, pathname });
     };
 
     const anchorPoint = (target: HTMLElement) => {
@@ -85,31 +94,43 @@ export function UiGuideTooltip() {
 
     const onPointerOver = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
+      pointerInput = true;
+      focused = null;
+      touchPinned = false;
       const target = guideTarget(event.target);
-      if (!target) return;
+      if (!target) {
+        hide();
+        return;
+      }
       hovered = target;
       show(target, { x: event.clientX, y: event.clientY, anchor: "pointer" });
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      if (event.pointerType === "touch") return;
-      const target = guideTarget(event.target);
-      if (target && target === hovered && currentKey) {
-        show(target, { x: event.clientX, y: event.clientY, anchor: "pointer" });
-      }
+      // A fast move or removed target may skip the matching pointerout.
+      onPointerOver(event);
     };
 
     const onPointerOut = (event: PointerEvent) => {
+      if (!event.relatedTarget) {
+        hide();
+        return;
+      }
       const target = guideTarget(event.target);
       const next = guideTarget(event.relatedTarget);
       if (!target || target !== hovered || (next && target.contains(next)))
         return;
-      hovered = null;
-      if (described === target && focused !== target && !touchPinned) hide();
+      hide();
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      if (touchPinned && guideTarget(event.target) !== described) hide();
+      pointerInput = true;
+      focused = null;
+      if (
+        event.pointerType !== "touch" ||
+        guideTarget(event.target) !== described
+      )
+        hide();
     };
 
     const onPointerUp = (event: PointerEvent) => {
@@ -125,8 +146,13 @@ export function UiGuideTooltip() {
     };
 
     const onFocusIn = (event: FocusEvent) => {
+      // Clicking focuses buttons too; only keyboard focus should keep help open.
+      if (pointerInput) return;
       const target = guideTarget(event.target);
-      if (!target) return;
+      if (!target) {
+        hide();
+        return;
+      }
       focused = target;
       show(target, anchorPoint(target));
     };
@@ -141,8 +167,29 @@ export function UiGuideTooltip() {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+      pointerInput = false;
       if (event.key === "Escape" && described) hide();
     };
+
+    const onClick = () => {
+      if (!touchPinned) hide();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") hide();
+    };
+    const observer = new MutationObserver(() => {
+      if (
+        described &&
+        (!described.isConnected || described.dataset.uiGuide !== currentKey)
+      )
+        hide();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-ui-guide"],
+    });
 
     document.addEventListener("pointerover", onPointerOver, true);
     document.addEventListener("pointermove", onPointerMove, true);
@@ -152,6 +199,12 @@ export function UiGuideTooltip() {
     document.addEventListener("focusin", onFocusIn, true);
     document.addEventListener("focusout", onFocusOut, true);
     document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("scroll", hide, true);
+    document.addEventListener("pointercancel", hide, true);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", hide);
+    window.addEventListener("resize", hide);
     return () => {
       document.removeEventListener("pointerover", onPointerOver, true);
       document.removeEventListener("pointermove", onPointerMove, true);
@@ -161,9 +214,16 @@ export function UiGuideTooltip() {
       document.removeEventListener("focusin", onFocusIn, true);
       document.removeEventListener("focusout", onFocusOut, true);
       document.removeEventListener("keydown", onKeyDown, true);
-      restoreDescription();
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("scroll", hide, true);
+      document.removeEventListener("pointercancel", hide, true);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("resize", hide);
+      observer.disconnect();
+      hide();
     };
-  }, [locale]);
+  }, [locale, pathname]);
 
   useLayoutEffect(() => {
     const tooltip = tooltipRef.current;
@@ -202,7 +262,7 @@ export function UiGuideTooltip() {
   }, [active]);
 
   const text = active ? uiGuideText(active.key, locale) : null;
-  if (!active || !text) return null;
+  if (!active || !text || active.pathname !== pathname) return null;
   return createPortal(
     <div
       id={tooltipId}

@@ -104,6 +104,9 @@ describe("KnowledgeLibrary integration", () => {
     expect(file.name).toBe("shared.md");
     expect(file.type).toBe("text/markdown");
     await waitFor(() => expect(screen.getByText("shared.md")).toBeTruthy());
+    expect(screen.queryByText("Ready")).toBeNull();
+    expect(screen.getByRole("button", { name: "Download" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "New" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Add$/ })).toBeNull();
     await waitFor(() =>

@@ -153,7 +153,7 @@ describe("private Agent chat", () => {
         </AppShell>
       </LocaleProvider>,
     );
-    await screen.findByTestId("avatar");
+    await screen.findByRole("combobox", { name: "Agent" });
     const nav = within(screen.getByRole("navigation"));
     expect(nav.queryByText("Back")).toBeNull();
     expect(nav.queryByText("Done")).toBeNull();
@@ -214,7 +214,7 @@ describe("private Agent chat", () => {
         <AgentChat />
       </LocaleProvider>,
     );
-    await screen.findByTestId("avatar");
+    await screen.findByRole("combobox", { name: "Agent" });
     fireEvent.error(document.querySelector("audio") as HTMLAudioElement);
     expect(
       document
@@ -259,52 +259,16 @@ describe("private Agent chat", () => {
     expect(screen.queryByRole("button", { name: "Voice" })).toBeNull();
   });
 
-  it("selects and remembers a local model for the signed-in user and Agent", async () => {
-    const scholarAgent = {
-      ...agent,
-      avatar_config: {
-        template_id: "maya-warm-scholar",
-        material_theme: "warm_sand",
-        eye_color: "brown",
-        default_expression: "attentive",
-        expression_strength: "medium",
-        motion_style: "calm",
-      },
-    };
-    state.api.chatAgents.mockResolvedValue([scholarAgent]);
-    const userId = state.userId;
-    const view = render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-
-    await screen.findByTestId("avatar");
-    const picker = screen.getByRole("combobox", { name: "3D model" });
-    expect(screen.getByTestId("avatar").getAttribute("data-asset-url")).toBe(
-      "/avatars/elder-scholar.glb",
-    );
-    fireEvent.change(picker, { target: { value: "maya-civic-observer" } });
-    expect(screen.getByTestId("avatar").getAttribute("data-asset-url")).toBe(
-      "/avatars/noble-scholar.glb",
-    );
-    expect(
-      window.localStorage.getItem(`maya.chat-avatar.v1:${userId}:agent`),
-    ).toBe("maya-civic-observer");
-
-    view.unmount();
-    state.role = "student";
+  it("keeps Chats focused on conversation without a 3D model panel", async () => {
     render(
       <LocaleProvider initialLocale="en">
         <AgentChat />
       </LocaleProvider>,
     );
-    await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "3D model" })).toHaveProperty(
-        "value",
-        "maya-civic-observer",
-      ),
-    );
+    await screen.findByRole("combobox", { name: "Agent" });
+    expect(screen.queryByRole("combobox", { name: "3D model" })).toBeNull();
+    expect(screen.queryByTestId("avatar")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
   });
 
   it("reuses an uncertain request ID instead of creating a second paid request", async () => {
@@ -318,7 +282,7 @@ describe("private Agent chat", () => {
         <AgentChat />
       </LocaleProvider>,
     );
-    await screen.findByTestId("avatar");
+    await screen.findByRole("combobox", { name: "Agent" });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
     });
