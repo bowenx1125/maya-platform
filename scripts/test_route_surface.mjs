@@ -73,7 +73,8 @@ try {
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
   // Private Chat, Provider settings and student Live add twelve operations.
-  if (platformOperationCount !== 104 || placeholderCount !== 0) {
+  // Chat streaming and deletion add two conversation operations.
+  if (platformOperationCount !== 106 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

@@ -8,7 +8,7 @@ Mayaform 是面向文化互学的 RAG 教学平台。学生编写 Agent 人设�
 - **教师 Accounts**：查看成员、修改显示名、调组、停用/恢复、重置密码。私有 Demo 目录账号由目录管理，自注册账号可在页面编辑。
 - **教师进入小组**：在 Accounts 的 Groups 中点击 **Enter**，以教师身份使用完整学生工作区，包括创建、编辑和删除；使用 **Homeward** 返回 Accounts。访问关系独立保存，重启同步 Demo 目录不会清除它。已发布历史及费用授权规则仍适用。
 - **工作区**：老师、学生和扫码互动页面统一采用系统字体、灰白表面与登录页的暖黄色，保留原版 Logo；Chat 和 Immerse 共用按钮与配色，支持窄屏与键盘操作。登录页不变，移除解释性介绍，保留权限、费用和错误提示。
-- **Chat**：老师和学生选择本课程已发布 Agent 进行私人文字对话，显示 3D 形象；历史、引用与绑定版本由服务器保存。其他用户（包括老师）不能读取个人会话。
+- **Chats**：老师和学生与本课程已发布 Agent 私人对话，回复流式显示；保留本地圆角悬浮输入框，三种 3D 形象按用户和 Agent 保存。配置可用声音后可朗读回复；历史、引用与版本由服务器保存，其他用户（包括老师）不可读取。
 - **Live**：老师进入 Immerse 后，学生的 Live 入口亮起，同步公开发言、人物和已有音频。学生不获得控制权，观看不额外调用模型；退出或租约过期关闭。
 - **声音**：克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
 - **3D 课堂**：2–5 位国风人物围绕圆桌站立，气泡和 Transcript 随音频显示；音频失败时仍保留完整文字。实验性高斯院落需要额外的本地生成资源，不是默认课堂依赖。
@@ -67,7 +67,7 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 | 更新后重建     | `docker compose up -d --build --wait` |
 | 查看状态       | `docker compose ps`                   |
 
-后端启动时自动迁移，`0030` 增加私人聊天、加密配置和 Live 租约。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
+后端启动时自动迁移，当前代码版本为 `0032_recovery_input_unbounded`；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
 
 修改 `.env` 后执行 `docker compose up -d --wait` 以重新创建需要更新配置的容器。更换 Wi-Fi 后，可运行：
 
@@ -90,13 +90,15 @@ MAYA_REPORT_PROVIDER=dashscope
 
 首次启用还需要配置本地凭据、区域、`LLM_MODEL` 和已审核的 Provider policy，并完成教师披露确认；详见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。仅修改上述选择项或填写 API Key 不足以完成配置。聊天、辩论和报告共用 `LLM_MODEL`，改这一项即可换模型。
 
-教师首页的 Components 可切换 LLM、Embedding、Report 的 Real/Mock；缺 Key 时弹窗填写，服务器加密保存，不回传 Key。右上角仅一个 **Check**，只检查尚未 Ready 或已更改的能力；真实检测先确认本批最多请求数，失败即停止。改模式仅使该项检查失效，改 Key 使全部检查失效。活跃生成期间禁止切换，网页配置重启后保留。Mock 与真实 Embedding 快照不混用。
+教师首页的 Components 可切换 LLM、Embedding、Report 的 Real/Mock；**API Key** 入口可主动填写，服务器加密保存，不回传 Key，服务器环境中的 Key 优先。**Check** 只检查尚未 Ready 或已更改的能力；真实检测先确认本批最多请求数，失败即停止。改模式仅使该项检查失效，改 Key 使全部检查失效。活跃生成期间禁止切换，网页配置重启后保留。Mock 与真实 Embedding 快照不混用。
 
 老师和学生均可在 **Chat** 选择已有已发布 Agent；会话与引用仅本人可读，重新进入保留历史。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。界面没有 Refresh 按钮；列表仍自动读取最新状态，断线可重新进入。
 
-TTS / Voice 保持原配置并标为 Deferred。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
+TTS 与 Voice 默认仍是 mock。需要语音克隆或聊天朗读时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。教师首页 Components 仍把 TTS 与 Voice 标为 Deferred，不能在网页上切换。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
 
 ## 开发与验证
+
+工作区和课堂操作支持中英文悬停、键盘焦点及触控提示；知识上传仍限 Markdown，PDF/Word 导入尚未实现。
 
 ```sh
 pnpm check

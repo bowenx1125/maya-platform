@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../locale";
 import type { AvatarConfig, AvatarState } from "./types";
-import { AVATAR_ASSET_URL } from "./types";
+import { avatarAssetUrlForTemplate } from "./types";
 import styles from "./avatar.module.css";
 
 export type AvatarCanvasProps = {
@@ -32,7 +32,7 @@ function initials(label: string): string {
 export function AvatarCanvas({
   config,
   state = "idle",
-  assetUrl = AVATAR_ASSET_URL,
+  assetUrl,
   fallbackLabel,
   framing = "head",
   className,
@@ -41,6 +41,12 @@ export function AvatarCanvas({
 }: AvatarCanvasProps) {
   const t = useT();
   const fallback = fallbackLabel ?? t("avatar");
+  // A missing config is not a guessable character. Leave the mesh unloaded
+  // so the static initials stay up until a real AvatarConfig arrives.
+  const templateId =
+    config && typeof config.template_id === "string" ? config.template_id : "";
+  const resolvedAssetUrl =
+    assetUrl ?? (templateId ? avatarAssetUrlForTemplate(templateId) : "");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<import("./avatar-renderer").AvatarRenderer | null>(
     null,
@@ -50,6 +56,8 @@ export function AvatarCanvas({
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
   const tRef = useRef(t);
+  const assetUrlRef = useRef(resolvedAssetUrl);
+  const hasAsset = Boolean(resolvedAssetUrl);
   const [status, setStatus] = useState<CanvasStatus>("loading");
   const [failure, setFailure] = useState<Error | null>(null);
 
@@ -71,8 +79,13 @@ export function AvatarCanvas({
   }, [t]);
 
   useEffect(() => {
+    assetUrlRef.current = resolvedAssetUrl;
+  }, [resolvedAssetUrl]);
+
+  useEffect(() => {
     let active = true;
     const canvas = canvasRef.current;
+    if (!hasAsset || !assetUrlRef.current) return undefined;
     if (!canvas) return undefined;
     setStatus("loading");
     setFailure(null);
@@ -82,7 +95,7 @@ export function AvatarCanvas({
         try {
           const renderer = new AvatarRenderer({
             canvas,
-            assetUrl,
+            assetUrl: assetUrlRef.current,
             framing,
             onReady: () => {
               if (!active) return;
@@ -96,7 +109,12 @@ export function AvatarCanvas({
               onErrorRef.current?.(error);
             },
           });
-          renderer.setConfig(configRef.current);
+          if (
+            configRef.current &&
+            typeof configRef.current.template_id === "string"
+          ) {
+            renderer.setConfig(configRef.current);
+          }
           renderer.setState(stateRef.current);
           rendererRef.current = renderer;
         } catch (cause) {
@@ -125,9 +143,15 @@ export function AvatarCanvas({
       rendererRef.current?.dispose();
       rendererRef.current = null;
     };
-  }, [assetUrl, framing]);
+  }, [framing, hasAsset]);
 
   useEffect(() => {
+    if (!resolvedAssetUrl) return;
+    rendererRef.current?.setAsset(resolvedAssetUrl);
+  }, [resolvedAssetUrl]);
+
+  useEffect(() => {
+    if (!config || typeof config.template_id !== "string") return;
     rendererRef.current?.setConfig(config);
   }, [config]);
 
@@ -140,25 +164,31 @@ export function AvatarCanvas({
       className={`${styles.canvasFrame}${className ? ` ${className}` : ""}`}
       role="img"
       aria-label={`${fallback} ${t("avatarPreview")}`}
-      data-avatar-status={status}
+      data-avatar-status={resolvedAssetUrl ? status : "failed"}
       data-avatar-state={state}
+      data-avatar-template={templateId}
+      data-avatar-material={config?.material_theme ?? ""}
+      data-avatar-eye={config?.eye_color ?? ""}
+      data-avatar-expression={config?.default_expression ?? ""}
+      data-avatar-strength={config?.expression_strength ?? ""}
+      data-avatar-motion={config?.motion_style ?? ""}
     >
       <canvas
         ref={canvasRef}
         className={styles.canvas}
-        hidden={status === "failed"}
+        hidden={!resolvedAssetUrl || status === "failed"}
       />
-      {status === "loading" ? (
+      {resolvedAssetUrl && status === "loading" ? (
         <span className={styles.loading}>{t("avatarPreviewLoading")}</span>
       ) : null}
       <div
         className={styles.fallback}
-        hidden={status !== "failed"}
+        hidden={Boolean(resolvedAssetUrl) && status !== "failed"}
         aria-hidden="true"
       >
         {initials(fallback)}
       </div>
-      {status === "failed" && failure ? (
+      {!resolvedAssetUrl || (status === "failed" && failure) ? (
         <span className={styles.previewLabel}>
           {fallback} · {t("avatarStaticPreview")}
         </span>

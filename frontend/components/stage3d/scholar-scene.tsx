@@ -351,6 +351,7 @@ export function ScholarScene({
               <span>院落</span>
               <select
                 aria-label="切换院落场景"
+                data-ui-guide="camera.scene"
                 onChange={(event) => changeScenePack(event.target.value)}
                 value={scenePackId}
               >
@@ -370,7 +371,7 @@ export function ScholarScene({
                 aria-label="镜头向前移动"
                 className={styles.cameraForward}
                 onClick={() => moveStageCamera("forward")}
-                title="向前移动"
+                data-ui-guide="camera.forward"
                 type="button"
               >
                 ↑
@@ -379,7 +380,7 @@ export function ScholarScene({
                 aria-label="镜头向左转"
                 className={styles.cameraTurnLeft}
                 onClick={() => moveStageCamera("turn-left")}
-                title="向左转"
+                data-ui-guide="camera.turnLeft"
                 type="button"
               >
                 ↶
@@ -388,7 +389,7 @@ export function ScholarScene({
                 aria-label="镜头向左移动"
                 className={styles.cameraLeft}
                 onClick={() => moveStageCamera("left")}
-                title="向左移动"
+                data-ui-guide="camera.left"
                 type="button"
               >
                 ←
@@ -397,7 +398,7 @@ export function ScholarScene({
                 aria-label="切换鸟瞰"
                 className={styles.cameraOverview}
                 onClick={toggleStageOverview}
-                title="切换鸟瞰"
+                data-ui-guide="camera.aerial"
                 type="button"
               >
                 ◎
@@ -406,7 +407,7 @@ export function ScholarScene({
                 aria-label="镜头向右移动"
                 className={styles.cameraRight}
                 onClick={() => moveStageCamera("right")}
-                title="向右移动"
+                data-ui-guide="camera.right"
                 type="button"
               >
                 →
@@ -415,7 +416,7 @@ export function ScholarScene({
                 aria-label="镜头向右转"
                 className={styles.cameraTurnRight}
                 onClick={() => moveStageCamera("turn-right")}
-                title="向右转"
+                data-ui-guide="camera.turnRight"
                 type="button"
               >
                 ↷
@@ -424,7 +425,7 @@ export function ScholarScene({
                 aria-label="镜头向后移动"
                 className={styles.cameraBackward}
                 onClick={() => moveStageCamera("backward")}
-                title="向后移动"
+                data-ui-guide="camera.backward"
                 type="button"
               >
                 ↓

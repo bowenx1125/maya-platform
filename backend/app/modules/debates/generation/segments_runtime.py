@@ -339,6 +339,8 @@ class SegmentLLMRuntime:
                                 repair_feedback=repair_feedback,
                                 queries=queries,
                             )
+                    if mover is None:
+                        raise SegmentRuntimeError(code="segment_preparation_failed") from exc
                     operation = _invoke(
                         mover,
                         reservation.operation_id,

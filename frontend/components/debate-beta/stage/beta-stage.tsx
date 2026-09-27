@@ -3304,7 +3304,10 @@ export function BetaDebateStage({
 
   const endRunningDebate = useCallback(async () => {
     if (!blockedBy || endRunningBusy) return;
-    if (typeof api.debate !== "function" || typeof api.finishDebate !== "function")
+    if (
+      typeof api.debate !== "function" ||
+      typeof api.finishDebate !== "function"
+    )
       return;
     setEndRunningBusy(true);
     try {
@@ -3705,7 +3708,6 @@ export function BetaDebateStage({
             )}
           </section>
         ) : null}
-
       </div>
       {blockedBy ? (
         <div

@@ -927,14 +927,14 @@ scoring.
 
 ### Operation caps
 
-| Gate operation                |           Request cap | Input/output cap               | Estimated charge cap |
-| ----------------------------- | --------------------: | ------------------------------ | -------------------: |
-| one new real snapshot         |                 none | 10 items / 30,000 tokens per batch |                 none |
-| W4-LLM-A 2-Agent × 2-round G3 |           8 LLM calls | PromptBudgetV1 per call        |             CNY 1.20 |
-| 5-Agent × 2-round debate      |          20 LLM calls | PromptBudgetV1 per call        |             CNY 3.00 |
-| one real TTS technical Gate   |     2 synthesis calls | 2,400 billed characters total  |             CNY 0.20 |
-| one 5-Agent × 2-round TTS run |    10 synthesis calls | 15,000 billed characters total |             CNY 1.20 |
-| new voice enrollment          |            1 creation | one approved sample            |             CNY 0.01 |
+| Gate operation                |        Request cap | Input/output cap                   | Estimated charge cap |
+| ----------------------------- | -----------------: | ---------------------------------- | -------------------: |
+| one new real snapshot         |               none | 10 items / 30,000 tokens per batch |                 none |
+| W4-LLM-A 2-Agent × 2-round G3 |        8 LLM calls | PromptBudgetV1 per call            |             CNY 1.20 |
+| 5-Agent × 2-round debate      |       20 LLM calls | PromptBudgetV1 per call            |             CNY 3.00 |
+| one real TTS technical Gate   |  2 synthesis calls | 2,400 billed characters total      |             CNY 0.20 |
+| one 5-Agent × 2-round TTS run | 10 synthesis calls | 15,000 billed characters total     |             CNY 1.20 |
+| new voice enrollment          |         1 creation | one approved sample                |             CNY 0.01 |
 
 W4-LLM-B adds at most two calls for one barrage-insight snapshot and two calls for one
 Maya report revision; it has a separate CNY 0.60 cap and cannot consume the Debate LLM

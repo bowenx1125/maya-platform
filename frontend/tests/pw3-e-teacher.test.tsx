@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 import {
   cleanup,
@@ -240,10 +241,11 @@ describe("PW3-E teacher shell and responsive contract", () => {
   });
 
   it("keeps shared navigation, text, summary, and file actions on 44px targets", () => {
-    const frontendRoot = process.cwd().endsWith("/frontend")
-      ? process.cwd()
-      : `${process.cwd()}/frontend`;
-    const css = readFileSync(`${frontendRoot}/app/globals.css`, "utf8");
+    const frontendRoot =
+      basename(process.cwd()) === "frontend"
+        ? process.cwd()
+        : join(process.cwd(), "frontend");
+    const css = readFileSync(join(frontendRoot, "app", "globals.css"), "utf8");
     expect(css).toMatch(/\.brand-mark\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/\.text-link\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/details > summary\s*\{[^}]*min-height:\s*44px/s);

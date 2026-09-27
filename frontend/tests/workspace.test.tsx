@@ -12,11 +12,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   api: {} as Record<string, ReturnType<typeof vi.fn>>,
   role: "teacher",
+  userId: "test-user",
 }));
 vi.mock("../components/session-provider", () => ({
   useSession: () => ({
     api: state.api,
-    user: { courses: [{ course_id: "course", role: state.role }], groups: [] },
+    user: {
+      id: state.userId,
+      courses: [{ course_id: "course", role: state.role }],
+      groups: [],
+    },
   }),
 }));
 vi.mock("next/navigation", () => ({
@@ -24,7 +29,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));
 vi.mock("../components/avatar", () => ({
-  AvatarPreview: () => <div data-testid="avatar" />,
+  AvatarPreview: (props: { assetUrl?: string }) => (
+    <div data-testid="avatar" data-asset-url={props.assetUrl} />
+  ),
 }));
 vi.mock("../components/stage3d/scholar-scene", () => ({
   ScholarScene: () => <div data-testid="scene" />,
@@ -76,12 +83,19 @@ const settings = {
 };
 
 beforeEach(() => {
+  state.userId = `test-user-${Date.now()}-${Math.random()}`;
   state.role = "teacher";
   state.api = {
     chatAgents: vi.fn().mockResolvedValue([agent]),
     conversations: vi.fn().mockResolvedValue([]),
     createConversation: vi.fn().mockResolvedValue(conversation),
     sendConversation: vi.fn().mockResolvedValue(completedConversation),
+    streamConversation: vi.fn().mockResolvedValue({
+      session: completedConversation,
+      audioUrl: null,
+      voiceProfileId: null,
+      contentType: null,
+    }),
     conversation: vi.fn().mockResolvedValue(conversation),
     deleteConversation: vi.fn().mockResolvedValue(undefined),
     providerSettings: vi.fn().mockResolvedValue(settings),
@@ -160,19 +174,25 @@ describe("private Agent chat", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
-    const first = await state.api.sendConversation.mock.results[0].value;
-    state.api.sendConversation.mockResolvedValue({
-      ...first,
-      revision: 2,
-      turns: [
-        ...first.turns,
-        {
-          ...first.turns[0],
-          id: "second",
-          user_text: "Why?",
-          assistant_text: "Following the earlier reply",
-        },
-      ],
+    const first = (await state.api.streamConversation.mock.results[0].value)
+      .session;
+    state.api.streamConversation.mockResolvedValue({
+      session: {
+        ...first,
+        revision: 2,
+        turns: [
+          ...first.turns,
+          {
+            ...first.turns[0],
+            id: "second",
+            user_text: "Why?",
+            assistant_text: "Following the earlier reply",
+          },
+        ],
+      },
+      audioUrl: null,
+      voiceProfileId: null,
+      contentType: null,
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Why?" },
@@ -181,7 +201,7 @@ describe("private Agent chat", () => {
     await screen.findByText("Following the earlier reply");
     expect(screen.getByText("A considered reply")).toBeTruthy();
     expect(
-      state.api.sendConversation.mock.calls.map(
+      state.api.streamConversation.mock.calls.map(
         (call) => call[1].expected_revision,
       ),
     ).toEqual([0, 1]);
@@ -195,6 +215,12 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByTestId("avatar");
+    fireEvent.error(document.querySelector("audio") as HTMLAudioElement);
+    expect(
+      document
+        .querySelector("[data-tts-playback]")
+        ?.getAttribute("data-tts-playback"),
+    ).toBe("incomplete");
     expect(screen.getByRole("heading", { name: "Chats" }).className).toBe(
       "sr-only",
     );
@@ -204,16 +230,22 @@ describe("private Agent chat", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
     expect(state.api.createConversation).toHaveBeenCalledWith("version");
-    expect(state.api.sendConversation).toHaveBeenCalledWith(
+    expect(state.api.streamConversation).toHaveBeenCalledWith(
       "conversation",
-      expect.objectContaining({ message: "Hello", expected_revision: 0 }),
+      expect.objectContaining({
+        message: "Hello",
+        expected_revision: 0,
+        lang: "en",
+      }),
+      expect.objectContaining({ onTextDone: expect.any(Function) }),
     );
     expect(
       (screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement)
         .value,
     ).toBe("");
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
-    const saved = await state.api.sendConversation.mock.results[0].value;
+    const saved = (await state.api.streamConversation.mock.results[0].value)
+      .session;
     state.api.conversations.mockResolvedValue([saved]);
     view.unmount();
     render(
@@ -222,15 +254,63 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByText("A considered reply");
-    expect(state.api.sendConversation).toHaveBeenCalledTimes(1);
+    expect(state.api.streamConversation).toHaveBeenCalledTimes(1);
     expect(state.api.conversations).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("button", { name: "Voice" })).toBeNull();
   });
 
+  it("selects and remembers a local model for the signed-in user and Agent", async () => {
+    const scholarAgent = {
+      ...agent,
+      avatar_config: {
+        template_id: "maya-warm-scholar",
+        material_theme: "warm_sand",
+        eye_color: "brown",
+        default_expression: "attentive",
+        expression_strength: "medium",
+        motion_style: "calm",
+      },
+    };
+    state.api.chatAgents.mockResolvedValue([scholarAgent]);
+    const userId = state.userId;
+    const view = render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+
+    await screen.findByTestId("avatar");
+    const picker = screen.getByRole("combobox", { name: "3D model" });
+    expect(screen.getByTestId("avatar").getAttribute("data-asset-url")).toBe(
+      "/avatars/elder-scholar.glb",
+    );
+    fireEvent.change(picker, { target: { value: "maya-civic-observer" } });
+    expect(screen.getByTestId("avatar").getAttribute("data-asset-url")).toBe(
+      "/avatars/noble-scholar.glb",
+    );
+    expect(
+      window.localStorage.getItem(`maya.chat-avatar.v1:${userId}:agent`),
+    ).toBe("maya-civic-observer");
+
+    view.unmount();
+    state.role = "student";
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "3D model" })).toHaveProperty(
+        "value",
+        "maya-civic-observer",
+      ),
+    );
+  });
+
   it("reuses an uncertain request ID instead of creating a second paid request", async () => {
     state.api.conversations.mockResolvedValue([completedConversation]);
-    state.api.sendConversation.mockClear();
-    state.api.sendConversation.mockRejectedValueOnce(
+    state.api.streamConversation.mockClear();
+    state.api.streamConversation.mockRejectedValueOnce(
       new Error("Network unavailable"),
     );
     render(
@@ -246,8 +326,8 @@ describe("private Agent chat", () => {
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
-    expect(state.api.sendConversation.mock.calls[0][1]).toEqual(
-      state.api.sendConversation.mock.calls[1][1],
+    expect(state.api.streamConversation.mock.calls[0][1]).toEqual(
+      state.api.streamConversation.mock.calls[1][1],
     );
     expect(state.api.createConversation).not.toHaveBeenCalled();
   });
@@ -255,7 +335,7 @@ describe("private Agent chat", () => {
   it("moves the draft into the transcript immediately and keeps the icon inside the composer", async () => {
     let resolve!: (value: unknown) => void;
     const saved = completedConversation;
-    state.api.sendConversation.mockReturnValue(
+    state.api.streamConversation.mockReturnValue(
       new Promise((done) => {
         resolve = done;
       }),
@@ -276,7 +356,14 @@ describe("private Agent chat", () => {
     expect(input).toHaveProperty("value", "");
     expect(within(screen.getByRole("log")).getByText("Hello")).toBeTruthy();
     expect(button).toHaveProperty("disabled", true);
-    await act(async () => resolve(saved));
+    await act(async () =>
+      resolve({
+        session: saved,
+        audioUrl: null,
+        voiceProfileId: null,
+        contentType: null,
+      }),
+    );
     expect(within(screen.getByRole("log")).getAllByText("Hello")).toHaveLength(
       1,
     );
@@ -289,7 +376,7 @@ describe("private Agent chat", () => {
       { ...saved, agent: { ...agent, available: false } },
     ]);
     state.api.chatAgents.mockResolvedValue([]);
-    state.api.sendConversation.mockClear();
+    state.api.streamConversation.mockClear();
     render(
       <LocaleProvider initialLocale="en">
         <AgentChat />
@@ -304,7 +391,7 @@ describe("private Agent chat", () => {
       "disabled",
       true,
     );
-    expect(state.api.sendConversation).not.toHaveBeenCalled();
+    expect(state.api.streamConversation).not.toHaveBeenCalled();
   });
 });
 
@@ -321,7 +408,7 @@ describe("provider controls", () => {
     fireEvent.change(select, { target: { value: "real" } });
     const dialog = await screen.findByRole("dialog");
     expect(state.api.updateProviderSettings).not.toHaveBeenCalled();
-    fireEvent.change(within(dialog).getByLabelText("API Key"), {
+    fireEvent.change(within(dialog).getByLabelText("DashScope API Key"), {
       target: { value: "test-only-key" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -350,6 +437,31 @@ describe("provider controls", () => {
       (screen.getByRole("combobox", { name: "TTS mode" }) as HTMLSelectElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("saves a teacher DashScope key without switching modes or checking providers", async () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <DemoCompositionBadge />
+      </LocaleProvider>,
+    );
+    await screen.findByRole("combobox", { name: "Debate LLM mode" });
+    fireEvent.click(screen.getByRole("button", { name: "Set API Key" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("DashScope API Key"), {
+      target: { value: "teacher-owned-test-key" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(state.api.updateProviderSettings).toHaveBeenCalledWith("course", {
+        expected_revision: 0,
+        component: null,
+        mode: null,
+        api_key: "teacher-owned-test-key",
+      }),
+    );
+    expect(state.api.checkProvider).not.toHaveBeenCalled();
   });
 
   it("checks only unchecked or changed components and leaves Ready and deferred ones alone", async () => {

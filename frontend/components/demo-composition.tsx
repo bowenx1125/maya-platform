@@ -204,13 +204,28 @@ export function DemoCompositionBadge() {
       <div className="section-card-header">
         <h2 id="demo-composition-title">Components</h2>
         {settings ? (
-          <button
-            className="text-link"
-            disabled={busy}
-            onClick={() => void check()}
-          >
-            Check
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              className="text-link"
+              disabled={busy}
+              onClick={() => {
+                setPendingComponent(null);
+                setError(null);
+                dialog.current?.showModal();
+              }}
+            >
+              {locale === "zh" ? "填写 API Key" : "Set API Key"}
+            </button>
+            <button
+              type="button"
+              className="text-link"
+              disabled={busy}
+              onClick={() => void check()}
+            >
+              Check
+            </button>
+          </div>
         ) : null}
       </div>
       {error ? <ErrorNotice error={error} /> : null}
@@ -304,9 +319,9 @@ export function DemoCompositionBadge() {
             );
           }}
         >
-          <h2 id="provider-key-title">API Key</h2>
+          <h2 id="provider-key-title">DashScope API Key</h2>
           <input
-            aria-label="API Key"
+            aria-label="DashScope API Key"
             type="password"
             autoComplete="new-password"
             value={key}
@@ -314,6 +329,11 @@ export function DemoCompositionBadge() {
             maxLength={1024}
             required
           />
+          <p className={styles.keyHint}>
+            {locale === "zh"
+              ? "密钥会加密保存在此 Maya 安装中。保存不会调用 DashScope；若服务器配置了 DASHSCOPE_API_KEY，则优先使用服务器密钥。"
+              : "Saved encrypted for this Maya installation. Saving does not call DashScope. A server-configured DASHSCOPE_API_KEY takes priority."}
+          </p>
           {error ? <ErrorNotice error={error} /> : null}
           <div className={styles.actions}>
             <button

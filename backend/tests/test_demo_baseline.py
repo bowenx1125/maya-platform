@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.models import Agent, AgentVersion, KnowledgeChunk, KnowledgeSnapshot
 from app.main import create_app
+from app.modules.avatars import DEFAULT_AVATAR_CONFIG, default_config_for
 from app.modules.demo_baseline.service import (
     BASELINE_AGENT_ID,
     BASELINE_CHUNK_ID,
@@ -18,6 +20,7 @@ from app.modules.demo_baseline.service import (
     BASELINE_SNAPSHOT_ID,
     BASELINE_SNAPSHOT_RELATIVE_PATH,
     BASELINE_SOURCE_RELATIVE_PATH,
+    BASELINE_SPECS,
     BASELINE_VERSION_ID,
     DemoBaselineConflict,
     baseline_is_usable,
@@ -72,6 +75,58 @@ def test_empty_runtime_baseline_is_idempotent_and_usable(
             assert path.stat().st_mode & 0o777 == 0o600
 
 
+def test_baselines_seed_the_requested_character_models(app_factory: Any) -> None:
+    app, database, settings = _seeded_database(app_factory)
+    with TestClient(app):
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
+            assert {
+                spec.agent_name: json.loads(
+                    db.get(AgentVersion, spec.version_id).avatar_config_json
+                )["template_id"]
+                for spec in BASELINE_SPECS
+            } == {
+                "Socrates": "maya-warm-scholar",
+                "Plato": "maya-civic-observer",
+                "Laozi": "maya-warm-scholar",
+            }
+
+
+def test_baseline_reconciles_only_exact_old_avatar_defaults(app_factory: Any) -> None:
+    app, database, settings = _seeded_database(app_factory)
+    with TestClient(app):
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
+            for spec in BASELINE_SPECS[:2]:
+                version = db.get(AgentVersion, spec.version_id)
+                assert version is not None
+                version.avatar_config_json = DEFAULT_AVATAR_CONFIG.model_dump_json()
+            laozi = db.get(AgentVersion, BASELINE_SPECS[2].version_id)
+            assert laozi is not None
+            manual_config = default_config_for("maya-civic-observer").model_dump_json()
+            laozi.avatar_config_json = manual_config
+            db.flush()
+
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
+            assert (
+                json.loads(db.get(AgentVersion, BASELINE_SPECS[0].version_id).avatar_config_json)[
+                    "template_id"
+                ]
+                == "maya-warm-scholar"
+            )
+            assert (
+                json.loads(db.get(AgentVersion, BASELINE_SPECS[1].version_id).avatar_config_json)[
+                    "template_id"
+                ]
+                == "maya-civic-observer"
+            )
+            assert (
+                db.get(AgentVersion, BASELINE_SPECS[2].version_id).avatar_config_json
+                == manual_config
+            )
+
+
 def test_baseline_conflict_fails_closed_without_rewriting_reserved_rows(
     app_factory: Any,
 ) -> None:
@@ -83,8 +138,12 @@ def test_baseline_conflict_fails_closed_without_rewriting_reserved_rows(
             agent = db.get(Agent, BASELINE_AGENT_ID)
             assert agent is not None
             agent.name = "Changed baseline"
+            version = db.get(AgentVersion, BASELINE_VERSION_ID)
+            assert version is not None
+            version.avatar_config_json = DEFAULT_AVATAR_CONFIG.model_dump_json()
             with pytest.raises(DemoBaselineConflict):
                 ensure_demo_baseline(db, settings.resolved_data_root)
+            assert version.avatar_config_json == DEFAULT_AVATAR_CONFIG.model_dump_json()
             db.rollback()
         with database.session() as db:
             assert db.get(Agent, BASELINE_AGENT_ID).name == "Socrates"

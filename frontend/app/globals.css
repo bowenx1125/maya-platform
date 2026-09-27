@@ -185,6 +185,7 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
+h2[data-ui-guide]:focus-visible,
 summary:focus-visible {
   outline: 3px solid rgba(84, 73, 166, 0.35);
   outline-offset: 3px;
@@ -2900,4 +2901,3 @@ dd {
     display: none;
   }
 }
-

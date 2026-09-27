@@ -202,7 +202,9 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
   async function hide(document: KnowledgeDocument, retry = false) {
     if (
       !retry &&
-      !window.confirm(t("deleteFileConfirm", { filename: document.source_filename }))
+      !window.confirm(
+        t("deleteFileConfirm", { filename: document.source_filename }),
+      )
     ) {
       return;
     }
@@ -327,7 +329,10 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
         </SectionCard>
       ) : null}
       {!creating && !editing ? (
-        <SectionCard title={`${t("filesHeading")} · ${visible.length}`}>
+        <SectionCard
+          title={`${t("filesHeading")} · ${visible.length}`}
+          guide="knowledge.files"
+        >
           {visible.length === 0 ? (
             <EmptyCard title={t("knowledgeNoFiles")} />
           ) : (
@@ -359,6 +364,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                         type="button"
                         disabled={busyId !== null}
                         aria-label={t("edit")}
+                        data-ui-guide="knowledge.edit"
                         onClick={() => void beginEdit(document)}
                       >
                         <IconEdit />
@@ -368,6 +374,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                         type="button"
                         disabled={busyId !== null}
                         aria-label={t("download")}
+                        data-ui-guide="knowledge.download"
                         onClick={() => void download(document)}
                       >
                         <IconDownload />
@@ -378,6 +385,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                           type="button"
                           disabled={busyId !== null}
                           aria-label={t("reindex")}
+                          data-ui-guide="knowledge.reindex"
                           onClick={() => void reindex(document)}
                         >
                           <IconRefresh />
@@ -388,6 +396,7 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                         type="button"
                         disabled={busyId !== null}
                         aria-label={t("delete")}
+                        data-ui-guide="knowledge.hide"
                         onClick={() => void hide(document)}
                       >
                         <IconClose />

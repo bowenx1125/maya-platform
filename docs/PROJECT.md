@@ -6,33 +6,28 @@ debates, student messages and independent reports. Progress authority;
 
 ## Approved four-round teaching flow — September 8, 2026
 
-New debates have exactly four rounds and two to five Agents; the complete
-round selector is removed. Snapshots use `four_round_v1` and `segments_v2`;
-the owner waived historical playback and recovery compatibility; existing
-records are not silently regenerated/deleted.
+New debates: exactly four rounds, two to five Agents, no round selector;
+four_round_v1/segments_v2 snapshots. Historical playback/recovery compatibility
+was waived; existing records are never silently regenerated/deleted.
 
-1. Opening: high-priority own-KB evidence; independent claim and relevance;
-   culture is a perspective, not proof; acknowledge missing evidence.
-2. Discussion: low-priority new own-KB retrieval; start from the speaker's
-   first-round position, respond to specific claims with agreement, challenge
-   or a question, and ask the cyclically assigned stable Agent ID a clear
-   question; no moderator or question-planning model is added.
-3. Response: medium-priority RAG, round-two questions first; query own
-   knowledge with the actual question or challenged point, state the retained,
-   qualified or revised position and why, and save concise session memory in
-   the same LLM output.
-4. Conclusion: high-priority fresh own-KB retrieval plus public earlier speeches
-   and session memory; name another Agent's point and explain
-   agreement, criticism and learning; freeze earlier barrages once; each Agent
-   answers one eligible message when available; no messages, no invented reply;
-   disagreement may remain.
+1. Opening: independent claim/relevance from high-priority own-KB evidence;
+   culture is perspective, not proof; acknowledge missing evidence.
+2. Discussion: low-priority new own-KB retrieval; build on the opening, address
+   specific claims and ask the cyclically assigned stable Agent ID a question.
+   No moderator or question-planning model.
+3. Response: medium-priority RAG on actual round-two questions/challenges;
+   explain retained/qualified/revised positions and save concise session memory
+   in the same output.
+4. Conclusion: fresh high-priority own-KB retrieval plus public speeches/memory;
+   explain agreement, criticism and learning from another Agent. Freeze earlier
+   barrages once; answer one eligible message per Agent if available. Do not
+   invent replies; disagreement may remain.
 
-Preview saves exact text and Mock audio for rounds one through three; round
-four is generated live. Opening is independent. Later turns see all successful
-prior turns, including the same round, with complete previous-round barriers;
-speaking order rotates but identities/question targets stay stable; scheduling,
-SQL Next, input hashes and recovery use the same prefix; completed
-results/accepted stages are reused, not charged again.
+Preview saves exact text/Mock audio for rounds 1–3; round 4 is live. Opening is
+independent; later turns see all successful predecessors including the same round,
+with complete previous-round barriers. Speaking order rotates, identities/question
+targets stay stable. Scheduling, SQL Next, input hashes and recovery share the
+same prefix; reuse accepted results/stages without charging again.
 
 | Round      | Chinese upper guidance | English upper guidance |
 | ---------- | ---------------------- | ---------------------- |
@@ -41,31 +36,24 @@ results/accepted stages are reused, not charged again.
 | Response   | 550 characters         | 350 words              |
 | Conclusion | 650 characters         | 420 words              |
 
-The owner's latest decision removes all backend speech-length validation and
-minimums; the upper bounds live only in the System Prompt. Chinese guidance
-counts non-whitespace characters including punctuation; English counts
-alphanumeric runs with internal apostrophes/hyphens as one word; only segment
-text counts. The backend never rejects, repairs, truncates or pads by length;
-only readable nonempty paragraph text is required. Auxiliary
-question/memory/source/barrage/support metadata cannot reject a speech;
-unusable metadata is dropped or left ungraded, while valid bindings and source
-text stay exact; unreadable JSON/text gets at most one authorized repair with
-frozen input and feedback, one-call authorization cannot gain another, and
-unknown acceptance is never silently resent. Question routing is separate from
-barrage reply_to; third-round memory holds
-position/change/reason/influence/unresolved_question, never classroom
-speech/TTS, Agent.md, published versions or knowledge; round four and Report
-read it under a separate session_discussion_memory outbound manifest class.
-Each Agent reads only its own knowledge and Persona. Other Agents' public
-speeches stay visible; their knowledge receipts and Persona do not. Migration
-0024 removes only the obsolete speaker/snapshot FK, retaining turn ownership,
-chunk/snapshot and unique constraints; direct +5,
-contextual +2 and no_match +0 are evidence-support categories, not factual
-correctness scores. Actual outbound prompts and synthetic I/O:
-[FOUR_ROUND_PROMPTS.md](contracts/FOUR_ROUND_PROMPTS.md),
-[four-round-example.json](contracts/four-round-example.json); content
-acceptance reviews actual answers, new points, evidence and reasoned
-disagreement; string similarity and keyword counts are not hard failure gates.
+Length guidance is System-Prompt-only, with no minimum. Count Chinese nonspace
+characters/punctuation and English alphanumeric words with internal apostrophes/
+hyphens, using segment text only. Backend requires readable nonempty paragraphs;
+never reject/repair/truncate/pad by length. Bad auxiliary metadata is dropped or
+ungraded, not speech-rejecting; valid bindings/source text remain exact. Unreadable
+JSON/text gets at most one authorized repair with frozen input/feedback; one-call
+authorization cannot gain another; unknown acceptance is not silently resent.
+
+Question routing is separate from barrage reply_to. Round-three memory contains
+position/change/reason/influence/unresolved_question, never speech/TTS, Agent.md,
+published versions or knowledge; round four/Report receive it as separate
+session_discussion_memory. Agents see only their own knowledge/Persona and others'
+public speeches, not others' private receipts/Persona. Migration 0024 removes only
+the obsolete speaker/snapshot FK, retaining ownership/chunk/snapshot/uniqueness.
+Direct +5/contextual +2/no_match +0 measure evidence support, not factual accuracy.
+[Actual prompts](contracts/FOUR_ROUND_PROMPTS.md) and
+[synthetic I/O](contracts/four-round-example.json) support manual content review:
+answers, new points, evidence and reasoned disagreement; no similarity/keyword gates.
 
 ## Verification boundary
 
@@ -75,74 +63,57 @@ no usage reset is authorized.
 
 ## Established classroom behavior
 
-Next can interrupt audio and recover using saved media; lists refresh while
-visible and on focus. Language, length and source alias wording are
-Prompt-only; S IDs remain metadata; report language follows the debate,
-renders Markdown without executing raw HTML, and does not reject prose for
-rhetorical/length rules; schema 0025 removed old report word-count publication
-limits. Larger Stage names omit A/B/C. Replay uses saved text/audio, hides
-Open Message and collects no new barrages. Immerse controls are now a fixed-size
-right-edge stack; a separate Transcript button toggles the speech sidebar.
+Next interrupts audio and recovers saved media; lists refresh while visible/on
+focus. Language, length and source aliases are Prompt-only; S IDs stay metadata.
+Reports follow debate language and render Markdown without raw HTML or prose
+length/rhetorical rejection (migration 0025). Stage names omit A/B/C. Replay
+uses saved media, hides Open Message and collects no new barrages. Fixed-size
+right-edge Immerse controls and a separate Transcript replace the bottom panel.
 
 ## Classroom actions
 
-- **Devocalize** removes saved audio; speech and sources survive.
-- **Delete** deletes the target debate regardless of draft/running/stalled/
-  terminal state; its writer transaction uses current revisions, so a stale
-  list cannot block the destructive intent. The list sends the ID without
-  depending on a successful detail projection and removes the row after the
-  delete commits, even if file cleanup is pending; other active classrooms no
-  longer block a scoped deletion and an absent legacy playback row is
-  materialized transactionally; workers get cancellation after the durable
-  deletion fence and the HTTP response does not wait for an external supplier.
-  Teacher/course authorization, shared-file ownership and path safety stay
-  enforced; this cannot retract a request already sent to a supplier, and late
-  work cannot recreate the deleted graph.
-- **Rebirth** is available on completed lessons, including retained replay. It
-  preserves the first three rounds' exact text, evidence, discussion memory and
-  audio, unpublishes them for classroom replay, removes final-round turns/audio
-  and classroom/report data, creates a fresh closed message window, and returns
-  to a Preview-ready draft with new-identity final turns. Each Rebirth funds
-  one additional final round (within the per-turn attempt cap); it calls no
-  Provider and regenerates no Preview.
-- **Remake** remains a guarded recovery API, not a visible Refresh action. The
-  latest UI removes all Refresh buttons, bulk retry and blocked-lesson recovery
-  buttons. List/focus reads never regenerate failures. Explicit recovery retains
-  prior charges, reuses saved results, and cannot duplicate sending or unknown
-  acceptance. End remains stop; auth, CSRF, identity and control guards remain.
+- **Devocalize** removes audio, preserving speech/sources.
+- **Delete** accepts every state/current transactional revision using only ID;
+  removes the row after commit despite pending cleanup/other active classrooms.
+  Materialize missing legacy playback; fence deletion before worker cancellation,
+  without waiting for suppliers. Preserve teacher/course/shared-file/path guards.
+  Sent requests cannot be retracted; late work cannot recreate the graph.
+- **Rebirth** preserves completed lessons' first three rounds exactly (text,
+  evidence, memory/audio), unpublishes them and removes final/classroom/report
+  data. Return a Preview-ready draft with closed messages, new final identities
+  and one final-round allowance within attempt caps. No Provider/Preview rerun.
+- **Remake** stays a guarded API; no Refresh/bulk retry/recovery UI or read-triggered
+  generation. Preserve charges, saved results and unknown-acceptance stop. End
+  means stop; auth/CSRF/identity/control guards remain.
 
 ## Playback and retrieval
 
-Preview polls while visible. Stage consumes ordered WebSocket events, applies
-speech/speaker atomically, ignores stale media callbacks and lets Next
-interrupt audio; final freezes barrages transactionally. Each round retrieves
-from its own KB with high/low/medium/high Prompt priority; up to three queries
-share one Embedding batch within the 4N initial allowance. Settled failed
-Provider responses are not cached successes; explicit Remake uses its
-fresh-turn allowance, preserves charge records and valid cached results,
-rebinds pending dependencies and rejoins Preview scheduling; deleted
-diagnostics are not recreated. Report
-offers Regenerate and Review; Conclude creates its first revision. Readable
-speech survives unusable auxiliary metadata; invalid bindings stay ungraded.
-Rebirth resets final dependencies in one
-writer transaction, restoring immutability triggers on success or rollback;
-Devocalize/Revocalize survive failures; consent, cost, identity and state
-guards remain, none establishing real-service acceptance.
+Visible Preview polls; ordered WebSocket events apply speech/speaker atomically
+and ignore stale media callbacks. Final barrages freeze transactionally. Each
+round queries its own KB at high/low/medium/high Prompt priority; up to three
+queries share a batch within the initial 4N allowance. Remake uses fresh-turn
+allowance, keeps charges/accepted caches, rebinds dependencies and rejoins
+scheduling; failed responses are not cache successes and deleted diagnostics
+stay deleted. Conclude creates Report revision 1; Regenerate/Review remain.
+Rebirth resets final dependencies under one writer transaction, restoring
+immutability triggers on success/rollback. Invalid auxiliary bindings stay
+ungraded. Devocalize/Revocalize preserve consent, cost, identity and state guards;
+these checks are not real-service acceptance.
 
 ## Runtime and established UI
 
-Next.js, FastAPI, SQLite/local files and Caddy share port 8080. Inspect active
-SQLite only inside its container; preserve private configuration, knowledge
-and runtime data. TTS/Voice remain Mock; Debate LLM, Embedding and Report use
-configured real DashScope adapters with independent authorization; Embedding
-is 1024-dimensional. Devocalize/Delete sit beside Rebirth; failed actions
-preserve the row. The Immerse topic stays fixed at the bottom left. The old bottom operation panel is removed.
-Small fixed-size buttons stand alone on the far right, without a backing board.
-Transcript toggles a separate sidebar with Public Debate, status, progress and
-Check RAG; Escape closes it and restores focus. Bubbles persist until Next;
-Interact/Hide preserves its QR session; Conclude shows Evaluation sorted
-by score without name prefixes, plus Report Version/History; Audio Ready
-indicates retained audio.
+Next.js/FastAPI/SQLite/local files/Caddy share port 8080. Inspect active SQLite
+inside its container; preserve private configuration, knowledge and runtime data.
+The previously accepted stack used Mock TTS/Voice and separately authorized real
+DashScope LLM/Embedding/Report; embedding dimension is 1024. Current checked-in
+speech capability is described below, without claiming new runtime acceptance.
+
+Devocalize/Delete sit beside Rebirth; failed actions preserve rows. Immerse topic
+is fixed bottom-left; standalone fixed-size controls sit far right. Transcript
+shows Public Debate/status/progress/Check RAG; Escape closes and restores focus.
+Bubbles persist until Next. Interact/Hide retains the QR session. Conclude shows
+score-sorted Evaluation without name prefixes and Report Version/History;
+Audio Ready means retained audio.
 
 ## Remaining scope
 
@@ -162,43 +133,27 @@ Topic/Background cards, sidebar Back/Done, and Ruleset language selection.
 
 ## Frozen Markdown Ruleset and current Report repair
 
-Default teaching content lives only in
-backend/app/modules/debates/default_rules/zh.md and en.md, loaded through a
-teacher-scoped read-only endpoint. Agents Order is followed by one Debate
-Ruleset row: compact language switch with pencil Edit and checkmark Save.
-Selected-language Markdown is rendered full-width; Edit shows raw text; the
-checkmark beside 中文/English saves that language and returns to rendered mode.
-Sidebar Back discards an unsaved edit. Sidebar Done creates the debate and does
-not save an unsaved ruleset edit (Done stays away while the ruleset is in Edit).
-The old Multi-round Civilization/phase block is removed and Topic/Background use
-warm paper textareas.
-Create freezes both authored Markdown files and eight complete System messages
-(four per language) in rule_snapshot_json. Markdown is sent intact, with no
-heading parser or old pedagogical Prompt appended; only the language/
-current-round, JSON/source/routing execution contract is added. Changes to
-default files or other debates cannot alter this snapshot; draft updates
-preserve frozen rules and reject replacement attempts; default-file reads make
-no Provider calls. Migration 0027_frozen_teaching_markdown freezes defaults
-for existing four-round rows, preserving saved speeches, custom snapshots and
-non-four-round records. Turn input hashes and recovery envelopes keep frozen
-System messages; repair appends feedback to the same message. UI rejects
-executable HTML/unsafe links; provider budgets and authorization are unchanged;
-model compliance stays manual; Chinese direct/contextual/no_match wording is
-“RAG证实”/“RAG提示”/“我感觉”, editable Prompt guidance only. A speech answers
-the Topic from retrieved evidence first. No-match general reasoning infers that
-answer from Agent.md, keeps a narrower source claim at its own scope, and does
-not invent facts absent from Agent.md and the sources. Transcript has one current/total
-indicator with nonvisual connection status. Network recovery uses Back/reentry;
-Report keeps complete evidence within request budgets and safe error paths.
-Creation defaults to Chinese, preserves independent CN/EN drafts and omitted
-language, uses linked-height Topic/Background and newest-first Agents Order;
-mobile stacks. The separate Beta list redirects to Debates. Row actions remain
-Rebirth, Immerse, Devocalize/Revocalize and Delete. Full Agent Profile and
-immutable RAG Check/Download remain. Replay and Conclude require completion;
-saved media/controller recovery never automatically retries generation or advances.
-Live starts/handoff clear replay cursors. Report bibliographic prose is not a
-private-input keyword failure; relationship/schema guards remain. Agent.md has
-a 12,000-character total budget without field/list caps.
+Defaults: backend/app/modules/debates/default_rules/zh.md and en.md, teacher-only
+read endpoint, no Provider calls. After Agents Order: language, pencil Edit,
+checkmark Save. Render full Markdown; Edit raw text. Checkmark saves that language,
+Back discards, Done creates and is hidden during Edit. Warm-paper Topic/Background.
+
+Create freezes both files/eight System messages in rule_snapshot_json. Send intact
+Markdown with only language/current-round/JSON/source/routing execution rules; no
+parser or old Prompt. Reject draft rule replacement; defaults cannot change saved
+snapshots. Migration 0027 preserves custom rules/speeches/non-four-round records.
+Hashes/recovery/repair retain frozen messages, appending repair feedback.
+Reject executable HTML/unsafe links; model compliance is manual.
+
+“RAG证实”/“RAG提示”/“我感觉” are editable direct/contextual/no_match guidance. Answer
+from evidence first; otherwise use Agent.md without inventing facts or widening
+source claims. Transcript has current/total and nonvisual connection status.
+Back/reentry recovers network; never auto-retry/advance saved generation. Reports
+keep complete evidence within budgets; bibliographic prose is not a secret leak.
+Creation defaults Chinese with independent CN/EN drafts/omitted language,
+linked-height inputs, newest-first Agents Order and mobile stacking. Beta redirects
+to Debates. Profile/RAG downloads and classroom actions remain. Replay/Conclude
+require completion; Live start/handoff clears replay cursors.
 
 ## Obsolete protocol removal — September 10, 2026
 
@@ -208,209 +163,162 @@ Old RuleSets and their branches are removed. Only
 
 ## Account integration — September 12, 2026
 
-Single-course Demo: open student registration, five-character passwords,
-distinct unknown-user/wrong-password errors; multi-course registration deferred.
-Catalog accounts stay source-managed. Migration 0029 enforces canonical username
-and group uniqueness; collisions stop migration, duplicates never alter a login.
-Teacher group access survives catalog sync: Enter grants workspace CRUD under
-the teacher identity; Homeward returns to Accounts. CSRF, publication, course,
-provider consent and cost boundaries remain; TTS/Voice configuration is preserved.
+Single-course Demo: open registration, five-character passwords, separate unknown
+user/wrong password errors; multi-course deferred. Catalog accounts stay managed.
+Migration 0029 enforces canonical username/group uniqueness and stops on collisions
+without altering logins. Teacher access survives sync; Enter grants CRUD as the
+teacher, Homeward returns to Accounts. CSRF/publication/course/consent/cost guards
+and TTS/Voice configuration remain.
 
 ## Classroom display — September 18, 2026
 
-PR 29 merged at `ed22231`. Two to five licensed scholar figures stand around
-the courtyard table; jaw motion, bubble and Transcript follow audio, while
-saved text remains readable on media failure. `/local-roundtable` accepts a
-local generated WAV directory. Cloned voices are uploader-owned. Optional
-Gaussian scene packs remain local experiments described by ADR-007, not a
-default runtime dependency.
-
-Two fully skipped obsolete backend tests and completed plans were removed;
-current assertions and the four-round manual checklist remain.
+PR 29 merged at ed22231: two to five licensed scholars surround the courtyard
+table; jaw/bubble/Transcript follow audio, with readable text on media failure.
+/local-roundtable accepts local WAVs. Cloned voices are uploader-owned. Gaussian
+packs remain optional ADR-007 experiments. Two fully skipped obsolete tests and
+completed plans were removed; current assertions/manual checklist remain.
 
 ## Operation panel and browser acceptance — September 22, 2026
 
-The owner approved ending the previous lesson, retaining its content. One Ready
-three-Agent debate completed Start, Next, Interact/Hide, Check RAG, four rounds/
-12 turns, Conclude and Version 1 Report. Replay and reload preserved the result.
-Nine Preview speeches were reused. Seven new charged calls succeeded with exact
-confirmations: three Embedding queries, three final LLM turns and one Report;
-replay/reopening Report added none. TTS/Voice remain Mock; no student messages/
-votes were sent. Real speech and classroom-scale acceptance remain unverified.
-
-Retained Preview turns 5/6 and 8/9 have identical speech ignoring whitespace;
-list text says “2 Rounds” despite the four-round snapshot. Neither was rewritten.
-Performance and full RAG teaching quality remain open.
-[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) records the accepted
-integration/reuse boundaries. This earlier acceptance does not cover the new work below.
+With owner approval, one three-Agent lesson completed Start/Next/Interact/Hide/
+Check RAG, four rounds/12 turns, Conclude and Report v1; Replay/reload preserved it.
+Nine Preview speeches were reused. Seven confirmed charged calls succeeded:
+3 Embedding queries, 3 final LLM turns, 1 Report; reopening/replay added none.
+TTS/Voice were Mock; no student messages/votes. Retained turns 5/6 and 8/9 have
+identical text ignoring whitespace, and the list says “2 Rounds”; neither was
+rewritten. Performance/RAG quality/real speech/load remain open.
+[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) defines reuse boundaries.
+This dated acceptance does not cover later changes.
 
 ## Working — workspace, private Chats and Live
 
-Migration 0030 adds owner-bound history, encrypted local Provider preferences and
-20-second Live leases. Chats freezes a published version/snapshot and uses request
-identity, revision fences and a cost ledger. Unknown provider acceptance stops a
-conversation. Five components remain visible: LLM/Embedding/Report can switch;
-TTS/Voice stay Mock/Deferred. Student Live shares public content and retained audio,
-never controller messages or a new generation request per spectator.
+Migration 0030 adds owner-bound history, encrypted Provider preferences and
+20-second Live leases. Chat freezes version/snapshot with request/revision fences,
+cost ledger and unknown-acceptance stop. Components switches LLM/Embedding/Report;
+TTS/Voice deferred. Live shares public history/audio, no controller messages or
+per-spectator requests. Ready Chat voices support TTS (120s timeout, generic 30s).
+Three avatars persist per user/Agent: Elder Scholar for Socrates/Laozi, Noble for
+Plato. Startup changes only exact old factory configs; no new speech/browser
+acceptance is claimed.
 
-Non-login UI follows ui-ux-pro-max Minimalism and the login mood: display-serif
-section headings, warm paper cards (`#fdfaf3`), quiet type scale, original mark in
-the Mayaform navigation item. No separate brand wordmark, visible page titles or
-Refresh. Accounts keeps username/group/status; group Enter is an arrow with an
-accessible name. Logout matches sidebar link size. Components has one Check,
-skips Ready/deferred items, confirms the maximum paid calls and stops on failure.
-Mode/key changes invalidate the relevant checks. Live keeps speech history.
+Minimalist workspace: display-serif headings, warm paper (#fdfaf3), quiet type,
+original Mayaform mark; no extra wordmark/titles/Refresh. Accounts shows username/
+group/status/accessible Enter; Logout matches links. API Key saves encrypted
+installation-wide credentials without calls/mode changes; environment key wins.
+Check skips Ready/deferred, confirms maximum calls and stops on failure; mode/key
+changes invalidate checks. New fades when disabled; Back/Done are contextual.
+Chat has New/history-delete X/Send. Changing Agent model opens a new chat. Agent
+New opens next draft; Done saves/publishes returned revision, Back warns on unsaved
+work. Libraries use pencil/download/X; failed creation retains text/retry identity.
 
-Sidebar New stays registered on screens that own it and fades when disabled;
-Back and Done still appear only when that screen needs them. Chats has New,
-conversation delete (hover/focus X on a history row), and Send; switching the
-Agent model always opens a new chat. Agent entry shows the current version; New
-opens/creates its next draft. Done saves then publishes the returned revision
-when checks pass; Back warns about unsaved edits. Libraries use quiet icon
-actions (pencil Edit, download glyph, X Delete) and one Back/Done editor.
-Failed creation retains text and retry identity.
-
-Earlier deployed browser acceptance covered both identities, owner-only history,
-Components/Accounts, 375px/desktop, Replay and Live. Immerse buttons retained
-104x44px desktop dimensions; Docker and retained classroom/assets were healthy.
-That release made 11 assistant-paid calls: 4 Chat Embedding + 4 Chat LLM,
-1 LLM Check and 2 Report Checks. Repeated requests/history added none. Decimal
-budget multiplication fixed a second-message failure before dispatch. Concurrent
-user work brought that dated ledger to 17 successes (7 Embedding, 10 LLM/checks);
-these counts do not describe the new checkpoint or later user requests.
+Earlier deployment checked both identities, private history, Components/Accounts,
+375px/desktop, Replay/Live, healthy Docker/assets and 104x44 Immerse buttons.
+11 assistant-paid calls: 4 Chat Embedding, 4 Chat LLM, 1 LLM Check, 2 Report Checks;
+repeated requests/history added none. Decimal multiplication fixed a pre-dispatch
+second-message budget failure. Concurrent user work raised that dated ledger to
+17 successes (7 Embedding, 10 LLM/checks); not a current count.
 
 ## Working — free Markdown, deletion and composer checkpoint
 
-Agent.md now passes directly to Chats and Debate generation as authored Chinese/
-English Markdown, maximum 12,000 characters. Its optional default template covers
-identity, characteristics and four thinking questions; no chapter parser, per-field
-caps, semantic rules or executed ToT/ReAct. Persona/Compile/Confirm and Test Chat UI
-are removed. Legacy columns, frozen API routes and historical codecs remain for
-saved data; they no longer gate publishing. RAG content is unrestricted, capped at
-100,000 characters per file, not across all files; file access and non-execution
-boundaries remain. Old classroom rules/results are not rewritten.
+Agent.md is authored Chinese/English Markdown (12,000 characters), passed directly
+to Chat/Debate. Optional template: identity, characteristics, four thinking questions.
+No chapter/field/semantic gates or executed ToT/ReAct. Removed Persona/Compile/
+Confirm/Test Chat UI; legacy columns/routes/codecs only serve saved data. RAG caps
+at 100,000 characters per file, retaining access/non-execution and old records.
 
-Migration 0031 adds a shared Agent tombstone. Workspace Delete removes teacher/
-student access, retains immutable assets and private chats read-only, and preserves
-shared knowledge/voice files. Any Debate reference or active publication blocks
-deletion under the same writer lock as concurrent creation/publication.
+Migration 0031 tombstones remove teacher/student Agent access while preserving
+immutable assets, shared files and read-only private chats. Debate references or
+active publication block deletion under the creation/publication writer lock.
+Chats restores nonempty history; New starts fresh. Send shows pending text and
+clears the draft; network failures restore text/request identity. Reentry sends
+same-conversation history without cross-chat memory.
 
-Chats is the visible label; Message and redundant knowledge revision/status copy
-are removed. Switching Agent restores nonempty history; New alone starts fresh.
-Sending clears the draft immediately and shows the user message while waiting;
-the accessible arrow sits inside the composer. A network failure restores text
-and preserves request identity. Same-conversation saved history is sent on reentry;
-no cross-chat personal memory is promised.
-
-Acceptance: backend 1391 passed/21 skipped; frontend 373 passed/1 skipped, plus
-23 focused UI checks. Types, Ruff, format, API/WS/boundary/reset and migration probes
-passed; old migration seeds now use historical columns, not today's ORM. Docker
-rebuilt/restarted, migration 0031/readiness/integrity passed after SQLite backup.
-Teacher Chats checked at 1440px/375px without overflow; arrow is 44x44px inside the
-composer. No new real calls, live Agent deletion or classroom generation. Obsolete
-Persona UI/tests and duplicate full Prompts removed; provider quality remains unverified.
+Dated acceptance: backend 1391/21 skipped; frontend 373/1 skipped plus 23 focused.
+Types/Ruff/format/API/WS/boundary/reset/migrations passed; historical seeds use old
+columns. Docker/0031/readiness/integrity passed after backup. Chats 1440px/375px:
+no overflow, 44x44 arrow. No new paid calls, live deletion or classroom generation;
+provider quality remains unverified. Obsolete Persona UI/tests/Prompts removed.
 
 ## Working — Chats without product I/O caps (observed 2026-09-23)
 
-Removed Chats product input/output stop rules that blocked SiyaH. Observed in
-the local Docker stack (`POST /api/v1/conversations/{id}/messages`):
-
-- Historical failures stored as `chat_context_full` (32,000-byte outbound JSON
-  gate and related turn/daily ceilings).
-- After those gates were lifted, SiyaH still failed with
-  `export_data_forbidden` because Agent.md contains the lesson word
-  `Authorization` and chat preflight scanned educational payload prose as if it
-  were a credential leak.
-
-Code change (same commit): drop the 20-turn stop, 100/day limit, 4,000-character
-message max, outbound JSON byte reject, and `max_tokens: 1500` request field;
-keep full conversation history in the prompt without summary/crop instructions;
-skip chat payload content scanning while leaving auth, CSRF, ownership,
-acceptance-unknown stop, and header credential handling intact; use finite
-per-call ledger reservations with sentinel-unbounded scope ceilings so multi-turn
-chats still share one budget. OpenAPI `SendChat` no longer declares
-`maxLength: 4000` or a `429` response. Focused backend chat tests passed,
-including a regression that sends educational `Authorization` text.
-
-Not observed in this change: a new charged SiyaH real-provider acceptance run
-after Docker rebuild; RAG teaching-quality acceptance. Supplier capacity,
-authentication, ownership and deduplication remain.
+SiyaH hit chat_context_full (32,000-byte JSON and turn/day ceilings), then
+export_data_forbidden when educational “Authorization” was scanned as a secret.
+Removed 20-turn/100-per-day/4,000-character/JSON-byte stops and max_tokens: 1500;
+retain full unsummarized history. Skip prose scanning, retaining auth/CSRF/
+ownership/unknown-acceptance/header guards and deduplication. Finite per-call
+reservations use unbounded scopes; SendChat drops maxLength: 4000 and 429.
+Focused tests including Authorization prose passed; no charged post-rebuild SiyaH
+or RAG quality acceptance was observed. Supplier capacity still applies.
 
 ## Working — quiet workspace UI (observed in code 2026-09-24)
 
-Mayaform home shows Welcome then Members; the old Workspace Members card is gone.
-Student Knowledge lists `Files · N` in a two-column tile grid; library Delete is the
-quiet X and soft-hides or removes the library row without rewriting published
-knowledge snapshots. Workspace and teacher Agents use a six-column tile grid with
-name, group, and version bubble vertically centered on warm paper; green/brown
-bubbles show the version label; hover/focus swaps the label for X to delete.
-Teacher Debates list no longer opens Preview from the row — Immerse remains the
-entry. AGENT.md, Evidence, and Knowledge snapshot cards use a top-right download
-icon; Evidence downloads every RAG file in the block; snapshot file rows keep
-filename and character count without `order N`. Snapshot SNAPSHOT/CONTENT/FILES
-are three vertical stacks (label above value) at the existing number size. Chats
-composer uses a floating rounded shell with the send control on its own row. Ruleset save is the
-checkmark beside language; sidebar Done does not save an unsaved Edit. Symbol
-actions and faded New / contextual Back/Done remain as before.
+Mayaform: Welcome then Members. Knowledge: two-column Files · N tiles; X hides or
+removes library rows without rewriting snapshots. Agents: six-column warm-paper
+tiles with centered name/group/version; green/brown version bubbles become X on
+hover/focus. Debate entry is Immerse, not row Preview. Top-right icons download
+AGENT.md, all Evidence files and Knowledge snapshots. Snapshot rows show filename/
+characters, not order N; SNAPSHOT/CONTENT/FILES labels sit above values. Chats keeps
+the local rounded floating composer and separate Send row. Ruleset checkmark saves
+language; Done does not save an unsaved Edit. Contextual sidebar controls remain.
 
 ## Snapshot publish quota — September 23, 2026
 
-The owner removed the real-snapshot request, token and CNY ceilings. Planning still
-packs at most 10 items and 30,000 counted tokens per batch. `embedding_snapshot`
-scope rows use unbounded ceilings so reservation cannot reimpose the old cap. Query
-embedding and LLM budgets are unchanged.
+Snapshot request/token/CNY ceilings were removed; batches still pack at most
+10 items/30,000 counted tokens. embedding_snapshot scopes are unbounded; that
+change did not alter query/LLM budgets.
 
-A later publish of the same 罗燕玲 draft reached DashScope. One batch was accepted
-and staged; the next batch returned HTTP 500. Continuation keeps a staged accept,
-restores it when the stage still matches, and resends an explicit
-`provider_http_rejected` batch once.
+罗燕玲 accepted/staged one batch then got HTTP 500. Matching stages are reused;
+provider_http_rejected retries once. Another build accepted five batches, timed
+out at 30s and left two not_sent; the next click sent nothing at attempt 2/2.
+Continuation now permits unstaged acceptance_unknown up to three attempts, each
+retry charged; embedding timeout is 120s. Saving the draft created a new build:
+at 07:28 UTC nine batches succeeded, publishing eaa37c26-c30a-4332-826c-2533820dcc13
+with text-embedding-v4/1024 dimensions/12 chunks. Old timed-out build was not resent.
+SiyaH's two staged batches survived a failed local commit. Restore matching failed
+stages without supplier resend; at 07:39 UTC cc072330-3885-4a39-ba28-adb0136fd976
+published with the same model/dimension, seven chunks and no new embedding call.
 
-The publish after that accepted five batches, then one batch hit a DashScope read
-timeout at 30 seconds (`acceptance_unknown`) and the two batches after it stayed
-`not_sent`. The next click stopped before any send because a timeout with no staged
-response was terminal, and that batch was already on attempt 2 of 2. Continuation
-now sends an `acceptance_unknown` batch that has no staged response again, up to
-three attempts for the build. The embedding read timeout is 120 seconds. Accepted
-batches are still reused. Retrying the timed-out batch is another charged request.
-
-The draft was saved again before the next publish, so that click started a new
-build instead of continuing the timed-out one. At 07:28 UTC all nine batches of
-that build succeeded. 罗燕玲 version `eaa37c26-c30a-4332-826c-2533820dcc13` is
-published with a DashScope `text-embedding-v4` snapshot, dimension 1024, and 12
-stored chunks. The earlier timed-out build remains on the ledger and was not
-resent.
-
-SiyaH's later draft had both embedding batches staged, then the local snapshot
-commit failed and those rows stayed `failed`. Later clicks stopped before any
-send. A failed batch that still has a matching stage is restored to `accepted`
-and published locally; the supplier request is not repeated. At 07:39 UTC draft
-`cc072330-3885-4a39-ba28-adb0136fd976` published that way, with a DashScope
-`text-embedding-v4` snapshot, dimension 1024, 7 stored chunks, and no new
-embedding request.
-
-Debate query identity uses the published AGENT.md hash. A missing compiled
-Persona hash no longer stops the turn, and the segment prompt sends that
-AGENT.md.
-
-Debate turns no longer stop on a prompt token, byte or output count, and a
-Debate's query and LLM scope ceilings are unbounded. Embedding and query
-batches are not rejected for input size. A draft whose current turn already
-failed does not take the warmer away from another Debate. A query that was
-proven not sent can be attempted once more. The stored LLM recovery input no
-longer stops at 256 KiB, so a turn whose prompt includes AGENT.md can be saved
-after the supplier accepts it.
+Debate identity/prompts use published AGENT.md, not compiled Persona. Later changes
+removed prompt-token/byte/output stops, query/LLM scope ceilings and embedding
+input-size rejects. Failed drafts cannot take another Debate's warmer; proven
+not_sent queries get one retry. Recovery input no longer stops at 256 KiB.
 
 ## Next atomic task
 
-`LLM_MODEL` selects the chat, debate and report model. When it is unset, the
-server uses `qwen3.8-max-2026-09-02`. Supplier price cards are not consulted.
-Embedding and speech models stay pinned. A charged acceptance run on that
-snapshot has not been recorded.
+LLM_MODEL selects Chat/Debate/Report, default qwen3.8-max-2026-09-02 without supplier
+price lookup. Embedding/speech models stay pinned; no charged acceptance on this
+snapshot is recorded. Next: independent model/effort UI with provider capabilities
+and server-side keys, audited assistant-ui/AI Elements/Agno reuse (ADR-008), no
+cloud history. Face-to-face Bailian Beijing voice follows manual text/UI audit;
+Components still defers TTS/Voice. RAG quality, real speech, load and deployment
+remain unverified.
 
-Then implement model/effort UI independent of teacher defaults, with provider
-capabilities and server-side keys. Prefer audited assistant-ui/AI Elements/Agno
-reuse (ADR-008), no cloud history.
+## Checked-in streaming and speech capability
 
-Later real-time face-to-face voice uses Bailian Beijing, after text/UI manual audit.
-TTS configuration stays untouched. Full RAG teaching quality, real speech,
-classroom-scale load and public deployment remain unverified.
+POST /api/v1/conversations/{conversation_id}/messages:stream and the existing JSON
+messages route share the assistant-text commit, once before text_done. Release the
+conversation lock then; hold no DB session across LLM/TTS. TTS runs once afterward;
+failure preserves text, and tts_ready carries audio_url, not bytes. lang is zh-CN/en.
+Student voice IDs stay encrypted; drafts bind voice_profile_id. DashScope speech
+can accompany real core slices using DASHSCOPE_API_KEY; defaults remain mock.
+Only Qwen WAV placeholder RIFF/data sizes near 2**31 are rewritten before technical
+validation. TTS language_type is Chinese/English; enrollment sends zh/en from
+zh-CN/en samples. The earlier Debate “language English” contract remains unchanged.
+Rotate the environment key and restart; voice rows hold no key.
+BASELINE_DEFAULT_VOICES maps immutable characters to ready profiles; omitted names
+use FALLBACK_VOICE_PROFILE_ID. No charged call established this capability.
+
+## Workspace UI/import — September 27, 2026
+
+Bilingual cursor/focus/touch help covers workspace and Debate actions; unit tests
+pass. PDF/Word import is deferred: Markdown-only uploads remain, and bounded
+extraction/OCR is not implemented.
+
+## Local/GitHub integration — September 27, 2026
+
+Inputs: local main 7236a97 plus its uncommitted composer, GitHub main a2b397d
+and entaiaki dfac2b4 (which contains main). Other siblings/reverts excluded.
+Local composer checkpoint: 4fd1968. Integration keeps remote help/streaming/avatar
+behavior. Fixed missing deleteConversation route fixture, guarded absent ledger
+transitions, aligned tests with existing unbounded query scopes, and passed the
+baseline voice mapping into Compose. README/AGENTS refreshed; authority compacted.

@@ -156,9 +156,7 @@ function PublishedAgentTile({
       >
         {item.agent.name}
       </Link>
-      {groupName ? (
-        <span className="agent-tile-group">{groupName}</span>
-      ) : null}
+      {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
       <button
         type="button"
         className="agent-pill agent-pill-action"

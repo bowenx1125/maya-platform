@@ -67,7 +67,11 @@ def preferences_settings(settings: Settings, row: ProviderPreferences | None) ->
         raise RuntimeError("Provider preferences are invalid")
     for key, mode in modes.items():
         values[f"{key}_provider"] = "dashscope" if mode == "real" else "mock"
-    if row.encrypted_key:
+    # DASHSCOPE_API_KEY is the rotation source. A key saved from the teacher
+    # dialog applies only when that variable is empty, so replacing the
+    # environment value and restarting does not require a database edit.
+    env_key = (settings.dashscope_api_key or "").strip()
+    if row.encrypted_key and not env_key:
         try:
             raw = base64.b64decode(row.encrypted_key, validate=True)
             key = hmac.digest(settings.secret_bytes, _KEY_CONTEXT, "sha256")

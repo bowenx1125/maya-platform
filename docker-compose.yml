@@ -73,6 +73,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       DEEPL_API_KEY: ${DEEPL_API_KEY:-}
       FALLBACK_VOICE_PROFILE_ID: ${FALLBACK_VOICE_PROFILE_ID:-}
+      BASELINE_DEFAULT_VOICES: ${BASELINE_DEFAULT_VOICES:-}
     expose:
       - "8000"
     volumes:

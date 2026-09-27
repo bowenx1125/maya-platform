@@ -161,7 +161,9 @@ describe("BetaDebateStage scene layout", () => {
     expect(scene.getAttribute("data-layout")).toBe("preview");
     expect(scholarSceneProps[0].layout).toBe("preview");
     expect(
-      screen.getByRole("heading", { name: "Should the bench fill the screen?" }),
+      screen.getByRole("heading", {
+        name: "Should the bench fill the screen?",
+      }),
     ).toBeTruthy();
   });
 

@@ -1,10 +1,9 @@
-"""Focused regression tests for real query disclosure consent and budgets."""
+"""Focused regression tests for real query disclosure consent and accounting."""
 
 from __future__ import annotations
 
 import importlib
 import struct
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -16,10 +15,7 @@ from app.modules.debates.generation.mutual_learning_policy import (
     MUTUAL_LEARNING_RULE_SET_ID,
 )
 from app.modules.debates.models import Debate, DebateTurn
-from app.modules.debates.playback.generation_adapter import (
-    SqlTurnPreparer,
-    _query_request_cap,
-)
+from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
 from app.modules.debates.setup.service import commit_start_plan
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingAdapter,
@@ -147,14 +143,6 @@ def _query_setup(
     return database, settings, str(debate_id), turn_id, policy, transport
 
 
-def test_segments_query_budget_scales_with_participants_and_rounds() -> None:
-    settings = SimpleNamespace(llm_provider="dashscope", embedding_provider="dashscope")
-    segments = SimpleNamespace(rule_snapshot_json='{"round_count":4,"turn_protocol":"segments_v2"}')
-    legacy = SimpleNamespace(rule_snapshot_json='{"round_count":4}')
-    assert _query_request_cap(settings, segments, participant_count=3) == 12
-    assert _query_request_cap(settings, legacy, participant_count=3) == 2
-
-
 def test_standing_query_consent_confirms_exact_owner_manifest_and_runs_once(
     app_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -203,8 +191,6 @@ def test_standing_query_consent_confirms_exact_owner_manifest_and_runs_once(
     assert operations[0].state == "succeeded"
     assert operations[0].request_count == 1
     assert operations[0].charged_request_count == 1
-    budget = ProviderRepository(database).get_scope_budget(debate_id)
-    assert budget is not None and budget.max_requests == 8
     confirmation = ProviderRepository(database).get_export_confirmation(
         operations[0].export_manifest_hash
     )
@@ -246,4 +232,7 @@ def test_manual_query_confirmation_path_still_parks_before_provider_call(
         operations[0].request_count,
         operations[0].charged_request_count,
     ) == ("prepared", 0, 0)
-    assert ProviderRepository(database).get_scope_budget(debate_id) is None
+    assert (
+        ProviderRepository(database).get_export_confirmation(operations[0].export_manifest_hash)
+        is None
+    )

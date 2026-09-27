@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { isConflict } from "../lib/api";
 import { localizeError, statusLabel } from "../lib/i18n";
+import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useLocale, useT } from "./locale";
 
 export function LoadingCard({ label }: { label?: string }) {
@@ -98,12 +99,14 @@ export function SectionCard({
   action,
   children,
   className = "",
+  guide,
 }: {
   title?: string;
   description?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  guide?: UiGuideKey;
 }) {
   // A section directly beneath the page title does not need to repeat it, so
   // the header collapses entirely when there is nothing of its own to say.
@@ -113,7 +116,15 @@ export function SectionCard({
       {header ? (
         <div className="section-card-header">
           <div>
-            {title ? <h2>{title}</h2> : null}
+            {title ? (
+              <h2
+                data-ui-guide={guide}
+                data-ui-guide-touch={guide ? "true" : undefined}
+                tabIndex={guide ? 0 : undefined}
+              >
+                {title}
+              </h2>
+            ) : null}
             {description ? <p>{description}</p> : null}
           </div>
           {action ? <div>{action}</div> : null}

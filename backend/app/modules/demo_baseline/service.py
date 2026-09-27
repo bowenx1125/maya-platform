@@ -38,7 +38,7 @@ from app.modules.agents.persona import (
     persona_spec_hash,
     raw_agent_md_hash,
 )
-from app.modules.avatars import DEFAULT_AVATAR_CONFIG
+from app.modules.avatars import DEFAULT_AVATAR_CONFIG, default_config_for
 from app.modules.debates.models import Debate
 from app.modules.interactions.models import ClassroomInteractionWindow
 from app.modules.knowledge.files import contained_path, write_atomic
@@ -65,6 +65,7 @@ class BaselineSpec:
     frozen_file_reference_id: str
     confirming_user_id: str
     agent_name: str
+    avatar_template_id: str
     description: str
     agent_md: str
     knowledge: str
@@ -124,6 +125,7 @@ BASELINE_SOCRATES = BaselineSpec(
     frozen_file_reference_id=str(UUID("8cd981ac-313c-5123-ad58-92a02dcb7573")),
     confirming_user_id="60541c78-30f1-55c5-b2aa-207b6a766883",
     agent_name="Socrates",
+    avatar_template_id="maya-warm-scholar",
     description="Seeded Demo Agent for the local mutual-learning session.",
     agent_md=SOCRATES_AGENT_MD,
     knowledge=SOCRATES_KNOWLEDGE,
@@ -145,6 +147,7 @@ BASELINE_PLATO = BaselineSpec(
     frozen_file_reference_id=str(UUID("21fa3a3b-59bd-5960-8297-5d61d4ef5647")),
     confirming_user_id="bc170f51-45fb-5296-a36d-a2edc8f8d315",
     agent_name="Plato",
+    avatar_template_id="maya-civic-observer",
     description="Seeded Demo Agent for the local mutual-learning session.",
     agent_md=PLATO_AGENT_MD,
     knowledge=PLATO_KNOWLEDGE,
@@ -166,6 +169,7 @@ BASELINE_LAOZI = BaselineSpec(
     frozen_file_reference_id=str(UUID("478f9390-70ac-5702-89b3-1d9d3b92d6b4")),
     confirming_user_id="89857c76-2d84-5ecf-b680-990815b98680",
     agent_name="Laozi",
+    avatar_template_id="maya-warm-scholar",
     description="Seeded Demo Agent for the local mutual-learning session.",
     agent_md=LAOZI_AGENT_MD,
     knowledge=LAOZI_KNOWLEDGE,
@@ -362,6 +366,21 @@ def _verify_existing_rows(db: Session, data_root: Path, spec: BaselineSpec) -> b
     return True
 
 
+def _reconcile_default_avatar_config(db: Session, spec: BaselineSpec) -> None:
+    """Update only baseline configs that still match the exact old factory default."""
+
+    version = db.get(AgentVersion, spec.version_id)
+    if version is None:
+        return
+    old_default = DEFAULT_AVATAR_CONFIG.model_dump_json()
+    if version.avatar_config_json != old_default:
+        return
+    next_config = default_config_for(spec.avatar_template_id).model_dump_json()
+    if next_config != old_default:
+        version.avatar_config_json = next_config
+        db.flush()
+
+
 def _create_baseline(db: Session, data_root: Path, spec: BaselineSpec) -> None:
     """Insert one frozen baseline; the caller has verified it is absent."""
 
@@ -414,7 +433,7 @@ def _create_baseline(db: Session, data_root: Path, spec: BaselineSpec) -> None:
         student_confirmed_at=now,
         persona_confirming_user_id=spec.confirming_user_id,
         persona_required=True,
-        avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+        avatar_config_json=default_config_for(spec.avatar_template_id).model_dump_json(),
         knowledge_snapshot_id=spec.snapshot_id,
         published_at=now,
         created_at=now,
@@ -553,6 +572,7 @@ def ensure_demo_baseline(db: Session, data_root: Path) -> None:
 
     for spec in BASELINE_SPECS:
         if _verify_existing_rows(db, data_root, spec):
+            _reconcile_default_avatar_config(db, spec)
             continue
         _create_baseline(db, data_root, spec)
     return None

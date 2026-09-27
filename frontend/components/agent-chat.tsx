@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { ChatAgent, ChatSession } from "../lib/api";
+import { PlatformApiError, type ChatAgent, type ChatSession } from "../lib/api";
+import {
+  readChatAvatarPreference,
+  saveChatAvatarPreference,
+} from "../lib/chat-avatar-preferences";
 import {
   abandonChatRequest,
   beginChatRequest,
@@ -11,8 +15,15 @@ import {
   getSettledChatSession,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
+import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
 import { AvatarPreview } from "./avatar";
-import { useT } from "./locale";
+import {
+  AVATAR_TEMPLATE_DEFAULT_CONFIGS,
+  CHAT_AVATAR_MODELS,
+  isChatAvatarModelId,
+  type ChatAvatarModelId,
+} from "./avatar/types";
+import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -23,6 +34,8 @@ import styles from "./agent-chat.module.css";
 export function AgentChat() {
   const { api, user } = useSession();
   const t = useT();
+  const { locale } = useLocale();
+  const chatLang = locale === "zh" ? "zh-CN" : "en";
   const courseId = user?.courses[0]?.course_id;
   const [agents, setAgents] = useState<ChatAgent[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -35,7 +48,36 @@ export function AgentChat() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(() => getChatRequest() !== null);
   const [error, setError] = useState<unknown>(null);
+  const [ttsPhase, setTtsPhase] = useState<
+    "idle" | "playing" | "complete" | "incomplete"
+  >("idle");
+  const [avatarModels, setAvatarModels] = useState<
+    Record<string, ChatAvatarModelId>
+  >({});
   const endRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  function syncTtsPlayback() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (
+      ttsPlaybackPhase({
+        ended: audio.ended,
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+      }) === "complete"
+    ) {
+      setTtsPhase("complete");
+    }
+  }
+
+  function startTtsPlayback(url: string) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    setTtsPhase("playing");
+    audio.src = url;
+    void audio.play().catch(() => setTtsPhase("incomplete"));
+  }
 
   function remember(value: ChatSession) {
     setSelected(value);
@@ -138,7 +180,9 @@ export function AgentChat() {
     setError(null);
     try {
       await api.deleteConversation(session.id);
-      setSessions((current) => current.filter((item) => item.id !== session.id));
+      setSessions((current) =>
+        current.filter((item) => item.id !== session.id),
+      );
       if (selected?.id === session.id) {
         setSelected(null);
         setDraft("");
@@ -154,6 +198,7 @@ export function AgentChat() {
     const message = draft.trim();
     if (!message || busy) return;
     setBusy(true);
+    setTtsPhase("idle");
     setPendingMessage(message);
     setDraft("");
     setError(null);
@@ -171,11 +216,37 @@ export function AgentChat() {
       const revision = reuse?.revision ?? session.revision;
       const promise =
         reuse?.promise ??
-        api.sendConversation(session.id, {
-          request_id: requestId,
-          message,
-          expected_revision: revision,
-        });
+        api
+          .streamConversation(
+            session.id,
+            {
+              request_id: requestId,
+              message,
+              expected_revision: revision,
+              lang: chatLang,
+            },
+            {
+              onTextDone: (refreshed) => {
+                remember(refreshed);
+                abandonChatRequest(requestId);
+                setPendingMessage("");
+                setBusy(false);
+              },
+            },
+          )
+          .then((result) => {
+            if (result.ttsErrorCode) {
+              setError(
+                new PlatformApiError(502, result.ttsErrorCode, {
+                  code: result.ttsErrorCode,
+                  message: result.ttsErrorCode,
+                }),
+              );
+            }
+            if (result.audioUrl) startTtsPlayback(result.audioUrl);
+            else setTtsPhase("idle");
+            return result.session;
+          });
       beginChatRequest({
         sessionId: session.id,
         versionId,
@@ -204,6 +275,45 @@ export function AgentChat() {
     }
   }
 
+  const character =
+    selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
+  const preferenceUserId = user?.id;
+  const avatarPreferenceKey =
+    preferenceUserId && character
+      ? `${preferenceUserId}:${character.agent_id}`
+      : null;
+  const serverModelId = character?.avatar_config.template_id;
+  const defaultModelId =
+    serverModelId && isChatAvatarModelId(serverModelId)
+      ? serverModelId
+      : "wave1-default-head";
+  const avatarModelId = avatarPreferenceKey
+    ? (avatarModels[avatarPreferenceKey] ?? defaultModelId)
+    : defaultModelId;
+  const avatarModel = CHAT_AVATAR_MODELS[avatarModelId];
+  const avatarConfig =
+    avatarModelId === serverModelId
+      ? character?.avatar_config
+      : AVATAR_TEMPLATE_DEFAULT_CONFIGS[avatarModelId];
+  const characterAgentId = character?.agent_id;
+
+  useEffect(() => {
+    if (!preferenceUserId || !characterAgentId) return;
+    const key = `${preferenceUserId}:${characterAgentId}`;
+    const saved = readChatAvatarPreference(preferenceUserId, characterAgentId);
+    if (!saved) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setAvatarModels((current) =>
+        current[key] === saved ? current : { ...current, [key]: saved },
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [characterAgentId, preferenceUserId]);
+
   if (loading) {
     return (
       <>
@@ -212,8 +322,7 @@ export function AgentChat() {
       </>
     );
   }
-  const character =
-    selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
+
   return (
     <>
       <PageIntro title="Chats" />
@@ -256,13 +365,47 @@ export function AgentChat() {
               ))}
             </select>
             {character ? (
-              <AvatarPreview
-                className={styles.avatar}
-                config={character.avatar_config}
-                framing="full-body"
-                fallbackLabel={character.name}
-                state={busy ? "thinking" : "idle"}
-              />
+              <>
+                <label className={styles.avatarModel}>
+                  <span>{t("chatAvatarModel")}</span>
+                  <select
+                    aria-label={t("chatAvatarModel")}
+                    value={avatarModelId}
+                    onChange={(event) => {
+                      const modelId = event.target.value;
+                      if (!isChatAvatarModelId(modelId)) return;
+                      const key = avatarPreferenceKey;
+                      if (key && preferenceUserId) {
+                        setAvatarModels((current) => ({
+                          ...current,
+                          [key]: modelId,
+                        }));
+                        saveChatAvatarPreference(
+                          preferenceUserId,
+                          character.agent_id,
+                          modelId,
+                        );
+                      }
+                    }}
+                  >
+                    {Object.entries(CHAT_AVATAR_MODELS).map(
+                      ([modelId, model]) => (
+                        <option key={modelId} value={modelId}>
+                          {t(model.labelKey)}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <AvatarPreview
+                  className={styles.avatar}
+                  config={avatarConfig ?? character.avatar_config}
+                  assetUrl={avatarModel.assetUrl}
+                  framing="full-body"
+                  fallbackLabel={character.name}
+                  state={busy ? "thinking" : "idle"}
+                />
+              </>
             ) : null}
             <div className={styles.history} aria-label="History">
               {sessions
@@ -295,6 +438,7 @@ export function AgentChat() {
                         className={styles.historyDelete}
                         disabled={busy}
                         aria-label={t("deleteChat")}
+                        data-ui-guide="chat.delete"
                         onClick={(event) => {
                           event.stopPropagation();
                           void removeChat(session);
@@ -307,7 +451,14 @@ export function AgentChat() {
                 ))}
             </div>
           </aside>
-          <section className={styles.conversation}>
+          <section className={styles.conversation} data-tts-playback={ttsPhase}>
+            <audio
+              ref={audioRef}
+              hidden
+              onTimeUpdate={syncTtsPlayback}
+              onEnded={syncTtsPlayback}
+              onError={() => setTtsPhase("incomplete")}
+            />
             <div
               className={styles.messages}
               role="log"
@@ -387,7 +538,14 @@ export function AgentChat() {
                   aria-label={
                     character?.available === false ? "Read-only" : "Send"
                   }
-                  title={character?.available === false ? "Read-only" : "Send"}
+                  data-ui-guide={
+                    character?.available === false
+                      ? "chat.readOnly"
+                      : "chat.send"
+                  }
+                  title={
+                    character?.available === false ? "Read-only" : undefined
+                  }
                   disabled={
                     busy ||
                     character?.available === false ||

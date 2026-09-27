@@ -627,7 +627,9 @@ it("updates debate progress in place without opening the debate", async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
     expect(load).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("heading", { name: /A live preview/ })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: /A live preview/ }),
+    ).toBeTruthy();
     expect(screen.getByText(/4 \/ 6/)).toBeTruthy();
   } finally {
     cleanup();

@@ -779,8 +779,7 @@ def reindex_knowledge_document(
         200: {
             "model": KnowledgeDocumentDTO,
             "description": (
-                "Removed from the group Knowledge library; "
-                "published snapshots stay intact."
+                "Removed from the group Knowledge library; published snapshots stay intact."
             ),
         },
         404: {"model": Error, "description": "Document not found."},

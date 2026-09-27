@@ -15,6 +15,11 @@ enough — this repository has no task-packet ceremony any more.
 
 Work on a branch. Never commit directly to `main` unless the user says so.
 
+For branch integration, fetch remote refs, compare ancestry and preserve dirty
+work before merging. Follow the user's selected refs; a newer sibling or revert
+branch is not implicitly in scope. Keep a recoverable local checkpoint, resolve
+overlapping behavior deliberately, and record exact input refs in `docs/PROJECT.md`.
+
 ## 2. How to write code here
 
 **Simplicity first.** Solve the requested problem with the smallest clear change.
@@ -55,6 +60,10 @@ provider response body, a credential, a private path or student data.
 Run these from the repository root before you report a change complete. Keep
 the scope proportional: a docs-only change does not need the full battery, and
 anything touching `backend/app` or `contracts/` needs all of it.
+
+`pnpm check` runs the complete deterministic suite. Also run the generated-file
+boundary probe below. Fix stale fixtures against the current product contract;
+retain consent, ownership and charged-request assertions when budgets change.
 
 ```bash
 cd backend && uv run pytest -p no:warnings && uv run ruff check . && uv run mypy app
@@ -131,6 +140,10 @@ Adding a migration means updating `ALEMBIC_HEAD` in `app/core/db.py`; the
 readiness probe compares the database against that constant and the container
 stays unhealthy until they agree.
 
+When adding an API operation, update the implemented operation set in
+`scripts/generate_route_fixture.mjs`, regenerate its fixture and update the exact
+route count in `scripts/test_route_surface.mjs` together.
+
 ## 5. Real provider work
 
 A real provider request costs money and is never automatically retried. Before
@@ -153,6 +166,12 @@ name, region, purpose, outbound field classes, storage facts and the exact
 policy/manifest hashes, and nothing else.
 
 ## 6. Running the Demo locally
+
+After an authorized update, back up the active SQLite database using SQLite's
+backup API inside the backend container, then rebuild with
+`docker compose up -d --build --wait`. Preserve `.env`, private configuration and
+runtime assets. Verify Compose health, container `/health/ready`, the schema head
+and `http://localhost:8080/`; distinguish these from manual product acceptance.
 
 The committed Compose file publishes `8080`. To run an isolated stack, write an
 override **outside** the repository and tag the port list so Compose replaces
@@ -192,6 +211,11 @@ commit as the work it describes, and only with facts you have observed:
   there, including a failed one;
 - record a deviation from a frozen contract explicitly, with the reason, rather
   than letting the code and the document drift apart.
+
+Keep `docs/PROJECT.md` below 20,000 bytes by compacting repeated history while
+preserving current decisions, acceptance boundaries and charged-call records.
+README explains how to use/run the product; AGENTS contains working rules, not a
+second progress log. Refresh those documents when their instructions change.
 
 Do not create status files, handoff notes or worklogs beside it. If something
 is worth keeping, it belongs in `docs/PROJECT.md`, an ADR under `docs/adr/`, or a

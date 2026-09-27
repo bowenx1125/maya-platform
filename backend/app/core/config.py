@@ -95,6 +95,13 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FALLBACK_VOICE_PROFILE_ID",
     )
+    # Operator mapping for immutable baseline characters. Empty means each
+    # character uses FALLBACK_VOICE_PROFILE_ID. The value is never a voice id
+    # baked into code: ``socrates=<uuid>,laozi=<uuid>``.
+    baseline_default_voices: str | None = Field(
+        default=None,
+        validation_alias="BASELINE_DEFAULT_VOICES",
+    )
     # Debates (beta) shows a join code on the stage and flies classroom
     # messages across it while the Agents are still speaking, which the
     # after-the-debate gate forbids.  Off by default: with the switch off the
@@ -267,6 +274,9 @@ class Settings(BaseSettings):
             if not self.is_test:
                 raise RuntimeError("SESSION_SECRET must contain at least 32 bytes")
         self.validate_provider_configuration()
+        # A bad baseline-voice map must stop startup rather than bind the
+        # wrong character at the first chat.
+        self.parsed_baseline_default_voices()
         # Parse the complete private graph before the application lifespan
         # yields. A malformed catalog therefore prevents readiness rather
         # than partially applying identities.
@@ -275,14 +285,42 @@ class Settings(BaseSettings):
 
             prepare_catalog(self)
 
-    def validate_provider_configuration(self) -> None:
-        """Allow Mock, one real slice, or the frozen dual Real-Core pair.
+    def parsed_baseline_default_voices(self) -> dict[str, str]:
+        """Return ``character -> voice profile id`` or raise on a bad map."""
 
-        The only multi-real composition admitted by the Demo is DashScope
-        Embedding plus DashScope LLM with Mock/disabled companions.  Each
-        endpoint-bound slice has its own policy hash.  The LLM adapter still
-        requires its own runtime confirmation/operation gate before any
-        request; selector construction alone performs no network I/O.
+        raw = self.baseline_default_voices
+        if raw is None or not str(raw).strip():
+            return {}
+        found: dict[str, str] = {}
+        allowed = {"socrates", "plato", "laozi"}
+        for part in str(raw).split(","):
+            item = part.strip()
+            if not item or "=" not in item:
+                raise RuntimeError("BASELINE_DEFAULT_VOICES entries are name=voice_profile_id")
+            name, profile_id = (piece.strip() for piece in item.split("=", 1))
+            name = name.lower()
+            if name not in allowed or name in found or not profile_id:
+                raise RuntimeError(
+                    "BASELINE_DEFAULT_VOICES has an unknown, empty, or repeated character"
+                )
+            try:
+                parsed = UUID(profile_id)
+            except ValueError as exc:
+                raise RuntimeError(
+                    "BASELINE_DEFAULT_VOICES voice profile id must be a UUID"
+                ) from exc
+            found[name] = str(parsed)
+        return found
+
+    def validate_provider_configuration(self) -> None:
+        """Allow Mock, reviewed text slices, and speech on one DashScope key.
+
+        LLM, Embedding and Report keep their composition and policy-hash
+        rules.  TTS and Voice may be ``dashscope`` beside any allowed core,
+        including on their own, only through the same ``DASHSCOPE_API_KEY``.
+        There is no second speech key.  Selector construction performs no
+        network I/O.  The LLM adapter still requires its own runtime
+        confirmation before any request.
         """
 
         selectors = (
@@ -295,41 +333,41 @@ class Settings(BaseSettings):
         if any(value not in {"mock", "dashscope"} for value in selectors):
             raise RuntimeError("provider selector is not supported")
 
-        non_mock = [
-            name for name, value in (("VOICE_PROVIDER", self.voice_provider),) if value != "mock"
-        ]
-        if non_mock:
-            raise RuntimeError(
-                "runtime provider gate permits only one reviewed DashScope slice with "
-                "Mock companions: " + ", ".join(non_mock)
-            )
-        real_slice_names = tuple(
+        # Speech is excluded from this tuple on purpose: adding it must not
+        # change the dual-hash rule, which keys off a core of length two.
+        core_names = tuple(
             name
             for name, value in (
                 ("LLM_PROVIDER", self.llm_provider),
                 ("REPORT_PROVIDER", self.report_provider),
                 ("EMBEDDING_PROVIDER", self.embedding_provider),
-                ("TTS_PROVIDER", self.tts_provider),
             )
             if value == "dashscope"
         )
-        allowed_real_compositions = {
+        speech_names = tuple(
+            name
+            for name, value in (
+                ("TTS_PROVIDER", self.tts_provider),
+                ("VOICE_PROVIDER", self.voice_provider),
+            )
+            if value == "dashscope"
+        )
+        allowed_cores = {
             (),
             ("EMBEDDING_PROVIDER",),
             ("LLM_PROVIDER",),
-            ("TTS_PROVIDER",),
             ("LLM_PROVIDER", "EMBEDDING_PROVIDER"),
             ("REPORT_PROVIDER",),
             ("LLM_PROVIDER", "REPORT_PROVIDER"),
             ("REPORT_PROVIDER", "EMBEDDING_PROVIDER"),
             ("LLM_PROVIDER", "REPORT_PROVIDER", "EMBEDDING_PROVIDER"),
         }
-        if real_slice_names not in allowed_real_compositions:
+        if core_names not in allowed_cores:
             raise RuntimeError(
                 "runtime provider gate permits only the Real Embedding + Real LLM pair "
                 "or one reviewed DashScope slice with Mock companions"
             )
-        if real_slice_names:
+        if core_names or speech_names:
             if not self.dashscope_api_key or not self.dashscope_api_key.strip():
                 raise RuntimeError(
                     "DASHSCOPE_API_KEY is required for real Provider work; "
@@ -348,10 +386,7 @@ class Settings(BaseSettings):
         # A legacy PROVIDER_POLICY_HASH is endpoint-ambiguous when both real
         # slices are selected.  Require the two explicit fields in that case;
         # a single-real configuration may still use the old field.
-        if len(real_slice_names) == 2 and set(real_slice_names) == {
-            "LLM_PROVIDER",
-            "EMBEDDING_PROVIDER",
-        }:
+        if set(core_names) == {"LLM_PROVIDER", "EMBEDDING_PROVIDER"}:
             if self.provider_policy_hash is not None and not (
                 self.embedding_provider_policy_hash is not None
                 and self.llm_provider_policy_hash is not None
