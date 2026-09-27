@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import NoReturn, cast
+from unicodedata import normalize
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
@@ -133,10 +134,40 @@ def _time() -> datetime:
     return datetime.now(UTC)
 
 
+def _agent_name_key(name: str) -> str:
+    return normalize("NFKC", name).strip().casefold()
+
+
+def _require_available_agent_name(
+    db: Session,
+    group_id: str,
+    name: str,
+    *,
+    current: Agent | None = None,
+) -> None:
+    # Call under the Agent writer lock so two normalized names cannot both win.
+    key = _agent_name_key(name)
+    if current is not None and key == _agent_name_key(current.name):
+        return
+    existing = db.execute(
+        select(Agent.id, Agent.name).where(Agent.group_id == group_id, Agent.deleted_at.is_(None))
+    )
+    if any(
+        _agent_name_key(row.name) == key and (current is None or row.id != current.id)
+        for row in existing
+    ):
+        raise conflict(
+            "agent_name_conflict",
+            "An Agent with this name already exists in this workspace. "
+            "Choose another name or delete the existing Agent first.",
+        )
+
+
 def _sync_markdown_name(db: Session, agent: Agent, markdown: str) -> None:
     name = agent_name_from_markdown(markdown)
     if name is None or name == agent.name:
         return
+    _require_available_agent_name(db, agent.group_id, name, current=agent)
     db.execute(
         update(Agent)
         .where(Agent.id == agent.id)
@@ -560,6 +591,7 @@ def list_group_agents(
     operation_id="createAgent",
     responses={
         201: {"model": AgentDetail, "description": "Agent and V1.0 draft created."},
+        409: {"model": Error, "description": "An Agent with this name already exists."},
         404: {"model": Error, "description": "Group not found."},
     },
 )
@@ -578,7 +610,14 @@ def create_agent(
     record, replay = claim_idempotency(db, context, "createAgent", idempotency_key, body_hash)
     if replay is not None:
         return replay  # type: ignore[return-value]
-    assert_claim_owned(db, record)
+    _begin_immediate(db)
+    try:
+        scoped_student_group_role(db, context, str(group_id))
+        assert_claim_owned(db, record)
+        _require_available_agent_name(db, str(group_id), payload.name)
+    except PlatformError:
+        abandon_claim(db, record)
+        raise
     timestamp = _time()
     agent = Agent(
         id=str(uuid4()),
@@ -1017,6 +1056,8 @@ def update_agent_draft(
     settings: Settings = Depends(get_settings),
 ) -> AgentVersionDTO:
     reject_baseline_version_mutation(str(version_id))
+    visible_student_version(db, context, str(version_id))
+    _begin_immediate(db)
     scoped = visible_student_version(db, context, str(version_id))
     if scoped.version.state != "draft":
         raise version_immutable()
@@ -1119,6 +1160,10 @@ async def upload_agent_md(
             "The AGENT.md upload is not valid.", code="file_operation_failed"
         ) from exc
     assert expected_revision is not None
+    _begin_immediate(db)
+    scoped = visible_student_version(db, context, str(version_id))
+    if scoped.version.state != "draft":
+        raise version_immutable()
     if scoped.version.revision != expected_revision:
         raise stale_revision(scoped.version.revision)
     changed = db.execute(

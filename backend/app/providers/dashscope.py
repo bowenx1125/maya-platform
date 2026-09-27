@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_technical_audio
+from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_speech_audio
 from app.providers.tts import (
     TTSAudioInvalidError,
     TTSHTTPRejectedError,
@@ -613,7 +613,7 @@ class DashScopeTTSProvider:
             raise TTSResponseInvalidError("provider response invalid")
         raw = _finalize_streamed_wav(self.downloader.download(audio_url))
         try:
-            validate_technical_audio(raw)
+            validate_speech_audio(raw)
         except AudioValidationError as exc:
             raise TTSAudioInvalidError("provider audio invalid") from exc
         return TTSResult(raw, "audio/wav", _request_id(response, document))

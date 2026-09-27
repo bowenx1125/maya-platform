@@ -2441,6 +2441,8 @@ export interface components {
         DebateSegment: {
             /** @enum {string|null} */
             support_mode?: "direct" | "contextual" | "no_match" | null;
+            /** @description Anonymous classroom message from the frozen Final input addressed by reply_to. */
+            reply_text?: string | null;
             reply_to: string | null;
             source_ids: string[];
             text: string;
@@ -4477,6 +4479,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     getAgent: {

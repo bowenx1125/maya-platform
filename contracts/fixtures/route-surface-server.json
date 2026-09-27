@@ -2230,6 +2230,9 @@
           },
           "404": {
             "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -8563,6 +8566,13 @@
               "no_match",
               null
             ]
+          },
+          "reply_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Anonymous classroom message from the frozen Final input addressed by reply_to."
           },
           "reply_to": {
             "type": [

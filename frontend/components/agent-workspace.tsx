@@ -282,6 +282,33 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const voiceGroupId = agent?.group_id;
+  useEffect(() => {
+    if (!voiceGroupId) return;
+    const groupId = voiceGroupId;
+    let active = true;
+    let refreshing = false;
+    async function refreshVoices() {
+      if (document.visibilityState === "hidden" || refreshing) return;
+      refreshing = true;
+      try {
+        const next = await api.voiceProfiles(groupId);
+        if (active) setVoiceProfiles(next);
+      } catch (cause) {
+        if (active) setError(cause);
+      } finally {
+        refreshing = false;
+      }
+    }
+    window.addEventListener("focus", refreshVoices);
+    document.addEventListener("visibilitychange", refreshVoices);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshVoices);
+      document.removeEventListener("visibilitychange", refreshVoices);
+    };
+  }, [api, voiceGroupId]);
+
   const enabledCount = selectedDocumentIds.length;
   const localDirty = Boolean(
     version &&
@@ -338,7 +365,9 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         expected_revision: currentVersion.revision,
         agent_md: agentMd,
         ...(avatarConfig ? { avatar_config: avatarConfig } : {}),
-        voice_profile_id: voiceProfileId,
+        ...(voiceProfileId !== (currentVersion.voice_profile_id ?? null)
+          ? { voice_profile_id: voiceProfileId }
+          : {}),
       });
       setVersion(next);
       setAgent(await api.agent(next.agent_id));
@@ -654,6 +683,16 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                   }
                 >
                   <option value="">{t("useFallbackVoice")}</option>
+                  {voiceProfileId &&
+                  !voiceProfiles.some(
+                    (profile) =>
+                      profile.id === voiceProfileId &&
+                      profile.status === "ready",
+                  ) ? (
+                    <option value={voiceProfileId} disabled>
+                      {t("currentVoiceBinding")}
+                    </option>
+                  ) : null}
                   {voiceProfiles
                     .filter((profile) => profile.status === "ready")
                     .map((profile) => (

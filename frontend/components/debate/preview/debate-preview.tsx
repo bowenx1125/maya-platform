@@ -8,6 +8,7 @@ import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
 import { ErrorNotice, SectionCard, StatusBadge } from "../../ui";
+import { IconRefresh } from "../../quiet-icons";
 import styles from "./debate-preview.module.css";
 
 export type DebatePreviewProgress = {
@@ -209,12 +210,14 @@ function PreviewTurnCard({
           </span>
           {onRetry ? (
             <button
-              className="secondary-action"
+              className={`icon-action ${styles.retryButton}`}
+              aria-label={retrying ? "Retrying…" : "Retry turn"}
+              aria-busy={retrying}
               disabled={retryBusy}
               onClick={() => onRetry(turn.id)}
               type="button"
             >
-              {retrying ? "Retrying…" : "Retry turn"}
+              <IconRefresh />
             </button>
           ) : null}
         </div>

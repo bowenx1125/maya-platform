@@ -51,6 +51,7 @@ const segmentTurn = closed(
           text: { type: "string" },
           source_ids: arrayOf({ type: "string" }),
           reply_to: nullable({ type: "string" }),
+          reply_text: nullable({ type: "string" }),
           support_mode: nullable({
             type: "string",
             enum: ["direct", "contextual", "no_match"],

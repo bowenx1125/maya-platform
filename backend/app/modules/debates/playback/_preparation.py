@@ -909,7 +909,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 # A safe code is the same string the browser already receives,
                 # so recording it leaks nothing and is often the only thing
                 # that distinguishes a missing policy from a refused request.
-                getattr(exc, "code", "-"),
+                getattr(exc, "code", None) or getattr(exc, "safe_code", "-"),
                 # Where it was raised, never what it said. An exception that
                 # carries no safe code -- a bare ValueError from somewhere deep
                 # in generation -- otherwise leaves a line that names a type and

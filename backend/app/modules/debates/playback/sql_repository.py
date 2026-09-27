@@ -370,18 +370,34 @@ class SqlPlaybackRepository(PlaybackRepository):
                         text(
                             "UPDATE debate_turns SET generation_status='pending', "
                             "preparation_stage='generation', safe_error_code=NULL, "
-                            "updated_at=:updated_at WHERE id IN :turn_ids"
-                        ).bindparams(bindparam("turn_ids", expanding=True)),
-                        {"updated_at": _now(), "turn_ids": tuple(accepted_recovery_turns)},
+                            "updated_at=:updated_at WHERE id IN :turn_ids "
+                            "AND COALESCE(safe_error_code,'') NOT IN :tts_codes"
+                        ).bindparams(
+                            bindparam("turn_ids", expanding=True),
+                            bindparam("tts_codes", expanding=True),
+                        ),
+                        {
+                            "updated_at": _now(),
+                            "turn_ids": tuple(accepted_recovery_turns),
+                            "tts_codes": tuple(_TTS_DEFERRED_CODES),
+                        },
                     )
                 if self._has_table(db, "jobs"):
                     db.execute(
                         text(
                             "UPDATE jobs SET state='pending', claim_token=NULL, "
                             "safe_error_code=NULL, updated_at=:updated_at "
-                            "WHERE turn_id IN :turn_ids AND state IN ('pending','running')"
-                        ).bindparams(bindparam("turn_ids", expanding=True)),
-                        {"updated_at": _now(), "turn_ids": tuple(accepted_recovery_turns)},
+                            "WHERE turn_id IN :turn_ids AND state IN ('pending','running') "
+                            "AND COALESCE(safe_error_code,'') NOT IN :tts_codes"
+                        ).bindparams(
+                            bindparam("turn_ids", expanding=True),
+                            bindparam("tts_codes", expanding=True),
+                        ),
+                        {
+                            "updated_at": _now(),
+                            "turn_ids": tuple(accepted_recovery_turns),
+                            "tts_codes": tuple(_TTS_DEFERRED_CODES),
+                        },
                     )
             if blocked_recovery_turns:
                 if self._has_table(db, "debate_turns"):
@@ -2547,6 +2563,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "UPDATE jobs SET state='running', claim_token=:token, safe_error_code=NULL, "
                 "updated_at=:updated_at "
                 "WHERE debate_id=:debate_id AND turn_id=:turn_id AND state='pending' "
+                "AND (safe_error_code IS NULL OR safe_error_code NOT LIKE 'tts_%') "
                 "AND cancellation_generation=:generation"
             ),
             {
@@ -2558,6 +2575,43 @@ class SqlPlaybackRepository(PlaybackRepository):
             },
         )
         return token if int(getattr(changed, "rowcount", 0)) == 1 else None
+
+    def authorize_pending_tts_retry(
+        self, db: Any, debate: SqlRow, turn: SqlRow, *, code: str
+    ) -> bool:
+        """Clear only an explicitly requested live audio retry, preserving text."""
+
+        if code not in _TTS_DEFERRED_CODES:
+            return False
+        params = {
+            "debate_id": str(debate.id),
+            "turn_id": str(turn.id),
+            "generation": int(debate.cancellation_generation or 0),
+            "code": code,
+        }
+        job = db.execute(
+            text(
+                "UPDATE jobs SET safe_error_code=NULL WHERE debate_id=:debate_id "
+                "AND turn_id=:turn_id AND state='pending' AND safe_error_code=:code "
+                "AND cancellation_generation=:generation "
+                "AND EXISTS (SELECT 1 FROM debates WHERE id=:debate_id AND status='running')"
+            ),
+            params,
+        )
+        if int(getattr(job, "rowcount", 0)) != 1:
+            return False
+        changed = db.execute(
+            text(
+                "UPDATE debate_turns SET safe_error_code=NULL WHERE id=:turn_id "
+                "AND debate_id=:debate_id AND generation_status='pending' "
+                "AND safe_error_code=:code"
+            ),
+            params,
+        )
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            db.rollback()
+            return False
+        return True
 
     def mark_turn_prewarming(
         self,

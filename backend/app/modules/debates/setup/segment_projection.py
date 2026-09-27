@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import invalid_state
 from app.core.models import Job, KnowledgeChunk, SnapshotDocument, StoredFile
-from app.modules.debates.models import DebateParticipant, DebateTurn
+from app.modules.debates.final_input import read_final_input
+from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
+from app.modules.debates.round_count import debate_round_count
 from app.modules.debates.schemas import PreviewTurn, SegmentSourceDetail, SegmentTurnPublic
 from app.modules.debates.source_lineage import receipt_scope_is_valid
 
@@ -26,10 +28,20 @@ def segment_projection(
         from app.modules.debates.generation.segments import load_stored_segment_turn_result
 
         stored = load_stored_segment_turn_result(raw)
+        reply_texts: dict[str, str] = {}
+        if any(segment.reply_to for segment in stored.segments):
+            debate = db.get(Debate, turn.debate_id)
+            if debate is not None and turn.round_no == debate_round_count(debate):
+                frozen = read_final_input(debate)
+                if frozen is not None:
+                    reply_texts = {item["id"]: item["text"] for item in frozen["barrages"]}
         result = SegmentTurnPublic.model_validate(
             {
                 "schema_version": stored.schema_version,
-                "segments": [item.as_payload() for item in stored.segments],
+                "segments": [
+                    {**item.as_payload(), "reply_text": reply_texts.get(item.reply_to or "")}
+                    for item in stored.segments
+                ],
             }
         )
         if turn.speech != "\n\n".join(row.text for row in result.segments):

@@ -1641,6 +1641,16 @@
                                 }
                               ]
                             },
+                            "reply_text": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
                             "support_mode": {
                               "anyOf": [
                                 {
@@ -2546,6 +2556,16 @@
                         "minItems": 0
                       },
                       "reply_to": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reply_text": {
                         "anyOf": [
                           {
                             "type": "string"

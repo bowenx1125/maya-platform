@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../components/locale";
 import {
@@ -121,6 +121,35 @@ describe("teacher debate preview", () => {
   it("does not treat an unfinished text turn as a completed Preview", () => {
     renderPreview({ ...detail, preview: null });
     expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+  });
+
+  it("retries through a labeled icon button and keeps it disabled while retrying", () => {
+    const retry = vi.fn();
+    const view = render(
+      <DebatePreview
+        detail={detail}
+        openClassroomHref="/classroom"
+        onRetryTurn={retry}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Retry turn" });
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(button.textContent).toBe("");
+    fireEvent.click(button);
+    expect(retry).toHaveBeenCalledWith("turn-a");
+    view.rerender(
+      <DebatePreview
+        detail={detail}
+        openClassroomHref="/classroom"
+        onRetryTurn={retry}
+        retryingTurnId="turn-a"
+      />,
+    );
+    const busy = screen.getByRole("button", { name: "Retrying…" });
+    expect(busy).toHaveProperty("disabled", true);
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    fireEvent.click(busy);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("shows Background before the turns only when the debate has one", () => {

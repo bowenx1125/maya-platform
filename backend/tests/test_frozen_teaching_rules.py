@@ -53,7 +53,15 @@ def test_actual_wire_uses_only_frozen_markdown_and_execution_contract(language, 
     assert f"Execute round {round_number} of 4" in system
     assert "# Execution contract" in system
     assert "segments" in system
+    assert "First-person pronouns in a history entry belong to that recorded speaker" in system
+    assert "preserve who gave it and whom it was addressed to" in system
     assert "frozen_system_prompt" not in json.loads(request.user_message.content)
+
+
+def test_identity_guidance_does_not_rewrite_previously_frozen_prompts():
+    original = "# Frozen teaching rules\nAn earlier exact execution contract."
+    stored = {"system_prompts": {"en": [original] * 4, "zh": [original] * 4}}
+    assert frozen_system_prompt(json.dumps(stored), 2, "zh") == original
 
 
 def test_recovery_preserves_exact_prompt_and_detects_changed_rule_hash(monkeypatch):

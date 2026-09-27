@@ -1199,6 +1199,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AgentDetail" }
+        "409": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /agents/{agent_id}:
     parameters:
@@ -4250,6 +4251,9 @@ components:
         support_mode:
           type: [string, "null"]
           enum: [direct, contextual, no_match, null]
+        reply_text:
+          type: [string, "null"]
+          description: Anonymous classroom message from the frozen Final input addressed by reply_to.
         reply_to:
           type:
             - string

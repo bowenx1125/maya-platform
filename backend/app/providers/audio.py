@@ -400,9 +400,18 @@ def audio_quality_metrics(raw_wav: bytes) -> dict[str, float]:
 
 
 def validate_technical_audio(raw_wav: bytes) -> dict[str, float]:
-    metrics = audio_quality_metrics(raw_wav)
+    """Validate a short preview/calibration clip, not a complete speech."""
+
+    metrics = validate_speech_audio(raw_wav)
     if not 1.0 <= metrics["duration_seconds"] <= 60.0:
         raise AudioValidationError("audio_invalid")
+    return metrics
+
+
+def validate_speech_audio(raw_wav: bytes) -> dict[str, float]:
+    """Validate complete supplier speech without imposing a preview duration."""
+
+    metrics = audio_quality_metrics(raw_wav)
     if metrics["rms"] < 100 or metrics["nonzero_fraction"] < 0.01:
         raise AudioValidationError("audio_invalid")
     if metrics["clipped_fraction"] >= 0.05:

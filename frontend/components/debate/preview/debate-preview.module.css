@@ -172,9 +172,11 @@
   overflow-wrap: anywhere;
 }
 
-.errorRow .secondary-action {
+.errorRow .retryButton {
+  flex: 0 0 auto;
   margin-left: auto;
-  min-height: 36px;
+  width: 44px;
+  height: 44px;
 }
 
 .ragCheck {
@@ -264,11 +266,6 @@
     align-items: start;
     justify-items: start;
     text-align: left;
-  }
-
-  .errorRow .secondary-action {
-    margin-left: 0;
-    width: 100%;
   }
 }
 

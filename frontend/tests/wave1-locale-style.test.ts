@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { statusLabel, t } from "../lib/i18n";
+import { localizeError, statusLabel, t } from "../lib/i18n";
 
 describe("Wave 1A locale and V2 style boundary", () => {
   it("keeps English-first copy translatable without changing business state", () => {
@@ -11,6 +11,9 @@ describe("Wave 1A locale and V2 style boundary", () => {
     expect(statusLabel("stale_revision", "en")).toBe("stale revision");
     expect(statusLabel("stale_revision", "zh")).toBe("stale revision");
     expect(statusLabel("published", "zh")).toBe("已发布");
+    expect(
+      localizeError({ code: "agent_name_conflict", status: 409 }, "zh"),
+    ).toBe("已有同名Agent，请换名字或先删除重复Agent。");
   });
 
   it("keeps workspace system typography scoped and removes visible page-title styles", () => {

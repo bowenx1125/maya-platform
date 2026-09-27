@@ -751,6 +751,14 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
             await restarted.recover_startup(db)
         await restart_tasks.wait_debate(debate_id)
         assert calls == 1
+        assert restart_tts.synthesize_calls == 0
+        with database.session() as db:
+            repository = restarted.repository
+            debate = repository.get_debate(db, debate_id)
+            turn = next(item for item in repository.turns(db, debate) if item.id == turn_id)
+            assert repository.authorize_pending_tts_retry(db, debate, turn, code="tts_timeout")
+            await restarted.prepare_turn(db, debate_id, turn_id)
+        assert calls == 1
         assert restart_tts.synthesize_calls == 1
         with database.engine.connect() as connection:
             final = connection.execute(

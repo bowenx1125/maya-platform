@@ -140,6 +140,7 @@ export type SegmentTurnPublic = {
     source_ids: string[];
     support_mode?: "direct" | "contextual" | "no_match" | null;
     reply_to: string | null;
+    reply_text?: string | null;
   }>;
 };
 

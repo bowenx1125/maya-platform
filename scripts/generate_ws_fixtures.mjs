@@ -533,6 +533,22 @@ invalid.push({
   event: missingTextMarker,
 });
 
+const classroomReply = structuredClone(
+  valid.find((event) => event.event_type === "playback.started"),
+);
+classroomReply.payload.segment_turn = {
+  schema_version: "segment_turn_v2",
+  segments: [
+    {
+      text: classroomReply.payload.speech,
+      source_ids: [],
+      reply_to: "B1",
+      reply_text: "How should the classroom revise its criterion?",
+    },
+  ],
+};
+valid.push(classroomReply);
+
 writeFileSync(
   resolve(fixtureDir, "ws-events.valid.json"),
   `${JSON.stringify(valid, null, 2)}\n`,

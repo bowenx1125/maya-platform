@@ -59,6 +59,13 @@ _SAFE_GENERATION_CODES = {
     "acceptance_unknown",
     "debate_stopped",
     "audio_invalid",
+    "tts_timeout",
+    "tts_http_rejected",
+    "tts_response_invalid",
+    "tts_result_url_rejected",
+    "tts_result_dns_failed",
+    "tts_result_download_failed",
+    "tts_audio_invalid",
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",

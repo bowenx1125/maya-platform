@@ -20,6 +20,7 @@ import type {
   KnowledgeDocument,
   PlatformApi,
   RagPreview,
+  VoiceProfile,
 } from "../lib/api";
 import { PlatformApiError } from "../lib/api";
 
@@ -180,8 +181,8 @@ function makeApi() {
     knowledge: vi.fn(async () => [document]),
     ragPreview: vi.fn(async () => makePreview()),
     avatarTemplates: vi.fn(async () => makeTemplates()),
-    voiceProfiles: vi.fn(async () => []),
-    updateDraft: vi.fn(async () => version),
+    voiceProfiles: vi.fn(async (): Promise<VoiceProfile[]> => []),
+    updateDraft: vi.fn(async (..._args: unknown[]) => version),
     compilePersona: vi.fn(),
     uploadKnowledge: vi.fn(async (..._args: unknown[]) => ({
       agent_version: version,
@@ -262,6 +263,118 @@ describe("Wave 1C real workbench locale boundary", () => {
     ).toBeTruthy();
     expect(navigation.replace).toHaveBeenCalledWith("/student/agents/agent-id");
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+  });
+
+  it.each(["own-ready", ""])(
+    "changes a later draft voice to %s without editing the published version",
+    async (choice) => {
+      const { api } = makeApi();
+      const draft = makeVersion({
+        version_label: "V1.1",
+        voice_profile_id: "inherited-private",
+      });
+      const ownVoice = {
+        id: "own-ready",
+        source_filename: "My voice",
+        status: "ready",
+      } as VoiceProfile;
+      api.version.mockResolvedValue(draft);
+      api.voiceProfiles.mockResolvedValue([
+        ownVoice,
+        {
+          ...ownVoice,
+          id: "unfinished",
+          status: "preview_ready",
+          source_filename: "Not confirmed",
+        },
+      ]);
+      const saved = { ...draft, revision: 1, voice_profile_id: choice || null };
+      api.updateDraft.mockResolvedValue(saved);
+      api.publish.mockResolvedValue({ ...saved, state: "published" });
+      renderWorkbench(api as unknown as PlatformApi, () => undefined);
+      const selector = await screen.findByRole("combobox", {
+        name: "Voice binding",
+      });
+      expect(selector).toHaveProperty("value", "inherited-private");
+      expect(
+        screen.getByRole("option", { name: "Current voice" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("option", { name: "Not confirmed" }),
+      ).toBeNull();
+      fireEvent.change(selector, { target: { value: choice } });
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      await waitFor(() =>
+        expect(api.publish).toHaveBeenCalledWith(
+          "version-id",
+          1,
+          expect.anything(),
+        ),
+      );
+      expect(api.updateDraft).toHaveBeenCalledWith(
+        "version-id",
+        expect.objectContaining({ voice_profile_id: choice || null }),
+      );
+      expect(draft.voice_profile_id).toBe("inherited-private");
+    },
+  );
+
+  it("keeps an inherited voice untouched when only the next draft text changes", async () => {
+    const { api } = makeApi();
+    const draft = makeVersion({
+      version_label: "V1.1",
+      voice_profile_id: "inherited-private",
+    });
+    const saved = { ...draft, revision: 1, agent_md: "# Changed" };
+    api.version.mockResolvedValue(draft);
+    api.updateDraft.mockResolvedValue(saved);
+    api.publish.mockResolvedValue({ ...saved, state: "published" });
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const editor = await screen.findByLabelText("AGENT.md editor");
+    fireEvent.change(editor, { target: { value: "# Changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    expect(api.updateDraft.mock.calls[0][1]).not.toHaveProperty(
+      "voice_profile_id",
+    );
+  });
+
+  it("refreshes available voices on focus without discarding the next draft", async () => {
+    const { api } = makeApi();
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const editor = await screen.findByLabelText("AGENT.md editor");
+    fireEvent.change(editor, { target: { value: "# Unsaved" } });
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "new-ready",
+        source_filename: "New voice",
+        status: "ready",
+      } as VoiceProfile,
+    ]);
+    fireEvent.focus(window);
+    expect(
+      await screen.findByRole("option", { name: "New voice" }),
+    ).toBeTruthy();
+    expect(editor).toHaveProperty("value", "# Unsaved");
+  });
+
+  it("shows a name conflict as an actionable error while retaining the local draft", async () => {
+    const { api } = makeApi();
+    api.updateDraft.mockRejectedValue(
+      new PlatformApiError(409, "Conflict", { code: "agent_name_conflict" }),
+    );
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const editor = await screen.findByLabelText("AGENT.md editor");
+    fireEvent.change(editor, { target: { value: "# Duplicate" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining(
+        "An Agent with this name already exists. Choose another name or delete the duplicate Agent first.",
+      ),
+    );
+    expect(editor).toHaveProperty("value", "# Duplicate");
+    expect(api.publish).not.toHaveBeenCalled();
   });
 
   it("keeps Done from publishing when saving introduces new server blockers", async () => {

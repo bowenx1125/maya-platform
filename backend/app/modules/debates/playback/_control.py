@@ -622,6 +622,11 @@ class PlaybackControlMixin(PlaybackCore):
                 or code not in _RECOVERABLE_PROVIDER_GENERATION_CODES
             ):
                 raise invalid_state("The selected turn is not waiting for a safe provider retry.")
+            if code.startswith("tts_"):
+                authorize = getattr(self.repository, "authorize_pending_tts_retry", None)
+                if callable(authorize) and not authorize(db, debate, target, code=code):
+                    self._rollback(db)
+                    raise conflict("stale_control_version", "The audio retry changed.")
             state.control_version += 1
             self._save(db, debate, state)
             result = self._state_dto(state, db, debate)
