@@ -209,18 +209,18 @@ describe("private Agent chat", () => {
   });
 
   it("uses the selected Agent, renders the response, and preserves history on reentry without Refresh", async () => {
+    state.api.streamConversation.mockResolvedValue({
+      session: completedConversation,
+      audioUrl: "/api/v1/conversations/conversation/audio/legacy",
+      ttsErrorCode: "tts_failed",
+    });
     const view = render(
       <LocaleProvider initialLocale="en">
         <AgentChat />
       </LocaleProvider>,
     );
     await screen.findByRole("combobox", { name: "Agent" });
-    fireEvent.error(document.querySelector("audio") as HTMLAudioElement);
-    expect(
-      document
-        .querySelector("[data-tts-playback]")
-        ?.getAttribute("data-tts-playback"),
-    ).toBe("incomplete");
+    expect(document.querySelector("audio")).toBeNull();
     expect(screen.getByRole("heading", { name: "Chats" }).className).toBe(
       "sr-only",
     );
@@ -229,6 +229,8 @@ describe("private Agent chat", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(state.api.createConversation).toHaveBeenCalledWith("version");
     expect(state.api.streamConversation).toHaveBeenCalledWith(
       "conversation",

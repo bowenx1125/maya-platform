@@ -322,8 +322,6 @@ without the preview duration ceiling;20MiB download and SSRF safeguards remain.
 Typed TTS failure jobs await explicit Retry instead of automatic reclamation.
 Docker was switched to this code before continued Preview generation.
 
-Live duplicate rejection and repaired turn verified.
-
 ## Debate entry and Immerse controls — September 27, 2026
 
 Preview links retain warm hover/focus/press and reduced-motion support.
@@ -335,4 +333,6 @@ matching/usage gates; content/finish checks remain. Close is an icon. No real re
 Student Live offers Interact below the scene, opening the same QR form/token.
 Same-course active/open non-replay access only; Final removes the entry. Messages
 repeat without a send-count cap; vote idempotency stays intact.
-Logout shows the current release baseline: Bowen V1.
+Work With Bowen sits above Logout’s divider. Chats is text-only; no TTS dispatch.
+
+Full gates/boundary passed; Docker healthy.

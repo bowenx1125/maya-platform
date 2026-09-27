@@ -733,7 +733,7 @@ export class PlatformApi {
 
   /**
    * Stream one chat turn. The JSON messages route stays available.
-   * Audio is a same-origin URL; the body never carries audio bytes.
+   * Legacy audio events are parsed for compatibility; Chats never plays them.
    */
   async streamConversation(
     id: string,

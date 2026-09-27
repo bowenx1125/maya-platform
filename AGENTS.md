@@ -38,6 +38,8 @@ must not pin Delete after the pointer leaves.
 Immerse has no manual barrage pause control. Final input freezing automatically
 ends message collection; retain that transactional cutoff.
 
+Chats is text-only: never dispatch TTS after a chat reply or play chat audio.
+
 Voice availability must not gate Debate text publication. Use a configured
 fallback, or explicit text-only playback when none is available; never fabricate
 audio or weaken supplier-download SSRF checks to hide a DNS/proxy failure.

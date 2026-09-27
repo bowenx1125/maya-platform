@@ -232,7 +232,9 @@ export function AppShell({
             })}
           </nav>
           <div className={styles.account}>
-            <span className={styles.version}>Bowen V1</span>
+            <span className={styles.credit}>
+              Work With <span className={styles.author}>Bowen</span>
+            </span>
             <button
               className={styles.logout}
               type="button"

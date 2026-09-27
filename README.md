@@ -114,4 +114,5 @@ pnpm check
 
 `.env`、私有账号目录、运行数据库、Provider 私有配置和生成音频不提交 Git。日常备份应包含本地运行数据及必要的私有配置，并自行安全保管。
 
-当前界面版本：**Bowen V1**，显示在 Logout 上方。
+署名 **Work With Bowen** 显示在 Logout 上方的分隔线上方。
+Chats 仅生成文本，不再调用 TTS 或自动播放语音。

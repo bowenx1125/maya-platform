@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { PlatformApiError, type ChatAgent, type ChatSession } from "../lib/api";
+import type { ChatAgent, ChatSession } from "../lib/api";
 import {
   abandonChatRequest,
   beginChatRequest,
@@ -11,7 +11,6 @@ import {
   getSettledChatSession,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
-import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
 import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
@@ -37,33 +36,7 @@ export function AgentChat() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(() => getChatRequest() !== null);
   const [error, setError] = useState<unknown>(null);
-  const [ttsPhase, setTtsPhase] = useState<
-    "idle" | "playing" | "complete" | "incomplete"
-  >("idle");
   const endRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  function syncTtsPlayback() {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (
-      ttsPlaybackPhase({
-        ended: audio.ended,
-        currentTime: audio.currentTime,
-        duration: audio.duration,
-      }) === "complete"
-    ) {
-      setTtsPhase("complete");
-    }
-  }
-
-  function startTtsPlayback(url: string) {
-    const audio = audioRef.current;
-    if (!audio) return;
-    setTtsPhase("playing");
-    audio.src = url;
-    void audio.play().catch(() => setTtsPhase("incomplete"));
-  }
 
   function remember(value: ChatSession) {
     setSelected(value);
@@ -184,7 +157,6 @@ export function AgentChat() {
     const message = draft.trim();
     if (!message || busy) return;
     setBusy(true);
-    setTtsPhase("idle");
     setPendingMessage(message);
     setDraft("");
     setError(null);
@@ -220,19 +192,7 @@ export function AgentChat() {
               },
             },
           )
-          .then((result) => {
-            if (result.ttsErrorCode) {
-              setError(
-                new PlatformApiError(502, result.ttsErrorCode, {
-                  code: result.ttsErrorCode,
-                  message: result.ttsErrorCode,
-                }),
-              );
-            }
-            if (result.audioUrl) startTtsPlayback(result.audioUrl);
-            else setTtsPhase("idle");
-            return result.session;
-          });
+          .then((result) => result.session);
       beginChatRequest({
         sessionId: session.id,
         versionId,
@@ -357,14 +317,7 @@ export function AgentChat() {
                 ))}
             </div>
           </aside>
-          <section className={styles.conversation} data-tts-playback={ttsPhase}>
-            <audio
-              ref={audioRef}
-              hidden
-              onTimeUpdate={syncTtsPlayback}
-              onEnded={syncTtsPlayback}
-              onError={() => setTtsPhase("incomplete")}
-            />
+          <section className={styles.conversation}>
             <div
               className={styles.messages}
               role="log"

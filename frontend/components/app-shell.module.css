@@ -80,18 +80,27 @@
 
 .account {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin-top: auto;
-  padding: 18px 10px 0;
-  border-top: 1px solid var(--line);
+  padding: 0 10px;
 }
 
-.version {
-  padding: 0 14px;
+.credit {
+  display: block;
+  padding: 0 14px 12px;
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.5;
   white-space: nowrap;
+}
+
+.author {
+  color: var(--ink);
+  font-family: var(--display-serif);
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .logout {
@@ -155,8 +164,8 @@
     padding: 0;
     border: 0;
   }
-  .version {
-    padding: 0 8px;
+  .credit {
+    padding: 0 8px 8px;
   }
   .logout svg {
     display: none;
