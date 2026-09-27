@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -20,7 +20,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import Engine, Table, func, select, text, update
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Executable
@@ -93,6 +93,15 @@ class ScopeBudgetAmbiguous(ProviderRepositoryError):
 
 class PolicyExportStale(ProviderRepositoryError):
     """An operation does not match a confirmed policy/export hash pair."""
+
+
+class ProviderDispatchRejected(ProviderRepositoryError):
+    """A Chat-specific request fence rejected an operation before dispatch."""
+
+    code = "chat_request_stale"
+
+
+ProviderSendingGuard = Callable[[Connection, RowMapping], bool]
 
 
 class ProviderRepository:
@@ -1225,10 +1234,12 @@ class ProviderRepository:
         state: OperationState,
         safe_error_code: str | None = None,
         response_hash: str | None = None,
+        sending_guard: ProviderSendingGuard | None = None,
     ) -> ProviderOperationV1:
         operation_table = _OPERATION_TABLE
         reservation_table = _RESERVATION_TABLE
         budget_table = _BUDGET_TABLE
+        dispatch_rejected = False
         with self._write_connection() as connection:
             row = (
                 connection.execute(
@@ -1242,9 +1253,20 @@ class ProviderRepository:
             current = cast(OperationState, str(row["state"]))
             if current != expected:
                 raise OperationStateError("provider operation CAS fence failed")
-            if not can_transition(expected, state):
+            target_state = state
+            target_safe_error_code = safe_error_code
+            if sending_guard is not None:
+                if expected != "reserved" or state != "sending":
+                    raise ProviderRepositoryError(
+                        "a provider sending guard is only valid for reserved-to-sending"
+                    )
+                if not sending_guard(connection, row):
+                    target_state = "not_sent"
+                    target_safe_error_code = "provider_dispatch_rejected"
+                    dispatch_rejected = True
+            if not can_transition(expected, target_state):
                 raise OperationStateError(
-                    f"invalid provider operation transition: {expected}->{state}"
+                    f"invalid provider operation transition: {expected}->{target_state}"
                 )
             if (
                 expected == "failed"
@@ -1258,12 +1280,15 @@ class ProviderRepository:
                 raise ProviderRepositoryError("staged response hash is invalid")
             now = self._now()
             values: dict[str, object] = {
-                "state": state,
-                "safe_error_code": _safe_code(safe_error_code)
-                if safe_error_code
+                "state": target_state,
+                "safe_error_code": _safe_code(target_safe_error_code)
+                if target_safe_error_code
                 else row["safe_error_code"],
                 "updated_at": now,
             }
+            if dispatch_rejected:
+                values["request_count"] = 0
+                values["charged_request_count"] = 0
             if response_hash is not None:
                 values["staged_response_hash"] = response_hash
             connection.execute(
@@ -1284,9 +1309,9 @@ class ProviderRepository:
                 connection.execute(
                     update(reservation_table)
                     .where(reservation_table.c.operation_id == operation_id)
-                    .values(state=state, updated_at=now)
+                    .values(state=target_state, updated_at=now)
                 )
-            if state == "not_sent" and reservation_row is not None:
+            if target_state == "not_sent" and reservation_row is not None:
                 # Releasing is part of the same transaction as the state CAS.
                 budget_changed = connection.execute(
                     update(budget_table)
@@ -1306,6 +1331,8 @@ class ProviderRepository:
                 )
                 if budget_changed.rowcount != 1:
                     raise ProviderRepositoryError("scope budget release CAS failed")
+        if dispatch_rejected:
+            raise ProviderDispatchRejected("the Chat request is no longer active")
         return self.operation(operation_id)
 
     def mark_not_sent(

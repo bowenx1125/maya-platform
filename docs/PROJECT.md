@@ -341,3 +341,18 @@ Full gates/boundary passed; Docker healthy.
 
 Agno3.0.11 pinned; 11 probes pass (ADR-009). Team `additional_input` preserves
 history; direct `Message[]` drops assistant turns.
+
+## MayaForm W2a Chat reliability — 2026-09-27
+
+Unknown is request-local: no auto-resend; same-ID replay, new-ID follow-up. History retains
+user turns, ready replies and status markers (no invention/truncation). Valid stop replies
+tolerate usage faults; invalid content fails after HTTP200. Charged calls recorded; usage
+unclaimed. LLM/Embedding dispatch is revision-fenced; pre-dispatch refunds/`not_sent`; save
+before SSE and fence late work.
+
+GET recovery: ready/failed settles, pending observes, unknown keeps ID/draft. Account/course
+change clears Chat; same-actor navigation/refresh preserves pending. r4 frontend: 42 focused,
+449 passed, 1 skipped; type/lint/format pass. Root check/review pending.
+
+Queue W2b→W1→accepted S01–S22: unified Knowledge Sets, save-to-use, legal automatic
+tools, course Public Team directory.

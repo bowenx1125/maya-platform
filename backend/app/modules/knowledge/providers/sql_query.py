@@ -48,7 +48,11 @@ from app.providers.control import (
     ProviderReservationRequestV1,
     ProviderScopeBudgetV1,
 )
-from app.providers.control_repository import ProviderRepository
+from app.providers.control_repository import (
+    ProviderDispatchRejected,
+    ProviderRepository,
+    ProviderSendingGuard,
+)
 
 SQL_QUERY_MAX_REQUESTS = 25
 SQL_QUERY_MAX_TOTAL_TOKENS = 150_000
@@ -319,6 +323,7 @@ class SqlAlchemyQueryControlAdapter(
         attempt_no: int = 1,
         logical_item_id: str | None = None,
         confirmation_revision: int | None = None,
+        sending_guard: ProviderSendingGuard | None = None,
         repository: ProviderRepository | None = None,
         max_requests: int = SQL_QUERY_MAX_REQUESTS,
         max_total_tokens: int = SQL_QUERY_MAX_TOTAL_TOKENS,
@@ -340,6 +345,7 @@ class SqlAlchemyQueryControlAdapter(
         except (TypeError, ValueError) as exc:
             raise SqlQueryPreflightError("query request context is invalid") from exc
         self.request = request
+        self.sending_guard = sending_guard
         self.repository = repository or ProviderRepository(database)  # type: ignore[arg-type]
         if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 1:
             raise SqlQueryPreflightError("query request cap is invalid")
@@ -680,6 +686,7 @@ class SqlAlchemyQueryControlAdapter(
                     operation_id,
                     expected="reserved",
                     state="sending",
+                    sending_guard=self.sending_guard,
                 )
             elif current.state not in {"accepted", "succeeded"}:
                 raise SqlQueryError("query operation is not ready for provider call")
@@ -822,6 +829,10 @@ class SqlAlchemyQueryControlAdapter(
                 raise QueryEmbeddingProviderError("query provider identity drifted")
             try:
                 operation = self.mark_sending(operation.id)
+            except ProviderDispatchRejected as exc:
+                raise QueryEmbeddingError(
+                    "The Chat request is no longer active.", code="chat_request_stale"
+                ) from exc
             except Exception as exc:
                 raise SqlQueryError("query sending transition failed") from exc
             try:

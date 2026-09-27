@@ -6158,11 +6158,6 @@
             "title": "Expected Revision",
             "type": "integer"
           },
-          "lang": {
-            "minLength": 1,
-            "title": "Lang",
-            "type": "string"
-          },
           "message": {
             "minLength": 1,
             "title": "Message",
@@ -6177,8 +6172,7 @@
         "required": [
           "request_id",
           "expected_revision",
-          "message",
-          "lang"
+          "message"
         ],
         "title": "StreamChat",
         "type": "object"

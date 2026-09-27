@@ -32,7 +32,11 @@ from app.providers.control import (
     confirm_export_manifest,
     validate_provider_preflight,
 )
-from app.providers.control_repository import ProviderRepository
+from app.providers.control_repository import (
+    ProviderDispatchRejected,
+    ProviderRepository,
+    ProviderSendingGuard,
+)
 from app.providers.factory import embedding_provider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import LLM_INPUT_TOKEN_CAP, LLM_RESERVED_OUTPUT_TOKEN_CAP
@@ -122,6 +126,7 @@ def retrieve_sources(
     scope_id: str,
     request_id: str,
     message: str,
+    sending_guard: ProviderSendingGuard | None = None,
 ) -> list[ChatSource]:
     snapshot = db.get(KnowledgeSnapshot, version.knowledge_snapshot_id)
     if snapshot is None:
@@ -183,6 +188,7 @@ def retrieve_sources(
             logical_item_id=f"chat:{request_id}",
             max_requests=CONTROL_UNBOUNDED_REQUESTS,
             confirmation_revision=confirmation.confirmation_revision,
+            sending_guard=sending_guard,
         )
         query = QueryEmbeddingService(
             provider=controlled_query_provider(
@@ -217,6 +223,7 @@ def real_reply(
     version_id: str | None = None,
     group_id: str | None = None,
     component: str = "llm",
+    sending_guard: ProviderSendingGuard | None = None,
 ) -> tuple[str, str]:
     selected = llm_provider(settings.model_copy(update={"llm_provider": "dashscope"}))
     if not isinstance(selected, DashScopeLLMAdapter):
@@ -301,7 +308,15 @@ def real_reply(
         )
     )
     repository.reserve(operation.id)
-    repository.transition(operation.id, expected="reserved", state="sending")
+    try:
+        repository.transition(
+            operation.id,
+            expected="reserved",
+            state="sending",
+            sending_guard=sending_guard,
+        )
+    except ProviderDispatchRejected as exc:
+        raise PlatformError("chat_request_stale", "This request is no longer active.", 409) from exc
     try:
         response = cast(
             Any,
@@ -343,17 +358,7 @@ def real_reply(
         if not isinstance(result, dict) or set(result) != {"reply"}:
             raise ValueError()
         reply = result.get("reply")
-        usage = payload["usage"]
-        input_tokens, output_tokens = usage["prompt_tokens"], usage["completion_tokens"]
-        if (
-            not isinstance(reply, str)
-            or not reply.strip()
-            or choice.get("finish_reason") != "stop"
-            or type(input_tokens) is not int
-            or type(output_tokens) is not int
-            or input_tokens < 0
-            or output_tokens < 0
-        ):
+        if not isinstance(reply, str) or not reply.strip() or choice.get("finish_reason") != "stop":
             raise ValueError()
     except (AttributeError, KeyError, IndexError, TypeError, ValueError):
         repository.mark_failed(operation.id, safe_error_code="chat_response_invalid")
@@ -376,7 +381,15 @@ def chat_messages(
     instruction = (
         "You are the selected educational Agent in a private one-to-one conversation. "
         "Follow the published agent_markdown for your identity, style and approach to questions. "
-        "Respond to the user's actual question in their language. "
+        "Determine the reply language from the final user message in this request. "
+        "When that message is in Chinese, write the reply in Chinese; when it is in English, "
+        "write the reply in English. Follow an explicit request to translate or answer in "
+        "another language instead. For mixed-language messages, use the language of the "
+        "actual question; brief names, quotations and technical terms do not change it. "
+        "This reply-language rule takes priority over language preferences in agent_markdown, "
+        "evidence and earlier conversation messages, including earlier assistant replies. "
+        "Do not carry an earlier reply's language into the current answer. "
+        "当前消息用中文提问时，默认用中文回答；仅在用户明确要求其他语言时切换。 "
         "The user and assistant messages below are the complete saved history of this same "
         "conversation, in chronological order, followed by the current question. Use the "
         "complete history directly to remember what the user told you and what you both "

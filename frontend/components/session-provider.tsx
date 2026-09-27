@@ -21,6 +21,7 @@ import {
   type DemoIdentity,
   type RegisterRequest,
 } from "../lib/api";
+import { resetChatRequestIdentity } from "../lib/chat-request-store";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
 import { useSetAcademyMood } from "./academy/mood";
@@ -33,6 +34,7 @@ type SessionContextValue = {
   status: SessionStatus;
   session: AuthSession | null;
   user: CurrentUser | null;
+  identityGeneration: number;
   error: unknown;
   refresh: () => Promise<AuthSession | null>;
   login: (username: string, password: string) => Promise<AuthSession>;
@@ -64,6 +66,14 @@ function writeApiCsrfToken(api: PlatformApi, token: string | undefined): void {
   candidate.setCsrfToken?.(token);
 }
 
+function identityKey(session: AuthSession): string {
+  const activeCourseId = session.user.courses[0]?.course_id ?? null;
+  const courses = session.user.courses
+    .map((course) => `${course.course_id}:${course.role}`)
+    .sort();
+  return JSON.stringify([session.user.id, activeCourseId, courses]);
+}
+
 export function SessionProvider({
   children,
   api: providedApi,
@@ -74,10 +84,13 @@ export function SessionProvider({
   const api = useMemo(() => providedApi ?? new PlatformApi(), [providedApi]);
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [identityGeneration, setIdentityGeneration] = useState(0);
   const [error, setError] = useState<unknown>(null);
   const sessionOperationEpoch = useRef(0);
   const sessionMutationTail = useRef<Promise<void>>(Promise.resolve());
   const currentSession = useRef<AuthSession | null>(null);
+  const committedIdentityKey = useRef<string | null>(null);
+  const identityGenerationRef = useRef(0);
   const committedCsrfToken = useRef<string | undefined>(readApiCsrfToken(api));
 
   const enqueueSessionMutation = useCallback(
@@ -112,6 +125,13 @@ export function SessionProvider({
         restoreCommittedCsrf();
         return;
       }
+      const nextIdentityKey = identityKey(next);
+      if (committedIdentityKey.current !== nextIdentityKey) {
+        committedIdentityKey.current = nextIdentityKey;
+        identityGenerationRef.current += 1;
+        resetChatRequestIdentity();
+        setIdentityGeneration(identityGenerationRef.current);
+      }
       committedCsrfToken.current = next.csrf_token;
       writeApiCsrfToken(api, next.csrf_token);
       currentSession.current = next;
@@ -128,6 +148,10 @@ export function SessionProvider({
         restoreCommittedCsrf();
         return;
       }
+      committedIdentityKey.current = null;
+      identityGenerationRef.current += 1;
+      resetChatRequestIdentity();
+      setIdentityGeneration(identityGenerationRef.current);
       committedCsrfToken.current = undefined;
       writeApiCsrfToken(api, undefined);
       currentSession.current = null;
@@ -316,6 +340,7 @@ export function SessionProvider({
       status,
       session,
       user: session?.user ?? null,
+      identityGeneration,
       error,
       refresh,
       login,
@@ -327,6 +352,7 @@ export function SessionProvider({
     [
       api,
       error,
+      identityGeneration,
       login,
       register,
       logout,

@@ -1847,8 +1847,6 @@ export interface components {
         StreamChat: {
             /** Expected Revision */
             expected_revision: number;
-            /** Lang */
-            lang: string;
             /** Message */
             message: string;
             /**

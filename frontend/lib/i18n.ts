@@ -576,6 +576,13 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorChatAcceptanceUnknown:
+    "This request's outcome is unknown. Maya will not resend it automatically. The message remains in this conversation; you can continue with a new message.",
+  errorChatTransportUncertain:
+    "Maya couldn't confirm whether this request finished. It won't resend automatically. Check its status or retry this same request to recover.",
+  errorChatHistoryRefreshFailed:
+    "Maya couldn't refresh this saved conversation. Retry the refresh before sending here.",
+  chatCheckStatus: "Check status",
   errorFileOperationFailed: "The file operation could not be completed.",
   errorMalformedRequest:
     "Please check the submitted information and try again.",
@@ -1290,6 +1297,13 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
+  errorChatAcceptanceUnknown:
+    "这次请求的结果尚不确定。Maya 不会自动重发。消息会保留在当前对话中，你可以继续发送新消息。",
+  errorChatTransportUncertain:
+    "Maya 无法确认这次请求是否完成，不会自动重发。你可以检查状态，或重试同一请求以恢复。",
+  errorChatHistoryRefreshFailed:
+    "Maya 无法刷新这段已保存的对话。请先重试刷新，再继续发送。",
+  chatCheckStatus: "检查状态",
   errorFileOperationFailed: "文件操作无法完成。",
   errorMalformedRequest: "请检查提交的信息后重试。",
   errorRequestFallback: "平台请求无法完成。",
@@ -1636,6 +1650,9 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  chat_acceptance_unknown: "errorChatAcceptanceUnknown",
+  chat_transport_uncertain: "errorChatTransportUncertain",
+  chat_history_refresh_failed: "errorChatHistoryRefreshFailed",
   file_operation_failed: "errorFileOperationFailed",
   malformed_request: "errorMalformedRequest",
 };

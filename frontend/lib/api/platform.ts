@@ -153,8 +153,24 @@ export type ChatStreamResult = {
 export type ChatStreamHooks = {
   /** Fired when text_done is parsed, before later TTS events are read. */
   onTextDone?: (session: ChatSession) => void;
+  /** Fired while the request's persisted turn is still pending. */
+  onPending?: (session: ChatSession, pendingTurnId: string) => void;
+  /** Fired for a confirmed failed/unknown turn or safe preclaim rejection. */
+  onTerminalError?: (
+    session: ChatSession | null,
+    error: PlatformApiError,
+  ) => void;
+  /** Fired when the response is ambiguous and no persisted turn is visible yet. */
+  onUncertain?: (session: ChatSession | null, error: PlatformApiError) => void;
 };
 export type ChatTurn = components["schemas"]["ChatTurn"];
+
+export class ChatRequestPendingError extends Error {
+  constructor() {
+    super("The Chat request is still pending.");
+    this.name = "ChatRequestPendingError";
+  }
+}
 export type ProviderSettings = components["schemas"]["ProviderSettings"];
 export type LiveSummary = components["schemas"]["LiveSummary"];
 export type LiveSnapshot = components["schemas"]["LiveSnapshot"];
@@ -720,6 +736,59 @@ export class PlatformApi {
     return this.getJson(`conversations/${id}`);
   }
 
+  private async recoverChatResponse(
+    id: string,
+    requestId: string,
+    hooks: ChatStreamHooks | undefined,
+    failure: PlatformApiError,
+  ): Promise<ChatSession> {
+    let refreshed: ChatSession | null = null;
+    try {
+      refreshed = await this.conversation(id);
+    } catch {
+      // The response classification below keeps an unobserved request ID intact.
+    }
+    const turn = refreshed?.turns.find((item) => item.id === requestId);
+    if (turn?.state === "ready" && refreshed) {
+      hooks?.onTextDone?.(refreshed);
+      return refreshed;
+    }
+    if (
+      turn &&
+      (turn.state === "failed" || turn.state === "acceptance_unknown")
+    ) {
+      const code = turn.safe_error_code ?? failure.code ?? "chat_failed";
+      const settledFailure = new PlatformApiError(failure.status, code, {
+        code,
+        message: code,
+        request_id: failure.requestId,
+      });
+      hooks?.onTerminalError?.(refreshed, settledFailure);
+      throw settledFailure;
+    }
+    const pendingTurn =
+      (turn?.state === "pending" ? turn : undefined) ??
+      refreshed?.turns.find((item) => item.state === "pending");
+    if (pendingTurn && refreshed) {
+      hooks?.onPending?.(refreshed, String(pendingTurn.id));
+      throw new ChatRequestPendingError();
+    }
+    if (failure.status < 500) {
+      hooks?.onTerminalError?.(refreshed, failure);
+      throw failure;
+    }
+    const uncertain =
+      failure.code === "chat_transport_uncertain"
+        ? failure
+        : new PlatformApiError(503, "chat_transport_uncertain", {
+            code: "chat_transport_uncertain",
+            message: "chat_transport_uncertain",
+            request_id: failure.requestId,
+          });
+    hooks?.onUncertain?.(refreshed, uncertain);
+    throw uncertain;
+  }
+
   deleteConversation(id: string): Promise<void> {
     return this.deleteJson(`conversations/${id}`);
   }
@@ -741,24 +810,51 @@ export class PlatformApi {
       request_id: string;
       expected_revision: number;
       message: string;
-      lang: "zh-CN" | "en";
     },
     hooks?: ChatStreamHooks,
   ): Promise<ChatStreamResult> {
+    let sawText = false;
+    let session: ChatSession | null = null;
+    let audioUrl: string | null = null;
+    let voiceProfileId: string | null = null;
+    let contentType: string | null = null;
+    let ttsErrorCode: string | null = null;
+    const resultFor = (saved: ChatSession): ChatStreamResult => ({
+      session: saved,
+      audioUrl,
+      voiceProfileId,
+      contentType,
+      ttsErrorCode,
+    });
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
-      `${this.baseUrl}${separator}conversations/${id}/messages:stream`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "text/event-stream",
-          "Content-Type": "application/json",
-          "X-CSRF-Token": this.csrfToken ?? "",
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.baseUrl}${separator}conversations/${id}/messages:stream`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "text/event-stream",
+            "Content-Type": "application/json",
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      },
-    );
+      );
+    } catch {
+      const failure = new PlatformApiError(503, "chat_transport_uncertain", {
+        code: "chat_transport_uncertain",
+        message: "chat_transport_uncertain",
+      });
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
+      return resultFor(session);
+    }
     if (!response.ok) {
       const raw = await response.text();
       let payload: unknown;
@@ -768,18 +864,19 @@ export class PlatformApi {
         payload = undefined;
       }
       const errorPayload = readErrorPayload(payload);
-      throw new PlatformApiError(
+      const failure = new PlatformApiError(
         response.status,
         errorPayload?.message ?? tm("httpError", { status: response.status }),
         errorPayload,
       );
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
+      return resultFor(session);
     }
-    let sawText = false;
-    let session: ChatSession | null = null;
-    let audioUrl: string | null = null;
-    let voiceProfileId: string | null = null;
-    let contentType: string | null = null;
-    let ttsErrorCode: string | null = null;
     try {
       await readSseEvents(response, async (event) => {
         if (event.event === "error") {
@@ -788,9 +885,38 @@ export class PlatformApi {
               ? event.safe_error_code
               : "chat_failed";
           if (!sawText) {
-            throw new PlatformApiError(502, code, { code, message: code });
+            const failure = new PlatformApiError(502, code, {
+              code,
+              message: code,
+            });
+            session = await this.recoverChatResponse(
+              id,
+              body.request_id,
+              hooks,
+              failure,
+            );
+            sawText = true;
+            return;
           }
           ttsErrorCode = code;
+          return;
+        }
+        if (event.event === "pending") {
+          const failure = new PlatformApiError(
+            503,
+            "chat_transport_uncertain",
+            {
+              code: "chat_transport_uncertain",
+              message: "chat_transport_uncertain",
+            },
+          );
+          session = await this.recoverChatResponse(
+            id,
+            body.request_id,
+            hooks,
+            failure,
+          );
+          sawText = true;
           return;
         }
         if (event.event === "text_done") {
@@ -812,27 +938,56 @@ export class PlatformApi {
         }
       });
     } catch (error) {
-      if (error instanceof SseBlockError) {
-        throw new PlatformApiError(502, "chat_stream_invalid", {
-          code: "chat_stream_invalid",
-          message: "chat_stream_invalid",
-        });
+      if (error instanceof ChatRequestPendingError) throw error;
+      if (sawText && session) return resultFor(session);
+      if (sawText) {
+        const failure =
+          error instanceof PlatformApiError
+            ? error
+            : new PlatformApiError(503, "chat_transport_uncertain", {
+                code: "chat_transport_uncertain",
+                message: "chat_transport_uncertain",
+              });
+        session = await this.recoverChatResponse(
+          id,
+          body.request_id,
+          hooks,
+          failure,
+        );
+        return resultFor(session);
       }
-      throw error;
+      if (error instanceof PlatformApiError) throw error;
+      const failure =
+        error instanceof SseBlockError
+          ? new PlatformApiError(502, "chat_stream_invalid", {
+              code: "chat_stream_invalid",
+              message: "chat_stream_invalid",
+            })
+          : new PlatformApiError(503, "chat_transport_uncertain", {
+              code: "chat_transport_uncertain",
+              message: "chat_transport_uncertain",
+            });
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
+      return resultFor(session);
     }
     if (!sawText || session === null) {
-      throw new PlatformApiError(502, "chat_failed", {
+      const failure = new PlatformApiError(502, "chat_failed", {
         code: "chat_failed",
         message: "chat_failed",
       });
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
     }
-    return {
-      session,
-      audioUrl,
-      voiceProfileId,
-      contentType,
-      ttsErrorCode,
-    };
+    return resultFor(session);
   }
 
   providerSettings(courseId: string): Promise<ProviderSettings> {

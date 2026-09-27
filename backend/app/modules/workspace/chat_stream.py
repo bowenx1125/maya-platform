@@ -1,4 +1,4 @@
-"""Text-only SSE chat events: deltas followed by one full-text commit."""
+"""Text-only SSE chat events publish deltas after committing the full reply."""
 
 from __future__ import annotations
 
@@ -20,12 +20,7 @@ from app.modules.knowledge.files import FileBoundaryError, contained_path
 from .models import Conversation, ConversationTurn
 from .schemas import ChatSource
 
-CHAT_LANGUAGES = frozenset({"zh-CN", "en"})
 DELTA_CHARS = 48
-
-
-def language_supported(lang: str) -> bool:
-    return lang in CHAT_LANGUAGES
 
 
 def accepts_event_stream(value: str | None) -> bool:
@@ -76,16 +71,18 @@ async def stream_events(
     conversation_id: str,
     created: bool,
     message: str,
-    lang: str,
     request_id: str,
+    claim_revision: int,
 ) -> AsyncIterator[bytes]:
-    """Yield deltas and terminal text_done, or an error.
+    """Yield deltas only after the current request has committed its full reply.
 
     The request session is not used here. Each database segment closes
-    before the LLM call; the conversation lock is released after text_done.
+    before the LLM call; the claim stays held through deltas and is released
+    before a terminal event is published.
     """
 
     released = False
+    settled = False
 
     def release() -> None:
         nonlocal released
@@ -94,12 +91,26 @@ async def stream_events(
         with _segment(database, settings) as db:
             from .chat import release_chat_request
 
-            release_chat_request(db, conversation_id, request_id)
+            release_chat_request(db, conversation_id, request_id, claim_revision)
         released = True
+
+    def settle(exc: Exception) -> str:
+        nonlocal settled
+        if settled or not created:
+            return "chat_failed"
+        code = _failure_code(database, settings, conversation_id, request_id, claim_revision, exc)
+        settled = True
+        return code
 
     try:
         if not created:
-            yield _replay_event(database, settings, conversation_id, request_id)
+            yield _replay_event(
+                database,
+                settings,
+                conversation_id,
+                request_id,
+                claim_revision,
+            )
             return
         try:
             reply, sources, operation_id = await asyncio.to_thread(
@@ -108,29 +119,35 @@ async def stream_events(
                 settings,
                 conversation_id,
                 request_id,
+                claim_revision,
                 message,
-                lang,
             )
         except Exception as exc:
-            code = _failure_code(database, settings, conversation_id, request_id, exc)
+            code = settle(exc)
+            release()
             yield sse("error", {"request_id": request_id, "safe_error_code": code})
             return
-        for seq, text in enumerate(text_deltas(reply), start=1):
-            yield sse("delta", {"request_id": request_id, "seq": seq, "text": text})
         try:
             revision, stored_sources = await asyncio.to_thread(
                 _store_segment,
                 database,
                 settings,
+                conversation_id,
                 request_id,
+                claim_revision,
                 reply,
                 sources,
                 operation_id,
             )
         except Exception as exc:
-            code = _failure_code(database, settings, conversation_id, request_id, exc)
+            code = settle(exc)
+            release()
             yield sse("error", {"request_id": request_id, "safe_error_code": code})
             return
+        settled = True
+        for seq, text in enumerate(text_deltas(reply), start=1):
+            yield sse("delta", {"request_id": request_id, "seq": seq, "text": text})
+        release()
         yield sse(
             "text_done",
             {
@@ -142,6 +159,8 @@ async def stream_events(
         )
         release()
     finally:
+        if created and not settled:
+            settle(PlatformError("chat_interrupted", "This chat request was interrupted.", 503))
         release()
 
 
@@ -150,12 +169,20 @@ def _replay_event(
     settings: Settings,
     conversation_id: str,
     request_id: str,
+    claim_revision: int,
 ) -> bytes:
     with _segment(database, settings) as db:
         row = db.get(Conversation, conversation_id)
         turn = db.get(ConversationTurn, request_id)
         if row is None or turn is None or turn.conversation_id != conversation_id:
             return sse("error", {"request_id": request_id, "safe_error_code": "chat_failed"})
+        if turn.position != claim_revision:
+            return sse("error", {"request_id": request_id, "safe_error_code": "chat_failed"})
+        if turn.state == "pending":
+            return sse("pending", {"request_id": request_id})
+        from .chat import release_chat_request
+
+        release_chat_request(db, conversation_id, request_id, claim_revision)
         if turn.state == "ready" and turn.assistant_text:
             sources = _stored_sources(turn.sources_json)
             if sources is None:
@@ -193,8 +220,8 @@ def _reply_segment(
     settings: Settings,
     conversation_id: str,
     request_id: str,
+    claim_revision: int,
     message: str,
-    lang: str,
 ) -> tuple[str, list[ChatSource], str | None]:
     from .chat import generate_reply
 
@@ -202,13 +229,15 @@ def _reply_segment(
         row = db.get(Conversation, conversation_id)
         if row is None:
             raise not_found()
-        return generate_reply(db, settings, row, request_id, message, lang=lang)
+        return generate_reply(db, settings, row, request_id, claim_revision, message)
 
 
 def _store_segment(
     database: Database,
     settings: Settings,
+    conversation_id: str,
     request_id: str,
+    claim_revision: int,
     reply: str,
     sources: list[ChatSource],
     operation_id: str | None,
@@ -216,7 +245,15 @@ def _store_segment(
     from .chat import store_assistant_text
 
     with _segment(database, settings) as db:
-        revision, stored = store_assistant_text(db, request_id, reply, sources, operation_id)
+        revision, stored = store_assistant_text(
+            db,
+            conversation_id,
+            request_id,
+            claim_revision,
+            reply,
+            sources,
+            operation_id,
+        )
         return revision, stored
 
 
@@ -225,13 +262,14 @@ def _failure_code(
     settings: Settings,
     conversation_id: str,
     request_id: str,
+    claim_revision: int,
     exc: Exception,
 ) -> str:
     from .chat import record_chat_failure
 
     try:
         with _segment(database, settings) as db:
-            return record_chat_failure(db, conversation_id, request_id, exc)
+            return record_chat_failure(db, conversation_id, request_id, claim_revision, exc)
     except PlatformError:
         return "chat_failed"
 

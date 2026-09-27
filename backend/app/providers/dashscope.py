@@ -518,9 +518,8 @@ class SupplierAudioDownloader:
 # cannot be a length — it is that placeholder. A merely truncated file keeps
 # a small declared size and must still fail the strict check.
 _STREAMED_WAV_PLACEHOLDER = 1 << 30
-# Maya speaks en/zh. DashScope names those language_type values; any other
-# code is refused so the request is not sent as the supplier's Auto default.
-_TTS_LANGUAGE_TYPES = {"en": "English", "zh": "Chinese"}
+# Mixed-language voice previews explicitly select Auto; unknown codes still fail closed.
+_TTS_LANGUAGE_TYPES = {"en": "English", "zh": "Chinese", "auto": "Auto"}
 
 
 def _finalize_streamed_wav(raw: bytes) -> bytes:

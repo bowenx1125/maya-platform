@@ -149,6 +149,8 @@ def _snapshot(snapshot_id: str = "snapshot-query-sql") -> SimpleNamespace:
 def _fixture(
     tmp_path: Path,
     *,
+    database: Database | None = None,
+    sending_guard: Any | None = None,
     query_texts: tuple[str, ...] = ("alpha", "beta"),
     scope_id: str = "debate-turn-sql",
     attempt_no: int = 1,
@@ -162,8 +164,9 @@ def _fixture(
     _Provider,
     _AtomicStage,
 ]:
-    database = Database(f"sqlite:///{tmp_path / f'{attempt_no}-{scope_id}.sqlite3'}")
-    database.initialize_schema()
+    if database is None:
+        database = Database(f"sqlite:///{tmp_path / f'{attempt_no}-{scope_id}.sqlite3'}")
+        database.initialize_schema()
     policy = _policy()
     build_hash = _digest("snapshot-build")
     hashes = tuple(query_hash(value) for value in query_texts)
@@ -201,6 +204,7 @@ def _fixture(
         query_hashes=hashes,
         attempt_no=attempt_no,
         logical_item_id=logical_item_id,
+        sending_guard=sending_guard,
     )
     provider = _Provider()
     stage = _AtomicStage(repository)
@@ -230,6 +234,50 @@ def test_sql_query_lifecycle_persists_one_sanitized_attempt_and_succeeds(
     assert operation.provider_operation == SQL_QUERY_PROVIDER_OPERATION
     assert repository.operations(scope_id=control.request.scope_id)[0].state == "succeeded"
     assert len(stage.values) == 1
+    database.dispose()
+
+
+def test_chat_sending_guard_refunds_embedding_reservation_before_dispatch(
+    tmp_path: Path,
+) -> None:
+    guard_observations: list[tuple[bool, str, str]] = []
+
+    def reject_stale(connection: Any, operation: Any) -> bool:
+        guard_observations.append(
+            (
+                connection.in_transaction(),
+                str(operation["provider_operation"]),
+                str(operation["logical_item_id"]),
+            )
+        )
+        return False
+
+    database, repository, control, service, provider, stage = _fixture(
+        tmp_path,
+        scope_id="chat-scope-before-embedding-dispatch",
+        logical_item_id="chat:request-before-embedding-dispatch",
+        sending_guard=reject_stale,
+    )
+    with pytest.raises(QueryEmbeddingError) as rejected:
+        service.embed_subqueries(_snapshot(), ("alpha", "beta"))
+    assert rejected.value.code == "chat_request_stale"
+    assert guard_observations == [
+        (True, SQL_QUERY_PROVIDER_OPERATION, "chat:request-before-embedding-dispatch")
+    ]
+    assert provider.calls == []
+    assert stage.values == {}
+    operation = repository.operations(scope_id=control.request.scope_id)[0]
+    assert operation.state == "not_sent"
+    assert operation.request_count == 0
+    assert operation.charged_request_count == 0
+    assert repository.reservation(operation.id).state == "not_sent"
+    with database.engine.connect() as connection:
+        allocated = connection.exec_driver_sql(
+            "SELECT allocated_requests, allocated_total_tokens "
+            "FROM provider_scope_budgets WHERE scope_id = ?",
+            (control.request.scope_id,),
+        ).one()
+    assert tuple(allocated) == (0, 0)
     database.dispose()
 
 

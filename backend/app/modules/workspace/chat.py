@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Response
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
@@ -30,10 +30,11 @@ from app.modules.auth.dependencies import (
     require_authenticated_mutation,
 )
 from app.modules.auth.service import AuthContext
+from app.providers.control_repository import ProviderSendingGuard
 
 from .access import course_member
 from .chat_provider import chat_messages, real_reply, retrieve_sources
-from .chat_stream import accepts_event_stream, chat_audio_path, language_supported, stream_events
+from .chat_stream import accepts_event_stream, chat_audio_path, stream_events
 from .models import Conversation, ConversationTurn
 from .schemas import ChatAgent, ChatSession, ChatSource, ChatTurn, CreateChat, SendChat, StreamChat
 
@@ -89,15 +90,6 @@ def claim_chat_send(
         if previous.conversation_id != row.id or previous.user_text != message:
             raise conflict("chat_request_changed", "This request has already been used.")
         return previous, False
-    if db.scalar(
-        select(ConversationTurn.id)
-        .where(
-            ConversationTurn.conversation_id == row.id,
-            ConversationTurn.state == "acceptance_unknown",
-        )
-        .limit(1)
-    ):
-        raise conflict("chat_acceptance_unknown", "This conversation cannot send more requests.")
     claimed = db.execute(
         update(Conversation)
         .where(
@@ -112,7 +104,7 @@ def claim_chat_send(
     turn = ConversationTurn(
         id=request_id,
         conversation_id=row.id,
-        position=row.revision,
+        position=expected_revision + 1,
         user_text=message,
         assistant_text=None,
         sources_json="[]",
@@ -125,17 +117,125 @@ def claim_chat_send(
     return turn, True
 
 
+def _current_chat_claim(conversation_id: str, request_id: str, claim_revision: int) -> Any:
+    return (
+        select(Conversation.id)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.active_request_id == request_id,
+            Conversation.revision == claim_revision,
+        )
+        .exists()
+    )
+
+
+def _chat_sending_guard(
+    conversation_id: str, request_id: str, claim_revision: int
+) -> ProviderSendingGuard:
+    conversations = Conversation.__table__
+    turns = ConversationTurn.__table__
+
+    def guard(connection: Any, operation: Any) -> bool:
+        if operation["scope_id"] != conversation_id:
+            return False
+        operation_matches = (
+            operation["provider_operation"] == "llm_agent_chat"
+            and operation["logical_item_id"] == request_id
+        ) or (
+            operation["provider_operation"] == "embedding_query"
+            and operation["logical_item_id"] == f"chat:{request_id}"
+        )
+        if not operation_matches:
+            return False
+        current = (
+            select(conversations.c.id)
+            .select_from(conversations.join(turns, turns.c.conversation_id == conversations.c.id))
+            .where(
+                conversations.c.id == conversation_id,
+                conversations.c.active_request_id == request_id,
+                conversations.c.revision == claim_revision,
+                turns.c.id == request_id,
+                turns.c.position == claim_revision,
+                turns.c.state == "pending",
+                turns.c.assistant_text.is_(None),
+            )
+            .limit(1)
+        )
+        return connection.execute(current).first() is not None
+
+    return guard
+
+
+def require_current_chat_claim(
+    db: Session, conversation_id: str, request_id: str, claim_revision: int
+) -> ConversationTurn:
+    db.expire_all()
+    turn = db.get(ConversationTurn, request_id)
+    if (
+        turn is None
+        or turn.conversation_id != conversation_id
+        or turn.position != claim_revision
+        or turn.state != "pending"
+        or turn.assistant_text is not None
+        or db.scalar(
+            select(Conversation.id).where(
+                Conversation.id == conversation_id,
+                Conversation.active_request_id == request_id,
+                Conversation.revision == claim_revision,
+            )
+        )
+        is None
+    ):
+        raise PlatformError("chat_request_stale", "This request is no longer active.", 409)
+    return turn
+
+
+def _saved_chat_history(
+    db: Session, conversation_id: str, before_position: int
+) -> list[dict[str, str]]:
+    history: list[dict[str, str]] = []
+    for saved in db.scalars(
+        select(ConversationTurn)
+        .where(
+            ConversationTurn.conversation_id == conversation_id,
+            ConversationTurn.position < before_position,
+        )
+        .order_by(ConversationTurn.position, ConversationTurn.id)
+    ):
+        history.append({"role": "user", "content": saved.user_text})
+        if saved.state == "ready" and saved.assistant_text is not None:
+            history.append({"role": "assistant", "content": saved.assistant_text})
+        else:
+            state = (
+                saved.state
+                if saved.state in {"pending", "failed", "acceptance_unknown"}
+                else "failed"
+            )
+            history.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f"Status for the preceding user request: {state}. "
+                        "No assistant reply was saved for that request."
+                    ),
+                }
+            )
+    return history
+
+
 def generate_reply(
     db: Session,
     settings: Settings,
     row: Conversation,
     request_id: str,
+    claim_revision: int,
     message: str,
-    *,
-    lang: str | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     """Produce one full reply in memory.  This does not store assistant text."""
 
+    current_turn = require_current_chat_claim(db, row.id, request_id, claim_revision)
+    if current_turn.user_text != message:
+        raise conflict("chat_request_changed", "This request has already been used.")
     version = db.get(AgentVersion, row.agent_version_id)
     agent = db.get(Agent, version.agent_id) if version else None
     if (
@@ -147,6 +247,7 @@ def generate_reply(
         raise not_found()
     if settings.llm_provider == "mock":
         return f"Mock · {agent.name}\n\n{message}", [], None
+    sending_guard = _chat_sending_guard(row.id, request_id, claim_revision)
     sources = retrieve_sources(
         db,
         settings,
@@ -155,32 +256,12 @@ def generate_reply(
         scope_id=row.id,
         request_id=request_id,
         message=message,
+        sending_guard=sending_guard,
     )
-    history: list[dict[str, str]] = []
-    for saved in db.scalars(
-        select(ConversationTurn)
-        .where(
-            ConversationTurn.conversation_id == row.id,
-            ConversationTurn.state == "ready",
-        )
-        .order_by(ConversationTurn.position)
-    ):
-        history.extend(
-            [
-                {"role": "user", "content": saved.user_text},
-                {"role": "assistant", "content": saved.assistant_text or ""},
-            ]
-        )
+    history = _saved_chat_history(db, row.id, current_turn.position)
     history.append({"role": "user", "content": message})
+    require_current_chat_claim(db, row.id, request_id, claim_revision)
     messages, persona_hash = chat_messages(version, history, sources)
-    if lang == "zh-CN":
-        messages[0]["content"] += (
-            "\nThe requested conversation language is zh-CN. Write the reply in Chinese."
-        )
-    elif lang == "en":
-        messages[0]["content"] += (
-            "\nThe requested conversation language is en. Write the reply in English."
-        )
     reply, operation_id = real_reply(
         db,
         settings,
@@ -191,29 +272,42 @@ def generate_reply(
         persona_hash=persona_hash,
         version_id=version.id,
         group_id=agent.group_id,
+        sending_guard=sending_guard,
     )
     return reply, sources, operation_id
 
 
 def store_assistant_text(
     db: Session,
+    conversation_id: str,
     request_id: str,
+    claim_revision: int,
     reply: str,
     sources: list[ChatSource],
     operation_id: str | None,
 ) -> tuple[int, list[dict[str, Any]]]:
     """Commit the full assistant text once.  Callers must not store prefixes."""
 
-    db.expire_all()
-    turn = db.get(ConversationTurn, request_id)
-    if turn is None:
-        raise not_found()
-    if turn.assistant_text is not None:
-        raise RuntimeError("assistant text is already stored")
     stored_sources = [item.model_dump(mode="json") for item in sources]
-    turn.assistant_text = reply
-    turn.sources_json = json.dumps(stored_sources, ensure_ascii=False)
-    turn.state = "ready"
+    write = db.execute(
+        update(ConversationTurn)
+        .where(
+            ConversationTurn.id == request_id,
+            ConversationTurn.conversation_id == conversation_id,
+            ConversationTurn.position == claim_revision,
+            ConversationTurn.state == "pending",
+            ConversationTurn.assistant_text.is_(None),
+            _current_chat_claim(conversation_id, request_id, claim_revision),
+        )
+        .values(
+            assistant_text=reply,
+            sources_json=json.dumps(stored_sources, ensure_ascii=False),
+            state="ready",
+            safe_error_code=None,
+        )
+    )
+    if not isinstance(write, CursorResult) or write.rowcount != 1:
+        raise PlatformError("chat_request_stale", "This request is no longer active.", 409)
     if operation_id:
         db.execute(
             update(ProviderOperation)
@@ -226,44 +320,86 @@ def store_assistant_text(
             .values(state="succeeded")
         )
     db.commit()
-    conversation = db.get(Conversation, turn.conversation_id)
+    conversation = db.get(Conversation, conversation_id)
     if conversation is None:
         raise not_found()
     return conversation.revision, stored_sources
 
 
-def record_chat_failure(db: Session, conversation_id: str, request_id: str, exc: Exception) -> str:
+def record_chat_failure(
+    db: Session,
+    conversation_id: str,
+    request_id: str,
+    claim_revision: int,
+    exc: Exception,
+) -> str:
     """Mark one claimed turn failed.  The caller commits the release."""
 
     db.rollback()
     turn = db.get(ConversationTurn, request_id)
-    if turn is None:
-        raise not_found() from None
     code = getattr(exc, "code", "chat_failed")
     if not isinstance(code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code):
         code = "chat_failed"
-    uncertain = "acceptance_unknown" in code or bool(
+    if (
+        turn is None
+        or turn.conversation_id != conversation_id
+        or turn.position != claim_revision
+        or turn.state != "pending"
+    ):
+        return turn.safe_error_code if turn and turn.safe_error_code else code
+    uncertain = code == "chat_acceptance_unknown" or bool(
         db.scalar(
             select(ProviderOperation.id)
             .where(
                 ProviderOperation.scope_id == conversation_id,
-                ProviderOperation.state.in_(("sending", "accepted", "acceptance_unknown")),
+                or_(
+                    and_(
+                        ProviderOperation.provider_operation == "llm_agent_chat",
+                        ProviderOperation.logical_item_id == request_id,
+                    ),
+                    and_(
+                        ProviderOperation.provider_operation == "embedding_query",
+                        ProviderOperation.logical_item_id == f"chat:{request_id}",
+                    ),
+                ),
+                ProviderOperation.state.in_(("sending", "acceptance_unknown")),
             )
             .limit(1)
         )
     )
-    turn.state = "acceptance_unknown" if uncertain else "failed"
-    turn.safe_error_code = code
+    write = db.execute(
+        update(ConversationTurn)
+        .where(
+            ConversationTurn.id == request_id,
+            ConversationTurn.conversation_id == conversation_id,
+            ConversationTurn.position == claim_revision,
+            ConversationTurn.state == "pending",
+            _current_chat_claim(conversation_id, request_id, claim_revision),
+        )
+        .values(state="acceptance_unknown" if uncertain else "failed", safe_error_code=code)
+    )
+    if not isinstance(write, CursorResult) or write.rowcount != 1:
+        db.expire_all()
+        current_turn = db.get(ConversationTurn, request_id)
+        return (
+            current_turn.safe_error_code if current_turn and current_turn.safe_error_code else code
+        )
     logger.warning(
         "Chat failed conversation_id=%s turn_id=%s code=%s", conversation_id, request_id, code
     )
     return code
 
 
-def release_chat_request(db: Session, conversation_id: str, request_id: str) -> None:
+def release_chat_request(
+    db: Session, conversation_id: str, request_id: str, claim_revision: int
+) -> None:
     db.execute(
         update(Conversation)
-        .where(Conversation.id == conversation_id, Conversation.active_request_id == request_id)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.active_request_id == request_id,
+            Conversation.revision == claim_revision,
+        )
         .values(active_request_id=None)
     )
 
@@ -444,7 +580,7 @@ def send_message(
     message = payload.message.strip()
     if not message:
         raise PlatformError("chat_message_empty", "Enter a message.", 400)
-    _turn, created = claim_chat_send(
+    turn, created = claim_chat_send(
         db,
         row,
         request_id=request_id,
@@ -452,14 +588,17 @@ def send_message(
         message=message,
         settings=settings,
     )
+    claim_revision = turn.position
     if not created:
         return session_view(db, row)
     try:
-        reply, sources, operation_id = generate_reply(db, settings, row, request_id, message)
-        store_assistant_text(db, request_id, reply, sources, operation_id)
+        reply, sources, operation_id = generate_reply(
+            db, settings, row, request_id, claim_revision, message
+        )
+        store_assistant_text(db, row.id, request_id, claim_revision, reply, sources, operation_id)
     except Exception as exc:
-        record_chat_failure(db, row.id, request_id, exc)
-    release_chat_request(db, row.id, request_id)
+        record_chat_failure(db, row.id, request_id, claim_revision, exc)
+    release_chat_request(db, row.id, request_id, claim_revision)
     db.commit()
     db.expire_all()
     return session_view(db, owned_conversation(db, context, str(conversation_id)))
@@ -494,17 +633,11 @@ def stream_message(
         raise conflict("agent_deleted", "This Agent was deleted. The conversation is read-only.")
     if not accepts_event_stream(accept):
         raise PlatformError("malformed_request", "Accept text/event-stream is required.", 400)
-    if not language_supported(payload.lang):
-        raise PlatformError(
-            "chat_language_unsupported",
-            "This chat supports Chinese (zh-CN) and English only.",
-            400,
-        )
     request_id = str(payload.request_id)
     message = payload.message.strip()
     if not message:
         raise PlatformError("chat_message_empty", "Enter a message.", 400)
-    _turn, created = claim_chat_send(
+    turn, created = claim_chat_send(
         db,
         row,
         request_id=request_id,
@@ -512,6 +645,7 @@ def stream_message(
         message=message,
         settings=settings,
     )
+    claim_revision = turn.position
     owned_id = row.id
     # Claim is committed.  Drop the request connection before the stream so
     # it is not held across the LLM call or TTS.
@@ -523,8 +657,8 @@ def stream_message(
             conversation_id=owned_id,
             created=created,
             message=message,
-            lang=payload.lang,
             request_id=request_id,
+            claim_revision=claim_revision,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},

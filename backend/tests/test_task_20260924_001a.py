@@ -230,9 +230,7 @@ class _RecordingTTS:
         return TTSResult(audio_bytes=_wav(1), content_type="audio/wav", request_id="tts-once")
 
 
-def _stream(
-    client: TestClient, csrf: str, conversation_id: str, *, lang: str, message: str, revision: int
-):
+def _stream(client: TestClient, csrf: str, conversation_id: str, *, message: str, revision: int):
     return client.post(
         f"/api/v1/conversations/{conversation_id}/messages:stream",
         headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
@@ -240,7 +238,6 @@ def _stream(
             "request_id": str(uuid4()),
             "expected_revision": revision,
             "message": message,
-            "lang": lang,
         },
     )
 
@@ -274,9 +271,7 @@ def test_sse_delta_then_text_done_persists_full_text(
 
     monkeypatch.setattr("app.modules.workspace.chat.store_assistant_text", wrapped_store)
     monkeypatch.setattr("app.modules.workspace.chat_stream.sse", wrapped_sse)
-    response = _stream(
-        client, csrf, conversation_id, lang="en", message="What is justice?", revision=0
-    )
+    response = _stream(client, csrf, conversation_id, message="What is justice?", revision=0)
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("text/event-stream")
     events = _parse_sse(response.text)
@@ -291,8 +286,9 @@ def test_sse_delta_then_text_done_persists_full_text(
     assert done["revision"] == 1
     assert isinstance(done["sources"], list)
     stored_at = order.index("stored")
-    assert order[:stored_at] == ["delta"] * stored_at
-    assert order[stored_at + 1] == "text_done"
+    assert stored_at == 0
+    assert order[stored_at + 1 : -1] == ["delta"] * (len(order) - 2)
+    assert order[-1] == "text_done"
     with database.session() as session:
         turn = session.scalar(
             select(ConversationTurn).where(ConversationTurn.conversation_id == conversation_id)
@@ -302,9 +298,9 @@ def test_sse_delta_then_text_done_persists_full_text(
         assert turn.state == "ready"
 
 
-@pytest.mark.parametrize("lang", ["en", "zh-CN"])
+@pytest.mark.parametrize("message", ["Hello", "你好"])
 def test_chat_with_bound_voice_is_text_only(
-    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch, lang: str
+    voice_app: tuple[TestClient, Database, Settings], monkeypatch: pytest.MonkeyPatch, message: str
 ) -> None:
     client, database, settings = voice_app
     with database.session() as session:
@@ -324,7 +320,7 @@ def test_chat_with_bound_voice_is_text_only(
     conversation_id = created.json()["id"]
     recorder = _RecordingTTS()
     monkeypatch.setattr("app.providers.tts.MockTTSProvider.synthesize", recorder.synthesize)
-    response = _stream(client, csrf, conversation_id, lang=lang, message="你好", revision=0)
+    response = _stream(client, csrf, conversation_id, message=message, revision=0)
     assert response.status_code == 200, response.text
     events = _parse_sse(response.text)
     assert {name for name, _ in events} == {"delta", "text_done"}
@@ -343,7 +339,7 @@ def test_chat_with_bound_voice_is_text_only(
     replay = client.post(
         f"/api/v1/conversations/{conversation_id}/messages:stream",
         headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
-        json={"request_id": request_id, "expected_revision": 1, "message": "你好", "lang": lang},
+        json={"request_id": request_id, "expected_revision": 1, "message": message},
     )
     assert replay.status_code == 200
     assert _parse_sse(replay.text) == [("text_done", done)]
@@ -359,7 +355,7 @@ def test_chat_with_bound_voice_is_text_only(
     assert recorder.calls == []
 
 
-def test_rejects_non_zh_cn_en_with_chat_language_unsupported(
+def test_chat_rejects_removed_language_field(
     voice_app: tuple[TestClient, Database, Settings],
 ) -> None:
     client, database, settings = voice_app
@@ -372,10 +368,19 @@ def test_rejects_non_zh_cn_en_with_chat_language_unsupported(
         json={"version_id": BASELINE_VERSION_ID},
     )
     conversation_id = created.json()["id"]
-    for lang in ("fr", "zh", "en-US", "zh-cn"):
-        response = _stream(client, csrf, conversation_id, lang=lang, message="Hello", revision=0)
+    for lang in ("en", "zh-CN", "fr"):
+        response = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages:stream",
+            headers={"X-CSRF-Token": csrf, "Accept": "text/event-stream"},
+            json={
+                "request_id": str(uuid4()),
+                "expected_revision": 0,
+                "message": "Hello",
+                "lang": lang,
+            },
+        )
         assert response.status_code == 400, response.text
-        assert response.json()["code"] == "chat_language_unsupported"
+        assert response.json()["code"] == "malformed_request"
     kept = client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"X-CSRF-Token": csrf},
@@ -401,9 +406,11 @@ def test_send_message_stores_assistant_text_once(
     calls: list[str] = []
     original = store_assistant_text
 
-    def wrapped(db, request_id, reply, sources, operation_id):  # type: ignore[no-untyped-def]
+    def wrapped(db, conversation_id, request_id, claim_revision, reply, sources, operation_id):
         calls.append(request_id)
-        return original(db, request_id, reply, sources, operation_id)
+        return original(
+            db, conversation_id, request_id, claim_revision, reply, sources, operation_id
+        )
 
     monkeypatch.setattr("app.modules.workspace.chat.store_assistant_text", wrapped)
     request_id = str(uuid4())
@@ -443,7 +450,6 @@ def test_replay_sources_json_failure_yields_sse_error(
             "request_id": request_id,
             "expected_revision": 0,
             "message": "Remember this",
-            "lang": "en",
         },
     )
     assert first.status_code == 200, first.text
@@ -459,7 +465,6 @@ def test_replay_sources_json_failure_yields_sse_error(
             "request_id": request_id,
             "expected_revision": 1,
             "message": "Remember this",
-            "lang": "en",
         },
     )
     assert replay.status_code == 200, replay.text
@@ -630,9 +635,7 @@ def test_baseline_voices_remain_for_debates_but_chat_ignores_them(
             json={"version_id": version_id},
         )
         assert created.status_code == 200, created.text
-        response = _stream(
-            client, csrf, created.json()["id"], lang="en", message="Speak", revision=0
-        )
+        response = _stream(client, csrf, created.json()["id"], message="Speak", revision=0)
         assert response.status_code == 200, response.text
         events = _parse_sse(response.text)
         assert {name for name, _ in events} == {"delta", "text_done"}
