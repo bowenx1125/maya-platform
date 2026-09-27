@@ -301,9 +301,8 @@ Backed-up normal soft-delete removed only the unpublished duplicate Bowen.
 
 ## Interaction and long-speech recovery — September 27, 2026
 
-Interaction uses warm-paper mobile layout, 16px inputs/48px controls and accessible
-feedback. Isolated375×812/812×375 checks verified overflow-free layout,18px radios
-and failed-input preservation/retry. No test messages entered a real classroom.
+Interaction uses warm-paper mobile layout,16px inputs/48px controls.
+375×812/812×375 checks passed; no real classroom test messages.
 Retry turn is now a refresh icon with accessible label.
 
 SQL/Mock integration covers HTTP submission, persisted messages/WS events, Final
@@ -331,6 +330,7 @@ Live duplicate rejection and repaired turn verified.
 ## Debate entry and Immerse controls — September 27, 2026
 
 Preview links retain warm hover/focus/press and reduced-motion support.
-No manual barrage pause control. Transactional Final freeze stops new messages
-before generation, retaining accepted inputs. Tests: frontend30/backend4;
-type/lint/boundary pass. Docker frontend updated.
+No manual barrage pause; Final freeze ends collection. Tests frontend30/backend4.
+Unscored counts removed; missing grades display No match +0 without rewriting data.
+Latest Report failed report_response_resource after HTTP200; model/object mismatch
+not distinguishable from retained metadata. No retry or report recovery claimed.

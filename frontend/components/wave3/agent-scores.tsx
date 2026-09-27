@@ -66,9 +66,6 @@ export function AgentScores({
   const { locale } = useLocale();
   const zh = locale === "zh";
   const data = agentScores(participants, turns);
-  const unscored = [...new Map(turns.map((turn) => [turn.id, turn])).values()]
-    .flatMap((turn) => turn.segment_turn?.segments ?? [])
-    .filter((segment) => segmentEvidenceGrade(segment) === null).length;
   return (
     <section aria-labelledby="agent-scores-title" className={panelStyles.panel}>
       <div className={panelStyles.header}>
@@ -84,7 +81,6 @@ export function AgentScores({
                 {label}
               </span>
             ))}
-            {unscored > 0 ? <span>{unscored} unscored</span> : null}
           </div>
           <BarChart
             data={data}

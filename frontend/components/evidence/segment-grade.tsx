@@ -6,10 +6,10 @@ import {
 import styles from "./segment-grade.module.css";
 
 export function SegmentGrade({ segment }: { segment: SegmentEvidence }) {
-  const grade = segmentEvidenceGrade(segment);
+  const grade = segmentEvidenceGrade(segment) ?? "none";
   return (
-    <span className={styles.grade} data-grade={grade ?? "unscored"}>
-      {grade === null ? "Unscored" : EVIDENCE_GRADE_LABELS[grade]}
+    <span className={styles.grade} data-grade={grade}>
+      {EVIDENCE_GRADE_LABELS[grade]}
     </span>
   );
 }
