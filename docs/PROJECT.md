@@ -336,3 +336,8 @@ repeat without a send-count cap; vote idempotency stays intact.
 Work With Bowen sits above Logout’s divider. Chats is text-only; no TTS dispatch.
 
 Full gates/boundary passed; Docker healthy.
+
+## MayaForm W0 — 2026-09-27
+
+Agno3.0.11 pinned; 11 probes pass (ADR-009). Team `additional_input` preserves
+history; direct `Message[]` drops assistant turns.

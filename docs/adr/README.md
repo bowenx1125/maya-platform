@@ -14,3 +14,5 @@ ADRs record durable decisions, not execution history. Status is one of `PROPOSED
   courtyard experiment.
 - [ADR-008](ADR-008-agent-chat-live-provider-controls.md): proposed reuse boundaries
   for single-Agent text/voice/3D chat, Provider controls and student Live.
+- [ADR-009](ADR-009-agno-sdk-boundary.md): pinned Agno version, public SDK boundary
+  and W0 extension probes for MayaForm.
