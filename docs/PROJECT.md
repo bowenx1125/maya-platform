@@ -349,7 +349,7 @@ entry. AGENT.md, Evidence, and Knowledge snapshot cards use a top-right download
 icon; Evidence downloads every RAG file in the block; snapshot file rows keep
 filename and character count without `order N`. Snapshot SNAPSHOT/CONTENT/FILES
 are three vertical stacks (label above value) at the existing number size. Chats
-composer is a single-line bar at the bottom of the pane. Ruleset save is the
+composer uses a floating rounded shell with the send control on its own row. Ruleset save is the
 checkmark beside language; sidebar Done does not save an unsaved Edit. Symbol
 actions and faded New / contextual Back/Done remain as before.
 
