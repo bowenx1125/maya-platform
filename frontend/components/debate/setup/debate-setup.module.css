@@ -522,3 +522,46 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Only the Preview link lifts the card; adjacent actions keep their own target. */
+.debateRow {
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+.debateRow > .debateCard {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.debateRow:has(> .debateCard:focus-visible) {
+  border-color: var(--gold, #d3a74a);
+  background: var(--surface, #fdfaf3);
+  box-shadow: 0 8px 24px rgb(52 45 30 / 9%);
+}
+.debateRow > .debateCard:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
+  outline-offset: -3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .debateRow:has(> .debateCard:hover) {
+    border-color: var(--gold, #d3a74a);
+    background: var(--surface, #fdfaf3);
+    box-shadow: 0 8px 24px rgb(52 45 30 / 9%);
+    transform: translateY(-2px);
+  }
+}
+.debateRow:has(> .debateCard:active) {
+  background: var(--gold-soft, #f6ecd3);
+  box-shadow: 0 2px 6px rgb(52 45 30 / 6%);
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .debateRow {
+    transition: none;
+  }
+  .debateRow:has(> .debateCard:hover) {
+    transform: none;
+  }
+}

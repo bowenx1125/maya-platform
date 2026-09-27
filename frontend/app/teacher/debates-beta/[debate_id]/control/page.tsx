@@ -480,7 +480,7 @@ export default function TeacherDebateControlPage() {
             </div>
           ) : null}
           <BetaDebateStage
-            headerActions={(replayButton) => (
+            headerActions={(replayButton, pauseButton) => (
               <>
                 <Link className="secondary-action" href="/teacher/debates">
                   {t("debateBack")}
@@ -522,6 +522,7 @@ export default function TeacherDebateControlPage() {
                         : betaLabels.openInteraction}
                   </button>
                 ) : null}
+                {pauseButton}
                 {replayButton}
                 {showSegmentsConclude ? (
                   <button

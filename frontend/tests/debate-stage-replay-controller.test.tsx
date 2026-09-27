@@ -26,12 +26,15 @@ vi.mock("../components/stage3d/scholar-scene", () => ({
   ScholarScene: ({
     bubbleText,
     visuals,
+    overlay,
   }: {
+    overlay?: import("react").ReactNode;
     bubbleText?: string;
     visuals: Record<string, string>;
   }) => (
     <aside data-motion={Object.values(visuals)[0]} data-testid="speech-bubble">
       {bubbleText}
+      {overlay}
     </aside>
   ),
 }));
@@ -245,6 +248,42 @@ function renderStage(
 }
 
 describe("terminal segments replay controller", () => {
+  it("toggles Pause and Collect below Interact and pauses the message lane", () => {
+    const initial = detail();
+    render(
+      <BetaDebateStage
+        api={apiFor(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => new ReplaySocket()}
+        joinUrl="https://example.test/classroom/test"
+        joinCodeVisible={false}
+        headerActions={(replayButton, pauseButton) => (
+          <>
+            <button>Interact</button>
+            {pauseButton}
+            {replayButton}
+          </>
+        )}
+      />,
+    );
+    const pause = screen.getByRole("button", { name: "Pause" });
+    expect(
+      screen.getByRole("button", { name: "Interact" }).nextElementSibling,
+    ).toBe(pause);
+    const lane = screen.getByLabelText("Classroom messages");
+    expect(lane.getAttribute("data-paused")).toBe("false");
+    fireEvent.click(pause);
+    expect(screen.getByRole("button", { name: "Collect" })).toBe(pause);
+    expect(lane.getAttribute("data-paused")).toBe("true");
+    fireEvent.click(pause);
+    expect(screen.getByRole("button", { name: "Pause" })).toBe(pause);
+    expect(lane.getAttribute("data-paused")).toBe("false");
+    expect(
+      screen.queryByRole("button", { name: /Resume messages/i }),
+    ).toBeNull();
+  });
+
   it("places terminal Replay between Back and Conclude while Next is disabled", () => {
     const initial = detail();
     render(

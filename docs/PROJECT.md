@@ -297,9 +297,7 @@ NFKC/strip/casefold on create/Markdown first-line rename;409 agent_name_conflict
 Next drafts can use the owner's ready voice or null(platform default); old versions
 stay unchanged.
 
-With user authorization and backup, the normal delete service soft-deleted the
-unpublished duplicate Bowen, preserving the published one; no Provider call occurred.
-Final combined verification follows below.
+Backed-up normal soft-delete removed only the unpublished duplicate Bowen.
 
 ## Interaction and long-speech recovery — September 27, 2026
 
@@ -328,6 +326,11 @@ without the preview duration ceiling;20MiB download and SSRF safeguards remain.
 Typed TTS failure jobs await explicit Retry instead of automatic reclamation.
 Docker was switched to this code before continued Preview generation.
 
-Checks: backend1498/21 skipped (restart assertion and known SQLite race passed
-focused reruns), frontend420/1 skipped; remaining gates/boundary passed. Docker
-ready; live duplicate rejection and repaired turn verified.
+Live duplicate rejection and repaired turn verified.
+
+## Debate entry and Immerse controls — September 27, 2026
+
+Preview links have warm hover/focus/press feedback and reduced-motion support.
+Immerse places Pause/Collect below Interact; it pauses the display, not server
+message collection. Frontend421/1 skipped (focused rerun), type/lint/boundary pass. Docker frontend
+updated; desktop focus/mobile layout verified.

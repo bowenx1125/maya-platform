@@ -494,7 +494,9 @@ function deriveClassroomPhase(
 }
 
 export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
-  headerActions?: ReactNode | ((replayButton: ReactNode) => ReactNode);
+  headerActions?:
+    | ReactNode
+    | ((replayButton: ReactNode, pauseButton: ReactNode) => ReactNode);
   /** The classroom join URL, once a teacher has opened interaction. */
   joinUrl?: string | null;
   /** Display only; hiding the code never closes the classroom entry. */
@@ -3528,6 +3530,17 @@ export function BetaDebateStage({
           connectionIssue === "origin_mismatch"
         ? { label: labels.connectionReload ?? "", kind: "reload" }
         : null;
+  const pauseButton =
+    !readOnly && joinUrl ? (
+      <button
+        className="secondary-action"
+        aria-pressed={barragePaused}
+        onClick={() => setBarragePaused((current) => !current)}
+        type="button"
+      >
+        {barragePaused ? beta.barrageCollect : beta.barragePause}
+      </button>
+    ) : null;
   const totalTurns = expectedTurnCount(detailState);
   const progressTurn = bubbleTurn ?? publicTurns[publicTurns.length - 1];
   const currentTurnNumber = progressTurn
@@ -3587,16 +3600,6 @@ export function BetaDebateStage({
                 </span>
               </div>
             ) : null}
-            {!readOnly && joinUrl ? (
-              <button
-                className={stage3d.barrageToggle}
-                data-paused={barragePaused ? "true" : "false"}
-                onClick={() => setBarragePaused((current) => !current)}
-                type="button"
-              >
-                {barragePaused ? beta.barrageResume : beta.barragePause}
-              </button>
-            ) : null}
           </>
         }
         resting={
@@ -3628,16 +3631,20 @@ export function BetaDebateStage({
         {headerActions ? (
           <div className={styles.panelActions}>
             {typeof headerActions === "function" ? (
-              headerActions(replayButton)
+              headerActions(replayButton, pauseButton)
             ) : (
               <>
                 {headerActions}
+                {pauseButton}
                 {replayButton}
               </>
             )}
           </div>
         ) : (
-          replayButton
+          <>
+            {pauseButton}
+            {replayButton}
+          </>
         )}
         <button
           ref={transcriptToggleRef}
