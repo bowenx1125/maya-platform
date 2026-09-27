@@ -113,6 +113,10 @@
   padding: 48px clamp(24px, 4vw, 64px) 80px;
 }
 
+.main.chatMain {
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
 @media (max-width: 900px) {
   .frame {
     grid-template-columns: minmax(0, 1fr);

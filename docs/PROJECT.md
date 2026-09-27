@@ -316,3 +316,12 @@ and lint passed (four existing warnings); no real voice request was made.
 Backed-up Docker rebuild passed readiness/schema/homepage checks. Browser verified
 the empty list and New/Back form at narrow width with no horizontal overflow;
 populated profile actions were covered by Mock tests, not real voice enrollment.
+
+Chats removes the 820px height ceiling and fills the desktop viewport below its
+48px top inset, retaining 24px bottom spacing (including card borders). Narrow
+screens use a 600px/75dvh minimum conversation area and safe-area bottom padding.
+Other pages retain their existing spacing. Frontend 402 passed/1 skipped,
+typecheck and lint passed with four existing warnings.
+Backed-up Docker rebuild/readiness/schema/homepage passed. At 1440×1000 the card
+grew from 822px to 928px and bottom space fell from 130px to 24px; at 390×844
+the conversation is 633px tall. Neither viewport had horizontal overflow.

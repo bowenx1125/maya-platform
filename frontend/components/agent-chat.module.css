@@ -128,7 +128,7 @@
   display: grid;
   grid-template-rows: minmax(280px, 1fr) auto;
   min-width: 0;
-  height: clamp(600px, calc(100dvh - 176px), 820px);
+  height: max(600px, calc(100dvh - 74px));
   overflow: hidden;
   background: #fdfaf3;
 }
@@ -304,7 +304,7 @@
     max-height: 104px;
   }
   .conversation {
-    height: max(540px, 70dvh);
+    height: max(600px, 75dvh);
   }
   .messages {
     padding: 16px 16px 8px;

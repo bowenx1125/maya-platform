@@ -247,7 +247,7 @@ export function AppShell({
         <main
           id="workspace-content"
           tabIndex={-1}
-          className={`${styles.main} ${workspaceStyles.surface}`}
+          className={`${styles.main} ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? styles.chatMain : ""}`}
         >
           {children}
         </main>
