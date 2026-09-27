@@ -66,7 +66,7 @@ describe("M08 voice library", () => {
     ).toBe(true);
 
     const input = screen.getByLabelText(
-      "Voice sample file",
+      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
     ) as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
       type: "audio/wav",
@@ -77,7 +77,11 @@ describe("M08 voice library", () => {
     expect(await screen.findByRole("button", { name: "Done" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(screen.queryByLabelText("Voice sample file")).toBeNull();
+    expect(
+      screen.queryByLabelText(
+        "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
+      ),
+    ).toBeNull();
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
@@ -112,7 +116,7 @@ describe("M08 voice library", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const input = screen.getByLabelText(
-      "Voice sample file",
+      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
     ) as HTMLInputElement;
     fireEvent.change(input, {
       target: {

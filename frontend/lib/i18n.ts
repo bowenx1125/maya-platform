@@ -686,7 +686,8 @@ const enMessages = {
   voiceCreateTitle: "New",
   voiceCreateLede:
     "WAV 16-bit, MP3, or M4A up to 10 MB. A custom voice is optional; unavailable voices use the platform fallback.",
-  voiceSampleFile: "Voice sample file",
+  voiceSampleFile:
+    "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
   voiceConsentLabel: "Consent",
   voiceConsent:
     "I confirm this is my voice and authorize this course to create a reusable profile.",
@@ -1387,7 +1388,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voiceCreateTitle: "新建",
   voiceCreateLede:
     "WAV 16 位、MP3 或 M4A，最大 10 MB。自定义音色是可选项；不可用时使用平台兜底音色。",
-  voiceSampleFile: "音色样本文件",
+  voiceSampleFile:
+    "请上传一段 10–15 秒的朗读音频（念一段话，支持 16 位 WAV、MP3 或 M4A，文件不超过 10 MB）。",
   voiceConsentLabel: "授权",
   voiceConsent: "我确认这是我的声音，并授权本课程创建可复用的音色档案。",
   voiceProcessing: "处理中…",

@@ -325,3 +325,8 @@ typecheck and lint passed with four existing warnings.
 Backed-up Docker rebuild/readiness/schema/homepage passed. At 1440×1000 the card
 grew from 822px to 928px and bottom space fell from 130px to 24px; at 390×844
 the conversation is 633px tall. Neither viewport had horizontal overflow.
+
+Voices upload copy now asks for 10–15 seconds reading a short passage and lists
+16-bit WAV/MP3/M4A with a 10 MB ceiling, in both locales. This is recording
+guidance; existing 10–20-second server validation and 10 MiB upload limit remain.
+Three voice tests/typecheck passed; Docker/browser copy and wrapping verified.
