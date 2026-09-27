@@ -22,6 +22,7 @@ from app.core.models import (
     Job,
     KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeDocumentChunk,
     KnowledgeSnapshot,
     SnapshotDocument,
     StoredFile,
@@ -835,7 +836,7 @@ def test_replace_publish_forced_order_has_one_stable_winner(
         _assert_storage_recovered(database, settings.resolved_data_root)
 
 
-def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
+def test_large_replacement_is_copy_on_write_for_every_enabled_draft_and_file(
     app_factory: Any,
 ) -> None:
     app, database, settings = app_factory()
@@ -877,6 +878,7 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
             }
             before_chunks = [
                 (
+                    row.id,
                     row.document_id,
                     row.chunk_index,
                     row.chunk_text,
@@ -885,13 +887,14 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
                     row.embedding_blob,
                 )
                 for row in session.scalars(
-                    select(KnowledgeChunk).where(KnowledgeChunk.document_id == old["id"])
+                    select(KnowledgeDocumentChunk).where(
+                        KnowledgeDocumentChunk.document_id == old["id"]
+                    )
                 ).all()
             ]
-
         oversized = b"# Replacement\n\n" + (b"evidence " * 12_000)
         assert len(oversized.decode("utf-8")) > 100_000
-        rejected = client.post(
+        replaced = client.post(
             f"/api/v1/knowledge-documents/{old['id']}/replace",
             headers=_headers(csrf, **{"Idempotency-Key": "over-limit-replace-123456"}),
             data={
@@ -900,28 +903,43 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
             },
             files={"file": ("oversized.md", oversized, "text/markdown")},
         )
-        assert rejected.status_code == 422, rejected.text
-        assert rejected.json()["code"] == "rag_over_limit"
+        assert replaced.status_code == 201, replaced.text
+        replacement = replaced.json()
+        assert replacement["id"] != old["id"]
+        assert replacement["char_count"] == len(oversized.decode("utf-8"))
 
         with database.session() as session:
             old_row = session.get(KnowledgeDocument, old["id"])
-            assert old_row is not None and old_row.workspace_state == "active"
+            assert old_row is not None and old_row.workspace_state == "hidden"
             assert old_row.content_hash == old["content_hash"]
             assert old_row.index_revision == old["index_revision"]
             assert old_row.stored_file is not None
             assert old_row.stored_file.id == old_file.id
+            new_row = session.get(KnowledgeDocument, replacement["id"])
+            assert new_row is not None and new_row.stored_file is not None
+            assert (
+                settings.resolved_data_root / new_row.stored_file.relative_path
+            ).read_bytes() == oversized
             assert [
                 (row.agent_version_id, row.document_id, row.enabled, row.order_index)
                 for row in session.scalars(select(AgentVersionDocument)).all()
-            ] == before_relations
-            assert {
+            ] == [
+                (version_id, replacement["id"], enabled, order_index)
+                for version_id, _document_id, enabled, order_index in before_relations
+            ]
+            after_versions = {
                 row.id: (row.revision, row.state, row.knowledge_snapshot_id)
                 for row in session.scalars(
                     select(AgentVersion).where(AgentVersion.id.in_([version_one, version_two]))
                 ).all()
-            } == before_versions
-            assert [
+            }
+            assert after_versions == {
+                version_id: (revision + 1, state, snapshot_id)
+                for version_id, (revision, state, snapshot_id) in before_versions.items()
+            }
+            after_old_chunks = [
                 (
+                    row.id,
                     row.document_id,
                     row.chunk_index,
                     row.chunk_text,
@@ -930,17 +948,18 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
                     row.embedding_blob,
                 )
                 for row in session.scalars(
-                    select(KnowledgeChunk).where(KnowledgeChunk.document_id == old["id"])
-                ).all()
-            ] == before_chunks
-            assert (
-                session.scalars(
-                    select(KnowledgeDocument).where(
-                        KnowledgeDocument.source_filename == "oversized.md"
+                    select(KnowledgeDocumentChunk).where(
+                        KnowledgeDocumentChunk.document_id == old["id"]
                     )
                 ).all()
-                == []
-            )
+            ]
+            assert after_old_chunks == before_chunks
+            new_chunks = session.scalars(
+                select(KnowledgeDocumentChunk).where(
+                    KnowledgeDocumentChunk.document_id == replacement["id"]
+                )
+            ).all()
+            assert new_chunks
         assert (settings.resolved_data_root / old_file.relative_path).read_bytes() == old_bytes
         _assert_storage_recovered(database, settings.resolved_data_root)
 

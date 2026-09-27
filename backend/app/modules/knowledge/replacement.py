@@ -22,7 +22,6 @@ from app.core.errors import (
     PlatformError,
     invalid_state,
     not_found,
-    rag_over_limit,
     stale_revision,
 )
 from app.core.models import (
@@ -40,7 +39,7 @@ from app.modules.knowledge.files import (
     stage_atomic,
     verify_staged,
 )
-from app.modules.knowledge.markdown import MAX_RAG_CHARS, MarkdownDocument, build_chunks
+from app.modules.knowledge.markdown import MarkdownDocument, build_chunks
 from app.modules.knowledge.services import (
     assert_claim_owned,
     create_file_operation,
@@ -287,9 +286,6 @@ def replace_document_copy_on_write(
             ):
                 raise stale_revision(current_revision)
             raise invalid_state("The draft document references changed during replacement.")
-
-        if replacement.char_count > MAX_RAG_CHARS:
-            raise rag_over_limit()
 
         timestamp = now_utc()
         stored_file = StoredFile(

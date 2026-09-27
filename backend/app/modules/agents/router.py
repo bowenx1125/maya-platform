@@ -20,7 +20,6 @@ from app.core.errors import (
     forbidden,
     invalid_state,
     not_found,
-    rag_over_limit,
     stale_revision,
     validation_failure,
     version_immutable,
@@ -76,7 +75,7 @@ from app.modules.demo_baseline.service import (
     reject_baseline_version_mutation,
 )
 from app.modules.knowledge.files import content_disposition, frozen_download_filename
-from app.modules.knowledge.markdown import MAX_RAG_CHARS, MarkdownInputError, normalize_markdown
+from app.modules.knowledge.markdown import MarkdownInputError, normalize_markdown
 from app.modules.knowledge.multipart import integer_field, parse_upload
 from app.modules.knowledge.providers.product_publication import (
     ProductPublicationError,
@@ -390,8 +389,6 @@ def _raise_embedding_publication_error(
         ) from error
     if error.code == "version_immutable":
         raise version_immutable() from error
-    if error.code == "rag_over_limit":
-        raise rag_over_limit() from error
     if error.code in {
         "manifest_drift",
         "manifest_owner_drift",
@@ -1153,8 +1150,6 @@ async def upload_agent_md(
         fields, filename, content = await parse_upload(request)
         expected_revision = integer_field(fields, "expected_revision", required=True)
         document = normalize_markdown(filename, content)
-        if document.char_count > 12_000:
-            raise MarkdownInputError("agent_md_too_large")
     except (ValueError, MarkdownInputError, UnicodeDecodeError) as exc:
         raise validation_failure(
             "The AGENT.md upload is not valid.", code="file_operation_failed"
@@ -1416,8 +1411,6 @@ def test_agent_draft(
             "All enabled documents must be indexed before test chat.",
             code="rag_index_pending",
         )
-    if any(document.char_count > MAX_RAG_CHARS for document in docs):
-        raise rag_over_limit()
     return retrieval_response(db, scoped.version, payload.message)
 
 

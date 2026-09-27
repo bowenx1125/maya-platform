@@ -54,8 +54,8 @@ immutable rows and server-derived source/speech locations. It does not certify t
 ## Prompt and context
 
 The rules engine owns order, phase, retry budget and terminal behavior. Agent.md is
-free-form Chinese/English Markdown capped at 12,000 characters, not a parsed Persona.
-RAG is free-form with a 100,000-character per-file cap, no aggregate or semantic gate.
+full Chinese/English Markdown, not a parsed Persona, with no whole-document character
+cap. RAG keeps complete Markdown with no per-file or aggregate character ceiling.
 Teacher Ruleset Markdown owns classroom guidance. Each turn receives successful
 predecessor speeches; private Chats sends only its own chronological history.
 Frozen envelopes and receipts are reused on authorized structure-only repair.

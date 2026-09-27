@@ -483,7 +483,7 @@ class KnowledgeSnapshot(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "total_char_count >= 1 AND total_char_count <= 100000",
+            "total_char_count >= 1",
             name="ck_knowledge_snapshots_total_chars",
         ),
         CheckConstraint(

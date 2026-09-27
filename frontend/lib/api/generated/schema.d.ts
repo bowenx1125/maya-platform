@@ -2253,8 +2253,7 @@ export interface components {
         RagPreview: {
             version_id: components["schemas"]["Uuid"];
             total_char_count: number;
-            /** @constant */
-            limit: 100000;
+            limit: null;
             document_count: number;
             /** @enum {string} */
             index_status: "pending" | "ready" | "failed";

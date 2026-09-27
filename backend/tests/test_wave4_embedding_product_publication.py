@@ -26,6 +26,7 @@ from app.core.models import (
     ProviderOperation,
     StoredFile,
 )
+from app.modules.agents.persona import compile_persona
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
 from app.modules.demo_acceptance.schemas import DemoAcceptanceRunCreateRequest
 from app.modules.demo_acceptance.service import create_acceptance_run
@@ -360,6 +361,32 @@ def test_real_build_is_deterministic_and_has_closed_identity(tmp_path: Path) -> 
         first.documents[0].source_sha256
         == hashlib.sha256(b"# Lesson\n\nA bounded lesson.").hexdigest()
     )
+    fixture.database.dispose()
+
+
+def test_real_build_keeps_agent_and_rag_text_above_old_limits_without_dispatch(
+    tmp_path: Path,
+) -> None:
+    source = b"# Lesson\n\n" + (b"complete source evidence \n" * 6_000)
+    assert len(source.decode("utf-8")) > 100_000
+    fixture = _make_fixture(tmp_path, source=source)
+    with fixture.database.session() as session:
+        version = session.get(AgentVersion, fixture.agent_version_id)
+        assert version is not None
+        long_agent_md = version.agent_md.replace("Classroom technology ethics expert", "R" * 12_001)
+        compiled = compile_persona(long_agent_md, expected_name="Publication Agent")
+        assert compiled.compiled and compiled.canonical_json and compiled.persona_spec_hash
+        assert len(long_agent_md) > 12_000
+        version.agent_md = long_agent_md
+        version.raw_agent_md_hash = compiled.source_agent_md_hash
+        version.persona_spec_json = compiled.canonical_json
+        version.persona_spec_hash = compiled.persona_spec_hash
+        version.persona_compiler_version = compiled.compiler_version
+        version.persona_diagnostics_json = "[]"
+
+    build = _build(fixture)
+    assert build.documents[0].normalized_text == source.decode("utf-8")
+    assert build.documents[0].char_count > 100_000
     fixture.database.dispose()
 
 

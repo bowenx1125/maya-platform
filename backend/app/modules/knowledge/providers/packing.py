@@ -284,7 +284,12 @@ def plan_embedding_batches(
     current: list[EmbeddingItemV1] = []
     current_tokens = 0
     for item in items:
-        would_exceed = current and (
+        if item.token_count > MAX_BATCH_TOKENS:
+            raise EmbeddingPlanError(
+                "one embedding item exceeds the 30000-token supplier batch limit",
+                code="embedding_item_tokens_exceeded",
+            )
+        would_exceed = bool(current) and (
             len(current) >= MAX_BATCH_ITEMS or current_tokens + item.token_count > MAX_BATCH_TOKENS
         )
         if would_exceed:

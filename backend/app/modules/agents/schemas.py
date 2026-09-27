@@ -43,7 +43,7 @@ class AgentVersion(BaseModel):
     version_label: str = Field(pattern=r"^V[0-9]+\.[0-9]+$")
     state: Literal["draft", "published", "superseded"]
     revision: int = Field(ge=0)
-    agent_md: str = Field(default="", max_length=12000)
+    agent_md: str = ""
     raw_agent_md_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     persona_spec: PersonaSpecVersion | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -95,7 +95,7 @@ class AgentDetail(AgentSummary):
 
 class UpdateAgentDraftRequest(BaseModel):
     expected_revision: int = Field(ge=0)
-    agent_md: str = Field(default="", max_length=12000)
+    agent_md: str = ""
     avatar_config: AvatarConfig = None  # type: ignore[assignment]
     voice_profile_id: UUID | None = None
 
@@ -141,7 +141,7 @@ ExpectedRevisionRequest = PublishAgentVersionRequest
 class RagPreview(BaseModel):
     version_id: UUID
     total_char_count: int
-    limit: Literal[100000]
+    limit: None
     document_count: int
     index_status: Literal["pending", "ready", "failed"]
     combined_markdown: str = ""
@@ -180,6 +180,6 @@ class KnowledgeSnapshot(BaseModel):
     id: UUID
     agent_version_id: UUID
     content_hash: str
-    total_char_count: int = Field(ge=1, le=100000)
+    total_char_count: int = Field(ge=1)
     documents: list[SnapshotDocument]
     created_at: datetime

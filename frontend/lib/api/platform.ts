@@ -1359,11 +1359,12 @@ export class PlatformApi {
   }
 
   async ragPreview(versionId: string): Promise<RagPreview> {
-    return unwrap(
+    const preview = await unwrap(
       await this.client.GET("/agent-versions/{version_id}/rag-preview", {
         params: { path: { version_id: versionId } },
       }),
     );
+    return { ...preview, limit: null };
   }
 
   async uploadAgentMd(

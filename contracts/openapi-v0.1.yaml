@@ -3712,7 +3712,7 @@ components:
         id: { $ref: "#/components/schemas/Uuid" }
         agent_version_id: { $ref: "#/components/schemas/Uuid" }
         content_hash: { type: string }
-        total_char_count: { type: integer, minimum: 1, maximum: 100000 }
+        total_char_count: { type: integer, minimum: 1 }
         documents:
           type: array
           items: { $ref: "#/components/schemas/SnapshotDocument" }
@@ -3766,7 +3766,7 @@ components:
         version_label: { type: string, pattern: '^V[0-9]+\.[0-9]+$' }
         state: { type: string, enum: [draft, published, superseded] }
         revision: { type: integer, minimum: 0 }
-        agent_md: { type: string, maxLength: 12000 }
+        agent_md: { type: string }
         avatar_config: { $ref: "#/components/schemas/AvatarConfig" }
         voice_profile_id:
           { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
@@ -3912,7 +3912,7 @@ components:
       required: [expected_revision]
       properties:
         expected_revision: { type: integer, minimum: 0 }
-        agent_md: { type: string, maxLength: 12000 }
+        agent_md: { type: string }
         avatar_config: { $ref: "#/components/schemas/AvatarConfig" }
         voice_profile_id:
           { oneOf: [{ $ref: "#/components/schemas/Uuid" }, { type: "null" }] }
@@ -3960,7 +3960,7 @@ components:
       properties:
         version_id: { $ref: "#/components/schemas/Uuid" }
         total_char_count: { type: integer }
-        limit: { type: integer, const: 100000 }
+        limit: { type: "null" }
         document_count: { type: integer }
         index_status: { type: string, enum: [pending, ready, failed] }
         combined_markdown: { type: string }

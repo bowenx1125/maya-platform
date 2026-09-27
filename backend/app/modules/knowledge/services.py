@@ -86,7 +86,7 @@ from app.modules.knowledge.files import (
 from app.modules.knowledge.markdown import (
     EMBEDDING_DIMENSION,
     EMBEDDING_KEY,
-    MAX_RAG_CHARS,
+    MAX_CHUNK_UTF8_BYTES,
     normalize_markdown,
     query_embedding,
 )
@@ -94,7 +94,10 @@ from app.modules.knowledge.mock_lexical import (
     MOCK_LEXICAL_ANCHOR_POLICY_ID,
     MockLexicalAnchorV2,
 )
-from app.modules.knowledge.providers.snapshot_build import SnapshotPublishCandidateV1
+from app.modules.knowledge.providers.snapshot_build import (
+    DEFAULT_CHUNKING_VERSION,
+    SnapshotPublishCandidateV1,
+)
 from app.modules.knowledge.schemas import JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.org.access import WorkspaceMember
@@ -834,13 +837,9 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
     result: list[str] = []
     if not version.agent_md.strip():
         result.append("agent_md_missing")
-    if len(version.agent_md) > 12_000:
-        result.append("agent_md_too_large")
     docs = _enabled_documents(db, version.id)
     if not docs:
         result.append("rag_missing")
-    if any(document.char_count > MAX_RAG_CHARS for document in docs):
-        result.append("rag_over_limit")
     statuses = {document.index_status for document in docs}
     if statuses & {"pending", "indexing"}:
         result.append("rag_index_pending")
@@ -1006,7 +1005,7 @@ def rag_preview(db: Session, version: AgentVersion, data_root: Path) -> RagPrevi
     return RagPreview(
         version_id=UUID(version.id),
         total_char_count=sum(document.char_count for document in docs),
-        limit=100000,
+        limit=None,
         document_count=len(docs),
         index_status=cast(Literal["pending", "ready", "failed"], state),
         combined_markdown=combined_markdown(db, version.id, data_root),
@@ -1509,7 +1508,17 @@ def create_snapshot(
                     separators=(",", ":"),
                 )
                 if embedding_candidate is not None
-                else json.dumps({"token_target": 600, "token_hard": 800, "overlap": 100})
+                else json.dumps(
+                    {
+                        "version": DEFAULT_CHUNKING_VERSION,
+                        "token_target": 600,
+                        "token_hard": 800,
+                        "overlap": 100,
+                        "max_chunk_utf8_bytes": MAX_CHUNK_UTF8_BYTES,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             ),
             created_at=timestamp,
         )

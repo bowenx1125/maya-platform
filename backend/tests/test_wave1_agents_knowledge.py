@@ -705,7 +705,7 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
     assert "rag_missing" in publish_body["details"]["publish_blockers"]
 
 
-def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(
+def test_wave1_rag_length_does_not_block_upload_set_or_chat(
     app_factory: Any,
 ) -> None:
     app, database, settings = app_factory()
@@ -728,32 +728,32 @@ def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(
             version_id,
         )
 
-        upload_error = client.post(
+        uploaded = client.post(
             f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "over-limit-upload-001"}),
             data={"target_agent_version_id": version_id, "expected_revision": "1"},
             files={"file": ("small.md", b"# Small", "text/markdown")},
         )
-        _assert_business_error(upload_error, "rag_over_limit")
+        assert uploaded.status_code == 201, uploaded.text
 
-        set_error = client.put(
+        selected = client.put(
             f"/api/v1/agent-versions/{version_id}/knowledge-documents",
             headers=_headers(csrf),
-            json={"expected_revision": 1, "document_ids": [document_id]},
+            json={"expected_revision": 2, "document_ids": [document_id]},
         )
-        _assert_business_error(set_error, "rag_over_limit")
+        assert selected.status_code == 200, selected.text
 
-        chat_error = client.post(
+        chat = client.post(
             f"/api/v1/agent-versions/{version_id}/chat",
             headers=_headers(csrf),
             json={"message": "hello"},
         )
-        _assert_business_error(chat_error, "rag_over_limit")
+        assert chat.status_code == 200, chat.text
 
         with database.session() as session:
             version = session.get(AgentVersion, version_id)
             assert version is not None
-            assert version.revision == 1
+            assert version.revision == 3
             relations = session.scalars(
                 select(AgentVersionDocument).where(
                     AgentVersionDocument.agent_version_id == version_id

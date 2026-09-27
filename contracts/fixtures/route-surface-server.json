@@ -7251,8 +7251,7 @@
           },
           "total_char_count": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 100000
+            "minimum": 1
           },
           "documents": {
             "type": "array",
@@ -7394,8 +7393,7 @@
             "minimum": 0
           },
           "agent_md": {
-            "type": "string",
-            "maxLength": 12000
+            "type": "string"
           },
           "avatar_config": {
             "$ref": "#/components/schemas/AvatarConfig"
@@ -7785,8 +7783,7 @@
             "minimum": 0
           },
           "agent_md": {
-            "type": "string",
-            "maxLength": 12000
+            "type": "string"
           },
           "avatar_config": {
             "$ref": "#/components/schemas/AvatarConfig"
@@ -7914,8 +7911,7 @@
             "type": "integer"
           },
           "limit": {
-            "type": "integer",
-            "const": 100000
+            "type": "null"
           },
           "document_count": {
             "type": "integer"

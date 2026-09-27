@@ -319,9 +319,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   const blockers = version?.publish_blockers ?? [];
   const blockerTitles: Record<string, string> = {
     agent_md_missing: "AGENT.md",
-    agent_md_too_large: "AGENT.md",
     rag_missing: t("knowledge"),
-    rag_over_limit: t("knowledge"),
     rag_index_pending: t("knowledge"),
     rag_index_failed: t("knowledge"),
     avatar_missing: t("avatarDesign"),
@@ -634,7 +632,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             <textarea
               className="markdown-editor"
               aria-label={`${t("agentMd")} ${t("editor")}`}
-              maxLength={12000}
               value={agentMd}
               disabled={saving}
               onChange={(event) => {
@@ -645,7 +642,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             />
             <div className="editor-footer">
               <span>
-                {agentMd.length.toLocaleString()} / 12,000 {t("characters")}
+                {agentMd.length.toLocaleString()} {t("characters")}
               </span>
             </div>
           </SectionCard>

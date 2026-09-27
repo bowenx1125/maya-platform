@@ -17,7 +17,6 @@ from app.core.errors import (
     PlatformError,
     invalid_state,
     not_found,
-    rag_over_limit,
     stale_revision,
     validation_failure,
     version_immutable,
@@ -58,7 +57,6 @@ from app.modules.knowledge.files import (
     verify_staged,
 )
 from app.modules.knowledge.markdown import (
-    MAX_RAG_CHARS,
     MarkdownInputError,
     build_chunks,
     normalize_markdown,
@@ -174,8 +172,6 @@ async def upload_knowledge_document(
         target_id = str(UUID(target_id_raw)) if target_id_raw else None
         expected_revision = integer_field(fields, "expected_revision", required=False)
         document = normalize_markdown(filename, content)
-        if document.char_count > MAX_RAG_CHARS:
-            raise rag_over_limit()
     except (ValueError, MarkdownInputError, UnicodeDecodeError):
         raise validation_failure(
             "The Markdown upload is not valid.", code="file_operation_failed"
@@ -235,8 +231,6 @@ async def upload_knowledge_document(
             if scoped.version.revision != expected_revision:
                 raise stale_revision(scoped.version.revision)
             current_docs = _enabled_documents(db, scoped.version.id)
-            if any(item.char_count > MAX_RAG_CHARS for item in current_docs):
-                raise rag_over_limit()
         else:
             current_docs = []
 
@@ -335,8 +329,6 @@ async def upload_knowledge_document(
             if scoped.version.revision != expected_revision:
                 raise stale_revision(scoped.version.revision)
             current_docs = _enabled_documents(db, scoped.version.id)
-            if any(item.char_count > MAX_RAG_CHARS for item in current_docs):
-                raise rag_over_limit()
             changed = db.execute(
                 update(AgentVersion)
                 .where(
@@ -532,8 +524,6 @@ async def replace_knowledge_document(
     try:
         fields, filename, content = await parse_upload(request)
         replacement = normalize_markdown(filename, content)
-        if replacement.char_count > MAX_RAG_CHARS:
-            raise rag_over_limit()
         expected_content_hash = fields.get("expected_content_hash")
         if (
             expected_content_hash is None
@@ -961,8 +951,6 @@ def set_agent_version_documents(
         raise not_found()
     documents_by_id = {document.id: document for document in documents}
     ordered = [documents_by_id[item] for item in document_ids]
-    if any(item.char_count > MAX_RAG_CHARS for item in ordered):
-        raise rag_over_limit()
     changed = db.execute(
         update(AgentVersion)
         .where(

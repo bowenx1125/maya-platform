@@ -36,7 +36,7 @@ from app.core.models import (
     ProviderPolicySnapshot,
 )
 from app.modules.agents.markdown import markdown_hash
-from app.modules.knowledge.markdown import MAX_RAG_CHARS, normalize_markdown
+from app.modules.knowledge.markdown import normalize_markdown
 from app.modules.knowledge.services import document_file_content
 from app.providers.control import (
     ExportConfirmationV1,
@@ -236,8 +236,6 @@ def _enabled_documents(
                 source_sha256=source_hash,
             )
         )
-    if any(len(document.text) > MAX_RAG_CHARS for document in documents):
-        raise _product_error("a document exceeds the publication limit", "rag_over_limit")
     return tuple(documents)
 
 
@@ -311,8 +309,8 @@ def prepare_real_snapshot_build(
             agent_version_id=agent_version_id,
             expected_revision=expected_revision,
         )
-        if not version.agent_md.strip() or len(version.agent_md) > 12_000:
-            raise _product_error("Agent Markdown is empty or too long", "agent_md_invalid")
+        if not version.agent_md.strip():
+            raise _product_error("Agent Markdown is empty", "agent_md_invalid")
         documents = _enabled_documents(db, version=version, group=group, data_root=root)
         _scan_document_outbound_texts(documents)
         snapshot_id, build_id = _deterministic_ids(
