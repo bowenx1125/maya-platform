@@ -118,7 +118,7 @@ class ContinueRealReportRequest(ClosedModel):
     """Teacher-runner acknowledgement for one already attached report call."""
 
     manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    call_no: int = Field(ge=1, le=8)
+    call_no: int = Field(ge=1)
 
 
 # Internal deterministic Mock policy result.  ``item_key`` is an in-memory

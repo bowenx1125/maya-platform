@@ -30,7 +30,6 @@ from app.modules.reports.real_schema import (
 from app.modules.reports.schemas import ReportSectionOutput
 from app.providers.llm_adapter import DashScopeLLMConfig
 from app.providers.llm_price_card import (
-    LLM_INPUT_TOKEN_CAP,
     LLM_MODEL_KEY,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
 )
@@ -153,7 +152,7 @@ def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
     # Read the counters this function needs and ignore anything else the
     # supplier reports alongside them. Rejecting an unknown field failed every
     # genuine response without protecting anything: none of it is echoed, and
-    # the arithmetic and cap checks below are what actually bound the spend.
+    # the arithmetic checks below keep accounting internally consistent.
     values: list[int] = []
     for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = payload.get(field)
@@ -170,12 +169,7 @@ def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
             raise ReportProviderError("report_usage_invalid")
         cached = cached_value
     prompt_tokens, completion_tokens, total_tokens = values
-    if (
-        total_tokens != prompt_tokens + completion_tokens
-        or prompt_tokens > LLM_INPUT_TOKEN_CAP
-        or completion_tokens > REAL_REPORT_OUTPUT_TOKEN_CAP
-        or cached > prompt_tokens
-    ):
+    if total_tokens != prompt_tokens + completion_tokens or cached > prompt_tokens:
         raise ReportProviderError("report_usage_overrun")
     return prompt_tokens, cached, completion_tokens, total_tokens
 
@@ -191,7 +185,7 @@ def _response_sections(
     # the debate adapter, which has worked against this same endpoint all
     # along, checks presence rather than exact shape. Nothing here echoes the
     # envelope, so an extra documented field is not a boundary risk; the model
-    # identity, single choice, finish reason and usage caps below are.
+    # identity, single choice, finish reason and usage arithmetic below are.
     if not isinstance(payload, Mapping) or _EXPECTED_ENVELOPE_FIELDS - set(payload):
         raise ReportProviderError("report_response_shape")
     if payload.get("object") != "chat.completion" or payload.get("model") != prepared.body.get(

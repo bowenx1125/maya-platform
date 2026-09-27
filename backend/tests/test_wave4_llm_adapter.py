@@ -266,7 +266,6 @@ def test_adapter_captures_exact_beijing_wire_and_hash_excludes_authorization() -
         "stream",
         "temperature",
         "top_p",
-        "max_completion_tokens",
         "n",
         "response_format",
     }
@@ -275,7 +274,7 @@ def test_adapter_captures_exact_beijing_wire_and_hash_excludes_authorization() -
     assert body["stream"] is False
     assert body["temperature"] == 0.2
     assert body["top_p"] == 0.8
-    assert body["max_completion_tokens"] == 1500
+    assert "max_completion_tokens" not in body
     assert body["n"] == 1
     assert [message["role"] for message in body["messages"]] == ["system", "user"]
     schema = body["response_format"]["json_schema"]

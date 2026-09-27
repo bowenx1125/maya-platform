@@ -1356,7 +1356,7 @@ class ProviderExportConfirmation(Base):
 
 
 class ProviderScopeBudget(Base):
-    """Atomic request/token/cost allowance for one server-owned scope."""
+    """Atomic request/token/cost accounting for one server-owned scope."""
 
     __tablename__ = "provider_scope_budgets"
 
@@ -1381,15 +1381,15 @@ class ProviderScopeBudget(Base):
         CheckConstraint("max_total_tokens >= 0", name="ck_provider_scope_budgets_max_tokens"),
         CheckConstraint("max_cost_cny >= 0", name="ck_provider_scope_budgets_max_cost"),
         CheckConstraint(
-            "allocated_requests >= 0 AND allocated_requests <= max_requests",
+            "allocated_requests >= 0",
             name="ck_provider_scope_budgets_allocated_requests",
         ),
         CheckConstraint(
-            "allocated_total_tokens >= 0 AND allocated_total_tokens <= max_total_tokens",
+            "allocated_total_tokens >= 0",
             name="ck_provider_scope_budgets_allocated_tokens",
         ),
         CheckConstraint(
-            "allocated_cost_cny >= 0 AND allocated_cost_cny <= max_cost_cny",
+            "allocated_cost_cny >= 0",
             name="ck_provider_scope_budgets_allocated_cost",
         ),
     )
@@ -1538,7 +1538,7 @@ class ProviderOperation(Base):
             name="ck_provider_operations_acceptance_call_pair",
         ),
         CheckConstraint(
-            "call_no IS NULL OR (call_no >= 1 AND call_no <= 8)",
+            "call_no IS NULL OR call_no >= 1",
             name="ck_provider_operations_call_no",
         ),
         UniqueConstraint(

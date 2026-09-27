@@ -64,6 +64,10 @@ anything touching `backend/app` or `contracts/` needs all of it.
 `pnpm check` runs the complete deterministic suite. Also run the generated-file
 boundary probe below. Fix stale fixtures against the current product contract;
 retain consent, ownership and charged-request assertions when budgets change.
+The owner removed all product request/token/CNY budget ceilings. Legacy max_*
+fields are accounting estimates; do not restore budget rejection in code, database
+checks, tests or outbound model output caps. Keep explicit retry authorization and
+unknown-acceptance recovery separate from budgeting.
 
 ```bash
 cd backend && uv run pytest -p no:warnings && uv run ruff check . && uv run mypy app

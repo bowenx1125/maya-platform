@@ -3441,7 +3441,7 @@ components:
       required: [manifest_hash, call_no]
       properties:
         manifest_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
-        call_no: { type: integer, minimum: 1, maximum: 8 }
+        call_no: { type: integer, minimum: 1 }
     ContinueRealReportResponse:
       anyOf:
         - $ref: "#/components/schemas/ContinueGeneratingReportRevision"

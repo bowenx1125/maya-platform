@@ -6533,8 +6533,7 @@
           },
           "call_no": {
             "type": "integer",
-            "minimum": 1,
-            "maximum": 8
+            "minimum": 1
           }
         }
       },

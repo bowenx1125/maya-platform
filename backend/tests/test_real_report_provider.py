@@ -200,7 +200,6 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
         "stream",
         "temperature",
         "top_p",
-        "max_completion_tokens",
         "n",
         "response_format",
     }
@@ -209,7 +208,7 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
     assert transport.last_json["stream"] is False
     assert transport.last_json["temperature"] == 0.2
     assert transport.last_json["top_p"] == 0.8
-    assert transport.last_json["max_completion_tokens"] == 1500
+    assert "max_completion_tokens" not in transport.last_json
     assert transport.last_json["n"] == 1
     messages = cast(list[dict[str, str]], transport.last_json["messages"])
     assert [message["role"] for message in messages] == ["system", "user"]
@@ -335,20 +334,12 @@ def test_output_extra_field_and_malformed_json_fail_once() -> None:
             "report_usage_overrun",
         ),
         (
-            {"prompt_tokens": 32_001, "completion_tokens": 1, "total_tokens": 32_002},
-            "report_usage_overrun",
-        ),
-        (
-            {"prompt_tokens": 80, "completion_tokens": 1_511, "total_tokens": 1_591},
-            "report_usage_overrun",
-        ),
-        (
             {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": "200"},
             "report_usage_invalid",
         ),
     ),
 )
-def test_usage_shape_and_caps_fail_after_one_received_response(
+def test_invalid_usage_arithmetic_fails_after_one_received_response(
     usage: Mapping[str, object], expected: str
 ) -> None:
     transport = FakeTransport(_response(usage=usage))
@@ -456,3 +447,16 @@ def test_conservative_tokenizer_backs_a_real_report_request() -> None:
     prepared = provider.build_request(_request())
     assert prepared.tokenizer_id == tokenizer.tokenizer_id
     assert prepared.tokenizer_asset_hash == tokenizer.asset_hash
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {"prompt_tokens": 320_001, "completion_tokens": 1, "total_tokens": 320_002},
+        {"prompt_tokens": 80, "completion_tokens": 15_110, "total_tokens": 15_190},
+    ],
+)
+def test_report_accepts_usage_above_legacy_estimates(usage: Mapping[str, object]) -> None:
+    transport = FakeTransport(_response(usage=usage))
+    _provider(transport).execute(_request())
+    assert transport.calls == 1

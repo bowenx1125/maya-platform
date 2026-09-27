@@ -390,7 +390,7 @@ def test_query_hash_mismatch_and_manifest_drift_fail_before_provider(tmp_path: P
     database.dispose()
 
 
-def test_provider_identity_and_hard_scope_caps_fail_closed(tmp_path: Path) -> None:
+def test_provider_identity_is_enforced_without_scope_caps(tmp_path: Path) -> None:
     database, repository, control, _service, _provider, _stage = _fixture(
         tmp_path,
         query_texts=("alpha",),
@@ -402,9 +402,7 @@ def test_provider_identity_and_hard_scope_caps_fail_closed(tmp_path: Path) -> No
             stage_store=_AtomicStage(repository),
         )
 
-    # The cap is enforced by the durable SQL repository, not by an in-memory
-    # counter.  Each logical item is distinct so the request uniqueness fence
-    # does not obscure the 25-request allowance.
+    # Distinct logical items can exceed the historical scope estimate.
     for index in range(SQL_QUERY_MAX_REQUESTS):
         text = f"query-{index}"
         scoped_control = SqlAlchemyQueryControlAdapter(
@@ -444,14 +442,15 @@ def test_provider_identity_and_hard_scope_caps_fail_closed(tmp_path: Path) -> No
         query_hashes=(query_hash("query-over-cap"),),
         logical_item_id="logical-over-cap",
     )
-    with pytest.raises(SqlQueryBudgetError):
-        blocked_control.reserve_query(
-            snapshot_id=control.request.snapshot_id,
-            identity=control.request.identity,
-            query_hashes=blocked_control.request.query_hashes,
-            request_count=1,
-            total_tokens=1,
-        )
+    blocked_control.reserve_query(
+        snapshot_id=control.request.snapshot_id,
+        identity=control.request.identity,
+        query_hashes=blocked_control.request.query_hashes,
+        request_count=1,
+        total_tokens=1,
+    )
+    assert blocked_control.operation is not None
+    assert blocked_control.operation.state == "reserved"
     assert (
         len(repository.operations(scope_id=control.request.scope_id)) == SQL_QUERY_MAX_REQUESTS + 1
     )

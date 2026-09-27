@@ -19,7 +19,6 @@ from app.core.models import (
 )
 from app.providers.control import (
     FIXED_MODELS,
-    BudgetExceeded,
     ExportFieldV1,
     ExportManifestV1,
     ProviderAcceptanceUnknownResultV1,
@@ -305,9 +304,9 @@ def test_acceptance_unknown_retains_budget_and_never_auto_retries(tmp_path: Path
             .one()
         )
         assert budget["allocated_requests"] == 1
-    with pytest.raises(BudgetExceeded):
-        second = repository.create_prepared(_request(manifest, attempt_no=2))
-        repository.reserve(second.id)
+    other = repository.create_prepared(_request(manifest, logical_item_id="independent-item"))
+    assert repository.reserve(other.id).state == "reserved"
+    assert repository.operation(first.id).charged_request_count == 1
     database.dispose()
 
 
@@ -328,16 +327,13 @@ def test_sqlite_scope_reservation_is_atomic_under_concurrency(tmp_path: Path) ->
     ]
 
     def reserve(operation_id: str) -> str:
-        try:
-            repository.reserve(operation_id)
-        except BudgetExceeded:
-            return "rejected"
+        repository.reserve(operation_id)
         return "reserved"
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         outcomes = tuple(executor.map(reserve, (operation.id for operation in operations)))
-    assert outcomes.count("reserved") == 1
-    assert outcomes.count("rejected") == 7
+    assert outcomes.count("reserved") == 8
+    assert outcomes.count("rejected") == 0
     database.dispose()
 
 

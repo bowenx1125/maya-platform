@@ -67,7 +67,7 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 | 更新后重建     | `docker compose up -d --build --wait` |
 | 查看状态       | `docker compose ps`                   |
 
-后端启动时自动迁移，当前代码版本为 `0032_recovery_input_unbounded`；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
+后端启动时自动迁移，当前代码版本为 `0033_budget_accounting_unbounded`；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制，`0033` 移除预算与调用序号上限并保留历史账本。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
 
 修改 `.env` 后执行 `docker compose up -d --wait` 以重新创建需要更新配置的容器。更换 Wi-Fi 后，可运行：
 
@@ -95,6 +95,8 @@ MAYA_REPORT_PROVIDER=dashscope
 老师和学生均可在 **Chat** 选择已有已发布 Agent；会话与引用仅本人可读，重新进入保留历史。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。界面没有 Refresh 按钮；列表仍自动读取最新状态，断线可重新进入。
 
 TTS 与 Voice 默认仍是 mock。需要语音克隆或聊天朗读时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。教师首页 Components 仍把 TTS 与 Voice 标为 Deferred，不能在网页上切换。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
+
+后端不再按请求次数、Token 数或金额预算阻止调用，也不向 LLM / Report 发送固定输出 Token 上限。实际用量、费用、权限、披露确认和去重仍保留；供应商自身的容量限制仍适用。
 
 ## 开发与验证
 

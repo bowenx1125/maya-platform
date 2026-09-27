@@ -1,5 +1,11 @@
 # Debate generation contracts
 
+> September 27, 2026 owner revision: request/token/CNY ceilings below are historical
+> estimates, not enforcement. Backend accounting accepts usage beyond estimates;
+> LLM/Report requests omit fixed output-token caps. Prompt length guidance, supplier
+> batch shape, exact authorization, deduplication and recovery identity still apply.
+> Current behavior and migration evidence are in [PROJECT](../PROJECT.md).
+
 The frozen behaviour of the real Debate path: what a Persona is, what may leave
 the machine, how a turn is generated and validated, and what every provider
 call must record. These are settled decisions, not proposals.

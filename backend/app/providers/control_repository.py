@@ -41,7 +41,6 @@ from app.core.models import (
 )
 from app.providers.control import (
     EMBEDDING_SNAPSHOT_BUCKET,
-    BudgetExceeded,
     DuplicateOperation,
     ExportConfirmationV1,
     ExportFieldV1,
@@ -559,12 +558,7 @@ class ProviderRepository:
                 connection.execute(table.insert().values(**budget_row))
                 return
             if not replace_empty:
-                if (
-                    _as_int(existing["max_requests"]) != selected_budget.max_requests
-                    or _as_int(existing["max_total_tokens"]) != selected_budget.max_total_tokens
-                    or _as_float(existing["max_cost_cny"]) != float(selected_budget.max_cost_cny)
-                ):
-                    raise ProviderRepositoryError("scope budget already has different caps")
+                # Existing estimates are historical accounting metadata, not quotas.
                 return
             if (
                 _as_int(existing["allocated_requests"] or 0) != 0
@@ -1130,7 +1124,7 @@ class ProviderRepository:
         return _reservation_from_row(row)
 
     def reserve(self, operation_id: str) -> ProviderReservationV1:
-        """Atomically allocate one scope budget before any provider I/O."""
+        """Atomically record one reservation before provider I/O, without quota checks."""
 
         operation_table = _OPERATION_TABLE
         budget_table = _BUDGET_TABLE
@@ -1163,14 +1157,6 @@ class ProviderRepository:
             allocated_requests = _as_int(budget_row["allocated_requests"] or 0)
             allocated_tokens = _as_int(budget_row["allocated_total_tokens"] or 0)
             allocated_cost = _as_float(budget_row["allocated_cost_cny"] or 0)
-            if (
-                allocated_requests + 1 > _as_int(budget_row["max_requests"])
-                or allocated_tokens + _as_int(operation_row["max_tokens"])
-                > _as_int(budget_row["max_total_tokens"])
-                or allocated_cost + _as_float(operation_row["max_cost_cny"])
-                > _as_float(budget_row["max_cost_cny"]) + 1e-12
-            ):
-                raise BudgetExceeded("provider scope allowance exceeded")
             reservation_id = str(uuid4())
             now = self._now()
             budget_changed = connection.execute(
@@ -1386,12 +1372,6 @@ class ProviderRepository:
                 or operation_row["model_key"] != stage.model_key
             ):
                 raise ProviderRepositoryError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation_row["max_cost_cny"])
-            ):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
             existing_row = (
                 connection.execute(
                     select(stage_table).where(stage_table.c.operation_id == stage.operation_id)
@@ -1495,12 +1475,6 @@ class ProviderRepository:
                 or operation_row["model_key"] != stage.model_key
             ):
                 raise ProviderRepositoryError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation_row["max_cost_cny"])
-            ):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
 
             existing_stage_row = (
                 connection.execute(
@@ -1619,12 +1593,6 @@ class ProviderRepository:
                 or operation_row["model_key"] != stage.model_key
             ):
                 raise ProviderRepositoryError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation_row["max_cost_cny"])
-            ):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
             existing_stage_row = (
                 connection.execute(
                     select(stage_table).where(stage_table.c.operation_id == stage.operation_id)

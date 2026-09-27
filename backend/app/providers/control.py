@@ -123,8 +123,7 @@ def demo_acceptance_max_calls(
     return happy + agent_count * round_count
 
 
-# Absolute ordinal ceiling across every supported shape.  It is a safety bound
-# for the wire DTO, never the plan for a particular run.
+# Historical plan estimate retained for callers; it no longer limits ordinals.
 DEMO_ACCEPTANCE_MAX_CALLS = demo_acceptance_max_calls(
     agent_count=DEMO_ACCEPTANCE_MAX_AGENTS,
     round_count=DEMO_ACCEPTANCE_MAX_ROUNDS,
@@ -251,16 +250,16 @@ def validate_budget_bucket(value: str) -> str:
 
 
 def validate_demo_acceptance_call_no(value: int) -> int:
-    """Validate one ordinal against the bounded Demo authorization ceiling."""
+    """Validate a positive accounting ordinal without a call-count ceiling."""
 
     if isinstance(value, bool) or not isinstance(value, int):
         raise ProviderControlError(
             "Demo acceptance call ordinal is invalid",
             code="acceptance_call_invalid",
         )
-    if value < 1 or value > DEMO_ACCEPTANCE_MAX_CALLS:
+    if value < 1:
         raise ProviderControlError(
-            "Demo acceptance call ordinal exceeds the authorized budget ceiling",
+            "Demo acceptance call ordinal must be positive",
             code="acceptance_call_invalid",
         )
     return value
@@ -1951,14 +1950,6 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
             current = self.operation(operation_id)
             if current.state != "prepared":
                 raise OperationStateError("provider operation is not reservable")
-            budget = self._budget(current.scope_id, current.budget_bucket)
-            requests, tokens, cost = self._scope_totals(current.scope_id, current.budget_bucket)
-            if (
-                requests + 1 > budget.max_requests
-                or tokens + current.max_tokens > budget.max_total_tokens
-                or cost + current.max_cost_cny > budget.max_cost_cny + 1e-12
-            ):
-                raise BudgetExceeded("provider scope allowance exceeded")
             reservation = ProviderReservationV1(
                 id=str(uuid4()),
                 operation_id=current.id,
@@ -2076,12 +2067,6 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
                 or operation.model_key != stage.model_key
             ):
                 raise OperationStateError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > operation.max_tokens:
-                raise OperationStateError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation.max_cost_cny)
-            ):
-                raise OperationStateError("LLM accepted stage exceeds reserved cost")
             existing = self._llm_stages.get(stage.operation_id)
             if existing is not None:
                 if existing != stage:
@@ -2142,12 +2127,6 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
                 or operation.model_key != stage.model_key
             ):
                 raise OperationStateError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > operation.max_tokens:
-                raise OperationStateError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation.max_cost_cny)
-            ):
-                raise OperationStateError("LLM accepted stage exceeds reserved cost")
             if (
                 operation.state == "accepted"
                 and operation.staged_response_hash != stage.output_hash
@@ -2198,12 +2177,6 @@ class InMemoryProviderOperationRepository(ProviderOperationRepository):
                 or operation.model_key != stage.model_key
             ):
                 raise OperationStateError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > operation.max_tokens:
-                raise OperationStateError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation.max_cost_cny)
-            ):
-                raise OperationStateError("LLM accepted stage exceeds reserved cost")
             if (
                 operation.state == "accepted"
                 and operation.staged_response_hash != stage.output_hash

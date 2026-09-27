@@ -789,20 +789,18 @@ def test_attach_accepts_an_explainable_extra_call_but_rejects_the_ceiling_and_du
                 run_id=run_id,
                 request=DemoAcceptanceCallRequest(
                     manifest_hash=_manifest_hash("semantic-extra-query"),
-                    call_no=8,
+                    call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1,
                 ),
             )
             assert response.call_count == 2
             assert response.charged_request_count == 0
             assert "calls" not in response.model_dump()
-        # The ordinal ceiling is no longer the old fixed eight: the plan is
-        # derived from the Debate shape, so only an ordinal past the absolute
-        # ceiling for the widest supported shape is rejected here.
-        DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=9)
+        # Ordinals identify calls; they no longer cap a run's request count.
+        DemoAcceptanceCallRequest(
+            manifest_hash=second_manifest, call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1
+        )
         with pytest.raises(ValidationError):
-            DemoAcceptanceCallRequest(
-                manifest_hash=second_manifest, call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1
-            )
+            DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=0)
         with database.engine.begin() as connection:
             connection.execute(
                 text(

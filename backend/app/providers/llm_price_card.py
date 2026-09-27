@@ -1,4 +1,4 @@
-"""Token and debate-shape caps. Supplier price cards are not used."""
+"""Legacy accounting estimates; no request, token or cost ceiling is enforced."""
 
 from __future__ import annotations
 

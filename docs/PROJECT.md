@@ -192,52 +192,43 @@ This dated acceptance does not cover later changes.
 
 ## Working — workspace, private Chats and Live
 
-Migration 0030 adds owner-bound history, encrypted Provider preferences and
-20-second Live leases. Chat freezes version/snapshot with request/revision fences,
-cost ledger and unknown-acceptance stop. Components switches LLM/Embedding/Report;
-TTS/Voice deferred. Live shares public history/audio, no controller messages or
-per-spectator requests. Ready Chat voices support TTS (120s timeout, generic 30s).
-Three avatars persist per user/Agent: Elder Scholar for Socrates/Laozi, Noble for
-Plato. Startup changes only exact old factory configs; no new speech/browser
-acceptance is claimed.
+0030 adds private history, encrypted preferences and 20-second Live leases.
+Chat freezes version/snapshot with identity/revision fences and cost/unknown-state
+tracking. Live shares public history/audio without spectator generation/control.
+Components switches LLM/Embedding/Report; TTS/Voice deferred. Ready Chat voices
+support TTS (120s timeout, generic 30s). Three avatars persist per user/Agent;
+Elder Scholar for Socrates/Laozi, Noble for Plato. Startup changes only old factory
+configs; no new speech/browser acceptance.
 
-Minimalist workspace: display-serif headings, warm paper (#fdfaf3), quiet type,
-original Mayaform mark; no extra wordmark/titles/Refresh. Accounts shows username/
-group/status/accessible Enter; Logout matches links. API Key saves encrypted
-installation-wide credentials without calls/mode changes; environment key wins.
-Check skips Ready/deferred, confirms maximum calls and stops on failure; mode/key
-changes invalidate checks. New fades when disabled; Back/Done are contextual.
-Chat has New/history-delete X/Send. Changing Agent model opens a new chat. Agent
-New opens next draft; Done saves/publishes returned revision, Back warns on unsaved
-work. Libraries use pencil/download/X; failed creation retains text/retry identity.
+Minimalist display-serif/warm-paper (#fdfaf3) workspace, original Mayaform mark;
+no extra wordmark/titles/Refresh. Accounts: username/group/status/accessible Enter.
+Encrypted installation-wide API Key entry makes no call/mode change; environment
+key wins. Check skips Ready/deferred, confirms calls, stops on failure. New fades
+when disabled; Back/Done contextual. Agent New opens next draft; Done saves/publishes
+returned revision, Back warns on unsaved work. Libraries use pencil/download/X.
+Failed creation retains text/retry identity.
 
-Earlier deployment checked both identities, private history, Components/Accounts,
-375px/desktop, Replay/Live, healthy Docker/assets and 104x44 Immerse buttons.
-11 assistant-paid calls: 4 Chat Embedding, 4 Chat LLM, 1 LLM Check, 2 Report Checks;
-repeated requests/history added none. Decimal multiplication fixed a pre-dispatch
-second-message budget failure. Concurrent user work raised that dated ledger to
-17 successes (7 Embedding, 10 LLM/checks); not a current count.
+Earlier deployment checked both identities/private history, Components/Accounts,
+375px/desktop, Replay/Live, Docker/assets and 104x44 Immerse buttons. 11 assistant
+calls: 4 Chat Embedding, 4 Chat LLM, 1 LLM Check, 2 Report Checks; repeats added none.
+Decimal multiplication fixed a pre-send second-message budget failure. Concurrent
+user work raised that dated ledger to 17 (7 Embedding, 10 LLM/checks), not a current count.
 
-## Working — free Markdown, deletion and composer checkpoint
+## Working — free Markdown and Agent deletion
 
-Agent.md is authored Chinese/English Markdown (12,000 characters), passed directly
-to Chat/Debate. Optional template: identity, characteristics, four thinking questions.
-No chapter/field/semantic gates or executed ToT/ReAct. Removed Persona/Compile/
-Confirm/Test Chat UI; legacy columns/routes/codecs only serve saved data. RAG caps
-at 100,000 characters per file, retaining access/non-execution and old records.
+Agent.md goes intact to Chat/Debate (12,000 characters); optional identity/
+characteristics/four-question template, no chapter/field/semantic gates or executed
+ToT/ReAct. Persona/Compile/Confirm/Test Chat UI removed; old codecs/routes serve
+saved data only. RAG caps 100,000 characters per file with access/non-execution.
+0031 tombstones remove shared Agent access, preserving immutable assets/files and
+read-only chats; Debate references/publication block deletion under the writer lock.
+Chats restores history, New starts fresh; Send clears draft/shows pending text,
+network errors restore identity/text. No cross-chat memory.
 
-Migration 0031 tombstones remove teacher/student Agent access while preserving
-immutable assets, shared files and read-only private chats. Debate references or
-active publication block deletion under the creation/publication writer lock.
-Chats restores nonempty history; New starts fresh. Send shows pending text and
-clears the draft; network failures restore text/request identity. Reentry sends
-same-conversation history without cross-chat memory.
-
-Dated acceptance: backend 1391/21 skipped; frontend 373/1 skipped plus 23 focused.
-Types/Ruff/format/API/WS/boundary/reset/migrations passed; historical seeds use old
-columns. Docker/0031/readiness/integrity passed after backup. Chats 1440px/375px:
-no overflow, 44x44 arrow. No new paid calls, live deletion or classroom generation;
-provider quality remains unverified. Obsolete Persona UI/tests/Prompts removed.
+Dated checks: backend 1391/21 skipped, frontend 373/1 skipped plus 23 focused;
+static/contracts/migrations passed. After backup: Docker/0031/readiness/integrity
+passed. Chats 1440px/375px had no overflow and a 44x44 arrow. No new paid calls,
+live deletion or classroom generation; provider quality unverified.
 
 ## Working — Chats without product I/O caps (observed 2026-09-23)
 
@@ -261,27 +252,23 @@ characters, not order N; SNAPSHOT/CONTENT/FILES labels sit above values. Chats k
 the local rounded floating composer and separate Send row. Ruleset checkmark saves
 language; Done does not save an unsaved Edit. Contextual sidebar controls remain.
 
-## Snapshot publish quota — September 23, 2026
+## Snapshot publication history — September 23, 2026
 
-Snapshot request/token/CNY ceilings were removed; batches still pack at most
-10 items/30,000 counted tokens. embedding_snapshot scopes are unbounded; that
-change did not alter query/LLM budgets.
+Snapshot ceilings were removed; batching remains 10 items/30,000 estimated tokens.
+罗燕玲 staged one batch before HTTP 500; a later build accepted five then timed
+out at 30s, leaving two not_sent. The next click sent nothing at attempt 2/2.
+Continuation now permits unstaged unknown batches up to three attempts, charging
+each resend; timeout is 120s. Saving the draft created a new build: nine batches
+succeeded at 07:28 UTC; eaa37c26-c30a-4332-826c-2533820dcc13 published with
+text-embedding-v4/1024 dimensions/12 chunks. The old timed-out build was not resent.
+SiyaH's two stages survived a local commit failure; at 07:39 UTC draft
+cc072330-3885-4a39-ba28-adb0136fd976 published from them with the same model/dimension,
+seven chunks and no new call.
 
-罗燕玲 accepted/staged one batch then got HTTP 500. Matching stages are reused;
-provider_http_rejected retries once. Another build accepted five batches, timed
-out at 30s and left two not_sent; the next click sent nothing at attempt 2/2.
-Continuation now permits unstaged acceptance_unknown up to three attempts, each
-retry charged; embedding timeout is 120s. Saving the draft created a new build:
-at 07:28 UTC nine batches succeeded, publishing eaa37c26-c30a-4332-826c-2533820dcc13
-with text-embedding-v4/1024 dimensions/12 chunks. Old timed-out build was not resent.
-SiyaH's two staged batches survived a failed local commit. Restore matching failed
-stages without supplier resend; at 07:39 UTC cc072330-3885-4a39-ba28-adb0136fd976
-published with the same model/dimension, seven chunks and no new embedding call.
-
-Debate identity/prompts use published AGENT.md, not compiled Persona. Later changes
-removed prompt-token/byte/output stops, query/LLM scope ceilings and embedding
-input-size rejects. Failed drafts cannot take another Debate's warmer; proven
-not_sent queries get one retry. Recovery input no longer stops at 256 KiB.
+Debate identity/prompts use AGENT.md, not compiled Persona. Removed prompt/output
+and query/LLM scope stops, embedding input-size rejects and the 256 KiB recovery
+ceiling. Failed drafts cannot steal another Debate's warmer; proven-not-sent
+queries get one retry. Accepted stages remain reusable.
 
 ## Next atomic task
 
@@ -319,6 +306,25 @@ extraction/OCR is not implemented.
 Inputs: local main 7236a97 plus its uncommitted composer, GitHub main a2b397d
 and entaiaki dfac2b4 (which contains main). Other siblings/reverts excluded.
 Local composer checkpoint: 4fd1968. Integration keeps remote help/streaming/avatar
-behavior. Fixed missing deleteConversation route fixture, guarded absent ledger
-transitions, aligned tests with existing unbounded query scopes, and passed the
-baseline voice mapping into Compose. README/AGENTS refreshed; authority compacted.
+behavior. Fixed the deleteConversation route fixture and absent ledger transitions;
+removed stale budget assertions and passed baseline voice mapping into Compose. README/AGENTS refreshed; authority compacted.
+
+## Unbounded provider accounting — September 27, 2026
+
+Owner removed backend request-count, token and CNY budget ceilings across Chat,
+Debate, Report and embedding. Reservations/actual usage remain accounting records;
+legacy max_* values are estimates, never send/acceptance gates. LLM/Report requests
+omit fixed output-token caps; valid usage/cost above estimates is retained.
+Migration 0033_budget_accounting_unbounded removes allocation/call-ordinal ceilings
+without deleting history. Report continuation drops its OpenAPI call_no maximum;
+frozen digest, generated types and fixture are updated together. Permissions,
+exact disclosure, deduplication, retry authorization, uncertain-acceptance recovery
+and supplier batch shapes remain. This change authorizes no paid acceptance run.
+
+Validation: pnpm check and generated-source boundary probe passed.
+Backend 1412 passed/21 skipped; frontend 391 passed/1 skipped.
+Migration rehearsal preserved all rows across 59 tables with integrity/FK checks;
+new tests cover concurrent accounting and usage above legacy estimates.
+Docker rebuilt/started; deployed source matched 11 key files. Homepage/readiness
+returned 200; schema 0033, integrity and foreign keys passed. The runtime DB was
+backed up first. Manual product/real-provider acceptance remains unperformed.
