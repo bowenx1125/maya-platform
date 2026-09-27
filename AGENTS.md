@@ -60,6 +60,9 @@ wrong. Fix the code, or change the check deliberately and record why in the
 same commit. Deleting an assertion to get green is the one thing that is
 always wrong here.
 
+Report response model/object/usage metadata never gates generation. Validate
+content and completion; preserve request accounting without inventing missing usage.
+
 **State every rule you enforce.** If the server rejects a provider response
 for violating a rule, the prompt that produced that response must state the
 rule. Enforcing an unstated rule is a defect, and it is how several real

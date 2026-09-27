@@ -42,6 +42,8 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 4. **进入课堂**：准备就绪后点击 **Immerse**。操作键独立放在屏幕最右侧；**Transcript** 展开发言记录侧栏，保留 Public Debate、课堂状态和 Check RAG。**Interact / Hide** 显示或收起消息二维码；Hide 不关闭已有扫码入口。进入 Final 时自动停止接收新弹幕，不设手动暂停按钮。第四轮冻结可用消息后生成回应，并在 Transcript 的回复段落旁展示对应匿名留言；弹幕不是逐条即时回复。
 5. **查看结果**：**Check RAG** 查看证据。课堂播放完成后使用 **Conclude** 查看 Evaluation 和 Report；报告提供版本/历史、Review 和 Regenerate。
 
+Report 不因供应商返回的 model/object 标识不同而拒收；usage 缺失或不一致也不阻止生成，仍校验报告正文与完成状态。
+
 证据支持等级为直接支持 **+5**、间接支持 **+2**、No match **+0**；缺少等级时也显示 No match，不另列 unscored 计数，不等于事实真伪评分。发言篇幅由 Prompt 指导，不因长度自动截断、补齐或拒收。
 
 ## 课堂恢复与清理

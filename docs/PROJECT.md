@@ -332,5 +332,5 @@ Live duplicate rejection and repaired turn verified.
 Preview links retain warm hover/focus/press and reduced-motion support.
 No manual barrage pause; Final freeze ends collection. Tests frontend30/backend4.
 Unscored counts removed; missing grades display No match +0 without rewriting data.
-Latest Report failed report_response_resource after HTTP200; model/object mismatch
-not distinguishable from retained metadata. No retry or report recovery claimed.
+Report failed report_response_resource after HTTP200. Removed model/object label
+matching/usage gates; content/finish checks remain. Close is an icon. No real retry.
