@@ -35,8 +35,8 @@ pointer leave, navigation, removed targets, scrolling and window blur. Keep
 keyboard dismissal and touch behavior when changing hover interactions. For
 history-row actions, date and Delete must be mutually exclusive; clicking a row
 must not pin Delete after the pointer leaves.
-Immerse Pause/Collect controls local barrage display only; do not close server
-message collection or the classroom entry when toggling it.
+Immerse has no manual barrage pause control. Final input freezing automatically
+ends message collection; retain that transactional cutoff.
 
 Voice availability must not gate Debate text publication. Use a configured
 fallback, or explicit text-only playback when none is available; never fabricate

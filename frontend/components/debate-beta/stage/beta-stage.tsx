@@ -494,9 +494,7 @@ function deriveClassroomPhase(
 }
 
 export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
-  headerActions?:
-    | ReactNode
-    | ((replayButton: ReactNode, pauseButton: ReactNode) => ReactNode);
+  headerActions?: ReactNode | ((replayButton: ReactNode) => ReactNode);
   /** The classroom join URL, once a teacher has opened interaction. */
   joinUrl?: string | null;
   /** Display only; hiding the code never closes the classroom entry. */
@@ -705,7 +703,6 @@ export function BetaDebateStage({
   // stable, so the socket handler below needs no extra dependency.
   const beta = betaLabels ?? defaultBetaStageLabels;
   const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
-  const [barragePaused, setBarragePaused] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const transcriptRef = useRef<HTMLElement>(null);
   const transcriptToggleRef = useRef<HTMLButtonElement>(null);
@@ -3530,17 +3527,6 @@ export function BetaDebateStage({
           connectionIssue === "origin_mismatch"
         ? { label: labels.connectionReload ?? "", kind: "reload" }
         : null;
-  const pauseButton =
-    !readOnly && joinUrl ? (
-      <button
-        className="secondary-action"
-        aria-pressed={barragePaused}
-        onClick={() => setBarragePaused((current) => !current)}
-        type="button"
-      >
-        {barragePaused ? beta.barrageCollect : beta.barragePause}
-      </button>
-    ) : null;
   const totalTurns = expectedTurnCount(detailState);
   const progressTurn = bubbleTurn ?? publicTurns[publicTurns.length - 1];
   const currentTurnNumber = progressTurn
@@ -3585,7 +3571,7 @@ export function BetaDebateStage({
             <BarrageLane
               bullets={barrages}
               label={beta.barrageLane}
-              paused={barragePaused}
+              paused={false}
             />
             {joinUrl && joinCodeVisible ? (
               <div
@@ -3631,20 +3617,16 @@ export function BetaDebateStage({
         {headerActions ? (
           <div className={styles.panelActions}>
             {typeof headerActions === "function" ? (
-              headerActions(replayButton, pauseButton)
+              headerActions(replayButton)
             ) : (
               <>
                 {headerActions}
-                {pauseButton}
                 {replayButton}
               </>
             )}
           </div>
         ) : (
-          <>
-            {pauseButton}
-            {replayButton}
-          </>
+          replayButton
         )}
         <button
           ref={transcriptToggleRef}

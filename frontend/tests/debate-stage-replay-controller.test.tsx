@@ -248,7 +248,7 @@ function renderStage(
 }
 
 describe("terminal segments replay controller", () => {
-  it("toggles Pause and Collect below Interact and pauses the message lane", () => {
+  it("keeps messages flowing without manual Pause or Collect controls", () => {
     const initial = detail();
     render(
       <BetaDebateStage
@@ -258,29 +258,19 @@ describe("terminal segments replay controller", () => {
         socketFactory={() => new ReplaySocket()}
         joinUrl="https://example.test/classroom/test"
         joinCodeVisible={false}
-        headerActions={(replayButton, pauseButton) => (
+        headerActions={(replayButton) => (
           <>
             <button>Interact</button>
-            {pauseButton}
             {replayButton}
           </>
         )}
       />,
     );
-    const pause = screen.getByRole("button", { name: "Pause" });
     expect(
-      screen.getByRole("button", { name: "Interact" }).nextElementSibling,
-    ).toBe(pause);
-    const lane = screen.getByLabelText("Classroom messages");
-    expect(lane.getAttribute("data-paused")).toBe("false");
-    fireEvent.click(pause);
-    expect(screen.getByRole("button", { name: "Collect" })).toBe(pause);
-    expect(lane.getAttribute("data-paused")).toBe("true");
-    fireEvent.click(pause);
-    expect(screen.getByRole("button", { name: "Pause" })).toBe(pause);
-    expect(lane.getAttribute("data-paused")).toBe("false");
+      screen.getByLabelText("Classroom messages").getAttribute("data-paused"),
+    ).toBe("false");
     expect(
-      screen.queryByRole("button", { name: /Resume messages/i }),
+      screen.queryByRole("button", { name: /Pause|Collect|Resume messages/i }),
     ).toBeNull();
   });
 

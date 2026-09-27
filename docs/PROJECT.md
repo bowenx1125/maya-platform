@@ -330,7 +330,7 @@ Live duplicate rejection and repaired turn verified.
 
 ## Debate entry and Immerse controls — September 27, 2026
 
-Preview links have warm hover/focus/press feedback and reduced-motion support.
-Immerse places Pause/Collect below Interact; it pauses the display, not server
-message collection. Frontend421/1 skipped (focused rerun), type/lint/boundary pass. Docker frontend
-updated; desktop focus/mobile layout verified.
+Preview links retain warm hover/focus/press and reduced-motion support.
+No manual barrage pause control. Transactional Final freeze stops new messages
+before generation, retaining accepted inputs. Tests: frontend30/backend4;
+type/lint/boundary pass. Docker frontend updated.
