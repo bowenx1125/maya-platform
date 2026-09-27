@@ -190,20 +190,6 @@ export function AudienceInteractionForm({
 
   const canInteract = nickname.trim().length > 0;
   const turnBound = Boolean(form.current_turn_id);
-  const bothSucceeded =
-    !turnBound && voteState === "success" && barrageState === "success";
-
-  if (bothSucceeded) {
-    return (
-      <main className={`${appearance.appearance} ${styles.audiencePage}`}>
-        <section className={styles.audienceCard}>
-          <span className={styles.eyebrow}>{t("appName")}</span>
-          <h1>{t("audienceSubmitted")}</h1>
-        </section>
-      </main>
-    );
-  }
-
   async function submitVote() {
     if (!canInteract || !selectedParticipant || voteState !== "idle") return;
     setVoteState("busy");
@@ -228,7 +214,6 @@ export function AudienceInteractionForm({
       !barrageText.trim() ||
       barrageState === "busy" ||
       syncFailed ||
-      (!turnBound && barrageState !== "idle") ||
       form?.barrage_open === false
     )
       return;
@@ -244,10 +229,8 @@ export function AudienceInteractionForm({
       if (!barragePayload) setBarragePayload(payload);
       await api.submitBarrage(accessToken, payload);
       setBarrageState("success");
-      if (turnBound) {
-        setBarrageText("");
-        setBarragePayload(null);
-      }
+      setBarrageText("");
+      setBarragePayload(null);
     } catch (cause) {
       setBarrageState("idle");
       setBarrageError(cause);
@@ -347,19 +330,15 @@ export function AudienceInteractionForm({
                 onChange={(event) => {
                   setBarrageText(event.target.value);
                   setBarrageError(null);
-                  if (turnBound) {
-                    setBarragePayload(null);
-                    setBarrageState("idle");
-                  }
+                  setBarragePayload(null);
+                  setBarrageState("idle");
                 }}
                 maxLength={turnBound ? 300 : undefined}
                 rows={5}
                 disabled={
                   !canInteract ||
                   form.barrage_open === false ||
-                  (turnBound
-                    ? barrageState === "busy"
-                    : barrageState !== "idle" || barragePayload !== null)
+                  barrageState === "busy"
                 }
               />
               <div className={styles.sendRow}>
@@ -376,9 +355,7 @@ export function AudienceInteractionForm({
                     syncFailed ||
                     !barrageText.trim() ||
                     form.barrage_open === false ||
-                    (turnBound
-                      ? barrageState === "busy"
-                      : barrageState !== "idle")
+                    barrageState === "busy"
                   }
                 >
                   {barrageState === "busy"

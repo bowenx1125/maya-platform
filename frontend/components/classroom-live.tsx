@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import type { LiveSnapshot } from "../lib/api";
 import type { AvatarState } from "./avatar";
@@ -162,6 +163,17 @@ export function ClassroomLive() {
               loadingLabel={t("loading")}
               unavailableLabel="3D unavailable"
             />
+          </div>
+          <div className={styles.interactionActions}>
+            {snapshot.interaction_url?.startsWith("/classroom/") ? (
+              <Link className="primary-action" href={snapshot.interaction_url}>
+                Interact
+              </Link>
+            ) : (
+              <button className="primary-action" type="button" disabled>
+                Interact
+              </button>
+            )}
           </div>
           <section className={styles.transcript}>
             <header>

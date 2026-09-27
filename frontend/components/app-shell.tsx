@@ -232,6 +232,7 @@ export function AppShell({
             })}
           </nav>
           <div className={styles.account}>
+            <span className={styles.version}>Bowen V1</span>
             <button
               className={styles.logout}
               type="button"

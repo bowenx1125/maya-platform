@@ -139,9 +139,8 @@ uploader-owned; Gaussian packs are optional ADR-007 experiments.
 
 ## Operation panel and browser acceptance — September 22, 2026
 
-Owner-approved three-Agent lesson completed four rounds/12 turns, classroom controls,
-Conclude/Report v1 and Replay/reload, reusing nine Preview speeches. Seven charged
-calls succeeded: 3 Embedding, 3 final LLM, 1 Report; reopening/replay added none.
+Three-Agent acceptance:12 turns, Conclude/Report and Replay; nine Preview speeches
+reused. Seven calls(3 Embedding/3 LLM/1 Report); reopening/replay added none.
 TTS/Voice were Mock; no student messages/votes. Retained turns 5/6 and 8/9 match
 ignoring whitespace; list says “2 Rounds”; neither was rewritten. This dated
 acceptance excludes later changes, RAG quality, real speech and load.
@@ -156,10 +155,8 @@ Warm-paper/display-serif retains Mayaform. Key entry makes no call/mode change;
 environment key wins. Check skips Ready/deferred, confirms calls and stops on failure.
 Failed creation retains text/retry identity; libraries use pencil/download/X.
 
-Dated deployment checked workspace/Live/responsive behavior and Docker.11 assistant
-calls:4 Chat Embedding,4 Chat LLM,1 LLM Check,2 Report Checks; repeats added none.
-Decimal arithmetic fixed a pre-send budget failure. Concurrent user work raised that
-dated ledger to17(7 Embedding,10 LLM/checks), not a current count.
+Dated workspace/Live checks used11 calls; concurrent owner work raised the ledger
+to17. These historical counts are not current usage.
 
 Agent.md reaches Chat/Debate intact(12,000 characters); template optional, no chapter/
 field/semantic gates or executed ToT/ReAct. Persona/Compile/Confirm/Test Chat UI is
@@ -334,3 +331,8 @@ No manual barrage pause; Final freeze ends collection. Tests frontend30/backend4
 Unscored counts removed; missing grades display No match +0 without rewriting data.
 Report failed report_response_resource after HTTP200. Removed model/object label
 matching/usage gates; content/finish checks remain. Close is an icon. No real retry.
+
+Student Live offers Interact below the scene, opening the same QR form/token.
+Same-course active/open non-replay access only; Final removes the entry. Messages
+repeat without a send-count cap; vote idempotency stays intact.
+Logout shows the current release baseline: Bowen V1.

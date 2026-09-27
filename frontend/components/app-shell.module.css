@@ -80,10 +80,18 @@
 
 .account {
   display: grid;
-  gap: 12px;
+  gap: 4px;
   margin-top: auto;
   padding: 18px 10px 0;
   border-top: 1px solid var(--line);
+}
+
+.version {
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .logout {
@@ -146,6 +154,9 @@
     margin: 0;
     padding: 0;
     border: 0;
+  }
+  .version {
+    padding: 0 8px;
   }
   .logout svg {
     display: none;

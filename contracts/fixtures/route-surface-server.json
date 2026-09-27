@@ -5905,6 +5905,13 @@
             "title": "Debate Id",
             "type": "string"
           },
+          "interaction_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "Interaction Url"
+          },
           "participants": {
             "items": {
               "$ref": "#/components/schemas/LiveParticipant"

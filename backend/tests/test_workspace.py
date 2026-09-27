@@ -9,6 +9,8 @@ import pytest
 from app.core.models import CourseMember, ProviderOperation
 from app.modules.debates.models import Debate, PlaybackState
 from app.modules.demo_baseline.service import BASELINE_VERSION_ID, ensure_demo_baseline
+from app.modules.interactions.service import ensure_closed_window
+from app.modules.interactions.tokens import issue_token
 from app.modules.workspace.chat_provider import chat_messages
 from app.modules.workspace.models import (
     Conversation,
@@ -477,6 +479,13 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
     assert client.get(f"/api/v1/courses/{COURSE_ID}/live").json() is None
     assert client.post(url, headers=headers, json={"lease_id": lease_id}).status_code == 200
     assert client.post(url, headers=headers, json={"lease_id": str(uuid4())}).status_code == 409
+    with database.session() as db:
+        window = ensure_closed_window(db, debate_id=debate_id, course_id=COURSE_ID)
+        window.status = "open"
+        window.token_nonce = b"i" * 32
+        window.opened_by = TEACHER_ID
+        window.opened_at = now
+        expected_token = issue_token(window.id, window.token_nonce, app.state.settings.secret_bytes)
     _, student_csrf = login(client, "bowen")
     assert (
         client.post(
@@ -486,6 +495,21 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
     )
     snapshot = client.get(f"/api/v1/live/{debate_id}")
     assert snapshot.status_code == 200 and snapshot.json()["active"]
+    assert snapshot.json()["interaction_url"] == f"/classroom/{expected_token}"
+    form_url = f"/api/v1/classroom-interactions/{expected_token}"
+    assert client.get(form_url).status_code == 200
+    for _ in range(3):
+        assert (
+            client.post(
+                f"{form_url}/barrages",
+                json={
+                    "nickname": "Student",
+                    "raw_text": "A question",
+                    "client_submission_id": str(uuid4()),
+                },
+            ).status_code
+            == 201
+        )
     assert "Private background" not in snapshot.text
     assert "controller_epoch" not in snapshot.text
     assert client.get(f"/api/v1/live/{debate_id}/audio/{uuid4()}").status_code == 404
@@ -506,8 +530,22 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
         socket.send_json({"command": "advance"})
         assert socket.receive()["code"] == 4403
     with database.session() as db:
+        db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id)).mode = "replay"
+    assert client.get(f"/api/v1/live/{debate_id}").json()["interaction_url"] is None
+    with database.session() as db:
+        db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id)).mode = "live"
+        db.get(Debate, debate_id).rule_snapshot_json = '{"turn_protocol":"segments_v2"}'
+    assert client.get(f"/api/v1/live/{debate_id}").json()["interaction_url"] is None
+    with database.session() as db:
+        db.get(Debate, debate_id).rule_snapshot_json = "{}"
+        db.get(Debate, debate_id).final_input_json = "{}"
+    assert client.get(f"/api/v1/live/{debate_id}").json()["interaction_url"] is None
+    with database.session() as db:
+        db.get(Debate, debate_id).final_input_json = None
         presence = db.get(LivePresence, COURSE_ID)
         presence.expires_at = now - timedelta(seconds=1)
     assert client.get(f"/api/v1/courses/{COURSE_ID}/live").json() is None
-    assert client.get(f"/api/v1/live/{debate_id}").json()["active"] is False
+    expired = client.get(f"/api/v1/live/{debate_id}").json()
+    assert expired["active"] is False
+    assert expired["interaction_url"] is None
     assert app.state.settings.tts_provider == "mock"

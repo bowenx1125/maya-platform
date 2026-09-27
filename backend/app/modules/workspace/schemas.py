@@ -126,6 +126,7 @@ class LiveTurn(ClosedModel):
 
 
 class LiveSnapshot(ClosedModel):
+    interaction_url: str | None = None
     active: bool
     debate_id: UUID
     sequence: int

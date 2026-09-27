@@ -1748,6 +1748,8 @@ export interface components {
              * Format: uuid
              */
             debate_id: string;
+            /** Interaction Url */
+            interaction_url?: string | null;
             /** Participants */
             participants: components["schemas"]["LiveParticipant"][];
             playback: components["schemas"]["PlaybackStateDTO"] | null;

@@ -416,12 +416,16 @@ describe("M13 anonymous audience form", () => {
         raw_text: "A useful question",
       }),
     );
-    expect(
-      screen.getByRole("heading", {
-        name: "Submitted",
-      }),
-    ).toBeTruthy();
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    const message = screen.getByRole("textbox", { name: "Barrage" });
+    await waitFor(() => expect(message).toHaveProperty("value", ""));
+    fireEvent.change(message, { target: { value: "Another useful question" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+    await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(api.submitBarrage).mock.calls;
+    expect(calls[0][1].client_submission_id).not.toBe(
+      calls[1][1].client_submission_id,
+    );
+    expect(api.submitVote).toHaveBeenCalledTimes(1);
   });
 
   it("reuses valid UUID submission identities after an ambiguous failure", async () => {

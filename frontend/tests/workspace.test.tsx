@@ -473,6 +473,7 @@ describe("student Live", () => {
   it("shares the full public transcript through a read-only socket without Refresh or controller commands", async () => {
     const snapshot = {
       active: true,
+      interaction_url: "/classroom/shared-qr-token",
       debate_id: "debate",
       sequence: 1,
       participants: [{ id: "speaker", name: "Socrates", avatar_config: {} }],
@@ -501,6 +502,9 @@ describe("student Live", () => {
       </LocaleProvider>,
     );
     await screen.findByTestId("scene");
+    expect(
+      screen.getByRole("link", { name: "Interact" }).getAttribute("href"),
+    ).toBe("/classroom/shared-qr-token");
     expect(send).not.toHaveBeenCalled();
     expect(sockets).toHaveLength(1);
     expect((sockets[0] as Socket).url).toContain("/api/v1/live/debate/events");
@@ -530,7 +534,21 @@ describe("student Live", () => {
     expect(screen.getByText("Second argument")).toBeTruthy();
     act(() =>
       sockets[0].onmessage?.({
-        data: JSON.stringify({ ...snapshot, sequence: 3, active: false }),
+        data: JSON.stringify({
+          ...snapshot,
+          sequence: 3,
+          interaction_url: null,
+        }),
+      }),
+    );
+    expect(screen.queryByRole("link", { name: "Interact" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Interact" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    act(() =>
+      sockets[0].onmessage?.({
+        data: JSON.stringify({ ...snapshot, sequence: 4, active: false }),
       }),
     );
     expect(screen.getByText("Live offline")).toBeTruthy();

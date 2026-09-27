@@ -52,3 +52,16 @@
     padding: 16px;
   }
 }
+
+.interactionActions {
+  display: flex;
+  justify-content: flex-end;
+}
+.interactionActions :is(a, button) {
+  min-width: 104px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
