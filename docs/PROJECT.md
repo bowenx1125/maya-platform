@@ -303,11 +303,9 @@ Final combined verification follows below.
 
 ## Interaction and long-speech recovery — September 27, 2026
 
-Audience Interaction uses warm-paper design, message-first mobile layout, 16px
-inputs/48px controls, safe-area spacing, accessible failure/success feedback and
-unchanged submission IDs. Isolated375×812/812×375 checks verified no horizontal
-overflow, preserved failed input and successful retry; fixed global radio styles
-so radio inputs remain18×18. No test messages entered a real classroom.
+Interaction uses warm-paper mobile layout, 16px inputs/48px controls and accessible
+feedback. Isolated375×812/812×375 checks verified overflow-free layout,18px radios
+and failed-input preservation/retry. No test messages entered a real classroom.
 Retry turn is now a refresh icon with accessible label.
 
 SQL/Mock integration covers HTTP submission, persisted messages/WS events, Final
@@ -316,9 +314,10 @@ only the referenced frozen anonymous message, never nickname or rewritten speech
 Conclusion uses the existing 300-character input/12-candidate pool. This proves
 plumbing, not real-model quality or immediate replies to every message.
 
-The reported pronoun error had the correct speaker/AGENT.md binding. Future frozen
-execution prompts explicitly preserve historical speakers and advice recipients;
-previously generated text/frozen prompts are not silently rewritten.
+Speaker/AGENT.md binding was correct. Attribution guidance now lives in editable
+zh/en Rulesets, not Execution contract; removing it never triggers hidden
+reinsertion. Existing frozen prompts/speeches stay exact. Gates: backend1500/21 skipped (known race rerun), frontend420/1 skipped; Docker and
+both Ruleset views verified. No new model calls or semantic-quality claim.
 
 The next stalled Debate had accepted text but TTS reused the preview1–60s check.
 A single authorized TTS POST returned HTTP200 and produced113.12s/5,429,804bytes,
