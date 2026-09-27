@@ -2132,3 +2132,34 @@ def test_ffmpeg_timeout_terminates_and_closes_process_handles(
         run_ffmpeg_normalize(source, target, timeout_seconds=0.01)
     assert process.terminated or process.killed
     assert process.stdin.closed and process.stdout.closed and process.stderr.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename", ["中文录音 2.m4a", "café.wav", "literal Ã©.mp3"])
+@pytest.mark.parametrize("chunk_size", [1, 7, 257])
+async def test_streamed_upload_preserves_browser_utf8_filename(
+    tmp_path: Path, filename: str, chunk_size: int
+) -> None:
+    content = b"unchanged audio bytes"
+    body, boundary = _multipart(filename, content)
+    upload = await stream_voice_upload(
+        _stream_request(body, boundary, chunk_size=chunk_size), tmp_path / "data"
+    )
+    try:
+        assert upload.source_filename == filename
+        assert upload.source_path.read_bytes() == content
+        assert upload.fields["consent_accepted"] == "true"
+    finally:
+        upload.cleanup()
+    assert not upload.request_directory.exists()
+
+
+@pytest.mark.asyncio
+async def test_streamed_upload_preserves_legacy_latin1_filename(tmp_path: Path) -> None:
+    body, boundary = _multipart("café.wav", b"audio bytes")
+    body = body.replace("café.wav".encode(), "café.wav".encode("latin-1"))
+    upload = await stream_voice_upload(_stream_request(body, boundary), tmp_path / "data")
+    try:
+        assert upload.source_filename == "café.wav"
+    finally:
+        upload.cleanup()

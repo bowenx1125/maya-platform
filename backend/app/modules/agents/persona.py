@@ -1305,6 +1305,21 @@ def _value(raw: str, *, line: int, field: str) -> tuple[str | None, PersonaDiagn
     return cleaned, None
 
 
+def agent_name_from_markdown(source: str) -> str | None:
+    """Read an authored name heading without treating identity sections as names."""
+
+    first_line = source.lstrip("\ufeff \t\r\n").split("\n", 1)[0].strip()
+    if not first_line.startswith("# "):
+        return None
+    raw_name = re.sub(r"\s+#+\s*$", "", first_line[2:]).strip()
+    if _has_forbidden_markup(raw_name) or _first_disallowed_control(raw_name) is not None:
+        return None
+    name = _clean_inline(raw_name)
+    if not name or name.casefold() in {"who i am", "我是谁"}:
+        return None
+    return name
+
+
 def _clean_inline(value: str) -> str:
     """Reduce emphasis/code delimiters to visible text without interpreting it."""
 

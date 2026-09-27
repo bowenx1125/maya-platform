@@ -19,6 +19,7 @@ from app.core.models import (
     IdempotencyRecord,
     KnowledgeDocument,
     KnowledgeSnapshot,
+    ProviderOperation,
     StoredFile,
     User,
     VoiceProfile,
@@ -718,6 +719,38 @@ def test_delete_and_publish_race_has_one_serialized_winner(
     database = cast(Any, client.app).state.database
     settings = cast(Any, client.app).state.settings
     student_context = _context(database, STUDENT_BOWEN_ID)
+    charged_operation_id = str(uuid4())
+    with database.session() as session:
+        draft = session.get(AgentVersion, version_id)
+        assert draft is not None
+        saved_draft = (draft.agent_md, draft.revision)
+        saved_documents = set(
+            session.scalars(
+                select(AgentVersionDocument.document_id).where(
+                    AgentVersionDocument.agent_version_id == version_id
+                )
+            )
+        )
+        now = datetime.now(UTC)
+        session.add(
+            ProviderOperation(
+                id=charged_operation_id,
+                scope_id=agent_id,
+                provider_operation="llm",
+                logical_item_id=version_id,
+                attempt_no=1,
+                request_hash="a" * 64,
+                max_tokens=0,
+                max_cost_cny=0,
+                policy_hash="b" * 64,
+                export_manifest_hash="c" * 64,
+                state="succeeded",
+                request_count=1,
+                charged_request_count=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
 
     def delete_operation(db: Any) -> Any:
         return delete_agent(
@@ -749,13 +782,42 @@ def test_delete_and_publish_race_has_one_serialized_winner(
     publish_result = second_result if operation_order == "delete-first" else first_result
 
     if _result_status(delete_result) == 204:
-        # Delete committed first: publication must lose after the Agent row is
-        # gone, rather than creating an orphan snapshot/version.
+        # Removal now retains a tombstone and draft for existing chat history.
+        # Publication must still lose and must not create a snapshot.
         assert isinstance(publish_result, PlatformError), repr(publish_result)
         assert _result_code(publish_result) in {"not_found", "invalid_state"}
         with database.session() as session:
-            assert session.get(Agent, agent_id) is None
-            assert session.get(AgentVersion, version_id) is None
+            removed = session.get(Agent, agent_id)
+            retained = session.get(AgentVersion, version_id)
+            assert removed is not None and retained is not None
+            assert removed.status == "archived" and removed.deleted_at is not None
+            assert removed.current_published_version_id is None
+            assert retained.agent_id == removed.id and retained.state == "draft"
+            assert (retained.agent_md, retained.revision) == saved_draft
+            assert retained.knowledge_snapshot_id is None
+            assert (
+                session.scalar(
+                    select(KnowledgeSnapshot.id).where(
+                        KnowledgeSnapshot.agent_version_id == version_id
+                    )
+                )
+                is None
+            )
+            assert (
+                set(
+                    session.scalars(
+                        select(AgentVersionDocument.document_id).where(
+                            AgentVersionDocument.agent_version_id == version_id
+                        )
+                    )
+                )
+                == saved_documents
+            )
+        assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
+        assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
+        visible = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents")
+        assert visible.status_code == 200, visible.text
+        assert agent_id not in {item["id"] for item in visible.json()}
     else:
         # Publication committed first: the delete's final history check must
         # lose with the stable retained-history error.
@@ -767,6 +829,16 @@ def test_delete_and_publish_race_has_one_serialized_winner(
             assert published is not None and version is not None
             assert version.state == "published"
             assert published.current_published_version_id == version_id
+
+    with database.session() as session:
+        charged = session.get(ProviderOperation, charged_operation_id)
+        assert charged is not None
+        assert (charged.state, charged.request_count, charged.charged_request_count) == (
+            "succeeded",
+            1,
+            1,
+        )
+        assert charged.logical_item_id == version_id
 
 
 @pytest.mark.parametrize("operation_order", ["delete-first", "debate-first"])

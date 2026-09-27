@@ -228,6 +228,9 @@ describe("Wave 1C real workbench locale boundary", () => {
     const { api } = makeApi();
     const saved = makeVersion({ revision: 1, agent_md: "# Local Agent" });
     api.updateDraft.mockResolvedValue(saved);
+    api.agent
+      .mockResolvedValueOnce(makeAgent())
+      .mockResolvedValue({ ...makeAgent(), name: "Local Agent" });
     api.publish.mockResolvedValue({ ...saved, state: "published" });
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
 
@@ -253,6 +256,10 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(
       api.publish.mock.invocationCallOrder[0],
     );
+    expect(api.agent).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByRole("heading", { name: "Local Agent · V1.0" }),
+    ).toBeTruthy();
     expect(navigation.replace).toHaveBeenCalledWith("/student/agents/agent-id");
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });

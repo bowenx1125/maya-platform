@@ -180,7 +180,7 @@ class PlaybackCore:
         # same in-process command replay its original private result without
         # issuing a second ticket.
         self._media_command_results: dict[
-            tuple[str, str], tuple[PreparedMedia, MediaPreparedResult]
+            tuple[str, str], tuple[PreparedMedia | None, MediaPreparedResult]
         ] = {}
         self._lock = asyncio.Lock()
 
@@ -716,10 +716,22 @@ class PlaybackCore:
         return status in {"public", "published"}
 
     @staticmethod
+    def _turn_text_only(turn: Any) -> bool:
+        return (
+            PlaybackCore._get(turn, "generation_status") == "final_ready"
+            and PlaybackCore._get(turn, "safe_error_code", "failed_code") == "tts_voice_unavailable"
+            and bool(str(PlaybackCore._get(turn, "speech", default="")).strip())
+            and PlaybackCore._get(turn, "audio_file_id", "audio_relative_path") is None
+            and PlaybackCore._get(turn, "audio_duration_ms") == 0
+        )
+
+    @staticmethod
     def _turn_ready(turn: Any) -> bool:
         generation = str(PlaybackCore._get(turn, "generation_status", "status", default="pending"))
         audio = PlaybackCore._get(turn, "audio_relative_path", "audio_file_id", default=None)
-        return generation in {"ready", "final_ready", "completed"} and audio is not None
+        return generation in {"ready", "final_ready", "completed"} and (
+            audio is not None or PlaybackCore._turn_text_only(turn)
+        )
 
     @staticmethod
     def _evidence_trace(turn: Any) -> list[dict[str, Any]]:
@@ -1117,7 +1129,10 @@ class PlaybackCore:
             turns, successor, rule_set_id=rule_set_id, teaching_protocol=teaching_protocol
         ):
             return False
-        if self._validated_turn_audio(db, debate, successor) is None:
+        if (
+            not self._turn_text_only(successor)
+            and self._validated_turn_audio(db, debate, successor) is None
+        ):
             return False
         return True
 

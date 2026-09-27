@@ -520,6 +520,19 @@ const invalid = [
   },
 ];
 
+const textStarted = structuredClone(
+  valid.find((event) => event.event_type === "playback.started"),
+);
+textStarted.payload.playback_url = null;
+textStarted.payload.audio_ready = false;
+valid.push(textStarted);
+const missingTextMarker = structuredClone(textStarted);
+delete missingTextMarker.payload.audio_ready;
+invalid.push({
+  name: "null playback URL requires explicit no-audio marker",
+  event: missingTextMarker,
+});
+
 writeFileSync(
   resolve(fixtureDir, "ws-events.valid.json"),
   `${JSON.stringify(valid, null, 2)}\n`,

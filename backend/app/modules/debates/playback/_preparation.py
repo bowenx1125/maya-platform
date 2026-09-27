@@ -361,17 +361,17 @@ class PlaybackPreparationMixin(PlaybackCore):
     def _provider_allowed(self) -> None:
         if self.settings is not None:
             embedding = getattr(self.settings, "embedding_provider", "mock")
-            blocked_selectors = (
+            speech_selectors = (
                 getattr(self.settings, "tts_provider", "mock"),
                 getattr(self.settings, "voice_provider", "mock"),
             )
             if embedding not in {"mock", "dashscope"} or any(
-                value != "mock" for value in blocked_selectors
+                value not in {"mock", "dashscope"} for value in speech_selectors
             ):
                 raise PlatformError(
                     "provider_unavailable", "The service is temporarily unavailable.", 503
                 )
-        if getattr(self.tts_provider, "key", "mock") != "mock":
+        if getattr(self.tts_provider, "key", "mock") not in {"mock", "dashscope"}:
             raise PlatformError(
                 "provider_unavailable", "The service is temporarily unavailable.", 503
             )
@@ -566,7 +566,8 @@ class PlaybackPreparationMixin(PlaybackCore):
                             self._participant_for_turn(self._participants(db, debate), turn)
                         ),
                         "round_no": self._round(turn),
-                        "audio_ready": True,
+                        "audio_ready": self._get(turn, "audio_file_id", "audio_relative_path")
+                        is not None,
                         "retrieval_status": str(
                             self._get(turn, "retrieval_status", default="no_match")
                         ),
@@ -708,50 +709,51 @@ class PlaybackPreparationMixin(PlaybackCore):
             )
             self._provider_allowed()
             voice_token = prepared.voice_token
-            if self.audio_store is None:
-                from .audio import AudioStore
+            if voice_token:
+                if self.audio_store is None:
+                    from .audio import AudioStore
 
-                root = getattr(self.settings, "resolved_data_root", None)
-                if root is None:
-                    raise TTSProviderError("audio store is not configured")
-                self.audio_store = AudioStore(root, tts_provider=self.tts_provider)
-            # Same reason as the preparer above: a real TTS provider is one
-            # more blocking HTTP call, and the audio store writes a file. Mock
-            # TTS returns fast enough to hide this, so leaving it on the loop
-            # would put the freeze back the moment the voice slice goes real.
-            if uses_segment_protocol(debate):
-                stage_work = asyncio.create_task(
-                    asyncio.to_thread(
-                        self.audio_store.stage_synthesis,
+                    root = getattr(self.settings, "resolved_data_root", None)
+                    if root is None:
+                        raise TTSProviderError("audio store is not configured")
+                    self.audio_store = AudioStore(root, tts_provider=self.tts_provider)
+                # Same reason as the preparer above: a real TTS provider is one
+                # more blocking HTTP call, and the audio store writes a file. Mock
+                # TTS returns fast enough to hide this, so leaving it on the loop
+                # would put the freeze back the moment the voice slice goes real.
+                if uses_segment_protocol(debate):
+                    stage_work = asyncio.create_task(
+                        asyncio.to_thread(
+                            self.audio_store.stage_synthesis,
+                            course_id=self._course_id(debate),
+                            debate_id=debate_id,
+                            turn_id=turn_id,
+                            operation_id=claim_token,
+                            speech=prepared.speech,
+                            voice_token=voice_token,
+                            language=debate_output_language(debate),
+                        )
+                    )
+                    try:
+                        staged_audio = await asyncio.shield(stage_work)
+                    except asyncio.CancelledError:
+                        try:
+                            abandoned_stage = await stage_work
+                            self.audio_store.discard_staged_audio(abandoned_stage)
+                        except Exception:
+                            pass
+                        raise
+                else:
+                    synthesize: Callable[[], AudioMetadata] = functools.partial(
+                        self.audio_store.synthesize_and_store,
                         course_id=self._course_id(debate),
                         debate_id=debate_id,
                         turn_id=turn_id,
-                        operation_id=claim_token,
                         speech=prepared.speech,
                         voice_token=voice_token,
                         language=debate_output_language(debate),
                     )
-                )
-                try:
-                    staged_audio = await asyncio.shield(stage_work)
-                except asyncio.CancelledError:
-                    try:
-                        abandoned_stage = await stage_work
-                        self.audio_store.discard_staged_audio(abandoned_stage)
-                    except Exception:
-                        pass
-                    raise
-            else:
-                synthesize: Callable[[], AudioMetadata] = functools.partial(
-                    self.audio_store.synthesize_and_store,
-                    course_id=self._course_id(debate),
-                    debate_id=debate_id,
-                    turn_id=turn_id,
-                    speech=prepared.speech,
-                    voice_token=voice_token,
-                    language=debate_output_language(debate),
-                )
-                audio = await asyncio.to_thread(synthesize)
+                    audio = await asyncio.to_thread(synthesize)
             async with self._lock:
                 fresh_debate = self._get_debate(db, debate_id)
                 fresh_turn = next(
@@ -772,11 +774,13 @@ class PlaybackPreparationMixin(PlaybackCore):
                     not in {"running", "pending"}
                 ):
                     if staged_audio is not None:
+                        assert self.audio_store is not None
                         self.audio_store.discard_staged_audio(staged_audio)
-                    else:
+                    elif self.audio_store is not None and audio is not None:
                         self.audio_store.remove_turn(debate_id, turn_id)
                     return
                 if staged_audio is not None:
+                    assert self.audio_store is not None
                     fence_audio = getattr(self.repository, "fence_audio_promotion", None)
                     if not callable(fence_audio) or not fence_audio(
                         db, fresh_debate, fresh_turn, claim_token, cancellation_generation
@@ -785,7 +789,6 @@ class PlaybackPreparationMixin(PlaybackCore):
                         self.audio_store.discard_staged_audio(staged_audio)
                         return
                     audio = self.audio_store.promote_staged_audio(staged_audio)
-                assert audio is not None
                 accepted = self.repository.mark_turn_ready(
                     db,
                     fresh_turn,
@@ -798,9 +801,10 @@ class PlaybackPreparationMixin(PlaybackCore):
                 )
                 if not accepted:
                     if staged_audio is not None:
+                        assert self.audio_store is not None
                         self.audio_store.remove_promoted_audio_if_owned(staged_audio)
                         self._rollback(db)
-                    else:
+                    elif self.audio_store is not None and audio is not None:
                         self.audio_store.remove_turn(debate_id, turn_id)
                     return
                 if prewarming:
@@ -825,7 +829,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if is_current:
                     current_state.status = "ready"
                     current_state.cursor_ms = 0
-                    current_state.audio_duration_ms = audio.duration_ms
+                    current_state.audio_duration_ms = audio.duration_ms if audio is not None else 0
                     current_state.pending_action = None
                     current_state.pending_ticket_hash = None
                     current_state.pending_media_command_id = None
@@ -844,10 +848,10 @@ class PlaybackPreparationMixin(PlaybackCore):
                                     )
                                 ),
                                 "round_no": self._round(fresh_turn),
-                                "audio_ready": True,
+                                "audio_ready": audio is not None,
                                 "retrieval_status": prepared.retrieval_status,
                                 "grounding_mode": prepared.grounding_mode,
-                                "audio_duration_ms": audio.duration_ms,
+                                "audio_duration_ms": audio.duration_ms if audio is not None else 0,
                                 **self._mutual_phase_payload(fresh_debate, fresh_turn),
                             },
                         )

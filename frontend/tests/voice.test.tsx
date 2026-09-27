@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceLibrary } from "../components/voice/voice-library";
 import { AppShell } from "../components/app-shell";
+import { PlatformApi } from "../lib/api/platform";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({}),
@@ -21,6 +22,7 @@ const api = {
   createVoicePreview: vi.fn(),
   confirmVoiceProfile: vi.fn(),
   deleteVoiceProfile: vi.fn(),
+  renameVoiceProfile: vi.fn(),
 };
 
 vi.mock("../components/session-provider", () => ({
@@ -30,6 +32,7 @@ vi.mock("../components/session-provider", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("M08 voice library", () => {
@@ -86,7 +89,7 @@ describe("M08 voice library", () => {
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 
-  it("enrolls with the selected sample language and shows the voice id", async () => {
+  it("enrolls without a language selector and shows the filename without an id", async () => {
     const created = {
       id: "voice-new",
       scope: "group",
@@ -127,9 +130,8 @@ describe("M08 voice library", () => {
         ],
       },
     });
-    fireEvent.change(screen.getByLabelText("Sample language"), {
-      target: { value: "zh-CN" },
-    });
+    expect(screen.queryByLabelText("Sample language")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));
     await waitFor(() =>
@@ -137,10 +139,14 @@ describe("M08 voice library", () => {
         "group-a",
         expect.any(File),
         "voice-consent-v1",
-        expect.objectContaining({ language: "zh-CN" }),
+        expect.objectContaining({ idempotency: expect.any(Object) }),
       ),
     );
-    expect(await screen.findByText("voice-new")).toBeTruthy();
+    expect(api.enrollVoice.mock.calls[0][3]).not.toHaveProperty("language");
+    expect(
+      await screen.findByRole("button", { name: "sample.wav" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("voice-new")).toBeNull();
   });
 
   it("shows a platform preview URL and only confirms after preview", async () => {
@@ -170,7 +176,7 @@ describe("M08 voice library", () => {
     });
     render(<VoiceLibrary groupId="group-a" />);
     await waitFor(() => expect(screen.getByText("sample.wav")).toBeTruthy());
-    expect(screen.getByText("voice-1")).toBeTruthy();
+    expect(screen.queryByText("voice-1")).toBeNull();
     const confirm = screen.getByRole("button", { name: /^confirm$/i });
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
@@ -183,5 +189,117 @@ describe("M08 voice library", () => {
     await waitFor(() =>
       expect(api.confirmVoiceProfile).toHaveBeenCalledWith("voice-1"),
     );
+  });
+});
+
+const profile = {
+  id: "voice-edit",
+  scope: "group",
+  group_id: "group-a",
+  status: "ready",
+  source_filename: "sample.wav",
+  safe_error_code: null,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+describe("voice filename editing", () => {
+  it("saves once for Enter followed by blur and loads the persisted name", async () => {
+    let saved = profile;
+    let finish!: (value: typeof profile) => void;
+    api.voiceProfiles.mockImplementation(async () => [saved]);
+    api.renameVoiceProfile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = render(<VoiceLibrary groupId="group-a" />);
+    fireEvent.click(await screen.findByRole("button", { name: "sample.wav" }));
+    const input = screen.getByRole("textbox", { name: "Voice name" });
+    fireEvent.change(input, { target: { value: "古典哲学" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+    expect(api.renameVoiceProfile).toHaveBeenCalledTimes(1);
+    expect(api.renameVoiceProfile).toHaveBeenCalledWith(
+      "voice-edit",
+      "古典哲学",
+    );
+    saved = { ...profile, source_filename: "古典哲学" };
+    finish(saved);
+    expect(
+      await screen.findByRole("button", { name: "古典哲学" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("voice-edit")).toBeNull();
+    expect(screen.queryByText(/Voice ID/)).toBeNull();
+    view.unmount();
+    render(<VoiceLibrary groupId="group-a" />);
+    expect(
+      await screen.findByRole("button", { name: "古典哲学" }),
+    ).toBeTruthy();
+  });
+
+  it("cancels with Escape and skips unchanged names", async () => {
+    api.voiceProfiles.mockResolvedValue([profile]);
+    render(<VoiceLibrary groupId="group-a" />);
+    fireEvent.click(await screen.findByRole("button", { name: "sample.wav" }));
+    const input = screen.getByRole("textbox", { name: "Voice name" });
+    fireEvent.change(input, { target: { value: "Unwanted change" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    const name = screen.getByRole("button", { name: "sample.wav" });
+    expect(document.activeElement).toBe(name);
+    fireEvent.click(name);
+    fireEvent.blur(screen.getByRole("textbox", { name: "Voice name" }));
+    expect(screen.queryByRole("textbox", { name: "Voice name" })).toBeNull();
+    expect(api.renameVoiceProfile).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed edit and saves it on a later blur", async () => {
+    api.voiceProfiles.mockResolvedValue([profile]);
+    api.renameVoiceProfile
+      .mockRejectedValueOnce(new Error("Rename unavailable"))
+      .mockResolvedValueOnce({ ...profile, source_filename: "New name" });
+    render(<VoiceLibrary groupId="group-a" />);
+    fireEvent.click(await screen.findByRole("button", { name: "sample.wav" }));
+    const input = screen.getByRole("textbox", { name: "Voice name" });
+    fireEvent.change(input, { target: { value: "New name" } });
+    fireEvent.blur(input);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Voice name" })).toHaveProperty(
+      "value",
+      "New name",
+    );
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(
+      await screen.findByRole("button", { name: "New name" }),
+    ).toBeTruthy();
+    expect(api.renameVoiceProfile).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("voice rename API", () => {
+  it("persists the name through the profile PATCH endpoint with CSRF", async () => {
+    const renamed = { ...profile, source_filename: "我的声音" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(renamed), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new PlatformApi({
+      baseUrl: "http://maya.test/api/v1",
+      csrfToken: "test-csrf",
+    });
+    expect(
+      await client.renameVoiceProfile(profile.id, renamed.source_filename),
+    ).toEqual(renamed);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.method).toBe("PATCH");
+    expect(request.url).toBe(
+      "http://maya.test/api/v1/voice-profiles/voice-edit",
+    );
+    expect(request.headers.get("X-CSRF-Token")).toBe("test-csrf");
+    expect(await request.json()).toEqual({ source_filename: "我的声音" });
   });
 });

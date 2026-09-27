@@ -1,6 +1,8 @@
 export function buildAgentTemplate(name: string, locale: "en" | "zh"): string {
   return locale === "zh"
-    ? `# 我是谁
+    ? `# ${name}
+
+# 我是谁
 我是 ${name}。
 
 # 我的特征
@@ -12,7 +14,9 @@ export function buildAgentTemplate(name: string, locale: "en" | "zh"): string {
 3. 根据这些知识和我的判断标准，我形成什么观点？
 4. 如何把依据、理由和观点清楚地表达出来？
 `
-    : `# Who I am
+    : `# ${name}
+
+# Who I am
 I am ${name}.
 
 # My characteristics

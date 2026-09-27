@@ -860,7 +860,7 @@ export interface paths {
         delete: operations["deleteVoiceProfile"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["renameVoiceProfile"];
         trace?: never;
     };
     "/voice-profiles/{voice_profile_id}/preview": {
@@ -2282,6 +2282,10 @@ export interface components {
             source_filename?: string;
             safe_error_code?: string | null;
             created_at: components["schemas"]["IsoTime"];
+        };
+        RenameVoiceProfileRequest: {
+            /** @description Trimmed display filename; path separators, control characters, dot and double-dot are rejected. */
+            source_filename: string;
         };
         VoicePreviewPlaybackResource: {
             /** Format: uri-reference */
@@ -5045,6 +5049,37 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             503: components["responses"]["Error"];
+        };
+    };
+    renameVoiceProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                voice_profile_id: components["parameters"]["VoiceProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameVoiceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Voice filename updated without changing its state or provider mapping. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceProfile"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     createVoicePreview: {

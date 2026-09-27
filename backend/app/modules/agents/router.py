@@ -35,6 +35,7 @@ from app.core.models import (
     IdempotencyRecord,
 )
 from app.modules.agents.persona import (
+    agent_name_from_markdown,
     raw_agent_md_hash,
 )
 from app.modules.agents.persona_repository import SqlAlchemyPersonaStore
@@ -130,6 +131,18 @@ _AGENT_MD_UPLOAD_BODY = {
 
 def _time() -> datetime:
     return datetime.now(UTC)
+
+
+def _sync_markdown_name(db: Session, agent: Agent, markdown: str) -> None:
+    name = agent_name_from_markdown(markdown)
+    if name is None or name == agent.name:
+        return
+    db.execute(
+        update(Agent)
+        .where(Agent.id == agent.id)
+        .values(name=name, metadata_revision=Agent.metadata_revision + 1, updated_at=_time())
+    )
+    db.refresh(agent)
 
 
 def _raise_persona_domain_error(error: PersonaDomainError) -> NoReturn:
@@ -1065,6 +1078,8 @@ def update_agent_draft(
             select(AgentVersion.revision).where(AgentVersion.id == scoped.version.id)
         )
         raise stale_revision(current_revision)
+    if "agent_md" in payload.model_fields_set:
+        _sync_markdown_name(db, scoped.agent, normalized_agent_md)
     db.refresh(scoped.version)
     db.flush()
     return version_dto(db, scoped.version, scoped.agent)
@@ -1132,6 +1147,7 @@ async def upload_agent_md(
             select(AgentVersion.revision).where(AgentVersion.id == scoped.version.id)
         )
         raise stale_revision(current_revision)
+    _sync_markdown_name(db, scoped.agent, document.normalized)
     db.refresh(scoped.version)
     db.flush()
     return version_dto(db, scoped.version, scoped.agent)

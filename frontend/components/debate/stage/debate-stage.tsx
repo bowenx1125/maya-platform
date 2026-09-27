@@ -1246,6 +1246,15 @@ export function DebateStage({
           settlePendingReplayAcquire();
           return;
         case "media.prepared": {
+          if (message.text_only === true && message.media_url === null) {
+            if (
+              message.controller_epoch !== controllerEpochRef.current ||
+              message.turn_id !== playbackRef.current.current_turn_id
+            )
+              return;
+            setFailure(null);
+            return;
+          }
           if (
             !message.controller_epoch ||
             !message.turn_id ||

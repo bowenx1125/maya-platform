@@ -34,6 +34,10 @@ keyboard dismissal and touch behavior when changing hover interactions. For
 history-row actions, date and Delete must be mutually exclusive; clicking a row
 must not pin Delete after the pointer leaves.
 
+Voice availability must not gate Debate text publication. Use a configured
+fallback, or explicit text-only playback when none is available; never fabricate
+audio or weaken supplier-download SSRF checks to hide a DNS/proxy failure.
+
 **Match the surrounding code.** Comment density, naming, error handling and
 module layout are already consistent; follow what is next to your change
 rather than importing a different style.

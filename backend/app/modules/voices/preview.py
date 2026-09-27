@@ -10,6 +10,7 @@ monolithic state machine.
 from __future__ import annotations
 
 import io
+import logging
 import wave
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -46,6 +47,19 @@ from app.providers.audio import (
 from app.providers.factory import tts_provider
 from app.providers.tts import TTSProvider, TTSProviderError
 from app.seed import COURSE_ID
+
+LOGGER = logging.getLogger("maya.voices")
+_SAFE_PREVIEW_ERRORS = frozenset(
+    {
+        "tts_http_rejected",
+        "tts_response_invalid",
+        "tts_result_url_rejected",
+        "tts_result_dns_failed",
+        "tts_result_download_failed",
+        "tts_audio_invalid",
+        "tts_timeout",
+    }
+)
 
 
 def _configured_fallback(db: Session, settings: Settings) -> VoiceProfile | None:
@@ -135,6 +149,10 @@ def create_voice_preview(
         raw = read_pcm16_wav_bytes(output.audio_bytes)
         validate_technical_audio(raw)
     except (TTSProviderError, AudioValidationError, OSError) as exc:
+        code = getattr(exc, "safe_code", None)
+        if not isinstance(code, str) or code not in _SAFE_PREVIEW_ERRORS:
+            code = "tts_audio_invalid" if isinstance(exc, AudioValidationError) else "tts_failed"
+        LOGGER.warning("Voice preview failed profile_id=%s safe_code=%s", profile.id, code)
         raise PlatformError(
             "provider_unavailable", "The preview could not be generated.", 503
         ) from exc

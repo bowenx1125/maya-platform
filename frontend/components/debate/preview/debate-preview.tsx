@@ -284,14 +284,12 @@ function deriveProgress(
   const expected = turns.length;
   const prepared = turns.filter(
     (turn) =>
-      turn.generation_status !== "pending" && Boolean(turn.speech.trim()),
+      ["final_ready", "ready", "completed"].includes(turn.generation_status) &&
+      Boolean(turn.speech.trim()),
   ).length;
   return {
     prepared_turns: prepared,
     expected_turns: expected,
-    ready:
-      expected > 0 &&
-      prepared === expected &&
-      turns.every((turn) => turn.audio_ready),
+    ready: expected > 0 && prepared === expected,
   };
 }

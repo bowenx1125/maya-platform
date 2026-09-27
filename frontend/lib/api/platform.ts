@@ -1462,7 +1462,7 @@ export class PlatformApi {
       const form = new FormData();
       form.append("file", file);
       form.append("consent_accepted", "true");
-      form.append("language", options.language ?? "en");
+      if (options.language) form.append("language", options.language);
       if (consentCopyVersion)
         form.append("consent_copy_version", consentCopyVersion);
       const result = await this.client.POST(
@@ -1486,6 +1486,21 @@ export class PlatformApi {
     return unwrap(
       await this.client.GET("/voice-profiles/{voice_profile_id}", {
         params: { path: { voice_profile_id: profileId } },
+      }),
+    );
+  }
+
+  async renameVoiceProfile(
+    profileId: string,
+    sourceFilename: string,
+  ): Promise<VoiceProfile> {
+    return unwrap(
+      await this.client.PATCH("/voice-profiles/{voice_profile_id}", {
+        params: {
+          path: { voice_profile_id: profileId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { source_filename: sourceFilename },
       }),
     );
   }

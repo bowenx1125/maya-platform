@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
+from unicodedata import category
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 VoiceStatus = Literal[
     "validating",
@@ -28,6 +29,19 @@ class VoiceProfile(BaseModel):
     source_filename: str = ""
     safe_error_code: str | None = None
     created_at: datetime
+
+
+class RenameVoiceProfileRequest(BaseModel):
+    source_filename: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+    ]
+
+    @field_validator("source_filename")
+    @classmethod
+    def safe_filename(cls, value: str) -> str:
+        if value in {".", ".."} or any(char in "/\\" or category(char) == "Cc" for char in value):
+            raise ValueError("Use a filename without path separators or control characters.")
+        return value
 
 
 class PlaybackResource(BaseModel):

@@ -276,57 +276,59 @@ title. An older record still has a state error; data retained.
 
 ## Workspace polish and speech configuration — September 27, 2026
 
-Code/configuration changes were rebuilt and deployed; backend/frontend are healthy.
-No real Provider request was made in this change.
+Draft/Published details use sidebar New to open/create a draft; inline Draft
+Edit/Delete removed. Done saves/publishes; Back confirms dirty edits without the
+Unsaved label. Chats removes 3D; Workspace keeps AvatarEditor. History date/Delete
+are mutually exclusive on hover/keyboard focus; mouse focus cannot pin Delete;
+touch shows Delete. Knowledge hides Ready and places actions top-right. Voices
+shares Knowledge's SectionCard/count/tile CSS and preview/confirm/delete icons;
+New replaces the list, Back restores it, empty decoration is omitted. Existing v1
+consent is fully visible. Help/Immerse use warm-paper styling; help clears on
+pointer leave, route/DOM changes, scroll, blur and Escape. Debate has no underlines.
 
-Initial Draft and Published details use sidebar New to open an existing draft or
-create the next one; inline Draft Edit/Delete removed. Done still saves/publishes;
-Back still confirms dirty edits, without an Unsaved local changes label. Chats
-removes its 3D panel/picker; Workspace keeps AvatarEditor. History shows dates
-normally, replacing them with Delete only on hover/keyboard focus using mutually
-exclusive visibility; mouse-click focus cannot pin Delete. Touch hides the date.
-Knowledge hides Ready only in the UI and puts all three actions at card top-right.
-Voices drops Empty decoration/nested cards and displays the existing v1 consent
-text fully, without tooltip. Help and Immerse controls use warm-paper styling;
-help clears on pointer leave, route/DOM change, scroll, blur and Escape. Mouse
-focus cannot pin it; keyboard/touch support remains. Debate links have no underline.
+Chats removes its 820px ceiling, leaving 48px top/24px bottom desktop insets;
+mobile conversation minimum is max(600px,75dvh). Browser 1440×1000: card822→928px,
+bottom130→24px; 390×844: conversation633px, no horizontal overflow. Voices copy
+asks for10–15 seconds reading a passage, 16-bit WAV/MP3/M4A, max10MB. This guides
+recording; server still accepts10–20 seconds with10MiB limit.
 
-The latest stalled draft made one embedding query, rejected remotely with HTTP
-403; its ledger counts one charged request and no LLM call. No local budget/content
-rule caused that rejection; precise remote cause is unknown and it was not retried.
-Local TTS/Voice selectors are dashscope; adapter construction passed offline. Real
-speech displays unchecked, not Ready; no Voice Profiles or default voice exist.
-The configured services still need a permitted supplier account and enrolled voice;
-no real speech request or voice upload was made in this change.
+The inspected stalled Debate had one charged Embedding query rejected with HTTP403
+and no LLM. No local budget/content rule caused it; remote cause remained unknown,
+not retried. Local TTS/Voice selected dashscope; offline construction passed.
+Speech settings say unchecked, not Ready. No profiles/fallback existed at that
+inspection; later user enrollment is recorded below. Configuration is not audio
+acceptance; this UI work made no real Provider request.
 
-Full pnpm check and generated-file boundary probe passed: backend 1414 passed/21
-skipped; frontend 402 passed/1 skipped. Runtime was backed up before recreation.
-Browser checks confirmed no Chats 3D panel, mutually exclusive date/Delete before,
-during and after hover, keyboard tooltip/Escape/navigation cleanup, compact
-Knowledge actions without Ready, and Voices form with full existing consent text.
-Narrow-layout pages had no horizontal overflow. Cloud speech acceptance remains
-unverified; configuration/adapter construction is not proof of successful audio.
+Dated full checks: backend1414 passed/21 skipped, frontend402 passed/1 skipped;
+static/contracts/migrations/boundary checks passed. Voice copy's three tests and
+typecheck passed. Backed-up Docker rebuild/readiness/schema/homepage and browser
+checks covered Chats3D removal/date-Delete, keyboard tooltip/Escape/navigation,
+Knowledge actions, Voices empty/form/consent and narrow wrapping. Populated voice
+actions used Mock tests, not real enrollment. Four existing lint warnings remain.
 
-Voices now matches Knowledge's SectionCard header/count, shared compact tile grid
-and top-right icon actions (preview/confirm/delete). Ready badges are hidden;
-processing/confirmation states, Voice IDs and preview audio remain. New replaces
-the list with the upload form; Back restores it. Empty lists omit decoration.
-Both libraries share the same card CSS. Frontend 402 passed/1 skipped, typecheck
-and lint passed (four existing warnings); no real voice request was made.
-Backed-up Docker rebuild passed readiness/schema/homepage checks. Browser verified
-the empty list and New/Back form at narrow width with no horizontal overflow;
-populated profile actions were covered by Mock tests, not real voice enrollment.
+## Voice filenames, editing and optional Debate audio — September 27, 2026
 
-Chats removes the 820px height ceiling and fills the desktop viewport below its
-48px top inset, retaining 24px bottom spacing (including card borders). Narrow
-screens use a 600px/75dvh minimum conversation area and safe-area bottom padding.
-Other pages retain their existing spacing. Frontend 402 passed/1 skipped,
-typecheck and lint passed with four existing warnings.
-Backed-up Docker rebuild/readiness/schema/homepage passed. At 1440×1000 the card
-grew from 822px to 928px and bottom space fell from 130px to 24px; at 390×844
-the conversation is 633px tall. Neither viewport had horizontal overflow.
+Multipart filenames use UTF-8 with legacy Latin-1 fallback. After backup, the
+reported name was repaired without changing audio/state/mapping/request hashes.
+Clicking filenames edits owner-scoped metadata; Voice IDs are hidden in the UI.
 
-Voices upload copy now asks for 10–15 seconds reading a short passage and lists
-16-bit WAV/MP3/M4A with a 10 MB ceiling, in both locales. This is recording
-guidance; existing 10–20-second server validation and 10 MiB upload limit remain.
-Three voice tests/typecheck passed; Docker/browser copy and wrapping verified.
+User enrollment succeeded once (request1/charged1). Preview download failed
+because container DNS returned proxy Fake-IP; the public-address guard correctly
+rejected it. A backed-up backend-only DNS override now resolves public addresses;
+SSRF validation is unchanged. One authorized service-level diagnostic made one
+TTS POST/HTTP200 without retry, storing8.72s/418604-byte PCM16/24kHz mono audio.
+It used the existing active owner/session context, not browser authentication.
+Profile remains preview_ready for user confirmation. Earlier failed preview charges
+cannot be reconstructed: previews have no provider-operation ledger.
+
+Debate uses available custom/system voice, otherwise explicit text-only playback;
+no fake media, automatic Next or repeated generation. Agent draft save/upload
+synchronizes a name H1 with Agent metadata after revision CAS, preserving historical
+versions/Debate names; new templates begin with a name H1. Old identity-section
+headings do not rename Agents. Voices removes Sample language; enrollment keeps
+its existing default, preview remains English, Debate speech follows Ruleset.
+The legacy delete/publish race test now checks tombstones and hidden access,
+preserving draft/RAG/charged records, rather than asserting physical row deletion.
+Full pnpm check/boundary passed: backend1484/21 skipped, frontend411/1 skipped.
+Backed-up Docker/readiness, Voices single-column browser check and recreated
+container public-DNS guard passed.

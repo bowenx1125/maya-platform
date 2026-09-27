@@ -74,7 +74,8 @@ try {
   ).length;
   // Private Chat, Provider settings and student Live add twelve operations.
   // Chat streaming and deletion add two conversation operations.
-  if (platformOperationCount !== 106 || placeholderCount !== 0) {
+  // Voice filename editing adds one metadata-only operation.
+  if (platformOperationCount !== 107 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

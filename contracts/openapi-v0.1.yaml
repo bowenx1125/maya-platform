@@ -1558,6 +1558,24 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/VoiceProfile" }
         "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Voices]
+      operationId: renameVoiceProfile
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameVoiceProfileRequest" }
+      responses:
+        "200":
+          description: Voice filename updated without changing its state or provider mapping.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoiceProfile" }
+        "404": { $ref: "#/components/responses/Error" }
+        "400": { $ref: "#/components/responses/Error" }
     delete:
       tags: [Voices]
       operationId: deleteVoiceProfile
@@ -3988,6 +4006,15 @@ components:
         source_filename: { type: string }
         safe_error_code: { type: [string, "null"] }
         created_at: { $ref: "#/components/schemas/IsoTime" }
+    RenameVoiceProfileRequest:
+      type: object
+      required: [source_filename]
+      properties:
+        source_filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Trimmed display filename; path separators, control characters, dot and double-dot are rejected.
     VoicePreviewPlaybackResource:
       type: object
       required: [playback_url, expires_at]

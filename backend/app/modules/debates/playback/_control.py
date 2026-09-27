@@ -233,7 +233,10 @@ class PlaybackControlMixin(PlaybackCore):
                     or not preview_turns
                     or any(
                         not self._turn_ready(row)
-                        or self._validated_turn_audio(db, debate, row) is None
+                        or (
+                            not self._turn_text_only(row)
+                            and self._validated_turn_audio(db, debate, row) is None
+                        )
                         for row in preview_turns
                     )
                 ):

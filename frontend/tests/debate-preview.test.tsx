@@ -104,6 +104,25 @@ describe("teacher debate preview", () => {
     ).toBeTruthy();
   });
 
+  it("opens completed text Preview without audio while keeping the audio failure visible", () => {
+    renderPreview({
+      ...detail,
+      preview: null,
+      preview_turns: detail.preview_turns?.map((turn) => ({
+        ...turn,
+        generation_status: "final_ready",
+      })),
+    });
+    expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
+    expect(screen.getByText("Audio Not Ready")).toBeTruthy();
+    expect(screen.getByText("Audio needs attention.")).toBeTruthy();
+  });
+
+  it("does not treat an unfinished text turn as a completed Preview", () => {
+    renderPreview({ ...detail, preview: null });
+    expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+  });
+
   it("shows Background before the turns only when the debate has one", () => {
     const { container } = renderPreview({
       ...detail,

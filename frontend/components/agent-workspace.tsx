@@ -341,6 +341,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         voice_profile_id: voiceProfileId,
       });
       setVersion(next);
+      setAgent(await api.agent(next.agent_id));
       setAgentMd(next.agent_md ?? "");
       setAvatarConfig(next.avatar_config);
       setVoiceProfileId(next.voice_profile_id ?? null);
@@ -368,6 +369,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         currentVersion.revision,
       );
       setVersion(next);
+      setAgent(await api.agent(next.agent_id));
       setAgentMd(next.agent_md ?? "");
       setNotice("agentMdUploadedNotice");
     } catch (cause) {

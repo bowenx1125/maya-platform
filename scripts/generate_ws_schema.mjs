@@ -417,7 +417,7 @@ const payloads = {
       segment_turn: nullable(segmentTurn),
       source_details: arrayOf(segmentSource),
       audio_ready: nullable({ type: "boolean" }),
-      playback_url: publicMediaPath,
+      playback_url: nullable(publicMediaPath),
       avatar_states: arrayOf(avatarState, 1),
       cursor_ms: { type: "integer", const: 0 },
       playback_rate: number(0.95, 1.25),
@@ -493,6 +493,19 @@ const payloads = {
     ["scope", "turn_id"],
   ),
 };
+
+payloads["playback.started"].allOf = [
+  {
+    if: {
+      properties: { playback_url: { type: "null" } },
+      required: ["playback_url"],
+    },
+    then: {
+      properties: { audio_ready: { const: false } },
+      required: ["audio_ready"],
+    },
+  },
+];
 
 const translationCounts = {
   batch_id: uuid,

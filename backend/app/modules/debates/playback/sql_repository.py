@@ -19,6 +19,7 @@ from uuid import uuid4
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
+from .audio import AudioMetadata
 from .events import EventRecord
 from .llm_publication import SqlLLMPublication
 from .protocols import (
@@ -258,36 +259,56 @@ class SqlPlaybackRepository(PlaybackRepository):
         participant: SqlRow,
         settings: Any,
     ) -> ResolvedTurnVoice:
-        """Revalidate the frozen custom voice, then system fallback, then Mock."""
+        """Resolve custom/system audio; an empty real token means text-only."""
 
-        def ready_profile(profile_id: str | None, *, system_only: bool = False) -> bool:
+        def ready_profile(profile_id: str | None, *, system_only: bool = False) -> str | None:
             if not profile_id:
-                return False
-            scope_guard = " AND scope='system'" if system_only else ""
-            row = db.execute(
-                text(
-                    "SELECT 1 FROM voice_profiles WHERE id=:profile_id AND status='ready'"
-                    + scope_guard
-                ),
-                {"profile_id": profile_id},
-            ).first()
-            return row is not None
+                return None
+            scope_guard = " AND scope='system' AND group_id IS NULL" if system_only else ""
+            row = (
+                db.execute(
+                    text(
+                        "SELECT id, scope, group_id, provider_key, target_model_key, "
+                        "external_id_encrypted FROM voice_profiles "
+                        "WHERE id=:profile_id AND status='ready'" + scope_guard
+                    ),
+                    {"profile_id": profile_id},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                return None
+            if getattr(settings, "tts_provider", "mock") == "mock":
+                return str(profile_id)
+            if row["provider_key"] != "dashscope" or not row["external_id_encrypted"]:
+                return None
+            from app.modules.voices.crypto import VoiceEncryptionError, decrypt_external_voice_id
+
+            try:
+                return decrypt_external_voice_id(
+                    row["external_id_encrypted"],
+                    settings.secret_bytes,
+                    profile_id=str(profile_id),
+                    scope=row["scope"],
+                    group_id=row["group_id"],
+                    provider_key=row["provider_key"],
+                    target_model_key=row["target_model_key"],
+                )
+            except VoiceEncryptionError:
+                return None
 
         frozen_id = getattr(participant, "effective_voice_profile_id", None)
-        if getattr(
-            participant, "effective_voice_kind", None
-        ) == "platform_profile" and ready_profile(frozen_id):
-            return ResolvedTurnVoice("platform_profile", str(frozen_id), str(frozen_id))
+        if getattr(participant, "effective_voice_kind", None) == "platform_profile" and (
+            token := ready_profile(frozen_id)
+        ):
+            return ResolvedTurnVoice("platform_profile", str(frozen_id), token)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
-        if ready_profile(fallback_id, system_only=True):
-            return ResolvedTurnVoice("platform_profile", str(fallback_id), str(fallback_id))
-        voice_selectors = (
-            getattr(settings, "tts_provider", "mock"),
-            getattr(settings, "voice_provider", "mock"),
-        )
-        if all(value == "mock" for value in voice_selectors):
+        if token := ready_profile(fallback_id, system_only=True):
+            return ResolvedTurnVoice("platform_profile", str(fallback_id), token)
+        if getattr(settings, "tts_provider", "mock") == "mock":
             return ResolvedTurnVoice("mock_sentinel", None, "mock")
-        raise RuntimeError("no ready effective voice is available")
+        return ResolvedTurnVoice("mock_sentinel", None, "")
 
     def recover_startup(self, db: Any) -> tuple[str, ...]:
         """Fence interrupted work and revoke process-local playback authority."""
@@ -1026,11 +1047,13 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND successor.generation_status='final_ready' "
                     "AND successor.preparation_stage='ready' "
                     "AND trim(COALESCE(successor.speech, '')) <> '' "
-                    "AND successor.audio_file_id IS NOT NULL "
+                    "AND ((successor.safe_error_code='tts_voice_unavailable' "
+                    "AND successor.audio_file_id IS NULL AND successor.audio_duration_ms=0) OR ("
+                    "successor.audio_file_id IS NOT NULL "
                     "AND successor.audio_duration_ms IS NOT NULL "
                     "AND successor.audio_duration_ms > 0 "
                     "AND EXISTS (SELECT 1 FROM stored_files AS sf "
-                    "WHERE sf.id=successor.audio_file_id AND sf.state='active') "
+                    "WHERE sf.id=successor.audio_file_id AND sf.state='active'))) "
                     "AND successor.transcript_hash IS NOT NULL "
                     "AND trim(successor.transcript_hash) <> '' "
                     "AND successor.cutoff_turn_index=CASE "
@@ -1778,6 +1801,48 @@ class SqlPlaybackRepository(PlaybackRepository):
         finally:
             claim_session.close()
 
+    def claim_text_playback(
+        self,
+        db: Any,
+        *,
+        debate_id: str,
+        turn_id: str,
+        expected_control_version: int,
+        controller_epoch: str,
+    ) -> bool:
+        result = db.execute(
+            text(
+                "UPDATE playback_states SET status='waiting_next', cursor_ms=0, "
+                "audio_duration_ms=0, server_started_at=NULL, updated_at=:now "
+                "WHERE debate_id=:debate_id AND current_turn_id=:turn_id "
+                "AND status='ready' AND mode='live' "
+                "AND control_version=:version AND controller_epoch=:epoch "
+                "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
+                "AND pending_media_command_id IS NULL "
+                "AND EXISTS (SELECT 1 FROM debate_turns AS t "
+                "JOIN debates AS d ON d.id=t.debate_id "
+                "JOIN jobs AS j ON j.turn_id=t.id AND j.debate_id=d.id "
+                "WHERE t.id=:turn_id AND t.debate_id=:debate_id AND d.status='running' "
+                "AND t.generation_status='final_ready' AND t.preparation_stage='ready' "
+                "AND t.publication_status='unpublished' "
+                "AND t.safe_error_code='tts_voice_unavailable' "
+                "AND trim(COALESCE(t.speech,''))<>'' AND t.audio_file_id IS NULL "
+                "AND t.audio_duration_ms=0 AND j.state='completed' "
+                "AND j.cancellation_generation=d.cancellation_generation "
+                "AND NOT EXISTS (SELECT 1 FROM json_each(t.predecessor_turn_ids_json) AS p "
+                "LEFT JOIN debate_turns AS prior ON prior.id=p.value AND prior.debate_id=d.id "
+                "WHERE prior.id IS NULL OR prior.publication_status<>'public'))"
+            ),
+            {
+                "debate_id": debate_id,
+                "turn_id": turn_id,
+                "version": expected_control_version,
+                "epoch": controller_epoch,
+                "now": _now(),
+            },
+        )
+        return int(getattr(result, "rowcount", 0)) == 1
+
     def claim_media_prepare(
         self,
         *,
@@ -2123,13 +2188,15 @@ class SqlPlaybackRepository(PlaybackRepository):
         db: Any,
         turn: SqlRow,
         prepared: PreparedTurn,
-        audio: Any,
+        audio: AudioMetadata | None,
         *,
         generation: int,
         attempt: int,
         claim_token: str | None = None,
         debate_status: str = "running",
     ) -> bool:
+        # None retains validated text when no TTS voice is configured; publication
+        # still goes through the same job, generation and accepted-LLM fences.
         # The Debate this turn belongs to has to be in the state the caller
         # prepared it for: ``running`` for a live lesson, ``draft`` for one
         # warming ahead of its lesson. Naming it rather than assuming it is
@@ -2214,7 +2281,8 @@ class SqlPlaybackRepository(PlaybackRepository):
             ),
             "word_count": prepared.word_count or len(prepared.speech.split()),
             "attempt": prepared.generation_attempt,
-            "audio_duration_ms": getattr(audio, "duration_ms", None),
+            "audio_duration_ms": audio.duration_ms if audio is not None else 0,
+            "safe_error_code": None if audio is not None else "tts_voice_unavailable",
             "audio_relative_path": getattr(audio, "relative_path", None),
             "audio_sha256": getattr(audio, "sha256", None),
             "actual_tts_voice_kind": prepared.actual_voice_kind,
@@ -2225,9 +2293,11 @@ class SqlPlaybackRepository(PlaybackRepository):
         # only its UUID on DebateTurn.  Create that row in the same transaction
         # before pointing the turn at it; if the host adapter has a direct
         # relative-path column too, both values are written consistently.
+        if audio is None:
+            values["audio_file_id"] = None
         audio_file_id = getattr(audio, "file_id", None) or str(uuid4())
         stored_columns = self._columns(db, "stored_files")
-        if getattr(audio, "relative_path", None) and stored_columns and "id" in stored_columns:
+        if audio is not None and audio.relative_path and stored_columns and "id" in stored_columns:
             stored_values: dict[str, Any] = {
                 "id": audio_file_id,
                 "kind": "debate_audio",

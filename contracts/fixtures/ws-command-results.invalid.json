@@ -1,8 +1,133 @@
 [
-  {"name":"unknown result","value":{"message_id":"50000000-0000-4000-8000-000000000001","message_type":"command.ok","result_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","occurred_at":"2026-08-27T00:00:00Z"}},
-  {"name":"result carries sequence","value":{"message_id":"50000000-0000-4000-8000-000000000001","message_type":"controller.acquired","result_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","occurred_at":"2026-08-27T00:00:00Z","command_id":"10000000-0000-4000-8000-000000000001","controller_epoch":"30000000-0000-4000-8000-000000000001","control_version":1,"sequence":3}},
-  {"name":"media missing expiry","value":{"message_id":"50000000-0000-4000-8000-000000000002","message_type":"media.prepared","result_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","occurred_at":"2026-08-27T00:00:00Z","command_id":"10000000-0000-4000-8000-000000000002","controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001","media_url":"/audio"}},
-  {"name":"supplier absolute media url","value":{"message_id":"50000000-0000-4000-8000-000000000006","message_type":"media.prepared","result_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","occurred_at":"2026-08-27T00:00:00Z","command_id":"10000000-0000-4000-8000-000000000006","controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001","media_url":"https://supplier.example/audio?key=secret","expires_at":"2026-08-27T00:01:00Z"}},
-  {"name":"provider leak","value":{"message_id":"50000000-0000-4000-8000-000000000001","message_type":"command.rejected","result_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","occurred_at":"2026-08-27T00:00:00Z","command_id":"10000000-0000-4000-8000-000000000001","code":"provider_unavailable","current_control_version":1,"recoverable":false,"model":"hidden"}},
-  {"name":"absolute path leak","value":{"message_id":"50000000-0000-4000-8000-000000000002","message_type":"media.prepared","result_version":1,"debate_id":"20000000-0000-4000-8000-000000000001","occurred_at":"2026-08-27T00:00:00Z","command_id":"10000000-0000-4000-8000-000000000002","controller_epoch":"30000000-0000-4000-8000-000000000001","turn_id":"40000000-0000-4000-8000-000000000001","media_url":"/private/file.wav","expires_at":"2026-08-27T00:01:00Z","absolute_path":"/private/file.wav"}}
+  {
+    "name": "unknown result",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000001",
+      "message_type": "command.ok",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z"
+    }
+  },
+  {
+    "name": "result carries sequence",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000001",
+      "message_type": "controller.acquired",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000001",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "control_version": 1,
+      "sequence": 3
+    }
+  },
+  {
+    "name": "media missing expiry",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000002",
+      "message_type": "media.prepared",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000002",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "turn_id": "40000000-0000-4000-8000-000000000001",
+      "media_url": "/audio"
+    }
+  },
+  {
+    "name": "supplier absolute media url",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000006",
+      "message_type": "media.prepared",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000006",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "turn_id": "40000000-0000-4000-8000-000000000001",
+      "media_url": "https://supplier.example/audio?key=secret",
+      "expires_at": "2026-08-27T00:01:00Z"
+    }
+  },
+  {
+    "name": "provider leak",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000001",
+      "message_type": "command.rejected",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000001",
+      "code": "provider_unavailable",
+      "current_control_version": 1,
+      "recoverable": false,
+      "model": "hidden"
+    }
+  },
+  {
+    "name": "absolute path leak",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000002",
+      "message_type": "media.prepared",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000002",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "turn_id": "40000000-0000-4000-8000-000000000001",
+      "media_url": "/private/file.wav",
+      "expires_at": "2026-08-27T00:01:00Z",
+      "absolute_path": "/private/file.wav"
+    }
+  },
+  {
+    "name": "null media URL without explicit text-only mode",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000002",
+      "message_type": "media.prepared",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000002",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "turn_id": "40000000-0000-4000-8000-000000000001",
+      "media_url": null,
+      "expires_at": "2026-08-27T00:01:00Z"
+    }
+  },
+  {
+    "name": "null media URL with false text-only mode",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000002",
+      "message_type": "media.prepared",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000002",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "turn_id": "40000000-0000-4000-8000-000000000001",
+      "media_url": null,
+      "expires_at": "2026-08-27T00:01:00Z",
+      "text_only": false
+    }
+  },
+  {
+    "name": "text-only mode must not expose a media URL",
+    "value": {
+      "message_id": "50000000-0000-4000-8000-000000000002",
+      "message_type": "media.prepared",
+      "result_version": 1,
+      "debate_id": "20000000-0000-4000-8000-000000000001",
+      "occurred_at": "2026-08-27T00:00:00Z",
+      "command_id": "10000000-0000-4000-8000-000000000002",
+      "controller_epoch": "30000000-0000-4000-8000-000000000001",
+      "turn_id": "40000000-0000-4000-8000-000000000001",
+      "media_url": "/api/v1/debates/20000000-0000-4000-8000-000000000001/audio/40000000-0000-4000-8000-000000000001?media_ticket=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expires_at": "2026-08-27T00:01:00Z",
+      "text_only": true
+    }
+  }
 ]

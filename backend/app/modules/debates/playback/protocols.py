@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
+from .audio import AudioMetadata
 from .schemas import RetrievalSourceDTO
 
 
@@ -174,7 +175,7 @@ class PlaybackRepository(Protocol):
         db: Any,
         turn: Any,
         prepared: PreparedTurn,
-        audio: Any,
+        audio: AudioMetadata | None,
         *,
         generation: int,
         attempt: int,
@@ -357,7 +358,7 @@ class MemoryPlaybackRepository:
         db: Any,
         turn: MemoryTurn,
         prepared: PreparedTurn,
-        audio: Any,
+        audio: AudioMetadata | None,
         *,
         generation: int,
         attempt: int,
@@ -374,7 +375,8 @@ class MemoryPlaybackRepository:
         turn.sources = list(prepared.sources)
         turn.retrieval_status = prepared.retrieval_status
         turn.grounding_mode = prepared.grounding_mode
-        turn.audio_duration_ms = getattr(audio, "duration_ms", None)
+        turn.audio_duration_ms = audio.duration_ms if audio is not None else 0
+        turn.failed_code = None if audio is not None else "tts_voice_unavailable"
         turn.audio_file_id = getattr(audio, "file_id", None) or (
             f"memory-audio:{turn.id}" if getattr(audio, "relative_path", None) else None
         )

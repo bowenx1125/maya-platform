@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
-import { useLocale, useT } from "../locale";
+import { useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ErrorNotice, LoadingCard, SectionCard, StatusBadge } from "../ui";
@@ -22,13 +22,9 @@ type PreviewState = {
 
 export function VoiceLibrary({ groupId }: { groupId: string }) {
   const t = useT();
-  const { locale } = useLocale();
   const { api } = useSession();
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [file, setFile] = useState<File | null>(null);
-  const [sampleLanguage, setSampleLanguage] = useState<"en" | "zh-CN">(
-    locale === "zh" ? "zh-CN" : "en",
-  );
   const [creating, setCreating] = useState(false);
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -36,7 +32,17 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const [preview, setPreview] = useState<Record<string, PreviewState>>({});
+  const [editingName, setEditingName] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
+  const activeName = useRef<string | null>(null);
+  const savingName = useRef(false);
+  const focusName = useRef<string | null>(null);
   const idempotency = useIdempotencyStore();
+  const focusNameInput = useCallback((input: HTMLInputElement | null) => {
+    input?.focus();
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,7 +69,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     try {
       await api.enrollVoice(groupId, file, CONSENT_COPY_VERSION, {
         idempotency: idempotency.handleFor("voice-enroll"),
-        language: sampleLanguage,
       });
       idempotency.finish("voice-enroll");
       setFile(null);
@@ -74,6 +79,37 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     } catch (cause) {
       setError(cause);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  function closeNameEditor(profileId: string, restoreFocus: boolean) {
+    activeName.current = null;
+    if (restoreFocus) focusName.current = profileId;
+    setEditingName(null);
+  }
+
+  async function saveName(profile: VoiceProfile, restoreFocus = false) {
+    if (activeName.current !== profile.id || !editingName || savingName.current)
+      return;
+    const value = editingName.value.trim();
+    if (value === (profile.source_filename ?? "")) {
+      closeNameEditor(profile.id, restoreFocus);
+      return;
+    }
+    savingName.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const renamed = await api.renameVoiceProfile(profile.id, value);
+      setProfiles((current) =>
+        current.map((item) => (item.id === profile.id ? renamed : item)),
+      );
+      closeNameEditor(profile.id, restoreFocus);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      savingName.current = false;
       setBusy(false);
     }
   }
@@ -188,33 +224,16 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
             disabled={!file || !consent || busy}
             onClick={() => void submitEnrollment()}
           />
-          <div className={styles.fields}>
-            <label className={styles.field}>
-              <span>{t("voiceSampleFile")}</span>
-              <input
-                className={styles.fileInput}
-                type="file"
-                accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                aria-label={t("voiceSampleFile")}
-              />
-            </label>
-            <label className={styles.field}>
-              <span>{t("voiceSampleLanguage")}</span>
-              <select
-                aria-label={t("voiceSampleLanguage")}
-                value={sampleLanguage}
-                onChange={(event) =>
-                  setSampleLanguage(
-                    event.target.value === "zh-CN" ? "zh-CN" : "en",
-                  )
-                }
-              >
-                <option value="en">{t("voiceLanguageEn")}</option>
-                <option value="zh-CN">{t("voiceLanguageZh")}</option>
-              </select>
-            </label>
-          </div>
+          <label className={styles.field}>
+            <span>{t("voiceSampleFile")}</span>
+            <input
+              className={styles.fileInput}
+              type="file"
+              accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              aria-label={t("voiceSampleFile")}
+            />
+          </label>
           <label className={styles.consent}>
             <input
               type="checkbox"
@@ -234,10 +253,57 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
                 key={profile.id}
               >
                 <span className="document-main">
-                  <strong>{profile.source_filename ?? t("voiceCustom")}</strong>
-                  <small className={styles.profileId}>
-                    {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
-                  </small>
+                  {editingName?.id === profile.id ? (
+                    <input
+                      className={styles.nameInput}
+                      aria-label={t("voiceName")}
+                      value={editingName.value}
+                      readOnly={busy}
+                      ref={focusNameInput}
+                      onChange={(event) =>
+                        setEditingName({
+                          id: profile.id,
+                          value: event.target.value,
+                        })
+                      }
+                      onBlur={() => void saveName(profile)}
+                      onKeyDown={(event) => {
+                        if (event.nativeEvent.isComposing) return;
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void saveName(profile, true);
+                        } else if (
+                          event.key === "Escape" &&
+                          !savingName.current
+                        ) {
+                          event.preventDefault();
+                          closeNameEditor(profile.id, true);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      className={styles.nameButton}
+                      type="button"
+                      disabled={busy || profile.status === "deleted"}
+                      ref={(button) => {
+                        if (button && focusName.current === profile.id) {
+                          button.focus();
+                          focusName.current = null;
+                        }
+                      }}
+                      onClick={() => {
+                        activeName.current = profile.id;
+                        setError(null);
+                        setEditingName({
+                          id: profile.id,
+                          value: profile.source_filename ?? "",
+                        });
+                      }}
+                    >
+                      {profile.source_filename ?? t("voiceCustom")}
+                    </button>
+                  )}
                 </span>
                 <div className={`icon-action-row ${cards.actions}`}>
                   {profile.status === "preview_ready" ||

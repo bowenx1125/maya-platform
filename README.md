@@ -10,7 +10,7 @@ Mayaform 是面向文化互学的 RAG 教学平台。学生编写 Agent 人设�
 - **工作区**：老师、学生和扫码互动页面统一采用系统字体、灰白表面与登录页的暖黄色，保留原版 Logo；Chat 和 Immerse 共用按钮与配色，支持窄屏与键盘操作。登录页不变，移除解释性介绍，保留权限、费用和错误提示。
 - **Chats**：老师和学生与本课程已发布 Agent 私人对话，回复流式显示；保留圆角悬浮输入框与聊天历史，不展示 3D 模型；形象在 Workspace 中编辑。配置可用声音后可朗读回复；历史、引用与版本由服务器保存，其他用户（包括老师）不可读取。
 - **Live**：老师进入 Immerse 后，学生的 Live 入口亮起，同步公开发言、人物和已有音频。学生不获得控制权，观看不额外调用模型；退出或租约过期关闭。
-- **声音**：克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
+- **声音**：Voices 点击文件名可直接改名，Enter／移开焦点保存，Escape 取消；不显示内部 ID。上传页不选择语言，试听默认英语，辩论朗读跟随 Ruleset。克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
 - **3D 课堂**：2–5 位国风人物围绕圆桌站立，气泡和 Transcript 随音频显示；音频失败时仍保留完整文字。实验性高斯院落需要额外的本地生成资源，不是默认课堂依赖。
 - **教学内容**：Topic 与可选 Background 分开保存；中英文 Markdown Ruleset 可编辑，创建辩论时冻结。Agent.md 的总编写预算为 12,000 字符。
 
@@ -36,9 +36,9 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 
 **New / Back / Done** 统一在侧栏，只显示当前可用的操作；主内容区不重复放创建、返回和提交按钮。Chats 只有 New 和输入框内的发送箭头；全屏 Immerse 保留自己的控制键。
 
-1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；自由编写中英文 AGENT.md（最多 12,000 字符）、启用 RAG（每文件最多 100,000 字符），配置形象及声音，侧栏 **Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chats** 与已发布 Agent 多轮对话。点击 Agent 检查当前版本；初始 Draft 和已有 Published 都使用侧栏 **New** 打开草稿编辑（需要时创建下一版），由 **Done** 保存并发布。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
+1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；自由编写中英文 AGENT.md（最多 12,000 字符）、启用 RAG（每文件最多 100,000 字符），配置形象及声音，AGENT.md 首行 `# 名字` 会在保存时同步当前 Agent 名称；侧栏 **Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chats** 与已发布 Agent 多轮对话。点击 Agent 检查当前版本；初始 Draft 和已有 Published 都使用侧栏 **New** 打开草稿编辑（需要时创建下一版），由 **Done** 保存并发布。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
 2. **创建辩论**：教师进入 **Debates → New**，填写 Topic / Background，选择 2–5 位 Agent、顺序和立场，确认 Ruleset 的语言及内容后点击 **Done**。
-3. **准备前三轮**：点击 Debates 列表中的辩论卡片进入预览，查看 Background 和各轮发言；页面保留议题标题，不显示额外的“Preview”标题。固定流程为 **Opening → Discussion → Response → Conclusion**；前三轮保存正文与音频，后续发言能看到此前成功完成的发言，包括同轮上下文。
+3. **准备前三轮**：点击 Debates 列表中的辩论卡片进入预览，查看 Background 和各轮发言；页面保留议题标题，不显示额外的“Preview”标题。固定流程为 **Opening → Discussion → Response → Conclusion**；前三轮保存正文及可用音频；自定义音色不可用时使用平台默认音色，默认音色也不可用时保留文字发布与手动 Next，后续发言能看到此前成功完成的发言，包括同轮上下文。
 4. **进入课堂**：准备就绪后点击 **Immerse**。操作键独立放在屏幕最右侧；**Transcript** 展开发言记录侧栏，保留 Public Debate、课堂状态和 Check RAG。**Interact / Hide** 显示或收起消息二维码；Hide 不关闭已有扫码入口。第四轮冻结可用消息后生成回应。
 5. **查看结果**：**Check RAG** 查看证据。课堂播放完成后使用 **Conclude** 查看 Evaluation 和 Report；报告提供版本/历史、Review 和 Regenerate。
 

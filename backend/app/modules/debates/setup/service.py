@@ -426,12 +426,8 @@ def _resolve_agent_version(
         ):
             effective_voice_id = configured_fallback.id
             effective_voice_kind = "platform_profile"
-    voice_selectors = (settings.tts_provider, settings.voice_provider)
-    if effective_voice_id is None and any(value != "mock" for value in voice_selectors):
-        raise validation_failure(
-            "A ready platform voice is required before this Debate can start.",
-            code="voice_unavailable_fallback_used",
-        )
+    # Missing speech configuration must not prevent a text Debate. Playback
+    # revalidates the custom/system mapping before deciding whether audio exists.
     return (
         agent,
         group,
@@ -821,7 +817,6 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                     DebateTurn.debate_id == debate.id,
                     DebateTurn.round_no < _round_count_from_snapshot(debate),
                     DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
-                    DebateTurn.audio_file_id.is_not(None),
                 )
             )
             or 0
@@ -1242,7 +1237,7 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
             if not audio_ready:
                 audio_missing.add(key)
             ready_by_debate[key] = ready_by_debate.get(key, 0) + int(ready)
-            if int(round_no) < rounds_by_debate[key] and audio_ready:
+            if int(round_no) < rounds_by_debate[key]:
                 preview_by_debate[key] = preview_by_debate.get(key, 0) + int(ready)
         for debate_id, count in db.execute(
             select(DebateParticipant.debate_id, func.count())

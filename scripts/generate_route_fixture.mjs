@@ -64,6 +64,7 @@ const implemented = new Set([
   "listVoiceProfiles",
   "enrollVoice",
   "getVoiceProfile",
+  "renameVoiceProfile",
   "deleteVoiceProfile",
   "createVoicePreview",
   "confirmVoiceProfile",
