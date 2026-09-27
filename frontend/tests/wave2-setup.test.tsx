@@ -146,7 +146,7 @@ describe("Wave 2 teacher debate setup", () => {
     );
   });
 
-  it("renders teacher debate summaries without a Preview list entry", async () => {
+  it("opens the retained Preview screen from a debate summary", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const rows = [
       {
@@ -165,9 +165,10 @@ describe("Wave 2 teacher debate setup", () => {
       />,
     );
 
-    const link = await screen.findByRole("heading", { name: /TikTok/ });
-    expect(link).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /TikTok/ })).toBeNull();
+    const link = await screen.findByRole("link", { name: /TikTok/ });
+    expect(link.getAttribute("href")).toBe(
+      "/teacher/debates/debate-one/control",
+    );
     expect(screen.getByText("2 Rounds")).toBeTruthy();
   });
 

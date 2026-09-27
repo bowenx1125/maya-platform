@@ -90,7 +90,6 @@ export function DebatePreview({
     <div className={styles.page} data-testid="debate-preview">
       <div className={styles.header}>
         <div>
-          <div className="eyebrow">Preview</div>
           <h1>{detail.topic}</h1>
         </div>
         <div className={styles.headerActions}>

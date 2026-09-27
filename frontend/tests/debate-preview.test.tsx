@@ -73,6 +73,9 @@ describe("teacher debate preview", () => {
   it("keeps saved speech visible when audio failed and exposes exact RAG mapping", () => {
     renderPreview(detail);
 
+    expect(screen.getByTestId("debate-preview")).toBeTruthy();
+    expect(screen.queryByText("Preview", { exact: true })).toBeNull();
+    expect(screen.getByRole("heading", { name: detail.topic })).toBeTruthy();
     expect(
       screen.getByText("A saved speech remains available for teacher review."),
     ).toBeTruthy();

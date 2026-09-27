@@ -1,7 +1,6 @@
 # Maya Platform
 
-Maya teaches through published Agent Markdown, RAG knowledge, classroom
-debates, student messages and independent reports. Progress authority;
+Maya combines Agent Markdown, RAG, classroom debate and reports. Progress authority;
 [AGENTS.md](../AGENTS.md) defines work. Latest user decisions prevail.
 
 ## Approved four-round teaching flow — September 8, 2026
@@ -246,7 +245,7 @@ or RAG quality acceptance was observed. Supplier capacity still applies.
 Mayaform: Welcome then Members. Knowledge: two-column Files · N tiles; X hides or
 removes library rows without rewriting snapshots. Agents: six-column warm-paper
 tiles with centered name/group/version; green/brown version bubbles become X on
-hover/focus. Debate entry is Immerse, not row Preview. Top-right icons download
+hover/focus. Debate rows open Preview; only its Preview label is hidden. Top-right icons download
 AGENT.md, all Evidence files and Knowledge snapshots. Snapshot rows show filename/
 characters, not order N; SNAPSHOT/CONTENT/FILES labels sit above values. Chats keeps
 the local rounded floating composer and separate Send row. Ruleset checkmark saves
@@ -303,10 +302,8 @@ extraction/OCR is not implemented.
 
 ## Local/GitHub integration — September 27, 2026
 
-Inputs: local main 7236a97 plus its uncommitted composer, GitHub main a2b397d
-and entaiaki dfac2b4 (which contains main). Other siblings/reverts excluded.
-Local composer checkpoint: 4fd1968. Integration keeps remote help/streaming/avatar
-behavior. Fixed the deleteConversation route fixture and absent ledger transitions;
+Merged local 7236a97/composer checkpoint 4fd1968 with GitHub main a2b397d
+and entaiaki dfac2b4. Other siblings/reverts excluded; remote features retained. Fixed the deleteConversation route fixture and absent ledger transitions;
 removed stale budget assertions and passed baseline voice mapping into Compose. README/AGENTS refreshed; authority compacted.
 
 ## Unbounded provider accounting — September 27, 2026
@@ -325,6 +322,9 @@ Validation: pnpm check and generated-source boundary probe passed.
 Backend 1412 passed/21 skipped; frontend 391 passed/1 skipped.
 Migration rehearsal preserved all rows across 59 tables with integrity/FK checks;
 new tests cover concurrent accounting and usage above legacy estimates.
-Docker rebuilt/started; deployed source matched 11 key files. Homepage/readiness
-returned 200; schema 0033, integrity and foreign keys passed. The runtime DB was
-backed up first. Manual product/real-provider acceptance remains unperformed.
+Docker/source checks, homepage/readiness, schema 0033 and DB integrity passed
+after backup; real-provider acceptance remains unperformed.
+
+Preview correction: 391 frontend tests passed/1 skipped, types/lint/format passed.
+Frontend rebuilt; current Preview shows nine turn cards and Immerse without the
+Preview label. One older record returns a state error; historical data unchanged.
