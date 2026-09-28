@@ -46,7 +46,7 @@ function renderTeacherShell(pathname: string) {
 describe("PW3-E teacher information architecture", () => {
   afterEach(() => cleanup());
 
-  it("exposes Mayaform, Chat, Debates and Accounts as primary navigation links", () => {
+  it("exposes Mayaform, Chat, Knowledge, Debates and Accounts as primary navigation links", () => {
     renderTeacherShell("/teacher");
 
     const primaryNavigation = within(screen.getByRole("navigation"));
@@ -54,9 +54,13 @@ describe("PW3-E teacher information architecture", () => {
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/teacher",
       "/teacher/chat",
+      "/teacher/knowledge",
       "/teacher/debates",
       "/teacher/roster",
     ]);
+    expect(
+      primaryNavigation.getByRole("link", { name: "Knowledge" }),
+    ).toBeTruthy();
     expect(
       primaryNavigation.getByRole("link", { name: "Mayaform" }).className,
     ).toContain("active");

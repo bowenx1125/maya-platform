@@ -11,6 +11,10 @@ pre-code snapshots.
 
 ## Debate generation contracts
 
+[`KNOWLEDGE_SETS_CONTRACT.md`](KNOWLEDGE_SETS_CONTRACT.md) describes K1's shared
+Set/Asset store, immutable versions, source authority and student Question
+projection.
+
 [`DEBATE_GENERATION_CONTRACTS.md`](DEBATE_GENERATION_CONTRACTS.md) is the frozen
 behaviour of the real Debate path — Persona, formal content, embedding identity,
 evidence trace, the mutual-learning RuleSet, the prompt budget, the provider

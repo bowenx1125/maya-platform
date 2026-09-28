@@ -378,6 +378,7 @@ export function TeacherAgentDetail({
         key={`${actorScope}:${editingVersionId}`}
         actorScopeKey={actorScope}
         backHref="/teacher"
+        knowledgeHref={`/teacher/knowledge?agent_id=${encodeURIComponent(agentId)}`}
         versionId={editingVersionId}
       />
     );
@@ -416,6 +417,12 @@ export function TeacherAgentDetail({
           {creatingDraft ? t("creating") : t("createNewVersion")}
         </button>
       ) : null}
+      <Link
+        className={detailStyles.action}
+        href={`/teacher/knowledge?agent_id=${encodeURIComponent(agent.id)}`}
+      >
+        {t("agentKnowledgeSets")}
+      </Link>
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <div className={detailStyles.overview}>
         <TeacherAgentMarkdown

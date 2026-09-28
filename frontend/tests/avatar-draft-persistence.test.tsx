@@ -82,6 +82,9 @@ function makeApi(version: AgentVersion) {
         ({
           id: "agent-id",
           group_id: "group-id",
+          course_id: "course-id",
+          ownership_scope: "group",
+          visibility: "public",
           name: "Agent",
           description: "A stable Agent description",
           metadata_revision: 0,
@@ -95,7 +98,7 @@ function makeApi(version: AgentVersion) {
     ragPreview: vi.fn(async () => ({
       version_id: "version-id",
       total_char_count: 0,
-      limit: 100000,
+      limit: null,
       document_count: 0,
       index_status: "ready",
       combined_markdown: "",
@@ -202,5 +205,15 @@ describe("AvatarEditor draft persistence", () => {
     expect(
       (screen.getByLabelText("Eye color") as HTMLSelectElement).value,
     ).toBe("blue");
+  });
+
+  it("renders a load failure before constructing the Agent Knowledge link", async () => {
+    const api = makeApi(makeVersion());
+    api.version.mockRejectedValue(new Error("Draft unavailable"));
+
+    renderWorkbench(api as unknown as PlatformApi);
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 });

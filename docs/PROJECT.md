@@ -307,26 +307,27 @@ Mock recovery passed, 0 real calls.
 
 ## MayaForm W2b authored lengths — 2026-09-27
 
-Agent.md and single/aggregate RAG caps removed; synthetic input fixtures were Agent.md
-14,343 chars, source108,350 and two-source total123,080; API-saved/downloaded Agent.md
-14,353. Full text survives PATCH/upload/preview/publish/download. Migration0034 preserves
-rows/chunks/vectors/refs/indexes/triggers/FKs, removes only snapshot upper CHECK; downgrade
-above100k refuses. UTF-8 codepoint chunks; provider plan/dispatch fail closed above10 items
-or30,000 estimated tokens. Sol R2 accepted; `pnpm check`/boundary0, frontend449/1 skipped;
-desktop/375 mobile no overflow, draft tail retained, IME unverified, 0 Provider.
+W2b removes Agent.md/RAG caps; fixtures 14,343/108,350/123,080 chars; persisted Agent.md
+14,353. PATCH→download lossless. 0034 preserves data; oversized downgrade refuses;
+batches ≤10/30k tokens via codepoint chunks. Sol accepted; check/boundary0, frontend449/1,
+desktop/375 no overflow; no Provider; IME NOT_RUN.
 
 ## MayaForm W1 owner-first workspace — 2026-09-27
 
-0035 adds owner/course/scope/visibility epochs, nullable personal Agent/source group links
-and Chat snapshots; legacy group stays Public/owner NULL. Teacher personal Agent
-create/list/detail exists. Sticky `draft_visibility` plus `can_read_version` keeps Private
-Agent/source/edited drafts owner-only across Public changes; clones share only from a
-current Public release with current Public sources; untouched Public drafts collaborate.
-Owner retains history. No-RAG Chat uses NULL snapshot/empty evidence; withdrawal freezes
-name/history and blocks new sends. Debate stays group-only.
+0035: owner/course/scope/visibility epochs; nullable personal Agent/source; Chat name
+snapshot; legacy groups Public/owner NULL. Teacher personal Agent CRUD.
+Sticky `draft_visibility`/`can_read_version`: Private-origin content stays owner-only through
+Public changes; current Public release/source gates clones; untouched Public drafts collaborate.
+Owner history kept. No-RAG: NULL snapshot/empty evidence; withdrawal freezes
+name/history, denies sends. Debate group-only.
 
-R5: 70 files, no drift; `pnpm check`/boundary passed. Sol security/migration reviews,
-80 Mock API requests and Teacher no-RAG Chat/mobile/grant-copy passed; 0 Provider calls.
-IME NOT_RUN; Docker unchanged. Student Agent.md allowed; no Toolkit binding/approval.
-Future Sets (outside W1): Sources/Concepts/Questions/Notes; Rubric in Question; Graph
-read-only; save activates, edits version.
+R5: 70 files; full check/boundary, Sol ACL/migration, 80 Mock requests and Teacher no-RAG
+Chat/mobile passed. No Provider/Docker; IME NOT_RUN. Student Agent.md
+allowed, no Toolkit binding/approval.
+K1 R3 active: four shared immutable/CAS types; Question Rubric/answer teacher-only;
+Graph read-only in Concepts. Global and Agent entry points share the store. Contract:
+`docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`. R2 covered P09 projection, student source load,
+excerpt hashes, source-revoke ACL and 0036 cleanup; full check 464/1 and boundary passed.
+Sol's only R2 reject was Asset replay timestamp drift. R3 replays exact accepted POST/PATCH
+JSON only after current ACL/source checks; V1/V2 exact-body and revoked-404 focused tests pass.
+R3 check 464/1, boundary0; Sol and HTTP/browser pending.

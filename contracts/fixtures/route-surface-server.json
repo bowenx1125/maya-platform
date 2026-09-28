@@ -5841,6 +5841,1097 @@
         ]
       }
     },
+    "/api/v1/agents/{agent_id}/knowledge-sets": {
+      "get": {
+        "operationId": "getAgentKnowledgeSets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKnowledgeSets"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Agent not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Agent Knowledge Sets",
+        "tags": [
+          "knowledge-sets"
+        ]
+      },
+      "put": {
+        "operationId": "replaceAgentKnowledgeSets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceAgentKnowledgeSetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKnowledgeSets"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Agent or Knowledge Set not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Agent metadata revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Replace Agent Knowledge Sets",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/courses/{course_id}/knowledge-sets": {
+      "get": {
+        "operationId": "listKnowledgeSets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeSetSummary"
+                  },
+                  "title": "Response Listknowledgesets",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Course not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Knowledge Sets",
+        "tags": [
+          "knowledge-sets"
+        ]
+      },
+      "post": {
+        "operationId": "createKnowledgeSet",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKnowledgeSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSetDetail"
+                }
+              }
+            },
+            "description": "Knowledge Set created."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Course or group not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create Knowledge Set",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-assets/{asset_id}": {
+      "get": {
+        "operationId": "getKnowledgeSetAsset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "full": "#/components/schemas/KnowledgeAssetFullDTO",
+                      "student": "#/components/schemas/KnowledgeAssetStudentDTO"
+                    },
+                    "propertyName": "audience"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/KnowledgeAssetFullDTO"
+                    },
+                    {
+                      "$ref": "#/components/schemas/KnowledgeAssetStudentDTO"
+                    }
+                  ],
+                  "title": "Response Getknowledgesetasset"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Asset not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Knowledge Set Asset",
+        "tags": [
+          "knowledge-sets"
+        ]
+      },
+      "patch": {
+        "operationId": "updateKnowledgeSetAsset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKnowledgeAssetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeAssetFullDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Asset not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Asset or Set revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Update Knowledge Set Asset",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-assets/{asset_id}/versions": {
+      "get": {
+        "operationId": "listKnowledgeSetAssetVersions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/KnowledgeAssetVersionHistoryFull"
+                    },
+                    {
+                      "$ref": "#/components/schemas/KnowledgeAssetVersionHistoryStudent"
+                    }
+                  ],
+                  "title": "Response Listknowledgesetassetversions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Asset not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Knowledge Set Asset Versions",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-sets/{set_id}": {
+      "delete": {
+        "operationId": "deleteKnowledgeSet",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteKnowledgeSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSetRevocation"
+                }
+              }
+            },
+            "description": "Knowledge Set revoked."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Set not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Set metadata or content revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Delete Knowledge Set",
+        "tags": [
+          "knowledge-sets"
+        ]
+      },
+      "get": {
+        "operationId": "getKnowledgeSet",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Set not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Knowledge Set",
+        "tags": [
+          "knowledge-sets"
+        ]
+      },
+      "patch": {
+        "operationId": "updateKnowledgeSetMetadata",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKnowledgeSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Set not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Metadata revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Update Knowledge Set",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-sets/{set_id}/assets": {
+      "get": {
+        "operationId": "listKnowledgeSetAssets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "concept",
+                "question",
+                "note",
+                null
+              ],
+              "title": "Kind",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "discriminator": {
+                      "mapping": {
+                        "full": "#/components/schemas/KnowledgeAssetFullDTO",
+                        "student": "#/components/schemas/KnowledgeAssetStudentDTO"
+                      },
+                      "propertyName": "audience"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/KnowledgeAssetFullDTO"
+                      },
+                      {
+                        "$ref": "#/components/schemas/KnowledgeAssetStudentDTO"
+                      }
+                    ]
+                  },
+                  "title": "Response Listknowledgesetassets",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Set not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Knowledge Set Assets",
+        "tags": [
+          "knowledge-sets"
+        ]
+      },
+      "post": {
+        "operationId": "createKnowledgeSetAsset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKnowledgeAssetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeAssetFullDTO"
+                }
+              }
+            },
+            "description": "Asset saved as version 1."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Set or referenced resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Set content revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create Knowledge Set Asset",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-sets/{set_id}/graph": {
+      "get": {
+        "operationId": "getKnowledgeSetGraph",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeGraph"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Knowledge Set not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Knowledge Set Graph",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-sets/{set_id}/sources": {
+      "put": {
+        "operationId": "replaceKnowledgeSetSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceKnowledgeSetSourcesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Set or source not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Set content revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Replace Knowledge Set Sources",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
+    "/api/v1/knowledge-sets/{set_id}/sources/{binding_id}": {
+      "delete": {
+        "operationId": "removeKnowledgeSetSource",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveKnowledgeSetSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Set or source binding not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Set content revision is stale."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Remove Knowledge Set Source",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",
@@ -11309,6 +12400,1422 @@
           "visibility"
         ],
         "title": "UpdateKnowledgeDocumentVisibility",
+        "type": "object"
+      },
+      "AgentKnowledgeSets": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_metadata_revision": {
+            "minimum": 0,
+            "title": "Agent Metadata Revision",
+            "type": "integer"
+          },
+          "sets": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSetSummary"
+            },
+            "title": "Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "agent_metadata_revision",
+          "sets"
+        ],
+        "title": "AgentKnowledgeSets",
+        "type": "object"
+      },
+      "AssetCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/SourceLocation"
+          },
+          "source_binding_id": {
+            "format": "uuid",
+            "title": "Source Binding Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_binding_id"
+        ],
+        "title": "AssetCitation",
+        "type": "object"
+      },
+      "AssetVersionFullDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "content": {
+            "discriminator": {
+              "mapping": {
+                "concept": "#/components/schemas/ConceptContent",
+                "note": "#/components/schemas/NoteContent",
+                "question": "#/components/schemas/QuestionContent"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConceptContent"
+              },
+              {
+                "$ref": "#/components/schemas/QuestionContent"
+              },
+              {
+                "$ref": "#/components/schemas/NoteContent"
+              }
+            ],
+            "title": "Content"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "format": "uuid",
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version_seq": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Seq"
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "content",
+          "content_hash",
+          "created_by_user_id",
+          "created_at"
+        ],
+        "title": "AssetVersionFullDTO",
+        "type": "object"
+      },
+      "AssetVersionStudentDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "content": {
+            "discriminator": {
+              "mapping": {
+                "concept": "#/components/schemas/ConceptContent",
+                "note": "#/components/schemas/NoteContent",
+                "question": "#/components/schemas/StudentQuestionContent"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConceptContent"
+              },
+              {
+                "$ref": "#/components/schemas/StudentQuestionContent"
+              },
+              {
+                "$ref": "#/components/schemas/NoteContent"
+              }
+            ],
+            "title": "Content"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "format": "uuid",
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version_seq": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Seq"
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "content",
+          "content_hash",
+          "created_by_user_id",
+          "created_at"
+        ],
+        "title": "AssetVersionStudentDTO",
+        "type": "object"
+      },
+      "ConceptContent": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "const": "concept",
+            "title": "Kind",
+            "type": "string"
+          },
+          "prerequisite_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Prerequisite Ids",
+            "type": "array"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title"
+        ],
+        "title": "ConceptContent",
+        "type": "object"
+      },
+      "CreateKnowledgeAssetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "discriminator": {
+              "mapping": {
+                "concept": "#/components/schemas/ConceptContent",
+                "note": "#/components/schemas/NoteContent",
+                "question": "#/components/schemas/QuestionContent"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConceptContent"
+              },
+              {
+                "$ref": "#/components/schemas/QuestionContent"
+              },
+              {
+                "$ref": "#/components/schemas/NoteContent"
+              }
+            ],
+            "title": "Content"
+          },
+          "expected_content_revision": {
+            "minimum": 0,
+            "title": "Expected Content Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_content_revision",
+          "content"
+        ],
+        "title": "CreateKnowledgeAssetRequest",
+        "type": "object"
+      },
+      "CreateKnowledgeSetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "CreateKnowledgeSetRequest",
+        "type": "object"
+      },
+      "DeleteKnowledgeSetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_content_revision": {
+            "minimum": 0,
+            "title": "Expected Content Revision",
+            "type": "integer"
+          },
+          "expected_metadata_revision": {
+            "minimum": 0,
+            "title": "Expected Metadata Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_metadata_revision",
+          "expected_content_revision"
+        ],
+        "title": "DeleteKnowledgeSetRequest",
+        "type": "object"
+      },
+      "KnowledgeAssetFullDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "const": "full",
+            "title": "Audience",
+            "type": "string"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "current_version": {
+            "$ref": "#/components/schemas/AssetVersionFullDTO"
+          },
+          "current_version_seq": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Seq"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "concept",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "knowledge_set_id": {
+            "format": "uuid",
+            "title": "Knowledge Set Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience",
+          "id",
+          "knowledge_set_id",
+          "kind",
+          "current_version",
+          "can_edit",
+          "updated_at"
+        ],
+        "title": "KnowledgeAssetFullDTO",
+        "type": "object"
+      },
+      "KnowledgeAssetStudentDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "const": "student",
+            "title": "Audience",
+            "type": "string"
+          },
+          "can_edit": {
+            "const": false,
+            "default": false,
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "current_version": {
+            "$ref": "#/components/schemas/AssetVersionStudentDTO"
+          },
+          "current_version_seq": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Seq"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "concept",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "knowledge_set_id": {
+            "format": "uuid",
+            "title": "Knowledge Set Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience",
+          "id",
+          "knowledge_set_id",
+          "kind",
+          "current_version",
+          "updated_at"
+        ],
+        "title": "KnowledgeAssetStudentDTO",
+        "type": "object"
+      },
+      "KnowledgeAssetVersionHistoryFull": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "audience": {
+            "const": "full",
+            "title": "Audience",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetVersionFullDTO"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "audience",
+          "asset_id",
+          "versions"
+        ],
+        "title": "KnowledgeAssetVersionHistoryFull",
+        "type": "object"
+      },
+      "KnowledgeAssetVersionHistoryStudent": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "audience": {
+            "const": "student",
+            "title": "Audience",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetVersionStudentDTO"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "audience",
+          "asset_id",
+          "versions"
+        ],
+        "title": "KnowledgeAssetVersionHistoryStudent",
+        "type": "object"
+      },
+      "KnowledgeGraph": {
+        "additionalProperties": false,
+        "properties": {
+          "content_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Revision"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeGraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeGraphNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "set_id": {
+            "format": "uuid",
+            "title": "Set Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "set_id",
+          "nodes",
+          "edges"
+        ],
+        "title": "KnowledgeGraph",
+        "type": "object"
+      },
+      "KnowledgeGraphEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "target_id"
+        ],
+        "title": "KnowledgeGraphEdge",
+        "type": "object"
+      },
+      "KnowledgeGraphNode": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description"
+        ],
+        "title": "KnowledgeGraphNode",
+        "type": "object"
+      },
+      "KnowledgeSetDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_count": {
+            "minimum": 0,
+            "title": "Asset Count",
+            "type": "integer"
+          },
+          "authorization_epoch": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Epoch"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "content_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Revision"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Revision"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "ownership_scope": {
+            "enum": [
+              "group",
+              "personal"
+            ],
+            "title": "Ownership Scope",
+            "type": "string"
+          },
+          "source_count": {
+            "minimum": 0,
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSetSourceDTO"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "group_id",
+          "ownership_scope",
+          "visibility",
+          "display_name",
+          "source_count",
+          "asset_count",
+          "can_edit",
+          "sources"
+        ],
+        "title": "KnowledgeSetDetail",
+        "type": "object"
+      },
+      "KnowledgeSetRevocation": {
+        "additionalProperties": false,
+        "properties": {
+          "authorization_epoch": {
+            "minimum": 0,
+            "title": "Authorization Epoch",
+            "type": "integer"
+          },
+          "content_revision": {
+            "minimum": 0,
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "deleted": {
+            "const": true,
+            "default": true,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata_revision": {
+            "minimum": 0,
+            "title": "Metadata Revision",
+            "type": "integer"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "title": "Revoked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "metadata_revision",
+          "content_revision",
+          "authorization_epoch",
+          "revoked_at"
+        ],
+        "title": "KnowledgeSetRevocation",
+        "type": "object"
+      },
+      "KnowledgeSetSourceDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "authorization_epoch": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Epoch"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "char_count": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Char Count"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "order_index": {
+            "minimum": 0,
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "source_filename": {
+            "title": "Source Filename",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "source_filename",
+          "order_index",
+          "is_active",
+          "available"
+        ],
+        "title": "KnowledgeSetSourceDTO",
+        "type": "object"
+      },
+      "KnowledgeSetSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_count": {
+            "minimum": 0,
+            "title": "Asset Count",
+            "type": "integer"
+          },
+          "authorization_epoch": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Epoch"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "content_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Revision"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Revision"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "ownership_scope": {
+            "enum": [
+              "group",
+              "personal"
+            ],
+            "title": "Ownership Scope",
+            "type": "string"
+          },
+          "source_count": {
+            "minimum": 0,
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "group_id",
+          "ownership_scope",
+          "visibility",
+          "display_name",
+          "source_count",
+          "asset_count",
+          "can_edit"
+        ],
+        "title": "KnowledgeSetSummary",
+        "type": "object"
+      },
+      "NoteContent": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "kind": {
+            "const": "note",
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title"
+        ],
+        "title": "NoteContent",
+        "type": "object"
+      },
+      "QuestionContent": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "concept_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Concept Ids",
+            "type": "array"
+          },
+          "kind": {
+            "const": "question",
+            "title": "Kind",
+            "type": "string"
+          },
+          "prompt": {
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reference_answer": {
+            "title": "Reference Answer",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rubric": {
+            "$ref": "#/components/schemas/Rubric"
+          }
+        },
+        "required": [
+          "kind",
+          "prompt",
+          "rubric"
+        ],
+        "title": "QuestionContent",
+        "type": "object"
+      },
+      "RemoveKnowledgeSetSourceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_content_revision": {
+            "minimum": 0,
+            "title": "Expected Content Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_content_revision"
+        ],
+        "title": "RemoveKnowledgeSetSourceRequest",
+        "type": "object"
+      },
+      "ReplaceAgentKnowledgeSetsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_agent_metadata_revision": {
+            "minimum": 0,
+            "title": "Expected Agent Metadata Revision",
+            "type": "integer"
+          },
+          "set_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Set Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_agent_metadata_revision",
+          "set_ids"
+        ],
+        "title": "ReplaceAgentKnowledgeSetsRequest",
+        "type": "object"
+      },
+      "ReplaceKnowledgeSetSourcesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_content_revision": {
+            "minimum": 0,
+            "title": "Expected Content Revision",
+            "type": "integer"
+          },
+          "source_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Source Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_content_revision",
+          "source_document_ids"
+        ],
+        "title": "ReplaceKnowledgeSetSourcesRequest",
+        "type": "object"
+      },
+      "Rubric": {
+        "additionalProperties": false,
+        "properties": {
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/RubricCriterion"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "total_points": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Points"
+          }
+        },
+        "title": "Rubric",
+        "type": "object"
+      },
+      "RubricCriterion": {
+        "additionalProperties": false,
+        "properties": {
+          "guidance": {
+            "default": "",
+            "title": "Guidance",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "points": {
+            "minimum": 0,
+            "title": "Points",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "points"
+        ],
+        "title": "RubricCriterion",
+        "type": "object"
+      },
+      "SourceLocation": {
+        "additionalProperties": false,
+        "properties": {
+          "end_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Offset"
+          },
+          "excerpt_hash": {
+            "title": "Excerpt Hash",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paragraph_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paragraph Index"
+          },
+          "section_path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Section Path",
+            "type": "array"
+          },
+          "start_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Offset"
+          }
+        },
+        "title": "SourceLocation",
+        "type": "object"
+      },
+      "StudentQuestionContent": {
+        "additionalProperties": false,
+        "description": "Student question projection intentionally has no Rubric field.",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "concept_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Concept Ids",
+            "type": "array"
+          },
+          "kind": {
+            "const": "question",
+            "title": "Kind",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "prompt"
+        ],
+        "title": "StudentQuestionContent",
+        "type": "object"
+      },
+      "UpdateKnowledgeAssetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "discriminator": {
+              "mapping": {
+                "concept": "#/components/schemas/ConceptContent",
+                "note": "#/components/schemas/NoteContent",
+                "question": "#/components/schemas/QuestionContent"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConceptContent"
+              },
+              {
+                "$ref": "#/components/schemas/QuestionContent"
+              },
+              {
+                "$ref": "#/components/schemas/NoteContent"
+              }
+            ],
+            "title": "Content"
+          },
+          "expected_asset_version_seq": {
+            "minimum": 1,
+            "title": "Expected Asset Version Seq",
+            "type": "integer"
+          },
+          "expected_content_revision": {
+            "minimum": 0,
+            "title": "Expected Content Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_content_revision",
+          "expected_asset_version_seq",
+          "content"
+        ],
+        "title": "UpdateKnowledgeAssetRequest",
+        "type": "object"
+      },
+      "UpdateKnowledgeSetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_metadata_revision": {
+            "minimum": 0,
+            "title": "Expected Metadata Revision",
+            "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public",
+              null
+            ],
+            "title": "Visibility",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "expected_metadata_revision"
+        ],
+        "title": "UpdateKnowledgeSetRequest",
         "type": "object"
       }
     }

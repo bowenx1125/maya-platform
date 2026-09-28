@@ -1620,6 +1620,165 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}/knowledge-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Knowledge Sets */
+        get: operations["getAgentKnowledgeSets"];
+        /** Replace Agent Knowledge Sets */
+        put: operations["replaceAgentKnowledgeSets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/knowledge-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Knowledge Sets */
+        get: operations["listKnowledgeSets"];
+        put?: never;
+        /** Create Knowledge Set */
+        post: operations["createKnowledgeSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Set Asset */
+        get: operations["getKnowledgeSetAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Knowledge Set Asset */
+        patch: operations["updateKnowledgeSetAsset"];
+        trace?: never;
+    };
+    "/knowledge-assets/{asset_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Knowledge Set Asset Versions */
+        get: operations["listKnowledgeSetAssetVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Set */
+        get: operations["getKnowledgeSet"];
+        put?: never;
+        post?: never;
+        /** Delete Knowledge Set */
+        delete: operations["deleteKnowledgeSet"];
+        options?: never;
+        head?: never;
+        /** Update Knowledge Set */
+        patch: operations["updateKnowledgeSetMetadata"];
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Knowledge Set Assets */
+        get: operations["listKnowledgeSetAssets"];
+        put?: never;
+        /** Create Knowledge Set Asset */
+        post: operations["createKnowledgeSetAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Set Graph */
+        get: operations["getKnowledgeSetGraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Knowledge Set Sources */
+        put: operations["replaceKnowledgeSetSources"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/sources/{binding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Knowledge Set Source */
+        delete: operations["removeKnowledgeSetSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3119,6 +3278,532 @@ export interface components {
              * @enum {string}
              */
             visibility: "private" | "public";
+        };
+        /** AgentKnowledgeSets */
+        AgentKnowledgeSets: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Agent Metadata Revision */
+            agent_metadata_revision: number;
+            /** Sets */
+            sets: components["schemas"]["KnowledgeSetSummary"][];
+        };
+        /** AssetCitation */
+        AssetCitation: {
+            location?: components["schemas"]["SourceLocation"];
+            /**
+             * Source Binding Id
+             * Format: uuid
+             */
+            source_binding_id: string;
+        };
+        /** AssetVersionFullDTO */
+        AssetVersionFullDTO: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["QuestionContent"] | components["schemas"]["NoteContent"];
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version Seq */
+            version_seq?: number | null;
+        };
+        /** AssetVersionStudentDTO */
+        AssetVersionStudentDTO: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["StudentQuestionContent"] | components["schemas"]["NoteContent"];
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version Seq */
+            version_seq?: number | null;
+        };
+        /** ConceptContent */
+        ConceptContent: {
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "concept";
+            /** Prerequisite Ids */
+            prerequisite_ids?: string[];
+            /** Title */
+            title: string;
+        };
+        /** CreateKnowledgeAssetRequest */
+        CreateKnowledgeAssetRequest: {
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["QuestionContent"] | components["schemas"]["NoteContent"];
+            /** Expected Content Revision */
+            expected_content_revision: number;
+        };
+        /** CreateKnowledgeSetRequest */
+        CreateKnowledgeSetRequest: {
+            /** Display Name */
+            display_name: string;
+            /** Group Id */
+            group_id?: string | null;
+        };
+        /** DeleteKnowledgeSetRequest */
+        DeleteKnowledgeSetRequest: {
+            /** Expected Content Revision */
+            expected_content_revision: number;
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+        };
+        /** KnowledgeAssetFullDTO */
+        KnowledgeAssetFullDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            audience: "full";
+            /** Can Edit */
+            can_edit: boolean;
+            /** Created At */
+            created_at?: string | null;
+            current_version: components["schemas"]["AssetVersionFullDTO"];
+            /** Current Version Seq */
+            current_version_seq?: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "concept" | "question" | "note";
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KnowledgeAssetStudentDTO */
+        KnowledgeAssetStudentDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            audience: "student";
+            /**
+             * Can Edit
+             * @default false
+             * @constant
+             */
+            can_edit: false;
+            /** Created At */
+            created_at?: string | null;
+            current_version: components["schemas"]["AssetVersionStudentDTO"];
+            /** Current Version Seq */
+            current_version_seq?: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "concept" | "question" | "note";
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KnowledgeAssetVersionHistoryFull */
+        KnowledgeAssetVersionHistoryFull: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Audience
+             * @constant
+             */
+            audience: "full";
+            /** Versions */
+            versions: components["schemas"]["AssetVersionFullDTO"][];
+        };
+        /** KnowledgeAssetVersionHistoryStudent */
+        KnowledgeAssetVersionHistoryStudent: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Audience
+             * @constant
+             */
+            audience: "student";
+            /** Versions */
+            versions: components["schemas"]["AssetVersionStudentDTO"][];
+        };
+        /** KnowledgeGraph */
+        KnowledgeGraph: {
+            /** Content Revision */
+            content_revision?: number | null;
+            /** Edges */
+            edges: components["schemas"]["KnowledgeGraphEdge"][];
+            /** Nodes */
+            nodes: components["schemas"]["KnowledgeGraphNode"][];
+            /**
+             * Set Id
+             * Format: uuid
+             */
+            set_id: string;
+        };
+        /** KnowledgeGraphEdge */
+        KnowledgeGraphEdge: {
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+        };
+        /** KnowledgeGraphNode */
+        KnowledgeGraphNode: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** KnowledgeSetDetail */
+        KnowledgeSetDetail: {
+            /** Asset Count */
+            asset_count: number;
+            /** Authorization Epoch */
+            authorization_epoch?: number | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Content Revision */
+            content_revision?: number | null;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision?: number | null;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /** Source Count */
+            source_count: number;
+            /** Sources */
+            sources: components["schemas"]["KnowledgeSetSourceDTO"][];
+            /** Updated At */
+            updated_at?: string | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** KnowledgeSetRevocation */
+        KnowledgeSetRevocation: {
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Deleted
+             * @default true
+             * @constant
+             */
+            deleted: true;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision: number;
+            /**
+             * Revoked At
+             * Format: date-time
+             */
+            revoked_at: string;
+        };
+        /** KnowledgeSetSourceDTO */
+        KnowledgeSetSourceDTO: {
+            /** Authorization Epoch */
+            authorization_epoch?: number | null;
+            /** Available */
+            available: boolean;
+            /** Char Count */
+            char_count?: number | null;
+            /** Content Hash */
+            content_hash?: string | null;
+            /** Document Id */
+            document_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Order Index */
+            order_index: number;
+            /** Source Filename */
+            source_filename: string | null;
+        };
+        /** KnowledgeSetSummary */
+        KnowledgeSetSummary: {
+            /** Asset Count */
+            asset_count: number;
+            /** Authorization Epoch */
+            authorization_epoch?: number | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Content Revision */
+            content_revision?: number | null;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision?: number | null;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /** Source Count */
+            source_count: number;
+            /** Updated At */
+            updated_at?: string | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** NoteContent */
+        NoteContent: {
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "note";
+            /** Title */
+            title: string;
+        };
+        /** QuestionContent */
+        QuestionContent: {
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /** Concept Ids */
+            concept_ids?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "question";
+            /** Prompt */
+            prompt: string;
+            /** Reference Answer */
+            reference_answer?: string | null;
+            rubric: components["schemas"]["Rubric"];
+        };
+        /** RemoveKnowledgeSetSourceRequest */
+        RemoveKnowledgeSetSourceRequest: {
+            /** Expected Content Revision */
+            expected_content_revision: number;
+        };
+        /** ReplaceAgentKnowledgeSetsRequest */
+        ReplaceAgentKnowledgeSetsRequest: {
+            /** Expected Agent Metadata Revision */
+            expected_agent_metadata_revision: number;
+            /** Set Ids */
+            set_ids: string[];
+        };
+        /** ReplaceKnowledgeSetSourcesRequest */
+        ReplaceKnowledgeSetSourcesRequest: {
+            /** Expected Content Revision */
+            expected_content_revision: number;
+            /** Source Document Ids */
+            source_document_ids: string[];
+        };
+        /** Rubric */
+        Rubric: {
+            /** Criteria */
+            criteria?: components["schemas"]["RubricCriterion"][];
+            /** Total Points */
+            total_points?: number | null;
+        };
+        /** RubricCriterion */
+        RubricCriterion: {
+            /**
+             * Guidance
+             * @default
+             */
+            guidance: string;
+            /** Label */
+            label: string;
+            /** Points */
+            points: number;
+        };
+        /** SourceLocation */
+        SourceLocation: {
+            /** End Offset */
+            end_offset?: number | null;
+            /** Excerpt Hash */
+            excerpt_hash?: string | null;
+            /** Paragraph Index */
+            paragraph_index?: number | null;
+            /** Section Path */
+            section_path?: string[];
+            /** Start Offset */
+            start_offset?: number | null;
+        };
+        /**
+         * StudentQuestionContent
+         * @description Student question projection intentionally has no Rubric field.
+         */
+        StudentQuestionContent: {
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /** Concept Ids */
+            concept_ids?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "question";
+            /** Prompt */
+            prompt: string;
+        };
+        /** UpdateKnowledgeAssetRequest */
+        UpdateKnowledgeAssetRequest: {
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["QuestionContent"] | components["schemas"]["NoteContent"];
+            /** Expected Asset Version Seq */
+            expected_asset_version_seq: number;
+            /** Expected Content Revision */
+            expected_content_revision: number;
+        };
+        /** UpdateKnowledgeSetRequest */
+        UpdateKnowledgeSetRequest: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+            /**
+             * Visibility
+             * @enum {string|null}
+             */
+            visibility?: "private" | "public" | null;
         };
     };
     responses: {
@@ -6967,6 +7652,593 @@ export interface operations {
                 };
             };
             /** @description Revision or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAgentKnowledgeSets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeSets"];
+                };
+            };
+            /** @description Agent not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replaceAgentKnowledgeSets: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceAgentKnowledgeSetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeSets"];
+                };
+            };
+            /** @description Agent or Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Agent metadata revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listKnowledgeSets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createKnowledgeSet: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateKnowledgeSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Knowledge Set created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Course or group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeSetAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetFullDTO"] | components["schemas"]["KnowledgeAssetStudentDTO"];
+                };
+            };
+            /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateKnowledgeSetAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetFullDTO"];
+                };
+            };
+            /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Asset or Set revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listKnowledgeSetAssetVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetVersionHistoryFull"] | components["schemas"]["KnowledgeAssetVersionHistoryStudent"];
+                };
+            };
+            /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteKnowledgeSet: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteKnowledgeSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Knowledge Set revoked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetRevocation"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set metadata or content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateKnowledgeSetMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Metadata revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listKnowledgeSetAssets: {
+        parameters: {
+            query?: {
+                kind?: "concept" | "question" | "note" | null;
+            };
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["KnowledgeAssetFullDTO"] | components["schemas"]["KnowledgeAssetStudentDTO"])[];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createKnowledgeSetAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateKnowledgeAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description Asset saved as version 1. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetFullDTO"];
+                };
+            };
+            /** @description Knowledge Set or referenced resource not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeSetGraph: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeGraph"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replaceKnowledgeSetSources: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceKnowledgeSetSourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Set or source not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeKnowledgeSetSource: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveKnowledgeSetSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Set or source binding not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set content revision is stale. */
             409: {
                 headers: {
                     [name: string]: unknown;

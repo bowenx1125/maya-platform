@@ -72,11 +72,8 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Private Chat, Provider settings and student Live add twelve operations.
-  // Chat streaming and deletion add two conversation operations.
-  // Voice filename editing adds one metadata-only operation.
-  // Teacher personal workspace adds two Agent, two source and one visibility operation.
-  if (platformOperationCount !== 112 || placeholderCount !== 0) {
+  // Knowledge Sets add fifteen Set, source, Asset, history, Graph and Agent-link operations.
+  if (platformOperationCount !== 127 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

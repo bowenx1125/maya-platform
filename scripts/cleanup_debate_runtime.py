@@ -26,7 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-SCHEMA_HEAD = "0035_w1_resource_ownership"
+SCHEMA_HEAD = "0036_knowledge_sets_assets"
+SUPPORTED_SCHEMA_HEADS = {"0035_w1_resource_ownership", SCHEMA_HEAD}
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 
@@ -97,6 +98,22 @@ PRESERVED_TABLES = (
     "voice_previews",
     "provider_policy_snapshots",
     "audit_logs",
+    "knowledge_sets",
+    "knowledge_set_sources",
+    "knowledge_assets",
+    "knowledge_asset_versions",
+    "knowledge_asset_version_sources",
+    "agent_knowledge_sets",
+)
+K1_PRESERVED_TABLES = frozenset(
+    {
+        "knowledge_sets",
+        "knowledge_set_sources",
+        "knowledge_assets",
+        "knowledge_asset_versions",
+        "knowledge_asset_version_sources",
+        "agent_knowledge_sets",
+    }
 )
 
 IDEMPOTENCY_OPERATIONS = (
@@ -310,17 +327,23 @@ def _table_names(connection: sqlite3.Connection) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
-def _validate_schema(connection: sqlite3.Connection) -> None:
+def _validate_schema(connection: sqlite3.Connection) -> str:
     tables = _table_names(connection)
-    required = set(TARGET_TABLES) | set(PRESERVED_TABLES) | {"alembic_version"}
-    if required.difference(tables):
+    if "alembic_version" not in tables:
         raise CleanupError("schema_tables_missing")
     heads = {
         str(row[0])
         for row in connection.execute("SELECT version_num FROM alembic_version")
     }
-    if heads != {SCHEMA_HEAD}:
+    if len(heads) != 1 or not heads.issubset(SUPPORTED_SCHEMA_HEADS):
         raise CleanupError("schema_head_invalid")
+    schema_head = next(iter(heads))
+    required_preserved = set(PRESERVED_TABLES)
+    if schema_head == "0035_w1_resource_ownership":
+        required_preserved.difference_update(K1_PRESERVED_TABLES)
+    required = set(TARGET_TABLES) | required_preserved | {"alembic_version"}
+    if required.difference(tables):
+        raise CleanupError("schema_tables_missing")
     if list(connection.execute("PRAGMA foreign_key_check")):
         raise CleanupError("foreign_key_violations_before")
     triggers = {
@@ -333,6 +356,7 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
         actual = triggers.get(name)
         if actual is None or _normalise_sql(actual) != _normalise_sql(expected):
             raise CleanupError("trigger_definition_unexpected")
+    return schema_head
 
 
 @dataclass(frozen=True)
@@ -362,6 +386,7 @@ class CleanupPlan:
     directory_paths: tuple[Path, ...]
     table_counts: Mapping[str, int]
     preserved_counts: Mapping[str, int]
+    schema_head: str
     file_bytes: int
 
     @property
@@ -558,7 +583,9 @@ def _stored_file_survivor_check(
             raise CleanupError("stored_file_shared")
 
 
-def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
+def _build_plan(
+    connection: sqlite3.Connection, data_root: Path, schema_head: str
+) -> CleanupPlan:
     debate_ids = _select_all(connection, "debates", "id")
     debate_course_ids = {
         str(row["id"]): str(row["course_id"])
@@ -979,6 +1006,7 @@ def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
     preserved_counts = {
         table: int(connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
         for table in PRESERVED_TABLES
+        if table in _table_names(connection)
     }
     return CleanupPlan(
         debate_ids=frozenset(debate_ids),
@@ -1004,6 +1032,7 @@ def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
         directory_paths=tuple(directory_paths_by_string.values()),
         table_counts=target_counts,
         preserved_counts=preserved_counts,
+        schema_head=schema_head,
         file_bytes=file_bytes,
     )
 
@@ -1014,8 +1043,8 @@ def inspect_cleanup(database_path: Path, data_root: Path) -> CleanupPlan:
     database, root = _validate_paths(database_path, data_root)
     connection = _connect(database, read_only=True)
     try:
-        _validate_schema(connection)
-        return _build_plan(connection, root)
+        schema_head = _validate_schema(connection)
+        return _build_plan(connection, root, schema_head)
     finally:
         connection.close()
 
@@ -1480,8 +1509,8 @@ def apply_cleanup(
     moved: list[tuple[Path, Path]] = []
     try:
         connection.execute("BEGIN IMMEDIATE")
-        _validate_schema(connection)
-        plan = _build_plan(connection, root)
+        schema_head = _validate_schema(connection)
+        plan = _build_plan(connection, root, schema_head)
         quarantine, moved = _move_files(plan, root)
         try:
             _apply_plan(connection, plan)
@@ -1509,7 +1538,7 @@ def audit_payload(plan: CleanupPlan, *, mode: str, status: str) -> dict[str, obj
         "schema_version": AUDIT_SCHEMA_VERSION,
         "status": status,
         "mode": mode,
-        "schema_head": SCHEMA_HEAD,
+        "schema_head": plan.schema_head,
         "app_must_be_stopped": True,
         "debates_seen": len(plan.debate_ids),
         "planned_turns": plan.table_counts.get("debate_turns", 0),

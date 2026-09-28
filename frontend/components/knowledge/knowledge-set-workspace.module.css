@@ -1,0 +1,628 @@
+.page {
+  display: grid;
+  gap: var(--workspace-gap, 20px);
+  min-width: 0;
+  color: var(--ink, #292820);
+}
+
+.intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: clamp(18px, 3vw, 30px);
+  border: 1px solid #ded8ca;
+  border-radius: 18px;
+  background: #f8f4e9;
+  box-shadow: 0 8px 24px rgb(48 42 30 / 5%);
+}
+
+.intro h1 {
+  margin: 3px 0 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.65rem, 3vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.intro p {
+  max-width: 58ch;
+  margin: 0;
+  color: #69665d;
+  line-height: 1.55;
+}
+
+.eyebrow {
+  color: #897346 !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.notice {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #b9cfb0;
+  border-radius: 12px;
+  background: #f0f6ec;
+  color: #355331;
+}
+
+.conceptViews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.conceptViews button,
+.assetDetails > button {
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid #d8cfbd;
+  border-radius: 10px;
+  background: #fffdf8;
+  color: #292820;
+  font: inherit;
+  cursor: pointer;
+}
+
+.conceptViews button[aria-pressed="true"] {
+  border-color: #806d47;
+  background: #f1eadc;
+  font-weight: 700;
+}
+
+.assetDetails {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e6e0d5;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.assetDetails h3,
+.assetDetails p {
+  margin: 0;
+}
+
+.assetHistory {
+  border-top: 1px solid #e6e0d5;
+  padding-top: 10px;
+}
+
+.historyList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.historyList li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.historyList time,
+.historyList small {
+  color: #69665d;
+  overflow-wrap: anywhere;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.9fr);
+  gap: var(--workspace-gap, 20px);
+  align-items: start;
+  min-width: 0;
+}
+
+.card.card,
+.listCard.listCard {
+  min-width: 0;
+  margin: 0;
+  border-color: #ded8ca;
+  background: #fdfaf3;
+}
+
+.listCard {
+  position: sticky;
+  top: 16px;
+}
+
+.setList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setButton,
+.assetButton {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 68px;
+  padding: 12px 14px;
+  border: 1px solid #e6e0d5;
+  border-radius: 12px;
+  background: #fffdf8;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.setButton strong,
+.assetButton strong {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.setButton span,
+.setButton small,
+.assetButton span,
+.assetButton small {
+  color: #716d62;
+  font-size: 0.78rem;
+}
+
+.setButton:hover,
+.assetButton:hover {
+  border-color: #bfac84;
+  background: #faf5e8;
+}
+
+.selected,
+.setButton[aria-current="true"],
+.assetButton[aria-current="true"] {
+  border-color: #b89a61;
+  background: #f5eddc;
+  box-shadow: inset 3px 0 #9c7a3f;
+}
+
+.setButton:focus-visible,
+.assetButton:focus-visible,
+.tabs button:focus-visible,
+.checkRow input:focus-visible,
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible,
+.nameButton:focus-visible,
+.nameEditor input:focus-visible,
+.graphNodeButton:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
+.detail {
+  display: grid;
+  gap: var(--workspace-gap, 20px);
+  min-width: 0;
+}
+
+.metadataBlock {
+  display: grid;
+  gap: 14px;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.nameRow > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.nameLabel {
+  color: #716a5b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.nameButton {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #292820;
+  font:
+    600 1.3rem/1.35 Georgia,
+    "Times New Roman",
+    serif;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.nameValue {
+  overflow-wrap: anywhere;
+  font:
+    600 1.3rem/1.35 Georgia,
+    "Times New Roman",
+    serif;
+}
+
+.nameEditor {
+  display: grid;
+  max-width: 520px;
+  gap: 6px;
+  color: #4e4b43;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.nameEditor input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #b89a61;
+  border-radius: 10px;
+  background: #fffefa;
+  color: #292820;
+  font:
+    600 1.25rem/1.35 Georgia,
+    "Times New Roman",
+    serif;
+}
+
+.createForm,
+.metadataForm {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: grid;
+  flex: 1 1 210px;
+  min-width: min(100%, 190px);
+  gap: 6px;
+  color: #4e4b43;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d8d2c5;
+  border-radius: 10px;
+  background: #fffefa;
+  color: #292820;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  background: #f0ede5;
+  color: #6d695f;
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 12px;
+  border-bottom: 1px solid #e8e2d7;
+  scrollbar-width: thin;
+}
+
+.tabs button {
+  flex: 0 0 auto;
+  min-width: 78px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #656156;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabs button:hover {
+  background: #f2ecdf;
+}
+
+.tabs .activeTab {
+  border-color: #d3c29e;
+  background: #f2e8d3;
+  color: #493e2e;
+}
+
+.sourcePanel,
+.graphPanel {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+}
+
+.sourcePanel > p,
+.graphPanel > p {
+  margin: 0;
+  color: #6b675d;
+  line-height: 1.5;
+}
+
+.unavailable {
+  padding: 10px 12px;
+  border: 1px solid #e2d2ae;
+  border-radius: 10px;
+  background: #fbf5e7;
+  color: #66522e !important;
+}
+
+.checkList {
+  display: grid;
+  gap: 7px;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 9px 12px;
+  border: 1px solid #e7e1d6;
+  border-radius: 10px;
+  background: #fffdf8;
+  cursor: pointer;
+}
+
+.checkRow input {
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
+  margin: 0;
+  accent-color: #826739;
+}
+
+.checkRow span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.checkRow small {
+  color: #777268;
+}
+
+.assetPanel {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.3fr);
+  gap: 16px;
+  padding-top: 16px;
+  align-items: start;
+}
+
+.assetList {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.assetButton {
+  gap: 4px;
+  min-height: 74px;
+}
+
+.editor {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e4ddcf;
+  border-radius: 14px;
+  background: #faf7ef;
+}
+
+.editor form {
+  display: grid;
+  gap: 13px;
+}
+
+.editorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.editorHeader h3 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.editorHeader span {
+  color: #756f61;
+  font-size: 0.8rem;
+}
+
+.rubric,
+.citations {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #d8cfbd;
+  border-radius: 12px;
+  background: #f5f0e5;
+}
+
+.rubric legend,
+.citations legend {
+  padding: 0 5px;
+  color: #5d513c;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.rubricCriterion {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e0d7c7;
+  border-radius: 10px;
+  background: #fffdf8;
+}
+
+.graphNodes {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.graphNodes li {
+  min-width: 0;
+}
+
+.graphNodeButton {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  gap: 4px;
+  padding: 13px 15px;
+  border: 1px solid #dfd4be;
+  border-radius: 12px;
+  background: #fffdf8;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.graphNodeButton:hover,
+.graphNodeButton[aria-pressed="true"] {
+  border-color: #b89a61;
+  background: #f5eddc;
+}
+
+.graphNodeButton strong {
+  overflow-wrap: anywhere;
+}
+
+.graphNodeButton span,
+.graphNodeButton small {
+  color: #68645a;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.graphDetail {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #d8c9a8;
+  border-radius: 12px;
+  background: #f8f1e2;
+}
+
+.graphDetail h3,
+.graphDetail p {
+  margin: 0;
+}
+
+.graphDetail p,
+.graphDetail small {
+  color: #68645a;
+  line-height: 1.5;
+}
+
+.agentSetForm {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .listCard {
+    position: static;
+  }
+
+  .setList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .intro > button {
+    align-self: flex-start;
+  }
+
+  .setList,
+  .assetPanel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .createForm,
+  .metadataForm,
+  .formActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .createForm > button,
+  .formActions > button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setButton,
+  .assetButton {
+    transition: none;
+  }
+}

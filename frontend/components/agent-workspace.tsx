@@ -135,6 +135,12 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     );
   const actions = (
     <div className="button-row">
+      <Link
+        className="text-link"
+        href={`/student/knowledge?agent_id=${encodeURIComponent(agent.id)}`}
+      >
+        {t("knowledgeSets")}
+      </Link>
       {canDelete ? (
         <button
           className="text-link danger-button"
@@ -190,10 +196,12 @@ export function AgentWorkbench({
   versionId,
   backHref,
   actorScopeKey,
+  knowledgeHref,
 }: {
   versionId: string;
   backHref?: string;
   actorScopeKey?: string;
+  knowledgeHref?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -357,10 +365,6 @@ export function AgentWorkbench({
     avatar_missing: t("avatarDesign"),
   };
 
-  // The recovery action can be rendered while the previous request is still
-  // represented by `error`; keep these bindings initialized for its callback.
-  const currentVersion = version as AgentVersion;
-  const currentAgent = agent as AgentDetail;
   if (loading) return <LoadingCard />;
   // Keep the loaded workbench mounted for mutation errors so local AGENT.md,
   // avatar/voice edits, selected documents, and retry handles remain visible
@@ -379,6 +383,13 @@ export function AgentWorkbench({
         }
       />
     );
+  const currentVersion = version;
+  const currentAgent = agent;
+  const resolvedKnowledgeHref =
+    knowledgeHref ??
+    (backHref?.startsWith("/teacher")
+      ? undefined
+      : `/student/knowledge?agent_id=${encodeURIComponent(agent.id)}`);
   if (version.state !== "draft")
     return (
       <ReadOnlyVersion version={version} agent={agent} backHref={backHref} />
@@ -683,6 +694,11 @@ export function AgentWorkbench({
         disabled={saving || (!localDirty && blockers.length > 0)}
         onClick={() => void publish()}
       />
+      {resolvedKnowledgeHref ? (
+        <Link className="text-link" href={resolvedKnowledgeHref}>
+          {t("agentKnowledgeSets")}
+        </Link>
+      ) : null}
       <div className="workbench-meta">
         <StatusBadge status="draft" />
       </div>

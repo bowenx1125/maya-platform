@@ -59,6 +59,7 @@ from app.modules.interactions.service import InteractionService
 from app.modules.knowledge.providers import recover_embedding_provider_startup
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
+from app.modules.knowledge_sets.router import router as knowledge_sets_router
 from app.modules.org.router import router as org_router
 from app.modules.provider_disclosure.router import (
     get_provider_disclosure_service,
@@ -456,6 +457,7 @@ def create_app(
     app.include_router(org_router, prefix="/api/v1")
     app.include_router(agents_router, prefix="/api/v1")
     app.include_router(knowledge_router, prefix="/api/v1")
+    app.include_router(knowledge_sets_router, prefix="/api/v1")
     app.include_router(avatars_router, prefix="/api/v1")
     app.include_router(voices_router, prefix="/api/v1")
     app.include_router(debate_setup_router, prefix="/api/v1")

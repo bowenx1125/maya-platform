@@ -22,6 +22,39 @@ export type AgentSummary = components["schemas"]["AgentSummary"];
 export type AgentDetail = components["schemas"]["AgentDetail"];
 export type AgentVersion = components["schemas"]["AgentVersion"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocument"];
+export type KnowledgeSetSummary = components["schemas"]["KnowledgeSetSummary"];
+export type KnowledgeSetDetail = components["schemas"]["KnowledgeSetDetail"];
+export type KnowledgeSetSource = components["schemas"]["KnowledgeSetSourceDTO"];
+export type KnowledgeSetRevocation =
+  components["schemas"]["KnowledgeSetRevocation"];
+export type CreateKnowledgeSetRequest =
+  components["schemas"]["CreateKnowledgeSetRequest"];
+export type UpdateKnowledgeSetRequest =
+  components["schemas"]["UpdateKnowledgeSetRequest"];
+export type DeleteKnowledgeSetRequest =
+  components["schemas"]["DeleteKnowledgeSetRequest"];
+export type ReplaceKnowledgeSetSourcesRequest =
+  components["schemas"]["ReplaceKnowledgeSetSourcesRequest"];
+export type KnowledgeAsset =
+  | components["schemas"]["KnowledgeAssetFullDTO"]
+  | components["schemas"]["KnowledgeAssetStudentDTO"];
+export type KnowledgeAssetFull = components["schemas"]["KnowledgeAssetFullDTO"];
+export type AssetContent =
+  | components["schemas"]["ConceptContent"]
+  | components["schemas"]["QuestionContent"]
+  | components["schemas"]["NoteContent"];
+export type AssetCitation = components["schemas"]["AssetCitation"];
+export type KnowledgeAssetRequest =
+  components["schemas"]["CreateKnowledgeAssetRequest"];
+export type UpdateKnowledgeAssetRequest =
+  components["schemas"]["UpdateKnowledgeAssetRequest"];
+export type KnowledgeAssetVersions =
+  | components["schemas"]["KnowledgeAssetVersionHistoryFull"]
+  | components["schemas"]["KnowledgeAssetVersionHistoryStudent"];
+export type KnowledgeGraph = components["schemas"]["KnowledgeGraph"];
+export type AgentKnowledgeSets = components["schemas"]["AgentKnowledgeSets"];
+export type ReplaceAgentKnowledgeSetsRequest =
+  components["schemas"]["ReplaceAgentKnowledgeSetsRequest"];
 export type KnowledgeDocumentMutation = {
   document: KnowledgeDocument;
   agent_version: AgentVersion | null;
@@ -1473,6 +1506,237 @@ export class PlatformApi {
         params: { path: { group_id: groupId } },
       }),
     );
+  }
+
+  async knowledgeSets(courseId: string): Promise<KnowledgeSetSummary[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/knowledge-sets", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async createKnowledgeSet(
+    courseId: string,
+    body: CreateKnowledgeSetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST(
+        "/courses/{course_id}/knowledge-sets",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async knowledgeSet(setId: string): Promise<KnowledgeSetDetail> {
+    return unwrap(
+      await this.client.GET("/knowledge-sets/{set_id}", {
+        params: { path: { set_id: setId } },
+      }),
+    );
+  }
+
+  async updateKnowledgeSet(
+    setId: string,
+    body: UpdateKnowledgeSetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PATCH("/knowledge-sets/{set_id}", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async deleteKnowledgeSet(
+    setId: string,
+    body: DeleteKnowledgeSetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetRevocation> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE("/knowledge-sets/{set_id}", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async replaceKnowledgeSetSources(
+    setId: string,
+    body: ReplaceKnowledgeSetSourcesRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PUT("/knowledge-sets/{set_id}/sources", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async removeKnowledgeSetSource(
+    setId: string,
+    bindingId: string,
+    body: components["schemas"]["RemoveKnowledgeSetSourceRequest"],
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE(
+        "/knowledge-sets/{set_id}/sources/{binding_id}",
+        {
+          params: {
+            path: { set_id: setId, binding_id: bindingId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async knowledgeSetAssets(
+    setId: string,
+    kind?: "concept" | "question" | "note",
+  ): Promise<KnowledgeAsset[]> {
+    return unwrap(
+      await this.client.GET("/knowledge-sets/{set_id}/assets", {
+        params: { path: { set_id: setId }, query: kind ? { kind } : {} },
+      }),
+    );
+  }
+
+  async knowledgeSetAsset(assetId: string): Promise<KnowledgeAsset> {
+    return unwrap(
+      await this.client.GET("/knowledge-assets/{asset_id}", {
+        params: { path: { asset_id: assetId } },
+      }),
+    );
+  }
+
+  async createKnowledgeSetAsset(
+    setId: string,
+    body: KnowledgeAssetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeAssetFull> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST("/knowledge-sets/{set_id}/assets", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async updateKnowledgeSetAsset(
+    assetId: string,
+    body: UpdateKnowledgeAssetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeAssetFull> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PATCH("/knowledge-assets/{asset_id}", {
+        params: {
+          path: { asset_id: assetId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async knowledgeSetAssetVersions(
+    assetId: string,
+  ): Promise<KnowledgeAssetVersions> {
+    return unwrap(
+      await this.client.GET("/knowledge-assets/{asset_id}/versions", {
+        params: { path: { asset_id: assetId } },
+      }),
+    );
+  }
+
+  async knowledgeSetGraph(setId: string): Promise<KnowledgeGraph> {
+    return unwrap(
+      await this.client.GET("/knowledge-sets/{set_id}/graph", {
+        params: { path: { set_id: setId } },
+      }),
+    );
+  }
+
+  async agentKnowledgeSets(agentId: string): Promise<AgentKnowledgeSets> {
+    return unwrap(
+      await this.client.GET("/agents/{agent_id}/knowledge-sets", {
+        params: { path: { agent_id: agentId } },
+      }),
+    );
+  }
+
+  async replaceAgentKnowledgeSets(
+    agentId: string,
+    body: ReplaceAgentKnowledgeSetsRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<AgentKnowledgeSets> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PUT(
+        "/agents/{agent_id}/knowledge-sets",
+        {
+          params: {
+            path: { agent_id: agentId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        },
+      );
+      return unwrap(result);
+    });
   }
 
   async workspaceDocuments(courseId: string): Promise<KnowledgeDocument[]> {

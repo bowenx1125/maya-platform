@@ -74,6 +74,11 @@ function makeDocument(): KnowledgeDocument {
   return {
     id: "document-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_manage_visibility: false,
+    authorization_epoch: 0,
     source_filename: "evidence.md",
     char_count: 42,
     workspace_state: "active",
@@ -111,6 +116,9 @@ function makeAgent(): AgentDetail {
   return {
     id: "agent-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
     name: "Agent",
     description: "A stable Agent description",
     metadata_revision: 0,
@@ -139,7 +147,7 @@ function makePreview(): RagPreview {
   return {
     version_id: "version-id",
     total_char_count: 42,
-    limit: 100000,
+    limit: null,
     document_count: 1,
     index_status: "ready",
     combined_markdown: "# Evidence\n\nA stable source excerpt.",

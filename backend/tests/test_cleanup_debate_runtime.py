@@ -3,20 +3,32 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from app.core.db import Database
 from app.core.identity import group_name_key, username_key
-from app.core.models import Base
+from app.core.models import Base, FileReference, KnowledgeDocument, StoredFile
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.debates import cleanup as online_cleanup
 from app.modules.debates import models as _debate_models
 from app.modules.interactions import models as _interaction_models
 from app.modules.knowledge.recovery import recover_file_operations
+from app.modules.knowledge_sets.models import (
+    AgentKnowledgeSet,
+    KnowledgeAsset,
+    KnowledgeAssetVersion,
+    KnowledgeAssetVersionSource,
+    KnowledgeSet,
+    KnowledgeSetSource,
+)
 from app.modules.reports import models as _report_models
 from sqlalchemy import text
 
@@ -33,8 +45,30 @@ def _uid(number: int) -> str:
     return f"00000000-0000-4000-8000-{number:012d}"
 
 
+def _alembic_config(database_path: Path) -> Config:
+    backend_root = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_root / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_root / "migrations"))
+    database_url = f"sqlite:///{database_path}"
+    config.set_main_option("sqlalchemy.url", database_url)
+    config.attributes["database_url"] = database_url
+    return config
+
+
 def _hash(letter: str = "a") -> str:
     return letter * 64
+
+
+def _table_rows(
+    database_path: Path, tables: tuple[str, ...]
+) -> dict[str, list[tuple[object, ...]]]:
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        return {
+            table: connection.execute(f'SELECT * FROM "{table}" ORDER BY rowid').fetchall()
+            for table in tables
+        }
 
 
 def _add(session, table_name: str, **values: object) -> None:
@@ -975,6 +1009,179 @@ def test_dry_run_is_read_only_and_machine_audit_is_sanitized(migrated_database):
     assert "00000000-0000-4000-8000-000000000020" not in encoded
     assert "Authored knowledge" not in encoded
     assert payload["app_must_be_stopped"] is True
+
+
+def test_cleanup_accepts_known_0035_data_after_additive_0036_downgrade(migrated_database):
+    database_path, data_root = migrated_database
+    command.downgrade(_alembic_config(database_path), "0035_w1_resource_ownership")
+
+    plan = cleanup.inspect_cleanup(database_path, data_root)
+    payload = cleanup.audit_payload(plan, mode="dry_run", status="dry_run")
+    assert plan.schema_head == "0035_w1_resource_ownership"
+    assert plan.table_counts["debates"] == 1
+    assert payload["schema_head"] == "0035_w1_resource_ownership"
+
+
+def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
+    database_path, data_root = migrated_database
+    database = Database(f"sqlite:///{database_path}", data_root)
+    set_id = _uid(110)
+    binding_id = _uid(111)
+    asset_id = _uid(112)
+    version_id = _uid(113)
+    version_source_id = _uid(114)
+    file_reference_id = _uid(115)
+    now = datetime.now(UTC)
+    content_json = json.dumps(
+        {"kind": "note", "title": "Kept source", "body": "Authored evidence."},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    content_hash = hashlib.sha256(content_json.encode("utf-8")).hexdigest()
+    location_json = "{}"
+    location_hash = hashlib.sha256(location_json.encode("utf-8")).hexdigest()
+    try:
+        with database.session() as session:
+            document = session.get(KnowledgeDocument, _uid(16))
+            stored = session.get(StoredFile, _uid(15))
+            assert document is not None and stored is not None
+            session.add(
+                KnowledgeSet(
+                    id=set_id,
+                    owner_user_id=_uid(1),
+                    course_id=_uid(10),
+                    group_id=_uid(11),
+                    ownership_scope="group",
+                    visibility="public",
+                    display_name="Kept Set",
+                    metadata_revision=1,
+                    content_revision=1,
+                    authorization_epoch=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeSetSource(
+                    id=binding_id,
+                    knowledge_set_id=set_id,
+                    document_id=document.id,
+                    stored_file_id=stored.id,
+                    source_content_hash=document.content_hash,
+                    source_file_sha256=stored.sha256,
+                    source_authorization_epoch=document.authorization_epoch,
+                    source_index_revision=document.index_revision,
+                    source_filename=document.source_filename,
+                    order_index=0,
+                    is_active=True,
+                    created_by_user_id=_uid(1),
+                    created_at=now,
+                )
+            )
+            session.add(
+                KnowledgeAsset(
+                    id=asset_id,
+                    knowledge_set_id=set_id,
+                    kind="note",
+                    current_version_seq=1,
+                    created_by_user_id=_uid(1),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeAssetVersion(
+                    id=version_id,
+                    asset_id=asset_id,
+                    version_seq=1,
+                    content_json=content_json,
+                    content_hash=content_hash,
+                    source_dependency_hash=_hash("5"),
+                    dependency_authorization_epoch=1,
+                    set_authorization_epoch=1,
+                    origin="manual",
+                    created_by_user_id=_uid(1),
+                    generator_agent_version_id=None,
+                    generation_job_id=None,
+                    created_at=now,
+                )
+            )
+            session.add(
+                KnowledgeAssetVersionSource(
+                    id=version_source_id,
+                    asset_version_id=version_id,
+                    source_binding_id=binding_id,
+                    document_id=document.id,
+                    stored_file_id=stored.id,
+                    source_content_hash=document.content_hash,
+                    source_file_sha256=stored.sha256,
+                    source_authorization_epoch=document.authorization_epoch,
+                    source_location_json=location_json,
+                    source_location_hash=location_hash,
+                    created_at=now,
+                )
+            )
+            session.add(
+                FileReference(
+                    id=file_reference_id,
+                    stored_file_id=stored.id,
+                    owner_type="knowledge_asset_version_source",
+                    owner_id=version_source_id,
+                    purpose="source",
+                    created_at=now,
+                )
+            )
+            session.add(
+                AgentKnowledgeSet(
+                    agent_id=_uid(12),
+                    knowledge_set_id=set_id,
+                    order_index=0,
+                    created_by_user_id=_uid(1),
+                    created_at=now,
+                )
+            )
+        preserved_tables = (
+            "knowledge_sets",
+            "knowledge_set_sources",
+            "knowledge_assets",
+            "knowledge_asset_versions",
+            "knowledge_asset_version_sources",
+            "agent_knowledge_sets",
+        )
+        before = _table_rows(database_path, preserved_tables)
+        with sqlite3.connect(database_path) as connection:
+            file_reference_before = connection.execute(
+                "SELECT * FROM file_references WHERE id=?", (file_reference_id,)
+            ).fetchone()
+        assert file_reference_before is not None
+        plan = cleanup.inspect_cleanup(database_path, data_root)
+        for table in preserved_tables[:6]:
+            assert plan.preserved_counts[table] == 1
+
+        cleanup.apply_cleanup(database_path, data_root, offline=True)
+
+        assert _table_rows(database_path, preserved_tables) == before
+        with sqlite3.connect(database_path) as connection:
+            file_reference_after = connection.execute(
+                "SELECT * FROM file_references WHERE id=?", (file_reference_id,)
+            ).fetchone()
+            assert file_reference_after == file_reference_before
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        database.dispose()
+
+
+def test_cleanup_rejects_unknown_schema_head(migrated_database):
+    import sqlite3
+
+    database_path, data_root = migrated_database
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("UPDATE alembic_version SET version_num='unknown-head'")
+
+    with pytest.raises(cleanup.CleanupError, match="schema_head_invalid"):
+        cleanup.inspect_cleanup(database_path, data_root)
 
 
 def test_apply_removes_runtime_graph_preserves_authored_graph_and_is_idempotent(
