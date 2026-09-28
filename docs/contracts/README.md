@@ -15,6 +15,12 @@ pre-code snapshots.
 Set/Asset store, immutable versions, source authority and student Question
 projection.
 
+[`KNOWLEDGE_GENERATION_CONTRACT.md`](KNOWLEDGE_GENERATION_CONTRACT.md) records
+K2a's durable, permission-scoped intent boundary.
+[`MAYAFORM_V14_GENERATION_AND_TOOLS.md`](MAYAFORM_V14_GENERATION_AND_TOOLS.md)
+records the latest user-approved K2b2/K3/K4 trigger, Tool and provenance
+decisions; its unimplemented obligations are not release claims.
+
 [`DEBATE_GENERATION_CONTRACTS.md`](DEBATE_GENERATION_CONTRACTS.md) is the frozen
 behaviour of the real Debate path — Persona, formal content, embedding identity,
 evidence trace, the mutual-learning RuleSet, the prompt budget, the provider
