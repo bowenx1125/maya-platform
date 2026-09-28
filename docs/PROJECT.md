@@ -324,10 +324,10 @@ Sol's only R2 reject was Asset replay timestamp drift. R3 replays exact accepted
 JSON only after current ACL/source checks; V1/V2 exact-body and revoked-404 focused tests pass.
 Sol accepted R3; full check and boundary passed. No Provider/Docker/deployment.
 
-## MayaForm K2a — in progress
+## MayaForm K2a — accepted
 
-0037 persists owner-scoped Jobs/runs, unique input hashes, leases and startup recovery.
-Generation intent remains an explicit optional API field; ordinary Teacher Done with RAG
-creates no generation Job. Explicit intent atomically commits a stable Private Set/link and
-Job/run. Owner GET returns safe status. K2a blocks `provider_not_configured` (0 calls, no
-fake assets); K2b NOT_RUN. R2 full check/boundary passed; Sol/HTTP pending.
+0037: owner-scoped Job/run, input-key uniqueness, lease/startup recovery. Intent is
+an optional API field; ordinary Teacher Done with RAG creates no Job. Explicit intent
+atomically saves a Private Set/link and Job/run; owner GET returns safe status. Absent
+Provider blocks `provider_not_configured`: 0 calls/assets. K2b NOT_RUN. R2 full
+check/boundary, Sol, HTTP/browser passed. No Docker/real Provider.
