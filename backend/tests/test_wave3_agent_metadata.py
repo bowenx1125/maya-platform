@@ -750,12 +750,16 @@ def test_delete_and_publish_race_has_one_serialized_winner(
 
     if _result_status(delete_result) == 204:
         # Delete committed first: publication must lose after the Agent row is
-        # gone, rather than creating an orphan snapshot/version.
+        # tombstoned, while its immutable draft history remains available to
+        # owner-only Chats.
         assert isinstance(publish_result, PlatformError), repr(publish_result)
         assert _result_code(publish_result) in {"not_found", "invalid_state"}
         with database.session() as session:
-            assert session.get(Agent, agent_id) is None
-            assert session.get(AgentVersion, version_id) is None
+            deleted = session.get(Agent, agent_id)
+            version = session.get(AgentVersion, version_id)
+            assert deleted is not None and version is not None
+            assert deleted.deleted_at is not None
+            assert deleted.status == "archived"
     else:
         # Publication committed first: the delete's final history check must
         # lose with the stable retained-history error.
