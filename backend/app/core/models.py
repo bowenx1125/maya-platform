@@ -8,6 +8,7 @@ inside the server-side database model.  The API projections in
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import (
     Boolean,
@@ -26,6 +27,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.core.identity import group_name_key, username_key
+
+
+def _course_id_from_group(context: object) -> str | None:
+    parameters = context.get_current_parameters()  # type: ignore[attr-defined]
+    group_id = parameters.get("group_id")
+    if not group_id:
+        return None
+    result = context.connection.exec_driver_sql(  # type: ignore[attr-defined]
+        "SELECT course_id FROM groups WHERE id = ?", (group_id,)
+    )
+    return cast(str | None, result.scalar_one_or_none())
 
 
 class Base(DeclarativeBase):
@@ -210,8 +222,24 @@ class Agent(Base):
     __tablename__ = "agents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    group_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    course_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        default=_course_id_from_group,
+    )
+    ownership_scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="group", server_default="group"
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="public", server_default="public"
+    )
+    authorization_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
     name: Mapped[str] = mapped_column(String(240), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -230,7 +258,7 @@ class Agent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    group: Mapped[Group] = relationship()
+    group: Mapped[Group | None] = relationship(foreign_keys=[group_id])
     versions: Mapped[list[AgentVersion]] = relationship(
         back_populates="agent", cascade="all, delete-orphan", order_by="AgentVersion.version_seq"
     )
@@ -238,8 +266,33 @@ class Agent(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active', 'archived')", name="ck_agents_status"),
         CheckConstraint("metadata_revision >= 0", name="ck_agents_metadata_revision_nonnegative"),
+        CheckConstraint(
+            "((ownership_scope = 'group' AND group_id IS NOT NULL) OR "
+            "(ownership_scope = 'personal' AND group_id IS NULL AND owner_user_id IS NOT NULL))",
+            name="ck_agents_owner_scope",
+        ),
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_agents_visibility"),
+        CheckConstraint(
+            "owner_user_id IS NOT NULL OR (ownership_scope = 'group' AND visibility = 'public')",
+            name="ck_agents_owner_visibility",
+        ),
+        CheckConstraint("authorization_epoch >= 0", name="ck_agents_authorization_epoch"),
+        ForeignKeyConstraint(
+            ["group_id", "course_id"],
+            ["groups.id", "groups.course_id"],
+            name="fk_agents_group_course",
+            ondelete="CASCADE",
+        ),
         Index("ix_agents_group_id", "group_id"),
         Index("ix_agents_group_status", "group_id", "status"),
+        Index(
+            "ix_agents_owner_course_scope",
+            "owner_user_id",
+            "course_id",
+            "ownership_scope",
+            "status",
+        ),
+        Index("ix_agents_course_visibility", "course_id", "visibility", "status"),
     )
 
 
@@ -276,6 +329,18 @@ class AgentVersion(Base):
     avatar_config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     voice_profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     knowledge_snapshot_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    authorization_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # A draft that contains owner-only material stays owner-only until the
+    # owner publishes a public immutable version. Visibility changes do not
+    # refresh this sticky provenance marker.
+    draft_visibility: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="private", server_default="private"
+    )
+    published_visibility: Mapped[str | None] = mapped_column(
+        String(16), nullable=True, default="public"
+    )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -290,6 +355,7 @@ class AgentVersion(Base):
     __table_args__ = (
         CheckConstraint("version_seq >= 0", name="ck_agent_versions_seq_nonnegative"),
         CheckConstraint("revision >= 0", name="ck_agent_versions_revision_nonnegative"),
+        CheckConstraint("authorization_epoch >= 0", name="ck_agent_versions_authorization_epoch"),
         CheckConstraint(
             "((persona_spec_json IS NULL AND persona_spec_hash IS NULL "
             "AND persona_compiler_version IS NULL) OR "
@@ -311,6 +377,10 @@ class AgentVersion(Base):
         CheckConstraint(
             "state IN ('draft', 'published', 'superseded')", name="ck_agent_versions_state"
         ),
+        CheckConstraint(
+            "published_visibility IS NULL OR published_visibility IN ('private', 'public')",
+            name="ck_agent_versions_published_visibility",
+        ),
         UniqueConstraint("agent_id", "version_seq", name="uq_agent_versions_agent_seq"),
         Index("ix_agent_versions_agent_state", "agent_id", "state"),
         Index(
@@ -326,8 +396,24 @@ class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    group_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    course_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        default=_course_id_from_group,
+    )
+    ownership_scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="group", server_default="group"
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="public", server_default="public"
+    )
+    authorization_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_file_id: Mapped[str] = mapped_column(
@@ -342,7 +428,7 @@ class KnowledgeDocument(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    group: Mapped[Group] = relationship()
+    group: Mapped[Group | None] = relationship(foreign_keys=[group_id])
     stored_file: Mapped[StoredFile] = relationship()
     chunks: Mapped[list[KnowledgeDocumentChunk]] = relationship(
         back_populates="document",
@@ -355,6 +441,23 @@ class KnowledgeDocument(Base):
 
     __table_args__ = (
         CheckConstraint("char_count >= 1", name="ck_knowledge_documents_char_count"),
+        CheckConstraint(
+            "((ownership_scope = 'group' AND group_id IS NOT NULL) OR "
+            "(ownership_scope = 'personal' AND group_id IS NULL AND owner_user_id IS NOT NULL))",
+            name="ck_knowledge_documents_owner_scope",
+        ),
+        CheckConstraint(
+            "visibility IN ('private', 'public')",
+            name="ck_knowledge_documents_visibility",
+        ),
+        CheckConstraint(
+            "owner_user_id IS NOT NULL OR (ownership_scope = 'group' AND visibility = 'public')",
+            name="ck_knowledge_documents_owner_visibility",
+        ),
+        CheckConstraint(
+            "authorization_epoch >= 0",
+            name="ck_knowledge_documents_authorization_epoch",
+        ),
         CheckConstraint("index_revision >= 0", name="ck_knowledge_documents_index_revision"),
         CheckConstraint(
             "index_status IN ('pending', 'indexing', 'ready', 'failed')",
@@ -363,7 +466,25 @@ class KnowledgeDocument(Base):
         CheckConstraint(
             "workspace_state IN ('active', 'hidden')", name="ck_knowledge_documents_workspace_state"
         ),
+        ForeignKeyConstraint(
+            ["group_id", "course_id"],
+            ["groups.id", "groups.course_id"],
+            name="fk_knowledge_documents_group_course",
+            ondelete="CASCADE",
+        ),
         Index("ix_knowledge_documents_group_state", "group_id", "workspace_state"),
+        Index(
+            "ix_knowledge_documents_owner_course_state",
+            "owner_user_id",
+            "course_id",
+            "workspace_state",
+        ),
+        Index(
+            "ix_knowledge_documents_course_visibility",
+            "course_id",
+            "visibility",
+            "workspace_state",
+        ),
     )
 
 
@@ -612,6 +733,9 @@ class SnapshotDocument(Base):
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     char_count: Mapped[int] = mapped_column(Integer, nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_authorization_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     snapshot: Mapped[KnowledgeSnapshot] = relationship(back_populates="documents")
 
@@ -638,6 +762,10 @@ class SnapshotDocument(Base):
             unique=True,
         ),
         CheckConstraint("order_index >= 0", name="ck_snapshot_documents_order"),
+        CheckConstraint(
+            "source_authorization_epoch >= 0",
+            name="ck_snapshot_documents_source_authorization_epoch",
+        ),
         Index("ix_snapshot_documents_snapshot", "snapshot_id"),
     )
 

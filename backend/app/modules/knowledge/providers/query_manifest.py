@@ -96,7 +96,7 @@ def _assert_snapshot_owner(
     db: Session,
     *,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     snapshot_id: str,
     persona_spec_hash: str,
@@ -107,13 +107,25 @@ def _assert_snapshot_owner(
     if version is None or snapshot is None:
         raise QueryManifestError("the frozen query Snapshot owner is unavailable")
     agent = db.get(Agent, version.agent_id)
-    group = db.get(Group, group_id)
+    group = db.get(Group, group_id) if group_id is not None else None
+    expected_group_scope = (
+        agent is not None
+        and agent.ownership_scope == "group"
+        and group is not None
+        and group.course_id == course_id
+        and agent.group_id == group.id
+    )
+    expected_personal_scope = (
+        agent is not None
+        and agent.ownership_scope == "personal"
+        and agent.group_id is None
+        and group_id is None
+    )
     if (
         agent is None
         or agent.deleted_at is not None
-        or group is None
-        or group.course_id != course_id
-        or agent.group_id != group.id
+        or agent.course_id != course_id
+        or not (expected_group_scope or expected_personal_scope)
         or version.agent_id != agent.id
         or version.state not in {"published", "superseded"}
         or str(version.knowledge_snapshot_id or "") != snapshot.id
@@ -142,7 +154,7 @@ def ensure_real_query_export_manifest(
     scope_id: str,
     turn_id: str,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     snapshot_id: str,
     identity: EmbeddingIdentityV1,

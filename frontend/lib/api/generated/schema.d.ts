@@ -484,7 +484,7 @@ export interface paths {
         };
         get: operations["listKnowledgeDocuments"];
         put?: never;
-        /** @description Creates an immutable Markdown document; no content deduplication. */
+        /** Upload Knowledge Document */
         post: operations["uploadKnowledgeDocument"];
         delete?: never;
         options?: never;
@@ -507,7 +507,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Knowledge Document Visibility */
+        patch: operations["updateKnowledgeDocumentVisibility"];
         trace?: never;
     };
     "/knowledge-documents/{document_id}/replace": {
@@ -601,6 +602,7 @@ export interface paths {
         };
         get: operations["listGroupAgents"];
         put?: never;
+        /** Create Agent */
         post: operations["createAgent"];
         delete?: never;
         options?: never;
@@ -623,6 +625,10 @@ export interface paths {
         delete: operations["deleteAgent"];
         options?: never;
         head?: never;
+        /**
+         * Update Agent Metadata
+         * @description CAS-update description without touching any versioned Agent data.
+         */
         patch: operations["updateAgentMetadata"];
         trace?: never;
     };
@@ -1578,6 +1584,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/workspace-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Workspace Agents */
+        get: operations["listCourseWorkspaceAgents"];
+        put?: never;
+        /** Create Course Workspace Agent */
+        post: operations["createCourseWorkspaceAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/workspace-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Workspace Documents */
+        get: operations["listCourseWorkspaceDocuments"];
+        put?: never;
+        /** Upload Knowledge Document */
+        post: operations["uploadCourseWorkspaceDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2084,19 +2126,62 @@ export interface components {
             group_name?: string | null;
             status?: string | null;
         };
+        /** KnowledgeDocument */
         KnowledgeDocument: {
-            id: components["schemas"]["Uuid"];
-            group_id: components["schemas"]["Uuid"];
-            source_filename: string;
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /**
+             * Can Manage Visibility
+             * @default false
+             */
+            can_manage_visibility: boolean;
+            /** Char Count */
             char_count: number;
+            /** Content Hash */
             content_hash: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Index Revision */
             index_revision: number;
-            /** @enum {string} */
+            /**
+             * Index Status
+             * @enum {string}
+             */
             index_status: "pending" | "indexing" | "ready" | "failed";
-            /** @enum {string} */
-            workspace_state: "active" | "hidden";
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /** Safe Error Code */
             safe_error_code?: string | null;
-            created_at: components["schemas"]["IsoTime"];
+            /** Source Filename */
+            source_filename: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /**
+             * Workspace State
+             * @enum {string}
+             */
+            workspace_state: "active" | "hidden";
         };
         SnapshotDocument: {
             id: components["schemas"]["Uuid"];
@@ -2116,45 +2201,160 @@ export interface components {
             document: components["schemas"]["KnowledgeDocument"];
             agent_version?: components["schemas"]["AgentVersion"] | null;
         };
+        /** AgentSummary */
         AgentSummary: {
-            id: components["schemas"]["Uuid"];
-            group_id: components["schemas"]["Uuid"];
-            name: string;
-            description?: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Current Draft Version Id */
+            current_draft_version_id?: string | null;
+            /** Current Published Version Id */
+            current_published_version_id?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
             metadata_revision: number;
-            /** @enum {string} */
+            /** Name */
+            name: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "active" | "archived";
-            current_published_version_id?: components["schemas"]["Uuid"] | null;
-            current_draft_version_id?: components["schemas"]["Uuid"] | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
-        AgentDetail: components["schemas"]["AgentSummary"] & {
+        /** AgentDetail */
+        AgentDetail: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Current Draft Version Id */
+            current_draft_version_id?: string | null;
+            /** Current Published Version Id */
+            current_published_version_id?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision: number;
+            /** Name */
+            name: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /** Versions */
             versions?: components["schemas"]["AgentVersion"][];
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
+        /** AgentVersion */
         AgentVersion: {
-            id: components["schemas"]["Uuid"];
-            agent_id: components["schemas"]["Uuid"];
-            version_label: string;
-            /** @enum {string} */
-            state: "draft" | "published" | "superseded";
-            revision: number;
-            agent_md?: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Agent Md
+             * @default
+             */
+            agent_md: string;
             avatar_config: components["schemas"]["AvatarConfig"];
-            voice_profile_id?: components["schemas"]["Uuid"] | null;
-            effective_voice_profile_id?: components["schemas"]["Uuid"] | null;
-            voice_fallback_active: boolean;
-            knowledge_snapshot_id?: components["schemas"]["Uuid"] | null;
+            /** Effective Voice Profile Id */
+            effective_voice_profile_id?: string | null;
+            /** Enabled Documents */
             enabled_documents?: components["schemas"]["KnowledgeDocument"][];
-            publish_blockers?: string[];
-            raw_agent_md_hash?: string | null;
-            persona_spec?: components["schemas"]["PersonaSpecV1"] | components["schemas"]["PersonaSpecV2"] | null;
-            persona_spec_hash?: string | null;
-            /** @enum {string|null} */
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Knowledge Snapshot Id */
+            knowledge_snapshot_id?: string | null;
+            /**
+             * Persona Compiler Version
+             * @enum {string|null}
+             */
             persona_compiler_version?: "persona_template_v1" | "persona_template_v2" | null;
-            persona_diagnostics?: components["schemas"]["PersonaDiagnostic"][];
+            /** Persona Confirmation Revision */
             persona_confirmation_revision?: number | null;
-            /** @default false */
+            /**
+             * Persona Confirmed
+             * @default false
+             */
             persona_confirmed: boolean;
-            student_confirmed_at?: components["schemas"]["IsoTime"] | null;
+            /** Persona Diagnostics */
+            persona_diagnostics?: components["schemas"]["PersonaDiagnostic"][];
+            /** Persona Spec */
+            persona_spec?: components["schemas"]["PersonaSpecV1"] | components["schemas"]["PersonaSpecV2"] | null;
+            /** Persona Spec Hash */
+            persona_spec_hash?: string | null;
+            /** Publish Blockers */
+            publish_blockers?: string[];
+            /**
+             * Published Visibility
+             * @enum {string|null}
+             */
+            published_visibility?: "private" | "public" | null;
+            /** Raw Agent Md Hash */
+            raw_agent_md_hash?: string | null;
+            /** Revision */
+            revision: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "published" | "superseded";
+            /** Student Confirmed At */
+            student_confirmed_at?: string | null;
+            /** Version Label */
+            version_label: string;
+            /** Voice Fallback Active */
+            voice_fallback_active: boolean;
+            /** Voice Profile Id */
+            voice_profile_id?: string | null;
         };
         PersonaIdentity: {
             name: string;
@@ -2228,10 +2428,27 @@ export interface components {
             avatar_config?: components["schemas"]["AvatarConfig"];
             voice_profile_id?: components["schemas"]["Uuid"] | null;
         };
+        /**
+         * UpdateAgentMetadataRequest
+         * @description CAS payload for mutable Agent metadata and owner-controlled visibility.
+         *
+         *     ``description`` is intentionally nullable on the wire so clients can
+         *     clear an older/null value explicitly.  The database stores a non-null
+         *     empty string.
+         */
         UpdateAgentMetadataRequest: {
-            expected_metadata_revision: number;
-            /** @default  */
+            /**
+             * Description
+             * @default
+             */
             description: string | null;
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+            /**
+             * Visibility
+             * @enum {string|null}
+             */
+            visibility?: "private" | "public" | null;
         };
         AvatarConfig: {
             template_id: string;
@@ -2876,6 +3093,32 @@ export interface components {
              * Format: uuid
              */
             turn_id: string;
+        };
+        /** AgentCreateRequest */
+        AgentCreateRequest: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Visibility
+             * @default private
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** UpdateKnowledgeDocumentVisibility */
+        UpdateKnowledgeDocumentVisibility: {
+            /** Expected Authorization Epoch */
+            expected_authorization_epoch: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
     };
     responses: {
@@ -4245,29 +4488,33 @@ export interface operations {
     };
     uploadKnowledgeDocument: {
         parameters: {
-            query?: never;
+            query?: {
+                course_id?: string | null;
+            };
             header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
             };
             path: {
-                group_id: components["parameters"]["GroupId"];
+                group_id: string | null;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
                 "multipart/form-data": {
+                    expected_revision?: number;
                     /** Format: binary */
                     file: string;
-                    target_agent_version_id?: components["schemas"]["Uuid"];
-                    expected_revision?: number;
+                    /** Format: uuid */
+                    target_agent_version_id?: string;
+                    /** @enum {string} */
+                    visibility?: "private" | "public";
                 };
             };
         };
         responses: {
-            /** @description Document stored and indexed; a target draft is updated only when explicitly supplied. */
+            /** @description Document stored and indexed. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4276,9 +4523,33 @@ export interface operations {
                     "application/json": components["schemas"]["KnowledgeDocumentMutation"];
                 };
             };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-            422: components["responses"]["Error"];
+            /** @description Group or draft not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Revision or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Markdown upload. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getKnowledgeDocument: {
@@ -4302,6 +4573,52 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    updateKnowledgeDocumentVisibility: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeDocumentVisibility"];
+            };
+        };
+        responses: {
+            /** @description Source visibility updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source authorization revision conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     replaceKnowledgeDocument: {
@@ -4449,22 +4766,17 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
             };
             path: {
-                group_id: components["parameters"]["GroupId"];
+                group_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": {
-                    name: string;
-                    /** @default  */
-                    description?: string;
-                };
+                "application/json": components["schemas"]["AgentCreateRequest"];
             };
         };
         responses: {
@@ -4477,8 +4789,24 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDetail"];
                 };
             };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
+            /** @description Group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An Agent with this name already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getAgent: {
@@ -4535,11 +4863,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "X-CSRF-Token": string;
             };
             path: {
-                agent_id: components["parameters"]["AgentId"];
+                agent_id: string;
             };
             cookie?: never;
         };
@@ -4558,8 +4885,24 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDetail"];
                 };
             };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
+            /** @description Agent not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Metadata revision conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listAgentVersions: {
@@ -6457,6 +6800,174 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseWorkspaceAgents: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCourseWorkspaceAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Private personal Agent draft created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDetail"];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Name or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseWorkspaceDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    uploadCourseWorkspaceDocument: {
+        parameters: {
+            query?: {
+                group_id?: string | null;
+            };
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    expected_revision?: number;
+                    /** Format: binary */
+                    file: string;
+                    /** Format: uuid */
+                    target_agent_version_id?: string;
+                    /** @enum {string} */
+                    visibility?: "private" | "public";
+                };
+            };
+        };
+        responses: {
+            /** @description Document stored and indexed. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentMutation"];
+                };
+            };
+            /** @description Course or draft not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Revision or idempotency conflict. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

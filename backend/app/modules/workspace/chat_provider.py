@@ -10,8 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import PlatformError
-from app.core.models import Agent, AgentVersion, Group, KnowledgeSnapshot, ProviderPolicySnapshot
+from app.core.errors import PlatformError, not_found
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    KnowledgeDocument,
+    KnowledgeSnapshot,
+    ProviderPolicySnapshot,
+    SnapshotDocument,
+)
 from app.modules.agents.markdown import markdown_hash
 from app.modules.debates.playback.generation_adapter import SqlSnapshotRetriever
 from app.modules.knowledge.mock_lexical import MOCK_LEXICAL_ANCHOR_POLICY_ID
@@ -23,6 +30,7 @@ from app.modules.knowledge.providers import (
     persisted_snapshot_identity,
 )
 from app.modules.knowledge.providers.query_manifest import ensure_real_query_export_manifest
+from app.modules.knowledge.services import can_invoke_version, snapshot_sources_are_readable
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
     ExportFieldV1,
@@ -42,6 +50,7 @@ from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import LLM_INPUT_TOKEN_CAP, LLM_RESERVED_OUTPUT_TOKEN_CAP
 from app.providers.llm_transport import HttpxLLMTransport, LLMTransportError
 
+from .models import Conversation
 from .schemas import ChatSource
 
 # Chats must not impose its own conversation-turn or request-byte ceiling.
@@ -128,9 +137,32 @@ def retrieve_sources(
     message: str,
     sending_guard: ProviderSendingGuard | None = None,
 ) -> list[ChatSource]:
+    if version.knowledge_snapshot_id is None:
+        return []
     snapshot = db.get(KnowledgeSnapshot, version.knowledge_snapshot_id)
     if snapshot is None:
         raise PlatformError("snapshot_unavailable", "The published knowledge is unavailable.", 409)
+    conversation = db.get(Conversation, scope_id)
+    if conversation is None or conversation.snapshot_id != snapshot.id:
+        raise not_found()
+    agent = db.get(Agent, version.agent_id)
+    if agent is None or not can_invoke_version(db, conversation.user_id, version, agent):
+        raise not_found()
+    sources = db.execute(
+        select(SnapshotDocument.source_authorization_epoch, KnowledgeDocument)
+        .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
+        .where(SnapshotDocument.snapshot_id == snapshot.id)
+    ).all()
+    if any(document.course_id != course_id for _, document in sources) or not (
+        snapshot_sources_are_readable(
+            db,
+            conversation.user_id,
+            snapshot.id,
+            agent=agent,
+            allow_historical_epoch_for_owner=True,
+        )
+    ):
+        raise not_found()
     identity = persisted_snapshot_identity(snapshot)
     query = QueryEmbeddingService()
     if identity.provider != "mock":
@@ -138,13 +170,11 @@ def retrieve_sources(
             raise PlatformError(
                 "embedding_mode_mismatch", "This knowledge requires Real Embedding.", 409
             )
-        agent = db.get(Agent, version.agent_id)
-        group = db.get(Group, agent.group_id) if agent else None
         repository = ProviderRepository(db)
         policy = repository.get_policy_snapshot(
             settings.provider_policy_hash_for("embedding") or ""
         )
-        if group is None or policy is None:
+        if policy is None:
             raise PlatformError("provider_preflight_blocked", "Embedding is not configured.", 409)
         plan = ensure_real_query_export_manifest(
             db,
@@ -152,7 +182,7 @@ def retrieve_sources(
             scope_id=scope_id,
             turn_id=request_id,
             course_id=course_id,
-            group_id=group.id,
+            group_id=agent.group_id,
             agent_version_id=version.id,
             snapshot_id=snapshot.id,
             identity=identity,
@@ -166,7 +196,7 @@ def retrieve_sources(
             settings,
             plan.manifest,
             course_id=course_id,
-            group_id=group.id,
+            group_id=agent.group_id,
             version_id=version.id,
         )
         confirmation = repository.get_export_confirmation(plan.manifest.manifest_hash)

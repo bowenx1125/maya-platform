@@ -42,6 +42,9 @@ function createdAgent(): AgentDetail {
   return {
     id: "agent-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
     name: "First Agent",
     description: "",
     metadata_revision: 0,
@@ -56,6 +59,11 @@ function failedDocument(): KnowledgeDocument {
   return {
     id: "document-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_manage_visibility: false,
+    authorization_epoch: 0,
     source_filename: "notes.md",
     char_count: 128,
     workspace_state: "active",

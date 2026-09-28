@@ -12,9 +12,9 @@ from alembic.config import Config
 from app.core.db import Database
 from app.core.models import Agent, AgentVersion
 from app.modules.agents.persona import compile_persona, raw_agent_md_hash
-from app.seed import GROUP_DEMO_ID, seed_demo_data
+from app.seed import GROUP_DEMO_ID
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, text
+from sqlalchemy import MetaData, Table, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login, make_foreign_group
@@ -199,7 +199,7 @@ def test_compile_and_confirm_enforce_revision_and_membership(
     assert hidden.status_code == 404
 
 
-def test_compile_failure_does_not_keep_prior_persona_and_publish_blocks_strict_template(
+def test_compile_result_does_not_gate_persona_free_no_rag_publication(
     client: TestClient,
 ) -> None:
     _user, csrf = login(client, "bowen")
@@ -222,15 +222,16 @@ def test_compile_failure_does_not_keep_prior_persona_and_publish_blocks_strict_t
         json={"expected_revision": 1},
     )
     assert failed.json()["compiled"] is True
-    # Legacy compilation is no longer a publication gate. Knowledge still is.
+    # Legacy Persona compilation is not a publication gate, and no-RAG Chat is
+    # a valid publication shape.
     publish = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "persona-api-publish-003"}),
         json={"expected_revision": 1},
     )
-    assert publish.status_code == 422
-    assert publish.json()["code"] == "rag_missing"
-    assert not any("persona" in item for item in publish.json()["details"]["publish_blockers"])
+    assert publish.status_code == 200, publish.text
+    assert publish.json()["state"] == "published"
+    assert publish.json()["knowledge_snapshot_id"] is None
 
 
 def test_publishing_confirmed_persona_rebinds_confirmation_to_immutable_revision(
@@ -434,38 +435,46 @@ def test_0009_columns_are_nullable_for_legacy_and_constraints_are_reversible(
 def test_0009_rejects_partial_persona_rows_and_lossy_downgrade(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'persona-populated.sqlite3'}"
     database = Database(database_url, tmp_path)
-    database.upgrade_schema()
+    cfg = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", database_url)
+    cfg.attributes["database_url"] = database_url
+    command.upgrade(cfg, "0008_wave4_mutual_learning_rounds")
+    now = datetime.now(UTC)
+    agent_md = _persona_md("Migration Agent")
     with database.session() as session:
-        seed_demo_data(session)
-        now = datetime.now(UTC)
-        agent = Agent(
-            id="persona-migration-agent",
-            group_id=GROUP_DEMO_ID,
-            name="Migration Agent",
-            description="",
-            metadata_revision=0,
-            status="active",
-            current_published_version_id=None,
-            created_at=now,
-            updated_at=now,
+        seed_legacy_organization(session)
+        connection = session.connection()
+        metadata = MetaData()
+        agents = Table("agents", metadata, autoload_with=connection)
+        versions = Table("agent_versions", metadata, autoload_with=connection)
+        session.execute(
+            agents.insert().values(
+                id="persona-migration-agent",
+                group_id=GROUP_DEMO_ID,
+                name="Migration Agent",
+                description="",
+                metadata_revision=0,
+                status="active",
+                current_published_version_id=None,
+                created_at=now,
+                updated_at=now,
+            )
         )
-        session.add(agent)
-        session.flush()
-        agent_md = _persona_md("Migration Agent")
-        session.add(
-            AgentVersion(
+        session.execute(
+            versions.insert().values(
                 id="persona-migration-version",
-                agent_id=agent.id,
+                agent_id="persona-migration-agent",
                 version_seq=0,
                 state="draft",
                 revision=1,
                 agent_md=agent_md,
-                raw_agent_md_hash=raw_agent_md_hash(agent_md),
                 avatar_config_json="{}",
                 created_at=now,
                 updated_at=now,
             )
         )
+    command.upgrade(cfg, "0009_persona_structured_fields")
     with database.engine.begin() as connection:
         with pytest.raises(IntegrityError):
             connection.execute(
@@ -474,7 +483,7 @@ def test_0009_rejects_partial_persona_rows_and_lossy_downgrade(tmp_path: Path) -
                     "WHERE id='persona-migration-version'"
                 )
             )
-    compiled = compile_persona(_persona_md("Migration Agent"), expected_name="Migration Agent")
+    compiled = compile_persona(agent_md, expected_name="Migration Agent")
     assert compiled.compiled and compiled.canonical_json and compiled.persona_spec_hash
     with database.engine.begin() as connection:
         with pytest.raises(IntegrityError):
@@ -519,12 +528,12 @@ def test_0009_rejects_partial_persona_rows_and_lossy_downgrade(tmp_path: Path) -
                 ),
                 {"agent_md": _persona_md("Migration Agent", role="Changed role")},
             )
-    cfg = Config(str(Path(__file__).parents[1] / "alembic.ini"))
-    cfg.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
-    cfg.set_main_option("sqlalchemy.url", database_url)
-    cfg.attributes["database_url"] = database_url
     with pytest.raises(RuntimeError, match="Cannot downgrade 0009"):
         command.downgrade(cfg, "0008_wave4_mutual_learning_rounds")
+    with database.engine.connect() as connection:
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+            "0009_persona_structured_fields"
+        )
     assert "persona_spec_json" in {
         item["name"] for item in inspect(database.engine).get_columns("agent_versions")
     }

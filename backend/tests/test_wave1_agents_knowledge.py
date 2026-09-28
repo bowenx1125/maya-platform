@@ -40,7 +40,11 @@ def _make_agent(client: TestClient, csrf: str) -> tuple[dict[str, Any], str]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": "create-wave1-agent-001"}),
-        json={"name": "Maya Guide", "description": "A small Demo guide."},
+        json={
+            "name": "Maya Guide",
+            "description": "A small Demo guide.",
+            "visibility": "public",
+        },
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -164,7 +168,11 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-document-001"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={
             "file": (
                 "lesson.md",
@@ -184,7 +192,11 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     replay = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-document-001"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={
             "file": (
                 "lesson.md",
@@ -474,7 +486,11 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
         uploaded = client.post(
             f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "cross-snapshot-upload-001"}),
-            data={"target_agent_version_id": version_id, "expected_revision": "1"},
+            data={
+                "target_agent_version_id": version_id,
+                "expected_revision": "1",
+                "visibility": "public",
+            },
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
         )
         assert uploaded.status_code == 201, uploaded.text
@@ -702,7 +718,7 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
     )
     publish_body = _assert_business_error(publish_error, "agent_md_missing")
     assert "agent_md_missing" in publish_body["details"]["publish_blockers"]
-    assert "rag_missing" in publish_body["details"]["publish_blockers"]
+    assert "rag_missing" not in publish_body["details"]["publish_blockers"]
 
 
 def test_wave1_rag_length_does_not_block_upload_set_or_chat(

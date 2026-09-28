@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import NoReturn, cast
+from typing import NoReturn
 from unicodedata import normalize
 from uuid import UUID, uuid4
 
@@ -33,6 +33,8 @@ from app.core.models import (
     FileOperation,
     Group,
     IdempotencyRecord,
+    KnowledgeDocument,
+    SnapshotDocument,
 )
 from app.modules.agents.persona import (
     agent_name_from_markdown,
@@ -90,16 +92,21 @@ from app.modules.knowledge.services import (
     agent_detail,
     agent_summary,
     assert_claim_owned,
+    can_read_version,
     claim_idempotency,
+    course_member_role,
     create_snapshot,
     finish_idempotency,
     parse_json_payload_hash,
+    publish_without_snapshot,
     renew_idempotency_lease,
     retrieval_response,
     saga_checkpoint,
     scoped_group_role,
     scoped_student_group_role,
     version_dto,
+    version_is_currently_public,
+    version_sources_are_readable,
     visible_agent,
     visible_student_agent,
     visible_student_version,
@@ -139,18 +146,48 @@ def _agent_name_key(name: str) -> str:
 
 def _require_available_agent_name(
     db: Session,
-    group_id: str,
     name: str,
     *,
+    group_id: str | None = None,
+    owner_user_id: str | None = None,
+    course_id: str | None = None,
+    visibility: str | None = None,
     current: Agent | None = None,
+    recheck_namespace: bool = False,
 ) -> None:
     # Call under the Agent writer lock so two normalized names cannot both win.
     key = _agent_name_key(name)
-    if current is not None and key == _agent_name_key(current.name):
+    if current is not None and key == _agent_name_key(current.name) and not recheck_namespace:
         return
-    existing = db.execute(
-        select(Agent.id, Agent.name).where(Agent.group_id == group_id, Agent.deleted_at.is_(None))
-    )
+    statement = select(Agent.id, Agent.name).where(Agent.deleted_at.is_(None))
+    if group_id is not None:
+        statement = statement.where(
+            Agent.ownership_scope == "group",
+            Agent.group_id == group_id,
+        )
+        if visibility == "public":
+            # Shared names occupy their own group-wide namespace. A public
+            # editor must never learn whether a private Agent uses this name.
+            statement = statement.where(Agent.visibility == "public")
+        elif visibility == "private" and owner_user_id is not None:
+            # Private names are unique only within the current actor's own
+            # private workspace. Public and other owners' private names do
+            # not collide with, or reveal, this namespace.
+            statement = statement.where(
+                Agent.visibility == "private",
+                Agent.owner_user_id == owner_user_id,
+            )
+        else:
+            # A private operation without an authenticated owner has no
+            # private namespace to query.
+            statement = statement.where(Agent.id == "")
+    else:
+        statement = statement.where(
+            Agent.ownership_scope == "personal",
+            Agent.owner_user_id == owner_user_id,
+            Agent.course_id == course_id,
+        )
+    existing = db.execute(statement)
     if any(
         _agent_name_key(row.name) == key and (current is None or row.id != current.id)
         for row in existing
@@ -162,11 +199,25 @@ def _require_available_agent_name(
         )
 
 
-def _sync_markdown_name(db: Session, agent: Agent, markdown: str) -> None:
+def _sync_markdown_name(
+    db: Session,
+    agent: Agent,
+    markdown: str,
+    *,
+    actor_user_id: str,
+) -> None:
     name = agent_name_from_markdown(markdown)
     if name is None or name == agent.name:
         return
-    _require_available_agent_name(db, agent.group_id, name, current=agent)
+    _require_available_agent_name(
+        db,
+        name,
+        group_id=agent.group_id,
+        owner_user_id=actor_user_id,
+        course_id=agent.course_id,
+        visibility=agent.visibility,
+        current=agent,
+    )
     db.execute(
         update(Agent)
         .where(Agent.id == agent.id)
@@ -196,46 +247,106 @@ def _raise_persona_domain_error(error: PersonaDomainError) -> NoReturn:
 
 
 def _summary_with_metadata(
-    db: Session, agent: Agent, *, include_draft: bool = True
+    db: Session,
+    agent: Agent,
+    *,
+    include_draft: bool = True,
+    role: str | None = "owner",
+    context: AuthContext | None = None,
 ) -> AgentSummary:
     """Build the shared projection with its authoritative metadata CAS."""
 
-    return agent_summary(db, agent, include_draft=include_draft)
+    return agent_summary(db, agent, include_draft=include_draft, role=role, context=context)
 
 
-def _detail_with_metadata(db: Session, agent: Agent, role: str) -> AgentDetail:
+def _detail_with_metadata(
+    db: Session, agent: Agent, role: str, context: AuthContext
+) -> AgentDetail:
     """Return an Agent detail whose mutable metadata is current and explicit."""
 
-    detail = agent_detail(db, agent, role)
+    detail = agent_detail(db, agent, role, context=context)
     return detail.model_copy(update={"metadata_revision": agent.metadata_revision})
 
 
-def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
-    """Students and teachers with explicit group access may delete its Agents."""
+def _version_sources_are_public(db: Session, version: AgentVersion, agent: Agent) -> bool:
+    if not version.knowledge_snapshot_id:
+        return True
+    rows = db.execute(
+        select(SnapshotDocument.source_authorization_epoch, KnowledgeDocument)
+        .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
+        .where(SnapshotDocument.snapshot_id == version.knowledge_snapshot_id)
+    ).all()
+    return all(
+        source_epoch == document.authorization_epoch
+        and document.visibility == "public"
+        and document.workspace_state == "active"
+        and document.course_id == agent.course_id
+        for source_epoch, document in rows
+    )
 
-    row = db.execute(
-        select(Agent, WorkspaceMember.user_id)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .outerjoin(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
+
+def _version_dto_for_actor(
+    db: Session,
+    version: AgentVersion,
+    agent: Agent,
+    context: AuthContext,
+) -> AgentVersionDTO:
+    return version_dto(
+        db,
+        version,
+        agent,
+        include_private_sources=agent.owner_user_id == context.user.id,
+    )
+
+
+def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
+    """Resolve owner access before an explicitly shared group workspace."""
+
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.deleted_at is not None:
+        raise not_found()
+    if course_member_role(db, context.user.id, agent.course_id) is None:
+        raise not_found()
+    if agent.owner_user_id == context.user.id:
+        return agent
+    if agent.ownership_scope != "group" or agent.group_id is None:
+        raise not_found()
+    if agent.visibility != "public":
+        raise not_found()
+    if scoped_group_role(db, context, agent.group_id) != "student":
+        raise not_found()
+    return agent
+
+
+def _agent_sources_are_public(db: Session, agent: Agent) -> bool:
+    version_id = (
+        db.scalar(
+            select(AgentVersion.id).where(
+                AgentVersion.agent_id == agent.id,
+                AgentVersion.state == "draft",
+            )
+        )
+        or agent.current_published_version_id
+    )
+    if version_id is None:
+        return True
+    rows = db.execute(
+        select(KnowledgeDocument)
+        .join(
+            AgentVersionDocument,
+            AgentVersionDocument.document_id == KnowledgeDocument.id,
         )
         .where(
-            Agent.id == agent_id,
-            Agent.deleted_at.is_(None),
-            CourseMember.user_id == context.user.id,
-            or_(
-                CourseMember.role == "teacher",
-                and_(CourseMember.role == "student", WorkspaceMember.user_id.is_not(None)),
-            ),
+            AgentVersionDocument.agent_version_id == version_id,
+            AgentVersionDocument.enabled.is_(True),
         )
-    ).first()
-    if row is None:
-        raise not_found()
-    if row[1] is None:
-        raise forbidden()
-    return cast(Agent, row[0])
+    ).all()
+    return all(
+        document.visibility == "public"
+        and document.course_id == agent.course_id
+        and document.workspace_state == "active"
+        for (document,) in rows
+    )
 
 
 def _agent_has_history(db: Session, agent_id: str) -> bool:
@@ -434,9 +545,6 @@ def _publish_real_embedding_snapshot(
             "Real Embedding is unavailable until every policy and account control is verified.",
             503,
         )
-    group = db.get(Group, agent.group_id)
-    if group is None:
-        raise not_found()
     repository = ProviderRepository(db)
     policy = repository.get_policy_snapshot(policy_hash)
     if policy is None or policy.policy_hash != policy_hash:
@@ -449,16 +557,16 @@ def _publish_real_embedding_snapshot(
         build = prepare_real_snapshot_build(
             db,
             settings.resolved_data_root,
-            course_id=group.course_id,
-            group_id=group.id,
+            course_id=agent.course_id,
+            group_id=agent.group_id,
             agent_version_id=version.id,
             expected_revision=expected_revision,
         )
         manifest = ensure_real_embedding_export_manifest(
             db,
             build,
-            course_id=group.course_id,
-            group_id=group.id,
+            course_id=agent.course_id,
+            group_id=agent.group_id,
             agent_version_id=version.id,
             policy=policy,
         )
@@ -467,8 +575,8 @@ def _publish_real_embedding_snapshot(
                 db,
                 manifest,
                 policy,
-                course_id=group.course_id,
-                group_id=group.id,
+                course_id=agent.course_id,
+                group_id=agent.group_id,
                 agent_version_id=version.id,
             )
         except ProductPublicationError as error:
@@ -494,8 +602,8 @@ def _publish_real_embedding_snapshot(
                     db,
                     manifest,
                     policy,
-                    course_id=group.course_id,
-                    group_id=group.id,
+                    course_id=agent.course_id,
+                    group_id=agent.group_id,
                     agent_version_id=version.id,
                 )
             except ProductPublicationError:
@@ -505,8 +613,8 @@ def _publish_real_embedding_snapshot(
         result = run_confirmed_real_embedding_publication(
             db,
             data_root=settings.resolved_data_root,
-            course_id=group.course_id,
-            group_id=group.id,
+            course_id=agent.course_id,
+            group_id=agent.group_id,
             agent_version_id=version.id,
             policy=policy,
             manifest=manifest,
@@ -555,8 +663,10 @@ def list_group_agents(
         raise not_found()
     published_version = exists(
         select(AgentVersion.id).where(
-            AgentVersion.agent_id == Agent.id,
-            AgentVersion.state.in_(("published", "superseded")),
+            AgentVersion.id == Agent.current_published_version_id,
+            AgentVersion.state == "published",
+            AgentVersion.published_visibility == "public",
+            AgentVersion.authorization_epoch == Agent.authorization_epoch,
         )
     )
     rows = db.execute(
@@ -569,16 +679,50 @@ def list_group_agents(
         )
         .where(
             Agent.group_id == str(group_id),
+            Agent.ownership_scope == "group",
             Agent.deleted_at.is_(None),
             CourseMember.user_id == context.user.id,
             or_(
-                and_(CourseMember.role == "teacher", published_version),
-                WorkspaceMember.user_id.is_not(None),
+                and_(
+                    Agent.owner_user_id == context.user.id,
+                    WorkspaceMember.user_id.is_not(None),
+                ),
+                and_(
+                    WorkspaceMember.user_id.is_not(None),
+                    Agent.visibility == "public",
+                ),
+                and_(
+                    CourseMember.role == "teacher", Agent.visibility == "public", published_version
+                ),
             ),
         )
     ).all()
-    agents = [row for row in rows if include_archived or row[0].status == "active"]
-    return [_summary_with_metadata(db, row[0], include_draft=role != "teacher") for row in agents]
+    agents = []
+    for (agent,) in rows:
+        if not include_archived and agent.status != "active":
+            continue
+        if agent.owner_user_id == context.user.id and role == "student":
+            agents.append((agent, "owner"))
+        elif agent.owner_user_id == context.user.id and role == "teacher":
+            current_version = db.get(AgentVersion, agent.current_published_version_id)
+            if current_version and version_is_currently_public(current_version, agent):
+                agents.append((agent, "teacher"))
+        elif agent.visibility == "public" and role == "student":
+            agents.append((agent, "student"))
+        elif agent.visibility == "public" and role == "teacher":
+            current_version = db.get(AgentVersion, agent.current_published_version_id)
+            if current_version and version_is_currently_public(current_version, agent):
+                agents.append((agent, "teacher"))
+    return [
+        _summary_with_metadata(
+            db,
+            agent,
+            include_draft=agent_role != "teacher",
+            role=agent_role,
+            context=context,
+        )
+        for agent, agent_role in agents
+    ]
 
 
 @router.post(
@@ -611,14 +755,29 @@ def create_agent(
     try:
         scoped_student_group_role(db, context, str(group_id))
         assert_claim_owned(db, record)
-        _require_available_agent_name(db, str(group_id), payload.name)
+        _require_available_agent_name(
+            db,
+            payload.name,
+            group_id=str(group_id),
+            owner_user_id=context.user.id,
+            visibility=payload.visibility,
+        )
     except PlatformError:
         abandon_claim(db, record)
         raise
     timestamp = _time()
+    group = db.get(Group, str(group_id))
+    if group is None:
+        abandon_claim(db, record)
+        raise not_found()
     agent = Agent(
         id=str(uuid4()),
         group_id=str(group_id),
+        owner_user_id=context.user.id,
+        course_id=group.course_id,
+        ownership_scope="group",
+        visibility=payload.visibility,
+        authorization_epoch=0,
         name=payload.name,
         description=(
             payload.description if payload.description and payload.description.strip() else ""
@@ -638,16 +797,139 @@ def create_agent(
         raw_agent_md_hash=raw_agent_md_hash(""),
         persona_required=True,
         avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+        authorization_epoch=agent.authorization_epoch,
+        draft_visibility=payload.visibility,
+        published_visibility=None,
         created_at=timestamp,
         updated_at=timestamp,
     )
     db.add_all([agent, version])
     db.flush()
-    result = _detail_with_metadata(db, agent, "student")
+    result = _detail_with_metadata(db, agent, "owner", context)
     finish_idempotency(db, record, 201, result.model_dump(mode="json"))
     saga_checkpoint("create_agent.before_final_commit")
     db.commit()
     saga_checkpoint("create_agent.after_final_commit")
+    return result
+
+
+@router.get(
+    "/courses/{course_id}/workspace-agents",
+    response_model=list[AgentSummary],
+    operation_id="listCourseWorkspaceAgents",
+    responses={404: {"model": Error, "description": "Course not found."}},
+)
+def list_course_workspace_agents(
+    course_id: UUID,
+    include_archived: bool = Query(True),
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[AgentSummary]:
+    if course_member_role(db, context.user.id, str(course_id)) != "teacher":
+        raise not_found()
+    rows = db.scalars(
+        select(Agent)
+        .where(
+            Agent.course_id == str(course_id),
+            Agent.owner_user_id == context.user.id,
+            Agent.ownership_scope == "personal",
+            Agent.deleted_at.is_(None),
+        )
+        .order_by(Agent.created_at, Agent.id)
+    ).all()
+    return [
+        _summary_with_metadata(db, agent, include_draft=True, context=context)
+        for agent in rows
+        if include_archived or agent.status == "active"
+    ]
+
+
+@router.post(
+    "/courses/{course_id}/workspace-agents",
+    response_model=AgentDetail,
+    status_code=201,
+    operation_id="createCourseWorkspaceAgent",
+    responses={
+        201: {"model": AgentDetail, "description": "Private personal Agent draft created."},
+        404: {"model": Error, "description": "Course not found."},
+        409: {"model": Error, "description": "Name or idempotency conflict."},
+    },
+)
+def create_course_workspace_agent(
+    course_id: UUID,
+    payload: AgentCreateRequest,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> AgentDetail:
+    course_key = str(course_id)
+    if course_member_role(db, context.user.id, course_key) != "teacher":
+        raise not_found()
+    body_hash = parse_json_payload_hash(
+        "createCourseWorkspaceAgent", context, [course_key, "personal"], payload.model_dump()
+    )
+    record, replay = claim_idempotency(
+        db, context, "createCourseWorkspaceAgent", idempotency_key, body_hash
+    )
+    if replay is not None:
+        return replay  # type: ignore[return-value]
+    _begin_immediate(db)
+    try:
+        if course_member_role(db, context.user.id, course_key) != "teacher":
+            raise not_found()
+        assert_claim_owned(db, record)
+        _require_available_agent_name(
+            db,
+            payload.name,
+            owner_user_id=context.user.id,
+            course_id=course_key,
+            visibility=payload.visibility,
+        )
+    except PlatformError:
+        abandon_claim(db, record)
+        raise
+    timestamp = _time()
+    agent = Agent(
+        id=str(uuid4()),
+        group_id=None,
+        owner_user_id=context.user.id,
+        course_id=course_key,
+        ownership_scope="personal",
+        visibility=payload.visibility,
+        authorization_epoch=0,
+        name=payload.name,
+        description=(
+            payload.description if payload.description and payload.description.strip() else ""
+        ),
+        metadata_revision=0,
+        status="active",
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    version = AgentVersion(
+        id=str(uuid4()),
+        agent_id=agent.id,
+        version_seq=0,
+        state="draft",
+        revision=0,
+        agent_md="",
+        raw_agent_md_hash=raw_agent_md_hash(""),
+        persona_required=True,
+        avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+        authorization_epoch=agent.authorization_epoch,
+        draft_visibility="private",
+        published_visibility=None,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    db.add_all([agent, version])
+    db.flush()
+    result = _detail_with_metadata(db, agent, "owner", context)
+    finish_idempotency(db, record, 201, result.model_dump(mode="json"))
+    saga_checkpoint("create_course_workspace_agent.before_final_commit")
+    db.commit()
+    saga_checkpoint("create_course_workspace_agent.after_final_commit")
     return result
 
 
@@ -666,7 +948,7 @@ def get_agent(
     db: Session = Depends(get_db),
 ) -> AgentDetail:
     scoped = visible_agent(db, context, str(agent_id))
-    return _detail_with_metadata(db, scoped.agent, scoped.role)
+    return _detail_with_metadata(db, scoped.agent, scoped.role, context)
 
 
 @router.patch(
@@ -698,6 +980,7 @@ def update_agent_metadata(
         current = db.scalar(
             select(Agent).where(
                 Agent.id == str(agent_id),
+                Agent.course_id == scoped.agent.course_id,
                 Agent.group_id == scoped.agent.group_id,
                 Agent.metadata_revision == payload.expected_metadata_revision,
             )
@@ -714,12 +997,45 @@ def update_agent_metadata(
                     "current_metadata_revision": latest,
                 },
             )
+        if "visibility" in payload.model_fields_set and current.owner_user_id != context.user.id:
+            raise not_found()
+        if payload.visibility is not None and payload.visibility != current.visibility:
+            if payload.visibility == "public" and not _agent_sources_are_public(db, current):
+                raise validation_failure(
+                    "Private sources must be shared before this Agent can be public.",
+                    code="private_source_for_public_agent",
+                )
+            _require_available_agent_name(
+                db,
+                current.name,
+                group_id=current.group_id,
+                owner_user_id=context.user.id,
+                course_id=current.course_id,
+                visibility=payload.visibility,
+                current=current,
+                recheck_namespace=True,
+            )
+            current.visibility = payload.visibility
+            current.authorization_epoch += 1
+            draft = db.scalar(
+                select(AgentVersion).where(
+                    AgentVersion.agent_id == current.id,
+                    AgentVersion.state == "draft",
+                )
+            )
+            if draft is not None and draft.draft_visibility == "public":
+                draft.authorization_epoch = current.authorization_epoch
         description = payload.description
         current.description = description if description and description.strip() else ""
         current.metadata_revision += 1
         current.updated_at = _time()
         db.flush()
-        result = _detail_with_metadata(db, current, "student")
+        result = _detail_with_metadata(
+            db,
+            current,
+            "owner" if current.owner_user_id == context.user.id else "student",
+            context,
+        )
         db.commit()
         return result
     except PlatformError:
@@ -822,9 +1138,14 @@ def list_agent_versions(
     if scoped.role == "teacher":
         query = query.where(AgentVersion.state.in_(("published", "superseded")))
     versions = list(db.scalars(query.order_by(AgentVersion.version_seq)).all())
+    versions = [
+        version
+        for version in versions
+        if can_read_version(db, version, scoped.agent, scoped.role, context=context)
+    ]
     if scoped.role == "teacher" and not versions:
         raise not_found()
-    return [version_dto(db, version, scoped.agent) for version in versions]
+    return [_version_dto_for_actor(db, version, scoped.agent, context) for version in versions]
 
 
 @router.post(
@@ -862,21 +1183,19 @@ def create_next_agent_version(
     current = db.scalar(
         select(AgentVersion)
         .join(Agent, Agent.id == AgentVersion.agent_id)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .join(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
-        )
         .where(
             AgentVersion.id == scoped.agent.current_published_version_id,
             AgentVersion.agent_id == scoped.agent.id,
-            CourseMember.user_id == context.user.id,
         )
     )
     if current is None or current.state != "published":
         abandon_claim(db, record)
         raise invalid_state("The current published version is unavailable.")
+    if scoped.agent.owner_user_id != context.user.id and not version_is_currently_public(
+        current, scoped.agent
+    ):
+        abandon_claim(db, record)
+        raise not_found()
     existing = db.scalar(
         select(AgentVersion).where(
             AgentVersion.agent_id == scoped.agent.id,
@@ -906,6 +1225,14 @@ def create_next_agent_version(
         avatar_config_json=current.avatar_config_json,
         voice_profile_id=current.voice_profile_id,
         knowledge_snapshot_id=None,
+        authorization_epoch=scoped.agent.authorization_epoch,
+        draft_visibility=(
+            "public"
+            if version_is_currently_public(current, scoped.agent)
+            and _version_sources_are_public(db, current, scoped.agent)
+            else "private"
+        ),
+        published_visibility=None,
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -925,7 +1252,7 @@ def create_next_agent_version(
             )
         )
     db.flush()
-    result = version_dto(db, version, scoped.agent)
+    result = _version_dto_for_actor(db, version, scoped.agent, context)
     finish_idempotency(db, record, 201, result.model_dump(mode="json"))
     saga_checkpoint("create_next_agent_version.before_final_commit")
     db.commit()
@@ -948,7 +1275,7 @@ def get_agent_version(
     db: Session = Depends(get_db),
 ) -> AgentVersionDTO:
     scoped = visible_version(db, context, str(version_id))
-    return version_dto(db, scoped.version, scoped.agent)
+    return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
 
 
 @router.post(
@@ -1030,7 +1357,7 @@ def confirm_agent_persona(
     except PersonaDomainError as error:
         _raise_persona_domain_error(error)
     refreshed = visible_student_version(db, context, str(version_id))
-    return version_dto(db, refreshed.version, refreshed.agent)
+    return _version_dto_for_actor(db, refreshed.version, refreshed.agent, context)
 
 
 @router.patch(
@@ -1086,6 +1413,8 @@ def update_agent_draft(
                     "persona_diagnostics_json": None,
                 }
             )
+    if scoped.agent.visibility != "public":
+        values["draft_visibility"] = "private"
     if payload.avatar_config is not None:
         try:
             avatar = validate_avatar_config(payload.avatar_config)
@@ -1117,10 +1446,15 @@ def update_agent_draft(
         )
         raise stale_revision(current_revision)
     if "agent_md" in payload.model_fields_set:
-        _sync_markdown_name(db, scoped.agent, normalized_agent_md)
+        _sync_markdown_name(
+            db,
+            scoped.agent,
+            normalized_agent_md,
+            actor_user_id=context.user.id,
+        )
     db.refresh(scoped.version)
     db.flush()
-    return version_dto(db, scoped.version, scoped.agent)
+    return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
 
 
 @router.post(
@@ -1178,6 +1512,7 @@ async def upload_agent_md(
             persona_confirmation_revision=None,
             student_confirmed_at=None,
             persona_confirming_user_id=None,
+            **({"draft_visibility": "private"} if scoped.agent.visibility != "public" else {}),
             revision=AgentVersion.revision + 1,
             updated_at=_time(),
         )
@@ -1187,10 +1522,15 @@ async def upload_agent_md(
             select(AgentVersion.revision).where(AgentVersion.id == scoped.version.id)
         )
         raise stale_revision(current_revision)
-    _sync_markdown_name(db, scoped.agent, document.normalized)
+    _sync_markdown_name(
+        db,
+        scoped.agent,
+        document.normalized,
+        actor_user_id=context.user.id,
+    )
     db.refresh(scoped.version)
     db.flush()
-    return version_dto(db, scoped.version, scoped.agent)
+    return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
 
 
 @router.get(
@@ -1306,7 +1646,20 @@ def publish_agent_version(
             payload.expected_revision,
             record,
         )
-        if settings.embedding_provider == "mock":
+        enabled_documents = _enabled_documents(db, version.id)
+        if agent.visibility == "public" and not _agent_sources_are_public(db, agent):
+            raise validation_failure(
+                "Private sources must be shared before this Agent can be public.",
+                code="private_source_for_public_agent",
+            )
+        if not enabled_documents:
+            publish_without_snapshot(
+                db,
+                version,
+                agent,
+                expected_revision=payload.expected_revision,
+            )
+        elif settings.embedding_provider == "mock":
             create_snapshot(
                 db,
                 settings.resolved_data_root,
@@ -1344,7 +1697,7 @@ def publish_agent_version(
             raise invalid_state("The Agent publish guard is no longer active.")
         guard.state = "committed"
         guard.updated_at = _time()
-        result = version_dto(db, version, agent)
+        result = _version_dto_for_actor(db, version, agent, context)
         finish_idempotency(db, record, 200, result.model_dump(mode="json"))
         db.flush()
         saga_checkpoint("publish.after_final_db_prepare")
@@ -1391,15 +1744,10 @@ def test_agent_draft(
     if scoped.version.state != "draft":
         raise not_found()
     docs = _enabled_documents(db, scoped.version.id)
-    if not scoped.version.agent_md.strip() or not docs:
-        if not scoped.version.agent_md.strip():
-            raise validation_failure(
-                "The draft needs AGENT.md.",
-                code="agent_md_missing",
-            )
+    if not scoped.version.agent_md.strip():
         raise validation_failure(
-            "The draft needs one enabled ready document.",
-            code="rag_missing",
+            "The draft needs AGENT.md.",
+            code="agent_md_missing",
         )
     if any(document.index_status != "ready" for document in docs):
         if any(document.index_status == "failed" for document in docs):
@@ -1438,7 +1786,10 @@ def list_published_agents_for_teacher(
             CourseMember.user_id == context.user.id,
             CourseMember.role == "teacher",
             Agent.status == "active",
+            Agent.visibility == "public",
             AgentVersion.state == "published",
+            AgentVersion.published_visibility == "public",
+            AgentVersion.authorization_epoch == Agent.authorization_epoch,
         )
         .order_by(Agent.created_at.desc(), Agent.id.desc())
     ).all()
@@ -1452,11 +1803,23 @@ def list_published_agents_for_teacher(
         )
         if course_exists is None:
             raise not_found()
+    public_rows: list[tuple[Agent, AgentVersion, str]] = [
+        (agent, version, group_name)
+        for agent, version, group_name in rows
+        if version_is_currently_public(version, agent)
+        and version_sources_are_readable(db, context, version, agent=agent)
+    ]
     return [
         PublishedAgentSummary(
             group_name=group_name,
-            agent=_summary_with_metadata(db, agent, include_draft=False),
+            agent=_summary_with_metadata(
+                db,
+                agent,
+                include_draft=False,
+                role="teacher",
+                context=context,
+            ),
             current_version=version_dto(db, version, agent),
         )
-        for agent, version, group_name in rows
+        for agent, version, group_name in public_rows
     ]

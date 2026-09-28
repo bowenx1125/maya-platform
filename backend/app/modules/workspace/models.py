@@ -15,13 +15,18 @@ class Conversation(Base):
     agent_version_id: Mapped[str] = mapped_column(
         ForeignKey("agent_versions.id", ondelete="RESTRICT")
     )
-    snapshot_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_snapshots.id", ondelete="RESTRICT")
+    snapshot_id: Mapped[str | None] = mapped_column(
+        ForeignKey("knowledge_snapshots.id", ondelete="RESTRICT"), nullable=True
     )
+    agent_name_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    agent_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     revision: Mapped[int] = mapped_column(Integer, default=0)
     active_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (CheckConstraint("revision >= 0"),)
+    __table_args__ = (
+        CheckConstraint("revision >= 0"),
+        CheckConstraint("agent_authorization_epoch >= 0"),
+    )
 
 
 class ConversationTurn(Base):

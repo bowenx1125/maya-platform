@@ -80,6 +80,9 @@ function agent(): AgentDetail {
   return {
     id: agentId,
     group_id: groupId,
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
     name: "Published Agent",
     description: "A released classroom perspective.",
     metadata_revision: 0,

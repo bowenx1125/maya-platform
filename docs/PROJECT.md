@@ -86,10 +86,9 @@ embedding dimension1024. These facts are not real-service acceptance.
 
 ## Remaining scope
 
-徐伯闻 owns content acceptance, 古月 3D/voice/TTS, Kaikai accounts/student UI.
-RAG quality, classroom load, deployment, monitoring, backup/restore and real speech
-remain unverified. Stable design: [Architecture](ARCHITECTURE.md),
-[contracts](../contracts/), [ADRs](adr/).
+徐伯闻 owns content acceptance; 古月 3D/voice/TTS, Kaikai accounts/student UI.
+RAG quality, classroom load, deployment/monitoring, backup/restore and real speech
+remain unverified. Architecture: [overview](ARCHITECTURE.md), [contracts](../contracts/), [ADRs](adr/).
 
 ## Topic and Background
 
@@ -142,33 +141,28 @@ acceptance excludes later changes, RAG quality, real speech and load.
 
 ## Working — workspace, private Chats and Live
 
-0030 adds private history/encrypted preferences/20s Live leases. Chat freezes version/
-snapshot with identity/revision/cost/unknown-state tracking. Live shares history/audio
-without spectator generation/control. Components switches core providers; speech is
-environment-managed(TTS timeout120s, generic30s). Avatar editing stays in Workspace.
-Warm-paper/display-serif retains Mayaform. Key entry makes no call/mode change;
-environment key wins. Check skips Ready/deferred, confirms calls and stops on failure.
-Failed creation retains text/retry identity; libraries use pencil/download/X.
+0030 adds private history, encrypted preferences and 20s Live leases. Chat freezes
+version/snapshot, actor, revision and unknown-state; Live shares history/audio without
+spectator generation/control. Providers are core modules; speech settings are
+environment-managed (TTS120s, generic30s). Avatar editing stays in Workspace; the
+warm-paper/display-serif design remains. Key entry makes no call/mode change; env key
+wins. Check skips Ready/deferred, confirms calls and stops on failure. Failed creation
+keeps text/retry identity; libraries use pencil/download/X. Dated workspace/Live checks
+used11 calls; concurrent owner work raised the historical ledger to17.
 
-Dated workspace/Live checks used11 calls; concurrent owner work raised the ledger
-to17. These historical counts are not current usage.
+Agent.md has no total cap; template is optional, with no chapter/semantic gates or
+executed ToT/ReAct. Persona UI is removed; old codecs no longer reject by total size.
+RAG has no file/aggregate character cap; ACL/non-execution guards remain. Supplier
+batches stay at 10 items/30,000 estimated tokens. 0031 tombstones remove shared access
+but retain assets/read-only Chats; Debate references/publication block deletion under
+writer lock. Chats restores history; New starts fresh; Send clears the composer and
+errors restore text/request identity. No cross-chat memory. Historical deterministic/
+Docker0031 checks used no paid calls/live deletion/generation; quality stayed unverified.
 
-Agent.md is complete through Chat/Debate with no whole-document cap; template optional,
-no chapter/semantic gates or executed ToT/ReAct. Persona UI is removed; old codecs no
-longer reject by total size. RAG has no file/aggregate character cap; access and
-non-execution guards remain. Embedding batches stay at 10 items/30,000 estimated tokens.
-0031 tombstones remove shared access but retain
-assets/read-only chats; Debate references/publication block deletion under writer lock.
-Chats restores history; New starts fresh. Send clears the composer; errors restore
-text/request identity. No cross-chat memory. Dated deterministic/Docker0031 checks
-passed without paid calls/live deletion/generation; quality remained unverified.
-
-September23: SiyaH context ceilings and an educational “Authorization” false positive
-led to removing20-turn/100-per-day/4,000-character/32,000-byte stops, fixed max_tokens:1500
-and prose scanning. Retain full unsummarized history, auth/CSRF/ownership/header/
-unknown-acceptance/deduplication guards. Reservations use unbounded scopes; SendChat
-has no maxLength/429. Focused tests passed; no paid post-rebuild SiyaH/RAG acceptance.
-Supplier capacity still applies.
+September23 removed Chat ceilings/fixed output caps and prose scanning; retain full
+history, auth/CSRF/ownership/header/unknown-acceptance/dedup/retry guards. Reservations
+are accounting only; SendChat has no maxLength/429. Focused tests passed; no paid
+post-rebuild SiyaH/RAG acceptance.
 
 ## Working — quiet workspace UI (observed in code 2026-09-24)
 
@@ -178,22 +172,14 @@ downloads and Chats floating composer/separate Send remain.
 
 ## Snapshot publication history — September 23, 2026
 
-Snapshot ceilings were removed; batches remain 10 items/30,000 estimated tokens.
-罗燕玲 staged one batch before HTTP 500; a later build accepted five, timed out at
-30s and left two not_sent. Next click sent nothing at attempt 2/2. Continuation now
-permits three attempts for unstaged unknown batches, charging resends; timeout 120s.
-New draft accepted nine batches at07:28UTC: text-embedding-v4/1024/12 chunks; old
-timeout was not resent. SiyaH's two retained stages published at07:39UTC after commit
-failure: same model/dimension, seven chunks, no new call.
-
-Debates use AGENT.md, not compiled Persona. Prompt/output/query/LLM scope stops,
-embedding input-size rejection and 256 KiB recovery ceiling were removed. Failed
+Snapshot totals are unbounded; supplier batches remain 10/30,000 estimated tokens.
+罗燕玲 staged one batch before HTTP500; a later build accepted five, timed out at30s and
+left two not_sent. Next clicked sent nothing at attempt2/2; continuation later allowed
+three attempts for unstaged unknown batches and120s timeout. A new draft accepted nine
+batches (text-embedding-v4/1024/12 chunks). SiyaH's two retained stages published after
+commit failure with seven chunks and no new call. Debate uses AGENT.md, not compiled
+Persona. Prompt/output/query/LLM caps and embedding byte rejection were removed; failed
 drafts cannot steal another warmer; proven-not-sent queries get one retry; stages reuse.
-
-## Next task
-
-LLM_MODEL selects Chat/Debate/Report; Embedding/speech pinned. Chats model/effort:
-[ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md); no charged model acceptance.
 
 ## Checked-in streaming and speech capability
 
@@ -276,44 +262,34 @@ Format gate blocked.
 
 ## Agent names and next-version voices — September 27, 2026
 
-Undeleted names are Workspace-unique by
-NFKC/strip/casefold on create/Markdown first-line rename;409 agent_name_conflict.
-Next drafts can use the owner's ready voice or null(platform default); old versions
-stay unchanged.
-
-Backed-up normal soft-delete removed only the unpublished duplicate Bowen.
+Names normalize NFKC/strip/casefold; duplicate creates and Markdown H1 renames return 409. Next drafts may use the owner's ready voice or null/platform default; old versions
+stay unchanged. Backed-up normal soft-delete removed only the unpublished duplicate Bowen.
 
 ## Interaction and long-speech recovery — September 27, 2026
 
-Interaction uses warm-paper mobile layout,16px inputs/48px controls; 375×812 and
-812×375 checks passed, no real classroom messages. Retry is an accessible refresh
-icon. SQL/Mock integration covers HTTP, persisted messages/WS events, Final freeze,
-model input, reply_to and public output. Reply text quotes only the referenced frozen
-anonymous message, never nickname/rewritten speech. Conclusion keeps300-char input/
-12-candidate pool; this proves plumbing, not quality or immediate replies.
+Interaction uses warm-paper mobile layout, 16px inputs/48px controls; 375×812 and
+812×375 checks passed, no real classroom messages. Retry is an accessible refresh icon.
+SQL/Mock covers HTTP, persisted messages/WS, Final freeze, model input, reply_to and
+public output; replies quote only the referenced frozen anonymous message. Conclusion
+keeps a 300-char input/12-candidate pool. This proves plumbing, not quality.
 
-Speaker/AGENT.md binding is correct. Attribution lives in editable zh/en Rulesets,
-not Execution contract; removal never reinserts it, frozen prompts stay exact.
-Checks: backend1500/21 skipped (known race rerun), frontend420/1 skipped; Docker and
-both Ruleset views passed. No model calls or semantic-quality claim.
+Speaker/AGENT.md binding is correct; attribution stays in editable zh/en Rulesets,
+not Execution contract, and removal never reinserts it. Backend1500/21 skipped (known
+race rerun), frontend420/1 skipped; Docker/Ruleset views passed, no model calls.
 
-Next stalled Debate accepted text but TTS reused the preview1–60s check. One
-authorized TTS POST returned HTTP200 and113.12s/5,429,804 bytes, proving that
-rejection. After backup, HTTP-disabled single-turn promotion reused saved bytes/text
-without Embedding/LLM or adjacent enqueue. Earlier failed-TTS charges remain unknown.
-Speech keeps format/nonempty/quality checks, removes preview duration cap, retains
-20MiB/SSRF guards; TTS failures wait for explicit Retry. Docker switched before
-Preview continued.
+A stalled Debate accepted text but TTS reused a preview 1–60s check. One authorized TTS
+POST returned HTTP200, 113.12s/5,429,804 bytes. After backup, HTTP-disabled promotion
+reused saved bytes/text without Embedding/LLM or adjacent enqueue; old failed-TTS charges
+remain unknown. Speech removes preview duration cap but keeps format/nonempty/quality,
+20MiB and SSRF guards; Retry stays explicit. Docker switched before Preview continued.
 
 ## Debate entry and Immerse controls — September 27, 2026
 
-Preview links keep warm hover/focus/press and reduced motion. No manual barrage
-pause; Final freezes collection. Missing grades show No match+0; unscored counts
-are removed without rewriting. Report failed `report_response_resource` after HTTP200;
-label/usage gates are gone, content/finish checks remain. Close icon; no real retry.
-Student Live Interact reuses the QR form (same-course, active, non-replay); Final
-hides it. Messages uncapped, votes idempotent. `Study With Bowen.` above Logout. Chats
-follow each current message's language, with no UI language field or TTS.
+Preview links keep warm hover/focus/press and reduced motion; no manual barrage pause,
+Final freezes collection. Missing grades show No match+0; unscored counts are removed
+without rewriting. Report failed `report_response_resource` after HTTP200; no real retry.
+Student Live reuses QR form (same-course, active, non-replay); Final hides it. Messages
+are uncapped/idempotent. Chats follow each message's language; no UI language field/TTS.
 
 ## MayaForm W0 — 2026-09-27
 
@@ -322,10 +298,35 @@ history; direct `Message[]` drops assistant turns.
 
 ## MayaForm W2a Chat reliability — 2026-09-27
 
-Unknown: no auto-resend; same-ID replay/new-ID follow-up. History/status persist; valid stop tolerates usage faults, invalid fails post-200. CAS/refund/save/SSE, GET recovery; charged calls recorded, usage unclaimed. Actor/course change clears Chat; same-actor nav retains. r4 `8bbcdfd00d804db574789a2a27b98bbf10d5c9d66da83587937d776c0d2cd9a8`/40: 42 focus, 449/1; `pnpm check`/boundary0. Sol 9+42 clean; Mock recovery, 0 real.
+Unknown timeouts are not auto-resent; same-ID replay/new-ID follow-up. History/status
+persist; valid stop tolerates usage faults, invalid fails after200. CAS/refund/save/SSE,
+GET recovery; charged calls recorded, usage unclaimed. Actor/course switch clears Chat;
+same-actor navigation retains. R4 `8bbcdfd00d804db574789a2a27b98bbf10d5c9d66da83587937d776c0d2cd9a8`/40 files:
+42 focused, 449 frontend/1 skipped, `pnpm check`/boundary0. Sol review clean (9+42);
+Mock recovery passed, 0 real calls.
 
 ## MayaForm W2b authored lengths — 2026-09-27
 
-Agent.md/single+aggregate RAG 12k/100k caps removed; full text survives PATCH/upload/preview/publish/download for synthetic Agent14,343/RAG108,350/aggregate123,080 (`limit:null`). Migration0034 preserves rows/children/vectors/indexes/triggers/FKs, removes only snapshot upper CHECK; downgrade >100k refuses. ACL/CAS/source guards intact. Chunker v2 codepoint-splits <=15k UTF-8 bytes; planner/adapter cap 10 items/30k estimated tokens, fail closed. Nine-suite backend (41 W4), Ruff/mypy/format pass. Sol R2 accepted; `pnpm check`/boundary0 (frontend449/1 skip). Desktop/375: no overflow, draft tail retained; IME unverified; 0 Provider.
+Agent.md and single/aggregate RAG caps removed; synthetic input fixtures were Agent.md
+14,343 chars, source108,350 and two-source total123,080; API-saved/downloaded Agent.md
+14,353. Full text survives PATCH/upload/preview/publish/download. Migration0034 preserves
+rows/chunks/vectors/refs/indexes/triggers/FKs, removes only snapshot upper CHECK; downgrade
+above100k refuses. UTF-8 codepoint chunks; provider plan/dispatch fail closed above10 items
+or30,000 estimated tokens. Sol R2 accepted; `pnpm check`/boundary0, frontend449/1 skipped;
+desktop/375 mobile no overflow, draft tail retained, IME unverified, 0 Provider.
 
-Queue W1→accepted S01–S22: Knowledge Sets, save-to-use, legal tools, Public Team.
+## MayaForm W1 owner-first workspace — 2026-09-27
+
+0035 adds owner/course/scope/visibility epochs, nullable personal Agent/source group links
+and Chat snapshots; legacy group stays Public/owner NULL. Teacher personal Agent
+create/list/detail exists. Sticky `draft_visibility` plus `can_read_version` keeps Private
+Agent/source/edited drafts owner-only across Public changes; clones share only from a
+current Public release with current Public sources; untouched Public drafts collaborate.
+Owner retains history. No-RAG Chat uses NULL snapshot/empty evidence; withdrawal freezes
+name/history and blocks new sends. Debate stays group-only.
+
+R5: 70 files, no drift; `pnpm check`/boundary passed. Sol security/migration reviews,
+80 Mock API requests and Teacher no-RAG Chat/mobile/grant-copy passed; 0 Provider calls.
+IME NOT_RUN; Docker unchanged. Student Agent.md allowed; no Toolkit binding/approval.
+Future Sets (outside W1): Sources/Concepts/Questions/Notes; Rubric in Question; Graph
+read-only; save activates, edits version.

@@ -1134,6 +1134,7 @@ export class PlatformApi {
     name: string,
     description: string,
     options: IdempotentMutationOptions = {},
+    visibility: "private" | "public" = "private",
   ): Promise<AgentDetail> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST("/groups/{group_id}/agents", {
@@ -1144,8 +1145,41 @@ export class PlatformApi {
             "X-CSRF-Token": this.csrfToken ?? "",
           },
         },
-        body: { name, description },
+        body: { name, description, visibility },
       });
+      return unwrap(result);
+    });
+  }
+
+  async workspaceAgents(courseId: string): Promise<AgentSummary[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/workspace-agents", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async createWorkspaceAgent(
+    courseId: string,
+    name: string,
+    description: string,
+    options: IdempotentMutationOptions = {},
+    visibility: "private" | "public" = "private",
+  ): Promise<AgentDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST(
+        "/courses/{course_id}/workspace-agents",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body: { name, description, visibility },
+        },
+      );
       return unwrap(result);
     });
   }
@@ -1439,6 +1473,63 @@ export class PlatformApi {
         params: { path: { group_id: groupId } },
       }),
     );
+  }
+
+  async workspaceDocuments(courseId: string): Promise<KnowledgeDocument[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/workspace-documents", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async updateKnowledgeVisibility(
+    documentId: string,
+    body: components["schemas"]["UpdateKnowledgeDocumentVisibility"],
+  ): Promise<KnowledgeDocument> {
+    return unwrap(
+      await this.client.PATCH("/knowledge-documents/{document_id}", {
+        params: {
+          path: { document_id: documentId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body,
+      }),
+    );
+  }
+
+  async uploadWorkspaceKnowledge(
+    courseId: string,
+    versionId: string,
+    file: File,
+    expectedRevision: number,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocumentMutation> {
+    return commitMutation(options.idempotency, async (key) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("target_agent_version_id", versionId);
+      form.append("expected_revision", String(expectedRevision));
+      form.append("visibility", "private");
+      const result = await this.client.POST(
+        "/courses/{course_id}/workspace-documents",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body: form as unknown as never,
+        },
+      );
+      const mutation = await unwrap(result);
+      return {
+        document: mutation.document,
+        agent_version: mutation.agent_version ?? null,
+      };
+    });
   }
 
   async uploadKnowledge(

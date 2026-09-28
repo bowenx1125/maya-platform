@@ -75,7 +75,8 @@ try {
   // Private Chat, Provider settings and student Live add twelve operations.
   // Chat streaming and deletion add two conversation operations.
   // Voice filename editing adds one metadata-only operation.
-  if (platformOperationCount !== 107 || placeholderCount !== 0) {
+  // Teacher personal workspace adds two Agent, two source and one visibility operation.
+  if (platformOperationCount !== 112 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

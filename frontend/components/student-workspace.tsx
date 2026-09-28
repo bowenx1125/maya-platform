@@ -4,7 +4,7 @@ import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import {
@@ -322,17 +322,56 @@ function GroupAgentTile({
   );
 }
 
-export function CreateAgentForm({ groupId }: { groupId: string }) {
+export function CreateAgentForm({
+  groupId,
+  courseId,
+}: {
+  groupId?: string;
+  courseId?: string;
+}) {
+  const { identityGeneration, user } = useSession();
+  const actorScopeKey = `${user?.id ?? "anonymous"}:${courseId ?? groupId ?? "none"}:${identityGeneration}`;
+  return (
+    <CreateAgentFormSession
+      key={actorScopeKey}
+      actorScopeKey={actorScopeKey}
+      courseId={courseId}
+      groupId={groupId}
+    />
+  );
+}
+
+function CreateAgentFormSession({
+  groupId,
+  courseId,
+  actorScopeKey,
+}: {
+  groupId?: string;
+  courseId?: string;
+  actorScopeKey: string;
+}) {
   const t = useT();
   const { api } = useSession();
   const router = useRouter();
   const mutationStore = useIdempotencyStore();
+  const mounted = useRef(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [visibility, setVisibility] = useState<"private" | "public">("private");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [retryable, setRetryable] = useState(false);
-  const mutationIntent = `create-agent:${groupId}`;
+  const mutationIntent = `create-agent:${actorScopeKey}`;
+  const visibilityLede = courseId
+    ? t("personalVisibilityLede")
+    : t("privateVisibilityLede");
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   function abandonCreateIntent() {
     mutationStore.abandon(mutationIntent);
@@ -344,23 +383,36 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
     setError(null);
     const handle = mutationStore.handleFor(mutationIntent);
     try {
-      const created = await api.createAgent(
-        groupId,
-        name.trim(),
-        description.trim(),
-        { idempotency: handle },
-      );
+      const created = groupId
+        ? await api.createAgent(
+            groupId,
+            name.trim(),
+            description.trim(),
+            { idempotency: handle },
+            visibility,
+          )
+        : await api.createWorkspaceAgent(
+            courseId ?? "",
+            name.trim(),
+            description.trim(),
+            { idempotency: handle },
+            visibility,
+          );
       mutationStore.finish(mutationIntent, handle);
+      if (!mounted.current) return;
       setRetryable(false);
       const draftId =
         created.current_draft_version_id ??
         created.versions?.find((version) => version.state === "draft")?.id;
       router.push(
-        draftId
-          ? `/student/agent-versions/${draftId}/edit`
-          : `/student/agents/${created.id}`,
+        groupId
+          ? draftId
+            ? `/student/agent-versions/${draftId}/edit`
+            : `/student/agents/${created.id}`
+          : `/teacher/agents/${created.id}`,
       );
     } catch (cause) {
+      if (!mounted.current) return;
       if (isAmbiguousMutationFailure(cause)) {
         setRetryable(true);
       } else {
@@ -384,7 +436,7 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
       <PageIntro title={t("newAgent")} />
       <WorkspaceAction
         name="back"
-        href={`/student/groups/${groupId}`}
+        href={groupId ? `/student/groups/${groupId}` : "/teacher"}
         disabled={busy}
       />
       <WorkspaceAction name="done" form="create-agent-form" disabled={busy} />
@@ -422,6 +474,25 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
               }}
               rows={4}
             />
+          </label>
+          <label>
+            <span>{t("agentVisibility")}</span>
+            <select
+              value={visibility}
+              disabled={busy}
+              onChange={(event) => {
+                abandonCreateIntent();
+                setVisibility(event.target.value as "private" | "public");
+              }}
+            >
+              <option value="private">{t("privateVisibility")}</option>
+              <option value="public">
+                {courseId
+                  ? t("personalPublicVisibility")
+                  : t("publicVisibility")}
+              </option>
+            </select>
+            <small>{visibilityLede}</small>
           </label>
           {error ? (
             <ErrorNotice

@@ -47,11 +47,18 @@ def _headers(csrf: str, **extra: str) -> dict[str, str]:
     return {"Origin": "http://testserver", "X-CSRF-Token": csrf, **extra}
 
 
-def _make_agent(client: TestClient, csrf: str, key: str, name: str) -> tuple[str, str]:
+def _make_agent(
+    client: TestClient,
+    csrf: str,
+    key: str,
+    name: str,
+    *,
+    visibility: str = "private",
+) -> tuple[str, str]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": f"create-{key}-123456"}),
-        json={"name": name},
+        json={"name": name, "visibility": visibility},
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -66,6 +73,7 @@ def _upload(
     filename: str,
     content: bytes,
     expected_revision: int,
+    visibility: str = "private",
 ) -> dict[str, Any]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
@@ -73,6 +81,7 @@ def _upload(
         data={
             "target_agent_version_id": version_id,
             "expected_revision": str(expected_revision),
+            "visibility": visibility,
         },
         files={"file": (filename, content, "text/markdown")},
     )
@@ -482,7 +491,13 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
     database: Database,
 ) -> None:
     _student, csrf = login(client, "bowen")
-    agent_id, version_id = _make_agent(client, csrf, "download", "Download Agent")
+    agent_id, version_id = _make_agent(
+        client,
+        csrf,
+        "download",
+        "Download Agent",
+        visibility="public",
+    )
     detail = client.get(f"/api/v1/agents/{agent_id}")
     assert detail.status_code == 200, detail.text
     avatar = detail.json()["versions"][0]["avatar_config"]
@@ -505,6 +520,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
         "same.md",
         b"# First\n\nAlpha",
         1,
+        visibility="public",
     )
     second = _upload(
         client,
@@ -514,6 +530,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
         "same.md",
         b"# Second\n\nBeta",
         2,
+        visibility="public",
     )
     _confirm_persona(client, csrf, version_id, expected_revision=3)
     published = client.post(

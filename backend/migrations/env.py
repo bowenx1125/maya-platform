@@ -65,9 +65,23 @@ def run_migrations_online() -> None:
     if connectable.dialect.name == "sqlite":
         event.listen(connectable, "connect", _sqlite_pragmas)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
-        with context.begin_transaction():
-            context.run_migrations()
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            transactional_ddl=True,
+            transaction_per_migration=True,
+        )
+        try:
+            with context.begin_transaction():
+                context.run_migrations()
+        finally:
+            if connectable.dialect.name == "sqlite":
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 1:
+                    raise RuntimeError(
+                        "Migrations failed to restore SQLite foreign-key enforcement."
+                    )
 
 
 if context.is_offline_mode():

@@ -38,6 +38,7 @@ from app.core.models import (
 from app.modules.agents.markdown import markdown_hash
 from app.modules.knowledge.markdown import normalize_markdown
 from app.modules.knowledge.services import document_file_content
+from app.modules.org.access import WorkspaceMember
 from app.providers.control import (
     ExportConfirmationV1,
     ExportFieldV1,
@@ -94,7 +95,7 @@ class RealSnapshotBuildContext:
 
     build: SnapshotBuildV1
     course_id: str
-    group_id: str
+    group_id: str | None
     agent_id: str
     agent_version_id: str
     documents: tuple[SnapshotBuildInputDocument, ...]
@@ -152,21 +153,30 @@ def _owner_rows(
     db: Session,
     *,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     expected_revision: int | None = None,
-) -> tuple[Course, Group, Agent, AgentVersion]:
-    """Load and verify the complete course -> group -> agent -> version chain."""
+) -> tuple[Course, Group | None, Agent, AgentVersion]:
+    """Load and verify the course -> optional group -> agent -> version chain."""
 
     course = db.get(Course, course_id)
-    group = db.get(Group, group_id)
+    group = db.get(Group, group_id) if group_id is not None else None
     version = db.get(AgentVersion, agent_version_id)
-    if course is None or group is None or version is None:
+    if course is None or version is None:
         raise _product_error("embedding publication owner was not found", "owner_not_found")
     agent = db.get(Agent, version.agent_id)
     if agent is None or agent.deleted_at is not None:
         raise _product_error("embedding publication agent was not found", "owner_not_found")
-    if group.course_id != course.id or agent.group_id != group.id or version.agent_id != agent.id:
+    if group_id is None:
+        valid_scope = agent.ownership_scope == "personal" and agent.group_id is None
+    else:
+        valid_scope = (
+            group is not None
+            and group.course_id == course.id
+            and agent.ownership_scope == "group"
+            and agent.group_id == group.id
+        )
+    if agent.course_id != course.id or not valid_scope or version.agent_id != agent.id:
         raise _product_error("embedding publication owner does not match", "owner_mismatch")
     if expected_revision is not None and version.revision != expected_revision:
         raise _product_error("embedding publication revision is stale", "revision_stale")
@@ -179,7 +189,8 @@ def _enabled_documents(
     db: Session,
     *,
     version: AgentVersion,
-    group: Group,
+    agent: Agent,
+    group: Group | None,
     data_root: Path,
 ) -> tuple[SnapshotBuildInputDocument, ...]:
     relations = list(
@@ -196,9 +207,36 @@ def _enabled_documents(
     documents: list[SnapshotBuildInputDocument] = []
     for order, relation in enumerate(enabled):
         document = db.get(KnowledgeDocument, relation.document_id)
+        if document is None:
+            raise _product_error("an enabled document is not publishable", "document_owner_drift")
+        if document.ownership_scope == "personal":
+            source_scope_matches = document.owner_user_id == agent.owner_user_id
+        elif document.ownership_scope == "group" and document.group_id is not None:
+            if agent.ownership_scope == "group":
+                # Legacy group Agents deliberately keep owner_user_id=NULL.
+                # Their immutable group scope is sufficient here because the
+                # API rechecks the current editor's group authority before
+                # entering this builder.
+                source_scope_matches = group is not None and document.group_id == group.id
+            else:
+                owner_is_group_member = (
+                    agent.owner_user_id is not None
+                    and db.scalar(
+                        select(WorkspaceMember.user_id).where(
+                            WorkspaceMember.group_id == document.group_id,
+                            WorkspaceMember.user_id == agent.owner_user_id,
+                        )
+                    )
+                    is not None
+                )
+                source_scope_matches = owner_is_group_member and (
+                    document.visibility == "public" or document.owner_user_id == agent.owner_user_id
+                )
+        else:
+            source_scope_matches = False
         if (
-            document is None
-            or document.group_id != group.id
+            not source_scope_matches
+            or document.course_id != agent.course_id
             or document.workspace_state != "active"
             or document.index_status != "ready"
             or document.stored_file is None
@@ -294,7 +332,7 @@ def prepare_real_snapshot_build(
     data_root: Path | str,
     *,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     expected_revision: int | None = None,
 ) -> SnapshotBuildV1:
@@ -302,7 +340,7 @@ def prepare_real_snapshot_build(
 
     root = Path(data_root)
     with _session_for(database) as db:
-        _course, group, _agent, version = _owner_rows(
+        _course, group, agent, version = _owner_rows(
             db,
             course_id=course_id,
             group_id=group_id,
@@ -311,7 +349,9 @@ def prepare_real_snapshot_build(
         )
         if not version.agent_md.strip():
             raise _product_error("Agent Markdown is empty", "agent_md_invalid")
-        documents = _enabled_documents(db, version=version, group=group, data_root=root)
+        documents = _enabled_documents(
+            db, version=version, agent=agent, group=group, data_root=root
+        )
         _scan_document_outbound_texts(documents)
         snapshot_id, build_id = _deterministic_ids(
             agent_version_id=version.id,
@@ -399,7 +439,7 @@ def _assert_manifest_row_owner(
     *,
     policy_snapshot_id: str,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
 ) -> Any:
     if row is None:
@@ -407,7 +447,7 @@ def _assert_manifest_row_owner(
     if (
         str(row["policy_snapshot_id"]) != policy_snapshot_id
         or str(row["course_id"]) != course_id
-        or str(row["group_id"]) != group_id
+        or row["group_id"] != group_id
         or str(row["agent_version_id"]) != agent_version_id
     ):
         raise _product_error("provider export manifest owner changed", "manifest_owner_drift")
@@ -419,7 +459,7 @@ def ensure_real_embedding_export_manifest(
     build: SnapshotBuildV1,
     *,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     policy: ProviderPolicySnapshotV1,
 ) -> ExportManifestV1:
@@ -545,7 +585,7 @@ def require_exact_confirmation(
     if str(manifest_row["policy_snapshot_id"]) != str(policy_row["id"]):
         raise _product_error("provider manifest policy changed", "policy_drift")
     if course_id is not None or group_id is not None or agent_version_id is not None:
-        if not course_id or not group_id or not agent_version_id:
+        if not course_id or not agent_version_id:
             raise _product_error("provider manifest owner is incomplete", "manifest_owner_drift")
         _assert_manifest_row_owner(
             manifest_row,
@@ -659,7 +699,7 @@ def _run_confirmed(
     data_root: Path,
     *,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     policy: ProviderPolicySnapshotV1,
     manifest: ExportManifestV1 | None,
@@ -905,7 +945,7 @@ def run_confirmed_real_embedding_publication(
     *,
     data_root: Path | str,
     course_id: str,
-    group_id: str,
+    group_id: str | None,
     agent_version_id: str,
     policy: ProviderPolicySnapshotV1,
     manifest: ExportManifestV1 | None = None,

@@ -18,7 +18,6 @@ from app.core.models import (
     Agent,
     AgentVersion,
     CourseMember,
-    Group,
     ProviderOperation,
     ProviderReservation,
 )
@@ -30,6 +29,9 @@ from app.modules.auth.dependencies import (
     require_authenticated_mutation,
 )
 from app.modules.auth.service import AuthContext
+from app.modules.knowledge.services import (
+    can_invoke_version,
+)
 from app.providers.control_repository import ProviderSendingGuard
 
 from .access import course_member
@@ -50,15 +52,22 @@ router = APIRouter(
 logger = logging.getLogger("maya.workspace")
 
 
-def agent_view(version: AgentVersion, agent: Agent, course_id: str) -> ChatAgent:
+def agent_view(
+    version: AgentVersion,
+    agent: Agent,
+    course_id: str,
+    *,
+    name: str | None = None,
+    available: bool = True,
+) -> ChatAgent:
     return ChatAgent(
         agent_id=UUID(agent.id),
         version_id=UUID(version.id),
         course_id=UUID(course_id),
-        name=agent.name,
+        name=name or agent.name,
         version_label=f"V1.{version.version_seq}",
         avatar_config=AvatarConfig.model_validate_json(version.avatar_config_json),
-        available=agent.deleted_at is None,
+        available=available,
     )
 
 
@@ -241,8 +250,7 @@ def generate_reply(
     if (
         version is None
         or agent is None
-        or agent.deleted_at is not None
-        or version.knowledge_snapshot_id != row.snapshot_id
+        or not _conversation_is_callable(db, row, version, agent, row.user_id)
     ):
         raise not_found()
     if settings.llm_provider == "mock":
@@ -404,11 +412,57 @@ def release_chat_request(
     )
 
 
-def session_view(db: Session, conversation: Conversation) -> ChatSession:
+def _conversation_is_callable(
+    db: Session,
+    conversation: Conversation,
+    version: AgentVersion,
+    agent: Agent,
+    actor_user_id: str,
+) -> bool:
+    if (
+        conversation.user_id != actor_user_id
+        or agent.deleted_at is not None
+        or agent.status != "active"
+        or version.knowledge_snapshot_id != conversation.snapshot_id
+    ):
+        return False
+    is_owner = agent.owner_user_id == conversation.user_id
+    if not is_owner and conversation.agent_authorization_epoch != agent.authorization_epoch:
+        return False
+    return can_invoke_version(db, actor_user_id, version, agent)
+
+
+def _conversation_unavailable_error(agent: Agent | None, actor_user_id: str) -> PlatformError:
+    if agent is not None and agent.deleted_at is not None and agent.owner_user_id == actor_user_id:
+        return conflict("agent_deleted", "This Agent has been deleted.")
+    return conflict("agent_unavailable", "This Agent is no longer available to this chat.")
+
+
+def _version_chat_allowed(
+    db: Session, context: AuthContext, version: AgentVersion, agent: Agent
+) -> bool:
+    return can_invoke_version(db, context, version, agent)
+
+
+def _version_chat_available(
+    db: Session, context: AuthContext, version: AgentVersion, agent: Agent
+) -> bool:
+    return (
+        agent.deleted_at is None
+        and agent.status == "active"
+        and version.state == "published"
+        and _version_chat_allowed(db, context, version, agent)
+    )
+
+
+def session_view(db: Session, conversation: Conversation, context: AuthContext) -> ChatSession:
+    if conversation.user_id != context.user.id:
+        raise not_found()
     version = db.get(AgentVersion, conversation.agent_version_id)
     agent = db.get(Agent, version.agent_id) if version else None
     if version is None or agent is None:
         raise not_found()
+    available = _conversation_is_callable(db, conversation, version, agent, context.user.id)
     turns = db.scalars(
         select(ConversationTurn)
         .where(
@@ -418,7 +472,13 @@ def session_view(db: Session, conversation: Conversation) -> ChatSession:
     ).all()
     return ChatSession(
         id=UUID(conversation.id),
-        agent=agent_view(version, agent, conversation.course_id),
+        agent=agent_view(
+            version,
+            agent,
+            conversation.course_id,
+            name=conversation.agent_name_snapshot or agent.name,
+            available=available,
+        ),
         revision=conversation.revision,
         created_at=conversation.created_at,
         turns=[
@@ -449,21 +509,33 @@ def list_agents(
     course_member(db, context, str(course_id))
     rows = db.execute(
         select(AgentVersion, Agent)
-        .join(
-            Agent,
-            Agent.current_published_version_id == AgentVersion.id,
-        )
-        .join(Group, Group.id == Agent.group_id)
+        .join(Agent, Agent.current_published_version_id == AgentVersion.id)
         .where(
-            Group.course_id == str(course_id),
+            Agent.course_id == str(course_id),
             Agent.status == "active",
             Agent.deleted_at.is_(None),
             AgentVersion.state == "published",
-            AgentVersion.knowledge_snapshot_id.is_not(None),
+            or_(
+                Agent.owner_user_id == context.user.id,
+                and_(
+                    Agent.visibility == "public",
+                    AgentVersion.published_visibility == "public",
+                    Agent.authorization_epoch == AgentVersion.authorization_epoch,
+                ),
+            ),
         )
         .order_by(Agent.created_at.desc())
     ).all()
-    return [agent_view(version, agent, str(course_id)) for version, agent in rows]
+    return [
+        agent_view(
+            version,
+            agent,
+            str(course_id),
+            available=_version_chat_available(db, context, version, agent),
+        )
+        for version, agent in rows
+        if _version_chat_available(db, context, version, agent)
+    ]
 
 
 @router.get("/conversations", response_model=list[ChatSession], operation_id="listConversations")
@@ -489,7 +561,7 @@ def list_conversations(
             Conversation.id,
         )
     ).all()
-    return [session_view(db, row) for row in rows]
+    return [session_view(db, row, context) for row in rows]
 
 
 @router.post("/conversations", response_model=ChatSession, operation_id="createConversation")
@@ -500,32 +572,32 @@ def create_conversation(
 ) -> ChatSession:
     version = db.get(AgentVersion, str(payload.version_id))
     agent = db.get(Agent, version.agent_id) if version else None
-    group = db.get(Group, agent.group_id) if agent else None
     if (
         version is None
         or agent is None
-        or group is None
         or agent.status != "active"
         or agent.deleted_at is not None
         or version.state != "published"
         or agent.current_published_version_id != version.id
-        or not version.knowledge_snapshot_id
+        or not _version_chat_allowed(db, context, version, agent)
     ):
         raise not_found()
-    course_member(db, context, group.course_id)
+    course_member(db, context, agent.course_id)
     row = Conversation(
         id=str(uuid4()),
         user_id=context.user.id,
-        course_id=group.course_id,
+        course_id=agent.course_id,
         agent_version_id=version.id,
         snapshot_id=version.knowledge_snapshot_id,
+        agent_name_snapshot=agent.name,
+        agent_authorization_epoch=agent.authorization_epoch,
         revision=0,
         active_request_id=None,
         created_at=datetime.now(UTC),
     )
     db.add(row)
     db.flush()
-    return session_view(db, row)
+    return session_view(db, row, context)
 
 
 @router.get(
@@ -536,7 +608,7 @@ def get_conversation(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> ChatSession:
-    return session_view(db, owned_conversation(db, context, str(conversation_id)))
+    return session_view(db, owned_conversation(db, context, str(conversation_id)), context)
 
 
 @router.delete(
@@ -574,8 +646,12 @@ def send_message(
     row = owned_conversation(db, context, str(conversation_id))
     version = db.get(AgentVersion, row.agent_version_id)
     agent = db.get(Agent, version.agent_id) if version else None
-    if agent is None or agent.deleted_at is not None:
-        raise conflict("agent_deleted", "This Agent was deleted. The conversation is read-only.")
+    if (
+        version is None
+        or agent is None
+        or not _conversation_is_callable(db, row, version, agent, context.user.id)
+    ):
+        raise _conversation_unavailable_error(agent, context.user.id)
     request_id = str(payload.request_id)
     message = payload.message.strip()
     if not message:
@@ -590,7 +666,7 @@ def send_message(
     )
     claim_revision = turn.position
     if not created:
-        return session_view(db, row)
+        return session_view(db, row, context)
     try:
         reply, sources, operation_id = generate_reply(
             db, settings, row, request_id, claim_revision, message
@@ -601,7 +677,7 @@ def send_message(
     release_chat_request(db, row.id, request_id, claim_revision)
     db.commit()
     db.expire_all()
-    return session_view(db, owned_conversation(db, context, str(conversation_id)))
+    return session_view(db, owned_conversation(db, context, str(conversation_id)), context)
 
 
 @router.post(
@@ -629,8 +705,12 @@ def stream_message(
     row = owned_conversation(db, context, str(conversation_id))
     version = db.get(AgentVersion, row.agent_version_id)
     agent = db.get(Agent, version.agent_id) if version else None
-    if agent is None or agent.deleted_at is not None:
-        raise conflict("agent_deleted", "This Agent was deleted. The conversation is read-only.")
+    if (
+        version is None
+        or agent is None
+        or not _conversation_is_callable(db, row, version, agent, context.user.id)
+    ):
+        raise _conversation_unavailable_error(agent, context.user.id)
     if not accepts_event_stream(accept):
         raise PlatformError("malformed_request", "Accept text/event-stream is required.", 400)
     request_id = str(payload.request_id)

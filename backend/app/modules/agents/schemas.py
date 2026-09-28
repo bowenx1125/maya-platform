@@ -28,7 +28,10 @@ class AvatarConfig(BaseModel):
 
 class AgentSummary(BaseModel):
     id: UUID
-    group_id: UUID
+    group_id: UUID | None
+    course_id: UUID
+    ownership_scope: Literal["group", "personal"]
+    visibility: Literal["private", "public"]
     name: str
     description: str = ""
     metadata_revision: int = Field(ge=0)
@@ -57,6 +60,7 @@ class AgentVersion(BaseModel):
     effective_voice_profile_id: UUID | None = None
     voice_fallback_active: bool
     knowledge_snapshot_id: UUID | None = None
+    published_visibility: Literal["private", "public"] | None = None
     enabled_documents: list[KnowledgeDocument] = Field(default_factory=list)
     publish_blockers: list[str] = Field(default_factory=list)
 
@@ -103,18 +107,20 @@ class UpdateAgentDraftRequest(BaseModel):
 class AgentCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
+    visibility: Literal["private", "public"] = "private"
 
 
 class UpdateAgentMetadataRequest(BaseModel):
-    """CAS payload for the mutable Agent description only.
+    """CAS payload for mutable Agent metadata and owner-controlled visibility.
 
     ``description`` is intentionally nullable on the wire so clients can
     clear an older/null value explicitly.  The database stores a non-null
-    empty string and the projection never invents fallback copy.
+    empty string.
     """
 
     expected_metadata_revision: int = Field(ge=0)
     description: str | None = ""
+    visibility: Literal["private", "public"] | None = None
 
 
 class SetDocumentsRequest(BaseModel):

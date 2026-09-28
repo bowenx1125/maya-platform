@@ -23,6 +23,9 @@ function agent(): AgentDetail {
   return {
     id: "agent-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
     name: "Published Agent",
     description: "A released view",
     metadata_revision: 0,

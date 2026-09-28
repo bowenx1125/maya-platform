@@ -176,7 +176,11 @@ def _create_agent(
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": key}),
-        json={"name": "Metadata Agent", "description": description},
+        json={
+            "name": "Metadata Agent",
+            "description": description,
+            "visibility": "public",
+        },
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -203,7 +207,11 @@ def _prepare_draft_for_publish(
     uploaded = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": f"wave3-race-upload-{key_suffix}"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={"file": ("race.md", b"# Race\n\nEvidence", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
@@ -418,7 +426,9 @@ def test_delete_rejects_history_teacher_and_cross_group(
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(teacher_csrf, **{"Idempotency-Key": "wave3-teacher-delete-001"}),
     )
-    assert teacher_delete.status_code == 403, teacher_delete.text
+    # A teacher cannot discover an unpublished student draft, even when its
+    # owner has marked it Public; it is available after publication.
+    assert teacher_delete.status_code == 404, teacher_delete.text
 
     # Delete is group-membership scoped. There is one seeded group, so the
     # cross-group branch is exercised by moving the Agent into a group the
@@ -430,7 +440,9 @@ def test_delete_rejects_history_teacher_and_cross_group(
         moved.group_id = foreign_group_id
         session.commit()
 
-    _other, other_csrf = login(client, "bowen")
+    # A different course member is not the Agent owner and has no membership
+    # in the new group, so the moved resource stays undiscoverable.
+    _other, other_csrf = login(client, "kaikai")
     cross_group = client.delete(
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(other_csrf, **{"Idempotency-Key": "wave3-cross-delete-001"}),
@@ -461,7 +473,11 @@ def test_delete_removes_unreferenced_published_agent_from_both_workspaces(
     uploaded = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-publish-upload-001"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={"file": ("published.md", b"# Published", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text

@@ -3,10 +3,11 @@
 import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type AgentDetail,
+  type AgentSummary,
   type AgentVersion,
   type Course,
   type Group,
@@ -14,6 +15,7 @@ import {
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
+import { useIdempotencyStore } from "../lib/idempotency";
 import { useT } from "./locale";
 import { IconClose, IconDownload } from "./quiet-icons";
 import { useSession } from "./session-provider";
@@ -21,6 +23,8 @@ import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
 import { ReportMarkdown } from "./report/report-markdown";
 import detailStyles from "./teacher-agent-detail.module.css";
+import { AgentWorkbench } from "./agent-workspace";
+import { CreateAgentForm } from "./student-workspace";
 import {
   EmptyCard,
   ErrorNotice,
@@ -31,42 +35,57 @@ import {
 
 export function TeacherDashboard() {
   const t = useT();
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const teacherMembership = user?.courses.find(
+    (item) => item.role === "teacher",
+  );
+  const teacherCourseId = teacherMembership?.course_id;
+  const workspaceScope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${identityGeneration}`;
+  const workspaceScopeRef = useRef(workspaceScope);
+  useEffect(() => {
+    workspaceScopeRef.current = workspaceScope;
+  }, [workspaceScope]);
   const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
+  const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const load = useCallback(async () => {
+    const requestScope = workspaceScope;
     setLoading(true);
     setError(null);
     try {
-      const teacherMembership = user?.courses.find(
-        (item) => item.role === "teacher",
+      const courses = await api.courses();
+      if (workspaceScopeRef.current !== requestScope) return;
+      const courseId = teacherCourseId;
+      const [nextPublished, nextGroups, nextPersonalAgents] = await Promise.all(
+        [
+          courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
+          courseId ? api.groups(courseId) : Promise.resolve([]),
+          courseId && typeof api.workspaceAgents === "function"
+            ? api.workspaceAgents(courseId)
+            : Promise.resolve([]),
+        ],
       );
-      const [courses, nextPublished, nextGroups] = await Promise.all([
-        api.courses(),
-        teacherMembership
-          ? api.publishedAgents(teacherMembership.course_id)
-          : Promise.resolve([]),
-        teacherMembership
-          ? api.groups(teacherMembership.course_id)
-          : Promise.resolve([]),
-      ]);
+      if (workspaceScopeRef.current !== requestScope) return;
       setCourse(
-        courses.find((item) => item.id === teacherMembership?.course_id) ??
-          courses[0] ??
-          null,
+        courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
       );
       setPublished(nextPublished);
       setGroups(nextGroups);
+      setPersonalAgents(nextPersonalAgents);
     } catch (cause) {
-      setError(cause);
+      if (workspaceScopeRef.current === requestScope) setError(cause);
     } finally {
-      setLoading(false);
+      if (workspaceScopeRef.current === requestScope) {
+        setLoadedScope(requestScope);
+        setLoading(false);
+      }
     }
-  }, [api, user]);
+  }, [api, teacherCourseId, workspaceScope]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -76,22 +95,24 @@ export function TeacherDashboard() {
 
   async function deleteAgent(agentId: string) {
     if (deleting || !window.confirm(t("deleteAgentConfirm"))) return;
+    const requestScope = workspaceScope;
     setDeleting(agentId);
     setError(null);
     try {
       await api.deleteAgent(agentId);
+      if (workspaceScopeRef.current !== requestScope) return;
       setPublished((current) =>
         current.filter((item) => item.agent.id !== agentId),
       );
     } catch (cause) {
-      setError(cause);
+      if (workspaceScopeRef.current === requestScope) setError(cause);
     } finally {
-      setDeleting(null);
+      if (workspaceScopeRef.current === requestScope) setDeleting(null);
     }
   }
 
-  if (loading) return <LoadingCard />;
-  if (error && published.length === 0)
+  if (loading || loadedScope !== workspaceScope) return <LoadingCard />;
+  if (error && published.length === 0 && personalAgents.length === 0)
     return <ErrorNotice error={error} onRetry={() => void load()} />;
   return (
     <div className="teacher-home-layout">
@@ -104,6 +125,37 @@ export function TeacherDashboard() {
       />
       <DemoCompositionBadge />
       {error ? <ErrorNotice error={error} /> : null}
+      <SectionCard
+        title={`${t("personalAgents")} · ${personalAgents.length}`}
+        description={t("personalWorkspaceLede")}
+        className="published-section"
+        action={
+          course ? (
+            <Link className="primary-action" href="/teacher/agents/new">
+              {t("newAgent")}
+            </Link>
+          ) : null
+        }
+      >
+        {personalAgents.length === 0 ? (
+          <EmptyCard
+            title={t("noPersonalAgents")}
+            action={
+              course ? (
+                <Link className="text-link" href="/teacher/agents/new">
+                  {t("openPersonalWorkspace")}
+                </Link>
+              ) : null
+            }
+          />
+        ) : (
+          <div className="agent-tile-grid">
+            {personalAgents.map((agent) => (
+              <PersonalAgentTile agent={agent} key={agent.id} />
+            ))}
+          </div>
+        )}
+      </SectionCard>
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
@@ -127,6 +179,43 @@ export function TeacherDashboard() {
           </div>
         </SectionCard>
       )}
+    </div>
+  );
+}
+
+export function TeacherPersonalAgentCreate() {
+  const t = useT();
+  const { identityGeneration, user } = useSession();
+  const teacherMembership = user?.courses.find(
+    (item) => item.role === "teacher",
+  );
+  if (!user || !teacherMembership) {
+    return <ErrorNotice error={new Error(t("courseNotFound"))} />;
+  }
+  const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
+  return (
+    <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
+  );
+}
+
+function PersonalAgentTile({ agent }: { agent: AgentSummary }) {
+  const t = useT();
+  return (
+    <div className="agent-tile" data-agent-row={agent.id}>
+      <Link
+        className="agent-tile-name text-link"
+        href={`/teacher/agents/${agent.id}`}
+      >
+        {agent.name}
+      </Link>
+      <span className="agent-tile-group">
+        {agent.current_draft_version_id ? t("draft") : t("published")}
+      </span>
+      <span className="agent-pill-label">
+        {agent.visibility === "private"
+          ? t("privateVisibility")
+          : t("personalPublicVisibility")}
+      </span>
     </div>
   );
 }
@@ -183,43 +272,70 @@ export function TeacherAgentDetail({
   snapshotId?: string;
 }) {
   const t = useT();
-  const { api } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const actorScope = `${user?.id ?? "anonymous"}:${agentId}:${identityGeneration}`;
+  const actorScopeRef = useRef(actorScope);
+  useEffect(() => {
+    actorScopeRef.current = actorScope;
+  }, [actorScope]);
+  const mutationStore = useIdempotencyStore();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const [editingVersionId, setEditingVersionId] = useState<string | null>(null);
+  const [creatingDraft, setCreatingDraft] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const load = useCallback(async () => {
+    const requestScope = actorScope;
     setLoading(true);
     setError(null);
     setSnapshot(null);
     try {
       const nextAgent = await api.agent(agentId);
+      if (actorScopeRef.current !== requestScope) return;
       const [nextVersions, nextGroup] = await Promise.all([
         api.versions(agentId),
-        typeof api.group === "function"
+        nextAgent.group_id && typeof api.group === "function"
           ? api.group(nextAgent.group_id)
           : Promise.resolve(null),
       ]);
+      if (actorScopeRef.current !== requestScope) return;
       setAgent(nextAgent);
       setGroup(nextGroup);
-      setVersions(nextVersions.filter((version) => version.state !== "draft"));
+      const visibleVersions =
+        nextAgent.ownership_scope === "personal"
+          ? nextVersions
+          : nextVersions.filter((version) => version.state !== "draft");
+      setVersions(visibleVersions);
+      setEditingVersionId(
+        nextAgent.ownership_scope === "personal"
+          ? (visibleVersions.find((version) => version.state === "draft")?.id ??
+              null)
+          : null,
+      );
       const selectedSnapshotId =
         snapshotId ||
         nextVersions.find(
           (version) => version.id === nextAgent.current_published_version_id,
         )?.knowledge_snapshot_id ||
         null;
-      if (selectedSnapshotId)
-        setSnapshot(await api.snapshot(selectedSnapshotId));
-      else setSnapshot(null);
+      if (selectedSnapshotId) {
+        const nextSnapshot = await api.snapshot(selectedSnapshotId);
+        if (actorScopeRef.current !== requestScope) return;
+        setSnapshot(nextSnapshot);
+      } else setSnapshot(null);
     } catch (cause) {
-      setError(cause);
+      if (actorScopeRef.current === requestScope) setError(cause);
     } finally {
-      setLoading(false);
+      if (actorScopeRef.current === requestScope) {
+        setLoadedScope(requestScope);
+        setLoading(false);
+      }
     }
-  }, [agentId, api, snapshotId]);
+  }, [actorScope, agentId, api, snapshotId]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -227,7 +343,7 @@ export function TeacherAgentDetail({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading) return <LoadingCard />;
+  if (loading || loadedScope !== actorScope) return <LoadingCard />;
   if (error || !agent)
     return (
       <ErrorNotice
@@ -236,6 +352,36 @@ export function TeacherAgentDetail({
       />
     );
   const currentAgent = agent;
+  async function createPersonalVersion() {
+    if (creatingDraft) return;
+    const requestScope = actorScope;
+    const intent = `teacher-next-version:${requestScope}`;
+    const handle = mutationStore.handleFor(intent);
+    setCreatingDraft(true);
+    setError(null);
+    try {
+      const next = await api.nextVersion(agentId, { idempotency: handle });
+      mutationStore.finish(intent, handle);
+      if (actorScopeRef.current !== requestScope) return;
+      setVersions((current) => [...current, next]);
+      setEditingVersionId(next.id);
+    } catch (cause) {
+      if (actorScopeRef.current !== requestScope) return;
+      setError(cause);
+    } finally {
+      if (actorScopeRef.current === requestScope) setCreatingDraft(false);
+    }
+  }
+  if (agent.ownership_scope === "personal" && editingVersionId) {
+    return (
+      <AgentWorkbench
+        key={`${actorScope}:${editingVersionId}`}
+        actorScopeKey={actorScope}
+        backHref="/teacher"
+        versionId={editingVersionId}
+      />
+    );
+  }
   const currentVersion = versions.find(
     (version) => version.id === currentAgent.current_published_version_id,
   );
@@ -259,6 +405,18 @@ export function TeacherAgentDetail({
       {agent.status === "archived" ? (
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}
+      {agent.ownership_scope === "personal" &&
+      agent.current_published_version_id ? (
+        <button
+          className="primary-action"
+          type="button"
+          disabled={creatingDraft}
+          onClick={() => void createPersonalVersion()}
+        >
+          {creatingDraft ? t("creating") : t("createNewVersion")}
+        </button>
+      ) : null}
+      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <div className={detailStyles.overview}>
         <TeacherAgentMarkdown
           key={selectedVersion?.id}

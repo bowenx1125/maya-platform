@@ -4,7 +4,7 @@ import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -186,11 +186,31 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   );
 }
 
-export function AgentWorkbench({ versionId }: { versionId: string }) {
+export function AgentWorkbench({
+  versionId,
+  backHref,
+  actorScopeKey,
+}: {
+  versionId: string;
+  backHref?: string;
+  actorScopeKey?: string;
+}) {
   const t = useT();
   const router = useRouter();
   const { locale } = useLocale();
   const { api } = useSession();
+  const workbenchScope = actorScopeKey ?? `agent-version:${versionId}`;
+  const workbenchScopeRef = useRef(workbenchScope);
+  workbenchScopeRef.current = workbenchScope;
+  const workbenchMounted = useRef(true);
+  useEffect(() => {
+    workbenchMounted.current = true;
+    return () => {
+      workbenchMounted.current = false;
+    };
+  }, []);
+  const isCurrentScope = (scope: string) =>
+    workbenchMounted.current && workbenchScopeRef.current === scope;
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -216,8 +236,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     file: File;
     signature: string;
   } | null>(null);
-  const uploadIntent = `upload-knowledge:${versionId}`;
-  const publishIntent = `publish-agent-version:${versionId}`;
+  const [visibilityBusyDocumentId, setVisibilityBusyDocumentId] = useState<
+    string | null
+  >(null);
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const uploadIntent = `${workbenchScope}:upload-knowledge:${versionId}`;
+  const publishIntent = `${workbenchScope}:publish-agent-version:${versionId}`;
 
   function abandonUploadIntent() {
     mutationStore.abandon(uploadIntent);
@@ -234,22 +258,30 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
 
   const load = useCallback(
     async (keepLocal = false) => {
+      const requestScope = workbenchScope;
       setLoading(true);
       setError(null);
       try {
         const nextVersion = await api.version(versionId);
+        if (!isCurrentScope(requestScope)) return;
         const nextAgent = await api.agent(nextVersion.agent_id);
+        if (!isCurrentScope(requestScope)) return;
         const [
           nextDocuments,
           nextPreview,
           nextAvatarTemplates,
           nextVoiceProfiles,
         ] = await Promise.all([
-          api.knowledge(nextAgent.group_id),
+          nextAgent.group_id
+            ? api.knowledge(nextAgent.group_id)
+            : api.workspaceDocuments(nextAgent.course_id),
           api.ragPreview(versionId),
           api.avatarTemplates(),
-          api.voiceProfiles(nextAgent.group_id),
+          nextAgent.group_id
+            ? api.voiceProfiles(nextAgent.group_id)
+            : Promise.resolve([]),
         ]);
+        if (!isCurrentScope(requestScope)) return;
         setVersion(nextVersion);
         setAgent(nextAgent);
         setDocuments(nextDocuments);
@@ -268,12 +300,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           setConflict(false);
         }
       } catch (cause) {
-        setError(cause);
+        if (isCurrentScope(requestScope)) setError(cause);
       } finally {
-        setLoading(false);
+        if (isCurrentScope(requestScope)) setLoading(false);
       }
     },
-    [api, versionId],
+    [api, versionId, workbenchScope],
   );
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -348,9 +380,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       />
     );
   if (version.state !== "draft")
-    return <ReadOnlyVersion version={version} agent={agent} />;
+    return (
+      <ReadOnlyVersion version={version} agent={agent} backHref={backHref} />
+    );
 
   async function saveDraft() {
+    const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
     setSaving(true);
@@ -367,22 +402,28 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           ? { voice_profile_id: voiceProfileId }
           : {}),
       });
+      if (!isCurrentScope(requestScope)) return;
+      const nextAgent = await api.agent(next.agent_id);
+      if (!isCurrentScope(requestScope)) return;
       setVersion(next);
-      setAgent(await api.agent(next.agent_id));
+      setAgent(nextAgent);
       setAgentMd(next.agent_md ?? "");
       setAvatarConfig(next.avatar_config);
       setVoiceProfileId(next.voice_profile_id ?? null);
       setNotice("draftSavedNotice");
       return next;
     } catch (cause) {
-      if (isConflict(cause)) setConflict(true);
-      setError(cause);
+      if (isCurrentScope(requestScope)) {
+        if (isConflict(cause)) setConflict(true);
+        setError(cause);
+      }
     } finally {
-      setSaving(false);
+      if (isCurrentScope(requestScope)) setSaving(false);
     }
   }
 
   async function uploadAgentMd(file: File) {
+    const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
     setSaving(true);
@@ -395,19 +436,25 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         file,
         currentVersion.revision,
       );
+      if (!isCurrentScope(requestScope)) return;
+      const nextAgent = await api.agent(next.agent_id);
+      if (!isCurrentScope(requestScope)) return;
       setVersion(next);
-      setAgent(await api.agent(next.agent_id));
+      setAgent(nextAgent);
       setAgentMd(next.agent_md ?? "");
       setNotice("agentMdUploadedNotice");
     } catch (cause) {
-      if (isConflict(cause)) setConflict(true);
-      setError(cause);
+      if (isCurrentScope(requestScope)) {
+        if (isConflict(cause)) setConflict(true);
+        setError(cause);
+      }
     } finally {
-      setSaving(false);
+      if (isCurrentScope(requestScope)) setSaving(false);
     }
   }
 
   async function toggleDocument(documentId: string, enabled: boolean) {
+    const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
     const nextIds = enabled
@@ -424,25 +471,29 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         currentVersion.revision,
         nextIds,
       );
+      if (!isCurrentScope(requestScope)) return;
       setVersion(next);
       setSelectedDocumentIds(
         (next.enabled_documents ?? []).map((document) => document.id),
       );
       setNotice("evidenceUpdatedNotice");
       const nextPreview = await api.ragPreview(currentVersion.id);
-      setPreview(nextPreview);
+      if (isCurrentScope(requestScope)) setPreview(nextPreview);
     } catch (cause) {
-      if (isConflict(cause)) {
-        setConflict(true);
-        setSelectedDocumentIds(selectedDocumentIds);
+      if (isCurrentScope(requestScope)) {
+        if (isConflict(cause)) {
+          setConflict(true);
+          setSelectedDocumentIds(selectedDocumentIds);
+        }
+        setError(cause);
       }
-      setError(cause);
     } finally {
-      setSaving(false);
+      if (isCurrentScope(requestScope)) setSaving(false);
     }
   }
 
   async function uploadKnowledge(file: File) {
+    const requestScope = workbenchScope;
     const signature = `${file.name}:${file.size}:${file.lastModified}`;
     if (pendingKnowledgeUpload?.signature !== signature) {
       mutationStore.abandon(uploadIntent);
@@ -456,15 +507,24 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
     let mutationCompleted = false;
     const handle = mutationStore.handleFor(uploadIntent);
     try {
-      const mutation = await api.uploadKnowledge(
-        currentAgent.group_id,
-        currentVersion.id,
-        file,
-        currentVersion.revision,
-        { idempotency: handle },
-      );
+      const mutation = currentAgent.group_id
+        ? await api.uploadKnowledge(
+            currentAgent.group_id,
+            currentVersion.id,
+            file,
+            currentVersion.revision,
+            { idempotency: handle },
+          )
+        : await api.uploadWorkspaceKnowledge(
+            currentAgent.course_id,
+            currentVersion.id,
+            file,
+            currentVersion.revision,
+            { idempotency: handle },
+          );
       mutationStore.finish(uploadIntent, handle);
       mutationCompleted = true;
+      if (!isCurrentScope(requestScope)) return;
       setPendingKnowledgeUpload((current) =>
         current?.signature === signature ? null : current,
       );
@@ -479,6 +539,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       setNotice("markdownUploadedNotice");
       setPreview(await api.ragPreview(currentVersion.id));
     } catch (cause) {
+      if (!isCurrentScope(requestScope)) return;
       if (!mutationCompleted && isConflict(cause)) {
         mutationStore.abandon(uploadIntent, handle);
         setPendingKnowledgeUpload((current) =>
@@ -497,15 +558,75 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       if (isConflict(cause)) setConflict(true);
       setError(cause);
     } finally {
-      setSaving(false);
+      if (isCurrentScope(requestScope)) setSaving(false);
+    }
+  }
+
+  async function updateSourceVisibility(document: KnowledgeDocument) {
+    if (visibilityBusyDocumentId) return;
+    const requestScope = workbenchScope;
+    setVisibilityBusyDocumentId(document.id);
+    setError(null);
+    try {
+      const updated = await api.updateKnowledgeVisibility(document.id, {
+        expected_authorization_epoch: document.authorization_epoch,
+        visibility: document.visibility === "private" ? "public" : "private",
+      });
+      if (!isCurrentScope(requestScope)) return;
+      setDocuments((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setNotice("sourceSharingUpdatedNotice");
+      const nextPreview = await api.ragPreview(currentVersion.id);
+      if (isCurrentScope(requestScope)) setPreview(nextPreview);
+    } catch (cause) {
+      if (isCurrentScope(requestScope)) setError(cause);
+    } finally {
+      if (isCurrentScope(requestScope)) setVisibilityBusyDocumentId(null);
+    }
+  }
+
+  async function updateAgentVisibility() {
+    if (!agent || visibilityBusy) return;
+    const requestScope = workbenchScope;
+    const nextVisibility =
+      agent.visibility === "private" ? "public" : "private";
+    setVisibilityBusy(true);
+    setError(null);
+    try {
+      const updatedAgent = await api.updateAgentMetadata(agent.id, {
+        expected_metadata_revision: agent.metadata_revision,
+        description: agent.description,
+        visibility: nextVisibility,
+      });
+      if (!isCurrentScope(requestScope)) return;
+      setAgent(updatedAgent);
+      const nextVersion = await api.version(versionId);
+      if (!isCurrentScope(requestScope)) return;
+      setVersion(nextVersion);
+      setSelectedDocumentIds(
+        (nextVersion.enabled_documents ?? []).map((document) => document.id),
+      );
+      const nextPreview = await api.ragPreview(versionId);
+      if (isCurrentScope(requestScope)) setPreview(nextPreview);
+    } catch (cause) {
+      if (isCurrentScope(requestScope)) setError(cause);
+    } finally {
+      if (isCurrentScope(requestScope)) setVisibilityBusy(false);
     }
   }
 
   async function publish(retry = false) {
+    const requestScope = workbenchScope;
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
     const saved = localDirty ? await saveDraft() : currentVersion;
-    if (!saved || (saved.publish_blockers ?? []).length > 0) return;
+    if (
+      !isCurrentScope(requestScope) ||
+      !saved ||
+      (saved.publish_blockers ?? []).length > 0
+    )
+      return;
     if (!retry) abandonUploadIntent();
     setSaving(true);
     setError(null);
@@ -517,11 +638,17 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
         idempotency: handle,
       });
       mutationStore.finish(publishIntent, handle);
+      if (!isCurrentScope(requestScope)) return;
       setRetryAction(null);
       setVersion(next);
       setNotice("publishedNotice");
-      router.replace(`/student/agents/${currentAgent.id}`);
+      router.replace(
+        currentAgent.ownership_scope === "personal"
+          ? `/teacher/agents/${currentAgent.id}`
+          : `/student/agents/${currentAgent.id}`,
+      );
     } catch (cause) {
+      if (!isCurrentScope(requestScope)) return;
       setProviderConfirmationRequired(
         cause instanceof PlatformApiError &&
           cause.code === "provider_confirmation_required",
@@ -535,7 +662,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       }
       setError(cause);
     } finally {
-      setSaving(false);
+      if (isCurrentScope(requestScope)) setSaving(false);
     }
   }
 
@@ -544,7 +671,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
       <WorkspaceAction
         name="back"
-        href={`/student/agents/${agent.id}`}
+        href={backHref ?? `/student/agents/${agent.id}`}
         disabled={saving}
         onClick={(event) => {
           if (localDirty && !window.confirm(t("discardDraftConfirm")))
@@ -657,50 +784,52 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
               />
             </SectionCard>
           ) : null}
-          <SectionCard
-            title={t("voiceBinding")}
-            guide="agent.voice"
-            action={
-              <Link
-                className="text-link"
-                href={`/student/groups/${agent.group_id}/voices`}
-              >
-                {t("manageVoices")}
-              </Link>
-            }
-          >
-            <div className="stack-form">
-              <label>
-                <span>{t("voiceBinding")}</span>
-                <select
-                  value={voiceProfileId ?? ""}
-                  disabled={saving}
-                  onChange={(event) =>
-                    setVoiceProfileId(event.target.value || null)
-                  }
+          {agent.group_id ? (
+            <SectionCard
+              title={t("voiceBinding")}
+              guide="agent.voice"
+              action={
+                <Link
+                  className="text-link"
+                  href={`/student/groups/${agent.group_id}/voices`}
                 >
-                  <option value="">{t("useFallbackVoice")}</option>
-                  {voiceProfileId &&
-                  !voiceProfiles.some(
-                    (profile) =>
-                      profile.id === voiceProfileId &&
-                      profile.status === "ready",
-                  ) ? (
-                    <option value={voiceProfileId} disabled>
-                      {t("currentVoiceBinding")}
-                    </option>
-                  ) : null}
-                  {voiceProfiles
-                    .filter((profile) => profile.status === "ready")
-                    .map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.source_filename || t("customVoiceReady")}
+                  {t("manageVoices")}
+                </Link>
+              }
+            >
+              <div className="stack-form">
+                <label>
+                  <span>{t("voiceBinding")}</span>
+                  <select
+                    value={voiceProfileId ?? ""}
+                    disabled={saving}
+                    onChange={(event) =>
+                      setVoiceProfileId(event.target.value || null)
+                    }
+                  >
+                    <option value="">{t("useFallbackVoice")}</option>
+                    {voiceProfileId &&
+                    !voiceProfiles.some(
+                      (profile) =>
+                        profile.id === voiceProfileId &&
+                        profile.status === "ready",
+                    ) ? (
+                      <option value={voiceProfileId} disabled>
+                        {t("currentVoiceBinding")}
                       </option>
-                    ))}
-                </select>
-              </label>
-            </div>
-          </SectionCard>
+                    ) : null}
+                    {voiceProfiles
+                      .filter((profile) => profile.status === "ready")
+                      .map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.source_filename || t("customVoiceReady")}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
+            </SectionCard>
+          ) : null}
           <SectionCard
             title={t("evidenceSet")}
             guide="agent.evidence"
@@ -725,45 +854,92 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             ) : (
               <div className="document-list">
                 {documents.map((document) => (
-                  <label
+                  <div
                     className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
                     key={document.id}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedDocumentIds.includes(document.id)}
-                      disabled={saving || document.workspace_state === "hidden"}
-                      onChange={(event) =>
-                        void toggleDocument(document.id, event.target.checked)
-                      }
-                    />
-                    <span className="document-main">
-                      <strong>{document.source_filename}</strong>
-                      <small>
-                        {document.char_count.toLocaleString()} {t("characters")}{" "}
-                        ·{" "}
-                        {document.workspace_state === "hidden"
-                          ? t("hiddenWorkspace")
-                          : t("groupMarkdown")}
-                      </small>
-                    </span>
-                    <StatusBadge
-                      status={document.index_status}
-                      tone={
-                        document.index_status === "ready"
-                          ? "good"
-                          : document.index_status === "failed"
-                            ? "bad"
-                            : "warn"
-                      }
-                    />
-                  </label>
+                    <label className="document-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocumentIds.includes(document.id)}
+                        disabled={
+                          saving || document.workspace_state === "hidden"
+                        }
+                        onChange={(event) =>
+                          void toggleDocument(document.id, event.target.checked)
+                        }
+                      />
+                      <span className="document-main">
+                        <strong>{document.source_filename}</strong>
+                        <small>
+                          {document.char_count.toLocaleString()}{" "}
+                          {t("characters")} ·{" "}
+                          {document.workspace_state === "hidden"
+                            ? t("hiddenWorkspace")
+                            : document.visibility === "public"
+                              ? t("publicVisibility")
+                              : t("privateVisibility")}
+                        </small>
+                      </span>
+                    </label>
+                    <div className="row-actions">
+                      <StatusBadge
+                        status={document.index_status}
+                        tone={
+                          document.index_status === "ready"
+                            ? "good"
+                            : document.index_status === "failed"
+                              ? "bad"
+                              : "warn"
+                        }
+                      />
+                      {document.can_manage_visibility ? (
+                        <button
+                          className="inline-button"
+                          type="button"
+                          disabled={saving || visibilityBusyDocumentId !== null}
+                          aria-label={`${document.visibility === "private" ? t("shareSource") : t("makeSourcePrivate")}: ${document.source_filename}`}
+                          onClick={() => void updateSourceVisibility(document)}
+                        >
+                          {visibilityBusyDocumentId === document.id
+                            ? t("working")
+                            : document.visibility === "private"
+                              ? t("shareSource")
+                              : t("makeSourcePrivate")}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </SectionCard>
         </div>
         <aside className="workbench-side">
+          {agent.ownership_scope === "personal" ? (
+            <SectionCard title={t("agentVisibility")}>
+              <div className="stack-form">
+                <p className="muted-copy">{t("personalVisibilityLede")}</p>
+                <strong>
+                  {agent.visibility === "private"
+                    ? t("privateVisibility")
+                    : t("personalPublicVisibility")}
+                </strong>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={visibilityBusy || saving}
+                  onClick={() => void updateAgentVisibility()}
+                >
+                  {visibilityBusy
+                    ? t("working")
+                    : agent.visibility === "private"
+                      ? t("makeAgentPublic")
+                      : t("makeAgentPrivate")}
+                </button>
+              </div>
+            </SectionCard>
+          ) : null}
           <SectionCard title={t("publishChecklist")} guide="agent.publish">
             <div className="checklist">
               {blockers.length === 0 ? (
@@ -834,10 +1010,12 @@ function ReadOnlyVersion({
   version,
   agent,
   actions,
+  backHref,
 }: {
   version: AgentVersion;
   agent: AgentDetail;
   actions?: ReactNode;
+  backHref?: string;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -894,7 +1072,10 @@ function ReadOnlyVersion({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <WorkspaceAction name="back" href={`/student/groups/${agent.group_id}`} />
+      <WorkspaceAction
+        name="back"
+        href={backHref ?? `/student/groups/${agent.group_id}`}
+      />
       <div className="workbench-grid">
         <div className="workbench-main">
           <SectionCard

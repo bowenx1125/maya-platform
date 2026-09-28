@@ -439,7 +439,7 @@ def test_0014_populated_upgrade_backfills_only_unambiguous_bucket(tmp_path: Path
     config = _migration_config(database)
     command.upgrade(config, "0013_embedding_identity_stage")
     _populate_0013_budget(database, "embedding_query")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0014_llm_runtime_budget_buckets")
     with database.engine.connect() as connection:
         assert (
             connection.execute(
@@ -448,7 +448,7 @@ def test_0014_populated_upgrade_backfills_only_unambiguous_bucket(tmp_path: Path
             == EMBEDDING_QUERY_BUCKET
         )
     command.downgrade(config, "0013_embedding_identity_stage")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0014_llm_runtime_budget_buckets")
     database.dispose()
 
 
@@ -458,7 +458,7 @@ def test_0014_ambiguous_populated_backfill_fails_closed(tmp_path: Path) -> None:
     command.upgrade(config, "0013_embedding_identity_stage")
     _populate_0013_budget(database, "embedding", "embedding_query")
     with pytest.raises(RuntimeError, match="multiple operation buckets"):
-        command.upgrade(config, "head")
+        command.upgrade(config, "0014_llm_runtime_budget_buckets")
     with database.engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
             "0013_embedding_identity_stage"
@@ -524,10 +524,10 @@ def test_budget_migration_preserves_allocations_and_reservations(tmp_path: Path)
         _request(scope_id="scope", operation="llm_debate_turn", item="first")
     )
     reservation = repository.reserve(first.id)
-    command.upgrade(config, "head")
+    command.upgrade(config, "0033_budget_accounting_unbounded")
     assert repository.reservation(first.id) == reservation
     command.downgrade(config, "0032_recovery_input_unbounded")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0033_budget_accounting_unbounded")
     assert repository.reservation(first.id) == reservation
     second = repository.create_prepared(
         _request(scope_id="scope", operation="llm_debate_turn", item="second")

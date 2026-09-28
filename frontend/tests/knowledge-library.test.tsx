@@ -35,6 +35,11 @@ function documentFixture(
   return {
     id: "document-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_manage_visibility: false,
+    authorization_epoch: 0,
     source_filename: "lesson.md",
     char_count: 24,
     content_hash: "a".repeat(64),

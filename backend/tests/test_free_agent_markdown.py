@@ -53,7 +53,11 @@ def test_free_markdown_publishes_without_persona_compile_or_confirmation(
     uploaded = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={"file": ("source.md", b"A shared source about fairness.", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
@@ -149,7 +153,11 @@ def test_long_agent_markdown_patch_upload_and_publish_preserve_authored_text(
     source = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
-        data={"target_agent_version_id": version_id, "expected_revision": "2"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "2",
+            "visibility": "public",
+        },
         files={"file": ("source.md", b"A source for publishing.", "text/markdown")},
     )
     assert source.status_code == 201, source.text
@@ -206,7 +214,11 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
         response = client.post(
             url,
             headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
-            data={"target_agent_version_id": version_id, "expected_revision": str(revision)},
+            data={
+                "target_agent_version_id": version_id,
+                "expected_revision": str(revision),
+                "visibility": "public",
+            },
             files={"file": (f"source-{revision}.md", source.encode(), "text/markdown")},
         )
         assert response.status_code == 201, response.text

@@ -138,7 +138,11 @@ def _utc_datetime(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str | None:
+def _actor_user_id(actor: AuthContext | str) -> str:
+    return actor.user.id if isinstance(actor, AuthContext) else actor
+
+
+def scoped_group_role_for_user(db: Session, user_id: str, group_id: str) -> str | None:
     """Resolve how a group answers this caller, without loading the group first.
 
     Membership outranks the course role.  A teacher who joined the group is
@@ -153,17 +157,21 @@ def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str |
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .outerjoin(
             WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
+            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == user_id),
         )
         .where(
             Group.id == group_id,
-            CourseMember.user_id == context.user.id,
+            CourseMember.user_id == user_id,
             or_(CourseMember.role == "teacher", WorkspaceMember.user_id.is_not(None)),
         )
     ).first()
     if row is None:
         return None
     return "teacher" if row[1] is None else "student"
+
+
+def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str | None:
+    return scoped_group_role_for_user(db, context.user.id, group_id)
 
 
 def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) -> str:
@@ -181,146 +189,369 @@ def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) 
     return "student"
 
 
-def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
-    published_version = exists(
-        select(AgentVersion.id).where(
-            AgentVersion.agent_id == Agent.id,
-            AgentVersion.state.in_(("published", "superseded")),
+def course_member_role(db: Session, user_id: str, course_id: str) -> str | None:
+    return db.scalar(
+        select(CourseMember.role).where(
+            CourseMember.user_id == user_id,
+            CourseMember.course_id == course_id,
         )
     )
-    row = db.execute(
-        select(Agent, WorkspaceMember.user_id)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .outerjoin(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
+
+
+def _owner_has_course_access(db: Session, actor: AuthContext | str, course_id: str) -> bool:
+    return course_member_role(db, _actor_user_id(actor), course_id) is not None
+
+
+def _agent_workspace_role(db: Session, actor: AuthContext | str, agent: Agent) -> str | None:
+    user_id = _actor_user_id(actor)
+    if agent.deleted_at is not None or not _owner_has_course_access(db, user_id, agent.course_id):
+        return None
+    if agent.ownership_scope == "group" and agent.group_id is not None:
+        group_role = scoped_group_role_for_user(db, user_id, agent.group_id)
+        if agent.owner_user_id == user_id and group_role == "student":
+            return "owner"
+        if group_role == "teacher" and agent.visibility == "public":
+            return "teacher"
+        if agent.owner_user_id == user_id:
+            return None
+        return group_role if agent.visibility == "public" else None
+    if agent.owner_user_id == user_id:
+        return "owner"
+    return None
+
+
+def _workspace_role_can_read_published(role: str | None, state: str) -> bool:
+    return (
+        role == "owner"
+        or role == "student"
+        or (role == "teacher" and state in {"published", "superseded"})
+    )
+
+
+def version_is_currently_public(version: AgentVersion, agent: Agent) -> bool:
+    return (
+        version.state in {"published", "superseded"}
+        and version.published_visibility == "public"
+        and version.authorization_epoch == agent.authorization_epoch
+        and agent.visibility == "public"
+        and agent.deleted_at is None
+    )
+
+
+def draft_is_currently_public(db: Session, version: AgentVersion, agent: Agent) -> bool:
+    """Whether a group draft is deliberately shared in the current epoch.
+
+    This marker is sticky: once a draft has private provenance, changing the
+    Agent or its sources back to Public cannot expose the draft. Publication
+    creates a new immutable public revision when the owner chooses to share it.
+    """
+
+    if not (
+        version.state == "draft"
+        and version.draft_visibility == "public"
+        and agent.ownership_scope == "group"
+        and agent.visibility == "public"
+        and version.authorization_epoch == agent.authorization_epoch
+        and agent.deleted_at is None
+    ):
+        return False
+    return all(
+        document.visibility == "public"
+        and document.workspace_state == "active"
+        and document.course_id == agent.course_id
+        for document in _enabled_documents(db, version.id)
+    )
+
+
+def can_read_version(
+    db: Session,
+    version: AgentVersion,
+    agent: Agent,
+    role: str | None,
+    *,
+    context: AuthContext | str | None = None,
+) -> bool:
+    """Single version-visibility rule shared by summaries, history and routes."""
+
+    if role == "owner":
+        return context is None or version_sources_are_readable(
+            db,
+            context,
+            version,
+            agent=agent,
+            allow_historical_epoch_for_owner=True,
         )
-        .where(
-            Agent.id == agent_id,
-            Agent.deleted_at.is_(None),
-            CourseMember.user_id == context.user.id,
-            or_(
-                and_(CourseMember.role == "teacher", published_version),
-                WorkspaceMember.user_id.is_not(None),
-            ),
+    if version.state == "draft":
+        visible = role == "student" and draft_is_currently_public(db, version, agent)
+    else:
+        visible = _workspace_role_can_read_published(role, version.state) and (
+            version_is_currently_public(version, agent)
         )
-    ).first()
-    if row is None:
+    if not visible:
+        return False
+    return context is None or version_sources_are_readable(db, context, version, agent=agent)
+
+
+def can_invoke_version(
+    db: Session,
+    context: AuthContext | str,
+    version: AgentVersion,
+    agent: Agent,
+) -> bool:
+    """Resolve current workspace access before allowing a Chat invocation.
+
+    Course membership alone is not an invocation grant. Group Agents inherit
+    their own group workspace rules; personal Agents remain owner-only until
+    a separate, explicit invoke grant exists.
+    """
+
+    role = _agent_workspace_role(db, context, agent)
+    return role is not None and can_read_version(db, version, agent, role, context=context)
+
+
+def can_read_source(
+    db: Session,
+    context: AuthContext | str,
+    document: KnowledgeDocument,
+    *,
+    require_active: bool = True,
+) -> bool:
+    if require_active and document.workspace_state != "active":
+        return False
+    user_id = _actor_user_id(context)
+    if not _owner_has_course_access(db, user_id, document.course_id):
+        return False
+    if document.ownership_scope == "personal":
+        return document.owner_user_id == user_id
+    if document.group_id is None:
+        return False
+    role = scoped_group_role_for_user(db, user_id, document.group_id)
+    if role is None or (role == "teacher" and document.visibility != "public"):
+        return False
+    return document.owner_user_id == user_id or document.visibility == "public"
+
+
+def can_mutate_source(
+    db: Session,
+    actor: AuthContext | str,
+    document: KnowledgeDocument,
+    *,
+    require_active: bool = True,
+) -> bool:
+    """Source mutation is owner-only and requires the active workspace scope."""
+
+    user_id = _actor_user_id(actor)
+    if (
+        require_active and document.workspace_state != "active"
+    ) or document.owner_user_id != user_id:
+        return False
+    if not _owner_has_course_access(db, user_id, document.course_id):
+        return False
+    if document.ownership_scope == "personal":
+        return document.group_id is None
+    if document.group_id is None:
+        return False
+    # A same-course Teacher can read a published Group summary without
+    # entering it. That read role must not become authority to replace, hide,
+    # reindex, or change the source's visibility.
+    return scoped_group_role_for_user(db, user_id, document.group_id) == "student"
+
+
+def can_bind_source(
+    db: Session, context: AuthContext, agent: Agent, document: KnowledgeDocument
+) -> bool:
+    if (
+        document.workspace_state != "active"
+        or document.course_id != agent.course_id
+        or not _owner_has_course_access(db, context, agent.course_id)
+    ):
+        return False
+    if document.ownership_scope == "personal":
+        return document.owner_user_id == context.user.id and agent.owner_user_id == context.user.id
+    if document.group_id is None:
+        return False
+    source_role = scoped_group_role(db, context, document.group_id)
+    if source_role != "student":
+        return False
+    source_is_owned = document.owner_user_id == context.user.id
+    if document.visibility != "public" and not (
+        source_is_owned and agent.owner_user_id == context.user.id
+    ):
+        return False
+    if agent.ownership_scope == "group":
+        return document.group_id == agent.group_id
+    # Attaching a shared Group source to a personal Agent is allowed only
+    # when the owner has actually entered that Group workspace. A course role
+    # alone is not a grant to enumerate or bind another Group's materials.
+    return agent.owner_user_id == context.user.id and source_role == "student"
+
+
+def snapshot_sources_are_readable(
+    db: Session,
+    context: AuthContext | str,
+    snapshot_id: str,
+    *,
+    agent: Agent | None = None,
+    allow_historical_epoch_for_owner: bool = False,
+) -> bool:
+    rows = db.execute(
+        select(SnapshotDocument, KnowledgeDocument)
+        .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
+        .where(SnapshotDocument.snapshot_id == snapshot_id)
+    ).all()
+    actor_id = _actor_user_id(context)
+    owner_can_read_history = bool(
+        allow_historical_epoch_for_owner
+        and agent is not None
+        and agent.owner_user_id == actor_id
+        and _agent_workspace_role(db, actor_id, agent) == "owner"
+    )
+    return all(
+        (
+            owner_can_read_history
+            or document.authorization_epoch == source_row.source_authorization_epoch
+        )
+        and can_read_source(db, context, document, require_active=False)
+        for source_row, document in rows
+    )
+
+
+def version_sources_are_readable(
+    db: Session,
+    context: AuthContext | str,
+    version: AgentVersion,
+    *,
+    agent: Agent,
+    allow_historical_epoch_for_owner: bool = False,
+) -> bool:
+    if version.state in {"published", "superseded"}:
+        return version.knowledge_snapshot_id is None or snapshot_sources_are_readable(
+            db,
+            context,
+            version.knowledge_snapshot_id,
+            agent=agent,
+            allow_historical_epoch_for_owner=allow_historical_epoch_for_owner,
+        )
+    return all(
+        can_read_source(db, context, document) for document in _enabled_documents(db, version.id)
+    )
+
+
+def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
+    agent = db.get(Agent, agent_id)
+    if agent is None:
         raise not_found()
-    return ScopedAgent(row[0], "teacher" if row[1] is None else "student")
+    role = _agent_workspace_role(db, context, agent)
+    if role == "owner":
+        return ScopedAgent(agent, role)
+    current_version = (
+        db.get(AgentVersion, agent.current_published_version_id)
+        if agent.current_published_version_id
+        else None
+    )
+    if role == "student":
+        return ScopedAgent(agent, role)
+    if (
+        role == "teacher"
+        and current_version
+        and can_read_version(db, current_version, agent, role, context=context)
+    ):
+        return ScopedAgent(agent, role)
+    raise not_found()
 
 
 def visible_version(db: Session, context: AuthContext, version_id: str) -> ScopedVersion:
     row = db.execute(
-        select(AgentVersion, Agent, WorkspaceMember.user_id)
+        select(AgentVersion, Agent)
         .join(Agent, Agent.id == AgentVersion.agent_id)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .outerjoin(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
-        )
-        .where(
-            AgentVersion.id == version_id,
-            Agent.deleted_at.is_(None),
-            CourseMember.user_id == context.user.id,
-            or_(
-                and_(
-                    CourseMember.role == "teacher",
-                    AgentVersion.state.in_(("published", "superseded")),
-                ),
-                WorkspaceMember.user_id.is_not(None),
-            ),
-        )
+        .where(AgentVersion.id == version_id)
     ).first()
     if row is None:
         raise not_found()
-    return ScopedVersion(row[0], row[1], "teacher" if row[2] is None else "student")
+    version, agent = row
+    role = _agent_workspace_role(db, context, agent)
+    if can_read_version(db, version, agent, role, context=context):
+        return ScopedVersion(version, agent, cast(str, role))
+    raise not_found()
 
 
 def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> ScopedSnapshot:
     row = db.execute(
-        select(KnowledgeSnapshot, AgentVersion, Agent, WorkspaceMember.user_id)
+        select(KnowledgeSnapshot, AgentVersion, Agent)
         .join(AgentVersion, AgentVersion.id == KnowledgeSnapshot.agent_version_id)
         .join(Agent, Agent.id == AgentVersion.agent_id)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .outerjoin(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
-        )
-        .where(
-            KnowledgeSnapshot.id == snapshot_id,
-            Agent.deleted_at.is_(None),
-            AgentVersion.state.in_(("published", "superseded")),
-            CourseMember.user_id == context.user.id,
-            or_(CourseMember.role == "teacher", WorkspaceMember.user_id.is_not(None)),
-        )
+        .where(KnowledgeSnapshot.id == snapshot_id)
     ).first()
     if row is None:
         raise not_found()
-    return ScopedSnapshot(row[0], row[1], row[2], "teacher" if row[3] is None else "student")
+    snapshot, version, agent = row
+    role = _agent_workspace_role(db, context, agent)
+    if role != "owner" and not can_read_version(db, version, agent, role, context=context):
+        raise not_found()
+    if version.state not in {"published", "superseded"} or not _workspace_role_can_read_published(
+        role, version.state
+    ):
+        raise not_found()
+    if not snapshot_sources_are_readable(
+        db,
+        context,
+        snapshot.id,
+        agent=agent,
+        allow_historical_epoch_for_owner=role == "owner",
+    ):
+        raise not_found()
+    return ScopedSnapshot(snapshot, version, agent, cast(str, role))
 
 
 def visible_student_version(db: Session, context: AuthContext, version_id: str) -> ScopedVersion:
     row = db.execute(
         select(AgentVersion, Agent)
         .join(Agent, Agent.id == AgentVersion.agent_id)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .join(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
-        )
-        .where(
-            AgentVersion.id == version_id,
-            Agent.deleted_at.is_(None),
-            CourseMember.user_id == context.user.id,
-        )
+        .where(AgentVersion.id == version_id)
     ).first()
     if row is None:
         raise not_found()
-    return ScopedVersion(row[0], row[1], "student")
+    version, agent = row
+    role = _agent_workspace_role(db, context, agent)
+    if role in {"owner", "student"} and can_read_version(db, version, agent, role, context=context):
+        return ScopedVersion(version, agent, role)
+    raise not_found()
 
 
 def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
-    row = db.execute(
-        select(Agent)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .join(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
-        )
-        .where(
-            Agent.id == agent_id,
-            Agent.deleted_at.is_(None),
-            CourseMember.user_id == context.user.id,
-        )
-    ).first()
-    if row is None:
+    agent = db.get(Agent, agent_id)
+    if agent is None:
         raise not_found()
-    return ScopedAgent(row[0], "student")
+    role = _agent_workspace_role(db, context, agent)
+    if role == "owner" or role == "student":
+        return ScopedAgent(agent, role)
+    raise not_found()
 
 
 def visible_student_document(db: Session, context: AuthContext, document_id: str) -> ScopedDocument:
-    row = db.execute(
-        select(KnowledgeDocument)
-        .join(Group, Group.id == KnowledgeDocument.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .join(
-            WorkspaceMember,
-            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
-        )
-        .where(
-            KnowledgeDocument.id == document_id,
-            CourseMember.user_id == context.user.id,
-        )
-    ).first()
-    if row is None:
+    document = db.get(KnowledgeDocument, document_id)
+    if document is None or not can_read_source(db, context, document):
         raise not_found()
-    return ScopedDocument(row[0], "student")
+    if document.owner_user_id == context.user.id:
+        return ScopedDocument(document, "owner")
+    if document.visibility == "public":
+        return ScopedDocument(document, "student")
+    raise not_found()
+
+
+def visible_mutable_document(
+    db: Session,
+    context: AuthContext,
+    document_id: str,
+    *,
+    require_active: bool = True,
+) -> ScopedDocument:
+    document = db.get(KnowledgeDocument, document_id)
+    if document is None or not can_mutate_source(
+        db, context, document, require_active=require_active
+    ):
+        raise not_found()
+    return ScopedDocument(document, "owner")
 
 
 def _canonical(value: Any) -> str:
@@ -804,12 +1035,21 @@ def _avatar(value: str) -> AvatarConfig:
         )
 
 
-def _document_dto(document: KnowledgeDocument) -> KnowledgeDocumentDTO:
+def _document_dto(
+    document: KnowledgeDocument,
+    *,
+    can_manage_visibility: bool = False,
+) -> KnowledgeDocumentDTO:
     return KnowledgeDocumentDTO(
         id=UUID(document.id),
-        group_id=UUID(document.group_id),
+        group_id=UUID(document.group_id) if document.group_id else None,
+        course_id=UUID(document.course_id),
+        ownership_scope=cast(Literal["group", "personal"], document.ownership_scope),
+        visibility=cast(Literal["private", "public"], document.visibility),
+        can_manage_visibility=can_manage_visibility,
         source_filename=document.source_filename,
         char_count=document.char_count,
+        authorization_epoch=document.authorization_epoch,
         content_hash=document.content_hash,
         index_revision=document.index_revision,
         index_status=cast(Literal["pending", "indexing", "ready", "failed"], document.index_status),
@@ -838,8 +1078,6 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
     if not version.agent_md.strip():
         result.append("agent_md_missing")
     docs = _enabled_documents(db, version.id)
-    if not docs:
-        result.append("rag_missing")
     statuses = {document.index_status for document in docs}
     if statuses & {"pending", "indexing"}:
         result.append("rag_index_pending")
@@ -854,13 +1092,121 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
     return result
 
 
+def publish_without_snapshot(
+    db: Session,
+    version: AgentVersion,
+    agent: Agent,
+    *,
+    expected_revision: int,
+) -> None:
+    """Publish an owner-authorized version whose enabled source set is empty."""
+
+    blockers_list = blockers(db, version, agent)
+    if blockers_list:
+        raise publish_blockers(blockers_list)
+    if _enabled_documents(db, version.id):
+        raise invalid_state("A version with enabled sources needs a SnapshotBuild.")
+    captured_pointer = agent.current_published_version_id
+
+    db.rollback()
+    db.execute(text("BEGIN IMMEDIATE"))
+    current_version = db.get(AgentVersion, version.id)
+    current_agent = db.get(Agent, agent.id)
+    if current_version is None or current_agent is None:
+        raise not_found()
+    if (
+        current_version.state != "draft"
+        or current_version.revision != expected_revision
+        or current_agent.status != "active"
+        or current_agent.deleted_at is not None
+        or current_agent.current_published_version_id != captured_pointer
+        or _enabled_documents(db, current_version.id)
+    ):
+        raise stale_revision(current_version.revision)
+
+    timestamp = now_utc()
+    changed = db.execute(
+        update(AgentVersion)
+        .where(
+            AgentVersion.id == current_version.id,
+            AgentVersion.state == "draft",
+            AgentVersion.revision == expected_revision,
+        )
+        .values(
+            state="published",
+            revision=AgentVersion.revision + 1,
+            knowledge_snapshot_id=None,
+            published_visibility=current_agent.visibility,
+            authorization_epoch=current_agent.authorization_epoch,
+            published_at=timestamp,
+            updated_at=timestamp,
+            persona_confirmation_revision=case(
+                (
+                    AgentVersion.persona_confirmation_revision.is_not(None),
+                    AgentVersion.revision + 1,
+                ),
+                else_=None,
+            ),
+        )
+    )
+    if getattr(changed, "rowcount", 0) != 1:
+        raise stale_revision(current_version.revision)
+
+    if captured_pointer:
+        previous = db.scalar(
+            select(AgentVersion).where(
+                AgentVersion.id == captured_pointer,
+                AgentVersion.agent_id == current_agent.id,
+                AgentVersion.state == "published",
+            )
+        )
+        if previous is None:
+            raise invalid_state("The current published version is unavailable.")
+        previous.state = "superseded"
+        previous.updated_at = timestamp
+
+    pointer_condition = (
+        Agent.current_published_version_id.is_(None)
+        if captured_pointer is None
+        else Agent.current_published_version_id == captured_pointer
+    )
+    pointer_changed = db.execute(
+        update(Agent)
+        .where(Agent.id == current_agent.id, pointer_condition)
+        .values(
+            current_published_version_id=current_version.id,
+            updated_at=timestamp,
+        )
+    )
+    if getattr(pointer_changed, "rowcount", 0) != 1:
+        raise invalid_state("The current published version changed during publication.")
+    db.refresh(current_version)
+    db.refresh(current_agent)
+    version.state = current_version.state
+    version.revision = current_version.revision
+    version.knowledge_snapshot_id = None
+    version.published_visibility = current_version.published_visibility
+    version.authorization_epoch = current_version.authorization_epoch
+    version.published_at = current_version.published_at
+    version.updated_at = current_version.updated_at
+    agent.current_published_version_id = current_agent.current_published_version_id
+    agent.updated_at = current_agent.updated_at
+
+
 def version_dto(
     db: Session,
     version: AgentVersion,
     agent: Agent,
     settings: Settings | None = None,
+    *,
+    include_private_sources: bool = False,
 ) -> AgentVersionDTO:
-    docs = _enabled_documents(db, version.id)
+    docs = [
+        document
+        for document in _enabled_documents(db, version.id)
+        if document.visibility == "public"
+        or (include_private_sources and document.owner_user_id == agent.owner_user_id)
+    ]
     from app.modules.voices.preview import resolve_effective_voice_profile
 
     effective_voice = resolve_effective_voice_profile(
@@ -918,15 +1264,33 @@ def version_dto(
         knowledge_snapshot_id=(
             UUID(version.knowledge_snapshot_id) if version.knowledge_snapshot_id else None
         ),
-        enabled_documents=[_document_dto(document) for document in docs],
+        published_visibility=cast(
+            Literal["private", "public"] | None, version.published_visibility
+        ),
+        enabled_documents=[
+            _document_dto(
+                document,
+                can_manage_visibility=(
+                    include_private_sources and document.owner_user_id == agent.owner_user_id
+                ),
+            )
+            for document in docs
+        ],
         publish_blockers=blockers(db, version, agent) if version.state == "draft" else [],
     )
 
 
-def agent_summary(db: Session, agent: Agent, *, include_draft: bool = True) -> AgentSummary:
-    draft_id = (
+def agent_summary(
+    db: Session,
+    agent: Agent,
+    *,
+    include_draft: bool = True,
+    role: str | None = "owner",
+    context: AuthContext | None = None,
+) -> AgentSummary:
+    draft = (
         db.scalar(
-            select(AgentVersion.id).where(
+            select(AgentVersion).where(
                 AgentVersion.agent_id == agent.id,
                 AgentVersion.state == "draft",
             )
@@ -934,9 +1298,18 @@ def agent_summary(db: Session, agent: Agent, *, include_draft: bool = True) -> A
         if include_draft
         else None
     )
+    if (
+        draft is not None
+        and role != "owner"
+        and not can_read_version(db, draft, agent, role, context=context)
+    ):
+        draft = None
     return AgentSummary(
         id=UUID(agent.id),
-        group_id=UUID(agent.group_id),
+        group_id=UUID(agent.group_id) if agent.group_id else None,
+        course_id=UUID(agent.course_id),
+        ownership_scope=cast(Literal["group", "personal"], agent.ownership_scope),
+        visibility=cast(Literal["private", "public"], agent.visibility),
         name=agent.name,
         description=agent.description,
         metadata_revision=agent.metadata_revision,
@@ -944,20 +1317,46 @@ def agent_summary(db: Session, agent: Agent, *, include_draft: bool = True) -> A
         current_published_version_id=(
             UUID(agent.current_published_version_id) if agent.current_published_version_id else None
         ),
-        current_draft_version_id=UUID(draft_id) if draft_id else None,
+        current_draft_version_id=UUID(draft.id) if draft else None,
     )
 
 
-def agent_detail(db: Session, agent: Agent, role: str) -> AgentDetail:
+def agent_detail(
+    db: Session,
+    agent: Agent,
+    role: str,
+    *,
+    context: AuthContext | None = None,
+) -> AgentDetail:
     query = select(AgentVersion).where(AgentVersion.agent_id == agent.id)
     if role == "teacher":
         query = query.where(AgentVersion.state.in_(("published", "superseded")))
     versions = list(db.scalars(query.order_by(AgentVersion.version_seq)).all())
+    if role != "owner":
+        versions = [
+            version
+            for version in versions
+            if can_read_version(db, version, agent, role, context=context)
+        ]
     if role == "teacher" and not versions:
         raise not_found()
     return AgentDetail(
-        **agent_summary(db, agent, include_draft=role == "student").model_dump(),
-        versions=[version_dto(db, version, agent) for version in versions],
+        **agent_summary(
+            db,
+            agent,
+            include_draft=role in {"owner", "student"},
+            role=role,
+            context=context,
+        ).model_dump(),
+        versions=[
+            version_dto(
+                db,
+                version,
+                agent,
+                include_private_sources=role == "owner",
+            )
+            for version in versions
+        ],
     )
 
 
@@ -1170,6 +1569,8 @@ def create_snapshot(
     if blockers_list:
         raise publish_blockers(blockers_list)
     selected = _enabled_documents(db, version.id)
+    if not selected:
+        raise invalid_state("A version without sources must publish without a Snapshot.")
     captured_current_pointer = agent.current_published_version_id
     vector_by_chunk: dict[str, tuple[float, ...]] = {}
     if embedding_candidate is not None:
@@ -1274,6 +1675,7 @@ def create_snapshot(
                 "normalized": normalized,
                 "index_revision": document.index_revision,
                 "content_hash": document.content_hash,
+                "authorization_epoch": document.authorization_epoch,
                 "snapshot_document_id": str(uuid4()),
                 "frozen_file_id": str(uuid4()),
                 "chunks": captured_chunks,
@@ -1412,6 +1814,7 @@ def create_snapshot(
                 or final_document.index_status != "ready"
                 or final_document.index_revision != item["index_revision"]
                 or final_document.content_hash != item["content_hash"]
+                or final_document.authorization_epoch != item["authorization_epoch"]
                 or final_document.workspace_state != "active"
             ):
                 raise invalid_state("A source index changed during publication.")
@@ -1435,6 +1838,8 @@ def create_snapshot(
                 state="published",
                 revision=AgentVersion.revision + 1,
                 knowledge_snapshot_id=snapshot_id,
+                published_visibility=final_agent.visibility,
+                authorization_epoch=final_agent.authorization_epoch,
                 published_at=timestamp,
                 updated_at=timestamp,
                 # Confirmation is bound to the immutable published revision.
@@ -1558,6 +1963,7 @@ def create_snapshot(
                     source_filename=item["document"].source_filename,
                     char_count=item["document"].char_count,
                     order_index=item["order"],
+                    source_authorization_epoch=item["authorization_epoch"],
                 )
             )
             db.flush()
@@ -1658,6 +2064,8 @@ def create_snapshot(
         # The caller commits this transaction together with its guarded
         # idempotency completion so publication and replay are indivisible.
         version.knowledge_snapshot_id = snapshot.id
+        version.published_visibility = final_version.published_visibility
+        version.authorization_epoch = final_version.authorization_epoch
         version.state = "published"
         version.revision = final_version.revision
         version.published_at = final_version.published_at

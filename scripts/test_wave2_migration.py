@@ -31,17 +31,15 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.core.db import Database
-from app.core.models import (
+from app.core.db import Database  # noqa: E402
+from app.core.models import (  # noqa: E402
     KnowledgeChunk,
-    KnowledgeDocument,
-    SnapshotDocument,
     StoredFile,
     VoicePreview,
     VoiceProfile,
     VoiceProviderOperation,
 )
-from tests.legacy_organization import seed_legacy_organization
+from tests.legacy_organization import seed_legacy_organization  # noqa: E402
 
 WAVE_0_REVISION = "0001_wave0_baseline"
 WAVE_1_REVISION = "0002_wave1_agents_rag"
@@ -177,6 +175,7 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
                 updated_at=now,
             )
         )
+        session.flush()
         # The probe intentionally inserts at the historical 0003 schema.
         # Use a column-explicit Core insert so later ORM-only columns (for
         # example 0006 ``metadata_revision``) do not leak backward into the
@@ -200,22 +199,32 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
                 "updated_at": now,
             },
         )
-        session.add(
-            KnowledgeDocument(
-                id=document_id,
-                group_id=GROUP_ID,
-                source_filename="migration.md",
-                stored_file_id=source_file_id,
-                char_count=9,
-                index_status="ready",
-                index_revision=1,
-                workspace_state="active",
-                content_hash="2" * 64,
-                created_at=now,
-                updated_at=now,
-            )
+        # Keep the historical 0003 source row column-explicit. Current
+        # KnowledgeDocument adds W1 ownership and privacy columns which do
+        # not exist in this old migration fixture.
+        session.execute(
+            text(
+                "INSERT INTO knowledge_documents "
+                "(id, group_id, source_filename, stored_file_id, char_count, index_status, "
+                "index_revision, workspace_state, content_hash, created_at, updated_at) "
+                "VALUES (:id, :group_id, :source_filename, :stored_file_id, :char_count, "
+                ":index_status, :index_revision, :workspace_state, :content_hash, "
+                ":created_at, :updated_at)"
+            ),
+            {
+                "id": document_id,
+                "group_id": GROUP_ID,
+                "source_filename": "migration.md",
+                "stored_file_id": source_file_id,
+                "char_count": 9,
+                "index_status": "ready",
+                "index_revision": 1,
+                "workspace_state": "active",
+                "content_hash": "2" * 64,
+                "created_at": now,
+                "updated_at": now,
+            },
         )
-        session.flush()
         # AgentVersion gained nullable Persona columns in 0009. Keep this
         # historical 0003 fixture column-explicit just like Agent above so an
         # old-revision probe never asks SQLite to insert future ORM fields.
@@ -270,18 +279,25 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
                 "created_at": now,
             },
         )
-        session.add(
-            SnapshotDocument(
-                id=snapshot_document_id,
-                snapshot_id=snapshot_id,
-                document_id=document_id,
-                stored_file_id=source_file_id,
-                source_filename="migration.md",
-                char_count=9,
-                order_index=0,
-            )
+        # The 0003 SnapshotDocument uses `frozen_file_id`; current W1 models
+        # add a source authorization epoch that is not present here.
+        session.execute(
+            text(
+                "INSERT INTO snapshot_documents "
+                "(id, snapshot_id, document_id, frozen_file_id, source_filename, char_count, "
+                "order_index) VALUES (:id, :snapshot_id, :document_id, :frozen_file_id, "
+                ":source_filename, :char_count, :order_index)"
+            ),
+            {
+                "id": snapshot_document_id,
+                "snapshot_id": snapshot_id,
+                "document_id": document_id,
+                "frozen_file_id": source_file_id,
+                "source_filename": "migration.md",
+                "char_count": 9,
+                "order_index": 0,
+            },
         )
-        session.flush()
         session.add(
             KnowledgeChunk(
                 id=chunk_id,

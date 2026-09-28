@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.core.db import ALEMBIC_HEAD, Database
+from app.core.db import Database
 from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
@@ -523,7 +523,7 @@ def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
             ),
             {"id": "legacy-operation", "hash": HASH_A, "now": now},
         )
-    command.upgrade(config, "head")
+    command.upgrade(config, "0016_real_core_acceptance_run")
     with Database(database_url).engine.connect() as connection:
         assert connection.execute(
             text(
@@ -533,7 +533,7 @@ def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
         ).one() == (None, None, 0, 0)
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == ALEMBIC_HEAD
+            == "0016_real_core_acceptance_run"
         )
     command.downgrade(config, "0015_llm_recovery_input")
     inspector = inspect(Database(database_url).engine)

@@ -420,8 +420,8 @@ def test_group_voice_is_owner_private_within_the_same_group(
         headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
         json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
     )
-    assert denied_bind.status_code == 422, denied_bind.text
-    assert denied_bind.json()["code"] == "voice_enrollment_failed"
+    assert denied_bind.status_code == 404, denied_bind.text
+    assert denied_bind.json()["code"] == "not_found"
     csrf = login(client, "bowen")[1]
     bound = client.patch(
         f"/api/v1/agent-versions/{draft['id']}",

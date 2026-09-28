@@ -42,6 +42,7 @@ from app.modules.knowledge.files import (
 from app.modules.knowledge.markdown import MarkdownDocument, build_chunks
 from app.modules.knowledge.services import (
     assert_claim_owned,
+    can_mutate_source,
     create_file_operation,
     document_file_content,
     load_file_operation,
@@ -104,6 +105,7 @@ def replace_document_copy_on_write(
     expected_index_revision: int | None,
     idempotency_record_id: str,
     claim_token: str,
+    actor_user_id: str,
     checkpoint: Callable[[str], None] = saga_checkpoint,
 ) -> tuple[KnowledgeDocument, tuple[str, ...], str]:
     """Create and atomically promote an immutable Markdown replacement.
@@ -142,13 +144,22 @@ def replace_document_copy_on_write(
     captured_stored_path = old_stored.relative_path
     captured_stored_sha = old_stored.sha256
     captured_group_id = old_document.group_id
+    captured_owner_user_id = old_document.owner_user_id
+    captured_course_id = old_document.course_id
+    captured_scope = old_document.ownership_scope
+    captured_visibility = old_document.visibility
+    captured_authorization_epoch = old_document.authorization_epoch
     captured_references = _draft_document_references(db, old_document_id)
 
     operation_id = str(uuid4())
     new_document_id = str(uuid4())
     staging_root = f"tmp/publish/{operation_id}"
     staging_path = f"{staging_root}/source.md"
-    target_path = f"groups/{captured_group_id}/knowledge/{new_document_id}/source.md"
+    target_path = (
+        f"groups/{captured_group_id}/knowledge/{new_document_id}/source.md"
+        if captured_visibility == "public" and captured_group_id is not None
+        else f"users/{captured_owner_user_id}/knowledge/{new_document_id}/source.md"
+    )
     expected_source_sha = hashlib.sha256(source_bytes).hexdigest()
     expected_source_size = len(source_bytes)
 
@@ -243,11 +254,21 @@ def replace_document_copy_on_write(
         final_old = db.get(KnowledgeDocument, old_document_id)
         if final_old is None:
             raise not_found()
+        # A competing owner replacement may have already hidden this exact
+        # source. Preserve owner-scoped CAS semantics (409 below) while still
+        # rejecting guessed IDs before exposing that state to other actors.
+        if not can_mutate_source(db, actor_user_id, final_old, require_active=False):
+            raise not_found()
         if final_old.workspace_state != "active":
             raise stale_revision(final_old.index_revision)
         final_stored = final_old.stored_file
         if (
             final_old.group_id != captured_group_id
+            or final_old.owner_user_id != captured_owner_user_id
+            or final_old.course_id != captured_course_id
+            or final_old.ownership_scope != captured_scope
+            or final_old.visibility != captured_visibility
+            or final_old.authorization_epoch != captured_authorization_epoch
             or final_old.content_hash != captured_content_hash
             or final_old.index_revision != captured_index_revision
             or final_stored is None
@@ -301,6 +322,11 @@ def replace_document_copy_on_write(
         new_document = KnowledgeDocument(
             id=new_document_id,
             group_id=captured_group_id,
+            owner_user_id=captured_owner_user_id,
+            course_id=captured_course_id,
+            ownership_scope=captured_scope,
+            visibility=captured_visibility,
+            authorization_epoch=captured_authorization_epoch,
             source_filename=replacement.filename,
             stored_file_id=stored_file.id,
             char_count=replacement.char_count,

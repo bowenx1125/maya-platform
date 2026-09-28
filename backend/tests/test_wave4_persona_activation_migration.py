@@ -7,7 +7,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from app.core.db import ALEMBIC_HEAD, Database
+from app.core.db import Database
 from app.seed import GROUP_DEMO_ID
 from sqlalchemy import inspect, text
 
@@ -73,7 +73,7 @@ def test_0012_marks_only_mutable_drafts_and_round_trips(tmp_path: Path) -> None:
                 },
             )
 
-    command.upgrade(config, ALEMBIC_HEAD)
+    command.upgrade(config, "0012_persona_activation")
     assert _persona_required(database) == {
         "activation-draft": True,
         "activation-published": False,
@@ -83,7 +83,7 @@ def test_0012_marks_only_mutable_drafts_and_round_trips(tmp_path: Path) -> None:
     assert "persona_required" not in {
         str(column["name"]) for column in inspect(database.engine).get_columns("agent_versions")
     }
-    command.upgrade(config, ALEMBIC_HEAD)
+    command.upgrade(config, "0012_persona_activation")
     assert _persona_required(database) == {
         "activation-draft": True,
         "activation-published": False,

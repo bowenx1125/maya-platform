@@ -19,13 +19,16 @@ from app.core.models import (
     AgentVersion,
     AgentVersionDocument,
     Course,
+    CourseMember,
     Group,
     KnowledgeDocument,
     KnowledgeSnapshot,
     ProviderExportManifest,
     ProviderOperation,
     StoredFile,
+    User,
 )
+from app.modules.agents.markdown import markdown_hash
 from app.modules.agents.persona import compile_persona
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG
 from app.modules.demo_acceptance.schemas import DemoAcceptanceRunCreateRequest
@@ -95,7 +98,7 @@ class _OwnerFixture:
     database: Database
     data_root: Path
     course_id: str
-    group_id: str
+    group_id: str | None
     agent_version_id: str
 
 
@@ -218,6 +221,51 @@ def _make_fixture(
             )
         )
     return _OwnerFixture(database, tmp_path, course_id, group_id, version_id)
+
+
+def _make_personal_fixture(tmp_path: Path) -> _OwnerFixture:
+    fixture = _make_fixture(tmp_path)
+    owner_id = str(uuid4())
+    now = datetime.now(UTC)
+    with fixture.database.session() as session:
+        session.add(
+            User(
+                id=owner_id,
+                username=f"personal-{owner_id[:8]}",
+                display_name="Personal owner",
+                status="active",
+                created_at=now,
+            )
+        )
+        session.add(
+            CourseMember(
+                course_id=fixture.course_id,
+                user_id=owner_id,
+                role="teacher",
+                created_at=now,
+            )
+        )
+        session.flush()
+        version = session.get(AgentVersion, fixture.agent_version_id)
+        assert version is not None
+        agent = session.get(Agent, version.agent_id)
+        assert agent is not None
+        agent.group_id = None
+        agent.owner_user_id = owner_id
+        agent.ownership_scope = "personal"
+        agent.visibility = "private"
+        document = session.get(KnowledgeDocument, version.documents[0].document_id)
+        assert document is not None
+        document.group_id = None
+        document.owner_user_id = owner_id
+        document.ownership_scope = "personal"
+        document.visibility = "private"
+        user_path = f"users/{owner_id}/knowledge/{document.id}/source.md"
+        write_atomic(tmp_path, user_path, b"# Lesson\n\nA bounded lesson.")
+        document.stored_file.relative_path = user_path
+    return _OwnerFixture(
+        fixture.database, tmp_path, fixture.course_id, None, fixture.agent_version_id
+    )
 
 
 class _CountingRealProvider:
@@ -344,6 +392,11 @@ def _confirm(
 
 def test_real_build_is_deterministic_and_has_closed_identity(tmp_path: Path) -> None:
     fixture = _make_fixture(tmp_path)
+    with fixture.database.session() as session:
+        version = session.get(AgentVersion, fixture.agent_version_id)
+        assert version is not None
+        legacy_agent = session.get(Agent, version.agent_id)
+        assert legacy_agent is not None and legacy_agent.owner_user_id is None
     first = _build(fixture)
     second = _build(fixture)
 
@@ -361,6 +414,76 @@ def test_real_build_is_deterministic_and_has_closed_identity(tmp_path: Path) -> 
         first.documents[0].source_sha256
         == hashlib.sha256(b"# Lesson\n\nA bounded lesson.").hexdigest()
     )
+    fixture.database.dispose()
+
+
+def test_personal_agent_real_snapshot_and_query_manifests_keep_null_group_scope(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_personal_fixture(tmp_path)
+    build = _build(fixture)
+    policy = _policy(policy_id="personal-embedding-policy-v1")
+    manifest, confirmation = _confirm(fixture, build, policy)
+    assert manifest.manifest_hash
+    assert confirmation.manifest_hash == manifest.manifest_hash
+    provider = _CountingRealProvider()
+    result = run_confirmed_real_embedding_publication(
+        fixture.database,
+        data_root=fixture.data_root,
+        course_id=fixture.course_id,
+        group_id=None,
+        agent_version_id=fixture.agent_version_id,
+        policy=policy,
+        manifest=manifest,
+        confirmation=confirmation,
+        build=build,
+        provider=provider,
+    )
+    assert result.status == "succeeded"
+    assert provider.call_count == len(result.plan.batches)
+    with fixture.database.session() as session:
+        snapshot = session.scalar(select(KnowledgeSnapshot))
+        version = session.get(AgentVersion, fixture.agent_version_id)
+        assert snapshot is not None and version is not None
+        identity = persisted_snapshot_identity(snapshot)
+        query_plan = ensure_real_query_export_manifest(
+            fixture.database,
+            db=session,
+            scope_id=f"personal:{fixture.agent_version_id}",
+            turn_id=str(uuid4()),
+            course_id=fixture.course_id,
+            group_id=None,
+            agent_version_id=fixture.agent_version_id,
+            snapshot_id=snapshot.id,
+            identity=identity,
+            transcript_hash=sha256_hex("personal turn"),
+            persona_spec_hash=markdown_hash(version.agent_md),
+            subqueries=(("viewpoint", "personal query"),),
+            policy=policy,
+        )
+        assert query_plan.manifest.manifest_hash
+    with fixture.database.engine.connect() as connection:
+        persisted_manifest = (
+            connection.execute(
+                select(ProviderExportManifest.__table__).where(
+                    ProviderExportManifest.__table__.c.manifest_hash == manifest.manifest_hash
+                )
+            )
+            .mappings()
+            .one()
+        )
+        persisted_query = (
+            connection.execute(
+                select(ProviderExportManifest.__table__).where(
+                    ProviderExportManifest.__table__.c.manifest_hash
+                    == query_plan.manifest.manifest_hash
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert persisted_manifest["group_id"] is None
+        assert persisted_query["group_id"] is None
     fixture.database.dispose()
 
 

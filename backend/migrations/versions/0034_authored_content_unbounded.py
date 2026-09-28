@@ -51,91 +51,84 @@ def _replace_total_check(table_sql: str, *, bounded: bool) -> str:
 
 
 def _sqlite_rebuild(*, bounded: bool) -> None:
-    with op.get_context().autocommit_block():
-        connection = op.get_bind()
-        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        began = False
-        committed = False
-        try:
-            connection.exec_driver_sql("BEGIN IMMEDIATE")
-            began = True
-            before_violations = {
-                tuple(row) for row in connection.exec_driver_sql("PRAGMA foreign_key_check")
-            }
-            row = connection.exec_driver_sql(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (_TABLE,)
-            ).first()
-            if row is None or not isinstance(row[0], str):
-                raise RuntimeError("knowledge_snapshots has no SQLite table definition.")
+    connection = op.get_bind()
+    connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+    began = False
+    completed = False
+    try:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        began = True
+        before_violations = {
+            tuple(row) for row in connection.exec_driver_sql("PRAGMA foreign_key_check")
+        }
+        row = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (_TABLE,)
+        ).first()
+        if row is None or not isinstance(row[0], str):
+            raise RuntimeError("knowledge_snapshots has no SQLite table definition.")
 
-            create_sql = _replace_total_check(row[0], bounded=bounded)
-            table_pattern = re.compile(
-                r'^(\s*CREATE\s+TABLE\s+)(?:"knowledge_snapshots"|'
-                r"`knowledge_snapshots`|\[knowledge_snapshots\]|knowledge_snapshots)(?=\s|\()",
-                re.IGNORECASE,
-            )
-            create_sql, renamed = table_pattern.subn(
-                f"CREATE TABLE {_identifier(_TEMP_TABLE)}", create_sql, count=1
-            )
-            if renamed != 1:
-                raise RuntimeError("Could not prepare the knowledge_snapshots rebuild table.")
+        create_sql = _replace_total_check(row[0], bounded=bounded)
+        table_pattern = re.compile(
+            r'^(\s*CREATE\s+TABLE\s+)(?:"knowledge_snapshots"|'
+            r"`knowledge_snapshots`|\[knowledge_snapshots\]|knowledge_snapshots)(?=\s|\()",
+            re.IGNORECASE,
+        )
+        create_sql, renamed = table_pattern.subn(
+            f"CREATE TABLE {_identifier(_TEMP_TABLE)}", create_sql, count=1
+        )
+        if renamed != 1:
+            raise RuntimeError("Could not prepare the knowledge_snapshots rebuild table.")
 
-            schema_objects = (
-                connection.exec_driver_sql(
-                    "SELECT sql FROM sqlite_master "
-                    "WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL "
-                    "ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END, name",
-                    (_TABLE,),
-                )
-                .scalars()
-                .all()
-            )
-            columns = [
-                str(item[1])
-                for item in connection.exec_driver_sql(
-                    f"PRAGMA table_info({_identifier(_TABLE)})"
-                ).fetchall()
-            ]
-            if not columns:
-                raise RuntimeError("knowledge_snapshots has no columns to preserve.")
-            quoted_columns = ", ".join(_identifier(column) for column in columns)
-            original_count = connection.exec_driver_sql(
-                f"SELECT count(*) FROM {_identifier(_TABLE)}"
-            ).scalar_one()
-
-            connection.exec_driver_sql(create_sql)
+        schema_objects = (
             connection.exec_driver_sql(
-                f"INSERT INTO {_identifier(_TEMP_TABLE)} ({quoted_columns}) "
-                f"SELECT {quoted_columns} FROM {_identifier(_TABLE)}"
+                "SELECT sql FROM sqlite_master "
+                "WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL "
+                "ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END, name",
+                (_TABLE,),
             )
-            copied_count = connection.exec_driver_sql(
-                f"SELECT count(*) FROM {_identifier(_TEMP_TABLE)}"
-            ).scalar_one()
-            if copied_count != original_count:
-                raise RuntimeError("knowledge_snapshots rows were not copied completely.")
+            .scalars()
+            .all()
+        )
+        columns = [
+            str(item[1])
+            for item in connection.exec_driver_sql(
+                f"PRAGMA table_info({_identifier(_TABLE)})"
+            ).fetchall()
+        ]
+        if not columns:
+            raise RuntimeError("knowledge_snapshots has no columns to preserve.")
+        quoted_columns = ", ".join(_identifier(column) for column in columns)
+        original_count = connection.exec_driver_sql(
+            f"SELECT count(*) FROM {_identifier(_TABLE)}"
+        ).scalar_one()
 
-            connection.exec_driver_sql(f"DROP TABLE {_identifier(_TABLE)}")
-            connection.exec_driver_sql(
-                f"ALTER TABLE {_identifier(_TEMP_TABLE)} RENAME TO {_identifier(_TABLE)}"
+        connection.exec_driver_sql(create_sql)
+        connection.exec_driver_sql(
+            f"INSERT INTO {_identifier(_TEMP_TABLE)} ({quoted_columns}) "
+            f"SELECT {quoted_columns} FROM {_identifier(_TABLE)}"
+        )
+        copied_count = connection.exec_driver_sql(
+            f"SELECT count(*) FROM {_identifier(_TEMP_TABLE)}"
+        ).scalar_one()
+        if copied_count != original_count:
+            raise RuntimeError("knowledge_snapshots rows were not copied completely.")
+
+        connection.exec_driver_sql(f"DROP TABLE {_identifier(_TABLE)}")
+        connection.exec_driver_sql(
+            f"ALTER TABLE {_identifier(_TEMP_TABLE)} RENAME TO {_identifier(_TABLE)}"
+        )
+        for statement in schema_objects:
+            connection.exec_driver_sql(str(statement))
+
+        violations = {tuple(row) for row in connection.exec_driver_sql("PRAGMA foreign_key_check")}
+        if violations - before_violations:
+            raise RuntimeError(
+                f"0034 introduced foreign-key violations: {violations - before_violations}"
             )
-            for statement in schema_objects:
-                connection.exec_driver_sql(str(statement))
-
-            violations = {
-                tuple(row) for row in connection.exec_driver_sql("PRAGMA foreign_key_check")
-            }
-            if violations - before_violations:
-                raise RuntimeError(
-                    f"0034 introduced foreign-key violations: {violations - before_violations}"
-                )
-            connection.exec_driver_sql("COMMIT")
-            committed = True
-        finally:
-            if began and not committed:
-                connection.exec_driver_sql("ROLLBACK")
-            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
-            if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 1:
-                raise RuntimeError("0034 failed to restore SQLite foreign-key enforcement.")
+        completed = True
+    finally:
+        if began and not completed:
+            connection.exec_driver_sql("ROLLBACK")
 
 
 def _change_check(*, bounded: bool) -> None:
