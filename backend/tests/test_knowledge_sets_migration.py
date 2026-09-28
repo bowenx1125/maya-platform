@@ -21,6 +21,7 @@ from tests.legacy_organization import seed_legacy_organization
 PREVIOUS_REVISION = "0035_w1_resource_ownership"
 CURRENT_REVISION = "0036_knowledge_sets_assets"
 NEXT_REVISION = "0037_knowledge_generation_runs"
+PROVIDER_STAGE_REVISION = "0038_knowledge_generation_provider_stage"
 
 
 def _database_url(path: Path) -> str:
@@ -317,4 +318,121 @@ def test_0037_downgrade_refuses_to_discard_generation_runs(tmp_path: Path) -> No
         command.downgrade(_config(path), CURRENT_REVISION)
 
     assert _revision(path) == NEXT_REVISION
+    assert _fingerprint(path) == before
+
+
+def _seed_populated_0037(path: Path) -> None:
+    _seed_populated_0036(path)
+    command.upgrade(_config(path), NEXT_REVISION)
+
+
+@pytest.mark.parametrize(
+    ("failure_match", "failure_label"),
+    [
+        ("CREATE TABLE knowledge_generation_accepted_stages", "accepted-stage table creation"),
+        ("UPDATE alembic_version", "Alembic head update"),
+    ],
+)
+def test_0038_failure_rolls_back_populated_0037_and_retry_succeeds(
+    tmp_path: Path,
+    failure_match: str,
+    failure_label: str,
+) -> None:
+    path = tmp_path / "populated-0037.sqlite3"
+    _seed_populated_0037(path)
+    assert _revision(path) == NEXT_REVISION
+    before = _fingerprint(path)
+    old_tables = _table_fingerprints(path)
+    fired = False
+
+    def inject_failure(
+        _connection: Any,
+        _cursor: Any,
+        statement: str,
+        _parameters: Any,
+        _context: Any,
+        _executemany: bool,
+    ) -> None:
+        nonlocal fired
+        if failure_match in statement:
+            fired = True
+            raise RuntimeError(f"injected {failure_label} failure")
+
+    event.listen(Engine, "before_cursor_execute", inject_failure)
+    try:
+        with pytest.raises(RuntimeError, match=f"injected {failure_label} failure"):
+            command.upgrade(_config(path), PROVIDER_STAGE_REVISION)
+    finally:
+        event.remove(Engine, "before_cursor_execute", inject_failure)
+
+    assert fired
+    assert _revision(path) == NEXT_REVISION
+    assert _fingerprint(path) == before
+    command.upgrade(_config(path), PROVIDER_STAGE_REVISION)
+    assert _revision(path) == PROVIDER_STAGE_REVISION
+    after_tables = _table_fingerprints(path)
+    retained_tables = {table for table in old_tables if table != "alembic_version"}
+    assert {table: after_tables[table] for table in retained_tables} == {
+        table: old_tables[table] for table in retained_tables
+    }
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert connection.execute("PRAGMA table_info(knowledge_generation_accepted_stages)")
+        assert connection.execute("SELECT count(*) FROM knowledge_generation_runs").fetchone() == (
+            0,
+        )
+
+
+def test_fresh_database_upgrades_to_knowledge_provider_stage_head(tmp_path: Path) -> None:
+    path = tmp_path / "fresh-0038.sqlite3"
+    command.upgrade(_config(path), PROVIDER_STAGE_REVISION)
+    assert _revision(path) == PROVIDER_STAGE_REVISION
+    with sqlite3.connect(path) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(knowledge_generation_runs)")
+        }
+        assert "provider_manifest_hash" in columns
+        indexes = {
+            str(row[1])
+            for row in connection.execute("PRAGMA index_list(knowledge_generation_accepted_stages)")
+        }
+        assert "ix_knowledge_generation_stage_operation" in indexes
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+
+def test_0038_downgrade_refuses_provider_operation_history(tmp_path: Path) -> None:
+    path = tmp_path / "provider-stage-history.sqlite3"
+    _seed_populated_0037(path)
+    command.upgrade(_config(path), PROVIDER_STAGE_REVISION)
+    now = "2026-09-28T12:00:00+00:00"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO provider_operations "
+            "(id, scope_id, provider_operation, logical_item_id, attempt_no, request_hash, "
+            "max_tokens, max_cost_cny, policy_hash, export_manifest_hash, build_manifest_hash, "
+            "model_key, state, request_count, charged_request_count, created_at, updated_at) "
+            "VALUES (?, ?, 'llm_knowledge_generate', ?, 1, ?, 0, 0, ?, ?, ?, ?, 'prepared', "
+            "0, 0, ?, ?)",
+            (
+                str(uuid4()),
+                "opaque-run-scope",
+                "opaque-run-scope",
+                "a" * 64,
+                "b" * 64,
+                "c" * 64,
+                "d" * 64,
+                "qwen-test-model",
+                now,
+                now,
+            ),
+        )
+        connection.commit()
+    before = _fingerprint(path)
+
+    with pytest.raises(RuntimeError, match="Knowledge Provider history exists"):
+        command.downgrade(_config(path), NEXT_REVISION)
+
+    assert _revision(path) == PROVIDER_STAGE_REVISION
     assert _fingerprint(path) == before

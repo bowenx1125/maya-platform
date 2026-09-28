@@ -15,7 +15,14 @@ from alembic import command
 from alembic.config import Config
 from app.core.db import Database
 from app.core.identity import group_name_key, username_key
-from app.core.models import Base, FileReference, Job, KnowledgeDocument, StoredFile
+from app.core.models import (
+    Base,
+    FileReference,
+    Job,
+    KnowledgeDocument,
+    ProviderOperation,
+    StoredFile,
+)
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.debates import cleanup as online_cleanup
 from app.modules.debates import models as _debate_models
@@ -26,6 +33,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeAsset,
     KnowledgeAssetVersion,
     KnowledgeAssetVersionSource,
+    KnowledgeGenerationAcceptedStage,
     KnowledgeGenerationRun,
     KnowledgeSet,
     KnowledgeSetSource,
@@ -1034,6 +1042,7 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
     file_reference_id = _uid(115)
     job_id = _uid(116)
     generation_run_id = _uid(117)
+    provider_operation_id = _uid(118)
     now = datetime.now(UTC)
     content_json = json.dumps(
         {"kind": "note", "title": "Kept source", "body": "Authored evidence."},
@@ -1043,6 +1052,8 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
     content_hash = hashlib.sha256(content_json.encode("utf-8")).hexdigest()
     location_json = "{}"
     location_hash = hashlib.sha256(location_json.encode("utf-8")).hexdigest()
+    accepted_stage_json = '{"assets":[]}'
+    accepted_stage_hash = hashlib.sha256(accepted_stage_json.encode("utf-8")).hexdigest()
     try:
         with database.session() as session:
             document = session.get(KnowledgeDocument, _uid(16))
@@ -1164,6 +1175,30 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
                 )
             )
             session.add(
+                ProviderOperation(
+                    id=provider_operation_id,
+                    scope_id=generation_run_id,
+                    provider_operation="llm_knowledge_generate",
+                    logical_item_id=generation_run_id,
+                    attempt_no=1,
+                    request_hash=_hash("p"),
+                    max_tokens=0,
+                    max_cost_cny=0,
+                    policy_hash=_hash("q"),
+                    export_manifest_hash=_hash("r"),
+                    build_manifest_hash=_hash("s"),
+                    model_key="qwen3.8-max-2026-09-02",
+                    state="accepted",
+                    request_count=1,
+                    charged_request_count=1,
+                    staged_response_hash=accepted_stage_hash,
+                    safe_error_code=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
                 KnowledgeGenerationRun(
                     id=generation_run_id,
                     job_id=job_id,
@@ -1173,6 +1208,9 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
                     agent_id=_uid(12),
                     agent_version_id=str(agent_version_id),
                     knowledge_set_id=set_id,
+                    provider_operation_id=provider_operation_id,
+                    provider_manifest_hash=_hash("r"),
+                    request_hash=_hash("p"),
                     agent_md_hash=_hash("9"),
                     agent_authorization_epoch=0,
                     set_authorization_epoch=1,
@@ -1186,6 +1224,25 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
                     updated_at=now,
                 )
             )
+            session.flush()
+            session.add(
+                KnowledgeGenerationAcceptedStage(
+                    run_id=generation_run_id,
+                    operation_id=provider_operation_id,
+                    request_hash=_hash("p"),
+                    manifest_hash=_hash("r"),
+                    policy_hash=_hash("q"),
+                    model_key="qwen3.8-max-2026-09-02",
+                    schema_hash=_hash("u"),
+                    canonical_stage_json=accepted_stage_json,
+                    canonical_stage_hash=accepted_stage_hash,
+                    item_count=0,
+                    usage_json=None,
+                    safe_error_code=None,
+                    accepted_at=now,
+                    created_at=now,
+                )
+            )
         preserved_tables = (
             "knowledge_sets",
             "knowledge_set_sources",
@@ -1194,6 +1251,7 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             "knowledge_asset_version_sources",
             "agent_knowledge_sets",
             "knowledge_generation_runs",
+            "knowledge_generation_accepted_stages",
         )
         before = _table_rows(database_path, preserved_tables)
         with sqlite3.connect(database_path) as connection:
@@ -1202,6 +1260,7 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             ).fetchone()
         assert file_reference_before is not None
         plan = cleanup.inspect_cleanup(database_path, data_root)
+        assert provider_operation_id not in plan.operation_ids, plan.operation_ids
         for table in preserved_tables:
             assert plan.preserved_counts[table] == 1
 

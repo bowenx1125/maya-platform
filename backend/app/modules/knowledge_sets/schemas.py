@@ -270,6 +270,7 @@ class KnowledgeGenerationStatus(StrictModel):
     job_id: UUID
     knowledge_set_id: UUID
     state: KnowledgeGenerationState
+    provider_manifest_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     safe_error_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
     created_at: datetime
     updated_at: datetime

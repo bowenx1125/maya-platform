@@ -41,6 +41,7 @@ FIXED_MODELS: Mapping[str, str] = MappingProxyType(
         "llm_debate_turn": "qwen3.8-max-2026-09-02",
         "llm_maya_report": "qwen3.8-max-2026-09-02",
         "llm_agent_chat": "qwen3.8-max-2026-09-02",
+        "llm_knowledge_generate": "qwen3.8-max-2026-09-02",
         "tts": "qwen3-tts-vc-2026-01-22",
         "voice_enrollment": "qwen-voice-enrollment",
     }
@@ -144,6 +145,7 @@ _OPERATION_BUCKETS: Mapping[str, str] = MappingProxyType(
         "llm_barrage_insight": LLM_BARRAGE_INSIGHT_BUCKET,
         "llm_maya_report": LLM_MAYA_REPORT_BUCKET,
         "llm_agent_chat": LLM_DEBATE_TURN_BUCKET,
+        "llm_knowledge_generate": LLM_DEBATE_TURN_BUCKET,
         "tts_synthesis": TTS_SYNTHESIS_BUCKET,
         "tts": TTS_SYNTHESIS_BUCKET,
         "voice_enrollment": VOICE_ENROLLMENT_BUCKET,
@@ -502,6 +504,8 @@ _ALLOWED_EXPORT_CLASSES = frozenset(
         "aggregate_evidence_grade",
         "current_tts_speech",
         "server_authored_structure_repair_feedback",
+        "teacher_agent_instructions",
+        "authorized_courseware_text",
     }
 )
 _FORBIDDEN_EXPORT_TERMS = frozenset(
@@ -636,6 +640,7 @@ class ExportManifestV1:
                 code="provider_operation_legacy",
             )
         is_llm_turn = self.provider_operation == "llm_debate_turn"
+        is_knowledge_generation = self.provider_operation == "llm_knowledge_generate"
         if is_llm_turn:
             if self.max_attempts == 2:
                 if (
@@ -656,6 +661,16 @@ class ExportManifestV1:
                     "one-shot LLM turn manifests cannot disclose repair feedback",
                     code="repair_policy_invalid",
                 )
+        elif is_knowledge_generation and (
+            self.max_attempts != 1
+            or self.repair_policy_version is not None
+            or self.repair_policy_hash is not None
+            or repair_fields
+        ):
+            raise ExportManifestError(
+                "Knowledge generation manifests are single-invoke and have no repair feedback",
+                code="knowledge_generation_attempts_invalid",
+            )
         elif repair_fields or self.repair_policy_version is not None:
             raise ExportManifestError(
                 "repair feedback policy is only valid for LLM turn manifests",
@@ -822,7 +837,13 @@ def _scan_forbidden(value: object, *, path: str = "payload") -> None:
 
 
 _LLM_MODEL_OPERATIONS = frozenset(
-    {"llm_debate", "llm_debate_turn", "llm_maya_report", "llm_agent_chat"}
+    {
+        "llm_debate",
+        "llm_debate_turn",
+        "llm_maya_report",
+        "llm_agent_chat",
+        "llm_knowledge_generate",
+    }
 )
 
 
@@ -1065,6 +1086,79 @@ class ProviderOperationV1:
             "call_no": self.call_no,
             "budget_bucket": self.budget_bucket,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeGenerationAcceptedStageV1:
+    """Sanitized, exact accepted output for one K2b1 Provider operation."""
+
+    run_id: str
+    claim_token: str
+    operation_id: str
+    request_hash: str
+    manifest_hash: str
+    policy_hash: str
+    model_key: str
+    schema_hash: str
+    canonical_stage_json: str | None
+    canonical_stage_hash: str
+    item_count: int
+    usage_json: str | None = None
+    safe_error_code: str | None = None
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.run_id, "Knowledge generation run id"),
+            (self.claim_token, "Knowledge generation claim token"),
+            (self.operation_id, "Provider operation id"),
+            (self.model_key, "Provider model key"),
+        ):
+            _safe_identifier(value, field_name=name)
+        for value, name in (
+            (self.request_hash, "Knowledge request hash"),
+            (self.manifest_hash, "Knowledge export manifest hash"),
+            (self.policy_hash, "Knowledge policy hash"),
+            (self.schema_hash, "Knowledge response schema hash"),
+            (self.canonical_stage_hash, "Knowledge canonical stage hash"),
+        ):
+            _hash(value, field_name=name)
+        if (
+            isinstance(self.item_count, bool)
+            or not isinstance(self.item_count, int)
+            or self.item_count < 0
+        ):
+            raise ProviderControlError("Knowledge stage item count is invalid")
+        if self.canonical_stage_json is None:
+            if self.item_count != 0 or self.safe_error_code is None:
+                raise ProviderControlError("suppressed Knowledge stage identity is invalid")
+            suppressed_json = canonical_json_bytes(
+                {"safe_error_code": self.safe_error_code, "suppressed": True}
+            ).decode("utf-8")
+            if sha256_hex(suppressed_json) != self.canonical_stage_hash:
+                raise ProviderControlError("suppressed Knowledge stage hash is stale")
+        else:
+            try:
+                parsed = json.loads(self.canonical_stage_json)
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ProviderControlError("Knowledge stage JSON is invalid") from exc
+            if canonical_json_bytes(parsed).decode("utf-8") != self.canonical_stage_json:
+                raise ProviderControlError("Knowledge stage JSON is not canonical")
+            if self.safe_error_code is not None:
+                raise ProviderControlError("accepted Knowledge stage cannot include an error")
+            if sha256_hex(self.canonical_stage_json.encode("utf-8")) != self.canonical_stage_hash:
+                raise ProviderControlError("Knowledge stage hash is stale")
+        if self.safe_error_code is not None and not _SAFE_CODE_RE.fullmatch(self.safe_error_code):
+            raise ProviderControlError("Knowledge stage safe error code is invalid")
+        if self.usage_json is not None:
+            try:
+                usage = json.loads(self.usage_json)
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ProviderControlError("Knowledge stage usage is invalid") from exc
+            if (
+                not isinstance(usage, dict)
+                or canonical_json_bytes(usage).decode("utf-8") != self.usage_json
+            ):
+                raise ProviderControlError("Knowledge stage usage is not canonical")
 
 
 @dataclass(frozen=True, slots=True)

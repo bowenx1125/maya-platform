@@ -5,10 +5,15 @@ from __future__ import annotations
 from typing import cast
 
 from fastapi import APIRouter, Depends, Path, Query, Request
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.errors import Error, PlatformError, conflict, forbidden, invalid_state, not_found
+from app.core.models import Job, ProviderExportManifest
 from app.modules.auth.dependencies import require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
+from app.modules.knowledge_sets.generation import GENERATION_OPERATION
+from app.modules.knowledge_sets.models import KnowledgeGenerationRun
 
 from .schemas import (
     ProviderDataCallConfirmationRequestV1,
@@ -233,18 +238,65 @@ def provider_data_call_report_manifests(
 )
 def confirm_provider_data_call_disclosure(
     payload: ProviderDataCallConfirmationRequestV1,
+    request: Request,
     context: AuthContext = Depends(require_authenticated_mutation),
     service: ProviderDisclosureService = Depends(get_provider_disclosure_service),
 ) -> ProviderDataCallDisclosureResponseV1:
     try:
-        return service.confirm(
+        response = service.confirm(
             payload,
             actor_user_id=str(context.user.id),
             manifest_ref=payload.manifest_hash,
         )
     except ProviderDisclosureError as error:
         _raise_domain_error(error)
-    raise AssertionError("unreachable")  # pragma: no cover
+    store = getattr(service, "store", None)
+    db = getattr(store, "db", None)
+    if not isinstance(db, Session):
+        return response
+    wake_run_id: str | None = None
+    manifest = db.scalar(
+        select(ProviderExportManifest).where(
+            ProviderExportManifest.manifest_hash == response.manifest_hash,
+            ProviderExportManifest.provider_operation == "llm_knowledge_generate",
+        )
+    )
+    if manifest is None:
+        return response
+    run = db.scalar(
+        select(KnowledgeGenerationRun).where(
+            KnowledgeGenerationRun.id == manifest.scope_id,
+            KnowledgeGenerationRun.provider_manifest_hash == manifest.manifest_hash,
+            KnowledgeGenerationRun.owner_user_id == str(context.user.id),
+            KnowledgeGenerationRun.course_id == manifest.course_id,
+        )
+    )
+    if (
+        run is not None
+        and run.state == "blocked"
+        and run.safe_error_code == "provider_confirmation_required"
+    ):
+        job = db.get(Job, run.job_id)
+        if job is not None and job.operation == GENERATION_OPERATION and job.state == "failed":
+            # Confirmation is bound to the exact run manifest. Requeue only
+            # that owner-authorized intent, then commit before waking the worker.
+            run.state = "pending"
+            run.safe_error_code = None
+            run.claim_token = None
+            run.lease_expires_at = None
+            job.state = "pending"
+            job.safe_error_code = None
+            job.claim_token = None
+            db.flush()
+            wake_run_id = run.id
+    if wake_run_id is None:
+        return response
+    db.commit()
+    task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+    wake = getattr(task_manager, "wake", None)
+    if callable(wake):
+        wake(wake_run_id)
+    return response
 
 
 # A small explicit factory lets the main window mount this router under its

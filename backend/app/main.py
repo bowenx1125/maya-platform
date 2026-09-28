@@ -150,7 +150,10 @@ def create_app(
         wave3_events.publish_summary,
         real_runtime=report_runtime,
     )
-    knowledge_generation_tasks = KnowledgeGenerationTaskManager(runtime_database.session_factory)
+    knowledge_generation_tasks = KnowledgeGenerationTaskManager(
+        runtime_database.session_factory,
+        settings=runtime_settings,
+    )
     playback_service = PlaybackService(
         playback_repository,
         audio_store=AudioStore(
@@ -371,6 +374,7 @@ def create_app(
             playback_service.settings = next_settings
             report_tasks.real_runtime = next_report
             app.state.report_runtime = next_report
+            knowledge_generation_tasks.settings = next_settings
             runtime_settings = next_settings
             app.state.settings = next_settings
 

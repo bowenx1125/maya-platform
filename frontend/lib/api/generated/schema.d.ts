@@ -2115,7 +2115,7 @@ export interface components {
             /** @constant */
             region: "cn-beijing";
             purpose: string;
-            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "teacher_agent_instructions" | "authorized_courseware_text" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
             storage_fact: string;
             no_training_basis: string;
             retention_setting: string;
@@ -3571,6 +3571,8 @@ export interface components {
              * Format: uuid
              */
             knowledge_set_id: string;
+            /** Provider Manifest Hash */
+            provider_manifest_hash?: string | null;
             /**
              * Run Id
              * Format: uuid

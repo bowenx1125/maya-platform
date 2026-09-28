@@ -8030,6 +8030,8 @@
               "enum": [
                 "topic_and_platform_rules",
                 "confirmed_structured_persona",
+                "teacher_agent_instructions",
+                "authorized_courseware_text",
                 "public_predecessor_speech",
                 "current_evidence_excerpt",
                 "opaque_local_id",
@@ -13079,6 +13081,14 @@
             "format": "uuid",
             "title": "Knowledge Set Id",
             "type": "string"
+          },
+          "provider_manifest_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Provider Manifest Hash",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "run_id": {
             "format": "uuid",

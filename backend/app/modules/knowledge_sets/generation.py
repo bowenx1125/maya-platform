@@ -15,6 +15,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import select, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,7 @@ from app.core.models import (
     AgentVersion,
     Job,
     KnowledgeDocument,
+    ProviderOperation,
     StoredFile,
 )
 from app.modules.agents.schemas import KnowledgeGenerationIntent, KnowledgeGenerationReceipt
@@ -37,6 +39,7 @@ from app.modules.knowledge.services import (
 )
 from app.modules.knowledge_sets.models import (
     AgentKnowledgeSet,
+    KnowledgeGenerationAcceptedStage,
     KnowledgeGenerationRun,
     KnowledgeSet,
     KnowledgeSetSource,
@@ -386,6 +389,7 @@ def _current_source_manifest(
             document is None
             or stored_file is None
             or document.course_id != run.course_id
+            or document.stored_file_id != binding.stored_file_id
             or document.workspace_state != "active"
             or document.authorization_epoch != binding.source_authorization_epoch
             or document.content_hash != binding.source_content_hash
@@ -459,6 +463,26 @@ def _current_generation_authorized(db: Session, run: KnowledgeGenerationRun) -> 
         )
         == run.input_key
     )
+
+
+def current_generation_authorized_on_connection(
+    connection: Connection,
+    run_id: str,
+    claim_token: str,
+) -> bool:
+    """Evaluate current owner/source ACLs inside a caller's write transaction."""
+
+    # A SAVEPOINT keeps this short-lived ORM view from taking ownership of the
+    # outer provider-ledger transaction while making its reads share the same
+    # snapshot and SQLite writer lock.
+    with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        return bool(
+            run is not None
+            and run.state == "running"
+            and run.claim_token == claim_token
+            and _current_generation_authorized(db, run)
+        )
 
 
 def _start_immediate(db: Session) -> None:
@@ -565,11 +589,14 @@ def mark_generation_worker_failure(session_factory: Any, run_id: str) -> None:
 
 
 def recover_generation_runs_at_startup(db: Session) -> int:
-    """Return interrupted K2a in-process claims to the durable pending queue.
+    """Reconcile interrupted K2b runs with the Provider ledger, never resend.
 
-    K2a has no outbound Provider path, so every running run from a previous
-    process is safe to reclaim. K2b must reconcile ProviderOperation state
-    before retaining this recovery rule.
+    A claim with no prepared operation, or one whose operation is still only
+    prepared, can be reclaimed because no request crossed the dispatch fence.
+    Reserved operations become ``not_sent`` in Provider startup recovery and
+    are terminal for this one-shot intent; sending operations become unknown.
+    An accepted operation is usable only when its canonical stage was committed
+    atomically with acceptance.
     """
 
     db.rollback()
@@ -580,16 +607,49 @@ def recover_generation_runs_at_startup(db: Session) -> int:
     now = now_utc()
     for run in rows:
         job = db.get(Job, run.job_id)
-        run.state = "pending"
+        operation = (
+            db.get(ProviderOperation, run.provider_operation_id)
+            if run.provider_operation_id is not None
+            else None
+        )
+        accepted_stage = db.get(KnowledgeGenerationAcceptedStage, run.id)
+        safe_error_code: str | None = None
+        if operation is not None:
+            if operation.provider_operation != "llm_knowledge_generate":
+                safe_error_code = "knowledge_generation_ledger_invalid"
+            elif operation.state == "prepared":
+                pass
+            elif operation.state == "accepted" and accepted_stage is not None:
+                safe_error_code = accepted_stage.safe_error_code or "accepted_stage_ready"
+            else:
+                safe_error_code = operation.safe_error_code or {
+                    "reserved": "knowledge_generation_not_sent",
+                    "not_sent": "knowledge_generation_not_sent",
+                    "sending": "acceptance_unknown",
+                    "acceptance_unknown": "acceptance_unknown",
+                    "failed": "provider_failed",
+                    "abandoned": "provider_abandoned",
+                    "succeeded": "knowledge_generation_stage_missing",
+                }.get(operation.state, "knowledge_generation_recovery_blocked")
+
         run.claim_token = None
         run.lease_expires_at = None
-        run.safe_error_code = None
         run.updated_at = now
         if job is not None and job.operation == GENERATION_OPERATION:
-            job.state = "pending"
             job.claim_token = None
-            job.safe_error_code = None
             job.updated_at = now
+        if safe_error_code is None:
+            run.state = "pending"
+            run.safe_error_code = None
+            if job is not None and job.operation == GENERATION_OPERATION:
+                job.state = "pending"
+                job.safe_error_code = None
+        else:
+            run.state = "blocked"
+            run.safe_error_code = safe_error_code
+            if job is not None and job.operation == GENERATION_OPERATION:
+                job.state = "pending" if safe_error_code == "accepted_stage_ready" else "failed"
+                job.safe_error_code = safe_error_code
     db.commit()
     return len(rows)
 
@@ -631,6 +691,7 @@ def get_generation_status(
         job_id=UUID(run.job_id),
         knowledge_set_id=UUID(run.knowledge_set_id),
         state=cast(_GenerationState, state),
+        provider_manifest_hash=run.provider_manifest_hash,
         safe_error_code=error_code,
         created_at=run.created_at,
         updated_at=run.updated_at,

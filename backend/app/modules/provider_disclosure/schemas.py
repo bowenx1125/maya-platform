@@ -16,6 +16,8 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 DisclosureFieldClass = Literal[
     "topic_and_platform_rules",
     "confirmed_structured_persona",
+    "teacher_agent_instructions",
+    "authorized_courseware_text",
     "public_predecessor_speech",
     "current_evidence_excerpt",
     "opaque_local_id",

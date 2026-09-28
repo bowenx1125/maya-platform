@@ -28,6 +28,9 @@ from app.core.models import (
     ProviderOperation,
     ProviderPolicySnapshot,
 )
+from app.modules.knowledge.services import scoped_group_role_for_user
+from app.modules.knowledge_sets.generation import _current_generation_authorized
+from app.modules.knowledge_sets.models import KnowledgeGenerationRun, KnowledgeSet
 from app.providers.control import (
     ALLOWED_ACCOUNT_PRODUCTS,
     FIXED_MODELS,
@@ -65,6 +68,7 @@ EMBEDDING_OPERATION = "embedding"
 EMBEDDING_QUERY_OPERATION = "embedding_query"
 LLM_DEBATE_OPERATION = "llm_debate_turn"
 LLM_REPORT_OPERATION = "llm_maya_report"
+LLM_KNOWLEDGE_OPERATION = "llm_knowledge_generate"
 
 _PURPOSES: Mapping[str, str] = {
     "embedding": "Build an evidence search index from an approved immutable snapshot.",
@@ -74,6 +78,10 @@ _PURPOSES: Mapping[str, str] = {
     "llm_debate": "Generate the teacher-approved classroom debate speech.",
     "llm_debate_turn": "Generate the teacher-approved classroom debate speech.",
     "llm_maya_report": "Generate the teacher-approved civilization mutual-learning report.",
+    LLM_KNOWLEDGE_OPERATION: (
+        "Derive editable teaching concepts, questions with rubrics, and notes "
+        "from the selected teaching instructions and courseware."
+    ),
     "tts": "Synthesize the current classroom speech for teacher-controlled playback.",
     "voice_enrollment": "Enroll an approved voice sample for a separate voice operation.",
 }
@@ -267,7 +275,9 @@ class ProviderDisclosureService:
         manifest_ref: str | None = None,
     ) -> ProviderDataCallDisclosureResponseV1:
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
-        self._assert_teacher(actor_user_id, manifest.manifest_hash)
+        self._assert_teacher(
+            actor_user_id, manifest.manifest_hash, provider_operation=manifest.provider_operation
+        )
         return self._response(policy, manifest)
 
     def list_embedding_query_manifests(
@@ -622,7 +632,9 @@ class ProviderDisclosureService:
         manifest_ref: str | None = None,
     ) -> ProviderDataCallDisclosureResponseV1:
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
-        self._assert_teacher(actor_user_id, manifest.manifest_hash)
+        self._assert_teacher(
+            actor_user_id, manifest.manifest_hash, provider_operation=manifest.provider_operation
+        )
         revision = self._revision(manifest)
         if request.policy_hash != policy.policy_hash:
             raise _stale("The provider policy changed; review the current disclosure again.")
@@ -703,7 +715,9 @@ class ProviderDisclosureService:
         """Validate a confirmed operation without invoking a transport."""
 
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
-        self._assert_teacher(actor_user_id, manifest.manifest_hash)
+        self._assert_teacher(
+            actor_user_id, manifest.manifest_hash, provider_operation=manifest.provider_operation
+        )
         revision = self._revision(manifest)
         try:
             confirmation = self.store.get_export_confirmation(manifest.manifest_hash)
@@ -732,7 +746,12 @@ class ProviderDisclosureService:
                 raise _stale() from exc
             raise _blocked() from exc
 
-    def _assert_teacher(self, actor_user_id: str, manifest_hash: str) -> None:
+    def _assert_teacher(
+        self, actor_user_id: str, manifest_hash: str, *, provider_operation: str
+    ) -> None:
+        if provider_operation == LLM_KNOWLEDGE_OPERATION:
+            self._assert_teacher_for_manifest_scope(actor_user_id, manifest_hash)
+            return
         if not isinstance(actor_user_id, str) or not actor_user_id.strip():
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
         authorizer = self.teacher_authorizer
@@ -1286,7 +1305,47 @@ class SqlAlchemyProviderDisclosureStore:
             is not None
         )
 
+    def _is_knowledge_owner_for_manifest(
+        self, user_id: str, manifest: ProviderExportManifest
+    ) -> bool:
+        run = self.db.scalar(
+            select(KnowledgeGenerationRun).where(
+                KnowledgeGenerationRun.id == manifest.scope_id,
+                KnowledgeGenerationRun.provider_manifest_hash == manifest.manifest_hash,
+                KnowledgeGenerationRun.owner_user_id == user_id,
+                KnowledgeGenerationRun.course_id == manifest.course_id,
+                KnowledgeGenerationRun.agent_version_id == manifest.agent_version_id,
+            )
+        )
+        if run is None:
+            return False
+        agent = self.db.get(Agent, run.agent_id)
+        set_row = self.db.get(KnowledgeSet, run.knowledge_set_id)
+        if (
+            agent is None
+            or set_row is None
+            or manifest.group_id != agent.group_id
+            or manifest.debate_id is not None
+            or manifest.turn_id is not None
+        ):
+            return False
+        # A course Teacher outside a Group has only its public summary view,
+        # which cannot authorize writes to that Group's generation target.
+        if set_row.ownership_scope == "group" and (
+            set_row.group_id is None
+            or scoped_group_role_for_user(self.db, user_id, set_row.group_id) != "student"
+        ):
+            return False
+        return _current_generation_authorized(self.db, run)
+
     def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
+        manifest = self.db.scalar(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.manifest_hash == manifest_hash
+            )
+        )
+        if manifest is not None and manifest.provider_operation == LLM_KNOWLEDGE_OPERATION:
+            return self._is_knowledge_owner_for_manifest(user_id, manifest)
         return (
             self.db.scalar(
                 select(ProviderExportManifest.id)
@@ -1578,6 +1637,7 @@ __all__ = [
     "EMBEDDING_QUERY_OPERATION",
     "LLM_DEBATE_OPERATION",
     "LLM_REPORT_OPERATION",
+    "LLM_KNOWLEDGE_OPERATION",
     "InMemoryProviderDisclosureStore",
     "PROVIDER_DISCLOSURE_VERSION",
     "ProviderDisclosureError",

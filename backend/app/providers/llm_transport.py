@@ -92,6 +92,16 @@ class LLMTransport(Protocol):
     ) -> object:
         """Make exactly one HTTP attempt and return its response."""
 
+    def post_bytes(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        content: bytes,
+        timeout: object,
+    ) -> object:
+        """Send the provided JSON bytes in one HTTP attempt."""
+
 
 def classify_http_status(status_code: int) -> TransportAcceptance:
     """An HTTP status proves a response was received and is therefore charged."""
@@ -126,6 +136,44 @@ class HttpxLLMTransport:
     ) -> object:
         # A caller may pass the frozen total as a float or an HTTPX timeout;
         # either way redirects stay disabled and this method performs one call.
+        return self._post(
+            url,
+            headers=headers,
+            timeout=timeout,
+            json_payload=json,
+        )
+
+    def post_bytes(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        content: bytes,
+        timeout: object = LLM_TOTAL_TIMEOUT_SECONDS,
+    ) -> object:
+        """Send canonical JSON bytes without decoding or re-encoding them."""
+        json_headers = {
+            key: value for key, value in headers.items() if key.lower() != "content-type"
+        }
+        json_headers["Content-Type"] = "application/json"
+        return self._post(
+            url,
+            headers=json_headers,
+            timeout=timeout,
+            content=content,
+        )
+
+    def _post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        timeout: object,
+        json_payload: Mapping[str, object] | None = None,
+        content: bytes | None = None,
+    ) -> object:
+        # A caller may pass the frozen total as a float or an HTTPX timeout;
+        # either way redirects stay disabled and this method performs one call.
         resolved_timeout: float | httpx.Timeout
         if isinstance(timeout, httpx.Timeout):
             resolved_timeout = timeout
@@ -133,19 +181,22 @@ class HttpxLLMTransport:
             resolved_timeout = self.timeout()
         try:
             if self.client is not None:
-                return self.client.post(
+                return self._dispatch(
+                    self.client,
                     url,
-                    headers=dict(headers),
-                    json=dict(json),
+                    headers=headers,
                     timeout=resolved_timeout,
-                    follow_redirects=False,
+                    json_payload=json_payload,
+                    content=content,
                 )
             with httpx.Client(follow_redirects=False) as client:
-                return client.post(
+                return self._dispatch(
+                    client,
                     url,
-                    headers=dict(headers),
-                    json=dict(json),
+                    headers=headers,
                     timeout=resolved_timeout,
+                    json_payload=json_payload,
+                    content=content,
                 )
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
             raise LLMTransportNotSent() from exc
@@ -164,6 +215,35 @@ class HttpxLLMTransport:
         except httpx.HTTPError as exc:
             # Unknown HTTPX failures are conservatively uncertain.
             raise LLMAcceptanceUnknown() from exc
+
+    @staticmethod
+    def _dispatch(
+        client: httpx.Client,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        timeout: float | httpx.Timeout,
+        json_payload: Mapping[str, object] | None,
+        content: bytes | None,
+    ) -> httpx.Response:
+        request_headers = dict(headers)
+        if content is not None:
+            return client.post(
+                url,
+                headers=request_headers,
+                content=content,
+                timeout=timeout,
+                follow_redirects=False,
+            )
+        if json_payload is None:
+            raise ValueError("A JSON payload or content bytes are required")
+        return client.post(
+            url,
+            headers=request_headers,
+            json=dict(json_payload),
+            timeout=timeout,
+            follow_redirects=False,
+        )
 
 
 # Naming aliases mirror the embedding adapter and keep imports discoverable.

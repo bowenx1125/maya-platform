@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from app.core.models import Agent, AgentVersion, CourseMember, Job, KnowledgeDocument
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    CourseMember,
+    Job,
+    KnowledgeDocument,
+    ProviderOperation,
+)
 from app.modules.knowledge_sets.generation import (
     block_claimed_generation,
     claim_generation_run,
@@ -16,12 +25,50 @@ from app.modules.knowledge_sets.models import (
     KnowledgeGenerationRun,
     KnowledgeSet,
 )
+from app.providers.control import (
+    FIXED_MODELS,
+    LLM_DEBATE_TURN_BUCKET,
+    ExportFieldV1,
+    ExportManifestV1,
+    KnowledgeGenerationAcceptedStageV1,
+    ProviderPolicySnapshotV1,
+    ProviderReservationRequestV1,
+    ProviderScopeBudgetV1,
+    confirm_export_manifest,
+)
+from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from tests.conftest import login
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
+
+
+def _digest(value: str | bytes) -> str:
+    raw = value.encode("utf-8") if isinstance(value, str) else value
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _provider_policy(
+    endpoint: str = ("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"),
+) -> ProviderPolicySnapshotV1:
+    return ProviderPolicySnapshotV1(
+        endpoint=endpoint,
+        privacy_notice_retrieved_at="2026-09-28T00:00:00Z",
+        privacy_notice_sha256=_digest("privacy notice"),
+        service_terms_retrieved_at="2026-09-28T00:00:00Z",
+        service_terms_sha256=_digest("service terms"),
+        faq_retrieved_at="2026-09-28T00:00:00Z",
+        faq_sha256=_digest("faq"),
+        no_training_basis="payg-api-terms-2026-09-28",
+        prompt_response_logging_disabled=True,
+        inference_log_backflow_disabled=True,
+        optional_content_logging_disabled=True,
+        service_improvement_disabled=True,
+        storage_disclosed=True,
+        retention_setting="unknown",
+    )
 
 
 def _headers(csrf: str, **extra: str) -> dict[str, str]:
@@ -232,6 +279,426 @@ def test_ordinary_teacher_done_with_rag_does_not_enqueue_and_chat_still_works(
             == 0
         )
         assert db.scalar(select(func.count()).select_from(KnowledgeSet)) == 0
+
+
+@pytest.mark.parametrize("authorized", [True, False])
+def test_provider_accepted_stage_is_atomic_and_suppresses_revoked_content(
+    client: TestClient,
+    app_bundle: Any,
+    authorized: bool,
+) -> None:
+    _app, database, _settings = app_bundle
+    _teacher, csrf = login(client, "maya")
+    _agent_id, version_id, revision, document_id = _teacher_agent_with_source(client, csrf)
+    published = _publish(
+        client,
+        csrf,
+        version_id,
+        revision,
+        document_id,
+        f"k2b1-stage-{uuid4()}",
+    )
+    assert published.status_code == 200, published.text
+    run_id = published.json()["knowledge_generation"]["run_id"]
+    with database.session() as db:
+        token = claim_generation_run(db, run_id)
+    assert token is not None
+
+    repository = ProviderRepository(database)
+    policy = _provider_policy()
+    policy_id = repository.save_policy_snapshot(policy, snapshot_id=f"k2b1-policy-{uuid4()}")
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        agent = db.get(Agent, run.agent_id)
+        version = db.get(AgentVersion, run.agent_version_id)
+        assert agent is not None and version is not None
+        group_id = agent.group_id
+        course_id = agent.course_id
+        md_hash = _digest(version.agent_md)
+        run_claim_token = run.claim_token
+    assert run_claim_token == token
+
+    build_hash = _digest("k2b1 exact agent schema and prompt bundle")
+    manifest = ExportManifestV1(
+        scope_id=run_id,
+        provider_operation="llm_knowledge_generate",
+        model_key=FIXED_MODELS["llm_knowledge_generate"],
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=build_hash,
+        persona_spec_hash=md_hash,
+        fields=(
+            ExportFieldV1("teacher_agent_instructions", md_hash),
+            ExportFieldV1("authorized_courseware_text", _digest("selected source")),
+            ExportFieldV1("topic_and_platform_rules", _digest("bounded output schema")),
+        ),
+    )
+    manifest_id = repository.save_export_manifest(
+        manifest,
+        policy_snapshot_id=policy_id,
+        course_id=course_id,
+        group_id=group_id,
+        agent_version_id=version_id,
+    )
+    confirmation = confirm_export_manifest(
+        manifest,
+        policy,
+        confirmed_at="2026-09-28T00:00:00Z",
+    )
+    repository.save_export_confirmation(manifest_id, confirmation)
+    repository.save_scope_budget(
+        run_id,
+        ProviderScopeBudgetV1(
+            max_requests=1,
+            max_total_tokens=0,
+            max_cost_cny=0,
+            budget_bucket=LLM_DEBATE_TURN_BUCKET,
+        ),
+    )
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        run.provider_manifest_hash = manifest.manifest_hash
+        db.commit()
+
+    request = ProviderReservationRequestV1(
+        scope_id=run_id,
+        provider_operation="llm_knowledge_generate",
+        logical_item_id=run_id,
+        attempt_no=1,
+        request_hash=_digest(f"exact-final-wire:{run_id}"),
+        max_tokens=0,
+        max_cost_cny=0,
+        policy_hash=policy.policy_hash,
+        export_manifest_hash=manifest.manifest_hash,
+        build_manifest_hash=build_hash,
+        model_key=manifest.model_key,
+    )
+    operation = repository.create_knowledge_generation_prepared(
+        request,
+        run_id=run_id,
+        claim_token=token,
+    )
+    assert (
+        repository.create_knowledge_generation_prepared(
+            request,
+            run_id=run_id,
+            claim_token=token,
+        ).id
+        == operation.id
+    )
+    changed_request = ProviderReservationRequestV1(
+        scope_id=run_id,
+        provider_operation="llm_knowledge_generate",
+        logical_item_id=run_id,
+        attempt_no=1,
+        request_hash=_digest(f"changed-wire:{run_id}"),
+        max_tokens=0,
+        max_cost_cny=0,
+        policy_hash=policy.policy_hash,
+        export_manifest_hash=manifest.manifest_hash,
+        build_manifest_hash=build_hash,
+        model_key=manifest.model_key,
+    )
+    with pytest.raises(ProviderRepositoryError, match="cannot be reused"):
+        repository.create_knowledge_generation_prepared(
+            changed_request,
+            run_id=run_id,
+            claim_token=token,
+        )
+    reservation = repository.reserve(operation.id)
+    assert reservation.state == "reserved"
+    repository.transition(operation.id, expected="reserved", state="sending")
+
+    canonical_stage = json.dumps(
+        {"assets": [{"kind": "note", "title": "Canary", "body": "full text"}]},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    stage = KnowledgeGenerationAcceptedStageV1(
+        run_id=run_id,
+        claim_token=token,
+        operation_id=operation.id,
+        request_hash=request.request_hash,
+        manifest_hash=manifest.manifest_hash,
+        policy_hash=policy.policy_hash,
+        model_key=manifest.model_key,
+        schema_hash=_digest("k2b1-schema"),
+        canonical_stage_json=canonical_stage,
+        canonical_stage_hash=_digest(canonical_stage),
+        item_count=1,
+    )
+    persisted = repository.stage_knowledge_generation_accepted(
+        stage,
+        content_authorized=lambda _connection, _run_id, _claim: authorized,
+    )
+
+    assert persisted.safe_error_code == (None if authorized else "authorization_revoked_after_send")
+    assert persisted.canonical_stage_json == (canonical_stage if authorized else None)
+    assert persisted.item_count == (1 if authorized else 0)
+    assert repository.knowledge_generation_stage(run_id) is not None
+    assert repository.operation(operation.id).state == "accepted"
+    assert repository.reservation(operation.id).state == "accepted"
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        job = db.scalar(select(Job).where(Job.id == run.job_id)) if run is not None else None
+        assert run is not None and run.state == "blocked"
+        assert job is not None
+        assert (run.safe_error_code, job.state) == (
+            ("accepted_stage_ready", "pending")
+            if authorized
+            else ("authorization_revoked_after_send", "failed")
+        )
+
+
+@pytest.mark.parametrize(
+    ("transport_outcome", "usage_payload"),
+    [
+        (
+            "accepted",
+            {"prompt_tokens": 24, "completion_tokens": 19, "total_tokens": 43},
+        ),
+        ("accepted", None),
+        (
+            "accepted",
+            {"prompt_tokens": -1, "completion_tokens": 19, "total_tokens": 18},
+        ),
+        ("not_sent", None),
+        ("unknown", None),
+    ],
+)
+def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
+    client: TestClient,
+    app_bundle: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    transport_outcome: str,
+    usage_payload: dict[str, int] | None,
+) -> None:
+    app, database, base_settings = app_bundle
+    _teacher, csrf = login(client, "maya")
+    _agent_id, version_id, revision, document_id = _teacher_agent_with_source(
+        client,
+        csrf,
+        agent_markdown=(
+            "# Course Guide\n\nUse the full selected text. "
+            "Authorization and API key are ordinary teaching terms here."
+        ),
+    )
+    published = _publish(
+        client,
+        csrf,
+        version_id,
+        revision,
+        document_id,
+        f"k2b1-runtime-{uuid4()}",
+    )
+    assert published.status_code == 200, published.text
+    run_id = published.json()["knowledge_generation"]["run_id"]
+
+    workspace = "syntheticknowledgeworkspace"
+    endpoint = (
+        f"https://{workspace}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+    )
+    policy = _provider_policy(endpoint)
+    repository = ProviderRepository(database)
+    repository.save_policy_snapshot(policy, snapshot_id=f"k2b1-runtime-policy-{uuid4()}")
+    settings = base_settings.model_copy(
+        update={
+            "llm_provider": "dashscope",
+            "llm_provider_policy_hash": policy.policy_hash,
+            "dashscope_api_key": "fixture-key",
+            "dashscope_workspace_id": workspace,
+            "dashscope_region": "cn-beijing",
+        }
+    )
+
+    from app.modules.knowledge_sets.provider_runtime import run_claimed_knowledge_generation
+    from app.providers.llm_transport import (
+        LLMAcceptanceUnknown,
+        LLMTransportNotSent,
+        LLMTransportResponse,
+    )
+
+    class FakeTransport:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, str], bytes]] = []
+
+        def post_bytes(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+            content: bytes,
+            timeout: object,
+        ) -> LLMTransportResponse:
+            del timeout
+            self.calls.append((url, headers, content))
+            if transport_outcome == "not_sent":
+                raise LLMTransportNotSent()
+            if transport_outcome == "unknown":
+                raise LLMAcceptanceUnknown()
+            payload: dict[str, Any] = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps(
+                                {
+                                    "assets": [
+                                        {
+                                            "kind": "question",
+                                            "prompt": "Why does the example matter?",
+                                            "reference_answer": (
+                                                "It links the idea to the source."
+                                            ),
+                                            "rubric": {
+                                                "criteria": [
+                                                    {
+                                                        "label": "Explain",
+                                                        "guidance": (
+                                                            "Connect the idea and example."
+                                                        ),
+                                                        "points": 2,
+                                                    }
+                                                ],
+                                                "total_points": 2,
+                                            },
+                                        }
+                                    ]
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+            if usage_payload is not None:
+                payload["usage"] = usage_payload
+            return LLMTransportResponse(status_code=200, payload=payload)
+
+    fake = FakeTransport()
+    run_claimed_knowledge_generation(
+        database.session_factory,
+        run_id,
+        settings,
+        transport=fake,
+    )
+
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None and run.state == "blocked"
+        assert run.safe_error_code == "provider_confirmation_required"
+        assert run.provider_manifest_hash is not None
+        manifest_hash = run.provider_manifest_hash
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(ProviderOperation)
+                .where(ProviderOperation.provider_operation == "llm_knowledge_generate")
+            )
+            == 0
+        )
+    assert fake.calls == []
+    job_id = published.json()["knowledge_generation"]["job_id"]
+    owner_status = client.get(f"/api/v1/knowledge-generation-jobs/{job_id}")
+    assert owner_status.status_code == 200, owner_status.text
+    assert owner_status.json()["provider_manifest_hash"] == manifest_hash
+    _student, _student_csrf = login(client, "bowen")
+    assert client.get(f"/api/v1/knowledge-generation-jobs/{job_id}").status_code == 404
+    _teacher, csrf = login(client, "maya")
+
+    manifest = repository.get_export_manifest(manifest_hash)
+    assert manifest is not None
+    manager = app.state.knowledge_generation_task_manager
+    wake_calls: list[str] = []
+    monkeypatch.setattr(manager, "wake", lambda value: wake_calls.append(value))
+    disclosed = client.get(
+        "/api/v1/provider/data-call/disclosure",
+        params={"manifest_hash": manifest_hash},
+    )
+    assert disclosed.status_code == 200, disclosed.text
+    confirmed = client.post(
+        "/api/v1/provider/data-call/disclosure/confirm",
+        headers=_headers(csrf),
+        json={
+            "policy_hash": policy.policy_hash,
+            "manifest_hash": manifest_hash,
+            "expected_revision": disclosed.json()["confirmation_revision"],
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert wake_calls == [run_id]
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None and run.state == "pending"
+        assert run.safe_error_code is None
+        job = db.get(Job, run.job_id)
+        assert job is not None and job.state == "pending"
+
+    run_claimed_knowledge_generation(
+        database.session_factory,
+        run_id,
+        settings,
+        transport=fake,
+    )
+
+    assert len(fake.calls) == 1
+    called_url, headers, wire_bytes = fake.calls[0]
+    assert called_url == endpoint
+    assert headers == {"Authorization": "Bearer fixture-key"}
+    assert b"fixture-key" not in wire_bytes
+    wire = json.loads(wire_bytes)
+    assert [item["role"] for item in wire["messages"]] == ["system", "user"]
+    assert "Authorization and API key" in wire["messages"][1]["content"]
+    operation_rows = repository.operations(scope_id=run_id)
+    assert len(operation_rows) == 1
+    operation = operation_rows[0]
+    assert operation.provider_operation == "llm_knowledge_generate"
+    assert operation.request_hash == _digest(wire_bytes)
+    if transport_outcome != "accepted":
+        expected_state = "not_sent" if transport_outcome == "not_sent" else "acceptance_unknown"
+        expected_count = 0 if transport_outcome == "not_sent" else 1
+        assert operation.state == expected_state
+        assert operation.request_count == operation.charged_request_count == expected_count
+        assert repository.reservation(operation.id).state == expected_state
+        assert repository.knowledge_generation_stage(run_id) is None
+        assert repository.recover_llm_startup() == ()
+        with database.session() as db:
+            run = db.get(KnowledgeGenerationRun, run_id)
+            job = db.scalar(select(Job).where(Job.id == run.job_id)) if run is not None else None
+            assert run is not None and run.state == "blocked"
+            assert job is not None and job.state == "failed"
+            assert run.safe_error_code == (
+                "llm_transport_not_sent"
+                if transport_outcome == "not_sent"
+                else "acceptance_unknown"
+            )
+        return
+    assert operation.state == "accepted"
+    assert operation.request_count == operation.charged_request_count == 1
+    recovered = repository.recover_llm_startup()
+    assert len(recovered) == 1 and recovered[0].id == operation.id
+    assert recovered[0].state == "accepted"
+    assert len(fake.calls) == 1
+    persisted_stage = repository.knowledge_generation_stage(run_id)
+    assert persisted_stage is not None
+    assert persisted_stage["canonical_stage_json"] is not None
+    assert "reference_answer" in str(persisted_stage["canonical_stage_json"])
+    assert "synthetic-secret-never-send-to-real-provider" not in str(persisted_stage)
+    assert persisted_stage["usage_json"] == (
+        '{"input_tokens":24,"output_tokens":19,"total_tokens":43}'
+        if usage_payload == {"prompt_tokens": 24, "completion_tokens": 19, "total_tokens": 43}
+        else None
+    )
+
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        job = db.scalar(select(Job).where(Job.id == run.job_id)) if run is not None else None
+        assert run is not None and run.state == "blocked"
+        assert job is not None and job.state == "pending"
+        assert run.safe_error_code == "accepted_stage_ready"
 
 
 def test_generation_source_mismatch_and_non_teacher_owner_fail_before_enqueue(

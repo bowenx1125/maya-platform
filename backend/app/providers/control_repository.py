@@ -30,6 +30,7 @@ from app.core.models import (
     Agent,
     AgentVersion,
     DemoAcceptanceRun,
+    Job,
     LlmAcceptedStage,
     LlmRecoveryInput,
     ProviderExportConfirmation,
@@ -39,12 +40,17 @@ from app.core.models import (
     ProviderReservation,
     ProviderScopeBudget,
 )
+from app.modules.knowledge_sets.models import (
+    KnowledgeGenerationAcceptedStage,
+    KnowledgeGenerationRun,
+)
 from app.providers.control import (
     EMBEDDING_SNAPSHOT_BUCKET,
     DuplicateOperation,
     ExportConfirmationV1,
     ExportFieldV1,
     ExportManifestV1,
+    KnowledgeGenerationAcceptedStageV1,
     LLMAcceptedBundleV1,
     LLMAcceptedStageV1,
     LLMRecoveryInputV1,
@@ -59,6 +65,8 @@ from app.providers.control import (
     ReservationState,
     budget_bucket_for_operation,
     can_transition,
+    canonical_json_bytes,
+    sha256_hex,
     startup_recovery_state,
     validate_budget_bucket,
     validate_demo_acceptance_call_no,
@@ -70,12 +78,15 @@ _MANIFEST_TABLE = cast(Table, ProviderExportManifest.__table__)
 _CONFIRMATION_TABLE = cast(Table, ProviderExportConfirmation.__table__)
 _BUDGET_TABLE = cast(Table, ProviderScopeBudget.__table__)
 _OPERATION_TABLE = cast(Table, ProviderOperation.__table__)
+_JOB_TABLE = cast(Table, Job.__table__)
 _ACCEPTANCE_RUN_TABLE = cast(Table, DemoAcceptanceRun.__table__)
 _AGENT_TABLE = cast(Table, Agent.__table__)
 _AGENT_VERSION_TABLE = cast(Table, AgentVersion.__table__)
 _RESERVATION_TABLE = cast(Table, ProviderReservation.__table__)
 _LLM_STAGE_TABLE = cast(Table, LlmAcceptedStage.__table__)
 _LLM_RECOVERY_INPUT_TABLE = cast(Table, LlmRecoveryInput.__table__)
+_KNOWLEDGE_GENERATION_RUN_TABLE = cast(Table, KnowledgeGenerationRun.__table__)
+_KNOWLEDGE_GENERATION_STAGE_TABLE = cast(Table, KnowledgeGenerationAcceptedStage.__table__)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -767,6 +778,177 @@ class ProviderRepository:
 
     create = create_prepared
 
+    def create_knowledge_generation_prepared(
+        self,
+        request: ProviderReservationRequestV1,
+        *,
+        run_id: str,
+        claim_token: str,
+    ) -> ProviderOperationV1:
+        """Create and bind one exact Knowledge operation in the same transaction."""
+
+        if (
+            request.provider_operation != "llm_knowledge_generate"
+            or request.scope_id != run_id
+            or request.logical_item_id != run_id
+            or request.attempt_no != 1
+            or not claim_token
+        ):
+            raise ProviderRepositoryError("Knowledge Provider operation identity is invalid")
+
+        run_table = _KNOWLEDGE_GENERATION_RUN_TABLE
+        agent_table = _AGENT_TABLE
+        operation_table = _OPERATION_TABLE
+        with self._write_connection() as connection:
+            run_row = (
+                connection.execute(select(run_table).where(run_table.c.id == run_id))
+                .mappings()
+                .first()
+            )
+            if (
+                run_row is None
+                or run_row["state"] != "running"
+                or run_row["claim_token"] != claim_token
+                or run_row["provider_manifest_hash"] != request.export_manifest_hash
+                or run_row["agent_version_id"] is None
+            ):
+                raise ProviderRepositoryError("Knowledge run claim or manifest is stale")
+            agent_row = (
+                connection.execute(
+                    select(agent_table.c.group_id).where(agent_table.c.id == run_row["agent_id"])
+                )
+                .mappings()
+                .first()
+            )
+            manifest = (
+                connection.execute(
+                    select(_MANIFEST_TABLE).where(
+                        _MANIFEST_TABLE.c.manifest_hash == request.export_manifest_hash
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                agent_row is None
+                or manifest is None
+                or manifest["provider_operation"] != request.provider_operation
+                or manifest["scope_id"] != run_id
+                or manifest["course_id"] != run_row["course_id"]
+                or manifest["group_id"]
+                != (str(agent_row["group_id"]) if agent_row["group_id"] is not None else None)
+                or manifest["agent_version_id"] != run_row["agent_version_id"]
+                or manifest["model_key"] != request.model_key
+                or manifest["policy_hash"] != request.policy_hash
+                or manifest["build_manifest_hash"] != request.build_manifest_hash
+            ):
+                raise ProviderRepositoryError("Knowledge Provider manifest ownership is stale")
+
+            confirmation = (
+                connection.execute(
+                    select(
+                        _CONFIRMATION_TABLE.c.manifest_hash,
+                        _CONFIRMATION_TABLE.c.policy_hash,
+                        _CONFIRMATION_TABLE.c.confirmation_revision,
+                        _POLICY_TABLE.c.policy_hash.label("current_policy_hash"),
+                    )
+                    .join(
+                        _CONFIRMATION_TABLE,
+                        _CONFIRMATION_TABLE.c.manifest_id == _MANIFEST_TABLE.c.id,
+                    )
+                    .join(
+                        _POLICY_TABLE,
+                        _POLICY_TABLE.c.id == _MANIFEST_TABLE.c.policy_snapshot_id,
+                    )
+                    .where(
+                        _MANIFEST_TABLE.c.id == manifest["id"],
+                        _CONFIRMATION_TABLE.c.manifest_hash == request.export_manifest_hash,
+                        _CONFIRMATION_TABLE.c.policy_hash == request.policy_hash,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                confirmation is None
+                or confirmation["manifest_hash"] != request.export_manifest_hash
+                or confirmation["policy_hash"] != request.policy_hash
+                or confirmation["current_policy_hash"] != request.policy_hash
+                or confirmation["confirmation_revision"] != manifest["operation_revision"]
+            ):
+                raise PolicyExportStale("Knowledge Provider manifest is not exactly confirmed")
+
+            linked_operation_id = run_row["provider_operation_id"]
+            if linked_operation_id is not None:
+                existing = (
+                    connection.execute(
+                        select(operation_table).where(operation_table.c.id == linked_operation_id)
+                    )
+                    .mappings()
+                    .first()
+                )
+                if (
+                    existing is None
+                    or existing["provider_operation"] != request.provider_operation
+                    or existing["scope_id"] != request.scope_id
+                    or existing["logical_item_id"] != request.logical_item_id
+                    or existing["attempt_no"] != request.attempt_no
+                    or existing["request_hash"] != request.request_hash
+                    or existing["policy_hash"] != request.policy_hash
+                    or existing["export_manifest_hash"] != request.export_manifest_hash
+                    or existing["build_manifest_hash"] != request.build_manifest_hash
+                    or existing["model_key"] != request.model_key
+                    or existing["state"] != "prepared"
+                ):
+                    raise ProviderRepositoryError("Knowledge Provider operation cannot be reused")
+                operation_id = str(linked_operation_id)
+            else:
+                operation_id = request.operation_id or str(uuid4())
+                now = self._now()
+                connection.execute(
+                    operation_table.insert().values(
+                        id=operation_id,
+                        scope_id=request.scope_id,
+                        provider_operation=request.provider_operation,
+                        logical_item_id=request.logical_item_id,
+                        attempt_no=request.attempt_no,
+                        request_hash=request.request_hash,
+                        max_tokens=request.max_tokens,
+                        max_cost_cny=request.max_cost_cny,
+                        policy_hash=request.policy_hash,
+                        export_manifest_hash=request.export_manifest_hash,
+                        build_manifest_hash=request.build_manifest_hash,
+                        model_key=request.model_key,
+                        state="prepared",
+                        request_count=0,
+                        charged_request_count=0,
+                        staged_response_hash=None,
+                        safe_error_code=None,
+                        acceptance_run_id=None,
+                        call_no=None,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                changed = connection.execute(
+                    update(run_table)
+                    .where(
+                        run_table.c.id == run_id,
+                        run_table.c.state == "running",
+                        run_table.c.claim_token == claim_token,
+                        run_table.c.provider_operation_id.is_(None),
+                        run_table.c.provider_manifest_hash == request.export_manifest_hash,
+                    )
+                    .values(
+                        provider_operation_id=operation_id,
+                        request_hash=request.request_hash,
+                        updated_at=now,
+                    )
+                )
+                if changed.rowcount != 1:
+                    raise ProviderRepositoryError("Knowledge Provider run binding CAS failed")
+        return self.operation(operation_id)
+
     def create_snapshot_prepared(
         self,
         request: ProviderReservationRequestV1,
@@ -977,6 +1159,218 @@ class ProviderRepository:
                 if changed.rowcount != 1:
                     raise ProviderRepositoryError("Demo acceptance run state CAS failed")
         return self.operation(operation_id)
+
+    def stage_knowledge_generation_accepted(
+        self,
+        stage: KnowledgeGenerationAcceptedStageV1,
+        *,
+        content_authorized: Callable[[Connection, str, str], bool],
+    ) -> KnowledgeGenerationAcceptedStageV1:
+        """Atomically persist the sanitized stage and accept its operation.
+
+        The supplied authorization callback runs inside this same database
+        transaction. If current source or actor permission has changed since
+        send, the accepted response is represented only by a safe receipt
+        hash; its generated content is suppressed.
+        """
+
+        stage.__post_init__()
+        if not callable(content_authorized):
+            raise ProviderRepositoryError("Knowledge accepted stage requires an ACL fence")
+        operation_table = _OPERATION_TABLE
+        run_table = _KNOWLEDGE_GENERATION_RUN_TABLE
+        stage_table = _KNOWLEDGE_GENERATION_STAGE_TABLE
+        reservation_table = _RESERVATION_TABLE
+        job_table = _JOB_TABLE
+        with self._write_connection() as connection:
+            operation_row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == stage.operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            run_row = (
+                connection.execute(select(run_table).where(run_table.c.id == stage.run_id))
+                .mappings()
+                .first()
+            )
+            existing_row = (
+                connection.execute(select(stage_table).where(stage_table.c.run_id == stage.run_id))
+                .mappings()
+                .first()
+            )
+            if operation_row is None or run_row is None:
+                raise ProviderRepositoryError("Knowledge accepted stage owner does not exist")
+            if (
+                operation_row["provider_operation"] != "llm_knowledge_generate"
+                or operation_row["scope_id"] != stage.run_id
+                or operation_row["logical_item_id"] != stage.run_id
+                or operation_row["attempt_no"] != 1
+                or operation_row["request_hash"] != stage.request_hash
+                or operation_row["export_manifest_hash"] != stage.manifest_hash
+                or operation_row["policy_hash"] != stage.policy_hash
+                or operation_row["model_key"] != stage.model_key
+                or run_row["provider_operation_id"] != stage.operation_id
+                or run_row["request_hash"] != stage.request_hash
+                or run_row["provider_manifest_hash"] != stage.manifest_hash
+            ):
+                raise ProviderRepositoryError("Knowledge accepted stage does not match its run")
+
+            if existing_row is not None:
+                if (
+                    existing_row["operation_id"] != stage.operation_id
+                    or existing_row["request_hash"] != stage.request_hash
+                    or existing_row["manifest_hash"] != stage.manifest_hash
+                    or existing_row["policy_hash"] != stage.policy_hash
+                    or existing_row["model_key"] != stage.model_key
+                    or existing_row["schema_hash"] != stage.schema_hash
+                    or existing_row["canonical_stage_json"] != stage.canonical_stage_json
+                    or existing_row["canonical_stage_hash"] != stage.canonical_stage_hash
+                    or existing_row["item_count"] != stage.item_count
+                    or existing_row["usage_json"] != stage.usage_json
+                    or existing_row["safe_error_code"] != stage.safe_error_code
+                    or operation_row["state"] != "accepted"
+                    or operation_row["staged_response_hash"] != stage.canonical_stage_hash
+                ):
+                    raise ProviderRepositoryError("Knowledge accepted stage is immutable")
+                return stage
+
+            if operation_row["state"] != "sending":
+                raise ProviderRepositoryError("Knowledge stage requires a sending operation")
+            reservation_row = (
+                connection.execute(
+                    select(reservation_table).where(
+                        reservation_table.c.operation_id == stage.operation_id
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if reservation_row is None or reservation_row["state"] != "sending":
+                raise ProviderRepositoryError("Knowledge stage reservation is not sending")
+
+            claim_is_current = (
+                run_row["state"] == "running" and run_row["claim_token"] == stage.claim_token
+            )
+            authorized = False
+            if claim_is_current:
+                try:
+                    authorized = bool(
+                        content_authorized(connection, stage.run_id, stage.claim_token)
+                    )
+                except Exception:
+                    authorized = False
+
+            accepted_stage = stage
+            if not authorized:
+                safe_code = (
+                    "authorization_revoked_after_send"
+                    if claim_is_current
+                    else "knowledge_generation_claim_stale"
+                )
+                suppressed_json = canonical_json_bytes(
+                    {"safe_error_code": safe_code, "suppressed": True}
+                ).decode("utf-8")
+                accepted_stage = replace(
+                    stage,
+                    canonical_stage_json=None,
+                    canonical_stage_hash=sha256_hex(suppressed_json.encode("utf-8")),
+                    item_count=0,
+                    safe_error_code=safe_code,
+                )
+
+            now = self._now()
+            connection.execute(
+                stage_table.insert().values(
+                    run_id=accepted_stage.run_id,
+                    operation_id=accepted_stage.operation_id,
+                    request_hash=accepted_stage.request_hash,
+                    manifest_hash=accepted_stage.manifest_hash,
+                    policy_hash=accepted_stage.policy_hash,
+                    model_key=accepted_stage.model_key,
+                    schema_hash=accepted_stage.schema_hash,
+                    canonical_stage_json=accepted_stage.canonical_stage_json,
+                    canonical_stage_hash=accepted_stage.canonical_stage_hash,
+                    item_count=accepted_stage.item_count,
+                    usage_json=accepted_stage.usage_json,
+                    safe_error_code=accepted_stage.safe_error_code,
+                    accepted_at=now,
+                    created_at=now,
+                )
+            )
+            accepted = connection.execute(
+                update(operation_table)
+                .where(
+                    operation_table.c.id == stage.operation_id,
+                    operation_table.c.state == "sending",
+                    operation_table.c.request_hash == stage.request_hash,
+                )
+                .values(
+                    state="accepted",
+                    staged_response_hash=accepted_stage.canonical_stage_hash,
+                    safe_error_code=accepted_stage.safe_error_code,
+                    updated_at=now,
+                )
+            )
+            reserved = connection.execute(
+                update(reservation_table)
+                .where(
+                    reservation_table.c.operation_id == stage.operation_id,
+                    reservation_table.c.state == "sending",
+                )
+                .values(state="accepted", updated_at=now)
+            )
+            if accepted.rowcount != 1 or reserved.rowcount != 1:
+                raise ProviderRepositoryError("Knowledge accepted stage CAS failed")
+
+            if claim_is_current:
+                safe_error_code = (
+                    accepted_stage.safe_error_code
+                    if accepted_stage.safe_error_code is not None
+                    else "accepted_stage_ready"
+                )
+                job_state = "failed" if accepted_stage.safe_error_code is not None else "pending"
+                run_changed = connection.execute(
+                    update(run_table)
+                    .where(
+                        run_table.c.id == stage.run_id,
+                        run_table.c.state == "running",
+                        run_table.c.claim_token == stage.claim_token,
+                        run_table.c.provider_operation_id == stage.operation_id,
+                    )
+                    .values(
+                        state="blocked",
+                        safe_error_code=safe_error_code,
+                        claim_token=None,
+                        lease_expires_at=None,
+                        updated_at=now,
+                    )
+                )
+                job_changed = connection.execute(
+                    update(job_table)
+                    .where(
+                        job_table.c.id == run_row["job_id"],
+                        job_table.c.claim_token == stage.claim_token,
+                    )
+                    .values(
+                        state=job_state,
+                        safe_error_code=safe_error_code,
+                        claim_token=None,
+                        updated_at=now,
+                    )
+                )
+                if run_changed.rowcount != 1 or job_changed.rowcount != 1:
+                    raise ProviderRepositoryError("Knowledge run accepted-stage fence failed")
+        return accepted_stage
+
+    def knowledge_generation_stage(self, run_id: str) -> Mapping[str, object] | None:
+        row = self._read_one(
+            select(_KNOWLEDGE_GENERATION_STAGE_TABLE).where(
+                _KNOWLEDGE_GENERATION_STAGE_TABLE.c.run_id == run_id
+            )
+        )
+        return row
 
     # Keep naming discoverable for callers that describe this as a bound
     # prepared operation while retaining one implementation and one seam.
@@ -1287,6 +1681,14 @@ class ProviderRepository:
                 "updated_at": now,
             }
             if dispatch_rejected:
+                values["request_count"] = 0
+                values["charged_request_count"] = 0
+            elif (
+                str(row["provider_operation"]) == "llm_knowledge_generate"
+                and target_state == "not_sent"
+            ):
+                # K2b1 is a one-shot operation. A proved-not-sent call has
+                # consumed neither supplier acceptance nor a billable request.
                 values["request_count"] = 0
                 values["charged_request_count"] = 0
             if response_hash is not None:
@@ -1909,6 +2311,13 @@ class ProviderRepository:
                 # their acceptance state and let callers surface the blocked
                 # recovery explicitly instead of relabeling it uncertain.
                 return current
+        elif current.provider_operation == "llm_knowledge_generate":
+            stage_row = self._read_one(
+                select(_KNOWLEDGE_GENERATION_STAGE_TABLE.c.run_id).where(
+                    _KNOWLEDGE_GENERATION_STAGE_TABLE.c.operation_id == operation_id
+                )
+            )
+            complete = stage_row is not None
         else:
             complete = (
                 current.staged_response_hash is not None
@@ -1938,7 +2347,7 @@ class ProviderRepository:
         with self.engine.connect() as connection:
             rows = connection.execute(
                 select(table.c.id).where(
-                    table.c.provider_operation == "llm_debate_turn",
+                    table.c.provider_operation.in_(("llm_debate_turn", "llm_knowledge_generate")),
                     table.c.state.in_(("reserved", "sending", "accepted")),
                 )
             ).all()

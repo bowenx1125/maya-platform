@@ -285,6 +285,7 @@ class KnowledgeGenerationRun(Base):
     provider_operation_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("provider_operations.id", ondelete="RESTRICT"), nullable=True
     )
+    provider_manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agent_md_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     agent_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -322,4 +323,58 @@ class KnowledgeGenerationRun(Base):
         Index("ix_knowledge_generation_owner_created", "owner_user_id", "created_at"),
         Index("ix_knowledge_generation_state_lease", "state", "lease_expires_at"),
         Index("ix_knowledge_generation_agent", "agent_id", "created_at"),
+    )
+
+
+class KnowledgeGenerationAcceptedStage(Base):
+    """Sanitized canonical provider output bound to one generation operation.
+
+    The supplier envelope and credentials are never stored. A null stage body
+    represents a charged response whose content was suppressed after an
+    authorization fence changed while the request was in flight.
+    """
+
+    __tablename__ = "knowledge_generation_accepted_stages"
+
+    run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("knowledge_generation_runs.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    operation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("provider_operations.id", ondelete="RESTRICT"), nullable=False
+    )
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_stage_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    canonical_stage_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    usage_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("operation_id", name="uq_knowledge_generation_stage_operation"),
+        CheckConstraint("length(request_hash) = 64", name="ck_knowledge_generation_stage_request"),
+        CheckConstraint(
+            "length(manifest_hash) = 64",
+            name="ck_knowledge_generation_stage_manifest",
+        ),
+        CheckConstraint("length(policy_hash) = 64", name="ck_knowledge_generation_stage_policy"),
+        CheckConstraint("length(schema_hash) = 64", name="ck_knowledge_generation_stage_schema"),
+        CheckConstraint(
+            "length(canonical_stage_hash) = 64",
+            name="ck_knowledge_generation_stage_hash",
+        ),
+        CheckConstraint("item_count >= 0", name="ck_knowledge_generation_stage_item_count"),
+        CheckConstraint(
+            "(canonical_stage_json IS NULL AND item_count = 0 AND safe_error_code IS NOT NULL) "
+            "OR (canonical_stage_json IS NOT NULL AND safe_error_code IS NULL)",
+            name="ck_knowledge_generation_stage_suppression",
+        ),
+        Index("ix_knowledge_generation_stage_operation", "operation_id"),
     )

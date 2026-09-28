@@ -8,11 +8,14 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
+
 from .generation import (
     block_claimed_generation,
     list_pending_generation_runs,
     mark_generation_worker_failure,
 )
+from .provider_runtime import run_claimed_knowledge_generation
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,8 +23,14 @@ LOGGER = logging.getLogger(__name__)
 class KnowledgeGenerationTaskManager:
     """Small wake layer; persisted Jobs and runs remain the source of truth."""
 
-    def __init__(self, session_factory: Callable[[], Session]) -> None:
+    def __init__(
+        self,
+        session_factory: Callable[[], Session],
+        *,
+        settings: Settings | None = None,
+    ) -> None:
         self.session_factory = session_factory
+        self.settings = settings
         self._loop: asyncio.AbstractEventLoop | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._rewake: set[str] = set()
@@ -61,9 +70,19 @@ class KnowledgeGenerationTaskManager:
             self._schedule(run_id)
 
     async def _run(self, run_id: str) -> None:
-        work = asyncio.create_task(
-            asyncio.to_thread(block_claimed_generation, self.session_factory, run_id)
-        )
+        if self.settings is None:
+            work = asyncio.create_task(
+                asyncio.to_thread(block_claimed_generation, self.session_factory, run_id)
+            )
+        else:
+            work = asyncio.create_task(
+                asyncio.to_thread(
+                    run_claimed_knowledge_generation,
+                    self.session_factory,
+                    run_id,
+                    self.settings,
+                )
+            )
         try:
             await asyncio.shield(work)
         except asyncio.CancelledError:

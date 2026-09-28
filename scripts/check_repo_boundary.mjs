@@ -170,6 +170,8 @@ function walk(directory) {
       relativePath === "backend/tests/test_wave1b_voices.py" ||
       relativePath === "backend/tests/test_wave4_llm_adapter.py" ||
       relativePath === "backend/tests/test_wave4_llm_runtime.py" ||
+      // Fake K2b transport tests retain a reviewed-shape supplier URL but never dispatch it.
+      relativePath === "backend/tests/test_knowledge_generation.py" ||
       relativePath === "backend/tests/test_real_report_provider.py" ||
       relativePath === "docs/contracts/DEBATE_GENERATION_CONTRACTS.md" ||
       // The operator has to record the exact endpoint they reviewed, so the

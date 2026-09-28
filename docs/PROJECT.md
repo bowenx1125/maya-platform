@@ -290,44 +290,43 @@ history; direct `Message[]` drops assistant turns.
 
 ## MayaForm W2a Chat reliability — 2026-09-27
 
-Unknown timeouts are not auto-resent; same-ID replay/new-ID follow-up. History/status
-persist; valid stop tolerates usage faults, invalid fails after200. CAS/refund/save/SSE,
-GET recovery; charged calls recorded, usage unclaimed. Actor/course switch clears Chat;
-same-actor navigation retains. R4 `8bbcdfd00d804db574789a2a27b98bbf10d5c9d66da83587937d776c0d2cd9a8`/40 files:
-42 focused, 449 frontend/1 skipped, `pnpm check`/boundary0. Sol review clean (9+42);
-Mock recovery passed, 0 real calls.
+Unknown timeouts never auto-resend; same-ID replay/new-ID follow-up. History/status,
+usage-fault handling, CAS/refund/save/SSE and GET recovery persist. Actor/course switch
+clears Chat; same-actor navigation retains. R4: 40 files, 42 focused, 449 frontend/1
+skip; full check/boundary0, Sol clean. Mock recovery only; 0 real calls.
 
 ## MayaForm W2b authored lengths — 2026-09-27
 
-W2b removes Agent.md/RAG caps; fixtures 14,343/108,350/123,080 chars; persisted Agent.md
-14,353. PATCH→download lossless. 0034 preserves data; oversized downgrade refuses;
-batches ≤10/30k tokens via codepoint chunks. Sol accepted; check/boundary0, frontend449/1,
-desktop/375 no overflow; no Provider; IME NOT_RUN.
+W2b removes Agent.md/RAG caps; 14,343/108,350/123,080-char fixtures persist losslessly.
+0034 preserves data; oversized downgrade refuses. Supplier batches stay ≤10/30k estimated
+tokens via codepoint chunks. Sol/check/boundary passed; no Provider; IME NOT_RUN.
 
 ## MayaForm W1 owner-first workspace — 2026-09-27
 
-0035: owner/course/scope/visibility epochs; nullable personal Agent/source; Chat name
-snapshot; legacy groups Public/owner NULL. Teacher personal Agent CRUD.
-Sticky `draft_visibility`/`can_read_version`: Private-origin content stays owner-only through
-Public changes; current Public release/source gates clones; untouched Public drafts collaborate.
-Owner history kept. No-RAG: NULL snapshot/empty evidence; withdrawal freezes
-name/history, denies sends. Debate group-only.
+0035 adds owner/course/scope/visibility epochs, nullable personal Agent/sources and Chat-name
+snapshot; legacy group owner remains NULL/Public. Private-origin drafts stay owner-only through
+visibility changes; current source ACL gates sharing. Teacher personal CRUD and no-RAG work;
+withdrawal freezes history and denies sends. Debate remains group-only. Student Agent.md is
+allowed; no Toolkit binding/approval. R5: 70 files; full check/boundary, Sol ACL/migration,
+80 Mock requests and Teacher no-RAG Chat/mobile passed. No Provider/Docker; IME NOT_RUN.
 
-R5: 70 files; full check/boundary, Sol ACL/migration, 80 Mock requests and Teacher no-RAG
-Chat/mobile passed. No Provider/Docker; IME NOT_RUN. Student Agent.md
-allowed, no Toolkit binding/approval.
-K1 R3 active: four shared immutable/CAS types; Question Rubric/answer teacher-only;
-Graph read-only in Concepts. Global and Agent entry points share the store. Contract:
-`docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`. R2 covered P09 projection, student source load,
-excerpt hashes, source-revoke ACL and 0036 cleanup; full check 464/1 and boundary passed.
-Sol's only R2 reject was Asset replay timestamp drift. R3 replays exact accepted POST/PATCH
-JSON only after current ACL/source checks; V1/V2 exact-body and revoked-404 focused tests pass.
-Sol accepted R3; full check and boundary passed. No Provider/Docker/deployment.
+K1 R3 accepted: four shared immutable/CAS types; Question Rubric/reference answer teacher-only;
+Graph read-only in Concepts; global/Agent entry points share a store. P09 DTO projection,
+source ACL/excerpt verification and 0036 cleanup passed. POST/PATCH replay returns the exact
+accepted JSON after current ACL checks. Contract: `docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`.
+Sol/full check/boundary passed; no Provider/Docker/deployment.
 
 ## MayaForm K2a — accepted
 
-0037: owner-scoped Job/run, input-key uniqueness, lease/startup recovery. Intent is
-an optional API field; ordinary Teacher Done with RAG creates no Job. Explicit intent
-atomically saves a Private Set/link and Job/run; owner GET returns safe status. Absent
-Provider blocks `provider_not_configured`: 0 calls/assets. K2b NOT_RUN. R2 full
-check/boundary, Sol, HTTP/browser passed. No Docker/real Provider.
+0037: owner-scoped Job/run, stable input-key reuse, lease/startup recovery. Optional explicit
+API intent; ordinary Teacher Done with RAG creates no Job. Intent atomically saves a Private
+Set/link and Job/run; owner GET returns safe status. No Provider blocks with zero calls/assets.
+R2 full check/boundary, Sol, HTTP/browser passed. No Docker/real Provider.
+
+## MayaForm K2b1 — Provider stage foundation (in progress)
+
+0038 binds a confirmed, owner-authorized `llm_knowledge_generate` operation to the K2a run.
+Fresh Agno 3.0.11 invokes once; canonical request bytes, persisted SHA-256 and `post_bytes`
+are identical. Consent/ACL fences, accounting, not-sent/unknown recovery and sanitized typed
+accepted stages are covered; no Assets or completion are claimed. Focused backend, mypy/Ruff
+and OpenAPI/TS/route sync pass. Full check/boundary pass; independent migration/HTTP and Sol review pending.
