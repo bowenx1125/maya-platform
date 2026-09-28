@@ -314,31 +314,26 @@ class SegmentLLMRuntime:
                 existing = _invoke(getter, reservation.operation_id) if getter is not None else None
                 if existing is not None and _operation_state(existing) in {"not_sent", "failed"}:
                     mover = _method(self.ledger, "transition")
-                    if mover is None or (
-                        _operation_state(existing) == "failed" and attempt_no < self.max_attempts
-                    ):
-                        if (
-                            existing is not None
-                            and _operation_state(existing) == "failed"
-                            and attempt_no < self.max_attempts
-                        ):
-                            return self.prepare(
-                                snapshot,
-                                debate_id=debate_id,
-                                turn_id=turn_id,
-                                policy_hash=policy_hash,
-                                manifest_hash=manifest_hash,
-                                build_manifest_hash=build_manifest_hash,
-                                confirmation_revision=confirmation_revision,
-                                generation_fence=generation_fence,
-                                repair_policy_hash=repair_policy_hash,
-                                identity_tokens=identity_tokens,
-                                outbound_manifest=outbound_manifest,
-                                attempt_no=attempt_no + 1,
-                                retrieval_reused=retrieval_reused,
-                                repair_feedback=repair_feedback,
-                                queries=queries,
-                            )
+                    if _operation_state(existing) == "failed" and attempt_no < self.max_attempts:
+                        return self.prepare(
+                            snapshot,
+                            debate_id=debate_id,
+                            turn_id=turn_id,
+                            policy_hash=policy_hash,
+                            manifest_hash=manifest_hash,
+                            build_manifest_hash=build_manifest_hash,
+                            confirmation_revision=confirmation_revision,
+                            generation_fence=generation_fence,
+                            repair_policy_hash=repair_policy_hash,
+                            identity_tokens=identity_tokens,
+                            outbound_manifest=outbound_manifest,
+                            attempt_no=attempt_no + 1,
+                            retrieval_reused=retrieval_reused,
+                            repair_feedback=repair_feedback,
+                            queries=queries,
+                        )
+                    if mover is None:
+                        raise SegmentRuntimeError(code="segment_preparation_failed") from exc
                     operation = _invoke(
                         mover,
                         reservation.operation_id,

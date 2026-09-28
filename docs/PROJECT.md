@@ -210,8 +210,11 @@ Old RuleSets and their branches are removed. Only
 
 Single-course Demo: open student registration, five-character passwords,
 distinct unknown-user/wrong-password errors; multi-course registration deferred.
-Catalog accounts stay source-managed. Migration 0029 enforces canonical username
-and group uniqueness; collisions stop migration, duplicates never alter a login.
+Catalog accounts start source-managed; a successful self-service password change
+creates a database override without mutating the read-only catalog. Login checks
+that override first, the current session survives the change, and every other
+session is revoked. Migration 0029 enforces canonical username and group uniqueness;
+collisions stop migration, duplicates never alter a login.
 Teacher group access survives catalog sync: Enter grants workspace CRUD under
 the teacher identity; Homeward returns to Accounts. CSRF, publication, course,
 provider consent and cost boundaries remain; TTS/Voice configuration is preserved.
@@ -244,161 +247,42 @@ Performance and full RAG teaching quality remain open.
 [ADR-008](adr/ADR-008-agent-chat-live-provider-controls.md) records the accepted
 integration/reuse boundaries. This earlier acceptance does not cover the new work below.
 
-## Working — workspace, private Chats and Live
+## Current workspace, profiles and provider behavior
 
-Migration 0030 adds owner-bound history, encrypted local Provider preferences and
-20-second Live leases. Chats freezes a published version/snapshot and uses request
-identity, revision fences and a cost ledger. Unknown provider acceptance stops a
-conversation. Five components remain visible: LLM/Embedding/Report can switch;
-TTS/Voice stay Mock/Deferred. Student Live shares public content and retained audio,
-never controller messages or a new generation request per spectator.
+Migration 0030 adds owner-bound Chat history, encrypted local Provider settings
+and 20-second Live leases. Chats freeze the published Agent version and knowledge
+snapshot, preserve same-conversation history and request identity, and stop on
+unknown provider acceptance. Live spectators receive only public content and
+retained audio. LLM, Embedding and Report are configurable; TTS/Voice stay
+Mock/Deferred. Agent.md is passed as authored Markdown (12,000-character maximum),
+and RAG files allow 100,000 characters each. Product-level Chat turn, daily,
+message, prompt-byte and output-token caps are removed; authorization, CSRF,
+ownership, deduplication, ledger and unknown-acceptance guards remain.
 
-Non-login UI follows ui-ux-pro-max Minimalism and the login mood: display-serif
-section headings, warm paper cards (`#fdfaf3`), quiet type scale, original mark in
-the Mayaform navigation item. No separate brand wordmark, visible page titles or
-Refresh. Accounts keeps username/group/status; group Enter is an arrow with an
-accessible name. Logout matches sidebar link size. Components has one Check,
-skips Ready/deferred items, confirms the maximum paid calls and stops on failure.
-Mode/key changes invalidate the relevant checks. Live keeps speech history.
+Migration 0031 adds shared Agent tombstones. Delete removes workspace access but
+retains immutable assets and private Chats read-only; a Debate reference or active
+publication blocks it. Quiet workspace actions use accessible icon controls;
+Chats has New, delete and an inline Send arrow; libraries share Back/Done editors.
+The product UI uses compact Inter typography and warm paper surfaces; display serif
+is reserved for login. Teacher Debate rows enter through Immerse.
 
-Sidebar New stays registered on screens that own it and fades when disabled;
-Back and Done still appear only when that screen needs them. Chats has New,
-conversation delete (hover/focus X on a history row), and Send; switching the
-Agent model always opens a new chat. Agent entry shows the current version; New
-opens/creates its next draft. Done saves then publishes the returned revision
-when checks pass; Back warns about unsaved edits. Libraries use quiet icon
-actions (pencil Edit, download glyph, X Delete) and one Back/Done editor.
-Failed creation retains text and retry identity.
+Student and teacher Home show a welcome, course context and live guide status.
+Student progress derives from group Agent, Knowledge and Voice state; teacher
+progress derives from course, group, published-Agent and Debate state. Home shows
+group members and published-Agent authors with generated preset avatars, and the
+teacher roster uses the same avatars. Every signed-in user can choose a preset and
+change their own password; uploads are not accepted. Migration 0033 adds the
+nullable avatar field. Password changes keep the current session and revoke all
+others; catalog accounts gain a database credential override.
 
-Earlier deployed browser acceptance covered both identities, owner-only history,
-Components/Accounts, 375px/desktop, Replay and Live. Immerse buttons retained
-104x44px desktop dimensions; Docker and retained classroom/assets were healthy.
-That release made 11 assistant-paid calls: 4 Chat Embedding + 4 Chat LLM,
-1 LLM Check and 2 Report Checks. Repeated requests/history added none. Decimal
-budget multiplication fixed a second-message failure before dispatch. Concurrent
-user work brought that dated ledger to 17 successes (7 Embedding, 10 LLM/checks);
-these counts do not describe the new checkpoint or later user requests.
-
-## Working — free Markdown, deletion and composer checkpoint
-
-Agent.md now passes directly to Chats and Debate generation as authored Chinese/
-English Markdown, maximum 12,000 characters. Its optional default template covers
-identity, characteristics and four thinking questions; no chapter parser, per-field
-caps, semantic rules or executed ToT/ReAct. Persona/Compile/Confirm and Test Chat UI
-are removed. Legacy columns, frozen API routes and historical codecs remain for
-saved data; they no longer gate publishing. RAG content is unrestricted, capped at
-100,000 characters per file, not across all files; file access and non-execution
-boundaries remain. Old classroom rules/results are not rewritten.
-
-Migration 0031 adds a shared Agent tombstone. Workspace Delete removes teacher/
-student access, retains immutable assets and private chats read-only, and preserves
-shared knowledge/voice files. Any Debate reference or active publication blocks
-deletion under the same writer lock as concurrent creation/publication.
-
-Chats is the visible label; Message and redundant knowledge revision/status copy
-are removed. Switching Agent restores nonempty history; New alone starts fresh.
-Sending clears the draft immediately and shows the user message while waiting;
-the accessible arrow sits inside the composer. A network failure restores text
-and preserves request identity. Same-conversation saved history is sent on reentry;
-no cross-chat personal memory is promised.
-
-Acceptance: backend 1391 passed/21 skipped; frontend 373 passed/1 skipped, plus
-23 focused UI checks. Types, Ruff, format, API/WS/boundary/reset and migration probes
-passed; old migration seeds now use historical columns, not today's ORM. Docker
-rebuilt/restarted, migration 0031/readiness/integrity passed after SQLite backup.
-Teacher Chats checked at 1440px/375px without overflow; arrow is 44x44px inside the
-composer. No new real calls, live Agent deletion or classroom generation. Obsolete
-Persona UI/tests and duplicate full Prompts removed; provider quality remains unverified.
-
-## Working — Chats without product I/O caps (observed 2026-09-23)
-
-Removed Chats product input/output stop rules that blocked SiyaH. Observed in
-the local Docker stack (`POST /api/v1/conversations/{id}/messages`):
-
-- Historical failures stored as `chat_context_full` (32,000-byte outbound JSON
-  gate and related turn/daily ceilings).
-- After those gates were lifted, SiyaH still failed with
-  `export_data_forbidden` because Agent.md contains the lesson word
-  `Authorization` and chat preflight scanned educational payload prose as if it
-  were a credential leak.
-
-Code change (same commit): drop the 20-turn stop, 100/day limit, 4,000-character
-message max, outbound JSON byte reject, and `max_tokens: 1500` request field;
-keep full conversation history in the prompt without summary/crop instructions;
-skip chat payload content scanning while leaving auth, CSRF, ownership,
-acceptance-unknown stop, and header credential handling intact; use finite
-per-call ledger reservations with sentinel-unbounded scope ceilings so multi-turn
-chats still share one budget. OpenAPI `SendChat` no longer declares
-`maxLength: 4000` or a `429` response. Focused backend chat tests passed,
-including a regression that sends educational `Authorization` text.
-
-Not observed in this change: a new charged SiyaH real-provider acceptance run
-after Docker rebuild; RAG teaching-quality acceptance. Supplier capacity,
-authentication, ownership and deduplication remain.
-
-## Working — quiet workspace UI (observed in code 2026-09-24)
-
-Mayaform home shows Welcome then Members; the old Workspace Members card is gone.
-Student Knowledge lists `Files · N` in a two-column tile grid; library Delete is the
-quiet X and soft-hides or removes the library row without rewriting published
-knowledge snapshots. Workspace and teacher Agents use a six-column tile grid with
-name, group, and version bubble vertically centered on warm paper; green/brown
-bubbles show the version label; hover/focus swaps the label for X to delete.
-Teacher Debates list no longer opens Preview from the row — Immerse remains the
-entry. AGENT.md, Evidence, and Knowledge snapshot cards use a top-right download
-icon; Evidence downloads every RAG file in the block; snapshot file rows keep
-filename and character count without `order N`. Snapshot SNAPSHOT/CONTENT/FILES
-are three vertical stacks (label above value) at the existing number size. Chats
-composer is a single-line bar at the bottom of the pane. Ruleset save is the
-checkmark beside language; sidebar Done does not save an unsaved Edit. Symbol
-actions and faded New / contextual Back/Done remain as before.
-
-## Snapshot publish quota — September 23, 2026
-
-The owner removed the real-snapshot request, token and CNY ceilings. Planning still
-packs at most 10 items and 30,000 counted tokens per batch. `embedding_snapshot`
-scope rows use unbounded ceilings so reservation cannot reimpose the old cap. Query
-embedding and LLM budgets are unchanged.
-
-A later publish of the same 罗燕玲 draft reached DashScope. One batch was accepted
-and staged; the next batch returned HTTP 500. Continuation keeps a staged accept,
-restores it when the stage still matches, and resends an explicit
-`provider_http_rejected` batch once.
-
-The publish after that accepted five batches, then one batch hit a DashScope read
-timeout at 30 seconds (`acceptance_unknown`) and the two batches after it stayed
-`not_sent`. The next click stopped before any send because a timeout with no staged
-response was terminal, and that batch was already on attempt 2 of 2. Continuation
-now sends an `acceptance_unknown` batch that has no staged response again, up to
-three attempts for the build. The embedding read timeout is 120 seconds. Accepted
-batches are still reused. Retrying the timed-out batch is another charged request.
-
-The draft was saved again before the next publish, so that click started a new
-build instead of continuing the timed-out one. At 07:28 UTC all nine batches of
-that build succeeded. 罗燕玲 version `eaa37c26-c30a-4332-826c-2533820dcc13` is
-published with a DashScope `text-embedding-v4` snapshot, dimension 1024, and 12
-stored chunks. The earlier timed-out build remains on the ledger and was not
-resent.
-
-SiyaH's later draft had both embedding batches staged, then the local snapshot
-commit failed and those rows stayed `failed`. Later clicks stopped before any
-send. A failed batch that still has a matching stage is restored to `accepted`
-and published locally; the supplier request is not repeated. At 07:39 UTC draft
-`cc072330-3885-4a39-ba28-adb0136fd976` published that way, with a DashScope
-`text-embedding-v4` snapshot, dimension 1024, 7 stored chunks, and no new
-embedding request.
-
-Debate query identity uses the published AGENT.md hash. A missing compiled
-Persona hash no longer stops the turn, and the segment prompt sends that
-AGENT.md.
-
-Debate turns no longer stop on a prompt token, byte or output count, and a
-Debate's query and LLM scope ceilings are unbounded. Embedding and query
-batches are not rejected for input size. A draft whose current turn already
-failed does not take the warmer away from another Debate. A query that was
-proven not sent can be attempted once more. The stored LLM recovery input no
-longer stops at 256 KiB, so a turn whose prompt includes AGENT.md can be saved
-after the supplier accepts it.
+Snapshot publication has no request, token or CNY ceiling, but batches still pack
+at most 10 items and 30,000 counted tokens. Matching staged accepts are restored
+after local failure instead of resent; unknown acceptance may retry up to three
+times per build, with a 120-second embedding read timeout. Debate query identity
+uses the published Agent.md hash. Query and LLM scope ceilings are unbounded, and
+stored recovery input has no 256 KiB stop. Authentication, ownership, immutable
+snapshot and cost-ledger boundaries remain. Real-provider quality and classroom
+scale remain unverified.
 
 ## Next atomic task
 

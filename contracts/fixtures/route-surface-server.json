@@ -231,6 +231,68 @@
         "tags": [
           "Chat"
         ]
+      },
+      "delete": {
+        "operationId": "deleteConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Conversation deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Delete Conversation",
+        "tags": [
+          "Chat"
+        ]
       }
     },
     "/api/v1/conversations/{conversation_id}/messages": {
@@ -1417,6 +1479,87 @@
             }
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "updateCurrentUser",
+        "description": "Update the authenticated user's scholar avatar.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCurrentUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile and current session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "changeCurrentPassword",
+        "description": "Change the authenticated user's password and revoke their other sessions.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Password changed; other sessions revoked."
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -6707,6 +6850,40 @@
           }
         }
       },
+      "UpdateCurrentUserRequest": {
+        "type": "object",
+        "required": [
+          "avatar"
+        ],
+        "properties": {
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          }
+        }
+      },
+      "PasswordChangeRequest": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 128
+          },
+          "new_password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 128
+          }
+        }
+      },
       "RegistrationGroup": {
         "type": "object",
         "required": [
@@ -6783,6 +6960,12 @@
           },
           "display_name": {
             "type": "string"
+          },
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "courses": {
             "type": "array",
@@ -6935,6 +7118,12 @@
           "display_name": {
             "type": "string"
           },
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "role": {
             "type": "string"
           }
@@ -6975,6 +7164,12 @@
           },
           "display_name": {
             "type": "string"
+          },
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "role": {
             "type": "string"
@@ -7977,11 +8172,42 @@
           "group_name": {
             "type": "string"
           },
+          "author": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublishedAgentAuthor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "agent": {
             "$ref": "#/components/schemas/AgentSummary"
           },
           "current_version": {
             "$ref": "#/components/schemas/AgentVersion"
+          }
+        }
+      },
+      "PublishedAgentAuthor": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

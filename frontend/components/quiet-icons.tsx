@@ -111,4 +111,3 @@ export function IconRefresh({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
-

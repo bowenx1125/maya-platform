@@ -874,6 +874,43 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AuthSession" }
         "401": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Auth]
+      operationId: updateCurrentUser
+      description: Update the authenticated user's scholar avatar.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCurrentUserRequest" }
+      responses:
+        "200":
+          description: Updated profile and current session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /auth/password:
+    post:
+      tags: [Auth]
+      operationId: changeCurrentPassword
+      description: Change the authenticated user's password and revoke their other sessions.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordChangeRequest" }
+      responses:
+        "204": { description: Password changed; other sessions revoked. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /auth/password-resets:
     post:
       tags: [Auth]
@@ -3519,6 +3556,17 @@ components:
         username: { type: string }
         display_name: { type: string }
         password: { type: string, format: password }
+    UpdateCurrentUserRequest:
+      type: object
+      required: [avatar]
+      properties:
+        avatar: { type: [string, "null"], maxLength: 64 }
+    PasswordChangeRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, format: password, maxLength: 128 }
+        new_password: { type: string, format: password, maxLength: 128 }
     RegistrationGroup:
       type: object
       required: [name, member_count]
@@ -3548,6 +3596,7 @@ components:
         id: { $ref: "#/components/schemas/Uuid" }
         username: { type: string }
         display_name: { type: string }
+        avatar: { type: [string, "null"] }
         courses:
           type: array
           items: { $ref: "#/components/schemas/CourseMembership" }
@@ -3604,6 +3653,7 @@ components:
       properties:
         user_id: { $ref: "#/components/schemas/Uuid" }
         display_name: { type: string }
+        avatar: { type: [string, "null"] }
         role: { type: string }
     GroupRef:
       type: object
@@ -3618,6 +3668,7 @@ components:
         user_id: { $ref: "#/components/schemas/Uuid" }
         username: { type: string }
         display_name: { type: string }
+        avatar: { type: [string, "null"] }
         role: { type: string }
         status: { type: string }
         source: { type: string }
@@ -4009,8 +4060,19 @@ components:
       required: [agent, current_version, group_name]
       properties:
         group_name: { type: string }
+        author:
+          oneOf:
+            - { $ref: "#/components/schemas/PublishedAgentAuthor" }
+            - { type: "null" }
         agent: { $ref: "#/components/schemas/AgentSummary" }
         current_version: { $ref: "#/components/schemas/AgentVersion" }
+    PublishedAgentAuthor:
+      type: object
+      required: [user_id, display_name]
+      properties:
+        user_id: { $ref: "#/components/schemas/Uuid" }
+        display_name: { type: string }
+        avatar: { type: [string, "null"] }
     DebateParticipantInput:
       type: object
       required: [agent_id, stance_mode]

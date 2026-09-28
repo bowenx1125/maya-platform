@@ -204,7 +204,7 @@ def test_standing_query_consent_confirms_exact_owner_manifest_and_runs_once(
     assert operations[0].request_count == 1
     assert operations[0].charged_request_count == 1
     budget = ProviderRepository(database).get_scope_budget(debate_id)
-    assert budget is not None and budget.max_requests == 8
+    assert budget is not None and budget.max_requests == 2_147_483_647
     confirmation = ProviderRepository(database).get_export_confirmation(
         operations[0].export_manifest_hash
     )
@@ -246,4 +246,5 @@ def test_manual_query_confirmation_path_still_parks_before_provider_call(
         operations[0].request_count,
         operations[0].charged_request_count,
     ) == ("prepared", 0, 0)
-    assert ProviderRepository(database).get_scope_budget(debate_id) is None
+    budget = ProviderRepository(database).get_scope_budget(debate_id)
+    assert budget is not None and budget.max_requests == 2_147_483_647

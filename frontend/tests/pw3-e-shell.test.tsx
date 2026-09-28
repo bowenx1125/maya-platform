@@ -141,7 +141,9 @@ describe("PW3-E teacher information architecture", () => {
         <p>Read only</p>
       </AppShell>,
     );
-    const fadedNew = nav.getByRole("button", { name: "New" }) as HTMLButtonElement;
+    const fadedNew = nav.getByRole("button", {
+      name: "New",
+    }) as HTMLButtonElement;
     expect(fadedNew.disabled).toBe(true);
     expect(fadedNew.className).toContain("disabled");
     expect(nav.queryByRole("link", { name: "Back" })).toBeNull();

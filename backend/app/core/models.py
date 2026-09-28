@@ -45,6 +45,7 @@ class User(Base):
         return value
 
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

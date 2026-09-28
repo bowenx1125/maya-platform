@@ -14,7 +14,7 @@
   --green: #2d8a68;
   --red: #b74f5a;
   --shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
-  /* Display face for the sign-in plate and workspace section headings. */
+  /* Display face for the sign-in plate only. */
   --display-serif:
     "Iowan Old Style", "Songti SC", "Source Han Serif SC", ui-serif, serif;
 }
@@ -259,7 +259,7 @@ button:disabled {
   font-weight: 500;
 }
 
-input:not([type="checkbox"]),
+input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
   width: 100%;
@@ -719,6 +719,7 @@ details > summary {
 .teacher-home-layout {
   display: grid;
   gap: var(--workspace-gap);
+  max-width: 780px;
 }
 .teacher-home-layout > * {
   margin-bottom: 0;
@@ -791,10 +792,9 @@ details > summary {
 
 .section-card-header h2 {
   margin: 0 0 7px;
-  font-family: var(--display-serif);
   font-size: 1.35rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-weight: 720;
+  letter-spacing: -0.02em;
 }
 
 .section-card-header p {
@@ -942,6 +942,22 @@ details > summary {
   line-height: 1.3;
 }
 
+.agent-tile-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.agent-tile-author > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .knowledge-tile {
   justify-items: stretch;
   text-align: left;
@@ -1029,8 +1045,8 @@ details > summary {
 
 .mayaform-home {
   display: grid;
-  gap: 48px;
-  max-width: 560px;
+  gap: 28px;
+  max-width: 780px;
   padding: 28px 8px 40px;
 }
 
@@ -1040,6 +1056,22 @@ details > summary {
   gap: 14px;
   padding: 8px 0 0;
   text-align: center;
+}
+
+.teacher-home-welcome {
+  padding-top: 28px;
+}
+
+.home-mascots {
+  position: relative;
+  width: min(310px, 82vw);
+  height: 116px;
+  overflow: hidden;
+}
+
+.home-mascots .academy-mascots {
+  bottom: -2px;
+  width: 100%;
 }
 
 .mayaform-home-eyebrow {
@@ -1054,10 +1086,9 @@ details > summary {
 .mayaform-home-welcome h1 {
   margin: 0;
   color: #3d3220;
-  font-family: var(--display-serif);
   font-size: clamp(1.7rem, 3vw, 2.25rem);
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: 720;
+  letter-spacing: -0.035em;
   line-height: 1.25;
 }
 
@@ -1128,10 +1159,9 @@ details > summary {
 .mayaform-home-members h2 {
   margin: 0;
   color: #3d3220;
-  font-family: var(--display-serif);
   font-size: 1.35rem;
-  font-weight: 500;
-  letter-spacing: 0.03em;
+  font-weight: 720;
+  letter-spacing: -0.02em;
 }
 
 .mayaform-home-members header p {
@@ -1139,6 +1169,219 @@ details > summary {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.5;
+}
+
+.home-guide {
+  display: grid;
+  gap: 10px;
+}
+
+.home-guide h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.home-guide-list {
+  display: grid;
+  gap: 7px;
+}
+
+.home-guide-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid #e7e0d7;
+  border-radius: 13px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.home-guide-row:hover,
+.home-guide-row:focus-visible {
+  border-color: #cdbd9e;
+  transform: translateY(-1px);
+}
+
+.home-guide-marker {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid #d8cdc0;
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: #faf7f1;
+}
+
+.home-guide-marker[data-complete="true"] {
+  border-color: #b8d7c3;
+  color: var(--green);
+  background: #e9f6f0;
+}
+
+.home-guide-row strong {
+  min-width: 0;
+  font-size: 0.86rem;
+}
+
+.home-guide-row small,
+.home-guide-state {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.home-guide-state {
+  min-width: 34px;
+  text-align: right;
+}
+
+.user-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(87, 69, 55, 0.12);
+  border-radius: 35%;
+  background: #f7f1e7;
+}
+
+.user-avatar svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.user-avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 0.68rem;
+}
+
+.user-avatar-md {
+  width: 38px;
+  height: 38px;
+  font-size: 0.82rem;
+}
+
+.user-avatar-lg {
+  width: 58px;
+  height: 58px;
+  font-size: 1.2rem;
+}
+
+.user-avatar-fallback {
+  color: #fff;
+  background: var(--avatar-body);
+  font-weight: 800;
+}
+
+.account-settings-card {
+  margin-top: 2px;
+}
+
+.account-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.profile-panel {
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #ebe5df;
+  border-radius: 14px;
+  background: #fdfaf3;
+}
+
+.profile-panel h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.profile-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.profile-panel-heading > div {
+  min-width: 0;
+}
+
+.profile-panel-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.avatar-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.avatar-picker label {
+  display: grid;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.avatar-picker label[data-selected="true"] {
+  border-color: var(--indigo);
+}
+
+.password-panel label {
+  display: grid;
+  gap: 5px;
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.password-panel input {
+  min-height: 38px;
+  padding-block: 7px;
+}
+
+.profile-action-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+}
+
+.profile-action-row > span {
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.roster-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 @media (max-width: 1100px) {
@@ -1162,6 +1405,19 @@ details > summary {
   .mayaform-home {
     gap: 36px;
     padding-inline: 0;
+  }
+
+  .account-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-guide-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+
+  .home-guide-row small,
+  .home-guide-state {
+    display: none;
   }
 }
 
@@ -2900,4 +3156,3 @@ dd {
     display: none;
   }
 }
-

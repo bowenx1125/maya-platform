@@ -648,6 +648,32 @@ export class PlatformApi {
     return session;
   }
 
+  async updateCurrentUser(avatar: string | null): Promise<AuthSession> {
+    const session = await unwrap<AuthSession>(
+      await this.client.PATCH("/auth/me", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: { avatar },
+      }),
+    );
+    this.setCsrfToken(session.csrf_token);
+    return session;
+  }
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    await unwrap<void>(
+      await this.client.POST("/auth/password", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: {
+          current_password: currentPassword,
+          new_password: newPassword,
+        },
+      }),
+    );
+  }
+
   async registrationOptions(): Promise<RegistrationOptions> {
     return unwrap(await this.client.GET("/auth/registration-options"));
   }

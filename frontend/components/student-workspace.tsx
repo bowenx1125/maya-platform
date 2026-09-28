@@ -17,9 +17,12 @@ import {
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
+import { AcademyMascots } from "./academy/mascots";
+import { AccountSettings } from "./account-settings";
 import { useLocale, useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
+import { UserAvatar } from "./user-avatar";
 import {
   EmptyCard,
   ErrorNotice,
@@ -30,6 +33,9 @@ import {
 
 type GroupOverview = {
   group: GroupDetail;
+  agentCount: number;
+  knowledgeCount: number;
+  voiceCount: number;
 };
 
 type AgentListItem = {
@@ -42,9 +48,20 @@ async function loadGroups(
   groupIds: string[],
 ): Promise<GroupOverview[]> {
   return Promise.all(
-    groupIds.map(async (groupId) => ({
-      group: await api.group(groupId),
-    })),
+    groupIds.map(async (groupId) => {
+      const [group, agents, knowledge, voices] = await Promise.all([
+        api.group(groupId),
+        api.agents(groupId, true),
+        api.knowledge(groupId),
+        api.voiceProfiles(groupId),
+      ]);
+      return {
+        group,
+        agentCount: agents.length,
+        knowledgeCount: knowledge.length,
+        voiceCount: voices.length,
+      };
+    }),
   );
 }
 
@@ -60,8 +77,7 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
     Boolean(agent.current_draft_version_id) &&
     agent.current_draft_version_id !== agent.current_published_version_id;
   const onlyDraft = !agent.current_published_version_id && Boolean(draft);
-  const label =
-    published?.version_label ?? draft?.version_label ?? "V1.0";
+  const label = published?.version_label ?? draft?.version_label ?? "V1.0";
   return {
     label,
     pending: hasUnpublishedWork || onlyDraft || agent.status === "archived",
@@ -76,14 +92,17 @@ export function StudentDashboard() {
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const hasUser = Boolean(user);
+  const groupIdsKey = user?.groups
+    .map((membership) => membership.group_id)
+    .join(",");
+  const courseId = user?.courses[0]?.course_id;
 
   const load = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+    if (!hasUser) return;
     setError(null);
     try {
-      const groupIds = user.groups.map((membership) => membership.group_id);
-      const courseId = user.courses[0]?.course_id;
+      const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
       const [overviews, courses] = await Promise.all([
         loadGroups(api, groupIds),
         courseId ? api.courses() : Promise.resolve([]),
@@ -97,7 +116,7 @@ export function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [api, user]);
+  }, [api, courseId, groupIdsKey, hasUser]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -111,29 +130,73 @@ export function StudentDashboard() {
 
   const name = user?.display_name ?? "";
   const courseName = course?.name ?? t("course");
+  const primary = groups[0];
+  const guide = primary
+    ? [
+        {
+          label: t("studentGuideGroup"),
+          complete: true,
+          href: `/student/groups/${primary.group.id}`,
+        },
+        {
+          label: t("studentGuideAgent"),
+          complete: primary.agentCount > 0,
+          href: `/student/groups/${primary.group.id}/agents/new`,
+        },
+        {
+          label: t("studentGuideKnowledge"),
+          complete: primary.knowledgeCount > 0,
+          href: `/student/groups/${primary.group.id}/knowledge`,
+        },
+        {
+          label: t("studentGuideVoice"),
+          complete: primary.voiceCount > 0,
+          optional: true,
+          href: `/student/groups/${primary.group.id}/voices`,
+        },
+      ]
+    : [];
 
   return (
     <div className="mayaform-home">
       <section className="mayaform-home-welcome">
+        <div className="home-mascots">
+          <AcademyMascots label={t("academyMascotsLabel")} />
+        </div>
         <p className="mayaform-home-eyebrow">{t("appName")}</p>
         <h1>{t("homeWelcomeTitle", { name })}</h1>
-        <div className="mayaform-home-rule" aria-hidden="true">
-          <span />
-          <i />
-          <span />
-        </div>
         <p className="mayaform-home-lede">
           {t("homeWelcomeCourse", { course: courseName })}
         </p>
-        <ul className="mayaform-home-surfaces">
-          <li>{t("homeSurfaceChats")}</li>
-          <li>{t("homeSurfaceWorkspace")}</li>
-          <li>{t("homeSurfaceKnowledge")}</li>
-          <li>{t("homeSurfaceVoice")}</li>
-          <li>{t("homeSurfaceLive")}</li>
-        </ul>
-        <p className="mayaform-home-privacy">{t("homePrivacyNote")}</p>
       </section>
+      {guide.length > 0 ? (
+        <section className="home-guide" aria-labelledby="student-guide-title">
+          <h2 id="student-guide-title">{t("guide")}</h2>
+          <div className="home-guide-list">
+            {guide.map((item, index) => (
+              <Link
+                className="home-guide-row"
+                href={item.href}
+                key={item.label}
+              >
+                <span
+                  className="home-guide-marker"
+                  data-complete={item.complete ? "true" : undefined}
+                  aria-hidden="true"
+                >
+                  {item.complete ? "✓" : index + 1}
+                </span>
+                <strong>{item.label}</strong>
+                {item.optional ? <small>{t("guideOptional")}</small> : null}
+                <span className="home-guide-state">
+                  {item.complete ? t("guideDone") : t("guideNext")}
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
@@ -146,9 +209,12 @@ export function StudentDashboard() {
             <div className="member-grid">
               {(overview.group.members ?? []).map((member) => (
                 <div className="member-chip" key={member.user_id}>
-                  <span className="avatar-mini">
-                    {member.display_name.slice(0, 1).toUpperCase()}
-                  </span>
+                  <UserAvatar
+                    avatar={member.avatar}
+                    name={member.display_name}
+                    userId={member.user_id}
+                    size="sm"
+                  />
                   <span>{member.display_name}</span>
                   <small>{roleLabel(member.role, locale)}</small>
                 </div>
@@ -157,6 +223,7 @@ export function StudentDashboard() {
           </section>
         ))
       )}
+      <AccountSettings />
     </div>
   );
 }

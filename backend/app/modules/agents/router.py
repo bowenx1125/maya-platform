@@ -33,6 +33,7 @@ from app.core.models import (
     FileOperation,
     Group,
     IdempotencyRecord,
+    User,
 )
 from app.modules.agents.persona import (
     raw_agent_md_hash,
@@ -53,6 +54,7 @@ from app.modules.agents.schemas import (
     ConfirmPersonaRequest,
     PersonaCompileResponse,
     PublishAgentVersionRequest,
+    PublishedAgentAuthor,
     PublishedAgentSummary,
     TestChatRequest,
     TestChatResponse,
@@ -1375,10 +1377,11 @@ def list_published_agents_for_teacher(
     db: Session = Depends(get_db),
 ) -> list[PublishedAgentSummary]:
     rows = db.execute(
-        select(Agent, AgentVersion, Group.name)
+        select(Agent, AgentVersion, Group.name, User)
         .join(Group, Group.id == Agent.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .join(AgentVersion, AgentVersion.id == Agent.current_published_version_id)
+        .outerjoin(User, User.id == AgentVersion.persona_confirming_user_id)
         .where(
             Group.course_id == str(course_id),
             CourseMember.user_id == context.user.id,
@@ -1401,8 +1404,17 @@ def list_published_agents_for_teacher(
     return [
         PublishedAgentSummary(
             group_name=group_name,
+            author=(
+                PublishedAgentAuthor(
+                    user_id=UUID(author.id),
+                    display_name=author.display_name,
+                    avatar=author.avatar,
+                )
+                if author is not None
+                else None
+            ),
             agent=_summary_with_metadata(db, agent, include_draft=False),
             current_version=version_dto(db, version, agent),
         )
-        for agent, version, group_name in rows
+        for agent, version, group_name, author in rows
     ]

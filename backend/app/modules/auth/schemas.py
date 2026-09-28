@@ -28,6 +28,7 @@ class CurrentUser(BaseModel):
     id: UUID
     username: str
     display_name: str
+    avatar: str | None = None
     courses: list[CourseMembership]
     groups: list[GroupMembership]
 
@@ -59,7 +60,17 @@ class PublicMember(BaseModel):
 
     user_id: UUID
     display_name: str
+    avatar: str | None = None
     role: str
+
+
+class UpdateCurrentUserRequest(BaseModel):
+    avatar: str | None = Field(max_length=64)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(max_length=128, json_schema_extra={"format": "password"})
+    new_password: str = Field(max_length=128, json_schema_extra={"format": "password"})
 
 
 class RegisterRequest(BaseModel):

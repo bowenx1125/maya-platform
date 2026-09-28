@@ -202,7 +202,9 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
   async function hide(document: KnowledgeDocument, retry = false) {
     if (
       !retry &&
-      !window.confirm(t("deleteFileConfirm", { filename: document.source_filename }))
+      !window.confirm(
+        t("deleteFileConfirm", { filename: document.source_filename }),
+      )
     ) {
       return;
     }

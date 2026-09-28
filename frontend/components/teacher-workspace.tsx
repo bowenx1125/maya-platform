@@ -17,9 +17,12 @@ import {
 import { useT } from "./locale";
 import { IconClose, IconDownload } from "./quiet-icons";
 import { useSession } from "./session-provider";
+import { AcademyMascots } from "./academy/mascots";
+import { AccountSettings } from "./account-settings";
 import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
 import { ReportMarkdown } from "./report/report-markdown";
+import { UserAvatar } from "./user-avatar";
 import detailStyles from "./teacher-agent-detail.module.css";
 import {
   EmptyCard,
@@ -35,38 +38,38 @@ export function TeacherDashboard() {
   const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [debateCount, setDebateCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const teacherCourseId = user?.courses.find(
+    (item) => item.role === "teacher",
+  )?.course_id;
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
-      const teacherMembership = user?.courses.find(
-        (item) => item.role === "teacher",
-      );
-      const [courses, nextPublished, nextGroups] = await Promise.all([
+      const [courses, nextPublished, nextGroups, debates] = await Promise.all([
         api.courses(),
-        teacherMembership
-          ? api.publishedAgents(teacherMembership.course_id)
+        teacherCourseId
+          ? api.publishedAgents(teacherCourseId)
           : Promise.resolve([]),
-        teacherMembership
-          ? api.groups(teacherMembership.course_id)
-          : Promise.resolve([]),
+        teacherCourseId ? api.groups(teacherCourseId) : Promise.resolve([]),
+        teacherCourseId ? api.debates(teacherCourseId) : Promise.resolve([]),
       ]);
       setCourse(
-        courses.find((item) => item.id === teacherMembership?.course_id) ??
+        courses.find((item) => item.id === teacherCourseId) ??
           courses[0] ??
           null,
       );
       setPublished(nextPublished);
       setGroups(nextGroups);
+      setDebateCount(debates.length);
     } catch (cause) {
       setError(cause);
     } finally {
       setLoading(false);
     }
-  }, [api, user]);
+  }, [api, teacherCourseId]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -93,15 +96,64 @@ export function TeacherDashboard() {
   if (loading) return <LoadingCard />;
   if (error && published.length === 0)
     return <ErrorNotice error={error} onRetry={() => void load()} />;
+  const name = user?.display_name ?? "";
+  const guide = [
+    {
+      label: t("teacherGuideCourse"),
+      complete: Boolean(course),
+      href: "/teacher/roster",
+    },
+    {
+      label: t("teacherGuideGroups"),
+      complete: groups.length > 0,
+      href: "/teacher/roster",
+    },
+    {
+      label: t("teacherGuideAgents"),
+      complete: published.length > 0,
+      href: "/teacher",
+    },
+    {
+      label: t("teacherGuideDebate"),
+      complete: debateCount > 0,
+      href: "/teacher/debates/new",
+    },
+  ];
   return (
     <div className="teacher-home-layout">
-      <PageIntro
-        title={
-          course?.name === "Maya Cultural Exchange Demo"
-            ? t("appName")
-            : (course?.name ?? t("appName"))
-        }
-      />
+      <section className="mayaform-home-welcome teacher-home-welcome">
+        <div className="home-mascots">
+          <AcademyMascots label={t("academyMascotsLabel")} />
+        </div>
+        <p className="mayaform-home-eyebrow">{t("appName")}</p>
+        <h1>{t("homeWelcomeTitle", { name })}</h1>
+        <p className="mayaform-home-lede">
+          {t("homeWelcomeCourse", {
+            course: course?.name ?? t("course"),
+          })}
+        </p>
+      </section>
+      <section className="home-guide" aria-labelledby="teacher-guide-title">
+        <h2 id="teacher-guide-title">{t("guide")}</h2>
+        <div className="home-guide-list">
+          {guide.map((item, index) => (
+            <Link className="home-guide-row" href={item.href} key={item.label}>
+              <span
+                className="home-guide-marker"
+                data-complete={item.complete ? "true" : undefined}
+                aria-hidden="true"
+              >
+                {item.complete ? "✓" : index + 1}
+              </span>
+              <strong>{item.label}</strong>
+              <span className="home-guide-state">
+                {item.complete ? t("guideDone") : t("guideNext")}
+              </span>
+              <span aria-hidden="true">→</span>
+            </Link>
+          ))}
+        </div>
+      </section>
       <DemoCompositionBadge />
       {error ? <ErrorNotice error={error} /> : null}
       {published.length === 0 ? (
@@ -127,6 +179,7 @@ export function TeacherDashboard() {
           </div>
         </SectionCard>
       )}
+      <AccountSettings />
     </div>
   );
 }
@@ -156,8 +209,17 @@ function PublishedAgentTile({
       >
         {item.agent.name}
       </Link>
-      {groupName ? (
-        <span className="agent-tile-group">{groupName}</span>
+      {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
+      {item.author ? (
+        <span className="agent-tile-author">
+          <UserAvatar
+            avatar={item.author.avatar}
+            name={item.author.display_name}
+            userId={item.author.user_id}
+            size="sm"
+          />
+          <span>{item.author.display_name}</span>
+        </span>
       ) : null}
       <button
         type="button"

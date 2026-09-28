@@ -308,6 +308,24 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** @description Update the authenticated user's scholar avatar. */
+        patch: operations["updateCurrentUser"];
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Change the authenticated user's password and revoke their other sessions. */
+        post: operations["changeCurrentPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -2008,6 +2026,15 @@ export interface components {
             /** Format: password */
             password: string;
         };
+        UpdateCurrentUserRequest: {
+            avatar: string | null;
+        };
+        PasswordChangeRequest: {
+            /** Format: password */
+            current_password: string;
+            /** Format: password */
+            new_password: string;
+        };
         RegistrationGroup: {
             name: string;
             member_count: number;
@@ -2026,6 +2053,7 @@ export interface components {
             id: components["schemas"]["Uuid"];
             username: string;
             display_name: string;
+            avatar?: string | null;
             courses: components["schemas"]["CourseMembership"][];
             groups: components["schemas"]["GroupMembership"][];
         };
@@ -2059,6 +2087,7 @@ export interface components {
         Member: {
             user_id: components["schemas"]["Uuid"];
             display_name: string;
+            avatar?: string | null;
             role: string;
         };
         GroupRef: {
@@ -2069,6 +2098,7 @@ export interface components {
             user_id: components["schemas"]["Uuid"];
             username: string;
             display_name: string;
+            avatar?: string | null;
             role: string;
             status: string;
             source: string;
@@ -2294,8 +2324,14 @@ export interface components {
         };
         PublishedAgentSummary: {
             group_name: string;
+            author?: components["schemas"]["PublishedAgentAuthor"] | null;
             agent: components["schemas"]["AgentSummary"];
             current_version: components["schemas"]["AgentVersion"];
+        };
+        PublishedAgentAuthor: {
+            user_id: components["schemas"]["Uuid"];
+            display_name: string;
+            avatar?: string | null;
         };
         DebateParticipantInput: {
             agent_id: components["schemas"]["Uuid"];
@@ -3963,6 +3999,64 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+        };
+    };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated profile and current session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    changeCurrentPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; other sessions revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     resetStudentPassword: {

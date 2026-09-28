@@ -163,8 +163,15 @@ class TestChatResponse(BaseModel):
     sources: list[RetrievalSource]
 
 
+class PublishedAgentAuthor(BaseModel):
+    user_id: UUID
+    display_name: str
+    avatar: str | None = None
+
+
 class PublishedAgentSummary(BaseModel):
     group_name: str
+    author: PublishedAgentAuthor | None = None
     agent: AgentSummary
     current_version: AgentVersion
 

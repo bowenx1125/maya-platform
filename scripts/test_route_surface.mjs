@@ -74,7 +74,7 @@ try {
   ).length;
   // Private Chat, Provider settings and student Live add twelve operations.
   // Chat streaming adds streamConversationMessage.
-  if (platformOperationCount !== 105 || placeholderCount !== 0) {
+  if (platformOperationCount !== 108 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
