@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.agents.persona import (
     PERSONA_COMPILER_VERSION,
@@ -40,6 +40,27 @@ class AgentSummary(BaseModel):
     current_draft_version_id: UUID | None = None
 
 
+class KnowledgeGenerationIntent(BaseModel):
+    """Explicit Done intent tied to the exact saved Agent source selection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_document_ids: list[UUID] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def source_ids_are_unique(self) -> KnowledgeGenerationIntent:
+        if len(self.source_document_ids) != len(set(self.source_document_ids)):
+            raise ValueError("source_document_ids must be unique")
+        return self
+
+
+class KnowledgeGenerationReceipt(BaseModel):
+    run_id: UUID
+    job_id: UUID
+    knowledge_set_id: UUID
+    state: Literal["pending", "running", "blocked", "completed", "failed", "interrupted"]
+
+
 class AgentVersion(BaseModel):
     id: UUID
     agent_id: UUID
@@ -63,6 +84,7 @@ class AgentVersion(BaseModel):
     published_visibility: Literal["private", "public"] | None = None
     enabled_documents: list[KnowledgeDocument] = Field(default_factory=list)
     publish_blockers: list[str] = Field(default_factory=list)
+    knowledge_generation: KnowledgeGenerationReceipt | None = None
 
 
 class CompilePersonaRequest(BaseModel):
@@ -132,6 +154,7 @@ class PublishAgentVersionRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     acceptance_run_id: UUID | None = None
     call_no: int | None = Field(default=None, ge=1, le=1)
+    generation: KnowledgeGenerationIntent | None = None
 
     @model_validator(mode="after")
     def validate_acceptance_binding(self) -> PublishAgentVersionRequest:

@@ -13,6 +13,11 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+KnowledgeGenerationState = Literal[
+    "pending", "running", "blocked", "completed", "failed", "interrupted"
+]
+
+
 class SourceLocation(StrictModel):
     section_path: list[str] = Field(default_factory=list)
     start_offset: int | None = Field(default=None, ge=0)
@@ -258,6 +263,16 @@ class KnowledgeGraph(StrictModel):
     content_revision: int | None = Field(default=None, ge=0)
     nodes: list[KnowledgeGraphNode]
     edges: list[KnowledgeGraphEdge]
+
+
+class KnowledgeGenerationStatus(StrictModel):
+    run_id: UUID
+    job_id: UUID
+    knowledge_set_id: UUID
+    state: KnowledgeGenerationState
+    safe_error_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    created_at: datetime
+    updated_at: datetime
 
 
 class AgentKnowledgeSets(StrictModel):

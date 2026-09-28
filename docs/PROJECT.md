@@ -238,27 +238,19 @@ four lint warnings.
 
 ## Voice filenames, editing and optional Debate audio — September 27, 2026
 
-Multipart filenames use UTF-8/legacy Latin-1. A backed-up filename repair preserved
-audio/state/mapping/request hashes. Click filenames for owner-scoped metadata edits;
-Voice IDs stay hidden.
+Multipart names accept UTF-8/legacy Latin-1; a backed-up repair preserved audio,
+mapping and request hashes. Owner-scoped metadata edits keep Voice IDs hidden.
+Enrollment succeeded once (1 charged request). Preview DNS returned rejected Fake-IP;
+the backed-up public-DNS fix kept SSRF checks unchanged. One authorized owner/session
+TTS POST/200 stored 8.72s/418,604B PCM16/24kHz mono; preview awaits owner confirmation.
+Older failed-preview charges are unknown (no ProviderOperation ledger).
 
-Enrollment succeeded once(request1/charged1). Preview download failed: container DNS
-returned proxy Fake-IP, rejected by the public-address guard. A backed-up backend DNS
-override now resolves public addresses; SSRF validation is unchanged. One authorized
-service diagnostic made one TTS POST/HTTP200, storing8.72s/418604-byte PCM16/24kHz
-mono audio using active owner/session context, not browser auth. Profile preview_ready
-awaits user confirmation. Earlier failed preview charges are unreconstructable (no
-ProviderOperation ledger).
-
-Debate uses custom/system voice or explicit text-only playback; no fake media,
-automatic Next or repeated generation. Revision-CAS draft save/upload syncs H1 names
-with Agent metadata, preserving old versions/Debate names; templates start with H1,
-old identity headings never rename. Sample defaults/Ruleset-language Debate; Voices owner EN/ZH, Auto.
-Voice63/backend/frontend427/contracts/migrations/boundary passed. Backend ready200; other containers/DNS kept; LLM env matches runtime. No real TTS/LLM
-acceptance. Delete/publish retains drafts/RAG/charges/tombstones/hidden access.
-Chats: final-message language outranks Persona/evidence/history; explicit requests
-override. Chat50/End12 passed/deployed. No age-based Stalled; End=Completed.
-Format gate blocked.
+Debate uses custom/system voice or explicit text-only playback, never fake media,
+automatic Next or repeated generation. CAS H1 sync preserves old versions/names;
+old identity headings do not rename. Voice63/backend/frontend427/contracts/migration/
+boundary passed; ready200, other containers kept, no real TTS/LLM acceptance. Delete/
+publish retains drafts/RAG/charges/tombstones. Chat language follows the final message;
+Chat50/End12 passed/deployed. No age-based Stalled; End=Completed. Format gate blocked.
 
 ## Agent names and next-version voices — September 27, 2026
 
@@ -330,4 +322,12 @@ Graph read-only in Concepts. Global and Agent entry points share the store. Cont
 excerpt hashes, source-revoke ACL and 0036 cleanup; full check 464/1 and boundary passed.
 Sol's only R2 reject was Asset replay timestamp drift. R3 replays exact accepted POST/PATCH
 JSON only after current ACL/source checks; V1/V2 exact-body and revoked-404 focused tests pass.
-R3 check 464/1, boundary0; Sol and HTTP/browser pending.
+Sol accepted R3; full check and boundary passed. No Provider/Docker/deployment.
+
+## MayaForm K2a — in progress
+
+0037 persists owner-scoped Jobs/runs, unique input hashes, leases and startup recovery.
+Generation intent remains an explicit optional API field; ordinary Teacher Done with RAG
+creates no generation Job. Explicit intent atomically commits a stable Private Set/link and
+Job/run. Owner GET returns safe status. K2a blocks `provider_not_configured` (0 calls, no
+fake assets); K2b NOT_RUN. R2 full check/boundary passed; Sol/HTTP pending.

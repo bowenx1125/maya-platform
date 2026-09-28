@@ -52,6 +52,7 @@ const implemented = new Set([
   "replaceAgentKnowledgeSets",
   "listKnowledgeSets",
   "createKnowledgeSet",
+  "getKnowledgeGenerationJob",
   "getKnowledgeSetAsset",
   "updateKnowledgeSetAsset",
   "listKnowledgeSetAssetVersions",

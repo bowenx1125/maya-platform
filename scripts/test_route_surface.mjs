@@ -72,8 +72,8 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Knowledge Sets add fifteen Set, source, Asset, history, Graph and Agent-link operations.
-  if (platformOperationCount !== 127 || placeholderCount !== 0) {
+  // Knowledge Sets add the generation status operation alongside Set/Asset routes.
+  if (platformOperationCount !== 128 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

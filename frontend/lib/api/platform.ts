@@ -24,6 +24,8 @@ export type AgentVersion = components["schemas"]["AgentVersion"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocument"];
 export type KnowledgeSetSummary = components["schemas"]["KnowledgeSetSummary"];
 export type KnowledgeSetDetail = components["schemas"]["KnowledgeSetDetail"];
+export type KnowledgeGenerationStatus =
+  components["schemas"]["KnowledgeGenerationStatus"];
 export type KnowledgeSetSource = components["schemas"]["KnowledgeSetSourceDTO"];
 export type KnowledgeSetRevocation =
   components["schemas"]["KnowledgeSetRevocation"];
@@ -490,6 +492,7 @@ export type IdempotentMutationOptions = {
 export type PublishAgentVersionOptions = IdempotentMutationOptions & {
   acceptance_run_id?: string;
   call_no?: 1;
+  generation?: { source_document_ids: string[] };
 };
 
 async function commitMutation<T>(
@@ -1493,6 +1496,7 @@ export class PlatformApi {
                   call_no: options.call_no ?? 1,
                 }
               : {}),
+            ...(options.generation ? { generation: options.generation } : {}),
           },
         },
       );
@@ -1512,6 +1516,16 @@ export class PlatformApi {
     return unwrap(
       await this.client.GET("/courses/{course_id}/knowledge-sets", {
         params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async knowledgeGenerationJob(
+    jobId: string,
+  ): Promise<KnowledgeGenerationStatus> {
+    return unwrap(
+      await this.client.GET("/knowledge-generation-jobs/{job_id}", {
+        params: { path: { job_id: jobId } },
       }),
     );
   }

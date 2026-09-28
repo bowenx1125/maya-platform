@@ -1691,6 +1691,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/knowledge-generation-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Knowledge Generation Job
+         * @description Safe generation status is available only to the current Teacher owner; it never returns source text or Provider data.
+         */
+        get: operations["getKnowledgeGenerationJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/knowledge-sets/{set_id}": {
         parameters: {
             query?: never;
@@ -2470,6 +2490,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            knowledge_generation?: components["schemas"]["KnowledgeGenerationReceipt"] | null;
             /** Knowledge Snapshot Id */
             knowledge_snapshot_id?: string | null;
             /**
@@ -3501,6 +3522,72 @@ export interface components {
             audience: "student";
             /** Versions */
             versions: components["schemas"]["AssetVersionStudentDTO"][];
+        };
+        /**
+         * KnowledgeGenerationIntent
+         * @description Explicit Done intent tied to the exact saved Agent source selection.
+         */
+        KnowledgeGenerationIntent: {
+            /** Source Document Ids */
+            source_document_ids: components["schemas"]["Uuid"][];
+        };
+        /** KnowledgeGenerationReceipt */
+        KnowledgeGenerationReceipt: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+        };
+        /** KnowledgeGenerationStatus */
+        KnowledgeGenerationStatus: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Safe Error Code */
+            safe_error_code?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** KnowledgeGraph */
         KnowledgeGraph: {
@@ -5928,11 +6015,12 @@ export interface operations {
                     expected_revision: number;
                     acceptance_run_id?: components["schemas"]["Uuid"] | null;
                     call_no?: number | null;
+                    generation?: components["schemas"]["KnowledgeGenerationIntent"] | null;
                 };
             };
         };
         responses: {
-            /** @description Immutable version and KnowledgeSnapshot published atomically. */
+            /** @description Agent publication and optional durable Knowledge generation intent committed atomically. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7908,6 +7996,37 @@ export interface operations {
                 };
             };
             /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeGenerationJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeGenerationStatus"];
+                };
+            };
+            /** @description Job not found. */
             404: {
                 headers: {
                     [name: string]: unknown;

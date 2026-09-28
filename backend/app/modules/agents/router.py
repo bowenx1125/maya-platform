@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import NoReturn
+from typing import NoReturn, cast
 from unicodedata import normalize
 from uuid import UUID, uuid4
 
@@ -111,6 +111,11 @@ from app.modules.knowledge.services import (
     visible_student_agent,
     visible_student_version,
     visible_version,
+)
+from app.modules.knowledge_sets.generation import (
+    enqueue_generation_for_publish,
+    generation_receipt,
+    validate_generation_intent,
 )
 from app.modules.org.access import WorkspaceMember
 from app.providers.control_repository import ProviderRepository
@@ -1586,6 +1591,9 @@ def publish_agent_version(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    # FastAPI still injects Request by its exact annotation. The default keeps
+    # direct non-generation domain tests/callers compatible with the endpoint.
+    request: Request = cast(Request, None),
 ) -> AgentVersionDTO:
     # Keep the original scope check for the stable permission/not-found
     # boundary, but never reuse that ORM object after the durable claim.  The
@@ -1635,6 +1643,11 @@ def publish_agent_version(
         data_root=settings.resolved_data_root,
     )
     if replay is not None:
+        replayed_version = AgentVersionDTO.model_validate_json(bytes(replay.body))
+        if replayed_version.knowledge_generation is not None and not settings.is_test:
+            task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+            if task_manager is not None:
+                task_manager.wake(str(replayed_version.knowledge_generation.run_id))
         return replay  # type: ignore[return-value]
     assert_claim_owned(db, record)
     guard_id: str | None = None
@@ -1646,6 +1659,8 @@ def publish_agent_version(
             payload.expected_revision,
             record,
         )
+        if payload.generation is not None:
+            validate_generation_intent(db, context, agent, version, payload.generation)
         enabled_documents = _enabled_documents(db, version.id)
         if agent.visibility == "public" and not _agent_sources_are_public(db, agent):
             raise validation_failure(
@@ -1688,6 +1703,11 @@ def publish_agent_version(
             raise PlatformError(
                 "provider_unavailable", "The service is temporarily unavailable.", 503
             )
+        generation = (
+            enqueue_generation_for_publish(db, context, agent, version, payload.generation)
+            if payload.generation is not None
+            else None
+        )
         # ``create_snapshot`` owns the heavy staging/finalization transaction
         # and intentionally rolls back before its final re-check.  The guard
         # survives that boundary, so mark it committed in the same transaction
@@ -1698,11 +1718,19 @@ def publish_agent_version(
         guard.state = "committed"
         guard.updated_at = _time()
         result = _version_dto_for_actor(db, version, agent, context)
+        if generation is not None:
+            result = result.model_copy(
+                update={"knowledge_generation": generation_receipt(generation.run)}
+            )
         finish_idempotency(db, record, 200, result.model_dump(mode="json"))
         db.flush()
         saga_checkpoint("publish.after_final_db_prepare")
         db.commit()
         saga_checkpoint("publish.after_final_commit")
+        if generation is not None and not settings.is_test:
+            task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+            if task_manager is not None:
+                task_manager.wake(generation.run.id)
         return result
     except ObjectDeletedError as exc:
         # A legacy caller or a process-local race may still hand us a deleted

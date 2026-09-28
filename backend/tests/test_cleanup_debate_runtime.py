@@ -15,7 +15,7 @@ from alembic import command
 from alembic.config import Config
 from app.core.db import Database
 from app.core.identity import group_name_key, username_key
-from app.core.models import Base, FileReference, KnowledgeDocument, StoredFile
+from app.core.models import Base, FileReference, Job, KnowledgeDocument, StoredFile
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.debates import cleanup as online_cleanup
 from app.modules.debates import models as _debate_models
@@ -26,6 +26,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeAsset,
     KnowledgeAssetVersion,
     KnowledgeAssetVersionSource,
+    KnowledgeGenerationRun,
     KnowledgeSet,
     KnowledgeSetSource,
 )
@@ -1031,6 +1032,8 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
     version_id = _uid(113)
     version_source_id = _uid(114)
     file_reference_id = _uid(115)
+    job_id = _uid(116)
+    generation_run_id = _uid(117)
     now = datetime.now(UTC)
     content_json = json.dumps(
         {"kind": "note", "title": "Kept source", "body": "Authored evidence."},
@@ -1045,6 +1048,11 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             document = session.get(KnowledgeDocument, _uid(16))
             stored = session.get(StoredFile, _uid(15))
             assert document is not None and stored is not None
+            agent_version_id = session.scalar(
+                text("SELECT id FROM agent_versions WHERE agent_id = :agent_id LIMIT 1"),
+                {"agent_id": _uid(12)},
+            )
+            assert agent_version_id is not None
             session.add(
                 KnowledgeSet(
                     id=set_id,
@@ -1142,6 +1150,42 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
                     created_at=now,
                 )
             )
+            session.add(
+                Job(
+                    id=job_id,
+                    operation="knowledge_set.generate",
+                    state="pending",
+                    idempotency_key=_hash("7"),
+                    claim_token=None,
+                    attempt=0,
+                    safe_error_code=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
+                KnowledgeGenerationRun(
+                    id=generation_run_id,
+                    job_id=job_id,
+                    input_key=_hash("8"),
+                    owner_user_id=_uid(1),
+                    course_id=_uid(10),
+                    agent_id=_uid(12),
+                    agent_version_id=str(agent_version_id),
+                    knowledge_set_id=set_id,
+                    agent_md_hash=_hash("9"),
+                    agent_authorization_epoch=0,
+                    set_authorization_epoch=1,
+                    source_manifest_json="[]",
+                    source_manifest_hash=_hash("6"),
+                    state="pending",
+                    safe_error_code=None,
+                    claim_token=None,
+                    lease_expires_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
         preserved_tables = (
             "knowledge_sets",
             "knowledge_set_sources",
@@ -1149,6 +1193,7 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             "knowledge_asset_versions",
             "knowledge_asset_version_sources",
             "agent_knowledge_sets",
+            "knowledge_generation_runs",
         )
         before = _table_rows(database_path, preserved_tables)
         with sqlite3.connect(database_path) as connection:
@@ -1157,7 +1202,7 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             ).fetchone()
         assert file_reference_before is not None
         plan = cleanup.inspect_cleanup(database_path, data_root)
-        for table in preserved_tables[:6]:
+        for table in preserved_tables:
             assert plan.preserved_counts[table] == 1
 
         cleanup.apply_cleanup(database_path, data_root, offline=True)

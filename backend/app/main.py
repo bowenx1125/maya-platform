@@ -59,7 +59,9 @@ from app.modules.interactions.service import InteractionService
 from app.modules.knowledge.providers import recover_embedding_provider_startup
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
+from app.modules.knowledge_sets.generation import recover_generation_runs_at_startup
 from app.modules.knowledge_sets.router import router as knowledge_sets_router
+from app.modules.knowledge_sets.task_manager import KnowledgeGenerationTaskManager
 from app.modules.org.router import router as org_router
 from app.modules.provider_disclosure.router import (
     get_provider_disclosure_service,
@@ -148,6 +150,7 @@ def create_app(
         wave3_events.publish_summary,
         real_runtime=report_runtime,
     )
+    knowledge_generation_tasks = KnowledgeGenerationTaskManager(runtime_database.session_factory)
     playback_service = PlaybackService(
         playback_repository,
         audio_store=AudioStore(
@@ -245,6 +248,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
+        knowledge_generation_tasks.bind_running_loop()
         prewarm.bind_running_loop()
         runtime_settings.validate_runtime()
         runtime_settings.ensure_data_root()
@@ -324,12 +328,16 @@ def create_app(
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
                 await playback_service.recover_startup(session)
                 recover_report_jobs(session)
+                recover_generation_runs_at_startup(session)
             report_tasks.schedule_pending()
+            if not runtime_settings.is_test:
+                knowledge_generation_tasks.schedule_pending()
         try:
             yield
         finally:
             await prewarm.close()
             await report_tasks.close()
+            await knowledge_generation_tasks.close()
             await playback_tasks.close()
             runtime_database.dispose()
 
@@ -347,6 +355,7 @@ def create_app(
     app.state.wave3_event_publisher = wave3_events
     app.state.prewarm_scheduler = prewarm
     app.state.report_task_manager = report_tasks
+    app.state.knowledge_generation_task_manager = knowledge_generation_tasks
     app.state.report_runtime = report_runtime
     app.state.base_settings = runtime_settings
     app.state.workspace_lock = RLock()

@@ -3079,6 +3079,16 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "generation": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/KnowledgeGenerationIntent"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -3087,7 +3097,7 @@
         },
         "responses": {
           "200": {
-            "description": "Immutable version and KnowledgeSnapshot published atomically.",
+            "description": "Agent publication and optional durable Knowledge generation intent committed atomically.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6308,6 +6318,55 @@
         ]
       }
     },
+    "/api/v1/knowledge-generation-jobs/{job_id}": {
+      "get": {
+        "operationId": "getKnowledgeGenerationJob",
+        "description": "Safe generation status is available only to the current Teacher owner; it never returns source text or Provider data.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeGenerationStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Job not found."
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get Knowledge Generation Job",
+        "tags": [
+          "knowledge-sets"
+        ]
+      }
+    },
     "/api/v1/knowledge-sets/{set_id}": {
       "delete": {
         "operationId": "deleteKnowledgeSet",
@@ -9238,6 +9297,16 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "knowledge_generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgeGenerationReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "knowledge_snapshot_id": {
             "anyOf": [
@@ -12933,6 +13002,123 @@
           "versions"
         ],
         "title": "KnowledgeAssetVersionHistoryStudent",
+        "type": "object"
+      },
+      "KnowledgeGenerationIntent": {
+        "additionalProperties": false,
+        "description": "Explicit Done intent tied to the exact saved Agent source selection.",
+        "properties": {
+          "source_document_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "minItems": 1,
+            "title": "Source Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_document_ids"
+        ],
+        "title": "KnowledgeGenerationIntent",
+        "type": "object"
+      },
+      "KnowledgeGenerationReceipt": {
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "knowledge_set_id": {
+            "format": "uuid",
+            "title": "Knowledge Set Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "running",
+              "blocked",
+              "completed",
+              "failed",
+              "interrupted"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "job_id",
+          "knowledge_set_id",
+          "state"
+        ],
+        "title": "KnowledgeGenerationReceipt",
+        "type": "object"
+      },
+      "KnowledgeGenerationStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "knowledge_set_id": {
+            "format": "uuid",
+            "title": "Knowledge Set Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "safe_error_code": {
+            "title": "Safe Error Code",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "running",
+              "blocked",
+              "completed",
+              "failed",
+              "interrupted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "job_id",
+          "knowledge_set_id",
+          "state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "KnowledgeGenerationStatus",
         "type": "object"
       },
       "KnowledgeGraph": {

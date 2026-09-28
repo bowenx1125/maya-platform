@@ -255,3 +255,71 @@ class AgentKnowledgeSet(Base):
         UniqueConstraint("agent_id", "order_index", name="uq_agent_knowledge_sets_order"),
         Index("ix_agent_knowledge_sets_set", "knowledge_set_id"),
     )
+
+
+class KnowledgeGenerationRun(Base):
+    """Durable, permission-fenced intent to prepare one Agent's Knowledge."""
+
+    __tablename__ = "knowledge_generation_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("jobs.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    input_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    owner_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    course_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("courses.id", ondelete="RESTRICT"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    )
+    agent_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    knowledge_set_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("knowledge_sets.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider_operation_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("provider_operations.id", ondelete="RESTRICT"), nullable=True
+    )
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_md_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    set_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_manifest_json: Mapped[str] = mapped_column(Text, nullable=False)
+    source_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("length(input_key) = 64", name="ck_knowledge_generation_input_key"),
+        CheckConstraint("length(agent_md_hash) = 64", name="ck_knowledge_generation_agent_hash"),
+        CheckConstraint(
+            "request_hash IS NULL OR length(request_hash) = 64",
+            name="ck_knowledge_generation_request_hash",
+        ),
+        CheckConstraint(
+            "agent_authorization_epoch >= 0 AND set_authorization_epoch >= 0",
+            name="ck_knowledge_generation_epochs",
+        ),
+        CheckConstraint(
+            "length(source_manifest_hash) = 64",
+            name="ck_knowledge_generation_source_hash",
+        ),
+        CheckConstraint(
+            "state IN ('pending', 'running', 'blocked', 'completed', 'failed', 'interrupted')",
+            name="ck_knowledge_generation_state",
+        ),
+        Index("ix_knowledge_generation_owner_created", "owner_user_id", "created_at"),
+        Index("ix_knowledge_generation_state_lease", "state", "lease_expires_at"),
+        Index("ix_knowledge_generation_agent", "agent_id", "created_at"),
+    )

@@ -26,8 +26,13 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-SCHEMA_HEAD = "0036_knowledge_sets_assets"
-SUPPORTED_SCHEMA_HEADS = {"0035_w1_resource_ownership", SCHEMA_HEAD}
+SCHEMA_HEAD = "0037_knowledge_generation_runs"
+KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
+SUPPORTED_SCHEMA_HEADS = {
+    "0035_w1_resource_ownership",
+    KNOWLEDGE_SETS_SCHEMA_HEAD,
+    SCHEMA_HEAD,
+}
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 
@@ -104,6 +109,7 @@ PRESERVED_TABLES = (
     "knowledge_asset_versions",
     "knowledge_asset_version_sources",
     "agent_knowledge_sets",
+    "knowledge_generation_runs",
 )
 K1_PRESERVED_TABLES = frozenset(
     {
@@ -115,6 +121,7 @@ K1_PRESERVED_TABLES = frozenset(
         "agent_knowledge_sets",
     }
 )
+K2_PRESERVED_TABLES = frozenset({"knowledge_generation_runs"})
 
 IDEMPOTENCY_OPERATIONS = (
     "createDebate",
@@ -341,6 +348,9 @@ def _validate_schema(connection: sqlite3.Connection) -> str:
     required_preserved = set(PRESERVED_TABLES)
     if schema_head == "0035_w1_resource_ownership":
         required_preserved.difference_update(K1_PRESERVED_TABLES)
+        required_preserved.difference_update(K2_PRESERVED_TABLES)
+    elif schema_head == KNOWLEDGE_SETS_SCHEMA_HEAD:
+        required_preserved.difference_update(K2_PRESERVED_TABLES)
     required = set(TARGET_TABLES) | required_preserved | {"alembic_version"}
     if required.difference(tables):
         raise CleanupError("schema_tables_missing")

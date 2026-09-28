@@ -23,6 +23,7 @@ from app.modules.knowledge.services import (
     parse_json_payload_hash,
 )
 from app.modules.knowledge_sets import service
+from app.modules.knowledge_sets.generation import get_generation_status
 from app.modules.knowledge_sets.schemas import (
     AgentKnowledgeSets,
     AssetVersionFullDTO,
@@ -35,6 +36,7 @@ from app.modules.knowledge_sets.schemas import (
     KnowledgeAssetStudentDTO,
     KnowledgeAssetVersionHistoryFull,
     KnowledgeAssetVersionHistoryStudent,
+    KnowledgeGenerationStatus,
     KnowledgeGraph,
     KnowledgeSetDetail,
     KnowledgeSetRevocation,
@@ -48,6 +50,22 @@ from app.modules.knowledge_sets.schemas import (
 )
 
 router = APIRouter(tags=["knowledge-sets"])
+
+
+@router.get(
+    "/knowledge-generation-jobs/{job_id}",
+    response_model=KnowledgeGenerationStatus,
+    operation_id="getKnowledgeGenerationJob",
+    responses={404: {"model": Error, "description": "Job not found."}},
+)
+def get_knowledge_generation_job(
+    job_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> KnowledgeGenerationStatus:
+    """Expose safe generation state to the current Teacher owner only."""
+
+    return get_generation_status(db, context, str(job_id))
 
 
 def _idempotent_mutation[T: BaseModel](

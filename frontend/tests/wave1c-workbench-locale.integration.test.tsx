@@ -273,6 +273,22 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });
 
+  it("does not infer a generation intent from already-selected courseware", async () => {
+    const { api, document } = makeApi();
+    const withSource = makeVersion({ enabled_documents: [document] });
+    api.version.mockResolvedValue(withSource);
+    api.publish.mockResolvedValue({ ...withSource, state: "published" });
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalled());
+    expect(api.publish).toHaveBeenCalledWith(
+      "version-id",
+      withSource.revision,
+      expect.not.objectContaining({ generation: expect.anything() }),
+    );
+  });
+
   it.each(["own-ready", ""])(
     "changes a later draft voice to %s without editing the published version",
     async (choice) => {
